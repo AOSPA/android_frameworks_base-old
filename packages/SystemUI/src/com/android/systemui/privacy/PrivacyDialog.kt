@@ -47,7 +47,7 @@ class PrivacyDialog(
     context: Context,
     private val list: List<PrivacyElement>,
     activityStarter: (String, Int) -> Unit
-) : SystemUIDialog(context, R.style.ScreenRecord) {
+) : SystemUIDialog(context, R.style.PrivacyDialog) {
 
     private val dismissListeners = mutableListOf<WeakReference<OnDialogDismissed>>()
     private val dismissed = AtomicBoolean(false)
@@ -64,6 +64,7 @@ class PrivacyDialog(
         super.onCreate(savedInstanceState)
         window?.apply {
             attributes.fitInsetsTypes = attributes.fitInsetsTypes or WindowInsets.Type.statusBars()
+            attributes.receiveInsetsIgnoringZOrder = true
             setLayout(context.resources.getDimensionPixelSize(R.dimen.qs_panel_width), WRAP_CONTENT)
             setGravity(Gravity.TOP or Gravity.CENTER_HORIZONTAL)
         }

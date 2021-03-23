@@ -306,6 +306,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mLogoutEnabled;
     // cached value to avoid IPCs
     private boolean mIsUdfpsEnrolled;
+    private boolean mKeyguardQsUserSwitchEnabled;
     // If the user long pressed the lock icon, disabling face auth for the current session.
     private boolean mLockIconPressed;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -1917,7 +1918,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             return isFaceAuthEnabledForUser(KeyguardUpdateMonitor.getCurrentUser())
                     && !isUdfpsEnrolled();
         }
-        return true;
+        return !isKeyguardQsUserSwitchEnabled();
     }
 
     /**
@@ -1925,6 +1926,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      */
     public boolean isUdfpsEnrolled() {
         return mIsUdfpsEnrolled;
+    }
+
+    /**
+     * @return true if the keyguard qs user switcher shortcut is enabled
+     */
+    public boolean isKeyguardQsUserSwitchEnabled() {
+        return mKeyguardQsUserSwitchEnabled;
+    }
+
+    public void setKeyguardQsUserSwitchEnabled(boolean enabled) {
+        mKeyguardQsUserSwitchEnabled = enabled;
     }
 
     private final UserSwitchObserver mUserSwitchObserver = new UserSwitchObserver() {
@@ -2066,8 +2078,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     boolean shouldListenForUdfps() {
         return shouldListenForFingerprint()
                 && !mBouncer
-                && mStatusBarState != StatusBarState.SHADE_LOCKED
-                && mStatusBarState != StatusBarState.FULLSCREEN_USER_SWITCHER
                 && mStrongAuthTracker.hasUserAuthenticatedSinceBoot();
     }
 

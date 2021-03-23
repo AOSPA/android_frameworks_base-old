@@ -1067,58 +1067,6 @@ public class ConnectivityManager {
     }
 
     /**
-     * Calls VpnManager#isAlwaysOnVpnPackageSupportedForUser.
-     * @deprecated TODO: remove when callers have migrated to VpnManager.
-     * @hide
-     */
-    @Deprecated
-    public boolean isAlwaysOnVpnPackageSupportedForUser(int userId, @Nullable String vpnPackage) {
-        return getVpnManager().isAlwaysOnVpnPackageSupportedForUser(userId, vpnPackage);
-    }
-
-    /**
-    * Calls VpnManager#setAlwaysOnVpnPackageForUser.
-     * @deprecated TODO: remove when callers have migrated to VpnManager.
-     * @hide
-     */
-    @Deprecated
-    public boolean setAlwaysOnVpnPackageForUser(int userId, @Nullable String vpnPackage,
-            boolean lockdownEnabled, @Nullable List<String> lockdownAllowlist) {
-        return getVpnManager().setAlwaysOnVpnPackageForUser(userId, vpnPackage, lockdownEnabled,
-                lockdownAllowlist);
-    }
-
-    /**
-     * Calls VpnManager#getAlwaysOnVpnPackageForUser.
-     * @deprecated TODO: remove when callers have migrated to VpnManager.
-     * @hide
-     */
-    @Deprecated
-    public String getAlwaysOnVpnPackageForUser(int userId) {
-        return getVpnManager().getAlwaysOnVpnPackageForUser(userId);
-    }
-
-    /**
-     * Calls VpnManager#isVpnLockdownEnabled.
-     * @deprecated TODO: remove when callers have migrated to VpnManager.
-     * @hide
-     */
-    @Deprecated
-    public boolean isVpnLockdownEnabled(int userId) {
-        return getVpnManager().isVpnLockdownEnabled(userId);
-    }
-
-    /**
-     * Calls VpnManager#getVpnLockdownAllowlist.
-     * @deprecated TODO: remove when callers have migrated to VpnManager.
-     * @hide
-     */
-    @Deprecated
-    public List<String> getVpnLockdownAllowlist(int userId) {
-        return getVpnManager().getVpnLockdownAllowlist(userId);
-    }
-
-    /**
      * Adds or removes a requirement for given UID ranges to use the VPN.
      *
      * If set to {@code true}, informs the system that the UIDs in the specified ranges must not
@@ -1305,6 +1253,25 @@ public class ConnectivityManager {
     public NetworkInfo[] getAllNetworkInfo() {
         try {
             return mService.getAllNetworkInfo();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Return a list of {@link NetworkStateSnapshot}s, one for each network that is currently
+     * connected.
+     * @hide
+     */
+    @SystemApi(client = MODULE_LIBRARIES)
+    @RequiresPermission(anyOf = {
+            NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
+            android.Manifest.permission.NETWORK_STACK,
+            android.Manifest.permission.NETWORK_SETTINGS})
+    @NonNull
+    public List<NetworkStateSnapshot> getAllNetworkStateSnapshot() {
+        try {
+            return mService.getAllNetworkStateSnapshot();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2297,31 +2264,6 @@ public class ConnectivityManager {
         }
     }
 
-    /* TODO: These permissions checks don't belong in client-side code. Move them to
-     * services.jar, possibly in com.android.server.net. */
-
-    /** {@hide} */
-    public static final void enforceChangePermission(Context context,
-            String callingPkg, String callingAttributionTag) {
-        int uid = Binder.getCallingUid();
-        checkAndNoteChangeNetworkStateOperation(context, uid, callingPkg,
-                callingAttributionTag, true /* throwException */);
-    }
-
-    /**
-     * Check if the package is a allowed to change the network state. This also accounts that such
-     * an access happened.
-     *
-     * @return {@code true} iff the package is allowed to change the network state.
-     */
-    // TODO: Remove method and replace with direct call once R code is pushed to AOSP
-    private static boolean checkAndNoteChangeNetworkStateOperation(@NonNull Context context,
-            int uid, @NonNull String callingPackage, @Nullable String callingAttributionTag,
-            boolean throwException) {
-        return Settings.checkAndNoteChangeNetworkStateOperation(context, uid, callingPackage,
-                callingAttributionTag, throwException);
-    }
-
     /**
      * Check if the package is a allowed to write settings. This also accounts that such an access
      * happened.
@@ -2963,10 +2905,14 @@ public class ConnectivityManager {
         ResultReceiver wrappedListener = new ResultReceiver(null) {
             @Override
             protected void onReceiveResult(int resultCode, Bundle resultData) {
-                Binder.withCleanCallingIdentity(() ->
-                            executor.execute(() -> {
-                                listener.onTetheringEntitlementResult(resultCode);
-                            }));
+                final long token = Binder.clearCallingIdentity();
+                try {
+                    executor.execute(() -> {
+                        listener.onTetheringEntitlementResult(resultCode);
+                    });
+                } finally {
+                    Binder.restoreCallingIdentity(token);
+                }
             }
         };
 
@@ -3150,16 +3096,6 @@ public class ConnectivityManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
-    }
-
-    /**
-     * Calls VpnManager#updateLockdownVpn.
-     * @deprecated TODO: remove when callers have migrated to VpnManager.
-     * @hide
-     */
-    @Deprecated
-    public boolean updateLockdownVpn() {
-        return getVpnManager().updateLockdownVpn();
     }
 
     /**
@@ -4523,8 +4459,6 @@ public class ConnectivityManager {
         try {
             mService.factoryReset();
             mTetheringManager.stopAllTethering();
-            // TODO: Migrate callers to VpnManager#factoryReset.
-            getVpnManager().factoryReset();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4816,15 +4750,6 @@ public class ConnectivityManager {
         }
 
         return new TestNetworkManager(ITestNetworkManager.Stub.asInterface(tnBinder));
-    }
-
-    /**
-     * Temporary hack to shim calls from ConnectivityManager to VpnManager. We cannot store a
-     * private final mVpnManager because ConnectivityManager is initialized before VpnManager.
-     * @hide TODO: remove.
-     */
-    public VpnManager getVpnManager() {
-        return mContext.getSystemService(VpnManager.class);
     }
 
     /** @hide */

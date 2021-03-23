@@ -2241,13 +2241,18 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
-    void assignRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer) {
+    void assignRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer,
+            boolean forceUpdate) {
         final boolean changed = layer != mLastLayer || mLastRelativeToLayer != relativeTo;
-        if (mSurfaceControl != null && changed) {
+        if (mSurfaceControl != null && (changed || forceUpdate)) {
             setRelativeLayer(t, relativeTo, layer);
             mLastLayer = layer;
             mLastRelativeToLayer = relativeTo;
         }
+    }
+
+    void assignRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer) {
+        assignRelativeLayer(t, relativeTo, layer, false /* forceUpdate */);
     }
 
     protected void setLayer(Transaction t, int layer) {
@@ -2684,14 +2689,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             @Nullable ArrayList<WindowContainer> sources) {
         final Task task = asTask();
         if (task != null && !enter && !task.isHomeOrRecentsRootTask()) {
-            if (AppTransition.isClosingTransitOld(transit)) {
-                // Freezes the insets state when the window is in app exiting transition, to
-                // ensure the exiting window won't receive unexpected insets changes from the
-                // next window.
-                task.forAllWindows(w -> {
-                    w.freezeInsetsState();
-                }, true /* traverseTopToBottom */);
-            }
             mDisplayContent.showImeScreenshot();
         }
         final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
@@ -3064,6 +3061,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     /** Cheap way of doing cast and instanceof. */
     ActivityRecord asActivityRecord() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
+    WallpaperWindowToken asWallpaperToken() {
         return null;
     }
 

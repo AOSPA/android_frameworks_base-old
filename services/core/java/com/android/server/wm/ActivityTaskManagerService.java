@@ -52,13 +52,12 @@ import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.FactoryTest.FACTORY_TEST_HIGH_LEVEL;
 import static android.os.FactoryTest.FACTORY_TEST_LOW_LEVEL;
 import static android.os.FactoryTest.FACTORY_TEST_OFF;
-import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.Process.FIRST_APPLICATION_UID;
 import static android.os.Process.SYSTEM_UID;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT;
 import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW;
-import static android.provider.Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES;
 import static android.provider.Settings.Global.DEVELOPMENT_FORCE_RTL;
 import static android.provider.Settings.Global.HIDE_ERROR_DIALOGS;
@@ -161,6 +160,7 @@ import android.content.Context;
 import android.content.DialogInterface;
 import android.content.IIntentSender;
 import android.content.Intent;
+import android.content.LocusId;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ConfigurationInfo;
@@ -557,7 +557,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
     boolean mSupportsPictureInPicture;
     boolean mSupportsMultiDisplay;
     boolean mForceResizableActivities;
-    boolean mSizeCompatFreeform;
     boolean mSupportsNonResizableMultiWindow;
 
     final List<ActivityTaskManagerInternal.ScreenObserver> mScreenObservers = new ArrayList<>();
@@ -788,8 +787,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final boolean forceRtl = Settings.Global.getInt(resolver, DEVELOPMENT_FORCE_RTL, 0) != 0;
         final boolean forceResizable = Settings.Global.getInt(
                 resolver, DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES, 0) != 0;
-        final boolean sizeCompatFreeform = Settings.Global.getInt(
-                resolver, DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM, 0) != 0;
         final boolean supportsNonResizableMultiWindow = Settings.Global.getInt(
                 resolver, DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1) != 0;
 
@@ -805,7 +802,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         synchronized (mGlobalLock) {
             mForceResizableActivities = forceResizable;
-            mSizeCompatFreeform = sizeCompatFreeform;
             mSupportsNonResizableMultiWindow = supportsNonResizableMultiWindow;
             final boolean multiWindowFormEnabled = freeformWindowManagement
                     || supportsSplitScreenMultiWindow
@@ -1947,6 +1943,21 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
+    /**
+     * Sets the locusId for a particular activity.
+     *
+     * @param locusId the locusId to set.
+     * @param appToken the ActivityRecord's appToken.
+     */
+    public void setLocusId(LocusId locusId, IBinder appToken) {
+        synchronized (mGlobalLock) {
+            final ActivityRecord r = ActivityRecord.isInRootTaskLocked(appToken);
+            if (r != null) {
+                r.setLocusId(locusId);
+            }
+        }
+    }
+
     NeededUriGrants collectGrants(Intent intent, ActivityRecord target) {
         if (target != null) {
             return mUgmInternal.checkGrantUriPermissionFromIntent(intent,
@@ -2095,10 +2106,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
-    /** @return the max ANR delay from all registered {@link AnrController} instances */
-    public long getMaxAnrDelayMillis(ApplicationInfo info) {
+    /**
+     * @return the controller with the max ANR delay from all registered
+     * {@link AnrController} instances
+     */
+    @Nullable
+    public AnrController getAnrController(ApplicationInfo info) {
         if (info == null || info.packageName == null) {
-            return 0;
+            return null;
         }
 
         final ArrayList<AnrController> controllers;
@@ -2107,12 +2122,19 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         final String packageName = info.packageName;
+        final int uid = info.uid;
         long maxDelayMs = 0;
+        AnrController controllerWithMaxDelay = null;
+
         for (AnrController controller : controllers) {
-            maxDelayMs = Math.max(maxDelayMs, controller.getAnrDelayMillis(packageName, info.uid));
+            long delayMs = controller.getAnrDelayMillis(packageName, uid);
+            if (delayMs > 0 && delayMs > maxDelayMs) {
+                controllerWithMaxDelay = controller;
+                maxDelayMs = delayMs;
+            }
         }
-        maxDelayMs = Math.max(maxDelayMs, 0);
-        return maxDelayMs;
+
+        return controllerWithMaxDelay;
     }
 
     @Override
@@ -2940,7 +2962,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // startActivity() for these apps.
         if (!CompatChanges.isChangeEnabled(LOCK_DOWN_CLOSE_SYSTEM_DIALOGS, uid)) {
             synchronized (mGlobalLock) {
-                if (mRootWindowContainer.hasVisibleWindowAboveNotificationShade(uid)) {
+                // It's ok that the owner of the shade is not allowed *per this rule* because it has
+                // BROADCAST_CLOSE_SYSTEM_DIALOGS (SystemUI), so it would fall into that rule.
+                if (mRootWindowContainer.hasVisibleWindowAboveButDoesNotOwnNotificationShade(uid)) {
                     return true;
                 }
             }
@@ -4015,8 +4039,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         deferWindowLayout();
         try {
             if (values != null) {
-                changes = updateGlobalConfigurationLocked(values, initLocale, persistent, userId,
-                        deferResume);
+                changes = updateGlobalConfigurationLocked(values, initLocale, persistent, userId);
             }
 
             if (!deferResume) {
@@ -4035,19 +4058,11 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     /** Update default (global) configuration and notify listeners about changes. */
     int updateGlobalConfigurationLocked(@NonNull Configuration values, boolean initLocale,
-            boolean persistent, int userId, boolean deferResume) {
-
-        final DisplayContent defaultDisplay =
-                mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY);
+            boolean persistent, int userId) {
 
         mTempConfig.setTo(getGlobalConfiguration());
         final int changes = mTempConfig.updateFrom(values);
         if (changes == 0) {
-            // Since calling to Activity.setRequestedOrientation leads to freezing the window with
-            // setting WindowManagerService.mWaitingForConfig to true, it is important that we call
-            // performDisplayOverrideConfigUpdate in order to send the new display configuration
-            // (even if there are no actual changes) to unfreeze the window.
-            defaultDisplay.performDisplayOverrideConfigUpdate(values, deferResume);
             return 0;
         }
 
@@ -4095,9 +4110,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         mTempConfig.seq = increaseConfigurationSeqLocked();
 
-        // Update stored global config and notify everyone about the change.
-        mRootWindowContainer.onConfigurationChanged(mTempConfig);
-
         Slog.i(TAG, "Config changes=" + Integer.toHexString(changes) + " " + mTempConfig);
         // TODO(multi-display): Update UsageEvents#Event to include displayId.
         mUsageStatsInternal.reportConfigurationChange(mTempConfig, mAmInternal.getCurrentUserId());
@@ -4116,13 +4128,10 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         // resources have that config before following boot code is executed.
         mSystemThread.applyConfigurationToResources(mTempConfig);
 
-        // We need another copy of global config because we're scheduling some calls instead of
-        // running them in place. We need to be sure that object we send will be handled unchanged.
-        final Configuration configCopy = new Configuration(mTempConfig);
         if (persistent && Settings.System.hasInterestingConfigurationChanges(changes)) {
             final Message msg = PooledLambda.obtainMessage(
                     ActivityTaskManagerService::sendPutConfigurationForUserMsg,
-                    this, userId, configCopy);
+                    this, userId, new Configuration(mTempConfig));
             mH.sendMessage(msg);
         }
 
@@ -4131,8 +4140,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             final int pid = pidMap.keyAt(i);
             final WindowProcessController app = pidMap.get(pid);
             ProtoLog.v(WM_DEBUG_CONFIGURATION, "Update process config of %s to new "
-                    + "config %s", app.mName, configCopy);
-            app.onConfigurationChanged(configCopy);
+                    + "config %s", app.mName, mTempConfig);
+            app.onConfigurationChanged(mTempConfig);
         }
 
         final Message msg = PooledLambda.obtainMessage(
@@ -4140,10 +4149,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 mAmInternal, changes, initLocale);
         mH.sendMessage(msg);
 
-        // Override configuration of the default display duplicates global config, so we need to
-        // update it also. This will also notify WindowManager about changes.
-        defaultDisplay.performDisplayOverrideConfigUpdate(mRootWindowContainer.getConfiguration(),
-                deferResume);
+        // Update stored global config and notify everyone about the change.
+        mRootWindowContainer.onConfigurationChanged(mTempConfig);
 
         return changes;
     }
@@ -5553,7 +5560,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     return null;
                 }
                 return new ActivityTokens(activity.appToken, activity.assistToken,
-                        activity.app.getThread());
+                        activity.app.getThread(), activity.shareableActivityToken);
             }
         }
 

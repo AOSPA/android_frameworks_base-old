@@ -22,12 +22,15 @@ import android.os.BatteryStats;
 import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
 import android.os.Bundle;
-import android.os.SystemClock;
+import android.os.UidBatteryConsumer;
 import android.os.UserHandle;
 import android.util.SparseArray;
 
+import com.android.internal.annotations.VisibleForTesting;
+
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Uses accumulated battery stats data and PowerCalculators to produce power
@@ -52,7 +55,7 @@ public class BatteryUsageStatsProvider {
                 mPowerCalculators = new ArrayList<>();
 
                 // Power calculators are applied in the order of registration
-                mPowerCalculators.add(new DischargedPowerCalculator(mPowerProfile));
+                mPowerCalculators.add(new BatteryChargeCalculator(mPowerProfile));
                 mPowerCalculators.add(new CpuPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new MemoryPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new WakelockPowerCalculator(mPowerProfile));
@@ -85,7 +88,7 @@ public class BatteryUsageStatsProvider {
     }
 
     /**
-     * Returns a snapshot of battery attribution data.
+     * Returns snapshots of battery attribution data, one per supplied query.
      */
     public List<BatteryUsageStats> getBatteryUsageStats(List<BatteryUsageStatsQuery> queries) {
 
@@ -112,12 +115,19 @@ public class BatteryUsageStatsProvider {
         return results;
     }
 
-    private BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query) {
-        final long[] customMeasuredEnergiesMicroJoules =
-                mStats.getCustomMeasuredEnergiesMicroJoules();
-        final int customPowerComponentCount = customMeasuredEnergiesMicroJoules != null
-                        ? customMeasuredEnergiesMicroJoules.length
-                        : 0;
+    /**
+     * Returns a snapshot of battery attribution data.
+     */
+    @VisibleForTesting
+    public BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query) {
+        final long realtimeUs = mStats.mClocks.elapsedRealtime() * 1000;
+        final long uptimeUs = mStats.mClocks.uptimeMillis() * 1000;
+
+        final long[] customMeasuredChargesUC =
+                mStats.getCustomConsumerMeasuredBatteryConsumptionUC();
+        final int customPowerComponentCount = customMeasuredChargesUC != null
+                ? customMeasuredChargesUC.length
+                : 0;
 
         // TODO(b/174186358): read extra time component number from configuration
         final int customTimeComponentCount = 0;
@@ -128,11 +138,13 @@ public class BatteryUsageStatsProvider {
 
         SparseArray<? extends BatteryStats.Uid> uidStats = mStats.getUidStats();
         for (int i = uidStats.size() - 1; i >= 0; i--) {
-            batteryUsageStatsBuilder.getOrCreateUidBatteryConsumerBuilder(uidStats.valueAt(i));
+            final BatteryStats.Uid uid = uidStats.valueAt(i);
+            batteryUsageStatsBuilder.getOrCreateUidBatteryConsumerBuilder(uid)
+                    .setTimeInStateMs(UidBatteryConsumer.STATE_BACKGROUND,
+                            getProcessBackgroundTimeMs(uid, realtimeUs))
+                    .setTimeInStateMs(UidBatteryConsumer.STATE_FOREGROUND,
+                            getProcessForegroundTimeMs(uid, realtimeUs));
         }
-
-        final long realtimeUs = SystemClock.elapsedRealtime() * 1000;
-        final long uptimeUs = SystemClock.uptimeMillis() * 1000;
 
         final List<PowerCalculator> powerCalculators = getPowerCalculators();
         for (int i = 0, count = powerCalculators.size(); i < count; i++) {
@@ -141,6 +153,51 @@ public class BatteryUsageStatsProvider {
                     query);
         }
 
+        if ((query.getFlags()
+                & BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_HISTORY) != 0) {
+            ArrayList<BatteryStats.HistoryTag> tags = new ArrayList<>(
+                    mStats.mHistoryTagPool.size());
+            for (Map.Entry<BatteryStats.HistoryTag, Integer> entry :
+                    mStats.mHistoryTagPool.entrySet()) {
+                final BatteryStats.HistoryTag tag = entry.getKey();
+                tag.poolIdx = entry.getValue();
+                tags.add(tag);
+            }
+
+            batteryUsageStatsBuilder.setBatteryHistory(mStats.mHistoryBuffer, tags);
+        }
+
         return batteryUsageStatsBuilder.build();
+    }
+
+    private long getProcessForegroundTimeMs(BatteryStats.Uid uid, long realtimeUs) {
+        final long topStateDurationMs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_TOP,
+                realtimeUs, BatteryStats.STATS_SINCE_CHARGED) / 1000;
+
+        long foregroundActivityDurationMs = 0;
+        final BatteryStats.Timer foregroundActivityTimer = uid.getForegroundActivityTimer();
+        if (foregroundActivityTimer != null) {
+            foregroundActivityDurationMs = foregroundActivityTimer.getTotalTimeLocked(realtimeUs,
+                    BatteryStats.STATS_SINCE_CHARGED) / 1000;
+        }
+
+        // Use the min value of STATE_TOP time and foreground activity time, since both of these
+        // times are imprecise
+        final long foregroundDurationMs = Math.min(topStateDurationMs,
+                foregroundActivityDurationMs);
+
+        long foregroundServiceDurationMs = 0;
+        final BatteryStats.Timer foregroundServiceTimer = uid.getForegroundServiceTimer();
+        if (foregroundServiceTimer != null) {
+            foregroundServiceDurationMs = foregroundServiceTimer.getTotalTimeLocked(realtimeUs,
+                    BatteryStats.STATS_SINCE_CHARGED) / 1000;
+        }
+
+        return foregroundDurationMs + foregroundServiceDurationMs;
+    }
+
+    private long getProcessBackgroundTimeMs(BatteryStats.Uid uid, long realtimeUs) {
+        return uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_BACKGROUND, realtimeUs,
+                BatteryStats.STATS_SINCE_CHARGED) / 1000;
     }
 }

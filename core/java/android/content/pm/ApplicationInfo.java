@@ -138,6 +138,18 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public int fullBackupContent = 0;
 
     /**
+     * Applications can set this attribute to an xml resource within their app where they specified
+     * the rules determining which files and directories can be copied from the device as part of
+     * backup or transfer operations.
+     *<p>
+     * Set from the {@link android.R.styleable#AndroidManifestApplication_dataExtractionRules}
+     * attribute in the manifest.
+     *
+     * @hide
+     */
+    public int dataExtractionRulesRes = 0;
+
+    /**
      * <code>true</code> if the package is capable of presenting a unified interface representing
      * multiple profiles.
      * @hide
@@ -1120,19 +1132,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * <p>
      * This property is the compile-time equivalent of
      * {@link android.os.Build.VERSION#CODENAME Build.VERSION.SDK_INT}.
-     *
-     * @hide For platform use only; we don't expect developers to need to read this value.
      */
     public int compileSdkVersion;
 
     /**
-     * The development codename (ex. "O", "REL") of the framework against which the application
+     * The development codename (ex. "S", "REL") of the framework against which the application
      * claims to have been compiled, or {@code null} if not specified.
      * <p>
      * This property is the compile-time equivalent of
      * {@link android.os.Build.VERSION#CODENAME Build.VERSION.CODENAME}.
-     *
-     * @hide For platform use only; we don't expect developers to need to read this value.
      */
     @Nullable
     public String compileSdkVersionCodename;
@@ -1212,7 +1220,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             CATEGORY_SOCIAL,
             CATEGORY_NEWS,
             CATEGORY_MAPS,
-            CATEGORY_PRODUCTIVITY
+            CATEGORY_PRODUCTIVITY,
+            CATEGORY_ACCESSIBILITY
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Category {
@@ -1288,6 +1297,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public static final int CATEGORY_PRODUCTIVITY = 7;
 
     /**
+     * Category for apps which are primarily accessibility apps, such as screen-readers.
+     *
+     * @see #category
+     */
+    public static final int CATEGORY_ACCESSIBILITY = 8;
+
+    /**
      * Return a concise, localized title for the given
      * {@link ApplicationInfo#category} value, or {@code null} for unknown
      * values such as {@link #CATEGORY_UNDEFINED}.
@@ -1312,6 +1328,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
                 return context.getText(com.android.internal.R.string.app_category_maps);
             case ApplicationInfo.CATEGORY_PRODUCTIVITY:
                 return context.getText(com.android.internal.R.string.app_category_productivity);
+            case ApplicationInfo.CATEGORY_ACCESSIBILITY:
+                return context.getText(com.android.internal.R.string.app_category_accessibility);
             default:
                 return null;
         }
@@ -1538,6 +1556,9 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             } else {
                 pw.println(prefix + "fullBackupContent="
                         + (fullBackupContent < 0 ? "false" : "true"));
+            }
+            if (dataExtractionRulesRes != 0) {
+                pw.println(prefix + "dataExtractionRules=@xml/" + dataExtractionRulesRes);
             }
             pw.println(prefix + "crossProfile=" + (crossProfile ? "true" : "false"));
             if (networkSecurityConfigRes != 0) {
@@ -1770,6 +1791,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         uiOptions = orig.uiOptions;
         backupAgentName = orig.backupAgentName;
         fullBackupContent = orig.fullBackupContent;
+        dataExtractionRulesRes = orig.dataExtractionRulesRes;
         crossProfile = orig.crossProfile;
         networkSecurityConfigRes = orig.networkSecurityConfigRes;
         category = orig.category;
@@ -1859,6 +1881,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(descriptionRes);
         dest.writeInt(uiOptions);
         dest.writeInt(fullBackupContent);
+        dest.writeInt(dataExtractionRulesRes);
         dest.writeBoolean(crossProfile);
         dest.writeInt(networkSecurityConfigRes);
         dest.writeInt(category);
@@ -1945,6 +1968,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         descriptionRes = source.readInt();
         uiOptions = source.readInt();
         fullBackupContent = source.readInt();
+        dataExtractionRulesRes = source.readInt();
         crossProfile = source.readBoolean();
         networkSecurityConfigRes = source.readInt();
         category = source.readInt();

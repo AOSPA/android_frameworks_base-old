@@ -789,7 +789,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @GuardedBy("mLock")
     private File mInheritedFilesBase;
     @GuardedBy("mLock")
-    private boolean mVerityFound;
+    private boolean mVerityFoundForApks;
 
     /**
      * Both flags should be guarded with mLock whenever changes need to be in lockstep.
@@ -1018,9 +1018,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 throw new IllegalArgumentException(
                         "DataLoader installation of APEX modules is not allowed.");
             }
+
             if (this.params.dataLoaderParams.getComponentName().getPackageName()
-                    == SYSTEM_DATA_LOADER_PACKAGE) {
-                assertShellOrSystemCalling("System data loaders");
+                    == SYSTEM_DATA_LOADER_PACKAGE && mContext.checkCallingOrSelfPermission(
+                    Manifest.permission.USE_SYSTEM_DATA_LOADERS)
+                    != PackageManager.PERMISSION_GRANTED) {
+                throw new SecurityException("You need the "
+                        + "com.android.permission.USE_SYSTEM_DATA_LOADERS permission "
+                        + "to use system data loaders");
             }
         }
 
@@ -1210,8 +1215,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @GuardedBy("mLock")
     private void computeProgressLocked(boolean forcePublish) {
-        mProgress = MathUtils.constrain(mClientProgress * 0.8f, 0f, 0.8f)
-                + MathUtils.constrain(mInternalProgress * 0.2f, 0f, 0.2f);
+        if (!mCommitted) {
+            mProgress = MathUtils.constrain(mClientProgress * 0.8f, 0f, 0.8f)
+                    + MathUtils.constrain(mInternalProgress * 0.2f, 0f, 0.2f);
+        } else {
+            // For incremental installs, continue publishing the install progress during committing.
+            mProgress = mIncrementalProgress;
+        }
 
         // Only publish when meaningful change
         if (forcePublish || Math.abs(mProgress - mReportedProgress) >= 0.01) {
@@ -1959,9 +1969,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
                             "Session destroyed");
                 }
-                // Client staging is fully done at this point
-                mClientProgress = 1f;
-                computeProgressLocked(true);
+                if (!isIncrementalInstallation()) {
+                    // For non-incremental installs, client staging is fully done at this point
+                    mClientProgress = 1f;
+                    computeProgressLocked(true);
+                }
 
                 // This ongoing commit should keep session active, even though client
                 // will probably close their end.
@@ -2094,15 +2106,16 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             try {
                 sealLocked();
 
-                // Session that are staged, ready and not multi package will be installed during
-                // this boot. As such, we need populate all the fields for successful installation.
-                if (isMultiPackage()) {
+                // Session that are staged, committed and not multi package will be installed or
+                // restart verification during this boot. As such, we need populate all the fields
+                // for successful installation.
+                if (isMultiPackage() || !isStaged() || !isCommitted()) {
                     return;
                 }
                 final PackageInstallerSession root = hasParentSessionId()
                         ? allSessions.get(getParentSessionId())
                         : this;
-                if (root != null && root.isStagedSessionReady()) {
+                if (root != null) {
                     if (isApexSession()) {
                         validateApexInstallLocked();
                     } else {
@@ -2737,8 +2750,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
                     "Missing existing base package");
         }
-        // Default to require only if existing base has fs-verity.
-        mVerityFound = PackageManagerServiceUtils.isApkVerityEnabled()
+        // Default to require only if existing base apk has fs-verity.
+        mVerityFoundForApks = PackageManagerServiceUtils.isApkVerityEnabled()
                 && params.mode == SessionParams.MODE_INHERIT_EXISTING
                 && VerityUtils.hasFsverity(pkgInfo.applicationInfo.getBaseCodePath());
 
@@ -3033,34 +3046,18 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     @GuardedBy("mLock")
-    private void maybeStageFsveritySignatureLocked(File origFile, File targetFile)
-            throws PackageManagerException {
+    private void maybeStageFsveritySignatureLocked(File origFile, File targetFile,
+            boolean fsVerityRequired) throws PackageManagerException {
         final File originalSignature = new File(
                 VerityUtils.getFsveritySignatureFilePath(origFile.getPath()));
-        // Make sure .fsv_sig exists when it should, then resolve and stage it.
         if (originalSignature.exists()) {
-            // mVerityFound can only change from false to true here during the staging loop. Since
-            // all or none of files should have .fsv_sig, this should only happen in the first time
-            // (or never), otherwise bail out.
-            if (!mVerityFound) {
-                mVerityFound = true;
-                if (mResolvedStagedFiles.size() > 1) {
-                    throw new PackageManagerException(INSTALL_FAILED_BAD_SIGNATURE,
-                            "Some file is missing fs-verity signature");
-                }
-            }
-        } else {
-            if (!mVerityFound) {
-                return;
-            }
+            final File stagedSignature = new File(
+                    VerityUtils.getFsveritySignatureFilePath(targetFile.getPath()));
+            stageFileLocked(originalSignature, stagedSignature);
+        } else if (fsVerityRequired) {
             throw new PackageManagerException(INSTALL_FAILED_BAD_SIGNATURE,
                     "Missing corresponding fs-verity signature to " + origFile);
         }
-
-        final File stagedSignature = new File(
-                VerityUtils.getFsveritySignatureFilePath(targetFile.getPath()));
-
-        stageFileLocked(originalSignature, stagedSignature);
     }
 
     @GuardedBy("mLock")
@@ -3079,7 +3076,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 DexMetadataHelper.buildDexMetadataPathForApk(targetFile.getName()));
 
         stageFileLocked(dexMetadataFile, targetDexMetadataFile);
-        maybeStageFsveritySignatureLocked(dexMetadataFile, targetDexMetadataFile);
+
+        // Also stage .dm.fsv_sig. .dm may be required to install with fs-verity signature on
+        // supported on older devices.
+        maybeStageFsveritySignatureLocked(dexMetadataFile, targetDexMetadataFile,
+                VerityUtils.isFsVeritySupported() && DexMetadataHelper.isFsVerityRequired());
     }
 
     private void storeBytesToInstallationFile(final String localPath, final String absolutePath,
@@ -3141,13 +3142,45 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     @GuardedBy("mLock")
+    private boolean isFsVerityRequiredForApk(File origFile, File targetFile)
+            throws PackageManagerException {
+        if (mVerityFoundForApks) {
+            return true;
+        }
+
+        // We haven't seen .fsv_sig for any APKs. Treat it as not required until we see one.
+        final File originalSignature = new File(
+                VerityUtils.getFsveritySignatureFilePath(origFile.getPath()));
+        if (!originalSignature.exists()) {
+            return false;
+        }
+        mVerityFoundForApks = true;
+
+        // When a signature is found, also check any previous staged APKs since they also need to
+        // have fs-verity signature consistently.
+        for (File file : mResolvedStagedFiles) {
+            if (!file.getName().endsWith(".apk")) {
+                continue;
+            }
+            // Ignore the current targeting file.
+            if (targetFile.getName().equals(file.getName())) {
+                continue;
+            }
+            throw new PackageManagerException(INSTALL_FAILED_BAD_SIGNATURE,
+                    "Previously staged apk is missing fs-verity signature");
+        }
+        return true;
+    }
+
+    @GuardedBy("mLock")
     private void resolveAndStageFileLocked(File origFile, File targetFile, String splitName)
             throws PackageManagerException {
         stageFileLocked(origFile, targetFile);
 
-        // Stage fsverity signature if present.
-        maybeStageFsveritySignatureLocked(origFile, targetFile);
-        // Stage dex metadata (.dm) if present.
+        // Stage APK's fs-verity signature if present.
+        maybeStageFsveritySignatureLocked(origFile, targetFile,
+                isFsVerityRequiredForApk(origFile, targetFile));
+        // Stage dex metadata (.dm) and corresponding fs-verity signature if present.
         maybeStageDexMetadataLocked(origFile, targetFile);
         // Stage checksums (.digests) if present.
         maybeStageDigestsLocked(origFile, targetFile, splitName);
@@ -3540,14 +3573,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public DataLoaderParamsParcel getDataLoaderParams() {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         return params.dataLoaderParams != null ? params.dataLoaderParams.getData() : null;
     }
 
     @Override
     public void addFile(int location, String name, long lengthBytes, byte[] metadata,
             byte[] signature) {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         if (!isDataLoaderInstallation()) {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
@@ -3580,7 +3611,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public void removeFile(int location, String name) {
-        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         if (!isDataLoaderInstallation()) {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
@@ -3804,6 +3834,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             public void onPackageLoadingProgressChanged(float progress) {
                                 synchronized (mLock) {
                                     mIncrementalProgress = progress;
+                                    computeProgressLocked(true);
                                 }
                             }
                         });

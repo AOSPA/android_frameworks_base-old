@@ -43,6 +43,7 @@ import java.security.interfaces.RSAPublicKey;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
 
 /**
  * A provider focused on providing JCA interfaces for the Android KeyStore.
@@ -273,10 +274,10 @@ public class AndroidKeyStoreProvider extends Provider {
     /** @hide **/
     @NonNull
     public static KeyPair loadAndroidKeyStoreKeyPairFromKeystore(
-            @NonNull KeyStore2 keyStore, @NonNull String privateKeyAlias, int namespace)
+            @NonNull KeyStore2 keyStore, @NonNull KeyDescriptor descriptor)
             throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
         AndroidKeyStoreKey key =
-                loadAndroidKeyStoreKeyFromKeystore(keyStore, privateKeyAlias, namespace);
+                loadAndroidKeyStoreKeyFromKeystore(keyStore, descriptor);
         if (key instanceof AndroidKeyStorePublicKey) {
             AndroidKeyStorePublicKey publicKey = (AndroidKeyStorePublicKey) key;
             return new KeyPair(publicKey, publicKey.getPrivateKey());
@@ -299,13 +300,26 @@ public class AndroidKeyStoreProvider extends Provider {
         }
     }
 
+    /** @hide **/
+    @NonNull
+    public static SecretKey loadAndroidKeyStoreSecretKeyFromKeystore(
+            @NonNull KeyStore2 keyStore, @NonNull KeyDescriptor descriptor)
+            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
+
+        AndroidKeyStoreKey key =
+                loadAndroidKeyStoreKeyFromKeystore(keyStore, descriptor);
+        if (key instanceof SecretKey) {
+            return (SecretKey) key;
+        } else {
+            throw new UnrecoverableKeyException("No secret key found by the given alias.");
+        }
+    }
 
     @NonNull
     private static AndroidKeyStoreSecretKey makeAndroidKeyStoreSecretKeyFromKeyEntryResponse(
             @NonNull KeyDescriptor descriptor,
             @NonNull KeyEntryResponse response, int algorithm, int digest)
             throws UnrecoverableKeyException {
-
         @KeyProperties.KeyAlgorithmEnum String keyAlgorithmString;
         try {
             keyAlgorithmString = KeyProperties.KeyAlgorithm.fromKeymasterSecretKeyAlgorithm(
@@ -336,8 +350,7 @@ public class AndroidKeyStoreProvider extends Provider {
     @NonNull
     public static AndroidKeyStoreKey loadAndroidKeyStoreKeyFromKeystore(
             @NonNull KeyStore2 keyStore, @NonNull String alias, int namespace)
-            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException  {
-
+            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
         KeyDescriptor descriptor = new KeyDescriptor();
         if (namespace == KeyProperties.NAMESPACE_APPLICATION) {
             descriptor.nspace = KeyProperties.NAMESPACE_APPLICATION; // ignored;
@@ -348,6 +361,18 @@ public class AndroidKeyStoreProvider extends Provider {
         }
         descriptor.alias = alias;
         descriptor.blob = null;
+
+        final AndroidKeyStoreKey key = loadAndroidKeyStoreKeyFromKeystore(keyStore, descriptor);
+        if (key instanceof AndroidKeyStorePublicKey) {
+            return ((AndroidKeyStorePublicKey) key).getPrivateKey();
+        } else {
+            return key;
+        }
+    }
+
+    private static AndroidKeyStoreKey loadAndroidKeyStoreKeyFromKeystore(
+            @NonNull KeyStore2 keyStore, @NonNull KeyDescriptor descriptor)
+            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
         KeyEntryResponse response = null;
         try {
             response = keyStore.getKeyEntry(descriptor);
@@ -397,7 +422,7 @@ public class AndroidKeyStoreProvider extends Provider {
                 keymasterAlgorithm == KeymasterDefs.KM_ALGORITHM_EC) {
             return makeAndroidKeyStorePublicKeyFromKeyEntryResponse(descriptor, response.metadata,
                     new KeyStoreSecurityLevel(response.iSecurityLevel),
-                    keymasterAlgorithm).getPrivateKey();
+                    keymasterAlgorithm);
         } else {
             throw new UnrecoverableKeyException("Key algorithm unknown");
         }

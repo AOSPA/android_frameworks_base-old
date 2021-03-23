@@ -98,14 +98,16 @@ public class FrameTrackerTest {
         mListenerCapture = ArgumentCaptor.forClass(OnJankDataListener.class);
         doNothing().when(mSurfaceControlWrapper).addJankStatsListener(
                 mListenerCapture.capture(), any());
+        doNothing().when(mSurfaceControlWrapper).removeJankStatsListener(
+                mListenerCapture.capture());
         mChoreographer = mock(ChoreographerWrapper.class);
-
 
         Session session = new Session(CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE);
         mTracker = Mockito.spy(
                 new FrameTracker(session, handler, mRenderer, mViewRootWrapper,
                         mSurfaceControlWrapper, mChoreographer, mWrapper,
-                        /*traceThresholdMissedFrames=*/ 1, /*traceThresholdFrameTimeMillis=*/ -1));
+                        /*traceThresholdMissedFrames=*/ 1, /*traceThresholdFrameTimeMillis=*/ -1,
+                        null));
         doNothing().when(mTracker).triggerPerfetto();
     }
 
@@ -126,11 +128,12 @@ public class FrameTrackerTest {
         sendFirstWindowFrame(5, JANK_NONE, 101L);
 
         // end the trace session, the last janky frame is after the end() so is discarded.
-        when(mChoreographer.getVsyncId()).thenReturn(101L);
+        when(mChoreographer.getVsyncId()).thenReturn(102L);
         mTracker.end();
-        sendFrame(500, JANK_APP_DEADLINE_MISSED, 102L);
+        sendFrame(5, JANK_NONE, 102L);
+        sendFrame(500, JANK_APP_DEADLINE_MISSED, 103L);
 
-        verify(mRenderer).removeObserver(any());
+        verify(mTracker).removeObservers();
         verify(mTracker, never()).triggerPerfetto();
     }
 
@@ -147,11 +150,11 @@ public class FrameTrackerTest {
         sendFrame(40, JANK_SURFACEFLINGER_DEADLINE_MISSED, 101L);
 
         // end the trace session
-        when(mChoreographer.getVsyncId()).thenReturn(101L);
+        when(mChoreographer.getVsyncId()).thenReturn(102L);
         mTracker.end();
         sendFrame(4, JANK_NONE, 102L);
 
-        verify(mRenderer).removeObserver(any());
+        verify(mTracker).removeObservers();
 
         // We detected a janky frame - trigger Perfetto
         verify(mTracker).triggerPerfetto();
@@ -170,11 +173,11 @@ public class FrameTrackerTest {
         sendFrame(4, JANK_NONE, 101L);
 
         // end the trace session
-        when(mChoreographer.getVsyncId()).thenReturn(101L);
+        when(mChoreographer.getVsyncId()).thenReturn(102L);
         mTracker.end();
         sendFrame(4, JANK_NONE, 102L);
 
-        verify(mRenderer).removeObserver(any());
+        verify(mTracker).removeObservers();
 
         // We detected a janky frame - trigger Perfetto
         verify(mTracker, never()).triggerPerfetto();
@@ -193,11 +196,11 @@ public class FrameTrackerTest {
         sendFrame(40, JANK_APP_DEADLINE_MISSED, 101L);
 
         // end the trace session
-        when(mChoreographer.getVsyncId()).thenReturn(101L);
+        when(mChoreographer.getVsyncId()).thenReturn(102L);
         mTracker.end();
         sendFrame(4, JANK_NONE, 102L);
 
-        verify(mRenderer).removeObserver(any());
+        verify(mTracker).removeObservers();
 
         // We detected a janky frame - trigger Perfetto
         verify(mTracker).triggerPerfetto();
@@ -223,7 +226,7 @@ public class FrameTrackerTest {
         // One more callback with VSYNC after the end() vsync id.
         sendFrame(4, JANK_NONE, 103L);
 
-        verify(mRenderer).removeObserver(any());
+        verify(mTracker).removeObservers();
 
         // We detected a janky frame - trigger Perfetto
         verify(mTracker).triggerPerfetto();
@@ -245,9 +248,48 @@ public class FrameTrackerTest {
         sendFrame(50, JANK_APP_DEADLINE_MISSED, 102L);
 
         mTracker.cancel();
-        verify(mRenderer).removeObserver(any());
+        verify(mTracker).removeObservers();
         // Since the tracker has been cancelled, shouldn't trigger perfetto.
         verify(mTracker, never()).triggerPerfetto();
+    }
+
+    @Test
+    public void testRemoveObserversWhenCancelledInEnd() {
+        when(mChoreographer.getVsyncId()).thenReturn(100L);
+        mTracker.begin();
+        verify(mRenderer, only()).addObserver(any());
+
+        // send first frame - not janky
+        sendFrame(4, JANK_NONE, 100L);
+
+        // send another frame - should be considered janky
+        sendFrame(40, JANK_APP_DEADLINE_MISSED, 101L);
+
+        // end the trace session
+        when(mChoreographer.getVsyncId()).thenReturn(101L);
+        mTracker.end();
+        sendFrame(4, JANK_NONE, 102L);
+
+        // Since the begin vsync id (101) equals to the end vsync id (101), will be treat as cancel.
+        verify(mTracker).cancel();
+
+        // Observers should be removed in this case, or FrameTracker object will be leaked.
+        verify(mTracker).removeObservers();
+
+        // Should never trigger Perfetto since it is a cancel.
+        verify(mTracker, never()).triggerPerfetto();
+    }
+
+    @Test
+    public void testCancelWhenSessionNeverBegun() {
+        mTracker.cancel();
+        verify(mTracker).removeObservers();
+    }
+
+    @Test
+    public void testEndWhenSessionNeverBegun() {
+        mTracker.end();
+        verify(mTracker).removeObservers();
     }
 
     private void sendFirstWindowFrame(long durationMillis,

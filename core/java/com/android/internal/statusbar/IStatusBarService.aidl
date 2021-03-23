@@ -67,7 +67,7 @@ interface IStatusBarService
     void onNotificationError(String pkg, String tag, int id,
             int uid, int initialPid, String message, int userId);
     void onClearAllNotifications(int userId);
-    void onNotificationClear(String pkg, String tag, int id, int userId, String key,
+    void onNotificationClear(String pkg, int userId, String key,
             int dismissalSurface, int dismissalSentiment, in NotificationVisibility nv);
     void onNotificationVisibilityChanged( in NotificationVisibility[] newlyVisibleKeys,
             in NotificationVisibility[] noLongerVisibleKeys);
@@ -79,7 +79,7 @@ interface IStatusBarService
             in int notificationLocation, boolean modifiedBeforeSending);
     void onNotificationSettingsViewed(String key);
     void onNotificationBubbleChanged(String key, boolean isBubble, int flags);
-    void onBubbleNotificationSuppressionChanged(String key, boolean isSuppressed);
+    void onBubbleNotificationSuppressionChanged(String key, boolean isNotifSuppressed, boolean isBubbleSuppressed);
     void hideCurrentInputMethodForBubbles();
     void grantInlineReplyUriPermission(String key, in Uri uri, in UserHandle user, String packageName);
     void clearInlineReplyUriPermissions(String key);

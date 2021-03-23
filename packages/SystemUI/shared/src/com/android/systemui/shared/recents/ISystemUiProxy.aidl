@@ -19,6 +19,7 @@ package com.android.systemui.shared.recents;
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
 import android.content.ComponentName;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Insets;
@@ -29,12 +30,13 @@ import android.view.MotionEvent;
 
 import com.android.systemui.shared.recents.IPinnedStackAnimationListener;
 import com.android.systemui.shared.recents.ISplitScreenListener;
+import com.android.systemui.shared.recents.IStartingWindowListener;
 import com.android.systemui.shared.recents.model.Task;
 import com.android.systemui.shared.system.RemoteTransitionCompat;
 
 /**
  * Temporary callbacks into SystemUI.
- * Next id = 30
+ * Next id = 44
  */
 interface ISystemUiProxy {
 
@@ -251,5 +253,11 @@ interface ISystemUiProxy {
     void startShortcut(in String packageName, in String shortcutId, in int stage, in int position,
             in Bundle options, in UserHandle user) = 40;
     void startIntent(
-            in PendingIntent intent, in int stage, in int position, in Bundle options) = 41;
+            in PendingIntent intent, in Intent fillInIntent, in int stage, in int position,
+            in Bundle options) = 41;
+    void removeFromSideStage(in int taskId) = 42;
+    /**
+     * Sets listener to get task launching callbacks.
+     */
+    void setStartingWindowListener(IStartingWindowListener listener) = 43;
 }

@@ -38,6 +38,7 @@ import static com.android.internal.util.function.pooled.PooledLambda.obtainRunna
 import static java.util.Objects.requireNonNull;
 import static java.util.concurrent.TimeUnit.MINUTES;
 
+import android.Manifest;
 import android.annotation.CheckResult;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -142,18 +143,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 import java.util.function.Function;
 
-//TODO onStop schedule unbind in 5 seconds
-//TODO make sure APIs are only callable from currently focused app
-//TODO schedule stopScan on activity destroy(except if configuration change)
-//TODO on associate called again after configuration change -> replace old callback with new
-//TODO avoid leaking calling activity in IFindDeviceCallback (see PrintManager#print for example)
 /** @hide */
 @SuppressLint("LongLogTag")
 public class CompanionDeviceManagerService extends SystemService implements Binder.DeathRecipient {
 
     private static final ComponentName SERVICE_TO_BIND_TO = ComponentName.createRelative(
             CompanionDeviceManager.COMPANION_DEVICE_DISCOVERY_PACKAGE_NAME,
-            ".DeviceDiscoveryService");
+            ".CompanionDeviceDiscoveryService");
 
     private static final long DEVICE_DISAPPEARED_TIMEOUT_MS = 10 * 1000;
     private static final long DEVICE_DISAPPEARED_UNBIND_TIMEOUT_MS = 10 * 60 * 1000;
@@ -414,6 +410,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             checkCallerIsSystemOr(callingPackage);
             int userId = getCallingUserId();
             checkUsesFeature(callingPackage, userId);
+            checkProfilePermissions(request);
 
             mFindDeviceCallback = callback;
             mRequest = request;
@@ -521,6 +518,21 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             int callingUid = Binder.getCallingUid();
             if (mAppOpsManager.checkPackage(callingUid, pkg) != AppOpsManager.MODE_ALLOWED) {
                 throw new SecurityException(pkg + " doesn't belong to uid " + callingUid);
+            }
+        }
+
+        private void checkProfilePermissions(AssociationRequest request) {
+            checkProfilePermission(request,
+                    AssociationRequest.DEVICE_PROFILE_WATCH,
+                    Manifest.permission.REQUEST_COMPANION_PROFILE_WATCH);
+        }
+
+        private void checkProfilePermission(
+                AssociationRequest request, String profile, String permission) {
+            if (profile.equals(request.getDeviceProfile())
+                    && getContext().checkCallingOrSelfPermission(permission)
+                            != PackageManager.PERMISSION_GRANTED) {
+                throw new SecurityException("Using " + profile + " requires " + permission);
             }
         }
 
@@ -745,6 +757,16 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                 } finally {
                     Binder.restoreCallingIdentity(identity);
                 }
+            }
+        }
+
+        if (association.isNotifyOnDeviceNearby()) {
+            ServiceConnector<ICompanionDeviceService> serviceConnector =
+                    mDeviceListenerServiceConnectors.forUser(association.getUserId())
+                            .get(association.getPackageName());
+            if (serviceConnector != null) {
+                serviceConnector.unbind();
+                restartBleScan();
             }
         }
     }
@@ -1046,11 +1068,19 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     }
 
     void onDeviceDisconnected(String address) {
-        Slog.d(LOG_TAG, "onDeviceConnected(address = " + address + ")");
+        Slog.d(LOG_TAG, "onDeviceDisconnected(address = " + address + ")");
 
         mCurrentlyConnectedDevices.remove(address);
 
-        onDeviceDisappeared(address);
+        Date lastSeen = mDevicesLastNearby.get(address);
+        if (isDeviceDisappeared(lastSeen)) {
+            onDeviceDisappeared(address);
+        }
+    }
+
+    private boolean isDeviceDisappeared(Date lastSeen) {
+        return lastSeen == null || System.currentTimeMillis() - lastSeen.getTime()
+                >= DEVICE_DISAPPEARED_UNBIND_TIMEOUT_MS;
     }
 
     private ServiceConnector<ICompanionDeviceService> getDeviceListenerServiceConnector(
@@ -1151,8 +1181,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                 String address = mDevicesLastNearby.keyAt(i);
                 Date lastNearby = mDevicesLastNearby.valueAt(i);
 
-                if (System.currentTimeMillis() - lastNearby.getTime()
-                        >= DEVICE_DISAPPEARED_UNBIND_TIMEOUT_MS) {
+                if (isDeviceDisappeared(lastNearby)) {
                     for (Association association : getAllAssociations(address)) {
                         if (association.isNotifyOnDeviceNearby()) {
                             getDeviceListenerServiceConnector(association).unbind();
@@ -1326,7 +1355,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         mPermissionControllerManager.getPrivilegesDescriptionStringForProfile(
                 deviceProfile, FgThread.getExecutor(), desc -> {
                         try {
-                            result.complete(desc);
+                            result.complete(String.valueOf(desc));
                         } catch (Exception e) {
                             result.completeExceptionally(e);
                         }
@@ -1422,7 +1451,9 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
 
         @Override
-        public void onDeviceDisconnected(BluetoothDevice device) {
+        public void onDeviceDisconnected(BluetoothDevice device, @DisconnectReason int reason) {
+            Slog.d(LOG_TAG, device.getAddress() + " disconnected w/ reason: (" + reason + ") "
+                    + BluetoothAdapter.BluetoothConnectionCallback.disconnectReasonText(reason));
             CompanionDeviceManagerService.this.onDeviceDisconnected(device.getAddress());
         }
     }

@@ -132,8 +132,11 @@ public abstract class ContentResolver implements ContentInterface {
     public static final String SYNC_EXTRAS_ACCOUNT = "account";
 
     /**
-     * If this extra is set to true, the sync request will be scheduled
-     * at the front of the sync request queue and without any delay
+     * If this extra is set to true, the sync request will be scheduled at the front of the
+     * sync request queue, but it is still subject to JobScheduler quota and throttling due to
+     * App Standby buckets.
+     *
+     * <p>This is different from {@link #SYNC_EXTRAS_SCHEDULE_AS_EXPEDITED_JOB}.
      */
     public static final String SYNC_EXTRAS_EXPEDITED = "expedited";
 
@@ -143,6 +146,29 @@ public abstract class ContentResolver implements ContentInterface {
      * setRequiresCharging(true) on {@link SyncRequest}.
      */
     public static final String SYNC_EXTRAS_REQUIRE_CHARGING = "require_charging";
+
+    /**
+     * Run this sync operation as an "expedited job"
+     * (see {@link android.app.job.JobInfo.Builder#setExpedited(boolean)}).
+     * Normally (if this flag isn't specified), sync operations are executed as regular
+     * {@link android.app.job.JobService} jobs.
+     *
+     * <p> Because Expedited Jobs have various restrictions compared to regular jobs, this flag
+     * cannot be combined with certain other flags, otherwise an
+     * <code>IllegalArgumentException</code> will be thrown. Notably, because Expedited Jobs do not
+     * support various constraints, the following restriction apply:
+     * <ul>
+     *  <li>Can't be used with {@link #SYNC_EXTRAS_REQUIRE_CHARGING}
+     *  <li>Can't be used with {@link #SYNC_EXTRAS_EXPEDITED}
+     *  <li>Can't be used on periodic syncs.
+     *  <li>When an expedited-job-sync fails and a retry is scheduled, the retried sync will be
+     *  scheduled as a regular job unless {@link #SYNC_EXTRAS_IGNORE_BACKOFF} is set.
+     * </ul>
+     *
+     * <p>This is different from {@link #SYNC_EXTRAS_EXPEDITED}.
+     */
+    @SuppressLint("IntentName")
+    public static final String SYNC_EXTRAS_SCHEDULE_AS_EXPEDITED_JOB = "schedule_as_expedited_job";
 
     /**
      * @deprecated instead use
@@ -743,7 +769,7 @@ public abstract class ContentResolver implements ContentInterface {
     // Always log queries which take 500ms+; shorter queries are
     // sampled accordingly.
     private static final boolean ENABLE_CONTENT_SAMPLE = false;
-    private static final int SLOW_THRESHOLD_MILLIS = 500;
+    private static final int SLOW_THRESHOLD_MILLIS = 500 * Build.HW_TIMEOUT_MULTIPLIER;
     private final Random mRandom = new Random();  // guarded by itself
 
     /** @hide */
@@ -757,7 +783,8 @@ public abstract class ContentResolver implements ContentInterface {
      * before we decide it must be hung.
      * @hide
      */
-    public static final int CONTENT_PROVIDER_PUBLISH_TIMEOUT_MILLIS = 10 * 1000;
+    public static final int CONTENT_PROVIDER_PUBLISH_TIMEOUT_MILLIS =
+            10 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     /**
      * How long we wait for an provider to be published. Should be longer than
@@ -765,10 +792,11 @@ public abstract class ContentResolver implements ContentInterface {
      * @hide
      */
     public static final int CONTENT_PROVIDER_READY_TIMEOUT_MILLIS =
-            CONTENT_PROVIDER_PUBLISH_TIMEOUT_MILLIS + 10 * 1000;
+            CONTENT_PROVIDER_PUBLISH_TIMEOUT_MILLIS + 10 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     // Timeout given a ContentProvider that has already been started and connected to.
-    private static final int CONTENT_PROVIDER_TIMEOUT_MILLIS = 3 * 1000;
+    private static final int CONTENT_PROVIDER_TIMEOUT_MILLIS =
+            3 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     // Should be >= {@link #CONTENT_PROVIDER_WAIT_TIMEOUT_MILLIS}, because that's how
     // long ActivityManagerService is giving a content provider to get published if a new process
@@ -3223,6 +3251,18 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
+     * {@hide}
+     * Helper function to throw an <code>IllegalArgumentException</code> if any illegal
+     * extras were set for a sync scheduled as an expedited job.
+     *
+     * @param extras bundle to validate.
+     */
+    public static boolean hasInvalidScheduleAsEjExtras(Bundle extras) {
+        return extras.getBoolean(ContentResolver.SYNC_EXTRAS_REQUIRE_CHARGING)
+                || extras.getBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED);
+    }
+
+    /**
      * Specifies that a sync should be requested with the specified the account, authority,
      * and extras at the given frequency. If there is already another periodic sync scheduled
      * with the account, authority and extras then a new periodic sync won't be added, instead
@@ -3236,7 +3276,8 @@ public abstract class ContentResolver implements ContentInterface {
      * Periodic syncs are not allowed to have any of {@link #SYNC_EXTRAS_DO_NOT_RETRY},
      * {@link #SYNC_EXTRAS_IGNORE_BACKOFF}, {@link #SYNC_EXTRAS_IGNORE_SETTINGS},
      * {@link #SYNC_EXTRAS_INITIALIZE}, {@link #SYNC_EXTRAS_FORCE},
-     * {@link #SYNC_EXTRAS_EXPEDITED}, {@link #SYNC_EXTRAS_MANUAL} set to true.
+     * {@link #SYNC_EXTRAS_EXPEDITED}, {@link #SYNC_EXTRAS_MANUAL},
+     * {@link #SYNC_EXTRAS_SCHEDULE_AS_EXPEDITED_JOB} set to true.
      * If any are supplied then an {@link IllegalArgumentException} will be thrown.
      *
      * <p>This method requires the caller to hold the permission
@@ -3276,16 +3317,14 @@ public abstract class ContentResolver implements ContentInterface {
      * @param extras bundle to validate.
      */
     public static boolean invalidPeriodicExtras(Bundle extras) {
-        if (extras.getBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, false)
+        return extras.getBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, false)
                 || extras.getBoolean(ContentResolver.SYNC_EXTRAS_DO_NOT_RETRY, false)
                 || extras.getBoolean(ContentResolver.SYNC_EXTRAS_IGNORE_BACKOFF, false)
                 || extras.getBoolean(ContentResolver.SYNC_EXTRAS_IGNORE_SETTINGS, false)
                 || extras.getBoolean(ContentResolver.SYNC_EXTRAS_INITIALIZE, false)
                 || extras.getBoolean(ContentResolver.SYNC_EXTRAS_FORCE, false)
-                || extras.getBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, false)) {
-            return true;
-        }
-        return false;
+                || extras.getBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, false)
+                || extras.getBoolean(ContentResolver.SYNC_EXTRAS_SCHEDULE_AS_EXPEDITED_JOB, false);
     }
 
     /**

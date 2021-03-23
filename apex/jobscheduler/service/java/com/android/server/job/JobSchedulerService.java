@@ -151,6 +151,8 @@ public class JobSchedulerService extends com.android.server.SystemService
     private static final boolean ENFORCE_MAX_JOBS = true;
     /** The maximum number of jobs that we allow an unprivileged app to schedule */
     private static final int MAX_JOBS_PER_APP = 100;
+    /** The number of the most recently completed jobs to keep track of for debugging purposes. */
+    private static final int NUM_COMPLETED_JOB_HISTORY = 20;
 
     @VisibleForTesting
     public static Clock sSystemClock = Clock.systemUTC();
@@ -296,6 +298,10 @@ public class JobSchedulerService extends com.android.server.SystemService
      * What we last reported to DeviceIdleController about whether we are active.
      */
     boolean mReportedActive;
+
+    private int mLastCompletedJobIndex = 0;
+    private final JobStatus[] mLastCompletedJobs = new JobStatus[NUM_COMPLETED_JOB_HISTORY];
+    private final long[] mLastCompletedJobTimeElapsed = new long[NUM_COMPLETED_JOB_HISTORY];
 
     /**
      * A mapping of which uids are currently in the foreground to their effective priority.
@@ -881,16 +887,12 @@ public class JobSchedulerService extends com.android.server.SystemService
     }
 
     @Override
-    public void onUserStarting(@NonNull TargetUser user) {
+    public void onUserUnlocked(@NonNull TargetUser user) {
         synchronized (mLock) {
+            // Note that the user has started after its unlocked instead of when the user
+            // actually starts because the storage won't be decrypted until unlock.
             mStartedUsers = ArrayUtils.appendInt(mStartedUsers, user.getUserIdentifier());
         }
-        // Let's kick any outstanding jobs for this user.
-        mHandler.obtainMessage(MSG_CHECK_JOB).sendToTarget();
-    }
-
-    @Override
-    public void onUserUnlocking(@NonNull TargetUser user) {
         // Let's kick any outstanding jobs for this user.
         mHandler.obtainMessage(MSG_CHECK_JOB).sendToTarget();
     }
@@ -1743,14 +1745,19 @@ public class JobSchedulerService extends com.android.server.SystemService
      * A job just finished executing. We fetch the
      * {@link com.android.server.job.controllers.JobStatus} from the store and depending on
      * whether we want to reschedule we re-add it to the controllers.
-     * @param jobStatus Completed job.
+     *
+     * @param jobStatus       Completed job.
      * @param needsReschedule Whether the implementing class should reschedule this job.
      */
     @Override
-    public void onJobCompletedLocked(JobStatus jobStatus, boolean needsReschedule) {
+    public void onJobCompletedLocked(JobStatus jobStatus, int stopReason, boolean needsReschedule) {
         if (DEBUG) {
             Slog.d(TAG, "Completed " + jobStatus + ", reschedule=" + needsReschedule);
         }
+
+        mLastCompletedJobs[mLastCompletedJobIndex] = jobStatus;
+        mLastCompletedJobTimeElapsed[mLastCompletedJobIndex] = sElapsedRealtimeClock.millis();
+        mLastCompletedJobIndex = (mLastCompletedJobIndex + 1) % NUM_COMPLETED_JOB_HISTORY;
 
         // Intentionally not checking expedited job quota here. An app can't find out if it's run
         // out of quota when it asks JS to reschedule an expedited job. Instead, the rescheduled
@@ -1761,6 +1768,11 @@ public class JobSchedulerService extends com.android.server.SystemService
         // we stop it.
         final JobStatus rescheduledJob = needsReschedule
                 ? getRescheduleJobForFailureLocked(jobStatus) : null;
+        if (rescheduledJob != null
+                && (stopReason == JobParameters.REASON_TIMEOUT
+                || stopReason == JobParameters.REASON_PREEMPT)) {
+            rescheduledJob.disallowRunInBatterySaverAndDoze();
+        }
 
         // Do not write back immediately if this is a periodic job. The job may get lost if system
         // shuts down before it is added back.
@@ -2287,7 +2299,8 @@ public class JobSchedulerService extends com.android.server.SystemService
     /** Returns the maximum amount of time this job could run for. */
     public long getMaxJobExecutionTimeMs(JobStatus job) {
         synchronized (mLock) {
-            return mQuotaController.getMaxJobExecutionTimeMsLocked(job);
+            return Math.min(mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS,
+                    mQuotaController.getMaxJobExecutionTimeMsLocked(job));
         }
     }
 
@@ -3298,6 +3311,37 @@ public class JobSchedulerService extends com.android.server.SystemService
                 }
             }
             pw.decreaseIndent();
+
+            pw.println();
+            boolean recentPrinted = false;
+            pw.println("Recently completed jobs:");
+            pw.increaseIndent();
+            for (int r = 1; r <= NUM_COMPLETED_JOB_HISTORY; ++r) {
+                // Print most recent first
+                final int idx = (mLastCompletedJobIndex + NUM_COMPLETED_JOB_HISTORY - r)
+                        % NUM_COMPLETED_JOB_HISTORY;
+                final JobStatus job = mLastCompletedJobs[idx];
+                if (job != null) {
+                    if (!predicate.test(job)) {
+                        continue;
+                    }
+                    recentPrinted = true;
+                    TimeUtils.formatDuration(mLastCompletedJobTimeElapsed[idx], nowElapsed, pw);
+                    pw.println();
+                    // Double indent for readability
+                    pw.increaseIndent();
+                    pw.increaseIndent();
+                    job.dump(pw, true, nowElapsed);
+                    pw.decreaseIndent();
+                    pw.decreaseIndent();
+                }
+            }
+            if (!recentPrinted) {
+                pw.println("None");
+            }
+            pw.decreaseIndent();
+            pw.println();
+
             if (filterUid == -1) {
                 pw.println();
                 pw.print("mReadyToRock="); pw.println(mReadyToRock);

@@ -848,6 +848,15 @@
         <!-- y-intercept --> <item>1.000000000000000</item>
     </string-array>
 
+    <!-- Default strength, in percentage, of bright color reduction when activated. -->
+    <integer name="config_reduceBrightColorsStrengthDefault">0</integer>
+
+    <!-- Minimum strength, in percentage, supported by bright color reduction. -->
+    <integer name="config_reduceBrightColorsStrengthMin">0</integer>
+
+    <!-- Maximum strength, in percentage, supported by bright color reduction. -->
+    <integer name="config_reduceBrightColorsStrengthMax">100</integer>
+
     <!-- Boolean indicating whether display white balance is supported. -->
     <bool name="config_displayWhiteBalanceAvailable">false</bool>
 
@@ -1172,6 +1181,9 @@
 
     <!-- Default value for LED off time when the battery is low on charge in miliseconds -->
     <integer name="config_notificationsBatteryLedOff">2875</integer>
+
+    <!-- If true, only colorized CallStyle notifications will apply custom colors -->
+    <bool name="config_callNotificationActionColorsRequireColorized">true</bool>
 
     <!-- Number of notifications to keep in the notification service historical archive -->
     <integer name="config_notificationServiceArchiveSize">100</integer>
@@ -1749,13 +1761,6 @@
         <item>com.android.location.fused</item>
     </string-array>
 
-    <!-- Gnss Psds Servers -->
-    <string name="config_longterm_psds_server_1" translatable="false"></string>
-    <string name="config_longterm_psds_server_2" translatable="false"></string>
-    <string name="config_longterm_psds_server_3" translatable="false"></string>
-    <string name="config_normal_psds_server" translatable="false"></string>
-    <string name="config_realtime_psds_server" translatable="false"></string>
-
     <!-- This string array can be overriden to enable test location providers initially. -->
     <!-- Array of "[locationProviderName],[requiresNetwork],
          [requiresSatellite],[requiresCell],[hasMonetaryCost],
@@ -1780,7 +1785,7 @@
              * SDK level 28 makes the following algorithms mandatory : "cbc(aes)", "hmac(md5)",
                "hmac(sha1)", "hmac(sha256)", "hmac(sha384)", "hmac(sha512)", "rfc4106(gcm(aes))"
              * SDK level 31 makes the following algorithms mandatory : "rfc3686(ctr(aes))",
-               "xcbc(aes)", "rfc7539esp(chacha20,poly1305)"
+               "xcbc(aes)", "cmac(aes)", "rfc7539esp(chacha20,poly1305)"
      -->
     <string-array name="config_optionalIpSecAlgorithms" translatable="false">
         <!-- Add algorithm here -->
@@ -1953,6 +1958,12 @@
     <string name="config_systemShell" translatable="false">com.android.shell</string>
     <!-- The name of the package that will hold the system contacts role. -->
     <string name="config_systemContacts" translatable="false">com.android.contacts</string>
+    <!-- The name of the package that will hold the speech recognizer role by default. -->
+    <string name="config_systemSpeechRecognizer" translatable="false"></string>
+    <!-- The name of the package that will hold the system Wi-Fi coex manager role. -->
+    <string name="config_systemWifiCoexManager" translateable="false"></string>
+    <!-- The name of the package that will hold the wellbeing role. -->
+    <string name="config_systemWellbeing" translatable="false"></string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
     <string name="config_overrideComponentUiPackage" translatable="false"></string>
@@ -3940,6 +3951,10 @@
          color supplied by the Notification.Builder if present. -->
     <bool name="config_tintNotificationActionButtons">true</bool>
 
+    <!-- Flag indicating that tinted items (actions, expander, etc) are to be tinted using the
+         theme color, rather than the notification color. -->
+    <bool name="config_tintNotificationsWithTheme">true</bool>
+
     <!-- Show area update info settings in CellBroadcastReceiver and information in SIM status in Settings app -->
     <bool name="config_showAreaUpdateInfoSettings">false</bool>
 
@@ -4667,20 +4682,11 @@
     <!-- WindowsManager JetPack display features -->
     <string name="config_display_features" translatable="false" />
 
-    <!-- Physical Display IDs of the display-devices that are swapped when a folding device folds.
-         This list is expected to contain two elements: the first is the display to use
-         when the device is folded, the second is the display to use when unfolded. If the array
-         is empty or the display IDs are not recognized, this feature is turned off and the value
-         ignored.
-         TODO: b/170470621 - remove once we can have multiple Internal displays in DMS as
-               well as a notification from DisplayStateManager. -->
-    <string-array name="config_internalFoldedPhysicalDisplayIds" translatable="false" />
-
-    <!-- Aspect ratio of task level letterboxing. Values <= 1.0 will be ignored.
-         Note: Activity min/max aspect ratio restrictions will still be respected by the
-         activity-level letterboxing (size-compat mode). Therefore this override can control the
-         maximum screen area that can be occupied by the app in the letterbox mode. -->
-    <item name="config_taskLetterboxAspectRatio" format="float" type="dimen">0.0</item>
+    <!-- Aspect ratio of letterboxing for fixed orientation. Values <= 1.0 will be ignored.
+         Note: Activity min/max aspect ratio restrictions will still be respected.
+         Therefore this override can control the maximum screen area that can be occupied by
+         the app in the letterbox mode. -->
+    <item name="config_fixedOrientationLetterboxAspectRatio" format="float" type="dimen">0.0</item>
 
     <!-- Corners radius for activity presented the letterbox mode. Values < 0 will be ignored and
          corners of the activity won't be rounded. -->
@@ -4705,6 +4711,14 @@
 
     <!-- If true, hide the display cutout with display area -->
     <bool name="config_hideDisplayCutoutWithDisplayArea">false</bool>
+
+    <!-- The timeout value in milliseconds used by SelectionActionModeHelper for each selections
+     when TextClassifier has been initialized. -->
+    <integer name="config_smartSelectionInitializedTimeoutMillis">200</integer>
+
+    <!-- The timeout value in milliseconds used by SelectionActionModeHelper for each selections
+         when TextClassifier has not been initialized. -->
+    <integer name="config_smartSelectionInitializingTimeoutMillis">500</integer>
 
     <!-- Indicates that default fitness tracker app needs to request sensor and location permissions. -->
     <bool name="config_trackerAppNeedsPermissions">false</bool>

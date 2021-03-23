@@ -22,12 +22,14 @@ import static android.text.TextUtils.formatSimple;
 
 import static com.android.server.am.ActivityManagerDebugConfig.*;
 
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.BroadcastOptions;
 import android.app.IApplicationThread;
 import android.app.PendingIntent;
+import android.app.usage.UsageEvents.Event;
 import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.IIntentReceiver;
@@ -43,6 +45,7 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerWhitelistManager;
 import android.os.PowerWhitelistManager.TempAllowListType;
 import android.os.Process;
 import android.os.RemoteException;
@@ -50,6 +53,7 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.permission.IPermissionManager;
+import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Slog;
 import android.util.SparseIntArray;
@@ -903,8 +907,9 @@ public final class BroadcastQueue {
         return false;
     }
 
-    final void scheduleTempWhitelistLocked(int uid, long duration, BroadcastRecord r,
-            @TempAllowListType int type) {
+    final void scheduleTempAllowlistLocked(int uid, long duration, BroadcastRecord r,
+            @TempAllowListType int type, @PowerWhitelistManager.ReasonCode int reasonCode,
+            @Nullable String reason) {
         if (duration > Integer.MAX_VALUE) {
             duration = Integer.MAX_VALUE;
         }
@@ -925,11 +930,14 @@ public final class BroadcastQueue {
         } else if (r.intent.getData() != null) {
             b.append(r.intent.getData());
         }
+        b.append(",reason:");
+        b.append(reason);
         if (DEBUG_BROADCAST) {
-            Slog.v(TAG, "Broadcast temp whitelist uid=" + uid + " duration=" + duration
+            Slog.v(TAG, "Broadcast temp allowlist uid=" + uid + " duration=" + duration
                     + " type=" + type + " : " + b.toString());
         }
-        mService.tempAllowlistUidLocked(uid, duration, b.toString(), type);
+        mService.tempAllowlistUidLocked(uid, duration, reasonCode, b.toString(), type,
+                r.callingUid);
     }
 
     /**
@@ -1332,10 +1340,12 @@ public final class BroadcastQueue {
                     // r is guaranteed ordered at this point, so we know finishReceiverLocked()
                     // will get a callback and handle the activity start token lifecycle.
                 }
-                if (brOptions != null && brOptions.getTemporaryAppWhitelistDuration() > 0) {
-                    scheduleTempWhitelistLocked(filter.owningUid,
-                            brOptions.getTemporaryAppWhitelistDuration(), r,
-                            brOptions.getTemporaryAppWhitelistType());
+                if (brOptions != null && brOptions.getTemporaryAppAllowlistDuration() > 0) {
+                    scheduleTempAllowlistLocked(filter.owningUid,
+                            brOptions.getTemporaryAppAllowlistDuration(), r,
+                            brOptions.getTemporaryAppAllowlistType(),
+                            brOptions.getTemporaryAppAllowlistReasonCode(),
+                            brOptions.getTemporaryAppAllowlistReason());
                 }
             }
             return;
@@ -1619,11 +1629,20 @@ public final class BroadcastQueue {
         }
 
         final boolean isActivityCapable =
-                (brOptions != null && brOptions.getTemporaryAppWhitelistDuration() > 0);
+                (brOptions != null && brOptions.getTemporaryAppAllowlistDuration() > 0);
         if (isActivityCapable) {
-            scheduleTempWhitelistLocked(receiverUid,
-                    brOptions.getTemporaryAppWhitelistDuration(), r,
-                    brOptions.getTemporaryAppWhitelistType());
+            scheduleTempAllowlistLocked(receiverUid,
+                    brOptions.getTemporaryAppAllowlistDuration(), r,
+                    brOptions.getTemporaryAppAllowlistType(),
+                    brOptions.getTemporaryAppAllowlistReasonCode(),
+                    brOptions.getTemporaryAppAllowlistReason());
+        }
+
+        // Report that a component is used for explicit broadcasts.
+        if (!r.intent.isExcludingStopped() && r.curComponent != null
+                && !TextUtils.equals(r.curComponent.getPackageName(), r.callerPackage)) {
+            mService.mUsageStatsService.reportEvent(
+                    r.curComponent.getPackageName(), r.userId, Event.APP_COMPONENT_USED);
         }
 
         // Broadcast is being executed, its package can't be stopped.

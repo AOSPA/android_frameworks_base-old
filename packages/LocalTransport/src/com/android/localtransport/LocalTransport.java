@@ -162,6 +162,12 @@ public class LocalTransport extends BackupTransport {
         if (mParameters.isFakeEncryptionFlag()) {
             flags |= BackupAgent.FLAG_FAKE_CLIENT_SIDE_ENCRYPTION_ENABLED;
         }
+        if (mParameters.isDeviceTransfer()) {
+            flags |= BackupAgent.FLAG_DEVICE_TO_DEVICE_TRANSFER;
+        }
+        if (mParameters.isEncrypted()) {
+            flags |= BackupAgent.FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED;
+        }
         return flags;
     }
 

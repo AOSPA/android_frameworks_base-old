@@ -54,6 +54,7 @@ import static android.net.INetd.FIREWALL_RULE_DENY;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+import static android.net.NetworkIdentity.OEM_NONE;
 import static android.net.NetworkPolicy.LIMIT_DISABLED;
 import static android.net.NetworkPolicy.SNOOZE_NEVER;
 import static android.net.NetworkPolicy.WARNING_DISABLED;
@@ -131,6 +132,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.app.ActivityManager.ProcessCapability;
 import android.app.ActivityManagerInternal;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
@@ -166,11 +168,11 @@ import android.net.NetworkCapabilities;
 import android.net.NetworkIdentity;
 import android.net.NetworkPolicy;
 import android.net.NetworkPolicyManager;
-import android.net.NetworkQuotaInfo;
+import android.net.NetworkPolicyManager.UidState;
 import android.net.NetworkRequest;
 import android.net.NetworkSpecifier;
 import android.net.NetworkStack;
-import android.net.NetworkState;
+import android.net.NetworkStateSnapshot;
 import android.net.NetworkStats;
 import android.net.NetworkTemplate;
 import android.net.TelephonyNetworkSpecifier;
@@ -428,7 +430,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private final CarrierConfigManager mCarrierConfigManager;
     private final MultipathPolicyTracker mMultipathPolicyTracker;
 
-    private IConnectivityManager mConnManager;
+    private ConnectivityManager mConnManager;
     private PowerManagerInternal mPowerManagerInternal;
     private PowerWhitelistManager mPowerWhitelistManager;
 
@@ -557,7 +559,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     /** Foreground at UID granularity. */
     @GuardedBy("mUidRulesFirstLock")
-    final SparseIntArray mUidState = new SparseIntArray();
+    final SparseArray<UidState> mUidState = new SparseArray<UidState>();
 
     /** Map from network ID to last observed meteredness state */
     @GuardedBy("mNetworkPoliciesSecondLock")
@@ -708,8 +710,9 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                 new NetworkPolicyManagerInternalImpl());
     }
 
-    public void bindConnectivityManager(IConnectivityManager connManager) {
-        mConnManager = Objects.requireNonNull(connManager, "missing IConnectivityManager");
+    public void bindConnectivityManager() {
+        mConnManager = Objects.requireNonNull(mContext.getSystemService(ConnectivityManager.class),
+                "missing ConnectivityManager");
     }
 
     @GuardedBy("mUidRulesFirstLock")
@@ -880,9 +883,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
             mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
             try {
+                // TODO: There shouldn't be a need to receive callback for all changes.
                 mActivityManager.registerUidObserver(mUidObserver,
                         ActivityManager.UID_OBSERVER_PROCSTATE|ActivityManager.UID_OBSERVER_GONE,
-                        NetworkPolicyManager.FOREGROUND_THRESHOLD_STATE, "android");
+                        ActivityManager.PROCESS_STATE_UNKNOWN, "android");
                 mNetworkManager.registerObserver(mAlertObserver);
             } catch (RemoteException e) {
                 // ignored; both services live in system_server
@@ -939,7 +943,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             mContext.registerReceiver(mCarrierConfigReceiver, carrierConfigFilter, null, mHandler);
 
             // listen for meteredness changes
-            mContext.getSystemService(ConnectivityManager.class).registerNetworkCallback(
+            mConnManager.registerNetworkCallback(
                     new NetworkRequest.Builder().build(), mNetworkCallback);
 
             mAppStandby.addListener(new NetPolicyAppIdleStateChangeListener());
@@ -988,9 +992,12 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     final private IUidObserver mUidObserver = new IUidObserver.Stub() {
         @Override public void onUidStateChanged(int uid, int procState, long procStateSeq,
-                int capability) {
+                @ProcessCapability int capability) {
+            // TODO: Avoid creating a new UidStateCallbackInfo object every time
+            // we get a callback for an uid
             mUidEventHandler.obtainMessage(UID_MSG_STATE_CHANGED,
-                    uid, procState, procStateSeq).sendToTarget();
+                    new UidStateCallbackInfo(uid, procState, procStateSeq, capability))
+                            .sendToTarget();
         }
 
         @Override public void onUidGone(int uid, boolean disabled) {
@@ -1006,6 +1013,22 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         @Override public void onUidCachedChanged(int uid, boolean cached) {
         }
     };
+
+    private static final class UidStateCallbackInfo {
+        public final int uid;
+        public final int procState;
+        public final long procStateSeq;
+        @ProcessCapability
+        public final int capability;
+
+        UidStateCallbackInfo(int uid, int procState, long procStateSeq,
+                @ProcessCapability int capability) {
+            this.uid = uid;
+            this.procState = procState;
+            this.procStateSeq = procStateSeq;
+            this.capability = capability;
+        }
+    }
 
     final private BroadcastReceiver mPowerSaveWhitelistReceiver = new BroadcastReceiver() {
         @Override
@@ -1382,7 +1405,11 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
             final String subscriberId = mSubIdToSubscriberId.valueAt(i);
             final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
                     TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true,
-                    true);
+                    true, OEM_NONE);
+            /* While OEM_NONE indicates "any non OEM managed network", OEM_NONE is meant to be a
+             * placeholder value here. The probeIdent is matched against a NetworkTemplate which
+             * should have its OEM managed value set to OEM_MANAGED_ALL, which will cause the
+             * template to match probeIdent without regard to OEM managed status. */
             if (template.matches(probeIdent)) {
                 return subId;
             }
@@ -1612,7 +1639,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         // find and update the mobile NetworkPolicy for this subscriber id
         boolean policyUpdated = false;
         final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
-                TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true, true);
+                TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true, true,
+                OEM_NONE);
         for (int i = mNetworkPolicy.size() - 1; i >= 0; i--) {
             final NetworkTemplate template = mNetworkPolicy.keyAt(i);
             if (template.matches(probeIdent)) {
@@ -1841,7 +1869,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
                     final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
                             TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true,
-                            true);
+                            true, OEM_NONE);
                     // Template is matched when subscriber id matches.
                     if (template.matches(probeIdent)) {
                         matchingSubIds.add(subId);
@@ -1859,14 +1887,14 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     }
 
     /**
-     * Collect all ifaces from a {@link NetworkState} into the given set.
+     * Collect all ifaces from a {@link NetworkStateSnapshot} into the given set.
      */
-    private static void collectIfaces(ArraySet<String> ifaces, NetworkState state) {
-        final String baseIface = state.linkProperties.getInterfaceName();
+    private static void collectIfaces(ArraySet<String> ifaces, NetworkStateSnapshot snapshot) {
+        final String baseIface = snapshot.linkProperties.getInterfaceName();
         if (baseIface != null) {
             ifaces.add(baseIface);
         }
-        for (LinkProperties stackedLink : state.linkProperties.getStackedLinks()) {
+        for (LinkProperties stackedLink : snapshot.linkProperties.getStackedLinks()) {
             final String stackedIface = stackedLink.getInterfaceName();
             if (stackedIface != null) {
                 ifaces.add(stackedIface);
@@ -1936,7 +1964,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     }
 
     /**
-     * Examine all connected {@link NetworkState}, looking for
+     * Examine all connected {@link NetworkStateSnapshot}, looking for
      * {@link NetworkPolicy} that need to be enforced. When matches found, set
      * remaining quota based on usage cycle and historical stats.
      */
@@ -1945,29 +1973,21 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         if (LOGV) Slog.v(TAG, "updateNetworkRulesNL()");
         Trace.traceBegin(TRACE_TAG_NETWORK, "updateNetworkRulesNL");
 
-        final NetworkState[] states;
-        try {
-            states = defeatNullable(mConnManager.getAllNetworkState());
-        } catch (RemoteException e) {
-            // ignored; service lives in system_server
-            return;
-        }
+        final List<NetworkStateSnapshot> snapshots = mConnManager.getAllNetworkStateSnapshot();
 
         // First, generate identities of all connected networks so we can
         // quickly compare them against all defined policies below.
         mNetIdToSubId.clear();
-        final ArrayMap<NetworkState, NetworkIdentity> identified = new ArrayMap<>();
-        for (NetworkState state : states) {
-            if (state.network != null) {
-                mNetIdToSubId.put(state.network.netId, parseSubId(state));
-            }
+        final ArrayMap<NetworkStateSnapshot, NetworkIdentity> identified = new ArrayMap<>();
+        for (final NetworkStateSnapshot snapshot : snapshots) {
+            mNetIdToSubId.put(snapshot.network.netId, parseSubId(snapshot));
 
             // Policies matched by NPMS only match by subscriber ID or by ssid. Thus subtype
             // in the object created here is never used and its value doesn't matter, so use
             // NETWORK_TYPE_UNKNOWN.
-            final NetworkIdentity ident = NetworkIdentity.buildNetworkIdentity(mContext, state,
+            final NetworkIdentity ident = NetworkIdentity.buildNetworkIdentity(mContext, snapshot,
                     true, TelephonyManager.NETWORK_TYPE_UNKNOWN /* subType */);
-            identified.put(state, ident);
+            identified.put(snapshot, ident);
         }
 
         final ArraySet<String> newMeteredIfaces = new ArraySet<>();
@@ -2041,10 +2061,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
         // One final pass to catch any metered ifaces that don't have explicitly
         // defined policies; typically Wi-Fi networks.
-        for (NetworkState state : states) {
-            if (!state.networkCapabilities.hasCapability(NET_CAPABILITY_NOT_METERED)) {
+        for (final NetworkStateSnapshot snapshot : snapshots) {
+            if (!snapshot.networkCapabilities.hasCapability(NET_CAPABILITY_NOT_METERED)) {
                 matchingIfaces.clear();
-                collectIfaces(matchingIfaces, state);
+                collectIfaces(matchingIfaces, snapshot);
                 for (int j = matchingIfaces.size() - 1; j >= 0; j--) {
                     final String iface = matchingIfaces.valueAt(j);
                     if (!newMeteredIfaces.contains(iface)) {
@@ -2076,16 +2096,16 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
         // Finally, calculate our opportunistic quotas
         mSubscriptionOpportunisticQuota.clear();
-        for (NetworkState state : states) {
+        for (final NetworkStateSnapshot snapshot : snapshots) {
             if (!quotaEnabled) continue;
-            if (state.network == null) continue;
-            final int subId = getSubIdLocked(state.network);
+            if (snapshot.network == null) continue;
+            final int subId = getSubIdLocked(snapshot.network);
             final SubscriptionPlan plan = getPrimarySubscriptionPlanLocked(subId);
             if (plan == null) continue;
 
             final long quotaBytes;
             final long limitBytes = plan.getDataLimitBytes();
-            if (!state.networkCapabilities.hasCapability(NET_CAPABILITY_NOT_ROAMING)) {
+            if (!snapshot.networkCapabilities.hasCapability(NET_CAPABILITY_NOT_ROAMING)) {
                 // Clamp to 0 when roaming
                 quotaBytes = 0;
             } else if (limitBytes == SubscriptionPlan.BYTES_UNKNOWN) {
@@ -2103,7 +2123,7 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                         .truncatedTo(ChronoUnit.DAYS)
                         .toInstant().toEpochMilli();
                 final long totalBytes = getTotalBytes(
-                        NetworkTemplate.buildTemplateMobileAll(state.subscriberId),
+                        NetworkTemplate.buildTemplateMobileAll(snapshot.subscriberId),
                         start, startOfDay);
                 final long remainingBytes = limitBytes - totalBytes;
                 // Number of remaining days including current day
@@ -2156,7 +2176,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private boolean ensureActiveMobilePolicyAL(int subId, String subscriberId) {
         // Poke around to see if we already have a policy
         final NetworkIdentity probeIdent = new NetworkIdentity(TYPE_MOBILE,
-                TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true, true);
+                TelephonyManager.NETWORK_TYPE_UNKNOWN, subscriberId, null, false, true, true,
+                OEM_NONE);
         for (int i = mNetworkPolicy.size() - 1; i >= 0; i--) {
             final NetworkTemplate template = mNetworkPolicy.keyAt(i);
             if (template.matches(probeIdent)) {
@@ -3135,14 +3156,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
     }
 
-    @Override
-    @Deprecated
-    public NetworkQuotaInfo getNetworkQuotaInfo(NetworkState state) {
-        Log.w(TAG, "Shame on UID " + Binder.getCallingUid()
-                + " for calling the hidden API getNetworkQuotaInfo(). Shame!");
-        return new NetworkQuotaInfo();
-    }
-
     private void enforceSubscriptionPlanAccess(int subId, int callingUid, String callingPackage) {
         // Verify they're not lying about package name
         mAppOps.checkPackage(callingUid, callingPackage);
@@ -3718,14 +3731,12 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
                     fout.print("UID=");
                     fout.print(uid);
 
-                    final int state = mUidState.get(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY);
-                    fout.print(" state=");
-                    fout.print(state);
-                    if (state <= ActivityManager.PROCESS_STATE_TOP) {
-                        fout.print(" (fg)");
+                    final UidState uidState = mUidState.get(uid);
+                    if (uidState == null) {
+                        fout.print(" state={null}");
                     } else {
-                        fout.print(state <= ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE
-                                ? " (fg svc)" : " (bg)");
+                        fout.print(" state=");
+                        fout.print(uidState.toString());
                     }
 
                     final int uidRules = mUidRules.get(uid, RULE_NONE);
@@ -3783,26 +3794,20 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     @VisibleForTesting
     boolean isUidForeground(int uid) {
         synchronized (mUidRulesFirstLock) {
-            return isUidStateForeground(
-                    mUidState.get(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY));
+            return isProcStateAllowedWhileIdleOrPowerSaveMode(mUidState.get(uid));
         }
     }
 
     @GuardedBy("mUidRulesFirstLock")
     private boolean isUidForegroundOnRestrictBackgroundUL(int uid) {
-        final int procState = mUidState.get(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY);
-        return isProcStateAllowedWhileOnRestrictBackground(procState);
+        final UidState uidState = mUidState.get(uid);
+        return isProcStateAllowedWhileOnRestrictBackground(uidState);
     }
 
     @GuardedBy("mUidRulesFirstLock")
     private boolean isUidForegroundOnRestrictPowerUL(int uid) {
-        final int procState = mUidState.get(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY);
-        return isProcStateAllowedWhileIdleOrPowerSaveMode(procState);
-    }
-
-    private boolean isUidStateForeground(int state) {
-        // only really in foreground when screen is also on
-        return state <= NetworkPolicyManager.FOREGROUND_THRESHOLD_STATE;
+        final UidState uidState = mUidState.get(uid);
+        return isProcStateAllowedWhileIdleOrPowerSaveMode(uidState);
     }
 
     /**
@@ -3811,16 +3816,18 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
      * {@link #updateRulesForPowerRestrictionsUL(int)}. Returns true if the state was updated.
      */
     @GuardedBy("mUidRulesFirstLock")
-    private boolean updateUidStateUL(int uid, int uidState) {
+    private boolean updateUidStateUL(int uid, int procState, @ProcessCapability int capability) {
         Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "updateUidStateUL");
         try {
-            final int oldUidState = mUidState.get(uid, ActivityManager.PROCESS_STATE_CACHED_EMPTY);
-            if (oldUidState != uidState) {
+            final UidState oldUidState = mUidState.get(uid);
+            if (oldUidState == null || oldUidState.procState != procState
+                    || oldUidState.capability != capability) {
+                final UidState newUidState = new UidState(uid, procState, capability);
                 // state changed, push updated rules
-                mUidState.put(uid, uidState);
-                updateRestrictBackgroundRulesOnUidStatusChangedUL(uid, oldUidState, uidState);
+                mUidState.put(uid, newUidState);
+                updateRestrictBackgroundRulesOnUidStatusChangedUL(uid, oldUidState, newUidState);
                 if (isProcStateAllowedWhileIdleOrPowerSaveMode(oldUidState)
-                        != isProcStateAllowedWhileIdleOrPowerSaveMode(uidState) ) {
+                        != isProcStateAllowedWhileIdleOrPowerSaveMode(newUidState)) {
                     updateRuleForAppIdleUL(uid);
                     if (mDeviceIdleMode) {
                         updateRuleForDeviceIdleUL(uid);
@@ -3842,11 +3849,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
     private boolean removeUidStateUL(int uid) {
         final int index = mUidState.indexOfKey(uid);
         if (index >= 0) {
-            final int oldUidState = mUidState.valueAt(index);
+            final UidState oldUidState = mUidState.valueAt(index);
             mUidState.removeAt(index);
-            if (oldUidState != ActivityManager.PROCESS_STATE_CACHED_EMPTY) {
-                updateRestrictBackgroundRulesOnUidStatusChangedUL(uid, oldUidState,
-                        ActivityManager.PROCESS_STATE_CACHED_EMPTY);
+            if (oldUidState != null) {
+                updateRestrictBackgroundRulesOnUidStatusChangedUL(uid, oldUidState, null);
                 if (mDeviceIdleMode) {
                     updateRuleForDeviceIdleUL(uid);
                 }
@@ -3873,8 +3879,8 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
     }
 
-    private void updateRestrictBackgroundRulesOnUidStatusChangedUL(int uid, int oldUidState,
-            int newUidState) {
+    private void updateRestrictBackgroundRulesOnUidStatusChangedUL(int uid,
+            @Nullable UidState oldUidState, @Nullable UidState newUidState) {
         final boolean oldForeground =
                 isProcStateAllowedWhileOnRestrictBackground(oldUidState);
         final boolean newForeground =
@@ -4979,11 +4985,14 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         public boolean handleMessage(Message msg) {
             switch (msg.what) {
                 case UID_MSG_STATE_CHANGED: {
-                    final int uid = msg.arg1;
-                    final int procState = msg.arg2;
-                    final long procStateSeq = (Long) msg.obj;
+                    final UidStateCallbackInfo uidStateCallbackInfo =
+                            (UidStateCallbackInfo) msg.obj;
+                    final int uid = uidStateCallbackInfo.uid;
+                    final int procState = uidStateCallbackInfo.procState;
+                    final long procStateSeq = uidStateCallbackInfo.procStateSeq;
+                    final int capability = uidStateCallbackInfo.capability;
 
-                    handleUidChanged(uid, procState, procStateSeq);
+                    handleUidChanged(uid, procState, procStateSeq, capability);
                     return true;
                 }
                 case UID_MSG_GONE: {
@@ -4998,23 +5007,24 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
     };
 
-    void handleUidChanged(int uid, int procState, long procStateSeq) {
+    void handleUidChanged(int uid, int procState, long procStateSeq,
+            @ProcessCapability int capability) {
         Trace.traceBegin(Trace.TRACE_TAG_NETWORK, "onUidStateChanged");
         try {
             boolean updated;
             synchronized (mUidRulesFirstLock) {
                 // We received a uid state change callback, add it to the history so that it
                 // will be useful for debugging.
-                mLogger.uidStateChanged(uid, procState, procStateSeq);
+                mLogger.uidStateChanged(uid, procState, procStateSeq, capability);
                 // Now update the network policy rules as per the updated uid state.
-                updated = updateUidStateUL(uid, procState);
+                updated = updateUidStateUL(uid, procState, capability);
                 // Updating the network rules is done, so notify AMS about this.
                 mActivityManagerInternal.notifyNetworkPolicyRulesUpdated(uid, procStateSeq);
             }
             // Do this without the lock held. handleUidChanged() and handleUidGone() are
             // called from the handler, so there's no multi-threading issue.
             if (updated) {
-                updateNetworkStats(uid, isUidStateForeground(procState));
+                updateNetworkStats(uid, isProcStateAllowedWhileOnRestrictBackground(procState));
             }
         } finally {
             Trace.traceEnd(Trace.TRACE_TAG_NETWORK);
@@ -5349,6 +5359,13 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
     }
 
+    private static void collectKeys(SparseArray<UidState> source, SparseBooleanArray target) {
+        final int size = source.size();
+        for (int i = 0; i < size; i++) {
+            target.put(source.keyAt(i), true);
+        }
+    }
+
     @Override
     public void factoryReset(String subscriber) {
         mContext.enforceCallingOrSelfPermission(NETWORK_SETTINGS, TAG);
@@ -5602,11 +5619,10 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
         }
     }
 
-    private int parseSubId(NetworkState state) {
+    private int parseSubId(@NonNull NetworkStateSnapshot snapshot) {
         int subId = INVALID_SUBSCRIPTION_ID;
-        if (state != null && state.networkCapabilities != null
-                && state.networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
-            NetworkSpecifier spec = state.networkCapabilities.getNetworkSpecifier();
+        if (snapshot.networkCapabilities.hasTransport(TRANSPORT_CELLULAR)) {
+            NetworkSpecifier spec = snapshot.networkCapabilities.getNetworkSpecifier();
             if (spec instanceof TelephonyNetworkSpecifier) {
                 subId = ((TelephonyNetworkSpecifier) spec).getSubscriptionId();
             }
@@ -5681,10 +5697,6 @@ public class NetworkPolicyManagerService extends INetworkPolicyManager.Stub {
 
     private static boolean hasRule(int uidRules, int rule) {
         return (uidRules & rule) != 0;
-    }
-
-    private static @NonNull NetworkState[] defeatNullable(@Nullable NetworkState[] val) {
-        return (val != null) ? val : new NetworkState[0];
     }
 
     private static boolean getBooleanDefeatingNullable(@Nullable PersistableBundle bundle,

@@ -74,12 +74,28 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      */
     public static final int LAUNCH_SINGLE_INSTANCE = 3;
     /**
-     * The launch mode style requested by the activity.  From the
-     * {@link android.R.attr#launchMode} attribute, one of
-     * {@link #LAUNCH_MULTIPLE},
-     * {@link #LAUNCH_SINGLE_TOP}, {@link #LAUNCH_SINGLE_TASK}, or
-     * {@link #LAUNCH_SINGLE_INSTANCE}.
+     * Constant corresponding to <code>singleInstancePerTask</code> in
+     * the {@link android.R.attr#launchMode} attribute.
      */
+    public static final int LAUNCH_SINGLE_INSTANCE_PER_TASK = 4;
+
+    /** @hide */
+    @IntDef(prefix = "LAUNCH_", value = {
+            LAUNCH_MULTIPLE,
+            LAUNCH_SINGLE_TOP,
+            LAUNCH_SINGLE_TASK,
+            LAUNCH_SINGLE_INSTANCE,
+            LAUNCH_SINGLE_INSTANCE_PER_TASK
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface LaunchMode {
+    }
+
+    /**
+     * The launch mode style requested by the activity.  From the
+     * {@link android.R.attr#launchMode} attribute.
+     */
+    @LaunchMode
     public int launchMode;
 
     /**
@@ -876,22 +892,42 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      */
     @ChangeId
     @Disabled
-    public static final long FORCE_RESIZE_APP = 174042936L; // number refers to buganizer id
+    @TestApi
+    public static final long FORCE_RESIZE_APP = 174042936L; // buganizer id
+
+    /**
+     * This change id forces the packages it is applied to to be non-resizable.
+     * @hide
+     */
+    @ChangeId
+    @Disabled
+    @TestApi
+    public static final long FORCE_NON_RESIZE_APP = 181136395L; // buganizer id
 
     /**
      * Return value for {@link #supportsSizeChanges()} indicating that this activity does not
-     * support size changes.
+     * support size changes due to the android.supports_size_changes metadata flag either being
+     * unset or set to {@code false} on application or activity level.
+     *
      * @hide
      */
-    public static final int SIZE_CHANGES_UNSUPPORTED = 0;
+    public static final int SIZE_CHANGES_UNSUPPORTED_METADATA = 0;
+
+    /**
+     * Return value for {@link #supportsSizeChanges()} indicating that this activity has been
+     * overridden to not support size changes through the compat framework change id
+     * {@link #FORCE_NON_RESIZE_APP}.
+     * @hide
+     */
+    public static final int SIZE_CHANGES_UNSUPPORTED_OVERRIDE = 1;
 
     /**
      * Return value for {@link #supportsSizeChanges()} indicating that this activity supports size
-     * changes due to the android.supports_size_changes metadata flag being set either on
-     * application or on activity level.
+     * changes due to the android.supports_size_changes metadata flag being set to {@code true}
+     * either on application or activity level.
      * @hide
      */
-    public static final int SIZE_CHANGES_SUPPORTED_METADATA = 1;
+    public static final int SIZE_CHANGES_SUPPORTED_METADATA = 2;
 
     /**
      * Return value for {@link #supportsSizeChanges()} indicating that this activity has been
@@ -899,11 +935,12 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * {@link #FORCE_RESIZE_APP}.
      * @hide
      */
-    public static final int SIZE_CHANGES_SUPPORTED_OVERRIDE = 2;
+    public static final int SIZE_CHANGES_SUPPORTED_OVERRIDE = 3;
 
     /** @hide */
     @IntDef(prefix = { "SIZE_CHANGES_" }, value = {
-            SIZE_CHANGES_UNSUPPORTED,
+            SIZE_CHANGES_UNSUPPORTED_METADATA,
+            SIZE_CHANGES_UNSUPPORTED_OVERRIDE,
             SIZE_CHANGES_SUPPORTED_METADATA,
             SIZE_CHANGES_SUPPORTED_OVERRIDE,
     })
@@ -1197,6 +1234,12 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      */
     @SizeChangesSupportMode
     public int supportsSizeChanges() {
+        if (CompatChanges.isChangeEnabled(FORCE_NON_RESIZE_APP,
+                applicationInfo.packageName,
+                UserHandle.getUserHandleForUid(applicationInfo.uid))) {
+            return SIZE_CHANGES_UNSUPPORTED_OVERRIDE;
+        }
+
         if (supportsSizeChanges) {
             return SIZE_CHANGES_SUPPORTED_METADATA;
         }
@@ -1207,7 +1250,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
             return SIZE_CHANGES_SUPPORTED_OVERRIDE;
         }
 
-        return SIZE_CHANGES_UNSUPPORTED;
+        return SIZE_CHANGES_UNSUPPORTED_METADATA;
     }
 
     /** @hide */
@@ -1253,8 +1296,10 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     /** @hide */
     public static String sizeChangesSupportModeToString(@SizeChangesSupportMode int mode) {
         switch (mode) {
-            case SIZE_CHANGES_UNSUPPORTED:
-                return "SIZE_CHANGES_UNSUPPORTED";
+            case SIZE_CHANGES_UNSUPPORTED_METADATA:
+                return "SIZE_CHANGES_UNSUPPORTED_METADATA";
+            case SIZE_CHANGES_UNSUPPORTED_OVERRIDE:
+                return "SIZE_CHANGES_UNSUPPORTED_OVERRIDE";
             case SIZE_CHANGES_SUPPORTED_METADATA:
                 return "SIZE_CHANGES_SUPPORTED_METADATA";
             case SIZE_CHANGES_SUPPORTED_OVERRIDE:

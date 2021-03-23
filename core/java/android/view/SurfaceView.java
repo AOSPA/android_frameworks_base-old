@@ -544,6 +544,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         // recreate this Surface, so only release it when we are fully
         // detached.
         if (mSurfacePackage != null) {
+            mTmpTransaction.reparent(mSurfacePackage.getSurfaceControl(), null).apply();
             mSurfacePackage.release();
             mSurfacePackage = null;
         }
@@ -1461,6 +1462,14 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             } catch (Exception ex) {
                 Log.e(TAG, "Exception from repositionChild", ex);
             }
+        }
+
+        @Override
+        public void applyStretch(long frameNumber, float left, float top, float right,
+                float bottom, float vecX, float vecY, float maxStretch) {
+            mRtTransaction.setStretchEffect(mSurfaceControl, left, top, right, bottom, vecX, vecY,
+                    maxStretch);
+            applyRtTransaction(frameNumber);
         }
 
         @Override

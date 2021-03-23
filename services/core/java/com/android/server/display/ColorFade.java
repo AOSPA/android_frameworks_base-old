@@ -165,7 +165,7 @@ final class ColorFade {
                     "Failed to take screenshot because internal display is disconnected");
             return false;
         }
-        boolean isWideColor = SurfaceControl.getActiveColorMode(token)
+        boolean isWideColor = SurfaceControl.getDynamicDisplayInfo(token).activeColorMode
                 == Display.COLOR_MODE_DISPLAY_P3;
 
         // Set mPrepared here so if initialization fails, resources can be cleaned up.
@@ -817,6 +817,12 @@ final class ColorFade {
                 }
 
                 DisplayInfo displayInfo = mDisplayManagerInternal.getDisplayInfo(mDisplayId);
+                if (displayInfo == null) {
+                    // displayInfo can be null if the associated display has been removed. There
+                    // is a delay between the display being removed and ColorFade being dismissed.
+                    return;
+                }
+
                 switch (displayInfo.rotation) {
                     case Surface.ROTATION_0:
                         t.setPosition(mSurfaceControl, 0, 0);

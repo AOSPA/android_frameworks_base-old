@@ -88,6 +88,7 @@
     <uses-permission android:name="android.permission.MASTER_CLEAR" />
     <uses-permission android:name="android.permission.VIBRATE" />
     <uses-permission android:name="android.permission.MANAGE_SENSOR_PRIVACY" />
+    <uses-permission android:name="android.permission.OBSERVE_SENSOR_PRIVACY" />
 
     <!-- ActivityManager -->
     <uses-permission android:name="android.permission.REAL_GET_TASKS" />
@@ -336,6 +337,12 @@
                 <action android:name="com.android.systemui.screenshot.SHOW_ERROR" />
             </intent-filter>
         </receiver>
+
+        <activity android:name=".screenshot.LongScreenshotActivity"
+                  android:theme="@android:style/Theme.DeviceDefault.NoActionBar"
+                  android:process=":screenshot"
+                  android:exported="false"
+                  android:finishOnTaskLaunch="true" />
 
         <activity android:name=".screenrecord.ScreenRecordDialog"
             android:theme="@style/ScreenRecord"

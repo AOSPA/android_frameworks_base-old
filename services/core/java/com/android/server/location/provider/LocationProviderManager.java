@@ -29,6 +29,8 @@ import static android.os.PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF
 import static android.os.PowerManager.LOCATION_MODE_FOREGROUND_ONLY;
 import static android.os.PowerManager.LOCATION_MODE_GPS_DISABLED_WHEN_SCREEN_OFF;
 import static android.os.PowerManager.LOCATION_MODE_THROTTLE_REQUESTS_WHEN_SCREEN_OFF;
+import static android.os.PowerWhitelistManager.REASON_LOCATION_PROVIDER;
+import static android.os.PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 
 import static com.android.server.location.LocationManagerService.D;
 import static com.android.server.location.LocationManagerService.TAG;
@@ -52,6 +54,8 @@ import android.location.LastLocationRequest;
 import android.location.Location;
 import android.location.LocationManager;
 import android.location.LocationManagerInternal;
+import android.location.LocationManagerInternal.LocationTagInfo;
+import android.location.LocationManagerInternal.OnProviderLocationTagsChangeListener;
 import android.location.LocationManagerInternal.ProviderEnabledListener;
 import android.location.LocationRequest;
 import android.location.LocationResult;
@@ -85,6 +89,7 @@ import android.util.TimeUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.location.LocationPermissions;
@@ -117,6 +122,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
@@ -223,7 +229,10 @@ public class LocationProviderManager extends
             BroadcastOptions options = BroadcastOptions.makeBasic();
             options.setDontSendToRestrictedApps(true);
             // allows apps to start a fg service in response to a location PI
-            options.setTemporaryAppWhitelistDuration(TEMPORARY_APP_ALLOWLIST_DURATION_MS);
+            options.setTemporaryAppAllowlist(TEMPORARY_APP_ALLOWLIST_DURATION_MS,
+                    TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED,
+                    REASON_LOCATION_PROVIDER,
+                    "");
 
             Intent intent = new Intent().putExtra(KEY_LOCATION_CHANGED,
                     locationResult.getLastLocation());
@@ -304,6 +313,7 @@ public class LocationProviderManager extends
                 LocationTransport transport, @PermissionLevel int permissionLevel) {
             super(Objects.requireNonNull(request), identity, transport);
 
+            Preconditions.checkArgument(identity.getListenerId() != null);
             Preconditions.checkArgument(permissionLevel > PERMISSION_NONE);
             Preconditions.checkArgument(!request.getWorkSource().isEmpty());
 
@@ -1287,6 +1297,9 @@ public class LocationProviderManager extends
     @GuardedBy("mLock")
     private @Nullable OnAlarmListener mDelayedRegister;
 
+    @GuardedBy("mLock")
+    private @Nullable OnProviderLocationTagsChangeListener mOnLocationTagsChangeListener;
+
     public LocationProviderManager(Context context, Injector injector, LocationEventLog eventLog,
             String name, @Nullable PassiveLocationProviderManager passiveManager) {
         mContext = context;
@@ -1444,6 +1457,19 @@ public class LocationProviderManager extends
             } finally {
                 Binder.restoreCallingIdentity(identity);
             }
+        }
+    }
+
+    /**
+     * Registers a listener for the location tags of the provider.
+     *
+     * @param listener The listener
+     */
+    public void setOnProviderLocationTagsChangeListener(
+            @Nullable OnProviderLocationTagsChangeListener listener) {
+        Preconditions.checkArgument(mOnLocationTagsChangeListener == null || listener == null);
+        synchronized (mLock) {
+            mOnLocationTagsChangeListener = listener;
         }
     }
 
@@ -2242,6 +2268,27 @@ public class LocationProviderManager extends
 
         if (oldState.allowed != newState.allowed) {
             onEnabledChanged(UserHandle.USER_ALL);
+        }
+
+        if (mOnLocationTagsChangeListener != null) {
+            if (!oldState.extraAttributionTags.equals(newState.extraAttributionTags)) {
+                if (oldState.identity != null) {
+                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                            OnProviderLocationTagsChangeListener::onLocationTagsChanged,
+                            mOnLocationTagsChangeListener, new LocationTagInfo(
+                                    oldState.identity.getUid(), oldState.identity.getPackageName(),
+                                    Collections.emptySet())
+                            ));
+                }
+                if (newState.identity != null) {
+                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                            OnProviderLocationTagsChangeListener::onLocationTagsChanged,
+                            mOnLocationTagsChangeListener, new LocationTagInfo(
+                                    newState.identity.getUid(), newState.identity.getPackageName(),
+                                    newState.extraAttributionTags)
+                            ));
+                }
+            }
         }
     }
 

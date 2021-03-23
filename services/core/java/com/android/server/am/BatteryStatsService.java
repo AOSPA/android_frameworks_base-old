@@ -16,6 +16,9 @@
 
 package com.android.server.am;
 
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
+
+import android.annotation.NonNull;
 import android.bluetooth.BluetoothActivityEnergyInfo;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -25,7 +28,9 @@ import android.hardware.power.stats.PowerEntity;
 import android.hardware.power.stats.State;
 import android.hardware.power.stats.StateResidency;
 import android.hardware.power.stats.StateResidencyResult;
+import android.net.ConnectivityManager;
 import android.net.INetworkManagementEventObserver;
+import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.os.BatteryStats;
 import android.os.BatteryStatsInternal;
@@ -77,6 +82,8 @@ import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.ParseUtils;
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.net.module.util.NetworkCapabilitiesUtils;
+import com.android.net.module.util.PermissionUtils;
 import com.android.server.LocalServices;
 import com.android.server.Watchdog;
 import com.android.server.net.BaseNetworkObserver;
@@ -216,6 +223,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             return;
         }
 
+        if (results == null) return;
+
         for (int i = 0; i < results.length; i++) {
             final StateResidencyResult result = results[i];
             RpmStats.PowerStateSubsystem subsystem =
@@ -257,7 +266,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             return EMPTY;
         }
 
-        if (results.length == 0) return EMPTY;
+        if (results == null || results.length == 0) return EMPTY;
 
         int charsLeft = MAX_LOW_POWER_STATS_SIZE;
         StringBuilder builder = new StringBuilder("SubsystemPowerState");
@@ -288,6 +297,23 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
         return builder.toString();
     }
+
+    private ConnectivityManager.NetworkCallback mNetworkCallback =
+            new ConnectivityManager.NetworkCallback() {
+        @Override
+        public void onCapabilitiesChanged(@NonNull Network network,
+                @NonNull NetworkCapabilities networkCapabilities) {
+            final String state = networkCapabilities.hasCapability(NET_CAPABILITY_NOT_SUSPENDED)
+                    ? "CONNECTED" : "SUSPENDED";
+            noteConnectivityChanged(NetworkCapabilitiesUtils.getDisplayTransport(
+                    networkCapabilities.getTransportTypes()), state);
+        }
+
+        @Override
+        public void onLost(Network network) {
+            noteConnectivityChanged(-1, "DISCONNECTED");
+        }
+    };
 
     BatteryStatsService(Context context, File systemDir, Handler handler) {
         // BatteryStatsImpl expects the ActivityManagerService handler, so pass that one through.
@@ -328,8 +354,10 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         mWorker.systemServicesReady();
         final INetworkManagementService nms = INetworkManagementService.Stub.asInterface(
                 ServiceManager.getService(Context.NETWORKMANAGEMENT_SERVICE));
+        final ConnectivityManager cm = mContext.getSystemService(ConnectivityManager.class);
         try {
             nms.registerObserver(mActivityChangeObserver);
+            cm.registerDefaultNetworkCallback(mNetworkCallback);
         } catch (RemoteException e) {
             Slog.e(TAG, "Could not register INetworkManagement event observer " + e);
         }
@@ -344,6 +372,9 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         }
 
         Watchdog.getInstance().addMonitor(this);
+
+        final DataConnectionStats dataConnectionStats = new DataConnectionStats(mContext, mHandler);
+        dataConnectionStats.startMonitoring();
     }
 
     private final class LocalService extends BatteryStatsInternal {
@@ -1751,7 +1782,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
 
     @Override
     public void noteNetworkInterfaceForTransports(final String iface, int[] transportTypes) {
-        enforceCallingPermission();
+        PermissionUtils.enforceNetworkStackPermission(mContext);
         synchronized (mLock) {
             mHandler.post(() -> {
                 mStats.noteNetworkInterfaceForTransports(iface, transportTypes);

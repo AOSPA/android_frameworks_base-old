@@ -200,6 +200,8 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
      * to the <code>wellbeing</code> value of
      * {@link android.R.attr#protectionLevel}.
      *
+     * @deprecated this protectionLevel is obsolete. Permissions previously granted through this
+     * protectionLevel have been migrated to use <code>role</code> instead
      * @hide
      */
     @SystemApi
@@ -307,7 +309,6 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
             PROTECTION_FLAG_OEM,
             PROTECTION_FLAG_VENDOR_PRIVILEGED,
             PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER,
-            PROTECTION_FLAG_WELLBEING,
             PROTECTION_FLAG_DOCUMENTER,
             PROTECTION_FLAG_CONFIGURATOR,
             PROTECTION_FLAG_INCIDENT_REPORT_APPROVER,
@@ -409,14 +410,6 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
      * the app is uninstalled.
      */
     public static final int FLAG_IMMUTABLY_RESTRICTED = 1<<4;
-
-    /**
-     * Flag for {@link #flags}, corresponding to <code>installerExemptIgnored</code>
-     * value of {@link android.R.attr#permissionFlags}.
-     *
-     * <p> Modifier for permission restriction. This permission cannot be exempted by the installer.
-     */
-    public static final int FLAG_INSTALLER_EXEMPT_IGNORED = 1 << 5;
 
     /**
      * Flag for {@link #flags}, indicating that this permission has been
@@ -568,9 +561,6 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
         if ((level & PermissionInfo.PROTECTION_FLAG_SYSTEM_TEXT_CLASSIFIER) != 0) {
             protLevel.append("|textClassifier");
         }
-        if ((level & PermissionInfo.PROTECTION_FLAG_WELLBEING) != 0) {
-            protLevel.append("|wellbeing");
-        }
         if ((level & PermissionInfo.PROTECTION_FLAG_DOCUMENTER) != 0) {
             protLevel.append("|documenter");
         }
@@ -721,11 +711,6 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
     /** @hide */
     public boolean isRestricted() {
         return isHardRestricted() || isSoftRestricted();
-    }
-
-    /** @hide */
-    public boolean isInstallerExemptIgnored() {
-        return (flags & PermissionInfo.FLAG_INSTALLER_EXEMPT_IGNORED) != 0;
     }
 
     /** @hide */

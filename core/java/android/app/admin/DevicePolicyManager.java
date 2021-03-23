@@ -2746,6 +2746,32 @@ public class DevicePolicyManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface PersonalAppsSuspensionReason {}
 
+    /**
+     * The default device owner type for a managed device.
+     *
+     * @hide
+     */
+    public static final int DEVICE_OWNER_TYPE_DEFAULT = 0;
+
+    /**
+     * The device owner type for a financed device.
+     *
+     * @hide
+     */
+    public static final int DEVICE_OWNER_TYPE_FINANCED = 1;
+
+    /**
+     * Different device owner types for a managed device.
+     *
+     * @hide
+     */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = { "DEVICE_OWNER_TYPE_" }, value = {
+            DEVICE_OWNER_TYPE_DEFAULT,
+            DEVICE_OWNER_TYPE_FINANCED
+    })
+    public @interface DeviceOwnerType {}
+
     /** @hide */
     @TestApi
     public static final int OPERATION_LOCK_NOW = 1;
@@ -2971,6 +2997,7 @@ public class DevicePolicyManager {
      */
     // TODO(b/173541467): should it throw SecurityException if caller is not admin?
     public boolean isSafeOperation(@OperationSafetyReason int reason) {
+        throwIfParentInstance("isSafeOperation");
         if (mService == null) return false;
 
         try {
@@ -6411,6 +6438,74 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Called by a device or profile owner, or delegated certificate chooser (an app that has been
+     * delegated the {@link #DELEGATION_CERT_SELECTION} privilege), to allow using a KeyChain key
+     * pair for authentication to Wifi networks. The key can then be used in configurations passed
+     * to {@link android.net.wifi.WifiManager#addNetwork}.
+     *
+     * @param alias The alias of the key pair.
+     * @return {@code true} if the operation was set successfully, {@code false} otherwise.
+     *
+     * @throws SecurityException if the caller is not a device owner, a profile owner or
+     *         delegated certificate chooser.
+     * @see #revokeKeyPairFromWifiAuth
+     */
+    public boolean grantKeyPairToWifiAuth(@NonNull String alias) {
+        throwIfParentInstance("grantKeyPairToWifiAuth");
+        try {
+            return mService.setKeyGrantToWifiAuth(mContext.getPackageName(), alias, true);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+        return false;
+    }
+
+    /**
+     * Called by a device or profile owner, or delegated certificate chooser (an app that has been
+     * delegated the {@link #DELEGATION_CERT_SELECTION} privilege), to deny using a KeyChain key
+     * pair for authentication to Wifi networks. Configured networks using this key won't be able to
+     * authenticate.
+     *
+     * @param alias The alias of the key pair.
+     * @return {@code true} if the operation was set successfully, {@code false} otherwise.
+     *
+     * @throws SecurityException if the caller is not a device owner, a profile owner or
+     *         delegated certificate chooser.
+     * @see #grantKeyPairToWifiAuth
+     */
+    public boolean revokeKeyPairFromWifiAuth(@NonNull String alias) {
+        throwIfParentInstance("revokeKeyPairFromWifiAuth");
+        try {
+            return mService.setKeyGrantToWifiAuth(mContext.getPackageName(), alias, false);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+        return false;
+    }
+
+    /**
+     * Called by a device or profile owner, or delegated certificate chooser (an app that has been
+     * delegated the {@link #DELEGATION_CERT_SELECTION} privilege), to query whether a KeyChain key
+     * pair can be used for authentication to Wifi networks.
+     *
+     * @param alias The alias of the key pair.
+     * @return {@code true} if the key pair can be used, {@code false} otherwise.
+     *
+     * @throws SecurityException if the caller is not a device owner, a profile owner or
+     *         delegated certificate chooser.
+     * @see #grantKeyPairToWifiAuth
+     */
+    public boolean isKeyPairGrantedToWifiAuth(@NonNull String alias) {
+        throwIfParentInstance("isKeyPairGrantedToWifiAuth");
+        try {
+            return mService.isKeyPairGrantedToWifiAuth(mContext.getPackageName(), alias);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+        return false;
+    }
+
+    /**
      * Returns {@code true} if the device supports attestation of device identifiers in addition
      * to key attestation. See
      * {@link #generateKeyPair(ComponentName, String, KeyGenParameterSpec, int)}
@@ -7276,7 +7371,12 @@ public class DevicePolicyManager {
     /**
      * @hide
      */
+    @TestApi
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.MANAGE_DEVICE_ADMINS,
+            android.Manifest.permission.INTERACT_ACROSS_USERS_FULL
+    })
     public void setActiveAdmin(@NonNull ComponentName policyReceiver, boolean refreshing,
             int userHandle) {
         if (mService != null) {
@@ -7453,8 +7553,10 @@ public class DevicePolicyManager {
      * @throws IllegalArgumentException if the package name is null or invalid
      * @throws IllegalStateException If the preconditions mentioned are not met.
      */
-    public boolean setDeviceOwner(ComponentName who, String ownerName, int userId)
-            throws IllegalArgumentException, IllegalStateException {
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS)
+    public boolean setDeviceOwner(
+            @NonNull ComponentName who, @Nullable String ownerName, @UserIdInt int userId) {
         if (mService != null) {
             try {
                 return mService.setDeviceOwner(who, ownerName, userId);
@@ -7521,7 +7623,10 @@ public class DevicePolicyManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS,
+    })
     public ComponentName getDeviceOwnerComponentOnAnyUser() {
         return getDeviceOwnerComponentInner(/* callingUserOnly =*/ false);
     }
@@ -10477,9 +10582,10 @@ public class DevicePolicyManager {
 
     /**
      * Reset record of previous system update freeze period the device went through.
-     * Only callable by ADB.
      * @hide
      */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.CLEAR_FREEZE_PERIOD)
     public void clearSystemUpdatePolicyFreezePeriodRecord() {
         throwIfParentInstance("clearSystemUpdatePolicyFreezePeriodRecord");
         if (mService == null) {
@@ -11207,9 +11313,11 @@ public class DevicePolicyManager {
 
     /**
      * Makes all accumulated network logs available to DPC in a new batch.
-     * Only callable by ADB. If throttled, returns time to wait in milliseconds, otherwise 0.
+     * If throttled, returns time to wait in milliseconds, otherwise 0.
      * @hide
      */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS)
     public long forceNetworkLogs() {
         if (mService == null) {
             return -1;
@@ -11223,9 +11331,11 @@ public class DevicePolicyManager {
 
     /**
      * Forces a batch of security logs to be fetched from logd and makes it available for DPC.
-     * Only callable by ADB. If throttled, returns time to wait in milliseconds, otherwise 0.
+     * If throttled, returns time to wait in milliseconds, otherwise 0.
      * @hide
      */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS)
     public long forceSecurityLogs() {
         if (mService == null) {
             return 0;
@@ -11657,7 +11767,10 @@ public class DevicePolicyManager {
      * @throws SecurityException if the caller is not shell / root or the admin package
      *         isn't a test application see {@link ApplicationInfo#FLAG_TEST_APP}.
      */
-    public void forceRemoveActiveAdmin(ComponentName adminReceiver, int userHandle) {
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS)
+    public void forceRemoveActiveAdmin(
+            @NonNull ComponentName adminReceiver, @UserIdInt int userHandle) {
         try {
             mService.forceRemoveActiveAdmin(adminReceiver, userHandle);
         } catch (RemoteException re) {
@@ -12195,8 +12308,9 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    public Set<String> getDisallowedSystemApps(ComponentName admin, int userId,
-            String provisioningAction) {
+    @TestApi
+    public @NonNull Set<String> getDisallowedSystemApps(@NonNull ComponentName admin,
+            @UserIdInt int userId, @NonNull String provisioningAction) {
         try {
             return new ArraySet<>(
                     mService.getDisallowedSystemApps(admin, userId, provisioningAction));
@@ -12727,8 +12841,11 @@ public class DevicePolicyManager {
      *
      * @hide
      */
-    @RequiresPermission(value = android.Manifest.permission.MARK_DEVICE_ORGANIZATION_OWNED,
-            conditional = true)
+    @TestApi
+    @RequiresPermission(anyOf = {
+            android.Manifest.permission.MARK_DEVICE_ORGANIZATION_OWNED,
+            android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS
+    }, conditional = true)
     public void markProfileOwnerOnOrganizationOwnedDevice(@NonNull ComponentName who) {
         if (mService == null) {
             return;
@@ -12957,6 +13074,7 @@ public class DevicePolicyManager {
      *
      * @hide
      */
+    @TestApi
     public @NonNull Set<String> getDefaultCrossProfilePackages() {
         throwIfParentInstance("getDefaultCrossProfilePackages");
         if (mService != null) {
@@ -13457,6 +13575,57 @@ public class DevicePolicyManager {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Sets the device owner type for a managed device (e.g. financed device).
+     *
+     * @param admin The {@link DeviceAdminReceiver} that is the device owner.
+     * @param deviceOwnerType The device owner type is set to. Use
+     * {@link #DEVICE_OWNER_TYPE_DEFAULT} for the default device owner type. Use
+     * {@link #DEVICE_OWNER_TYPE_FINANCED} for the financed device owner type.
+     *
+     * @throws IllegalStateException When admin is not the device owner, or there is no device
+     *     owner, or attempting to set the device owner type again for the same admin.
+     * @throws SecurityException If the caller does not have the permission
+     *     {@link permission#MANAGE_PROFILE_AND_DEVICE_OWNERS}.
+     *
+     * @hide
+     */
+    public void setDeviceOwnerType(@NonNull ComponentName admin,
+            @DeviceOwnerType int deviceOwnerType) {
+        throwIfParentInstance("setDeviceOwnerType");
+        if (mService != null) {
+            try {
+                mService.setDeviceOwnerType(admin, deviceOwnerType);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Returns the device owner type for the admin used in
+     * {@link #setDeviceOwnerType(ComponentName, int)}. {@link #DEVICE_OWNER_TYPE_DEFAULT}
+     * would be returned when the device owner type is not set for the device owner admin.
+     *
+     * @param admin The {@link DeviceAdminReceiver} that is the device owner.
+     *
+     * @throws IllegalStateException When admin is not the device owner or there is no device owner.
+     *
+     * @hide
+     */
+    @DeviceOwnerType
+    public int getDeviceOwnerType(@NonNull ComponentName admin) {
+        throwIfParentInstance("getDeviceOwnerType");
+        if (mService != null) {
+            try {
+                return mService.getDeviceOwnerType(admin);
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return DEVICE_OWNER_TYPE_DEFAULT;
     }
 
     /**

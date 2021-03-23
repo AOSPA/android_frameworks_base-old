@@ -1200,15 +1200,6 @@ interface ITelephony {
     void shutdownMobileRadios();
 
     /**
-     * Set phone radio type and access technology.
-     *
-     * @param rafs an RadioAccessFamily array to indicate all phone's
-     *        new radio access family. The length of RadioAccessFamily
-     *        must equ]]al to phone count.
-     */
-    void setRadioCapability(in RadioAccessFamily[] rafs);
-
-    /**
      * Get phone radio type and access technology.
      *
      * @param phoneId which phone you want to get
@@ -2055,6 +2046,11 @@ interface ITelephony {
     int setImsProvisioningString(int subId, int key, String value);
 
     /**
+     * Start emergency callback mode for testing.
+     */
+    void startEmergencyCallbackMode();
+
+    /**
      * Update Emergency Number List for Test Mode.
      */
     void updateEmergencyNumberListTestMode(int action, in EmergencyNumber num);
@@ -2306,18 +2302,27 @@ interface ITelephony {
     /**
      * Register RCS provisioning callback.
      */
-    void registerRcsProvisioningChangedCallback(int subId,
-            IRcsConfigCallback callback);
+    void registerRcsProvisioningCallback(int subId, IRcsConfigCallback callback);
 
     /**
      * Unregister RCS provisioning callback.
      */
-    void unregisterRcsProvisioningChangedCallback(int subId, IRcsConfigCallback callback);
+    void unregisterRcsProvisioningCallback(int subId, IRcsConfigCallback callback);
 
     /**
      * trigger RCS reconfiguration.
      */
     void triggerRcsReconfiguration(int subId);
+
+    /**
+     * Enables or disables the test mode for RCS VoLTE single registration.
+     */
+    void setRcsSingleRegistrationTestModeEnabled(boolean enabled);
+
+    /**
+     * Gets the test mode for RCS VoLTE single registration.
+     */
+    boolean getRcsSingleRegistrationTestModeEnabled();
 
     /**
      * Overrides the config of RCS VoLTE single registration enabled for the device.
@@ -2338,6 +2343,11 @@ interface ITelephony {
      * Sends a device to device message; only for use through shell.
      */
     void sendDeviceToDeviceMessage(int message, int value);
+
+    /**
+     * Sets the specified transport active; only for use through shell.
+     */
+    void setActiveDeviceToDeviceTransport(String transport);
 
     /**
      * Gets the config of RCS VoLTE single registration enabled for the carrier/subscription.

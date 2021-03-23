@@ -76,6 +76,7 @@ import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
+import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
 
 import java.io.PrintWriter;
@@ -513,8 +514,15 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             int qsTypeIcon = 0;
             IconState qsIcon = null;
             CharSequence description = null;
+            // Mobile icon will only be shown in the statusbar in 2 scenarios
+            // 1. Mobile is the default network, and it is validated
+            // 2. Mobile is the default network, it is not validated and there is no other
+            // non-Carrier WiFi networks available.
+            boolean maybeShowIcons = (mCurrentState.inetCondition == 1)
+                    || (mCurrentState.inetCondition == 0
+                            && !mNetworkController.isNonCarrierWifiNetworkAvailable());
             // Only send data sim callbacks to QS.
-            if (mCurrentState.dataSim && mCurrentState.isDefault) {
+            if (mCurrentState.dataSim && mCurrentState.isDefault && maybeShowIcons) {
                 qsTypeIcon =
                         (showDataIcon || mConfig.alwaysShowDataRatIcon) ? icons.qsDataType : 0;
                 qsIcon = new IconState(mCurrentState.enabled
@@ -527,17 +535,19 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             boolean activityOut = mCurrentState.dataConnected
                     && !mCurrentState.carrierNetworkChangeMode
                     && mCurrentState.activityOut;
-            showDataIcon &= mCurrentState.dataSim && mCurrentState.isDefault;
+            showDataIcon &= mCurrentState.dataSim && mCurrentState.isDefault && maybeShowIcons;
             boolean showTriangle = showDataIcon && !mCurrentState.airplaneMode;
             int typeIcon = (showDataIcon || mConfig.alwaysShowDataRatIcon) ? icons.dataType : 0;
             showDataIcon |= mCurrentState.roaming;
             IconState statusIcon = new IconState(showDataIcon && !mCurrentState.airplaneMode,
                     getCurrentIconId(), contentDescription);
             int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
-            callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
+            MobileDataIndicators mobileDataIndicators = new MobileDataIndicators(
+                    statusIcon, qsIcon, typeIcon, qsTypeIcon,
                     activityIn, activityOut, volteIcon, dataContentDescription, dataContentDescriptionHtml,
                     description, icons.isWide, mSubscriptionInfo.getSubscriptionId(),
                     mCurrentState.roaming, showTriangle);
+            callback.setMobileDataIndicators(mobileDataIndicators);
         } else {
             boolean showDataIcon = mCurrentState.dataConnected || dataDisabled;
             IconState statusIcon = new IconState(
@@ -569,7 +579,6 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
             }else if ( mConfig.enableDdsRatIconEnhancement ) {
                 typeIcon = getEnhancementDdsRatIcon();
             }
-            int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
             MobileIconGroup vowifiIconGroup = getVowifiIconGroup();
             if ( mConfig.showVowifiIcon && vowifiIconGroup != null ) {
                 typeIcon = vowifiIconGroup.dataType;
@@ -577,6 +586,7 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                         mCurrentState.enabled && !mCurrentState.airplaneMode? statusIcon.icon : -1,
                         statusIcon.contentDescription);
             }
+            int volteIcon = mConfig.showVolteIcon && isVolteSwitchOn() ? getVolteResId() : 0;
             if (DEBUG) {
                 Log.d(mTag, "notifyListeners mConfig.alwaysShowNetworkTypeIcon="
                         + mConfig.alwaysShowNetworkTypeIcon + "  getNetworkType:" + mTelephonyDisplayInfo.getNetworkType() +
@@ -592,10 +602,12 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                         + " mConfig.showVowifiIcon=" + mConfig.showVowifiIcon);
             }
             boolean showTriangle = mCurrentState.enabled && !mCurrentState.airplaneMode;
-            callback.setMobileDataIndicators(statusIcon, qsIcon, typeIcon, qsTypeIcon,
+            MobileDataIndicators mobileDataIndicators = new MobileDataIndicators(
+                    statusIcon, qsIcon, typeIcon, qsTypeIcon,
                     activityIn, activityOut, volteIcon, dataContentDescription, dataContentDescriptionHtml,
                     description, icons.isWide, mSubscriptionInfo.getSubscriptionId(),
                     mCurrentState.roaming, showTriangle);
+            callback.setMobileDataIndicators(mobileDataIndicators);
         }
     }
 

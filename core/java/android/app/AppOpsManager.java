@@ -16,6 +16,8 @@
 
 package android.app;
 
+import static java.lang.Long.max;
+
 import android.Manifest;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
@@ -1141,23 +1143,20 @@ public class AppOpsManager {
      *
      * @hide
      */
-    // TODO: Add as AppProtoEnums
-    public static final int OP_PHONE_CALL_MICROPHONE = 100;
+    public static final int OP_PHONE_CALL_MICROPHONE = AppProtoEnums.APP_OP_PHONE_CALL_MICROPHONE;
     /**
      * Phone call is using camera
      *
      * @hide
      */
-    // TODO: Add as AppProtoEnums
-    public static final int OP_PHONE_CALL_CAMERA = 101;
+    public static final int OP_PHONE_CALL_CAMERA = AppProtoEnums.APP_OP_PHONE_CALL_CAMERA;
 
     /**
      * Audio is being recorded for hotword detection.
      *
      * @hide
      */
-    // TODO: Add as AppProtoEnums
-    public static final int OP_RECORD_AUDIO_HOTWORD = 102;
+    public static final int OP_RECORD_AUDIO_HOTWORD = AppProtoEnums.APP_OP_RECORD_AUDIO_HOTWORD;
 
     /**
      * Manage credentials in the system KeyChain.
@@ -1184,10 +1183,29 @@ public class AppOpsManager {
      */
     public static final int OP_SCHEDULE_EXACT_ALARM = AppProtoEnums.APP_OP_SCHEDULE_EXACT_ALARM;
 
+    /**
+     * Fine location being accessed by a location source, which is
+     * a component that already has location data since it is the one
+     * that produces location, which is it is a data source for
+     * location data.
+     *
+     * @hide
+     */
+    public static final int OP_FINE_LOCATION_SOURCE = AppProtoEnums.APP_OP_FINE_LOCATION_SOURCE;
+
+    /**
+     * Coarse location being accessed by a location source, which is
+     * a component that already has location data since it is the one
+     * that produces location, which is it is a data source for
+     * location data.
+     *
+     * @hide
+     */
+    public static final int OP_COARSE_LOCATION_SOURCE = AppProtoEnums.APP_OP_COARSE_LOCATION_SOURCE;
 
     /** @hide */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static final int _NUM_OP = 108;
+    public static final int _NUM_OP = 110;
 
     /** Access to coarse location information. */
     public static final String OPSTR_COARSE_LOCATION = "android:coarse_location";
@@ -1567,6 +1585,24 @@ public class AppOpsManager {
      */
     public static final String OPSTR_SCHEDULE_EXACT_ALARM = "android:schedule_exact_alarm";
 
+    /**
+     * Fine location being accessed by a location source, which is
+     * a component that already has location since it is the one that
+     * produces location.
+     *
+     * @hide
+     */
+    public static final String OPSTR_FINE_LOCATION_SOURCE = "android:fine_location_source";
+
+    /**
+     * Coarse location being accessed by a location source, which is
+     * a component that already has location since it is the one that
+     * produces location.
+     *
+     * @hide
+     */
+    public static final String OPSTR_COARSE_LOCATION_SOURCE = "android:coarse_location_source";
+
     /** {@link #sAppOpsToNote} not initialized yet for this op */
     private static final byte SHOULD_COLLECT_NOTE_OP_NOT_INITIALIZED = 0;
     /** Should not collect noting of this app-op in {@link #sAppOpsToNote} */
@@ -1767,6 +1803,8 @@ public class AppOpsManager {
             OP_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
             OP_RECORD_AUDIO_OUTPUT,             // RECORD_AUDIO_OUTPUT
             OP_SCHEDULE_EXACT_ALARM,            // SCHEDULE_EXACT_ALARM
+            OP_FINE_LOCATION,                   // OP_FINE_LOCATION_SOURCE
+            OP_COARSE_LOCATION,                 // OP_COARSE_LOCATION_SOURCE
     };
 
     /**
@@ -1881,6 +1919,8 @@ public class AppOpsManager {
             OPSTR_USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
             OPSTR_RECORD_AUDIO_OUTPUT,
             OPSTR_SCHEDULE_EXACT_ALARM,
+            OPSTR_FINE_LOCATION_SOURCE,
+            OPSTR_COARSE_LOCATION_SOURCE,
     };
 
     /**
@@ -1996,6 +2036,8 @@ public class AppOpsManager {
             "USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER",
             "RECORD_AUDIO_OUTPUT",
             "SCHEDULE_EXACT_ALARM",
+            "FINE_LOCATION_SOURCE",
+            "COARSE_LOCATION_SOURCE",
     };
 
     /**
@@ -2112,6 +2154,8 @@ public class AppOpsManager {
             Manifest.permission.USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER,
             null, // no permission for OP_RECORD_AUDIO_OUTPUT
             Manifest.permission.SCHEDULE_EXACT_ALARM,
+            null, // no permission for OP_ACCESS_FINE_LOCATION_SOURCE,
+            null, // no permission for OP_ACCESS_COARSE_LOCATION_SOURCE,
     };
 
     /**
@@ -2228,6 +2272,8 @@ public class AppOpsManager {
             null, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
             null, // RECORD_AUDIO_OUTPUT
             null, // SCHEDULE_EXACT_ALARM
+            null, // ACCESS_FINE_LOCATION_SOURCE
+            null, // ACCESS_COARSE_LOCATION_SOURCE
     };
 
     /**
@@ -2343,6 +2389,8 @@ public class AppOpsManager {
             null, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
             null, // RECORD_AUDIO_OUTPUT
             null, // SCHEDULE_EXACT_ALARM
+            null, // ACCESS_FINE_LOCATION_SOURCE
+            null, // ACCESS_COARSE_LOCATION_SOURCE
     };
 
     /**
@@ -2457,6 +2505,8 @@ public class AppOpsManager {
             AppOpsManager.MODE_DEFAULT, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
             AppOpsManager.MODE_ALLOWED, // RECORD_AUDIO_OUTPUT
             AppOpsManager.MODE_DEFAULT, // SCHEDULE_EXACT_ALARM
+            AppOpsManager.MODE_ALLOWED, // ACCESS_FINE_LOCATION_SOURCE
+            AppOpsManager.MODE_ALLOWED, // ACCESS_COARSE_LOCATION_SOURCE
     };
 
     /**
@@ -2551,9 +2601,9 @@ public class AppOpsManager {
             false, // READ_MEDIA_AUDIO
             false, // WRITE_MEDIA_AUDIO
             false, // READ_MEDIA_VIDEO
-            false, // WRITE_MEDIA_VIDEO
+            true,  // WRITE_MEDIA_VIDEO
             false, // READ_MEDIA_IMAGES
-            false, // WRITE_MEDIA_IMAGES
+            true,  // WRITE_MEDIA_IMAGES
             true,  // LEGACY_STORAGE
             false, // ACCESS_ACCESSIBILITY
             false, // READ_DEVICE_IDENTIFIERS
@@ -2575,6 +2625,8 @@ public class AppOpsManager {
             true, // USE_ICC_AUTH_WITH_DEVICE_IDENTIFIER
             false, // RECORD_AUDIO_OUTPUT
             false, // SCHEDULE_EXACT_ALARM
+            false, // ACCESS_FINE_LOCATION_SOURCE
+            false, // ACCESS_COARSE_LOCATION_SOURCE
     };
 
     /**
@@ -3335,6 +3387,13 @@ public class AppOpsManager {
         @DataClass.ParcelWith(LongSparseArrayParceling.class)
         private final @Nullable LongSparseArray<NoteOpEvent> mRejectEvents;
 
+        private AttributedOpEntry(@NonNull AttributedOpEntry other) {
+            mOp = other.mOp;
+            mRunning = other.mRunning;
+            mAccessEvents = other.mAccessEvents == null ? null : other.mAccessEvents.clone();
+            mRejectEvents = other.mRejectEvents == null ? null : other.mRejectEvents.clone();
+        }
+
         /**
          * Returns all keys for which we have events.
          *
@@ -3697,6 +3756,15 @@ public class AppOpsManager {
             }
 
             return lastEvent.getProxy();
+        }
+
+        @NonNull
+        String getOpName() {
+            return AppOpsManager.opToPublicName(mOp);
+        }
+
+        int getOp() {
+            return mOp;
         }
 
         private static class LongSparseArrayParceling implements
@@ -4521,6 +4589,50 @@ public class AppOpsManager {
     }
 
     /**
+     * Flag for querying app op history: get only aggregate information and no
+     * discrete accesses.
+     *
+     * @see #getHistoricalOps(HistoricalOpsRequest, Executor, Consumer)
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final int HISTORY_FLAG_AGGREGATE = 1 << 0;
+
+    /**
+     * Flag for querying app op history: get only discrete information and no
+     * aggregate accesses.
+     *
+     * @see #getHistoricalOps(HistoricalOpsRequest, Executor, Consumer)
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final int HISTORY_FLAG_DISCRETE = 1 << 1;
+
+    /**
+     * Flag for querying app op history: get all types of historical accesses.
+     *
+     * @see #getHistoricalOps(HistoricalOpsRequest, Executor, Consumer)
+     *
+     * @hide
+     */
+    @TestApi
+    @SystemApi
+    public static final int HISTORY_FLAGS_ALL = HISTORY_FLAG_AGGREGATE
+            | HISTORY_FLAG_DISCRETE;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = { "HISTORY_FLAG_" }, value = {
+            HISTORY_FLAG_AGGREGATE,
+            HISTORY_FLAG_DISCRETE
+    })
+    public @interface OpHistoryFlags {}
+
+    /**
      * Specifies what parameters to filter historical appop requests for
      *
      * @hide
@@ -4575,6 +4687,7 @@ public class AppOpsManager {
         private final @Nullable String mPackageName;
         private final @Nullable String mAttributionTag;
         private final @Nullable List<String> mOpNames;
+        private final @OpHistoryFlags int mHistoryFlags;
         private final @HistoricalOpsRequestFilter int mFilter;
         private final long mBeginTimeMillis;
         private final long mEndTimeMillis;
@@ -4582,12 +4695,13 @@ public class AppOpsManager {
 
         private HistoricalOpsRequest(int uid, @Nullable String packageName,
                 @Nullable String attributionTag, @Nullable List<String> opNames,
-                @HistoricalOpsRequestFilter int filter, long beginTimeMillis,
-                long endTimeMillis, @OpFlags int flags) {
+                @OpHistoryFlags int historyFlags, @HistoricalOpsRequestFilter int filter,
+                long beginTimeMillis, long endTimeMillis, @OpFlags int flags) {
             mUid = uid;
             mPackageName = packageName;
             mAttributionTag = attributionTag;
             mOpNames = opNames;
+            mHistoryFlags = historyFlags;
             mFilter = filter;
             mBeginTimeMillis = beginTimeMillis;
             mEndTimeMillis = endTimeMillis;
@@ -4605,6 +4719,7 @@ public class AppOpsManager {
             private @Nullable String mPackageName;
             private @Nullable String mAttributionTag;
             private @Nullable List<String> mOpNames;
+            private @OpHistoryFlags int mHistoryFlags;
             private @HistoricalOpsRequestFilter int mFilter;
             private final long mBeginTimeMillis;
             private final long mEndTimeMillis;
@@ -4626,6 +4741,7 @@ public class AppOpsManager {
                         "beginTimeMillis must be non negative and lesser than endTimeMillis");
                 mBeginTimeMillis = beginTimeMillis;
                 mEndTimeMillis = endTimeMillis;
+                mHistoryFlags = HISTORY_FLAG_AGGREGATE;
             }
 
             /**
@@ -4722,11 +4838,25 @@ public class AppOpsManager {
             }
 
             /**
+             * Specifies what type of historical information to query.
+             *
+             * @param flags Flags for the historical types to fetch which are any
+             * combination of {@link #HISTORY_FLAG_AGGREGATE}, {@link #HISTORY_FLAG_DISCRETE},
+             * {@link #HISTORY_FLAGS_ALL}. The default is {@link #HISTORY_FLAG_AGGREGATE}.
+             * @return This builder.
+             */
+            public @NonNull Builder setHistoryFlags(@OpHistoryFlags int flags) {
+                Preconditions.checkFlagsArgument(flags, HISTORY_FLAGS_ALL);
+                mHistoryFlags = flags;
+                return this;
+            }
+
+            /**
              * @return a new {@link HistoricalOpsRequest}.
              */
             public @NonNull HistoricalOpsRequest build() {
                 return new HistoricalOpsRequest(mUid, mPackageName, mAttributionTag, mOpNames,
-                        mFilter, mBeginTimeMillis, mEndTimeMillis, mFlags);
+                        mHistoryFlags, mFilter, mBeginTimeMillis, mEndTimeMillis, mFlags);
             }
         }
     }
@@ -4893,7 +5023,8 @@ public class AppOpsManager {
          * @hide
          */
         public void filter(int uid, @Nullable String packageName, @Nullable String attributionTag,
-                @Nullable String[] opNames, @HistoricalOpsRequestFilter int filter,
+                @Nullable String[] opNames, @OpHistoryFlags int historyFilter,
+                @HistoricalOpsRequestFilter int filter,
                 long beginTimeMillis, long endTimeMillis) {
             final long durationMillis = getDurationMillis();
             mBeginTimeMillis = Math.max(mBeginTimeMillis, beginTimeMillis);
@@ -4906,7 +5037,8 @@ public class AppOpsManager {
                 if ((filter & FILTER_BY_UID) != 0 && uid != uidOp.getUid()) {
                     mHistoricalUidOps.removeAt(i);
                 } else {
-                    uidOp.filter(packageName, attributionTag, opNames, filter, scaleFactor);
+                    uidOp.filter(packageName, attributionTag, opNames, filter, historyFilter,
+                            scaleFactor, mBeginTimeMillis, mEndTimeMillis);
                     if (uidOp.getPackageCount() == 0) {
                         mHistoricalUidOps.removeAt(i);
                     }
@@ -4960,6 +5092,16 @@ public class AppOpsManager {
             getOrCreateHistoricalUidOps(uid).increaseAccessDuration(opCode,
                     packageName, attributionTag, uidState, flags, increment);
         }
+
+        /** @hide */
+        @TestApi
+        public void addDiscreteAccess(int opCode, int uid, @NonNull String packageName,
+                @Nullable String attributionTag, @UidState int uidState, @OpFlags int opFlag,
+                long discreteAccessTime, long discreteAccessDuration) {
+            getOrCreateHistoricalUidOps(uid).addDiscreteAccess(opCode, packageName, attributionTag,
+                    uidState, opFlag, discreteAccessTime, discreteAccessDuration);
+        };
+
 
         /** @hide */
         @TestApi
@@ -5238,7 +5380,8 @@ public class AppOpsManager {
 
         private void filter(@Nullable String packageName, @Nullable String attributionTag,
                 @Nullable String[] opNames, @HistoricalOpsRequestFilter int filter,
-                double fractionToRemove) {
+                @OpHistoryFlags int historyFilter, double fractionToRemove, long beginTimeMillis,
+                long endTimeMillis) {
             final int packageCount = getPackageCount();
             for (int i = packageCount - 1; i >= 0; i--) {
                 final HistoricalPackageOps packageOps = getPackageOpsAt(i);
@@ -5246,7 +5389,8 @@ public class AppOpsManager {
                         packageOps.getPackageName())) {
                     mHistoricalPackageOps.removeAt(i);
                 } else {
-                    packageOps.filter(attributionTag, opNames, filter, fractionToRemove);
+                    packageOps.filter(attributionTag, opNames, filter, historyFilter,
+                            fractionToRemove, beginTimeMillis, endTimeMillis);
                     if (packageOps.getAttributedOpsCount() == 0) {
                         mHistoricalPackageOps.removeAt(i);
                     }
@@ -5285,6 +5429,13 @@ public class AppOpsManager {
             getOrCreateHistoricalPackageOps(packageName).increaseAccessDuration(
                     opCode, attributionTag, uidState, flags, increment);
         }
+
+        private void addDiscreteAccess(int opCode, @NonNull String packageName,
+                @Nullable String attributionTag, @UidState int uidState,
+                @OpFlags int flag, long discreteAccessTime, long discreteAccessDuration) {
+            getOrCreateHistoricalPackageOps(packageName).addDiscreteAccess(opCode, attributionTag,
+                    uidState, flag, discreteAccessTime, discreteAccessDuration);
+        };
 
         /**
          * @return The UID for which the data is related.
@@ -5490,7 +5641,8 @@ public class AppOpsManager {
         }
 
         private void filter(@Nullable String attributionTag, @Nullable String[] opNames,
-                @HistoricalOpsRequestFilter int filter, double fractionToRemove) {
+                @HistoricalOpsRequestFilter int filter, @OpHistoryFlags int historyFilter,
+                double fractionToRemove, long beginTimeMillis, long endTimeMillis) {
             final int attributionCount = getAttributedOpsCount();
             for (int i = attributionCount - 1; i >= 0; i--) {
                 final AttributedHistoricalOps attributionOps = getAttributedOpsAt(i);
@@ -5498,7 +5650,8 @@ public class AppOpsManager {
                         attributionOps.getTag())) {
                     mAttributedHistoricalOps.removeAt(i);
                 } else {
-                    attributionOps.filter(opNames, filter, fractionToRemove);
+                    attributionOps.filter(opNames, filter, historyFilter, fractionToRemove,
+                            beginTimeMillis, endTimeMillis);
                     if (attributionOps.getOpCount() == 0) {
                         mAttributedHistoricalOps.removeAt(i);
                     }
@@ -5541,6 +5694,13 @@ public class AppOpsManager {
                 @UidState int uidState, @OpFlags int flags, long increment) {
             getOrCreateAttributedHistoricalOps(attributionTag).increaseAccessDuration(
                     opCode, uidState, flags, increment);
+        }
+
+        private void addDiscreteAccess(int opCode, @Nullable String attributionTag,
+                @UidState int uidState, @OpFlags int flag, long discreteAccessTime,
+                long discreteAccessDuration) {
+            getOrCreateAttributedHistoricalOps(attributionTag).addDiscreteAccess(opCode, uidState,
+                    flag, discreteAccessTime, discreteAccessDuration);
         }
 
         /**
@@ -5820,7 +5980,8 @@ public class AppOpsManager {
         }
 
         private void filter(@Nullable String[] opNames, @HistoricalOpsRequestFilter int filter,
-                double scaleFactor) {
+                @OpHistoryFlags int historyFilter, double scaleFactor, long beginTimeMillis,
+                long endTimeMillis) {
             final int opCount = getOpCount();
             for (int i = opCount - 1; i >= 0; i--) {
                 final HistoricalOp op = mHistoricalOps.valueAt(i);
@@ -5828,7 +5989,7 @@ public class AppOpsManager {
                         op.getOpName())) {
                     mHistoricalOps.removeAt(i);
                 } else {
-                    op.filter(scaleFactor);
+                    op.filter(historyFilter, scaleFactor, beginTimeMillis, endTimeMillis);
                 }
             }
         }
@@ -5857,6 +6018,12 @@ public class AppOpsManager {
         private void increaseAccessDuration(int opCode, @UidState int uidState,
                 @OpFlags int flags, long increment) {
             getOrCreateHistoricalOp(opCode).increaseAccessDuration(uidState, flags, increment);
+        }
+
+        private void addDiscreteAccess(int opCode, @UidState int uidState, @OpFlags int flag,
+                long discreteAccessTime, long discreteAccessDuration) {
+            getOrCreateHistoricalOp(opCode).addDiscreteAccess(uidState,flag, discreteAccessTime,
+                    discreteAccessDuration);
         }
 
         /**
@@ -5919,8 +6086,6 @@ public class AppOpsManager {
             }
             return op;
         }
-
-
 
         // Code below generated by codegen v1.0.14.
         //
@@ -6071,6 +6236,9 @@ public class AppOpsManager {
         private @Nullable LongSparseLongArray mRejectCount;
         private @Nullable LongSparseLongArray mAccessDuration;
 
+        /** Discrete Ops for this Op */
+        private @Nullable List<AttributedOpEntry> mDiscreteAccesses;
+
         /** @hide */
         public HistoricalOp(int op) {
             mOp = op;
@@ -6087,6 +6255,12 @@ public class AppOpsManager {
             if (other.mAccessDuration != null) {
                 mAccessDuration = other.mAccessDuration.clone();
             }
+            final int historicalOpCount = other.getDiscreteAccessCount();
+            for (int i = 0; i < historicalOpCount; i++) {
+                final AttributedOpEntry origOp = other.getDiscreteAccessAt(i);
+                final AttributedOpEntry cloneOp = new AttributedOpEntry(origOp);
+                getOrCreateDiscreteAccesses().add(cloneOp);
+            }
         }
 
         private HistoricalOp(@NonNull Parcel parcel) {
@@ -6094,22 +6268,45 @@ public class AppOpsManager {
             mAccessCount = readLongSparseLongArrayFromParcel(parcel);
             mRejectCount = readLongSparseLongArrayFromParcel(parcel);
             mAccessDuration = readLongSparseLongArrayFromParcel(parcel);
+            mDiscreteAccesses = readDiscreteAccessArrayFromParcel(parcel);
         }
 
-        private void filter(double scaleFactor) {
-            scale(mAccessCount, scaleFactor);
-            scale(mRejectCount, scaleFactor);
-            scale(mAccessDuration, scaleFactor);
+        private void filter(@OpHistoryFlags int historyFlag, double scaleFactor,
+                long beginTimeMillis, long endTimeMillis) {
+            if ((historyFlag & HISTORY_FLAG_AGGREGATE) == 0) {
+                mAccessCount = null;
+                mRejectCount = null;
+                mAccessDuration = null;
+            } else {
+                scale(mAccessCount, scaleFactor);
+                scale(mRejectCount, scaleFactor);
+                scale(mAccessDuration, scaleFactor);
+            }
+            if ((historyFlag & HISTORY_FLAG_DISCRETE) == 0) {
+                mDiscreteAccesses = null;
+                return;
+            }
+            final int discreteOpCount = getDiscreteAccessCount();
+            for (int i = discreteOpCount - 1; i >= 0; i--) {
+                final AttributedOpEntry op = mDiscreteAccesses.get(i);
+                long opBeginTime = op.getLastAccessTime(OP_FLAGS_ALL);
+                long opEndTime = opBeginTime + op.getLastDuration(OP_FLAGS_ALL);
+                opEndTime = max(opBeginTime, opEndTime);
+                if (opEndTime < beginTimeMillis || opBeginTime > endTimeMillis) {
+                    mDiscreteAccesses.remove(i);
+                }
+            }
         }
 
         private boolean isEmpty() {
             return !hasData(mAccessCount)
                     && !hasData(mRejectCount)
-                    && !hasData(mAccessDuration);
+                    && !hasData(mAccessDuration)
+                    && (mDiscreteAccesses == null);
         }
 
         private boolean hasData(@NonNull LongSparseLongArray array) {
-            return (array != null && array.size() > 0);
+            return array != null && array.size() > 0;
         }
 
         private @Nullable HistoricalOp splice(double fractionToRemove) {
@@ -6141,6 +6338,32 @@ public class AppOpsManager {
             merge(this::getOrCreateAccessCount, other.mAccessCount);
             merge(this::getOrCreateRejectCount, other.mRejectCount);
             merge(this::getOrCreateAccessDuration, other.mAccessDuration);
+
+            if (other.mDiscreteAccesses == null) {
+                return;
+            }
+            if (mDiscreteAccesses == null) {
+                mDiscreteAccesses = new ArrayList(other.mDiscreteAccesses);
+                return;
+            }
+            List<AttributedOpEntry> historicalDiscreteAccesses = new ArrayList<>();
+            final int otherHistoricalOpCount = other.getDiscreteAccessCount();
+            final int historicalOpCount = getDiscreteAccessCount();
+            int i = 0;
+            int j = 0;
+            while (i < otherHistoricalOpCount || j < historicalOpCount) {
+                if (i == otherHistoricalOpCount) {
+                    historicalDiscreteAccesses.add(mDiscreteAccesses.get(j++));
+                } else if (j == historicalOpCount) {
+                    historicalDiscreteAccesses.add(other.mDiscreteAccesses.get(i++));
+                } else if (mDiscreteAccesses.get(j).getLastAccessTime(OP_FLAGS_ALL)
+                        < other.mDiscreteAccesses.get(i).getLastAccessTime(OP_FLAGS_ALL)) {
+                    historicalDiscreteAccesses.add(mDiscreteAccesses.get(j++));
+                } else {
+                    historicalDiscreteAccesses.add(other.mDiscreteAccesses.get(i++));
+                }
+            }
+            mDiscreteAccesses = historicalDiscreteAccesses;
         }
 
         private void increaseAccessCount(@UidState int uidState, @OpFlags int flags,
@@ -6168,6 +6391,23 @@ public class AppOpsManager {
             }
         }
 
+        private void addDiscreteAccess(@UidState int uidState, @OpFlags int flag,
+                long discreteAccessTime, long discreteAccessDuration) {
+            List<AttributedOpEntry> discreteAccesses = getOrCreateDiscreteAccesses();
+            LongSparseArray<NoteOpEvent> accessEvents = new LongSparseArray<>();
+            long key = makeKey(uidState, flag);
+            NoteOpEvent note = new NoteOpEvent(discreteAccessTime, discreteAccessDuration, null);
+            accessEvents.append(key, note);
+            AttributedOpEntry access = new AttributedOpEntry(mOp, false, accessEvents, null);
+            for (int i = discreteAccesses.size() - 1; i >= 0; i--) {
+                if (discreteAccesses.get(i).getLastAccessTime(OP_FLAGS_ALL) < discreteAccessTime) {
+                    discreteAccesses.add(i + 1, access);
+                    return;
+                }
+            }
+            discreteAccesses.add(0, access);
+        }
+
         /**
          * Gets the op name.
          *
@@ -6180,6 +6420,33 @@ public class AppOpsManager {
         /** @hide */
         public int getOpCode() {
             return mOp;
+        }
+
+        /**
+         * Gets number of discrete historical app ops.
+         *
+         * @return The number historical app ops.
+         * @see #getOpAt(int)
+         */
+        public @IntRange(from = 0) int getDiscreteAccessCount() {
+            if (mDiscreteAccesses == null) {
+                return 0;
+            }
+            return mDiscreteAccesses.size();
+        }
+
+        /**
+         * Gets the historical op at a given index.
+         *
+         * @param index The index to lookup.
+         * @return The op at the given index.
+         * @see #getOpCount()
+         */
+        public @NonNull AttributedOpEntry getDiscreteAccessAt(@IntRange(from = 0) int index) {
+            if (mDiscreteAccesses == null) {
+                throw new IndexOutOfBoundsException();
+            }
+            return mDiscreteAccesses.get(index);
         }
 
         /**
@@ -6201,6 +6468,25 @@ public class AppOpsManager {
         }
 
         /**
+         * Gets the discrete events the op was accessed (performed) in the foreground.
+         *
+         * @param flags The flags which are any combination of
+         * {@link #OP_FLAG_SELF}, {@link #OP_FLAG_TRUSTED_PROXY},
+         * {@link #OP_FLAG_UNTRUSTED_PROXY}, {@link #OP_FLAG_TRUSTED_PROXIED},
+         * {@link #OP_FLAG_UNTRUSTED_PROXIED}. You can use {@link #OP_FLAGS_ALL}
+         * for any flag.
+         * @return The list of discrete ops accessed in the foreground.
+         *
+         * @see #getBackgroundDiscreteAccesses(int)
+         * @see #getDiscreteAccesses(int, int, int)
+         */
+        @NonNull
+        public List<AttributedOpEntry> getForegroundDiscreteAccesses(@OpFlags int flags) {
+            return listForFlagsInStates(mDiscreteAccesses, MAX_PRIORITY_UID_STATE,
+                    resolveFirstUnrestrictedUidState(mOp), flags);
+        }
+
+        /**
          * Gets the number times the op was accessed (performed) in the background.
          *
          * @param flags The flags which are any combination of
@@ -6215,6 +6501,25 @@ public class AppOpsManager {
          */
         public long getBackgroundAccessCount(@OpFlags int flags) {
             return sumForFlagsInStates(mAccessCount, resolveLastRestrictedUidState(mOp),
+                    MIN_PRIORITY_UID_STATE, flags);
+        }
+
+        /**
+         * Gets the discrete events the op was accessed (performed) in the background.
+         *
+         * @param flags The flags which are any combination of
+         * {@link #OP_FLAG_SELF}, {@link #OP_FLAG_TRUSTED_PROXY},
+         * {@link #OP_FLAG_UNTRUSTED_PROXY}, {@link #OP_FLAG_TRUSTED_PROXIED},
+         * {@link #OP_FLAG_UNTRUSTED_PROXIED}. You can use {@link #OP_FLAGS_ALL}
+         * for any flag.
+         * @return The list of discrete ops accessed in the background.
+         *
+         * @see #getForegroundDiscreteAccesses(int)
+         * @see #getDiscreteAccesses(int, int, int)
+         */
+        @NonNull
+        public List<AttributedOpEntry> getBackgroundDiscreteAccesses(@OpFlags int flags) {
+            return listForFlagsInStates(mDiscreteAccesses, resolveLastRestrictedUidState(mOp),
                     MIN_PRIORITY_UID_STATE, flags);
         }
 
@@ -6241,6 +6546,26 @@ public class AppOpsManager {
         public long getAccessCount(@UidState int fromUidState, @UidState int toUidState,
                 @OpFlags int flags) {
             return sumForFlagsInStates(mAccessCount, fromUidState, toUidState, flags);
+        }
+
+        /**
+         * Gets the discrete events the op was accessed (performed) for a
+         * range of uid states.
+         *
+         * @param flags The flags which are any combination of
+         * {@link #OP_FLAG_SELF}, {@link #OP_FLAG_TRUSTED_PROXY},
+         * {@link #OP_FLAG_UNTRUSTED_PROXY}, {@link #OP_FLAG_TRUSTED_PROXIED},
+         * {@link #OP_FLAG_UNTRUSTED_PROXIED}. You can use {@link #OP_FLAGS_ALL}
+         * for any flag.
+         * @return The discrete the op was accessed in the background.
+         *
+         * @see #getBackgroundDiscreteAccesses(int)
+         * @see #getForegroundDiscreteAccesses(int)
+         */
+        @NonNull
+        public List<AttributedOpEntry> getDiscreteAccesses(@UidState int fromUidState,
+                @UidState int toUidState, @OpFlags int flags) {
+            return listForFlagsInStates(mDiscreteAccesses, fromUidState, toUidState, flags);
         }
 
         /**
@@ -6377,6 +6702,7 @@ public class AppOpsManager {
             writeLongSparseLongArrayToParcel(mAccessCount, parcel);
             writeLongSparseLongArrayToParcel(mRejectCount, parcel);
             writeLongSparseLongArrayToParcel(mAccessDuration, parcel);
+            writeDiscreteAccessArrayToParcel(mDiscreteAccesses, parcel);
         }
 
         @Override
@@ -6397,7 +6723,11 @@ public class AppOpsManager {
             if (!equalsLongSparseLongArray(mRejectCount, other.mRejectCount)) {
                 return false;
             }
-            return equalsLongSparseLongArray(mAccessDuration, other.mAccessDuration);
+            if (!equalsLongSparseLongArray(mAccessDuration, other.mAccessDuration)) {
+                return false;
+            }
+            return mDiscreteAccesses == null ? (other.mDiscreteAccesses == null ? true
+                    : false) : mDiscreteAccesses.equals(other.mDiscreteAccesses);
         }
 
         @Override
@@ -6406,6 +6736,7 @@ public class AppOpsManager {
             result = 31 * result + Objects.hashCode(mAccessCount);
             result = 31 * result + Objects.hashCode(mRejectCount);
             result = 31 * result + Objects.hashCode(mAccessDuration);
+            result = 31 * result + Objects.hashCode(mDiscreteAccesses);
             return result;
         }
 
@@ -6432,6 +6763,13 @@ public class AppOpsManager {
                 mAccessDuration = new LongSparseLongArray();
             }
             return mAccessDuration;
+        }
+
+        private @NonNull List<AttributedOpEntry> getOrCreateDiscreteAccesses() {
+            if (mDiscreteAccesses == null) {
+                mDiscreteAccesses = new ArrayList<>();
+            }
+            return mDiscreteAccesses;
         }
 
         /**
@@ -6524,6 +6862,32 @@ public class AppOpsManager {
     }
 
     /**
+     * Returns list of events filtered by UidState and UID flags.
+     *
+     * @param accesses The events list.
+     * @param beginUidState The beginning UID state (inclusive).
+     * @param endUidState The end UID state (inclusive).
+     * @param flags The UID flags.
+     * @return filtered list of events.
+     */
+    private static List<AttributedOpEntry> listForFlagsInStates(List<AttributedOpEntry> accesses,
+            @UidState int beginUidState, @UidState int endUidState, @OpFlags int flags) {
+        List<AttributedOpEntry> result = new ArrayList<>();
+        if (accesses == null) {
+            return result;
+        }
+        int nAccesses = accesses.size();
+        for (int i = 0; i < nAccesses; i++) {
+            AttributedOpEntry entry = accesses.get(i);
+            if (entry.getLastAccessTime(beginUidState, endUidState, flags) == -1) {
+                continue;
+            }
+            result.add(entry);
+        }
+        return result;
+    }
+
+    /**
      * Callback for notification of changes to operation state.
      */
     public interface OnOpChangedListener {
@@ -6553,14 +6917,15 @@ public class AppOpsManager {
     public interface OnOpNotedListener {
         /**
          * Called when an op was noted.
-         *
          * @param code The op code.
          * @param uid The UID performing the operation.
          * @param packageName The package performing the operation.
+         * @param attributionTag The attribution tag performing the operation.
          * @param flags The flags of this op
          * @param result The result of the note.
          */
-        void onOpNoted(int code, int uid, String packageName, @OpFlags int flags, @Mode int result);
+        void onOpNoted(int code, int uid, String packageName, String attributionTag,
+                @OpFlags int flags, @Mode int result);
     }
 
     /**
@@ -6593,14 +6958,15 @@ public class AppOpsManager {
          * Called when an op was started.
          *
          * Note: This is only for op starts. It is not called when an op is noted or stopped.
-         *
          * @param op The op code.
          * @param uid The UID performing the operation.
          * @param packageName The package performing the operation.
+         * @param attributionTag The attribution tag performing the operation.
          * @param flags The flags of this op
          * @param result The result of the start.
          */
-        void onOpStarted(int op, int uid, String packageName, @OpFlags int flags, @Mode int result);
+        void onOpStarted(int op, int uid, String packageName, String attributionTag,
+                @OpFlags int flags, @Mode int result);
     }
 
     AppOpsManager(Context context, IAppOpsService service) {
@@ -6744,8 +7110,9 @@ public class AppOpsManager {
         Objects.requireNonNull(callback, "callback cannot be null");
         try {
             mService.getHistoricalOps(request.mUid, request.mPackageName, request.mAttributionTag,
-                    request.mOpNames, request.mFilter, request.mBeginTimeMillis,
-                    request.mEndTimeMillis, request.mFlags, new RemoteCallback((result) -> {
+                    request.mOpNames, request.mHistoryFlags, request.mFilter,
+                    request.mBeginTimeMillis, request.mEndTimeMillis, request.mFlags,
+                    new RemoteCallback((result) -> {
                 final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
                 final long identity = Binder.clearCallingIdentity();
                 try {
@@ -6783,9 +7150,9 @@ public class AppOpsManager {
         Objects.requireNonNull(callback, "callback cannot be null");
         try {
             mService.getHistoricalOpsFromDiskRaw(request.mUid, request.mPackageName,
-                    request.mAttributionTag, request.mOpNames, request.mFilter,
-                    request.mBeginTimeMillis, request.mEndTimeMillis, request.mFlags,
-                    new RemoteCallback((result) -> {
+                    request.mAttributionTag, request.mOpNames, request.mHistoryFlags,
+                    request.mFilter, request.mBeginTimeMillis, request.mEndTimeMillis,
+                    request.mFlags, new RemoteCallback((result) -> {
                 final HistoricalOps ops = result.getParcelable(KEY_HISTORICAL_OPS);
                 final long identity = Binder.clearCallingIdentity();
                 try {
@@ -7183,8 +7550,9 @@ public class AppOpsManager {
              }
              cb = new IAppOpsStartedCallback.Stub() {
                  @Override
-                 public void opStarted(int op, int uid, String packageName, int flags, int mode) {
-                     callback.onOpStarted(op, uid, packageName, flags, mode);
+                 public void opStarted(int op, int uid, String packageName, String attributionTag,
+                         int flags, int mode) {
+                     callback.onOpStarted(op, uid, packageName, attributionTag, flags, mode);
                  }
              };
              mStartedWatchers.put(callback, cb);
@@ -7250,8 +7618,9 @@ public class AppOpsManager {
             }
             cb = new IAppOpsNotedCallback.Stub() {
                 @Override
-                public void opNoted(int op, int uid, String packageName, int flags, int mode) {
-                    callback.onOpNoted(op, uid, packageName, flags, mode);
+                public void opNoted(int op, int uid, String packageName, String attributionTag,
+                        int flags, int mode) {
+                    callback.onOpNoted(op, uid, packageName, attributionTag, flags, mode);
                 }
             };
             mNotedWatchers.put(callback, cb);
@@ -9014,6 +9383,32 @@ public class AppOpsManager {
         final LongSparseLongArray array = new LongSparseLongArray(size);
         for (int i = 0; i < size; i++) {
             array.append(parcel.readLong(), parcel.readLong());
+        }
+        return array;
+    }
+
+    private static void writeDiscreteAccessArrayToParcel(
+            @Nullable List<AttributedOpEntry> array, @NonNull Parcel parcel) {
+        if (array != null) {
+            final int size = array.size();
+            parcel.writeInt(size);
+            for (int i = 0; i < size; i++) {
+                array.get(i).writeToParcel(parcel, 0);
+            }
+        } else {
+            parcel.writeInt(-1);
+        }
+    }
+
+    private static @Nullable List<AttributedOpEntry> readDiscreteAccessArrayFromParcel(
+            @NonNull Parcel parcel) {
+        final int size = parcel.readInt();
+        if (size < 0) {
+            return null;
+        }
+        final List<AttributedOpEntry> array = new ArrayList<>(size);
+        for (int i = 0; i < size; i++) {
+            array.add(new AttributedOpEntry(parcel));
         }
         return array;
     }

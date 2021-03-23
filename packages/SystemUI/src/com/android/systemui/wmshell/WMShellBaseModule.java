@@ -17,6 +17,7 @@
 package com.android.systemui.wmshell;
 
 import static android.os.Process.THREAD_PRIORITY_DISPLAY;
+import static android.os.Process.THREAD_PRIORITY_TOP_APP_BOOST;
 
 import android.animation.AnimationHandler;
 import android.app.ActivityTaskManager;
@@ -31,6 +32,7 @@ import android.view.WindowManager;
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.systemui.R;
 import com.android.systemui.dagger.WMComponent;
 import com.android.systemui.dagger.WMSingleton;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -60,6 +62,7 @@ import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ChoreographerSfVsync;
 import com.android.wm.shell.common.annotations.ShellAnimationThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
+import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
@@ -76,6 +79,8 @@ import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.splitscreen.SplitScreenController;
+import com.android.wm.shell.startingsurface.StartingSurface;
+import com.android.wm.shell.startingsurface.StartingWindowController;
 import com.android.wm.shell.transition.RemoteTransitions;
 import com.android.wm.shell.transition.Transitions;
 
@@ -97,7 +102,12 @@ import dagger.Provides;
 @Module
 public abstract class WMShellBaseModule {
 
-    private static final boolean ENABLE_SHELL_MAIN_THREAD = false;
+    /**
+     * Returns whether to enable a separate shell thread for the shell features.
+     */
+    private static boolean enableShellMainThread(Context context) {
+        return context.getResources().getBoolean(R.bool.config_enableShellMainThread);
+    }
 
     //
     // Shell Concurrency - Components used for managing threading in the Shell and SysUI
@@ -120,8 +130,8 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     @ShellMainThread
-    public static Handler provideShellMainHandler(@Main Handler sysuiMainHandler) {
-        if (ENABLE_SHELL_MAIN_THREAD) {
+    public static Handler provideShellMainHandler(Context context, @Main Handler sysuiMainHandler) {
+        if (enableShellMainThread(context)) {
              HandlerThread mainThread = new HandlerThread("wmshell.main");
              mainThread.start();
              return mainThread.getThreadHandler();
@@ -135,9 +145,9 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     @ShellMainThread
-    public static ShellExecutor provideShellMainExecutor(@ShellMainThread Handler mainHandler,
-            @Main ShellExecutor sysuiMainExecutor) {
-        if (ENABLE_SHELL_MAIN_THREAD) {
+    public static ShellExecutor provideShellMainExecutor(Context context,
+            @ShellMainThread Handler mainHandler, @Main ShellExecutor sysuiMainExecutor) {
+        if (enableShellMainThread(context)) {
             return new HandlerExecutor(mainHandler);
         }
         return sysuiMainExecutor;
@@ -154,6 +164,19 @@ public abstract class WMShellBaseModule {
                  THREAD_PRIORITY_DISPLAY);
          shellAnimationThread.start();
          return new HandlerExecutor(shellAnimationThread.getThreadHandler());
+    }
+
+    /**
+     * Provides a Shell splashscreen-thread Executor
+     */
+    @WMSingleton
+    @Provides
+    @ShellSplashscreenThread
+    public static ShellExecutor provideSplashScreenExecutor() {
+        HandlerThread shellSplashscreenThread = new HandlerThread("wmshell.splashscreen",
+                THREAD_PRIORITY_TOP_APP_BOOST);
+        shellSplashscreenThread.start();
+        return new HandlerExecutor(shellSplashscreenThread.getThreadHandler());
     }
 
     /**
@@ -320,12 +343,12 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<OneHandedController> provideOneHandedController(Context context,
-            DisplayController displayController, TaskStackListenerImpl taskStackListener,
-            UiEventLogger uiEventLogger,
+            WindowManager windowManager, DisplayController displayController,
+            TaskStackListenerImpl taskStackListener, UiEventLogger uiEventLogger,
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellMainThread Handler mainHandler) {
-        return Optional.ofNullable(OneHandedController.create(context, displayController,
-                taskStackListener, uiEventLogger, mainExecutor, mainHandler));
+        return Optional.ofNullable(OneHandedController.create(context, windowManager,
+                displayController, taskStackListener, uiEventLogger, mainExecutor, mainHandler));
     }
 
     //
@@ -367,6 +390,9 @@ public abstract class WMShellBaseModule {
         return new PipUiEventLogger(uiEventLogger, packageManager);
     }
 
+    @BindsOptionalOf
+    abstract PipTouchHandler optionalPipTouchHandler();
+
     //
     // Shell transitions
     //
@@ -380,9 +406,9 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
-            @ShellMainThread ShellExecutor mainExecutor,
+            Context context, @ShellMainThread ShellExecutor mainExecutor,
             @ShellAnimationThread ShellExecutor animExecutor) {
-        return new Transitions(organizer, pool, mainExecutor, animExecutor);
+        return new Transitions(organizer, pool, context, mainExecutor, animExecutor);
     }
 
     //
@@ -409,10 +435,11 @@ public abstract class WMShellBaseModule {
             ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue, Context context,
             RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
-            @ShellMainThread ShellExecutor mainExecutor) {
+            @ShellMainThread ShellExecutor mainExecutor,
+            DisplayImeController displayImeController) {
         if (ActivityTaskManager.supportsSplitScreenMultiWindow(context)) {
             return Optional.of(new SplitScreenController(shellTaskOrganizer, syncQueue, context,
-                    rootTaskDisplayAreaOrganizer, mainExecutor));
+                    rootTaskDisplayAreaOrganizer, mainExecutor, displayImeController));
         } else {
             return Optional.empty();
         }
@@ -440,6 +467,22 @@ public abstract class WMShellBaseModule {
 
     @BindsOptionalOf
     abstract AppPairsController optionalAppPairs();
+
+    // Starting window
+
+    @WMSingleton
+    @Provides
+    static Optional<StartingSurface> provideStartingSurface(
+            StartingWindowController startingWindowController) {
+        return Optional.of(startingWindowController.asStartingSurface());
+    }
+
+    @WMSingleton
+    @Provides
+    static StartingWindowController provideStartingWindowController(Context context,
+            @ShellSplashscreenThread ShellExecutor executor) {
+        return new StartingWindowController(context, executor);
+    }
 
     //
     // Task view factory
@@ -472,6 +515,8 @@ public abstract class WMShellBaseModule {
             Optional<LegacySplitScreenController> legacySplitScreenOptional,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<AppPairsController> appPairsOptional,
+            Optional<StartingSurface> startingSurface,
+            Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
             Transitions transitions,
             @ShellMainThread ShellExecutor mainExecutor) {
@@ -481,6 +526,8 @@ public abstract class WMShellBaseModule {
                 legacySplitScreenOptional,
                 splitScreenOptional,
                 appPairsOptional,
+                startingSurface,
+                pipTouchHandlerOptional,
                 fullscreenTaskListener,
                 transitions,
                 mainExecutor);

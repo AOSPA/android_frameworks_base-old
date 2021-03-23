@@ -41,6 +41,7 @@ import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 
+import com.android.internal.net.NetworkUtilsInternal;
 import com.android.internal.net.VpnConfig;
 
 import java.net.DatagramSocket;
@@ -254,7 +255,7 @@ public class VpnService extends Service {
      * @return {@code true} on success.
      */
     public boolean protect(int socket) {
-        return NetworkUtils.protectFromVpn(socket);
+        return NetworkUtilsInternal.protectFromVpn(socket);
     }
 
     /**
@@ -596,7 +597,8 @@ public class VpnService extends Service {
                     }
                 }
             }
-            mRoutes.add(new RouteInfo(new IpPrefix(address, prefixLength), null));
+            mRoutes.add(new RouteInfo(new IpPrefix(address, prefixLength), null, null,
+                RouteInfo.RTN_UNICAST));
             mConfig.updateAllowedFamilies(address);
             return this;
         }

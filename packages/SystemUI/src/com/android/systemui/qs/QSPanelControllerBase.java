@@ -75,7 +75,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
 
     private final QSHost.Callback mQSHostCallback = this::setTiles;
     protected boolean mShowLabels = true;
-    protected boolean mSideLabels;
+    protected boolean mQSLabelFlag;
 
     private final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
             new QSPanel.OnConfigurationChangedListener() {
@@ -118,11 +118,12 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         mQSLogger = qsLogger;
         mDumpManager = dumpManager;
         mFeatureFlags = featureFlags;
+        mQSLabelFlag = featureFlags.isQSLabelsEnabled();
     }
 
     @Override
     protected void onInit() {
-        mView.initialize(mSideLabels);
+        mView.initialize(mQSLabelFlag);
         mQSLogger.logAllTilesChangeListening(mView.isListening(), mView.getDumpableTag(), "");
     }
 
@@ -197,7 +198,6 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         final TileRecord r = new TileRecord();
         r.tile = tile;
         r.tileView = mHost.createTileView(tile, collapsedView);
-        r.tileView.setShowLabels(mShowLabels);
         mView.addTile(r);
         mRecords.add(r);
         mCachedSpecs = getTilesSpecs();

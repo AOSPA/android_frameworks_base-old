@@ -37,7 +37,6 @@ import androidx.dynamicanimation.animation.SpringForce;
 import com.android.wm.shell.animation.FloatProperties;
 import com.android.wm.shell.animation.PhysicsAnimator;
 import com.android.wm.shell.common.FloatingContentCoordinator;
-import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.magnetictarget.MagnetizedObject;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipSnapAlgorithm;
@@ -64,8 +63,11 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     private static final int LEAVE_PIP_DURATION = 300;
     private static final int SHIFT_DURATION = 300;
 
+    private static final float PIP_STIFFNESS = 700f;
+    private static final float PIP_DAMPING_RATIO = SpringForce.DAMPING_RATIO_NO_BOUNCY;
+
     /** Friction to use for PIP when it moves via physics fling animations. */
-    private static final float DEFAULT_FRICTION = 2f;
+    private static final float DEFAULT_FRICTION = 1.9f;
 
     private final Context mContext;
     private final PipTaskOrganizer mPipTaskOrganizer;
@@ -102,7 +104,7 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
      * PhysicsAnimator instance for animating {@link PipBoundsState#getMotionBoundsState()}
      * using physics animations.
      */
-    private final PhysicsAnimator<Rect> mTemporaryBoundsPhysicsAnimator;
+    private PhysicsAnimator<Rect> mTemporaryBoundsPhysicsAnimator;
 
     private MagnetizedObject<Rect> mMagnetizedPip;
 
@@ -119,13 +121,11 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
 
     /** SpringConfig to use for fling-then-spring animations. */
     private final PhysicsAnimator.SpringConfig mSpringConfig =
-            new PhysicsAnimator.SpringConfig(
-                    SpringForce.STIFFNESS_MEDIUM, SpringForce.DAMPING_RATIO_LOW_BOUNCY);
+            new PhysicsAnimator.SpringConfig(PIP_STIFFNESS, PIP_DAMPING_RATIO);
 
     /** SpringConfig to use for springing PIP away from conflicting floating content. */
     private final PhysicsAnimator.SpringConfig mConflictResolutionSpringConfig =
-                new PhysicsAnimator.SpringConfig(
-                        SpringForce.STIFFNESS_LOW, SpringForce.DAMPING_RATIO_LOW_BOUNCY);
+                new PhysicsAnimator.SpringConfig(SpringForce.STIFFNESS_LOW, PIP_DAMPING_RATIO);
 
     private final Consumer<Rect> mUpdateBoundsCallback = (Rect newBounds) -> {
         mMenuController.updateMenuLayout(newBounds);
@@ -171,7 +171,7 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
     public PipMotionHelper(Context context, @NonNull PipBoundsState pipBoundsState,
             PipTaskOrganizer pipTaskOrganizer, PhonePipMenuController menuController,
             PipSnapAlgorithm snapAlgorithm, PipTransitionController pipTransitionController,
-            FloatingContentCoordinator floatingContentCoordinator, ShellExecutor mainExecutor) {
+            FloatingContentCoordinator floatingContentCoordinator) {
         mContext = context;
         mPipTaskOrganizer = pipTaskOrganizer;
         mPipBoundsState = pipBoundsState;
@@ -179,21 +179,20 @@ public class PipMotionHelper implements PipAppOpsListener.Callback,
         mSnapAlgorithm = snapAlgorithm;
         mFloatingContentCoordinator = floatingContentCoordinator;
         pipTransitionController.registerPipTransitionCallback(mPipTransitionCallback);
-        mTemporaryBoundsPhysicsAnimator = PhysicsAnimator.getInstance(
-                mPipBoundsState.getMotionBoundsState().getBoundsInMotion());
-
-        // Need to get the shell main thread sf vsync animation handler
-        mainExecutor.execute(() -> {
-            mTemporaryBoundsPhysicsAnimator.setCustomAnimationHandler(
-                    mSfAnimationHandlerThreadLocal.get());
-        });
-
         mResizePipUpdateListener = (target, values) -> {
             if (mPipBoundsState.getMotionBoundsState().isInMotion()) {
                 mPipTaskOrganizer.scheduleUserResizePip(getBounds(),
                         mPipBoundsState.getMotionBoundsState().getBoundsInMotion(), null);
             }
         };
+    }
+
+    public void init() {
+        // Note: Needs to get the shell main thread sf vsync animation handler
+        mTemporaryBoundsPhysicsAnimator = PhysicsAnimator.getInstance(
+                mPipBoundsState.getMotionBoundsState().getBoundsInMotion());
+        mTemporaryBoundsPhysicsAnimator.setCustomAnimationHandler(
+                mSfAnimationHandlerThreadLocal.get());
     }
 
     @NonNull

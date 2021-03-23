@@ -3076,6 +3076,18 @@
     <public name="maxResizeHeight" />
     <public name="targetCellWidth" />
     <public name="targetCellHeight" />
+    <public name="dialTint"/>
+    <public name="dialTintMode"/>
+    <public name="hand_hourTint"/>
+    <public name="hand_hourTintMode"/>
+    <public name="hand_minuteTint"/>
+    <public name="hand_minuteTintMode"/>
+    <public name="hand_secondTint"/>
+    <public name="hand_secondTintMode"/>
+    <public name="dataExtractionRules"/>
+    <public name="passwordsActivity"/>
+    <public name="selectableAsDefault"/>
+    <public name="isAccessibilityTool"/>
   </public-group>
 
   <public-group type="drawable" first-id="0x010800b5">
@@ -3157,6 +3169,12 @@
     <public name="config_customMediaKeyDispatcher" />
     <!-- @hide @SystemApi -->
     <public name="config_customMediaSessionPolicyProvider" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemSpeechRecognizer" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemWifiCoexManager" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemWellbeing" />
   </public-group>
 
   <public-group type="id" first-id="0x01020055">

@@ -29,6 +29,7 @@ import android.annotation.IntDef;
 import android.annotation.LongDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresFeature;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
@@ -5954,25 +5955,20 @@ public class TelephonyManager {
      * @param events The telephony state(s) of interest to the listener,
      *               as a bitwise-OR combination of {@link PhoneStateListener}
      *               LISTEN_ flags.
-     * @deprecated Use {@link #registerPhoneStateListener(Executor, PhoneStateListener)}.
+     * @deprecated Use {@link #registerTelephonyCallback(Executor, TelephonyCallback)}.
      */
     @Deprecated
     public void listen(PhoneStateListener listener, int events) {
-        if (!listener.isExecutorSet()) {
-            throw new IllegalStateException("PhoneStateListener should be created on a thread "
-                    + "with Looper.myLooper() != null");
-        }
-        boolean notifyNow = getITelephony() != null;
-        mTelephonyRegistryMgr = mContext.getSystemService(TelephonyRegistryManager.class);
-        if (mTelephonyRegistryMgr != null) {
-            if (events != PhoneStateListener.LISTEN_NONE) {
-                mTelephonyRegistryMgr.registerPhoneStateListenerWithEvents(mSubId,
-                        getOpPackageName(), getAttributionTag(), listener, events, notifyNow);
-            } else {
-                unregisterPhoneStateListener(listener);
-            }
+        if (mContext == null) return;
+        boolean notifyNow = (getITelephony() != null);
+        TelephonyRegistryManager telephonyRegistry =
+                (TelephonyRegistryManager)
+                        mContext.getSystemService(Context.TELEPHONY_REGISTRY_SERVICE);
+        if (telephonyRegistry != null) {
+            telephonyRegistry.listenFromListener(mSubId, getOpPackageName(),
+                    getAttributionTag(), listener, events, notifyNow);
         } else {
-            throw new IllegalStateException("telephony service is null.");
+            Rlog.w(TAG, "telephony registry not ready.");
         }
     }
 
@@ -8585,6 +8581,9 @@ public class TelephonyManager {
      */
     @Deprecated
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresFeature(
+            enforcement = "android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported",
+            value = TelephonyManager.CAPABILITY_ALLOWED_NETWORK_TYPES_USED)
     @SystemApi
     public boolean setAllowedNetworkTypes(@NetworkTypeBitMask long allowedNetworkTypes) {
         try {
@@ -8676,6 +8675,9 @@ public class TelephonyManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
+    @RequiresFeature(
+            enforcement = "android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported",
+            value = TelephonyManager.CAPABILITY_ALLOWED_NETWORK_TYPES_USED)
     public void setAllowedNetworkTypesForReason(@AllowedNetworkTypesReason int reason,
             @NetworkTypeBitMask long allowedNetworkTypes) {
         if (!isValidAllowedNetworkTypesReason(reason)) {
@@ -8714,6 +8716,9 @@ public class TelephonyManager {
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
+    @RequiresFeature(
+            enforcement = "android.telephony.TelephonyManager#isRadioInterfaceCapabilitySupported",
+            value = TelephonyManager.CAPABILITY_ALLOWED_NETWORK_TYPES_USED)
     public @NetworkTypeBitMask long getAllowedNetworkTypesForReason(
             @AllowedNetworkTypesReason int reason) {
         if (!isValidAllowedNetworkTypesReason(reason)) {
@@ -9125,18 +9130,11 @@ public class TelephonyManager {
      */
     public static final int CALL_COMPOSER_STATUS_ON = 1;
 
-    /**
-     * Call composer status indicating that sending/receiving pictures is disabled.
-     * All other attachments are still enabled in this state.
-     */
-    public static final int CALL_COMPOSER_STATUS_ON_NO_PICTURES = 2;
-
     /** @hide */
     @IntDef(prefix = {"CALL_COMPOSER_STATUS_"},
             value = {
                 CALL_COMPOSER_STATUS_ON,
                 CALL_COMPOSER_STATUS_OFF,
-                CALL_COMPOSER_STATUS_ON_NO_PICTURES,
             })
     public @interface CallComposerStatus {}
 
@@ -9144,9 +9142,8 @@ public class TelephonyManager {
      * Set the user-set status for enriched calling with call composer.
      *
      * @param status user-set status for enriched calling with call composer;
-     *               it must be any of {@link #CALL_COMPOSER_STATUS_ON}
-     *               {@link #CALL_COMPOSER_STATUS_OFF},
-     *               or {@link #CALL_COMPOSER_STATUS_ON_NO_PICTURES}
+     *               it must be either {@link #CALL_COMPOSER_STATUS_ON} or
+     *               {@link #CALL_COMPOSER_STATUS_OFF}.
      *
      * <p>If this object has been created with {@link #createForSubscriptionId}, applies to the
      * given subId. Otherwise, applies to {@link SubscriptionManager#getDefaultSubscriptionId()}
@@ -9156,7 +9153,7 @@ public class TelephonyManager {
      */
     @RequiresPermission(android.Manifest.permission.MODIFY_PHONE_STATE)
     public void setCallComposerStatus(@CallComposerStatus int status) {
-        if (status > CALL_COMPOSER_STATUS_ON_NO_PICTURES
+        if (status > CALL_COMPOSER_STATUS_ON
                 || status < CALL_COMPOSER_STATUS_OFF) {
             throw new IllegalArgumentException("requested status is invalid");
         }
@@ -9179,9 +9176,8 @@ public class TelephonyManager {
      *
      * @throws SecurityException if the caller does not have the permission.
      *
-     * @return the user-set status for enriched calling with call composer, any of
-     * {@link #CALL_COMPOSER_STATUS_ON}, {@link #CALL_COMPOSER_STATUS_OFF}, or
-     * {@link #CALL_COMPOSER_STATUS_ON_NO_PICTURES}.
+     * @return the user-set status for enriched calling with call composer, either of
+     * {@link #CALL_COMPOSER_STATUS_ON} or {@link #CALL_COMPOSER_STATUS_OFF}.
      */
     @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
     public @CallComposerStatus int getCallComposerStatus() {
@@ -11299,21 +11295,16 @@ public class TelephonyManager {
      *
      * <p>Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE}
      * or that the calling app has carrier privileges (see {@link #hasCarrierPrivileges})
-     * Additionally, depending on the level of location permissions the caller holds (i.e. no
-     * location permissions, {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}, or
-     * {@link android.Manifest.permission#ACCESS_FINE_LOCATION}), location-sensitive fields will
-     * be cleared from the return value.
-     *
-     * <p>Note also that if the caller holds any sort of location permission, a usage event for the
-     * {@link android.app.AppOpsManager#OPSTR_FINE_LOCATION} or
-     * {@link android.app.AppOpsManager#OPSTR_FINE_LOCATION}
-     * will be logged against the caller when calling this method.
+     * and {@link android.Manifest.permission#ACCESS_COARSE_LOCATION}.
      *
      * May return {@code null} when the subscription is inactive or when there was an error
      * communicating with the phone process.
      */
     @SuppressAutoDoc // Blocked by b/72967236 - no support for carrier privileges
-    @RequiresPermission(Manifest.permission.READ_PHONE_STATE)
+    @RequiresPermission(allOf = {
+            Manifest.permission.READ_PHONE_STATE,
+            Manifest.permission.ACCESS_COARSE_LOCATION
+    })
     public @Nullable ServiceState getServiceState() {
         return getServiceStateForSubscriber(getSubId());
     }
@@ -15059,66 +15050,69 @@ public class TelephonyManager {
     }
 
     /**
-     * Registers a listener object to receive notification of changes
-     * in specified telephony states.
+     * Registers a callback object to receive notification of changes in specified telephony states.
      * <p>
-     * To register a listener, pass a {@link PhoneStateListener} which implements
+     * To register a callback, pass a {@link TelephonyCallback} which implements
      * interfaces of events. For example,
-     * FakeServiceStateChangedListener extends {@link PhoneStateListener} implements
-     * {@link PhoneStateListener.ServiceStateChangedListener}.
+     * FakeServiceStateCallback extends {@link TelephonyCallback} implements
+     * {@link TelephonyCallback.ServiceStateListener}.
      *
      * At registration, and when a specified telephony state changes, the telephony manager invokes
-     * the appropriate callback method on the listener object and passes the current (updated)
+     * the appropriate callback method on the callback object and passes the current (updated)
      * values.
      * <p>
      *
      * If this TelephonyManager object has been created with {@link #createForSubscriptionId},
      * applies to the given subId. Otherwise, applies to
-     * {@link SubscriptionManager#getDefaultSubscriptionId()}. To listen events for multiple subIds,
-     * pass a separate listener object to each TelephonyManager object created with
+     * {@link SubscriptionManager#getDefaultSubscriptionId()}. To register events for multiple
+     * subIds, pass a separate callback object to each TelephonyManager object created with
      * {@link #createForSubscriptionId}.
      *
      * Note: if you call this method while in the middle of a binder transaction, you <b>must</b>
      * call {@link android.os.Binder#clearCallingIdentity()} before calling this method. A
      * {@link SecurityException} will be thrown otherwise.
      *
-     * This API should be used sparingly -- large numbers of listeners will cause system
-     * instability. If a process has registered too many listeners without unregistering them, it
-     * may encounter an {@link IllegalStateException} when trying to register more listeners.
+     * This API should be used sparingly -- large numbers of callbacks will cause system
+     * instability. If a process has registered too many callbacks without unregistering them, it
+     * may encounter an {@link IllegalStateException} when trying to register more callbacks.
      *
      * @param executor The executor of where the callback will execute.
-     * @param listener The {@link PhoneStateListener} object to register.
+     * @param callback The {@link TelephonyCallback} object to register.
      */
-    public void registerPhoneStateListener(@NonNull @CallbackExecutor Executor executor,
-            @NonNull PhoneStateListener listener) {
-        if (executor == null || listener == null) {
-            throw new IllegalArgumentException("PhoneStateListener and executor must be non-null");
+    public void registerTelephonyCallback(@NonNull @CallbackExecutor Executor executor,
+            @NonNull TelephonyCallback callback) {
+        if (executor == null || callback == null) {
+            throw new IllegalArgumentException("TelephonyCallback and executor must be non-null");
         }
         mTelephonyRegistryMgr = (TelephonyRegistryManager)
                 mContext.getSystemService(Context.TELEPHONY_REGISTRY_SERVICE);
         if (mTelephonyRegistryMgr != null) {
-            mTelephonyRegistryMgr.registerPhoneStateListener(executor, mSubId,
-                    getOpPackageName(), getAttributionTag(), listener, getITelephony() != null);
+            mTelephonyRegistryMgr.registerTelephonyCallback(executor, mSubId, getOpPackageName(),
+                    getAttributionTag(), callback, getITelephony() != null);
         } else {
             throw new IllegalStateException("telephony service is null.");
         }
     }
 
     /**
-     * Unregister an existing {@link PhoneStateListener}.
+     * Unregister an existing {@link TelephonyCallback}.
      *
-     * @param listener The {@link PhoneStateListener} object to unregister.
+     * @param callback The {@link TelephonyCallback} object to unregister.
      */
-    public void unregisterPhoneStateListener(@NonNull PhoneStateListener listener) {
+    public void unregisterTelephonyCallback(@NonNull TelephonyCallback callback) {
 
         if (mContext == null) {
             throw new IllegalStateException("telephony service is null.");
         }
 
+        if (callback.callback == null) {
+            return;
+        }
+
         mTelephonyRegistryMgr = mContext.getSystemService(TelephonyRegistryManager.class);
         if (mTelephonyRegistryMgr != null) {
-            mTelephonyRegistryMgr.unregisterPhoneStateListener(mSubId, getOpPackageName(),
-                    getAttributionTag(), listener, getITelephony() != null);
+            mTelephonyRegistryMgr.unregisterTelephonyCallback(mSubId, getOpPackageName(),
+                    getAttributionTag(), callback, getITelephony() != null);
         } else {
             throw new IllegalStateException("telephony service is null.");
         }

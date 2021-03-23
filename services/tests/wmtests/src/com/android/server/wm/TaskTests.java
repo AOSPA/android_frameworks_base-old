@@ -16,8 +16,11 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
@@ -259,22 +262,19 @@ public class TaskTests extends WindowTestsBase {
     }
 
     @Test
-    public void testCleanUpActivityReferences_clearLastTaskBoundsComputeActivity() {
-        final Task rootTask = createTaskStackOnDisplay(mDisplayContent);
-        final Task leafTask = createTaskInStack(rootTask, 0 /* userId */);
-        final ActivityRecord activity2 = createActivityRecord(mDisplayContent, leafTask);
-        final ActivityRecord activity1 = createActivityRecord(mDisplayContent, leafTask);
-        activity1.finishing = false;
-        leafTask.resolveOverrideConfiguration(rootTask.getConfiguration());
+    public void testHandlesOrientationChangeFromDescendant() {
+        final Task rootTask = createTaskStackOnDisplay(WINDOWING_MODE_MULTI_WINDOW,
+                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task leafTask1 = createTaskInStack(rootTask, 0 /* userId */);
+        final Task leafTask2 = createTaskInStack(rootTask, 0 /* userId */);
+        leafTask1.getWindowConfiguration().setActivityType(ACTIVITY_TYPE_HOME);
+        leafTask2.getWindowConfiguration().setActivityType(ACTIVITY_TYPE_STANDARD);
 
-        assertEquals(activity1, leafTask.getLastTaskBoundsComputeActivity());
-
-        leafTask.cleanUpActivityReferences(activity2);
-
-        assertNotNull(leafTask.getLastTaskBoundsComputeActivity());
-
-        leafTask.cleanUpActivityReferences(activity1);
-
-        assertNull(leafTask.getLastTaskBoundsComputeActivity());
+        assertEquals(leafTask2, rootTask.getTopChild());
+        assertTrue(rootTask.handlesOrientationChangeFromDescendant());
+        // Treat orientation request from home as handled.
+        assertTrue(leafTask1.handlesOrientationChangeFromDescendant());
+        // Orientation request from standard activity in multi window will not be handled.
+        assertFalse(leafTask2.handlesOrientationChangeFromDescendant());
     }
 }

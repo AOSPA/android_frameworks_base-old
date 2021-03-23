@@ -19,15 +19,22 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.Person;
+import android.app.appsearch.AppSearchManager;
+import android.app.appsearch.AppSearchSession;
+import android.app.appsearch.PackageIdentifier;
+import android.app.appsearch.SetSchemaRequest;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.LocusId;
+import android.content.pm.AppSearchPerson;
+import android.content.pm.AppSearchShortcutInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.ShortcutInfo;
 import android.content.pm.ShortcutManager;
 import android.content.res.Resources;
 import android.graphics.drawable.Icon;
+import android.os.Binder;
 import android.os.PersistableBundle;
 import android.text.format.Formatter;
 import android.util.ArrayMap;
@@ -39,9 +46,11 @@ import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
+import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
+import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.Preconditions;
 import com.android.internal.util.XmlUtils;
 import com.android.server.pm.ShortcutService.DumpFilter;
@@ -64,8 +73,12 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.function.Consumer;
+import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -155,6 +168,16 @@ class ShortcutPackage extends ShortcutPackageItem {
 
     private long mLastKnownForegroundElapsedTime;
 
+    private final Object mLock = new Object();
+
+    /**
+     * All external packages that have gained access to the shortcuts from this package
+     */
+    private final Map<String, PackageIdentifier> mPackageIdentifiers = new ArrayMap<>(0);
+
+    @GuardedBy("mLock")
+    private AppSearchSession mAppSearchSession;
+
     private ShortcutPackage(ShortcutUser shortcutUser,
             int packageUserId, String packageName, ShortcutPackageInfo spi) {
         super(shortcutUser, packageUserId, packageName,
@@ -200,12 +223,14 @@ class ShortcutPackage extends ShortcutPackageItem {
         // - Disable if needed.
         for (int i = mShortcuts.size() - 1; i >= 0; i--) {
             ShortcutInfo si = mShortcuts.valueAt(i);
-            si.clearFlags(ShortcutInfo.FLAG_SHADOW);
+            mutateShortcut(si.getId(), si, shortcut -> {
+                shortcut.clearFlags(ShortcutInfo.FLAG_SHADOW);
 
-            si.setDisabledReason(restoreBlockReason);
-            if (restoreBlockReason != ShortcutInfo.DISABLED_REASON_NOT_DISABLED) {
-                si.addFlags(ShortcutInfo.FLAG_DISABLED);
-            }
+                shortcut.setDisabledReason(restoreBlockReason);
+                if (restoreBlockReason != ShortcutInfo.DISABLED_REASON_NOT_DISABLED) {
+                    shortcut.addFlags(ShortcutInfo.FLAG_DISABLED);
+                }
+            });
         }
         // Because some launchers may not have been restored (e.g. allowBackup=false),
         // we need to re-calculate the pinned shortcuts.
@@ -437,9 +462,11 @@ class ShortcutPackage extends ShortcutPackageItem {
             if (si.isDynamic() && (!ignoreInvisible || si.isVisibleToPublisher())) {
                 changed = true;
 
-                si.setTimestamp(now);
-                si.clearFlags(ShortcutInfo.FLAG_DYNAMIC);
-                si.setRank(0); // It may still be pinned, so clear the rank.
+                mutateShortcut(si.getId(), si, shortcut -> {
+                    shortcut.setTimestamp(now);
+                    shortcut.clearFlags(ShortcutInfo.FLAG_DYNAMIC);
+                    shortcut.setRank(0); // It may still be pinned, so clear the rank.
+                });
             }
         }
         if (changed) {
@@ -483,7 +510,7 @@ class ShortcutPackage extends ShortcutPackageItem {
     public ShortcutInfo deleteLongLivedWithId(@NonNull String shortcutId, boolean ignoreInvisible) {
         final ShortcutInfo shortcut = mShortcuts.get(shortcutId);
         if (shortcut != null) {
-            shortcut.clearFlags(ShortcutInfo.FLAG_CACHED_ALL);
+            mutateShortcut(shortcutId, null, si -> si.clearFlags(ShortcutInfo.FLAG_CACHED_ALL));
         }
         return deleteOrDisableWithId(
                 shortcutId, /* disable =*/ false, /* overrideImmutable=*/ false, ignoreInvisible,
@@ -504,15 +531,16 @@ class ShortcutPackage extends ShortcutPackageItem {
                 overrideImmutable, ignoreInvisible, disabledReason);
 
         // If disabled id still exists, it is pinned and we need to update the disabled message.
-        final ShortcutInfo disabled = mShortcuts.get(shortcutId);
-        if (disabled != null) {
-            if (disabledMessage != null) {
-                disabled.setDisabledMessage(disabledMessage);
-            } else if (disabledMessageResId != 0) {
-                disabled.setDisabledMessageResId(disabledMessageResId);
-                mShortcutUser.mService.fixUpShortcutResourceNamesAndValues(disabled);
+        mutateShortcut(shortcutId, null, disabled -> {
+            if (disabled != null) {
+                if (disabledMessage != null) {
+                    disabled.setDisabledMessage(disabledMessage);
+                } else if (disabledMessageResId != 0) {
+                    disabled.setDisabledMessageResId(disabledMessageResId);
+                    mShortcutUser.mService.fixUpShortcutResourceNamesAndValues(disabled);
+                }
             }
-        }
+        });
 
         return deleted;
     }
@@ -534,21 +562,23 @@ class ShortcutPackage extends ShortcutPackageItem {
         }
         if (oldShortcut.isPinned() || oldShortcut.isCached()) {
 
-            oldShortcut.setRank(0);
-            oldShortcut.clearFlags(ShortcutInfo.FLAG_DYNAMIC | ShortcutInfo.FLAG_MANIFEST);
-            if (disable) {
-                oldShortcut.addFlags(ShortcutInfo.FLAG_DISABLED);
-                // Do not overwrite the disabled reason if one is alreay set.
-                if (oldShortcut.getDisabledReason() == ShortcutInfo.DISABLED_REASON_NOT_DISABLED) {
-                    oldShortcut.setDisabledReason(disabledReason);
+            mutateShortcut(oldShortcut.getId(), oldShortcut, si -> {
+                si.setRank(0);
+                si.clearFlags(ShortcutInfo.FLAG_DYNAMIC | ShortcutInfo.FLAG_MANIFEST);
+                if (disable) {
+                    si.addFlags(ShortcutInfo.FLAG_DISABLED);
+                    // Do not overwrite the disabled reason if one is alreay set.
+                    if (si.getDisabledReason() == ShortcutInfo.DISABLED_REASON_NOT_DISABLED) {
+                        si.setDisabledReason(disabledReason);
+                    }
                 }
-            }
-            oldShortcut.setTimestamp(mShortcutUser.mService.injectCurrentTimeMillis());
+                si.setTimestamp(mShortcutUser.mService.injectCurrentTimeMillis());
 
-            // See ShortcutRequestPinProcessor.directPinShortcut().
-            if (mShortcutUser.mService.isDummyMainActivity(oldShortcut.getActivity())) {
-                oldShortcut.setActivity(null);
-            }
+                // See ShortcutRequestPinProcessor.directPinShortcut().
+                if (mShortcutUser.mService.isDummyMainActivity(si.getActivity())) {
+                    si.setActivity(null);
+                }
+            });
 
             return null;
         } else {
@@ -558,12 +588,11 @@ class ShortcutPackage extends ShortcutPackageItem {
     }
 
     public void enableWithId(@NonNull String shortcutId) {
-        final ShortcutInfo shortcut = mShortcuts.get(shortcutId);
-        if (shortcut != null) {
-            ensureNotImmutable(shortcut, /*ignoreInvisible=*/ true);
-            shortcut.clearFlags(ShortcutInfo.FLAG_DISABLED);
-            shortcut.setDisabledReason(ShortcutInfo.DISABLED_REASON_NOT_DISABLED);
-        }
+        mutateShortcut(shortcutId, null, si -> {
+            ensureNotImmutable(si, /*ignoreInvisible=*/ true);
+            si.clearFlags(ShortcutInfo.FLAG_DISABLED);
+            si.setDisabledReason(ShortcutInfo.DISABLED_REASON_NOT_DISABLED);
+        });
     }
 
     public void updateInvisibleShortcutForPinRequestWith(@NonNull ShortcutInfo shortcut) {
@@ -586,22 +615,25 @@ class ShortcutPackage extends ShortcutPackageItem {
      * <p>Then remove all shortcuts that are not dynamic and no longer pinned either.
      */
     public void refreshPinnedFlags() {
-        // First, un-pin all shortcuts
-        for (int i = mShortcuts.size() - 1; i >= 0; i--) {
-            mShortcuts.valueAt(i).clearFlags(ShortcutInfo.FLAG_PINNED);
+        // TODO: rewrite this function with proper query (i.e. fetch only pinned shortcuts and
+        //  unpin if it's no longer pinned by any launcher and vice versa)
+        final List<ShortcutInfo> shortcuts = new ArrayList<>(mShortcuts.values());
+        final Map<String, ShortcutInfo> shortcutMap = new ArrayMap<>(shortcuts.size());
+        for (ShortcutInfo si : shortcuts) {
+            shortcutMap.put(si.getId(), si);
         }
+        final Set<String> pinnedShortcuts = new ArraySet<>();
 
-        // Then, for the pinned set for each launcher, set the pin flag one by one.
+        // First, for the pinned set for each launcher, keep track of their id one by one.
         mShortcutUser.forAllLaunchers(launcherShortcuts -> {
             final ArraySet<String> pinned = launcherShortcuts.getPinnedShortcutIds(
                     getPackageName(), getPackageUserId());
-
             if (pinned == null || pinned.size() == 0) {
                 return;
             }
             for (int i = pinned.size() - 1; i >= 0; i--) {
                 final String id = pinned.valueAt(i);
-                final ShortcutInfo si = mShortcuts.get(id);
+                final ShortcutInfo si = shortcutMap.get(id);
                 if (si == null) {
                     // This happens if a launcher pinned shortcuts from this package, then backup&
                     // restored, but this package doesn't allow backing up.
@@ -609,9 +641,21 @@ class ShortcutPackage extends ShortcutPackageItem {
                     // That's fine, when the launcher is restored, we'll fix it.
                     continue;
                 }
-                si.addFlags(ShortcutInfo.FLAG_PINNED);
+                pinnedShortcuts.add(si.getId());
             }
         });
+        // Then, update the pinned state if necessary
+        for (int i = shortcuts.size() - 1; i >= 0; i--) {
+            final ShortcutInfo si = shortcuts.get(i);
+            if (pinnedShortcuts.contains(si.getId()) && !si.isPinned()) {
+                mutateShortcut(si.getId(), si,
+                        shortcut -> shortcut.addFlags(ShortcutInfo.FLAG_PINNED));
+            }
+            if (!pinnedShortcuts.contains(si.getId()) && si.isPinned()) {
+                mutateShortcut(si.getId(), si, shortcut ->
+                        shortcut.clearFlags(ShortcutInfo.FLAG_PINNED));
+            }
+        }
 
         // Lastly, remove the ones that are no longer pinned, cached nor dynamic.
         removeOrphans();
@@ -1011,8 +1055,10 @@ class ShortcutPackage extends ShortcutPackageItem {
                 continue;
             }
             Slog.i(TAG, String.format("Restoring shortcut: %s", si.getId()));
-            si.clearFlags(ShortcutInfo.FLAG_DISABLED);
-            si.setDisabledReason(ShortcutInfo.DISABLED_REASON_NOT_DISABLED);
+            mutateShortcut(si.getId(), si, shortcut -> {
+                shortcut.clearFlags(ShortcutInfo.FLAG_DISABLED);
+                shortcut.setDisabledReason(ShortcutInfo.DISABLED_REASON_NOT_DISABLED);
+            });
         }
 
         // For existing shortcuts, update timestamps if they have any resources.
@@ -1042,21 +1088,24 @@ class ShortcutPackage extends ShortcutPackageItem {
                 }
 
                 if (si.hasAnyResources()) {
-                    if (!si.isOriginallyFromManifest()) {
+                    if (publisherRes == null) {
+                        publisherRes = getPackageResources();
                         if (publisherRes == null) {
-                            publisherRes = getPackageResources();
-                            if (publisherRes == null) {
-                                break; // Resources couldn't be loaded.
-                            }
+                            break; // Resources couldn't be loaded.
+                        }
+                    }
+
+                    final Resources res = publisherRes;
+                    mutateShortcut(si.getId(), si, shortcut -> {
+                        if (!shortcut.isOriginallyFromManifest()) {
+                            shortcut.lookupAndFillInResourceIds(res);
                         }
 
-                        // TODO: update resource strings in AppSearch
                         // If this shortcut is not from a manifest, then update all resource IDs
                         // from resource names.  (We don't allow resource strings for
                         // non-manifest at the moment, but icons can still be resources.)
-                        si.lookupAndFillInResourceIds(publisherRes);
-                    }
-                    si.setTimestamp(s.injectCurrentTimeMillis());
+                        shortcut.setTimestamp(s.injectCurrentTimeMillis());
+                    });
                 }
             }
         }
@@ -1359,8 +1408,11 @@ class ShortcutPackage extends ShortcutPackageItem {
                     }
                 }
 
-                si.resolveResourceStrings(publisherRes);
-                si.setTimestamp(s.injectCurrentTimeMillis());
+                final Resources res = publisherRes;
+                mutateShortcut(si.getId(), si, shortcut -> {
+                    shortcut.resolveResourceStrings(res);
+                    shortcut.setTimestamp(s.injectCurrentTimeMillis());
+                });
 
                 if (changedShortcuts == null) {
                     changedShortcuts = new ArrayList<>(1);
@@ -1377,7 +1429,7 @@ class ShortcutPackage extends ShortcutPackageItem {
     public void clearAllImplicitRanks() {
         for (int i = mShortcuts.size() - 1; i >= 0; i--) {
             final ShortcutInfo si = mShortcuts.valueAt(i);
-            si.clearImplicitRankAndRankChangedFlag();
+            mutateShortcut(si.getId(), si, ShortcutInfo::clearImplicitRankAndRankChangedFlag);
         }
     }
 
@@ -1422,8 +1474,10 @@ class ShortcutPackage extends ShortcutPackageItem {
             final ShortcutInfo si = mShortcuts.valueAt(i);
             if (si.isFloating()) {
                 if (si.getRank() != 0) {
-                    si.setTimestamp(now);
-                    si.setRank(0);
+                    mutateShortcut(si.getId(), si, shortcut -> {
+                        shortcut.setTimestamp(now);
+                        shortcut.setRank(0);
+                    });
                 }
             }
         }
@@ -1456,8 +1510,10 @@ class ShortcutPackage extends ShortcutPackageItem {
                 }
                 final int thisRank = rank++;
                 if (si.getRank() != thisRank) {
-                    si.setTimestamp(now);
-                    si.setRank(thisRank);
+                    mutateShortcut(si.getId(), si, shortcut -> {
+                        shortcut.setTimestamp(now);
+                        shortcut.setRank(thisRank);
+                    });
                 }
             }
         }
@@ -2140,6 +2196,41 @@ class ShortcutPackage extends ShortcutPackageItem {
         }
     }
 
+    void updateVisibility(String packageName, byte[] certificate, boolean visible) {
+        if (visible) {
+            mPackageIdentifiers.put(packageName, new PackageIdentifier(packageName, certificate));
+        } else {
+            mPackageIdentifiers.remove(packageName);
+        }
+        resetAppSearch(null);
+    }
+
+    void mutateShortcut(@NonNull final String id, @Nullable final ShortcutInfo shortcut,
+            @NonNull final Consumer<ShortcutInfo> transform) {
+        Objects.requireNonNull(id);
+        Objects.requireNonNull(transform);
+        synchronized (mLock) {
+            if (shortcut != null) {
+                transform.accept(shortcut);
+            } else {
+                transform.accept(findShortcutById(id));
+            }
+            // TODO: Load ShortcutInfo from AppSearch, apply transformation logic and save
+        }
+    }
+
+    /**
+     * Removes shortcuts from AppSearch.
+     */
+    void removeShortcuts() {
+    }
+
+    /**
+     * Merge/replace shortcuts parsed from xml file.
+     */
+    void restoreParsedShortcuts(final boolean replace) {
+    }
+
     private boolean verifyRanksSequential(List<ShortcutInfo> list) {
         boolean failed = false;
 
@@ -2152,5 +2243,129 @@ class ShortcutPackage extends ShortcutPackageItem {
             }
         }
         return failed;
+    }
+
+    private void runInAppSearch(
+            Function<SearchSessionObservable, Consumer<AppSearchSession>>... observers) {
+        if (mShortcutUser == null) {
+            Slog.w(TAG, "shortcut user is null");
+            return;
+        }
+        synchronized (mLock) {
+            if (mAppSearchSession != null) {
+                final CountDownLatch latch = new CountDownLatch(1);
+                final long callingIdentity = Binder.clearCallingIdentity();
+                try {
+                    final SearchSessionObservable upstream =
+                            new SearchSessionObservable(mAppSearchSession, latch);
+                    for (Function<SearchSessionObservable, Consumer<AppSearchSession>> observer
+                            : observers) {
+                        upstream.map(observer);
+                    }
+                    upstream.next();
+                } finally {
+                    Binder.restoreCallingIdentity(callingIdentity);
+                }
+                ConcurrentUtils.waitForCountDownNoInterrupt(latch, 500,
+                        "timeout accessing shortcut");
+            } else {
+                resetAppSearch(observers);
+            }
+        }
+    }
+
+    private void resetAppSearch(
+            Function<SearchSessionObservable, Consumer<AppSearchSession>>... observers) {
+        final CountDownLatch latch = new CountDownLatch(1);
+        final AppSearchManager.SearchContext searchContext =
+                new AppSearchManager.SearchContext.Builder()
+                        .setDatabaseName(getPackageName()).build();
+        mShortcutUser.runInAppSearch(searchContext, result -> {
+            if (!result.isSuccess()) {
+                Slog.e(TAG, "error getting search session during lazy init, "
+                        + result.getErrorMessage());
+                latch.countDown();
+                return;
+            }
+            // TODO: Flatten callback chain with proper async framework
+            final SearchSessionObservable upstream =
+                    new SearchSessionObservable(result.getResultValue(), latch)
+                            .map(this::setupSchema);
+            if (observers != null) {
+                for (Function<SearchSessionObservable, Consumer<AppSearchSession>> observer
+                        : observers) {
+                    upstream.map(observer);
+                }
+            }
+            upstream.map(observable -> session -> {
+                mAppSearchSession = session;
+                observable.next();
+            });
+            upstream.next();
+        });
+        ConcurrentUtils.waitForCountDownNoInterrupt(latch, 1500,
+                "timeout accessing shortcut during lazy initialization");
+    }
+
+    /**
+     * creates the schema for shortcut in the database
+     */
+    private Consumer<AppSearchSession> setupSchema(SearchSessionObservable observable) {
+        return session -> {
+            SetSchemaRequest.Builder schemaBuilder = new SetSchemaRequest.Builder()
+                            .addSchemas(AppSearchPerson.SCHEMA, AppSearchShortcutInfo.SCHEMA);
+            for (PackageIdentifier pi : mPackageIdentifiers.values()) {
+                schemaBuilder = schemaBuilder
+                        .setSchemaTypeVisibilityForPackage(
+                                AppSearchPerson.SCHEMA_TYPE, true, pi)
+                        .setSchemaTypeVisibilityForPackage(
+                                AppSearchShortcutInfo.SCHEMA_TYPE, true, pi);
+            }
+            session.setSchema(schemaBuilder.build(), mShortcutUser.mExecutor, result -> {
+                if (!result.isSuccess()) {
+                    observable.error("failed to instantiate app search schema: "
+                            + result.getErrorMessage());
+                    return;
+                }
+                observable.next();
+            });
+        };
+    }
+
+    /**
+     * TODO: Replace this temporary implementation with proper async framework
+     */
+    private class SearchSessionObservable {
+
+        final AppSearchSession mSession;
+        final CountDownLatch mLatch;
+        final ArrayList<Consumer<AppSearchSession>> mObservers = new ArrayList<>(1);
+
+        SearchSessionObservable(@NonNull final AppSearchSession session,
+                @NonNull final CountDownLatch latch) {
+            mSession = session;
+            mLatch = latch;
+        }
+
+        SearchSessionObservable map(
+                Function<SearchSessionObservable, Consumer<AppSearchSession>> observer) {
+            mObservers.add(observer.apply(this));
+            return this;
+        }
+
+        void next() {
+            if (mObservers.isEmpty()) {
+                mLatch.countDown();
+                return;
+            }
+            mObservers.remove(0).accept(mSession);
+        }
+
+        void error(@Nullable final String errorMessage) {
+            if (errorMessage != null) {
+                Slog.e(TAG, errorMessage);
+            }
+            mLatch.countDown();
+        }
     }
 }

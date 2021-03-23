@@ -58,6 +58,8 @@ public final class IncrementalManager {
 
     private static final String ALLOWED_PROPERTY = "incremental.allowed";
 
+    public static final int MIN_VERSION_TO_SUPPORT_FSVERITY = 2;
+
     public static final int CREATE_MODE_TEMPORARY_BIND =
             IIncrementalService.CREATE_MODE_TEMPORARY_BIND;
     public static final int CREATE_MODE_PERMANENT_BIND =
@@ -155,22 +157,21 @@ public final class IncrementalManager {
     }
 
     /**
-     * Set up an app's code path. The expected outcome of this method is:
+     * Link an app's files from the stage dir to the final installation location.
+     * The expected outcome of this method is:
      * 1) The actual apk directory under /data/incremental is bind-mounted to the parent directory
      * of {@code afterCodeFile}.
      * 2) All the files under {@code beforeCodeFile} will show up under {@code afterCodeFile}.
      *
      * @param beforeCodeFile Path that is currently bind-mounted and have APKs under it.
-     *                       Should no longer have any APKs after this method is called.
      *                       Example: /data/app/vmdl*tmp
      * @param afterCodeFile Path that should will have APKs after this method is called. Its parent
      *                      directory should be bind-mounted to a directory under /data/incremental.
      *                      Example: /data/app/~~[randomStringA]/[packageName]-[randomStringB]
      * @throws IllegalArgumentException
      * @throws IOException
-     * TODO(b/147371381): add unit tests
      */
-    public void renameCodePath(File beforeCodeFile, File afterCodeFile)
+    public void linkCodePath(File beforeCodeFile, File afterCodeFile)
             throws IllegalArgumentException, IOException {
         final File beforeCodeAbsolute = beforeCodeFile.getAbsoluteFile();
         final IncrementalStorage apkStorage = openStorage(beforeCodeAbsolute.toString());
@@ -188,7 +189,6 @@ public final class IncrementalManager {
         try {
             final String afterCodePathName = afterCodeFile.getName();
             linkFiles(apkStorage, beforeCodeAbsolute, "", linkedApkStorage, afterCodePathName);
-            apkStorage.unBind(beforeCodeAbsolute.toString());
         } catch (Exception e) {
             linkedApkStorage.unBind(targetStorageDir);
             throw e;
@@ -241,10 +241,12 @@ public final class IncrementalManager {
     }
 
     /**
-     * Checks if device supports V2 calls (e.g. PerUid).
+     * 0 - IncFs is disabled.
+     * 1 - IncFs v1, core features, no PerUid support. Optional in R.
+     * 2 - IncFs v2, PerUid support, fs-verity support. Required in S.
      */
-    public static boolean isV2Available() {
-        return nativeIsV2Available();
+    public static int getVersion() {
+        return nativeIsEnabled() ? nativeIsV2Available() ? 2 : 1 : 0;
     }
 
     /**
@@ -342,7 +344,6 @@ public final class IncrementalManager {
             storage.unregisterLoadingProgressListener();
         }
 
-        // TODO(b/165841827): handle reboot and app update
         public boolean registerCallback(@NonNull IncrementalStorage storage,
                 @NonNull IPackageLoadingProgressCallback callback) {
             final int storageId = storage.getId();
@@ -362,30 +363,6 @@ public final class IncrementalManager {
                 }
             }
             return storage.registerLoadingProgressListener(this);
-        }
-
-        public boolean unregisterCallback(@NonNull IncrementalStorage storage,
-                @NonNull IPackageLoadingProgressCallback callback) {
-            final int storageId = storage.getId();
-            final RemoteCallbackList<IPackageLoadingProgressCallback> callbacksForStorage;
-            synchronized (mCallbacks) {
-                callbacksForStorage = mCallbacks.get(storageId);
-                if (callbacksForStorage == null) {
-                    // no callback has ever been registered on this storage
-                    return false;
-                }
-                if (!callbacksForStorage.unregister(callback)) {
-                    // the callback was not registered
-                    return false;
-                }
-                if (callbacksForStorage.getRegisteredCallbackCount() > 0) {
-                    // other callbacks are still listening on this storage
-                    return true;
-                }
-                mCallbacks.delete(storageId);
-            }
-            // stop listening for this storage
-            return storage.unregisterLoadingProgressListener();
         }
 
         @Override

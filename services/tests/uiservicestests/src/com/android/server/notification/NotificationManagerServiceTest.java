@@ -3671,8 +3671,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(r);
 
         final NotificationVisibility nv = NotificationVisibility.obtain(r.getKey(), 0, 1, true);
-        mService.mNotificationDelegate.onNotificationClear(mUid, 0, PKG, r.getSbn().getTag(),
-                r.getSbn().getId(), r.getUserId(), r.getKey(), NotificationStats.DISMISSAL_AOD,
+        mService.mNotificationDelegate.onNotificationClear(mUid, 0, PKG, r.getUserId(),
+                r.getKey(), NotificationStats.DISMISSAL_AOD,
                 NotificationStats.DISMISS_SENTIMENT_POSITIVE, nv);
         waitForIdle();
 
@@ -3694,8 +3694,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mService.addNotification(r);
 
         final NotificationVisibility nv = NotificationVisibility.obtain(r.getKey(), 0, 1, true);
-        mService.mNotificationDelegate.onNotificationClear(mUid, 0, PKG, r.getSbn().getTag(),
-                r.getSbn().getId(), r.getUserId(), r.getKey(), NotificationStats.DISMISSAL_AOD,
+        mService.mNotificationDelegate.onNotificationClear(mUid, 0, PKG, r.getUserId(),
+                r.getKey(), NotificationStats.DISMISSAL_AOD,
                 NotificationStats.DISMISS_SENTIMENT_NEGATIVE, nv);
         waitForIdle();
 
@@ -6207,7 +6207,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         reset(mListeners);
 
         // Test: update suppression to true
-        mService.mNotificationDelegate.onBubbleNotificationSuppressionChanged(nr.getKey(), true);
+        mService.mNotificationDelegate.onBubbleNotificationSuppressionChanged(nr.getKey(), true,
+                false);
         waitForIdle();
 
         // Check
@@ -6218,7 +6219,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         reset(mListeners);
 
         // Test: update suppression to false
-        mService.mNotificationDelegate.onBubbleNotificationSuppressionChanged(nr.getKey(), false);
+        mService.mNotificationDelegate.onBubbleNotificationSuppressionChanged(nr.getKey(), false,
+                false);
         waitForIdle();
 
         // Check
@@ -6693,8 +6695,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         final NotificationVisibility nv = NotificationVisibility.obtain(nrSummary.getKey(), 1, 2,
                 true);
         mService.mNotificationDelegate.onNotificationClear(mUid, 0, PKG,
-                nrSummary.getSbn().getTag(),
-                nrSummary.getSbn().getId(), nrSummary.getUserId(), nrSummary.getKey(),
+                nrSummary.getUserId(), nrSummary.getKey(),
                 NotificationStats.DISMISSAL_SHADE,
                 NotificationStats.DISMISS_SENTIMENT_NEUTRAL, nv);
         waitForIdle();

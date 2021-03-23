@@ -24,6 +24,10 @@ import static android.app.AppOpsManager.OP_LEGACY_STORAGE;
 import static android.app.AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.OP_REQUEST_INSTALL_PACKAGES;
 import static android.app.AppOpsManager.OP_WRITE_EXTERNAL_STORAGE;
+import static android.app.PendingIntent.FLAG_CANCEL_CURRENT;
+import static android.app.PendingIntent.FLAG_IMMUTABLE;
+import static android.app.PendingIntent.FLAG_ONE_SHOT;
+import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.PackageManager.MATCH_ANY_USER;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
@@ -51,9 +55,11 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.app.AnrController;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.KeyguardManager;
+import android.app.PendingIntent;
 import android.app.admin.SecurityLog;
 import android.app.usage.StorageStatsManager;
 import android.content.BroadcastReceiver;
@@ -573,6 +579,12 @@ class StorageManagerService extends IStorageManager.Stub
      */
     private static final int PBKDF2_HASH_ROUNDS = 1024;
 
+    private static final String ANR_DELAY_MILLIS_DEVICE_CONFIG_KEY =
+            "anr_delay_millis";
+
+    private static final String ANR_DELAY_NOTIFY_EXTERNAL_STORAGE_SERVICE_DEVICE_CONFIG_KEY =
+            "anr_delay_notify_external_storage_service";
+
     /**
      * Mounted OBB tracking information. Used to track the current state of all
      * OBBs.
@@ -939,14 +951,55 @@ class StorageManagerService extends IStorageManager.Stub
 
         if (transcodeEnabled) {
             LocalServices.getService(ActivityManagerInternal.class)
-                    .registerAnrController((packageName, uid) -> {
-                        try {
-                            return mStorageSessionController.getAnrDelayMillis(packageName, uid);
-                        } catch (ExternalStorageServiceException e) {
-                            Log.e(TAG, "Failed to get ANR delay for " + packageName, e);
-                            return 0;
-                        }
-                    });
+                .registerAnrController(new ExternalStorageServiceAnrController());
+        }
+    }
+
+    private class ExternalStorageServiceAnrController implements AnrController {
+        @Override
+        public long getAnrDelayMillis(String packageName, int uid) {
+            if (!isAppIoBlocked(uid)) {
+                return 0;
+            }
+
+            int delay = DeviceConfig.getInt(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    ANR_DELAY_MILLIS_DEVICE_CONFIG_KEY, 0);
+            Slog.v(TAG, "getAnrDelayMillis for " + packageName + ". " + delay + "ms");
+            return delay;
+        }
+
+        @Override
+        public void onAnrDelayStarted(String packageName, int uid) {
+            if (!isAppIoBlocked(uid)) {
+                return;
+            }
+
+            boolean notifyExternalStorageService = DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    ANR_DELAY_NOTIFY_EXTERNAL_STORAGE_SERVICE_DEVICE_CONFIG_KEY, true);
+            if (notifyExternalStorageService) {
+                Slog.d(TAG, "onAnrDelayStarted for " + packageName
+                        + ". Notifying external storage service");
+                try {
+                    mStorageSessionController.notifyAnrDelayStarted(packageName, uid, 0 /* tid */,
+                            StorageManager.APP_IO_BLOCKED_REASON_TRANSCODING);
+                } catch (ExternalStorageServiceException e) {
+                    Slog.e(TAG, "Failed to notify ANR delay started for " + packageName, e);
+                }
+            } else {
+                // TODO(b/170973510): Implement framework spinning dialog for ANR delay
+            }
+        }
+
+        @Override
+        public boolean onAnrDelayCompleted(String packageName, int uid) {
+            if (isAppIoBlocked(uid)) {
+                Slog.d(TAG, "onAnrDelayCompleted for " + packageName + ". Showing ANR dialog...");
+                return true;
+            } else {
+                Slog.d(TAG, "onAnrDelayCompleted for " + packageName + ". Skipping ANR dialog...");
+                return false;
+            }
         }
     }
 
@@ -3337,6 +3390,87 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @Override
+    public void notifyAppIoBlocked(String volumeUuid, int uid, int tid, int reason) {
+        enforceExternalStorageService();
+
+        mStorageSessionController.notifyAppIoBlocked(volumeUuid, uid, tid, reason);
+    }
+
+    @Override
+    public void notifyAppIoResumed(String volumeUuid, int uid, int tid, int reason) {
+        enforceExternalStorageService();
+
+        mStorageSessionController.notifyAppIoResumed(volumeUuid, uid, tid, reason);
+    }
+
+    private boolean isAppIoBlocked(int uid) {
+        return mStorageSessionController.isAppIoBlocked(uid);
+    }
+
+    /**
+     * Enforces that the caller is the {@link ExternalStorageService}
+     *
+     * @throws SecurityException if the caller doesn't have the
+     * {@link android.Manifest.permission.WRITE_MEDIA_STORAGE} permission or is not the
+     * {@link ExternalStorageService}
+     */
+    private void enforceExternalStorageService() {
+        enforcePermission(android.Manifest.permission.WRITE_MEDIA_STORAGE);
+        int callingAppId = UserHandle.getAppId(Binder.getCallingUid());
+        if (callingAppId != mMediaStoreAuthorityAppId) {
+            throw new SecurityException("Only the ExternalStorageService is permitted");
+        }
+    }
+
+    /**
+     * Returns PendingIntent which can be used by Apps with MANAGE_EXTERNAL_STORAGE permission
+     * to launch the manageSpaceActivity of the App specified by packageName.
+     */
+    @Override
+    @Nullable
+    public PendingIntent getManageSpaceActivityIntent(
+            @NonNull String packageName, int requestCode) {
+        // Only Apps with MANAGE_EXTERNAL_STORAGE permission should be able to call this API.
+        enforcePermission(android.Manifest.permission.MANAGE_EXTERNAL_STORAGE);
+
+        // We want to call the manageSpaceActivity as a SystemService and clear identity
+        // of the calling App
+        int originalUid = Binder.getCallingUidOrThrow();
+        long token = Binder.clearCallingIdentity();
+
+        try {
+            ApplicationInfo appInfo = mIPackageManager.getApplicationInfo(packageName, 0,
+                    UserHandle.getUserId(originalUid));
+            if (appInfo == null) {
+                throw new IllegalArgumentException(
+                        "Invalid packageName");
+            }
+            if (appInfo.manageSpaceActivityName == null) {
+                Log.i(TAG, packageName + " doesn't have a manageSpaceActivity");
+                return null;
+            }
+            Context targetAppContext = mContext.createPackageContext(packageName, 0);
+
+            Intent intent = new Intent(Intent.ACTION_DEFAULT);
+            intent.setClassName(packageName,
+                    appInfo.manageSpaceActivityName);
+            intent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+
+            PendingIntent activity = PendingIntent.getActivity(targetAppContext, requestCode,
+                    intent,
+                    FLAG_ONE_SHOT | FLAG_CANCEL_CURRENT | FLAG_IMMUTABLE);
+            return activity;
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new IllegalArgumentException(
+                    "packageName not found");
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     /** Not thread safe */
     class AppFuseMountScope extends AppFuseBridge.MountScope {
         private boolean mMounted = false;
@@ -4602,6 +4736,20 @@ class StorageManagerService extends IStorageManager.Stub
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
+        }
+
+        @Override
+        public List<String> getPrimaryVolumeIds() {
+            final List<String> primaryVolumeIds = new ArrayList<>();
+            synchronized (mLock) {
+                for (int i = 0; i < mVolumes.size(); i++) {
+                    final VolumeInfo vol = mVolumes.valueAt(i);
+                    if (vol.isPrimary()) {
+                        primaryVolumeIds.add(vol.getId());
+                    }
+                }
+            }
+            return primaryVolumeIds;
         }
     }
 }

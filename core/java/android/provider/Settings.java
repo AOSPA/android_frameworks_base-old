@@ -417,6 +417,22 @@ public final class Settings {
             "android.settings.MANAGE_UNKNOWN_APP_SOURCES";
 
     /**
+     * Activity Action: Show settings to allow configuration of
+     * {@link Manifest.permission#SCHEDULE_EXACT_ALARM} permission
+     *
+     * Input: Optionally, the Intent's data URI can specify the application package name to
+     * directly invoke the management GUI specific to the package name. For example
+     * "package:com.my.app".
+     * <p>
+     * Output: When a package data uri is passed as input, the activity result is set to
+     * {@link android.app.Activity#RESULT_OK} if the permission was granted to the app. Otherwise,
+     * the result is set to {@link android.app.Activity#RESULT_CANCELED}.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_REQUEST_SCHEDULE_EXACT_ALARM =
+            "android.settings.REQUEST_SCHEDULE_EXACT_ALARM";
+
+    /**
      * Activity Action: Show settings to allow configuration of cross-profile access for apps
      *
      * Input: Optionally, the Intent's data URI can specify the application package name to
@@ -807,6 +823,13 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_DISPLAY_SETTINGS =
             "android.settings.DISPLAY_SETTINGS";
+
+    /**
+     * Activity Action: Show Auto Rotate configuration settings.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_AUTO_ROTATE_SETTINGS =
+            "android.settings.AUTO_ROTATE_SETTINGS";
 
     /**
      * Activity Action: Show settings to allow configuration of Night display.
@@ -10507,18 +10530,6 @@ public final class Settings {
                 "force_desktop_mode_on_external_displays";
 
         /**
-         * Whether to allow non-resizable apps to be freeform.
-         *
-         * TODO(b/176061101) remove after update all usages
-         * @deprecated use {@link #DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW}
-         * @hide
-         */
-        @Deprecated
-        @Readable
-        public static final String DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM =
-                "enable_sizecompat_freeform";
-
-        /**
          * Whether to allow non-resizable apps to be shown in multi-window. The app will be
          * letterboxed if the request orientation is not met, and will be shown in size-compat
          * mode if the container size has changed.
@@ -10706,14 +10717,6 @@ public final class Settings {
         @Readable
         public static final String HDMI_CEC_SWITCH_ENABLED =
                 "hdmi_cec_switch_enabled";
-
-        /**
-         * HDMI CEC version to use. Defaults to v1.4b.
-         * @hide
-         */
-        @Readable
-        public static final String HDMI_CEC_VERSION =
-                "hdmi_cec_version";
 
         /**
          * Whether TV will automatically turn on upon reception of the CEC command
@@ -14628,6 +14631,29 @@ public final class Settings {
         public static final String POWER_BUTTON_VERY_LONG_PRESS =
                 "power_button_very_long_press";
 
+
+        /**
+         * Keyguard should be on the left hand side of the screen, for wide screen layouts.
+         *
+         * @hide
+         */
+        public static final int ONE_HANDED_KEYGUARD_SIDE_LEFT = 0;
+
+        /**
+         * Keyguard should be on the right hand side of the screen, for wide screen layouts.
+         *
+         * @hide
+         */
+        public static final int ONE_HANDED_KEYGUARD_SIDE_RIGHT = 1;
+        /**
+         * In one handed mode, which side the keyguard should be on. Allowable values are one of
+         * the ONE_HANDED_KEYGUARD_SIDE_* constants.
+         *
+         * @hide
+         */
+        @Readable
+        public static final String ONE_HANDED_KEYGUARD_SIDE = "one_handed_keyguard_side";
+
         /**
          * Keys we no longer back up under the current schema, but want to continue to
          * process when restoring historical backup datasets.
@@ -16563,30 +16589,6 @@ public final class Settings {
         return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
                 callingPackage, callingAttributionTag, throwException,
                 AppOpsManager.OP_WRITE_SETTINGS, PM_WRITE_SETTINGS, true);
-    }
-
-    /**
-     * Performs a strict and comprehensive check of whether a calling package is allowed to
-     * change the state of network, as the condition differs for pre-M, M+, and
-     * privileged/preinstalled apps. The caller is expected to have either the
-     * CHANGE_NETWORK_STATE or the WRITE_SETTINGS permission declared. Either of these
-     * permissions allow changing network state; WRITE_SETTINGS is a runtime permission and
-     * can be revoked, but (except in M, excluding M MRs), CHANGE_NETWORK_STATE is a normal
-     * permission and cannot be revoked. See http://b/23597341
-     *
-     * Note: if the check succeeds because the application holds WRITE_SETTINGS, the operation
-     * of this app will be updated to the current time.
-     * @hide
-     */
-    public static boolean checkAndNoteChangeNetworkStateOperation(Context context, int uid,
-            String callingPackage, String callingAttributionTag, boolean throwException) {
-        if (context.checkCallingOrSelfPermission(android.Manifest.permission.CHANGE_NETWORK_STATE)
-                == PackageManager.PERMISSION_GRANTED) {
-            return true;
-        }
-        return isCallingPackageAllowedToPerformAppOpsProtectedOperation(context, uid,
-                callingPackage, callingAttributionTag, throwException,
-                AppOpsManager.OP_WRITE_SETTINGS, PM_CHANGE_NETWORK_STATE, true);
     }
 
     /**

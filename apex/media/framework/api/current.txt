@@ -26,6 +26,7 @@ package android.media {
   }
 
   public class MediaCommunicationManager {
+    method @NonNull public java.util.List<android.media.Session2Token> getSession2Tokens();
     method @IntRange(from=1) public int getVersion();
   }
 
@@ -207,12 +208,6 @@ package android.media {
     ctor public MediaSession2Service.MediaNotification(int, @NonNull android.app.Notification);
     method @NonNull public android.app.Notification getNotification();
     method public int getNotificationId();
-  }
-
-  public class MediaTranscodingException extends java.lang.Exception {
-  }
-
-  public static final class MediaTranscodingException.ServiceNotAvailableException extends android.media.MediaTranscodingException {
   }
 
   public final class Session2Command implements android.os.Parcelable {

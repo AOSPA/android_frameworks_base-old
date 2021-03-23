@@ -49,8 +49,10 @@ import static com.android.server.alarm.AlarmManagerService.AlarmHandler.APP_STAN
 import static com.android.server.alarm.AlarmManagerService.AlarmHandler.CHARGING_STATUS_CHANGED;
 import static com.android.server.alarm.AlarmManagerService.AlarmHandler.REMOVE_FOR_CANCELED;
 import static com.android.server.alarm.AlarmManagerService.Constants.KEY_ALLOW_WHILE_IDLE_COMPAT_QUOTA;
+import static com.android.server.alarm.AlarmManagerService.Constants.KEY_ALLOW_WHILE_IDLE_COMPAT_WINDOW;
 import static com.android.server.alarm.AlarmManagerService.Constants.KEY_ALLOW_WHILE_IDLE_QUOTA;
 import static com.android.server.alarm.AlarmManagerService.Constants.KEY_ALLOW_WHILE_IDLE_WHITELIST_DURATION;
+import static com.android.server.alarm.AlarmManagerService.Constants.KEY_ALLOW_WHILE_IDLE_WINDOW;
 import static com.android.server.alarm.AlarmManagerService.Constants.KEY_LAZY_BATCHING;
 import static com.android.server.alarm.AlarmManagerService.Constants.KEY_LISTENER_TIMEOUT;
 import static com.android.server.alarm.AlarmManagerService.Constants.KEY_MAX_INTERVAL;
@@ -85,6 +87,7 @@ import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
 import android.app.AppOpsManager;
+import android.app.BroadcastOptions;
 import android.app.IActivityManager;
 import android.app.IAlarmCompleteListener;
 import android.app.IAlarmListener;
@@ -565,17 +568,23 @@ public class AlarmManagerServiceTest {
         setDeviceConfigLong(KEY_MAX_INTERVAL, 15);
         setDeviceConfigInt(KEY_ALLOW_WHILE_IDLE_QUOTA, 20);
         setDeviceConfigInt(KEY_ALLOW_WHILE_IDLE_COMPAT_QUOTA, 25);
-        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_WHITELIST_DURATION, 30);
-        setDeviceConfigLong(KEY_LISTENER_TIMEOUT, 35);
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_WINDOW, 30);
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_COMPAT_WINDOW, 35);
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_WHITELIST_DURATION, 40);
+        setDeviceConfigLong(KEY_LISTENER_TIMEOUT, 45);
         assertEquals(5, mService.mConstants.MIN_FUTURITY);
         assertEquals(10, mService.mConstants.MIN_INTERVAL);
         assertEquals(15, mService.mConstants.MAX_INTERVAL);
         assertEquals(20, mService.mConstants.ALLOW_WHILE_IDLE_QUOTA);
         assertEquals(25, mService.mConstants.ALLOW_WHILE_IDLE_COMPAT_QUOTA);
-        assertEquals(30, mService.mConstants.ALLOW_WHILE_IDLE_WHITELIST_DURATION);
-        assertEquals(35, mService.mConstants.LISTENER_TIMEOUT);
+        assertEquals(30, mService.mConstants.ALLOW_WHILE_IDLE_WINDOW);
+        assertEquals(35, mService.mConstants.ALLOW_WHILE_IDLE_COMPAT_WINDOW);
+        assertEquals(40, mService.mConstants.ALLOW_WHILE_IDLE_WHITELIST_DURATION);
+        assertEquals(45, mService.mConstants.LISTENER_TIMEOUT);
+    }
 
-        // Test safeguards.
+    @Test
+    public void positiveWhileIdleQuotas() {
         setDeviceConfigInt(KEY_ALLOW_WHILE_IDLE_QUOTA, -3);
         assertEquals(1, mService.mConstants.ALLOW_WHILE_IDLE_QUOTA);
         setDeviceConfigInt(KEY_ALLOW_WHILE_IDLE_QUOTA, 0);
@@ -585,6 +594,21 @@ public class AlarmManagerServiceTest {
         assertEquals(1, mService.mConstants.ALLOW_WHILE_IDLE_COMPAT_QUOTA);
         setDeviceConfigInt(KEY_ALLOW_WHILE_IDLE_COMPAT_QUOTA, 0);
         assertEquals(1, mService.mConstants.ALLOW_WHILE_IDLE_COMPAT_QUOTA);
+    }
+
+    @Test
+    public void whileIdleWindowsDontExceedAnHour() {
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_WINDOW, AlarmManager.INTERVAL_DAY);
+        assertEquals(AlarmManager.INTERVAL_HOUR, mService.mConstants.ALLOW_WHILE_IDLE_WINDOW);
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_WINDOW, AlarmManager.INTERVAL_HOUR + 1);
+        assertEquals(AlarmManager.INTERVAL_HOUR, mService.mConstants.ALLOW_WHILE_IDLE_WINDOW);
+
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_COMPAT_WINDOW, AlarmManager.INTERVAL_DAY);
+        assertEquals(AlarmManager.INTERVAL_HOUR,
+                mService.mConstants.ALLOW_WHILE_IDLE_COMPAT_WINDOW);
+        setDeviceConfigLong(KEY_ALLOW_WHILE_IDLE_COMPAT_WINDOW, AlarmManager.INTERVAL_HOUR + 1);
+        assertEquals(AlarmManager.INTERVAL_HOUR,
+                mService.mConstants.ALLOW_WHILE_IDLE_COMPAT_WINDOW);
     }
 
     @Test
@@ -1649,8 +1673,8 @@ public class AlarmManagerServiceTest {
                 eq(FLAG_ALLOW_WHILE_IDLE_COMPAT | FLAG_STANDALONE), isNull(), isNull(),
                 eq(Process.myUid()), eq(TEST_CALLING_PACKAGE), bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED, type);
     }
 
@@ -1669,8 +1693,8 @@ public class AlarmManagerServiceTest {
                 eq(alarmPi), isNull(), isNull(), eq(FLAG_ALLOW_WHILE_IDLE_COMPAT), isNull(),
                 isNull(), eq(Process.myUid()), eq(TEST_CALLING_PACKAGE), bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED, type);
     }
 
@@ -1716,8 +1740,8 @@ public class AlarmManagerServiceTest {
                 isNull(), eq(alarmClock), eq(Process.myUid()), eq(TEST_CALLING_PACKAGE),
                 bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED, type);
     }
 
@@ -1742,8 +1766,8 @@ public class AlarmManagerServiceTest {
                 eq(FLAG_ALLOW_WHILE_IDLE | FLAG_STANDALONE), isNull(), isNull(),
                 eq(Process.myUid()), eq(TEST_CALLING_PACKAGE), bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED, type);
     }
 
@@ -1772,8 +1796,8 @@ public class AlarmManagerServiceTest {
                 eq(FLAG_ALLOW_WHILE_IDLE_COMPAT | FLAG_STANDALONE), isNull(), isNull(),
                 eq(Process.myUid()), eq(TEST_CALLING_PACKAGE), bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED, type);
     }
 
@@ -1797,8 +1821,8 @@ public class AlarmManagerServiceTest {
                 eq(alarmPi), isNull(), isNull(), eq(FLAG_ALLOW_WHILE_IDLE_COMPAT), isNull(),
                 isNull(), eq(Process.myUid()), eq(TEST_CALLING_PACKAGE), bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED, type);
     }
 
@@ -1822,8 +1846,8 @@ public class AlarmManagerServiceTest {
                 eq(alarmPi), isNull(), isNull(), eq(FLAG_ALLOW_WHILE_IDLE_COMPAT), isNull(),
                 isNull(), eq(Process.myUid()), eq(TEST_CALLING_PACKAGE), bundleCaptor.capture());
 
-        final Bundle idleOptions = bundleCaptor.getValue();
-        final int type = idleOptions.getInt("android:broadcast.temporaryAppWhitelistType");
+        final BroadcastOptions idleOptions = new BroadcastOptions(bundleCaptor.getValue());
+        final int type = idleOptions.getTemporaryAppAllowlistType();
         assertEquals(TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED, type);
     }
 

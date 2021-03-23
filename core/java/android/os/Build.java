@@ -1117,6 +1117,18 @@ public class Build {
     }
 
     /**
+     * A multiplier for various timeouts on the system.
+     *
+     * The intent is that products targeting software emulators that are orders of magnitude slower
+     * than real hardware may set this to a large number. On real devices and hardware-accelerated
+     * virtualized devices this should not be set.
+     *
+     * @hide
+     */
+    public static final int HW_TIMEOUT_MULTIPLIER =
+        SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+
+    /**
      * True if Treble is enabled and required for this device.
      *
      * @hide
@@ -1288,10 +1300,12 @@ public class Build {
     public static final String HOST = getString("ro.build.host");
 
     /**
-     * Returns true if we are running a debug build such as "user-debug" or "eng".
-     * @hide
+     * Returns true if the device is running a debuggable build such as "userdebug" or "eng".
+     *
+     * Debuggable builds allow users to gain root access via local shell, attach debuggers to any
+     * application regardless of whether they have the "debuggable" attribute set, or downgrade
+     * selinux into "permissive" mode in particular.
      */
-    @UnsupportedAppUsage
     public static final boolean IS_DEBUGGABLE =
             SystemProperties.getInt("ro.debuggable", 0) == 1;
 

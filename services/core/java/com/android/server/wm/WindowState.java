@@ -26,7 +26,7 @@ import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.graphics.GraphicsProtos.dumpPointProto;
 import static android.hardware.input.InputManager.BLOCK_UNTRUSTED_TOUCHES;
-import static android.os.IInputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
+import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.InsetsState.ITYPE_IME;
@@ -141,11 +141,9 @@ import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ANIM;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_CONFIGURATION;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_INPUT_METHOD;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_LAYOUT_REPEATS;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_POWER;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_STARTING_WINDOW_VERBOSE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_VISIBILITY;
-import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_WALLPAPER_LIGHT;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.WINDOW_STATE_BLAST_SYNC_TIMEOUT;
@@ -169,7 +167,9 @@ import static com.android.server.wm.WindowStateProto.DISPLAY_ID;
 import static com.android.server.wm.WindowStateProto.FINISHED_SEAMLESS_ROTATION_FRAME;
 import static com.android.server.wm.WindowStateProto.FORCE_SEAMLESS_ROTATION;
 import static com.android.server.wm.WindowStateProto.GIVEN_CONTENT_INSETS;
+import static com.android.server.wm.WindowStateProto.GLOBAL_SCALE;
 import static com.android.server.wm.WindowStateProto.HAS_SURFACE;
+import static com.android.server.wm.WindowStateProto.IN_SIZE_COMPAT_MODE;
 import static com.android.server.wm.WindowStateProto.IS_ON_SCREEN;
 import static com.android.server.wm.WindowStateProto.IS_READY_FOR_DISPLAY;
 import static com.android.server.wm.WindowStateProto.IS_VISIBLE;
@@ -211,11 +211,11 @@ import android.os.Trace;
 import android.os.WorkSource;
 import android.provider.Settings;
 import android.text.TextUtils;
-import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.MergedConfiguration;
 import android.util.Slog;
+import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
@@ -356,7 +356,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private boolean mForceHideNonSystemOverlayWindow;
     boolean mAppFreezing;
     boolean mHidden = true;    // Used to determine if to show child windows.
-    boolean mWallpaperVisible;  // for wallpaper, what was last vis report?
     private boolean mDragResizing;
     private boolean mDragResizingChangeReported = true;
     private int mResizeMode;
@@ -533,6 +532,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     private boolean mOrientationChanging;
 
+    /** The time when the window was last requested to redraw for orientation change. */
+    private long mOrientationChangeRedrawRequestTime;
+
     /**
      * Sometimes in addition to the mOrientationChanging
      * flag we report that the orientation is changing
@@ -648,12 +650,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     /**
      * The insets state of sources provided by windows above the current window.
      */
-    InsetsState mAboveInsetsState = new InsetsState();
+    final InsetsState mAboveInsetsState = new InsetsState();
 
     /**
      * The insets sources provided by this window.
      */
-    ArrayMap<Integer, InsetsSource> mProvidedInsetsSources = new ArrayMap<>();
+    final SparseArray<InsetsSource> mProvidedInsetsSources = new SparseArray<>();
 
     /**
      * Surface insets from the previous call to relayout(), used to track
@@ -792,7 +794,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * {@link InsetsStateController#notifyInsetsChanged}.
      */
     boolean isReadyToDispatchInsetsState() {
-        return isVisible() && mFrozenInsetsState == null;
+        return isVisibleRequested() && mFrozenInsetsState == null;
     }
 
     void seamlesslyRotateIfAllowed(Transaction transaction, @Rotation int oldRotation,
@@ -1185,16 +1187,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             layoutYDiff = 0;
         } else {
             windowFrames.mContainingFrame.set(getBounds());
-            if (mActivityRecord != null && !mActivityRecord.mFrozenBounds.isEmpty()) {
-
-                // If the bounds are frozen, we still want to translate the window freely and only
-                // freeze the size.
-                Rect frozen = mActivityRecord.mFrozenBounds.peek();
-                windowFrames.mContainingFrame.right =
-                        windowFrames.mContainingFrame.left + frozen.width();
-                windowFrames.mContainingFrame.bottom =
-                        windowFrames.mContainingFrame.top + frozen.height();
-            }
             // IME is up and obscuring this window. Adjust the window position so it is visible.
             if (isImeTarget) {
                 if (inFreeformWindowingMode()) {
@@ -1219,7 +1211,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     // But in docked we want to behave like fullscreen and behave as if the task
                     // were given smaller bounds for the purposes of layout. Skip adjustments for
                     // the root pinned task, they are handled separately in the
-                    // PinnedStackController.
+                    // PinnedTaskController.
                     windowFrames.mContainingFrame.bottom = windowFrames.mParentFrame.bottom;
                 }
             }
@@ -1441,11 +1433,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // redrawn; to do that, we need to go through the process of getting informed by the
             // application when it has finished drawing.
             if (getOrientationChanging() || dragResizingChanged) {
-                if (getOrientationChanging()) {
-                    Slog.v(TAG_WM, "Orientation start waiting for draw"
-                            + ", mDrawState=DRAW_PENDING in " + this
-                            + ", surfaceController " + winAnimator.mSurfaceController);
-                }
                 if (dragResizingChanged) {
                     ProtoLog.v(WM_DEBUG_RESIZE,
                             "Resize start waiting for draw, "
@@ -1725,7 +1712,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     boolean isVisibleRequested() {
-        return isVisible() && (mActivityRecord == null || mActivityRecord.isVisibleRequested());
+        if (mToken != null && (mActivityRecord != null || mToken.asWallpaperToken() != null)) {
+            // Currently only ActivityRecord and WallpaperToken support visibleRequested.
+            return isVisible() && mToken.isVisibleRequested();
+        }
+        return isVisible();
     }
 
     /**
@@ -1755,8 +1746,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      *         {@code false} otherwise.
      */
     boolean wouldBeVisibleIfPolicyIgnored() {
-        return mHasSurface && !isParentWindowHidden()
-                && !mAnimatingExit && !mDestroying && (!mIsWallpaper || mWallpaperVisible);
+        if (!mHasSurface || isParentWindowHidden() || mAnimatingExit || mDestroying) {
+            return false;
+        }
+        final boolean isWallpaper = mToken != null && mToken.asWallpaperToken() != null;
+        return !isWallpaper || mToken.isVisible();
     }
 
     /**
@@ -1813,6 +1807,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (atoken != null) {
             return ((!isParentWindowHidden() && atoken.isVisible())
                     || isAnimating(TRANSITION | PARENTS));
+        }
+        final WallpaperWindowToken wtoken = mToken.asWallpaperToken();
+        if (wtoken != null) {
+            return !isParentWindowHidden() && wtoken.isVisible();
         }
         return !isParentWindowHidden() || isAnimating(TRANSITION | PARENTS);
     }
@@ -1953,8 +1951,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // When there is keyguard, wallpaper could be placed over the secure app
         // window but invisible. We need to check wallpaper visibility explicitly
         // to determine if it's occluding apps.
-        return ((!mIsWallpaper && mAttrs.format == PixelFormat.OPAQUE)
-                || (mIsWallpaper && mWallpaperVisible))
+        final boolean isWallpaper = mToken != null && mToken.asWallpaperToken() != null;
+        return ((!isWallpaper && mAttrs.format == PixelFormat.OPAQUE)
+                || (isWallpaper && mToken.isVisible()))
                 && isDrawn() && !isAnimating(TRANSITION | PARENTS);
     }
 
@@ -2066,23 +2065,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         super.onResize();
-    }
-
-    void onUnfreezeBounds() {
-        for (int i = mChildren.size() - 1; i >= 0; --i) {
-            final WindowState c = mChildren.get(i);
-            c.onUnfreezeBounds();
-        }
-
-        if (!mHasSurface) {
-            return;
-        }
-
-        mLayoutNeeded = true;
-        setDisplayLayoutNeeded();
-        if (!mWmService.mResizingWindows.contains(this)) {
-            mWmService.mResizingWindows.add(this);
-        }
     }
 
     /**
@@ -2204,7 +2186,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
-  @Override
+    @Override
     void removeImmediately() {
         super.removeImmediately();
 
@@ -3251,7 +3233,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void sendAppVisibilityToClients() {
         super.sendAppVisibilityToClients();
 
-        final boolean clientVisible = mActivityRecord.isClientVisible();
+        if (mToken == null) return;
+
+        final boolean clientVisible = mToken.isClientVisible();
+        // TODO(shell-transitions): This is currently only applicable to app windows, BUT we
+        //                          want to extend the "starting" concept to other windows.
         if (mAttrs.type == TYPE_APPLICATION_STARTING && !clientVisible) {
             // Don't hide the starting window.
             return;
@@ -3579,10 +3565,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     @Override
     public Configuration getConfiguration() {
-        if (mActivityRecord != null && mActivityRecord.mFrozenMergedConfig.size() > 0) {
-            return mActivityRecord.mFrozenMergedConfig.peek();
-        }
-
         // If the process has not registered to any display area to listen to the configuration
         // change, we can simply return the mFullConfiguration as default.
         if (!registeredForDisplayAreaConfigChanges()) {
@@ -3639,9 +3621,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mActivityRecord != null && mActivityRecord.isRelaunching()) {
             return;
         }
-        // If the activity is invisible or going invisible, don't report either since it is going
-        // away. This is likely during a transition so we want to preserve the original state.
-        if (mActivityRecord != null && !mActivityRecord.isVisibleRequested()) {
+        // If this is an activity or wallpaper and is invisible or going invisible, don't report
+        // either since it is going away. This is likely during a transition so we want to preserve
+        // the original state.
+        if ((mActivityRecord != null || mToken.asWallpaperToken() != null)
+                && !mToken.isVisibleRequested()) {
             return;
         }
 
@@ -3651,7 +3635,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         ProtoLog.v(WM_DEBUG_RESIZE, "Reporting new frame to %s: %s", this,
                 mWindowFrames.mCompatFrame);
-        if (mWinAnimator.mDrawState == DRAW_PENDING) {
+        final boolean drawPending = mWinAnimator.mDrawState == DRAW_PENDING;
+        if (drawPending) {
             ProtoLog.i(WM_DEBUG_ORIENTATION, "Resizing %s WITH DRAW PENDING", this);
         }
 
@@ -3668,7 +3653,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mWindowFrames.clearReportResizeHints();
 
         final MergedConfiguration mergedConfiguration = mLastReportedConfiguration;
-        final boolean reportDraw = mWinAnimator.mDrawState == DRAW_PENDING || useBLASTSync() || !mRedrawForSyncReported;
+        final boolean reportDraw = drawPending || useBLASTSync() || !mRedrawForSyncReported;
         final boolean forceRelayout = reportOrientation || isDragResizeChanged() || !mRedrawForSyncReported;
         final int displayId = getDisplayId();
         fillClientWindowFrames(mClientWindowFrames);
@@ -3679,6 +3664,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             mClient.resized(mClientWindowFrames, reportDraw, mergedConfiguration, forceRelayout,
                     getDisplayContent().getDisplayPolicy().areSystemBarsForcedShownLw(this),
                     displayId);
+            if (drawPending && reportOrientation && mOrientationChanging) {
+                mOrientationChangeRedrawRequestTime = SystemClock.elapsedRealtime();
+                ProtoLog.v(WM_DEBUG_ORIENTATION,
+                        "Requested redraw for orientation change: %s", this);
+            }
 
             if (mWmService.mAccessibilityController != null) {
                 mWmService.mAccessibilityController.onSomeWindowResizedOrMoved(displayId);
@@ -3821,13 +3811,21 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     /** @return true when the window should be letterboxed. */
     boolean isLetterboxedAppWindow() {
         // Fullscreen mode but doesn't fill display area.
-        return (!inMultiWindowMode() && !matchesDisplayAreaBounds())
-                // Activity in size compat.
-                || (mActivityRecord != null && mActivityRecord.inSizeCompatMode())
-                // Task letterboxed.
-                || (getTask() != null && getTask().isTaskLetterboxed())
-                // Letterboxed for display cutout.
-                || isLetterboxedForDisplayCutout();
+        if (!inMultiWindowMode() && !matchesDisplayAreaBounds()) {
+            return true;
+        }
+        if (mActivityRecord != null) {
+            // Activity in size compat.
+            if (mActivityRecord.inSizeCompatMode()) {
+                return true;
+            }
+            // Letterbox for fixed orientation.
+            if (mActivityRecord.isLetterboxedForFixedOrientationAndAspectRatio()) {
+                return true;
+            }
+        }
+        // Letterboxed for display cutout.
+        return isLetterboxedForDisplayCutout();
     }
 
     /** Returns {@code true} if the window is letterboxed for the display cutout. */
@@ -3930,14 +3928,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             return true;
         }
 
-        // If the bounds are currently frozen, it means that the layout size that the app sees
-        // and the bounds we clip this window to might be different. In order to avoid holes, we
-        // simulate that we are still resizing so the app fills the hole with the resizing
-        // background.
-        return (getDisplayContent().mDividerControllerLocked.isResizing()
-                        || mActivityRecord != null && !mActivityRecord.mFrozenBounds.isEmpty()) &&
-                !task.inFreeformWindowingMode() && !isGoneForLayout();
-
+        return getDisplayContent().mDividerControllerLocked.isResizing()
+                && !task.inFreeformWindowingMode() && !isGoneForLayout();
     }
 
     void setDragResizing() {
@@ -3998,6 +3990,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         proto.write(PENDING_SEAMLESS_ROTATION, mPendingSeamlessRotate != null);
         proto.write(FINISHED_SEAMLESS_ROTATION_FRAME, mFinishSeamlessRotateFrameNumber);
         proto.write(FORCE_SEAMLESS_ROTATION, mForceSeamlesslyRotate);
+        proto.write(IN_SIZE_COMPAT_MODE, inSizeCompatMode());
+        proto.write(GLOBAL_SCALE, mGlobalScale);
         proto.end(token);
     }
 
@@ -4045,8 +4039,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (mIsImWindow || mIsWallpaper || mIsFloatingLayer) {
             pw.println(prefix + "mIsImWindow=" + mIsImWindow
                     + " mIsWallpaper=" + mIsWallpaper
-                    + " mIsFloatingLayer=" + mIsFloatingLayer
-                    + " mWallpaperVisible=" + mWallpaperVisible);
+                    + " mIsFloatingLayer=" + mIsFloatingLayer);
         }
         if (dumpAll) {
             pw.print(prefix); pw.print("mBaseLayer="); pw.print(mBaseLayer);
@@ -4860,61 +4853,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return getConfiguration().getLayoutDirection() == View.LAYOUT_DIRECTION_RTL;
     }
 
-    void hideWallpaperWindow(boolean wasDeferred, String reason) {
-        for (int j = mChildren.size() - 1; j >= 0; --j) {
-            final WindowState c = mChildren.get(j);
-            c.hideWallpaperWindow(wasDeferred, reason);
-        }
-        if (!mWinAnimator.mLastHidden || wasDeferred) {
-            mWinAnimator.hide(getGlobalTransaction(), reason);
-            getDisplayContent().mWallpaperController.mDeferredHideWallpaper = null;
-            dispatchWallpaperVisibility(false);
-            final DisplayContent displayContent = getDisplayContent();
-            if (displayContent != null) {
-                displayContent.pendingLayoutChanges |= FINISH_LAYOUT_REDO_WALLPAPER;
-                if (DEBUG_LAYOUT_REPEATS) {
-                    mWmService.mWindowPlacerLocked.debugLayoutRepeats("hideWallpaperWindow " + this,
-                            displayContent.pendingLayoutChanges);
-                }
-            }
-        }
-    }
-
-    /**
-     * Check wallpaper window for visibility change and notify window if so.
-     * @param visible Current visibility.
-     */
-    void dispatchWallpaperVisibility(final boolean visible) {
-        final boolean hideAllowed =
-                getDisplayContent().mWallpaperController.mDeferredHideWallpaper == null;
-
-        // Only send notification if the visibility actually changed and we are not trying to hide
-        // the wallpaper when we are deferring hiding of the wallpaper.
-        if (mWallpaperVisible != visible && (hideAllowed || visible)) {
-            mWallpaperVisible = visible;
-            try {
-                if (DEBUG_VISIBILITY || DEBUG_WALLPAPER_LIGHT) Slog.v(TAG,
-                        "Updating vis of wallpaper " + this
-                                + ": " + visible + " from:\n" + Debug.getCallers(4, "  "));
-                mClient.dispatchAppVisibility(visible);
-            } catch (RemoteException e) {
-            }
-        }
-    }
-
-    boolean hasVisibleNotDrawnWallpaper() {
-        if (mWallpaperVisible && !isDrawn()) {
-            return true;
-        }
-        for (int j = mChildren.size() - 1; j >= 0; --j) {
-            final WindowState c = mChildren.get(j);
-            if (c.hasVisibleNotDrawnWallpaper()) {
-                return true;
-            }
-        }
-        return false;
-    }
-
     void updateReportedVisibility(UpdateReportedVisibilityResults results) {
         for (int i = mChildren.size() - 1; i >= 0; --i) {
             final WindowState c = mChildren.get(i);
@@ -5257,20 +5195,22 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         if (!mAnimatingExit && mAppDied) {
             mIsDimming = true;
             getDimmer().dimAbove(getSyncTransaction(), this, DEFAULT_DIM_AMOUNT_DEAD_WINDOW);
-        } else if (((mAttrs.flags & FLAG_DIM_BEHIND) != 0 || (mAttrs.flags & FLAG_BLUR_BEHIND) != 0)
+        } else if (((mAttrs.flags & FLAG_DIM_BEHIND) != 0 || shouldDrawBlurBehind())
                    && isVisibleNow() && !mHidden) {
             // Only show the Dimmer when the following is satisfied:
-            // 1. The window has the flag FLAG_DIM_BEHIND or background blur is requested
+            // 1. The window has the flag FLAG_DIM_BEHIND or blur behind is requested
             // 2. The WindowToken is not hidden so dims aren't shown when the window is exiting.
             // 3. The WS is considered visible according to the isVisible() method
             // 4. The WS is not hidden.
             mIsDimming = true;
             final float dimAmount = (mAttrs.flags & FLAG_DIM_BEHIND) != 0 ? mAttrs.dimAmount : 0;
-            final int blurRadius =
-                    (mAttrs.flags & FLAG_BLUR_BEHIND) != 0 ? mAttrs.blurBehindRadius : 0;
-            getDimmer().dimBelow(
-                    getSyncTransaction(), this, mAttrs.dimAmount, mAttrs.blurBehindRadius);
+            final int blurRadius = shouldDrawBlurBehind() ? mAttrs.getBlurBehindRadius() : 0;
+            getDimmer().dimBelow(getSyncTransaction(), this, dimAmount, blurRadius);
         }
+    }
+
+    private boolean shouldDrawBlurBehind() {
+        return (mAttrs.flags & FLAG_BLUR_BEHIND) != 0 && mWmService.mBlurController.mBlurEnabled;
     }
 
     /**
@@ -5732,6 +5672,18 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     boolean finishDrawing(SurfaceControl.Transaction postDrawTransaction) {
+        if (mOrientationChangeRedrawRequestTime > 0) {
+            final long duration =
+                    SystemClock.elapsedRealtime() - mOrientationChangeRedrawRequestTime;
+            Slog.i(TAG, "finishDrawing of orientation change: " + this + " " + duration + "ms");
+            mOrientationChangeRedrawRequestTime = 0;
+        } else if (mActivityRecord != null && mActivityRecord.mRelaunchStartTime != 0
+                && mActivityRecord.findMainWindow() == this) {
+            final long duration =
+                    SystemClock.elapsedRealtime() - mActivityRecord.mRelaunchStartTime;
+            Slog.i(TAG, "finishDrawing of relaunch: " + this + " " + duration + "ms");
+            mActivityRecord.mRelaunchStartTime = 0;
+        }
         if (!onSyncFinishedDrawing()) {
             return mWinAnimator.finishDrawingLocked(postDrawTransaction);
         }

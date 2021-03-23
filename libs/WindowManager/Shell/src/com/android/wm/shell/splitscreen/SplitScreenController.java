@@ -30,6 +30,7 @@ import android.app.ActivityTaskManager;
 import android.app.PendingIntent;
 import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.LauncherApps;
 import android.graphics.Rect;
 import android.os.Bundle;
@@ -42,6 +43,7 @@ import androidx.annotation.Nullable;
 
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.draganddrop.DragAndDropPolicy;
@@ -62,18 +64,20 @@ public class SplitScreenController implements DragAndDropPolicy.Starter {
     private final RootTaskDisplayAreaOrganizer mRootTDAOrganizer;
     private final ShellExecutor mMainExecutor;
     private final SplitScreenImpl mImpl = new SplitScreenImpl();
+    private final DisplayImeController mDisplayImeController;
 
     private StageCoordinator mStageCoordinator;
 
     public SplitScreenController(ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue, Context context,
             RootTaskDisplayAreaOrganizer rootTDAOrganizer,
-            ShellExecutor mainExecutor) {
+            ShellExecutor mainExecutor, DisplayImeController displayImeController) {
         mTaskOrganizer = shellTaskOrganizer;
         mSyncQueue = syncQueue;
         mContext = context;
         mRootTDAOrganizer = rootTDAOrganizer;
         mMainExecutor = mainExecutor;
+        mDisplayImeController = displayImeController;
     }
 
     public SplitScreen asSplitScreen() {
@@ -84,7 +88,7 @@ public class SplitScreenController implements DragAndDropPolicy.Starter {
         if (mStageCoordinator == null) {
             // TODO: Multi-display
             mStageCoordinator = new StageCoordinator(mContext, DEFAULT_DISPLAY, mSyncQueue,
-                    mRootTDAOrganizer, mTaskOrganizer);
+                    mRootTDAOrganizer, mTaskOrganizer, mDisplayImeController);
         }
     }
 
@@ -168,12 +172,13 @@ public class SplitScreenController implements DragAndDropPolicy.Starter {
         }
     }
 
-    public void startIntent(PendingIntent intent, @SplitScreen.StageType int stage,
+    public void startIntent(PendingIntent intent, Context context,
+            Intent fillInIntent, @SplitScreen.StageType int stage,
             @SplitScreen.StagePosition int position, @Nullable Bundle options) {
         options = resolveStartStage(stage, position, options);
 
         try {
-            intent.send(null, 0, null, null, null, null, options);
+            intent.send(context, 0, fillInIntent, null, null, null, options);
         } catch (PendingIntent.CanceledException e) {
             Slog.e(TAG, "Failed to launch activity", e);
         }
@@ -345,10 +350,11 @@ public class SplitScreenController implements DragAndDropPolicy.Starter {
         }
 
         @Override
-        public void startIntent(PendingIntent intent, int stage, int position,
-                @Nullable Bundle options) {
+        public void startIntent(PendingIntent intent, Context context, Intent fillInIntent,
+                int stage, int position, @Nullable Bundle options) {
             mMainExecutor.execute(() -> {
-                SplitScreenController.this.startIntent(intent, stage, position, options);
+                SplitScreenController.this.startIntent(intent, context, fillInIntent, stage,
+                        position, options);
             });
         }
     }

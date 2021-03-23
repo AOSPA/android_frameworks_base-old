@@ -29,6 +29,7 @@ import android.graphics.drawable.Icon;
 import android.net.Uri;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.os.UserHandle;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,7 +46,7 @@ public class PeopleSpaceTile implements Parcelable {
     private String mId;
     private CharSequence mUserName;
     private Icon mUserIcon;
-    private int mUid;
+    private UserHandle mUserHandle;
     private Uri mContactUri;
     private String mPackageName;
     private String mBirthdayText;
@@ -53,6 +54,7 @@ public class PeopleSpaceTile implements Parcelable {
     private boolean mIsImportantConversation;
     private String mNotificationKey;
     private CharSequence mNotificationContent;
+    private String mNotificationCategory;
     private Uri mNotificationDataUri;
     private Intent mIntent;
     private long mNotificationTimestamp;
@@ -63,13 +65,14 @@ public class PeopleSpaceTile implements Parcelable {
         mUserName = b.mUserName;
         mUserIcon = b.mUserIcon;
         mContactUri = b.mContactUri;
-        mUid = b.mUid;
+        mUserHandle = b.mUserHandle;
         mPackageName = b.mPackageName;
         mBirthdayText = b.mBirthdayText;
         mLastInteractionTimestamp = b.mLastInteractionTimestamp;
         mIsImportantConversation = b.mIsImportantConversation;
         mNotificationKey = b.mNotificationKey;
         mNotificationContent = b.mNotificationContent;
+        mNotificationCategory = b.mNotificationCategory;
         mNotificationDataUri = b.mNotificationDataUri;
         mIntent = b.mIntent;
         mNotificationTimestamp = b.mNotificationTimestamp;
@@ -93,8 +96,8 @@ public class PeopleSpaceTile implements Parcelable {
         return mContactUri;
     }
 
-    public int getUid() {
-        return mUid;
+    public UserHandle getUserHandle() {
+        return mUserHandle;
     }
 
     public String getPackageName() {
@@ -129,6 +132,10 @@ public class PeopleSpaceTile implements Parcelable {
         return mNotificationContent;
     }
 
+    public String getNotificationCategory() {
+        return mNotificationCategory;
+    }
+
     public Uri getNotificationDataUri() {
         return mNotificationDataUri;
     }
@@ -159,13 +166,14 @@ public class PeopleSpaceTile implements Parcelable {
         Builder builder =
                 new Builder(mId, mUserName.toString(), mUserIcon, mIntent);
         builder.setContactUri(mContactUri);
-        builder.setUid(mUid);
+        builder.setUserHandle(mUserHandle);
         builder.setPackageName(mPackageName);
         builder.setBirthdayText(mBirthdayText);
         builder.setLastInteractionTimestamp(mLastInteractionTimestamp);
         builder.setIsImportantConversation(mIsImportantConversation);
         builder.setNotificationKey(mNotificationKey);
         builder.setNotificationContent(mNotificationContent);
+        builder.setNotificationCategory(mNotificationCategory);
         builder.setNotificationDataUri(mNotificationDataUri);
         builder.setIntent(mIntent);
         builder.setNotificationTimestamp(mNotificationTimestamp);
@@ -179,13 +187,14 @@ public class PeopleSpaceTile implements Parcelable {
         private CharSequence mUserName;
         private Icon mUserIcon;
         private Uri mContactUri;
-        private int mUid;
+        private UserHandle mUserHandle;
         private String mPackageName;
         private String mBirthdayText;
         private long mLastInteractionTimestamp;
         private boolean mIsImportantConversation;
         private String mNotificationKey;
         private CharSequence mNotificationContent;
+        private String mNotificationCategory;
         private Uri mNotificationDataUri;
         private Intent mIntent;
         private long mNotificationTimestamp;
@@ -204,7 +213,7 @@ public class PeopleSpaceTile implements Parcelable {
             mId = info.getId();
             mUserName = info.getLabel();
             mUserIcon = convertDrawableToIcon(launcherApps.getShortcutIconDrawable(info, 0));
-            mUid = info.getUserId();
+            mUserHandle = info.getUserHandle();
             mPackageName = info.getPackage();
             mContactUri = getContactUri(info);
         }
@@ -214,7 +223,7 @@ public class PeopleSpaceTile implements Parcelable {
             mId = info.getId();
             mUserName = info.getLabel();
             mUserIcon = convertDrawableToIcon(launcherApps.getShortcutIconDrawable(info, 0));
-            mUid = info.getUserId();
+            mUserHandle = info.getUserHandle();
             mPackageName = info.getPackage();
             mContactUri = getContactUri(info);
             mStatuses = channel.getStatuses();
@@ -257,9 +266,9 @@ public class PeopleSpaceTile implements Parcelable {
             return this;
         }
 
-        /** Sets the associated uid. */
-        public Builder setUid(int uid) {
-            mUid = uid;
+        /** Sets the associated {@code userHandle}. */
+        public Builder setUserHandle(UserHandle userHandle) {
+            mUserHandle = userHandle;
             return this;
         }
 
@@ -299,6 +308,12 @@ public class PeopleSpaceTile implements Parcelable {
             return this;
         }
 
+        /** Sets the associated notification's category. */
+        public Builder setNotificationCategory(String notificationCategory) {
+            mNotificationCategory = notificationCategory;
+            return this;
+        }
+
         /** Sets the associated notification's data URI. */
         public Builder setNotificationDataUri(Uri notificationDataUri) {
             mNotificationDataUri = notificationDataUri;
@@ -335,13 +350,14 @@ public class PeopleSpaceTile implements Parcelable {
         mUserName = in.readCharSequence();
         mUserIcon = in.readParcelable(Icon.class.getClassLoader());
         mContactUri = in.readParcelable(Uri.class.getClassLoader());
-        mUid = in.readInt();
+        mUserHandle = in.readParcelable(UserHandle.class.getClassLoader());
         mPackageName = in.readString();
         mBirthdayText = in.readString();
         mLastInteractionTimestamp = in.readLong();
         mIsImportantConversation = in.readBoolean();
         mNotificationKey = in.readString();
         mNotificationContent = in.readCharSequence();
+        mNotificationCategory = in.readString();
         mNotificationDataUri = in.readParcelable(Uri.class.getClassLoader());
         mIntent = in.readParcelable(Intent.class.getClassLoader());
         mNotificationTimestamp = in.readLong();
@@ -360,13 +376,14 @@ public class PeopleSpaceTile implements Parcelable {
         dest.writeCharSequence(mUserName);
         dest.writeParcelable(mUserIcon, flags);
         dest.writeParcelable(mContactUri, flags);
-        dest.writeInt(mUid);
+        dest.writeParcelable(mUserHandle, flags);
         dest.writeString(mPackageName);
         dest.writeString(mBirthdayText);
         dest.writeLong(mLastInteractionTimestamp);
         dest.writeBoolean(mIsImportantConversation);
         dest.writeString(mNotificationKey);
         dest.writeCharSequence(mNotificationContent);
+        dest.writeString(mNotificationCategory);
         dest.writeParcelable(mNotificationDataUri, flags);
         dest.writeParcelable(mIntent, flags);
         dest.writeLong(mNotificationTimestamp);

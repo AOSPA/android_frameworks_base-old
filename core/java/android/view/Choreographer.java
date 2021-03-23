@@ -822,11 +822,15 @@ public final class Choreographer {
 
         try {
             mIsDoFrameProcessing = true;
-            Trace.traceBegin(Trace.TRACE_TAG_VIEW, "Choreographer#doFrame");
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+                Trace.traceBegin(Trace.TRACE_TAG_VIEW,
+                        "Choreographer#doFrame " + vsyncEventData.id);
+            }
             ScrollOptimizer.setUITaskStatus(true);
             long adjustedTime =
                     ScrollOptimizer.getAdjustedAnimationClock(frameTimeNanos);
             AnimationUtils.lockAnimationClock(adjustedTime / TimeUtils.NANOS_PER_MS);
+            AnimationUtils.lockAnimationClock(frameTimeNanos / TimeUtils.NANOS_PER_MS);
 
             mFrameInfo.markInputHandlingStart();
             doCallbacks(Choreographer.CALLBACK_INPUT, frameTimeNanos);

@@ -106,8 +106,6 @@ public class DeviceSelectActionTest {
         PowerManager powerManager = new PowerManager(context, mIPowerManagerMock,
                 mIThermalServiceMock, new Handler(mMyLooper));
 
-        HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(context);
-
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext()) {
                     @Override
@@ -133,16 +131,12 @@ public class DeviceSelectActionTest {
                     protected PowerManager getPowerManager() {
                         return powerManager;
                     }
-
-                    @Override
-                    protected HdmiCecConfig getHdmiCecConfig() {
-                        return hdmiCecConfig;
-                    }
                 };
 
         mHdmiCecLocalDeviceTv = new HdmiCecLocalDeviceTv(mHdmiControlService);
         mHdmiCecLocalDeviceTv.init();
         mHdmiControlService.setIoLooper(mMyLooper);
+        mHdmiControlService.setHdmiCecConfig(new FakeHdmiCecConfig(context));
         mNativeWrapper = new FakeNativeWrapper();
         mHdmiCecController = HdmiCecController.createWithNativeWrapper(
                 mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
@@ -221,7 +215,8 @@ public class DeviceSelectActionTest {
                                                  "testDeviceSelect");
         action.start();
         mTestLooper.dispatchAll();
-        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(SET_STREAM_PATH);
+        assertThat(mNativeWrapper.getResultMessages()).contains(SET_STREAM_PATH);
+        mNativeWrapper.clearResultMessages();
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_REPORT_POWER_STATUS);
         action.processCommand(REPORT_POWER_STATUS_ON);
         mTestLooper.dispatchAll();
@@ -238,12 +233,15 @@ public class DeviceSelectActionTest {
         DeviceSelectAction action = createDeviceSelectAction(actionTimer, callback,
                                         /*isCec20=*/false);
         action.start();
+        mTestLooper.dispatchAll();
+        assertThat(mNativeWrapper.getResultMessages()).contains(SET_STREAM_PATH);
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_REPORT_POWER_STATUS);
         action.processCommand(REPORT_POWER_STATUS_STANDBY);
         mTestLooper.dispatchAll();
         HdmiCecMessage userControlPressed = HdmiCecMessageBuilder.buildUserControlPressed(
                         ADDR_TV, ADDR_PLAYBACK_1, HdmiCecKeycode.CEC_KEYCODE_POWER);
         assertThat(mNativeWrapper.getResultMessages()).contains(userControlPressed);
+        mNativeWrapper.clearResultMessages();
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_DEVICE_POWER_ON);
         action.handleTimerEvent(STATE_WAIT_FOR_DEVICE_POWER_ON);
         action.processCommand(REPORT_POWER_STATUS_ON);
@@ -261,6 +259,9 @@ public class DeviceSelectActionTest {
         DeviceSelectAction action = createDeviceSelectAction(actionTimer, callback,
                                         /*isCec20=*/false);
         action.start();
+        mTestLooper.dispatchAll();
+        assertThat(mNativeWrapper.getResultMessages()).contains(SET_STREAM_PATH);
+        mNativeWrapper.clearResultMessages();
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_REPORT_POWER_STATUS);
         action.processCommand(REPORT_POWER_STATUS_STANDBY);
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_DEVICE_POWER_ON);
@@ -285,6 +286,9 @@ public class DeviceSelectActionTest {
         DeviceSelectAction action = createDeviceSelectAction(actionTimer, callback,
                                         /*isCec20=*/false);
         action.start();
+        mTestLooper.dispatchAll();
+        assertThat(mNativeWrapper.getResultMessages()).contains(SET_STREAM_PATH);
+        mNativeWrapper.clearResultMessages();
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_REPORT_POWER_STATUS);
         action.processCommand(REPORT_POWER_STATUS_STANDBY);
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_DEVICE_POWER_ON);
@@ -330,8 +334,11 @@ public class DeviceSelectActionTest {
         action.start();
         mTestLooper.dispatchAll();
         assertThat(mNativeWrapper.getResultMessages()).contains(SET_STREAM_PATH);
+        mNativeWrapper.clearResultMessages();
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_REPORT_POWER_STATUS);
         action.processCommand(REPORT_POWER_STATUS_ON);
+        mTestLooper.dispatchAll();
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(SET_STREAM_PATH);
         assertThat(callback.getResult()).isEqualTo(HdmiControlManager.RESULT_SUCCESS);
     }
 
@@ -354,9 +361,12 @@ public class DeviceSelectActionTest {
         HdmiCecMessage userControlPressed = HdmiCecMessageBuilder.buildUserControlPressed(
                         ADDR_TV, ADDR_PLAYBACK_1, HdmiCecKeycode.CEC_KEYCODE_POWER);
         assertThat(mNativeWrapper.getResultMessages()).doesNotContain(userControlPressed);
+        mNativeWrapper.clearResultMessages();
         assertThat(actionTimer.getState()).isEqualTo(STATE_WAIT_FOR_DEVICE_POWER_ON);
         action.handleTimerEvent(STATE_WAIT_FOR_DEVICE_POWER_ON);
         action.processCommand(REPORT_POWER_STATUS_ON);
+        mTestLooper.dispatchAll();
+        assertThat(mNativeWrapper.getResultMessages()).doesNotContain(SET_STREAM_PATH);
         assertThat(callback.getResult()).isEqualTo(HdmiControlManager.RESULT_SUCCESS);
     }
 }

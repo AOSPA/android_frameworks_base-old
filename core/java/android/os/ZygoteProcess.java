@@ -333,7 +333,7 @@ public class ZygoteProcess {
      *                             started.
      * @param pkgDataInfoMap Map from related package names to private data directory
      *                       volume UUID and inode number.
-     * @param whitelistedDataInfoMap Map from allowlisted package names to private data directory
+     * @param allowlistedDataInfoList Map from allowlisted package names to private data directory
      *                       volume UUID and inode number.
      * @param bindMountAppsData whether zygote needs to mount CE and DE data.
      * @param bindMountAppStorageDirs whether zygote needs to mount Android/obb and Android/data.
@@ -359,7 +359,7 @@ public class ZygoteProcess {
                                                   @Nullable Map<String, Pair<String, Long>>
                                                           pkgDataInfoMap,
                                                   @Nullable Map<String, Pair<String, Long>>
-                                                          whitelistedDataInfoMap,
+                                                          allowlistedDataInfoList,
                                                   boolean bindMountAppsData,
                                                   boolean bindMountAppStorageDirs,
                                                   @Nullable String[] zygoteArgs) {
@@ -373,7 +373,7 @@ public class ZygoteProcess {
                     runtimeFlags, mountExternal, targetSdkVersion, seInfo,
                     abi, instructionSet, appDataDir, invokeWith, /*startChildZygote=*/ false,
                     packageName, zygotePolicyFlags, isTopApp, disabledCompatChanges,
-                    pkgDataInfoMap, whitelistedDataInfoMap, bindMountAppsData,
+                    pkgDataInfoMap, allowlistedDataInfoList, bindMountAppsData,
                     bindMountAppStorageDirs, zygoteArgs);
         } catch (ZygoteStartFailedEx ex) {
             Log.e(LOG_TAG,
@@ -426,7 +426,7 @@ public class ZygoteProcess {
         // avoid writing a partial response to the zygote.
         for (String arg : args) {
             // Making two indexOf calls here is faster than running a manually fused loop due
-            // to the fact that indexOf is a optimized intrinsic.
+            // to the fact that indexOf is an optimized intrinsic.
             if (arg.indexOf('\n') >= 0) {
                 throw new ZygoteStartFailedEx("Embedded newlines not allowed");
             } else if (arg.indexOf('\r') >= 0) {
@@ -615,7 +615,7 @@ public class ZygoteProcess {
      * @param disabledCompatChanges a list of disabled compat changes for the process being started.
      * @param pkgDataInfoMap Map from related package names to private data directory volume UUID
      *                       and inode number.
-     * @param whitelistedDataInfoMap Map from allowlisted package names to private data directory
+     * @param allowlistedDataInfoList Map from allowlisted package names to private data directory
      *                       volume UUID and inode number.
      * @param bindMountAppsData whether zygote needs to mount CE and DE data.
      * @param bindMountAppStorageDirs whether zygote needs to mount Android/obb and Android/data.
@@ -642,7 +642,7 @@ public class ZygoteProcess {
                                                       @Nullable Map<String, Pair<String, Long>>
                                                               pkgDataInfoMap,
                                                       @Nullable Map<String, Pair<String, Long>>
-                                                              whitelistedDataInfoMap,
+                                                              allowlistedDataInfoList,
                                                       boolean bindMountAppsData,
                                                       boolean bindMountAppStorageDirs,
                                                       @Nullable String[] extraArgs)
@@ -733,12 +733,12 @@ public class ZygoteProcess {
             }
             argsForZygote.add(sb.toString());
         }
-        if (whitelistedDataInfoMap != null && whitelistedDataInfoMap.size() > 0) {
+        if (allowlistedDataInfoList != null && allowlistedDataInfoList.size() > 0) {
             StringBuilder sb = new StringBuilder();
-            sb.append(Zygote.WHITELISTED_DATA_INFO_MAP);
+            sb.append(Zygote.ALLOWLISTED_DATA_INFO_MAP);
             sb.append("=");
             boolean started = false;
-            for (Map.Entry<String, Pair<String, Long>> entry : whitelistedDataInfoMap.entrySet()) {
+            for (Map.Entry<String, Pair<String, Long>> entry : allowlistedDataInfoList.entrySet()) {
                 if (started) {
                     sb.append(',');
                 }
@@ -1318,7 +1318,7 @@ public class ZygoteProcess {
                     true /* startChildZygote */, null /* packageName */,
                     ZYGOTE_POLICY_FLAG_SYSTEM_PROCESS /* zygotePolicyFlags */, false /* isTopApp */,
                     null /* disabledCompatChanges */, null /* pkgDataInfoMap */,
-                    null /* whitelistedDataInfoMap */, true /* bindMountAppsData*/,
+                    null /* allowlistedDataInfoList */, true /* bindMountAppsData*/,
                     /* bindMountAppStorageDirs */ false, extraArgs);
 
         } catch (ZygoteStartFailedEx ex) {

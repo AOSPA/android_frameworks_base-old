@@ -157,6 +157,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_BLUETOOTH = "bluetooth";
 
     /**
+     * Namespace for features relating to clipboard.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_CLIPBOARD = "clipboard";
+
+    /**
      * Namespace for all networking connectivity related features.
      *
      * @hide
@@ -273,6 +281,14 @@ public final class DeviceConfig {
      */
     @SystemApi
     public static final String NAMESPACE_PROFCOLLECT_NATIVE_BOOT = "profcollect_native_boot";
+
+    /**
+     * Namespace for features related to Reboot Readiness detection.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_REBOOT_READINESS = "reboot_readiness";
 
     /**
      * Namespace for Rollback flags that are applied immediately.
@@ -487,6 +503,22 @@ public final class DeviceConfig {
      */
     public static final String NAMESPACE_CONNECTIVITY_THERMAL_POWER_MANAGER =
             "connectivity_thermal_power_manager";
+
+    /**
+     * Namespace for all statsd java features that can be applied immediately.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_STATSD_JAVA = "statsd_java";
+
+    /**
+     * Namespace for all statsd java features that are applied on boot.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_STATSD_JAVA_BOOT = "statsd_java_boot";
 
     /**
      * Namespace for all statsd native features that can be applied immediately.

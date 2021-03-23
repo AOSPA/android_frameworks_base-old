@@ -912,9 +912,6 @@ public class BubbleStackView extends FrameLayout
                     removeOnLayoutChangeListener(mOrientationChangedListener);
                 };
 
-        // This must be a separate OnDrawListener since it should be called for every draw.
-        getViewTreeObserver().addOnDrawListener(mSystemGestureExcludeUpdater);
-
         final ColorMatrix animatedMatrix = new ColorMatrix();
         final ColorMatrix darkenMatrix = new ColorMatrix();
 
@@ -1274,12 +1271,14 @@ public class BubbleStackView extends FrameLayout
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         getViewTreeObserver().addOnComputeInternalInsetsListener(this);
+        getViewTreeObserver().addOnDrawListener(mSystemGestureExcludeUpdater);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         getViewTreeObserver().removeOnPreDrawListener(mViewUpdater);
+        getViewTreeObserver().removeOnDrawListener(mSystemGestureExcludeUpdater);
         getViewTreeObserver().removeOnComputeInternalInsetsListener(this);
         if (mBubbleOverflow != null) {
             mBubbleOverflow.cleanUpExpandedState();
@@ -1539,19 +1538,16 @@ public class BubbleStackView extends FrameLayout
      * Update bubble order and pointer position.
      */
     public void updateBubbleOrder(List<Bubble> bubbles) {
-        if (isExpansionAnimating()) {
-            return;
-        }
         final Runnable reorder = () -> {
             for (int i = 0; i < bubbles.size(); i++) {
                 Bubble bubble = bubbles.get(i);
                 mBubbleContainer.reorderView(bubble.getIconView(), i);
             }
         };
-        if (mIsExpanded) {
+        if (mIsExpanded || isExpansionAnimating()) {
             reorder.run();
             updateBadgesAndZOrder(false /* setBadgeForCollapsedStack */);
-        } else {
+        } else if (!isExpansionAnimating()) {
             List<View> bubbleViews = bubbles.stream()
                     .map(b -> b.getIconView()).collect(Collectors.toList());
             mStackAnimationController.animateReorder(bubbleViews, reorder);
@@ -1689,6 +1685,13 @@ public class BubbleStackView extends FrameLayout
                     FrameworkStatsLog.BUBBLE_UICHANGED__ACTION__STACK_EXPANDED);
         }
         notifyExpansionChanged(mExpandedBubble, mIsExpanded);
+    }
+
+    void setBubbleVisibility(Bubble b, boolean visible) {
+        if (b.getIconView() != null) {
+            b.getIconView().setVisibility(visible ? VISIBLE : GONE);
+        }
+        // TODO(b/181166384): Animate in / out & handle adjusting how the bubbles overlap
     }
 
     /**
@@ -2434,7 +2437,7 @@ public class BubbleStackView extends FrameLayout
 
             if (mFlyout.getVisibility() == View.VISIBLE) {
                 mFlyout.animateUpdate(bubble.getFlyoutMessage(), getWidth(),
-                        mStackAnimationController.getStackPosition().y);
+                        mStackAnimationController.getStackPosition(), !bubble.showDot());
             } else {
                 mFlyout.setVisibility(INVISIBLE);
                 mFlyout.setupFlyoutStartingAsDot(bubble.getFlyoutMessage(),
