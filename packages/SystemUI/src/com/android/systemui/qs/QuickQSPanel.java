@@ -55,6 +55,11 @@ public class QuickQSPanel extends QSPanel {
         applyBottomMargin((View) mRegularTileLayout);
     }
 
+    @Override
+    protected void inflateQSFooter(boolean newFooter) {
+        // No footer
+    }
+
     private void applyBottomMargin(View view) {
         int margin = getResources().getDimensionPixelSize(R.dimen.qs_header_tile_margin_bottom);
         MarginLayoutParams layoutParams = (MarginLayoutParams) view.getLayoutParams();
@@ -69,12 +74,22 @@ public class QuickQSPanel extends QSPanel {
 
     @Override
     public TileLayout createRegularTileLayout() {
-        return new QuickQSPanel.HeaderTileLayout(mContext);
+        if (mSideLabels) {
+            return new QQSSideLabelTileLayout(mContext);
+        } else {
+            return new QuickQSPanel.HeaderTileLayout(mContext);
+        }
     }
 
     @Override
     protected QSTileLayout createHorizontalTileLayout() {
-        return new DoubleLineTileLayout(mContext);
+        if (mSideLabels) {
+            TileLayout t = createRegularTileLayout();
+            t.setMaxColumns(2);
+            return t;
+        } else {
+            return new DoubleLineTileLayout(mContext);
+        }
     }
 
     @Override
@@ -329,6 +344,40 @@ public class QuickQSPanel extends QSPanel {
                             tile.getMetricsSpec(), tile.getInstanceId());
                 }
             }
+        }
+    }
+
+    static class QQSSideLabelTileLayout extends SideLabelTileLayout {
+        QQSSideLabelTileLayout(Context context) {
+            super(context, null);
+            setClipChildren(false);
+            setClipToPadding(false);
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(LayoutParams.MATCH_PARENT,
+                    LayoutParams.WRAP_CONTENT);
+            lp.gravity = Gravity.CENTER_HORIZONTAL;
+            setLayoutParams(lp);
+            setMaxColumns(4);
+        }
+
+        @Override
+        public boolean updateResources() {
+            boolean b = super.updateResources();
+            mMaxAllowedRows = 2;
+            return b;
+        }
+
+        @Override
+        protected void onConfigurationChanged(Configuration newConfig) {
+            super.onConfigurationChanged(newConfig);
+            updateResources();
+        }
+
+        @Override
+        protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+            // Make sure to always use the correct number of rows. As it's determined by the
+            // columns, just use as many as needed.
+            updateMaxRows(10000, mRecords.size());
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
     }
 }

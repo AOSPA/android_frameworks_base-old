@@ -16,238 +16,80 @@
 
 package com.android.systemui.screenshot;
 
-import android.annotation.IdRes;
 import android.annotation.UiThread;
-import android.content.ComponentName;
 import android.content.Context;
-import android.content.Intent;
-import android.graphics.Rect;
 import android.net.Uri;
-import android.os.UserHandle;
 import android.provider.Settings;
-import android.text.TextUtils;
 import android.util.Log;
-import android.view.View;
-import android.view.ViewTreeObserver.InternalInsetsInfo;
-import android.view.ViewTreeObserver.OnComputeInternalInsetsListener;
-import android.view.Window;
-import android.widget.ImageView;
 
-import com.android.internal.logging.UiEventLogger;
-import com.android.systemui.R;
 import com.android.systemui.screenshot.ScrollCaptureClient.CaptureResult;
 import com.android.systemui.screenshot.ScrollCaptureClient.Connection;
 import com.android.systemui.screenshot.ScrollCaptureClient.Session;
-import com.android.systemui.screenshot.TakeScreenshotService.RequestCallback;
-
-import com.google.common.util.concurrent.ListenableFuture;
 
 import java.time.ZonedDateTime;
 import java.util.UUID;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 
 /**
  * Interaction controller between the UI and ScrollCaptureClient.
  */
-public class ScrollCaptureController implements OnComputeInternalInsetsListener {
+public class ScrollCaptureController {
     private static final String TAG = "ScrollCaptureController";
     private static final float MAX_PAGES_DEFAULT = 3f;
 
     private static final String SETTING_KEY_MAX_PAGES = "screenshot.scroll_max_pages";
+    // Portion of the tiles to be acquired above the starting position in infinite scroll
+    // situations. 1.0 means maximize the area above, 0 means just go down.
+    private static final float IDEAL_PORTION_ABOVE = 0.4f;
 
-    private static final int UP = -1;
-    private static final int DOWN = 1;
+    private boolean mScrollingUp = true;
+    // If true, stop acquiring images when no more bitmap data is available in the current direction
+    // or if the desired bitmap size is reached.
+    private boolean mFinishOnBoundary;
 
-    private int mDirection = DOWN;
-    private boolean mAtBottomEdge;
-    private boolean mAtTopEdge;
     private Session mSession;
-
-    // TODO: Support saving without additional action.
-    private enum PendingAction {
-        SHARE,
-        EDIT,
-        SAVE
-    }
 
     public static final int MAX_HEIGHT = 12000;
 
-    private final Connection mConnection;
     private final Context mContext;
 
     private final Executor mUiExecutor;
     private final Executor mBgExecutor;
     private final ImageExporter mImageExporter;
     private final ImageTileSet mImageTileSet;
-    private final UiEventLogger mUiEventLogger;
 
     private ZonedDateTime mCaptureTime;
     private UUID mRequestId;
-    private RequestCallback mCallback;
-    private Window mWindow;
-    private ImageView mPreview;
-    private View mSave;
-    private View mCancel;
-    private View mEdit;
-    private View mShare;
-    private CropView mCropView;
-    private MagnifierView mMagnifierView;
+    private ScrollCaptureCallback mCaptureCallback;
 
-    public ScrollCaptureController(Context context, Connection connection, Executor uiExecutor,
-            Executor bgExecutor, ImageExporter exporter, UiEventLogger uiEventLogger) {
+    public ScrollCaptureController(Context context, Executor uiExecutor, Executor bgExecutor,
+            ImageExporter exporter) {
         mContext = context;
-        mConnection = connection;
         mUiExecutor = uiExecutor;
         mBgExecutor = bgExecutor;
         mImageExporter = exporter;
-        mUiEventLogger = uiEventLogger;
         mImageTileSet = new ImageTileSet(context.getMainThreadHandler());
-    }
-
-    /**
-     * @param window the window to display the preview
-     */
-    public void attach(Window window) {
-        mWindow = window;
     }
 
     /**
      * Run scroll capture!
      *
+     * @param connection connection to the remote window to be used
      * @param callback request callback to report back to the service
      */
-    public void start(RequestCallback callback) {
+    public void start(Connection connection, ScrollCaptureCallback callback) {
         mCaptureTime = ZonedDateTime.now();
         mRequestId = UUID.randomUUID();
-        mCallback = callback;
-
-        setContentView(R.layout.long_screenshot);
-        mWindow.getDecorView().getViewTreeObserver()
-                .addOnComputeInternalInsetsListener(this);
-        mPreview = findViewById(R.id.preview);
-
-        mSave = findViewById(R.id.save);
-        mCancel = findViewById(R.id.cancel);
-        mEdit = findViewById(R.id.edit);
-        mShare = findViewById(R.id.share);
-        mCropView = findViewById(R.id.crop_view);
-        mMagnifierView = findViewById(R.id.magnifier);
-        mCropView.setCropInteractionListener(mMagnifierView);
-
-        mSave.setOnClickListener(this::onClicked);
-        mCancel.setOnClickListener(this::onClicked);
-        mEdit.setOnClickListener(this::onClicked);
-        mShare.setOnClickListener(this::onClicked);
+        mCaptureCallback = callback;
 
         float maxPages = Settings.Secure.getFloat(mContext.getContentResolver(),
                 SETTING_KEY_MAX_PAGES, MAX_PAGES_DEFAULT);
-        mConnection.start(this::startCapture, maxPages);
+        connection.start(this::startCapture, maxPages);
     }
-
-
-    /** Ensure the entire window is touchable */
-    public void onComputeInternalInsets(InternalInsetsInfo inoutInfo) {
-        inoutInfo.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_FRAME);
-    }
-
-    void disableButtons() {
-        mSave.setEnabled(false);
-        mCancel.setEnabled(false);
-        mEdit.setEnabled(false);
-        mShare.setEnabled(false);
-    }
-
-    private void onClicked(View v) {
-        Log.d(TAG, "button clicked!");
-
-        int id = v.getId();
-        v.setPressed(true);
-        disableButtons();
-        if (id == R.id.save) {
-            startExport(PendingAction.SAVE);
-        } else if (id == R.id.cancel) {
-            doFinish();
-        } else if (id == R.id.edit) {
-            mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_LONG_SCREENSHOT_EDIT);
-            startExport(PendingAction.EDIT);
-        } else if (id == R.id.share) {
-            mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_LONG_SCREENSHOT_SHARE);
-            startExport(PendingAction.SHARE);
-        }
-    }
-
-    private void doFinish() {
-        mPreview.setImageDrawable(null);
-        mMagnifierView.setImageTileset(null);
-        mImageTileSet.clear();
-        mCallback.onFinish();
-        mWindow.getDecorView().getViewTreeObserver()
-                .removeOnComputeInternalInsetsListener(this);
-    }
-
-    private void startExport(PendingAction action) {
-        Rect croppedPortion = new Rect(
-                0,
-                (int) (mImageTileSet.getHeight() * mCropView.getTopBoundary()),
-                mImageTileSet.getWidth(),
-                (int) (mImageTileSet.getHeight() * mCropView.getBottomBoundary()));
-        ListenableFuture<ImageExporter.Result> exportFuture = mImageExporter.export(
-                mBgExecutor, mRequestId, mImageTileSet.toBitmap(croppedPortion), mCaptureTime);
-        exportFuture.addListener(() -> {
-            try {
-                ImageExporter.Result result = exportFuture.get();
-                if (action == PendingAction.EDIT) {
-                    doEdit(result.uri);
-                } else if (action == PendingAction.SHARE) {
-                    doShare(result.uri);
-                }
-                doFinish();
-            } catch (InterruptedException | ExecutionException e) {
-                Log.e(TAG, "failed to export", e);
-                mCallback.onFinish();
-            }
-        }, mUiExecutor);
-    }
-
-    private void doEdit(Uri uri) {
-        String editorPackage = mContext.getString(R.string.config_screenshotEditor);
-        Intent intent = new Intent(Intent.ACTION_EDIT);
-        if (!TextUtils.isEmpty(editorPackage)) {
-            intent.setComponent(ComponentName.unflattenFromString(editorPackage));
-        }
-        intent.setType("image/png");
-        intent.setData(uri);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
-                | Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
-
-        mContext.startActivityAsUser(intent, UserHandle.CURRENT);
-    }
-
-    private void doShare(Uri uri) {
-        Intent intent = new Intent(Intent.ACTION_SEND);
-        intent.setType("image/png");
-        intent.setData(uri);
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK
-                | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        Intent sharingChooserIntent = Intent.createChooser(intent, null)
-                .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TASK | Intent.FLAG_ACTIVITY_NEW_TASK
-                        | Intent.FLAG_GRANT_READ_URI_PERMISSION);
-
-        mContext.startActivityAsUser(sharingChooserIntent, UserHandle.CURRENT);
-    }
-
-    private void setContentView(@IdRes int id) {
-        mWindow.setContentView(id);
-    }
-
-    <T extends View> T findViewById(@IdRes int res) {
-        return mWindow.findViewById(res);
-    }
-
 
     private void onCaptureResult(CaptureResult result) {
-        Log.d(TAG, "onCaptureResult: " + result);
+        Log.d(TAG, "onCaptureResult: " + result + " scrolling " + (mScrollingUp ? "UP" : "DOWN")
+                + " finish on boundary: " + mFinishOnBoundary);
         boolean emptyResult = result.captured.height() == 0;
         boolean partialResult = !emptyResult
                 && result.captured.height() < result.requested.height();
@@ -255,34 +97,35 @@ public class ScrollCaptureController implements OnComputeInternalInsetsListener 
 
         if (partialResult || emptyResult) {
             // Potentially reached a vertical boundary. Extend in the other direction.
-            switch (mDirection) {
-                case DOWN:
-                    Log.d(TAG, "Reached bottom edge.");
-                    mAtBottomEdge = true;
-                    mDirection = UP;
-                    break;
-                case UP:
-                    Log.d(TAG, "Reached top edge.");
-                    mAtTopEdge = true;
-                    mDirection = DOWN;
-                    break;
-            }
-
-            if (mAtTopEdge && mAtBottomEdge) {
-                Log.d(TAG, "Reached both top and bottom edge, ending.");
+            if (mFinishOnBoundary) {
+                Log.d(TAG, "Partial/empty: finished!");
                 finish = true;
             } else {
-                // only reverse if the edge was relatively close to the starting point
-                if (mImageTileSet.getHeight() < mSession.getPageHeight() * 3) {
-                    Log.d(TAG, "Restarting in reverse direction.");
-
-                    // Because of temporary limitations, we cannot just jump to the opposite edge
-                    // and continue there. Instead, clear the results and start over capturing from
-                    // here in the other direction.
-                    mImageTileSet.clear();
-                } else {
-                    Log.d(TAG, "Capture is tall enough, stopping here.");
-                    finish = true;
+                // We hit a boundary, clear the tiles, capture everything in the opposite direction,
+                // then finish.
+                mImageTileSet.clear();
+                mFinishOnBoundary = true;
+                mScrollingUp = !mScrollingUp;
+                Log.d(TAG, "Partial/empty: cleared, switch direction to finish");
+            }
+        } else {
+            // Got the full requested result, but may have got enough bitmap data now
+            int expectedTiles = mImageTileSet.size() + 1;
+            if (expectedTiles >= mSession.getMaxTiles()) {
+                Log.d(TAG, "Hit max tiles: finished");
+                // If we ever hit the max tiles, we've got enough bitmap data to finish (even if we
+                // weren't sure we'd finish on this pass).
+                finish = true;
+            } else {
+                if (mScrollingUp && !mFinishOnBoundary) {
+                    // During the initial scroll up, we only want to acquire the portion described
+                    // by IDEAL_PORTION_ABOVE.
+                    if (expectedTiles >= mSession.getMaxTiles() * IDEAL_PORTION_ABOVE) {
+                        Log.d(TAG, "Hit ideal portion above: clear and switch direction");
+                        // We got enough above the start point, now see how far down it can go.
+                        mImageTileSet.clear();
+                        mScrollingUp = false;
+                    }
                 }
             }
         }
@@ -297,9 +140,8 @@ public class ScrollCaptureController implements OnComputeInternalInsetsListener 
 
 
         // Stop when "too tall"
-        if (mImageTileSet.size() >= mSession.getMaxTiles()
-                || mImageTileSet.getHeight() > MAX_HEIGHT) {
-            Log.d(TAG, "Max height and/or tile count reached.");
+        if (mImageTileSet.getHeight() > MAX_HEIGHT) {
+            Log.d(TAG, "Max height reached.");
             finish = true;
         }
 
@@ -311,8 +153,8 @@ public class ScrollCaptureController implements OnComputeInternalInsetsListener 
             return;
         }
 
-        int nextTop = (mDirection == DOWN) ? result.captured.bottom
-                : result.captured.top - mSession.getTileHeight();
+        int nextTop = (mScrollingUp)
+                ? result.captured.top - mSession.getTileHeight() : result.captured.bottom;
         Log.d(TAG, "requestTile: " + nextTop);
         mSession.requestTile(nextTop, /* consumer */ this::onCaptureResult);
     }
@@ -327,11 +169,26 @@ public class ScrollCaptureController implements OnComputeInternalInsetsListener 
         Log.d(TAG, "afterCaptureComplete");
 
         if (mImageTileSet.isEmpty()) {
-            session.end(mCallback::onFinish);
+            mCaptureCallback.onError();
         } else {
-            mPreview.setImageDrawable(mImageTileSet.getDrawable());
-            mMagnifierView.setImageTileset(mImageTileSet);
-            mCropView.animateBoundaryTo(CropView.CropBoundary.BOTTOM, 0.5f);
+            mCaptureCallback.onComplete(mImageTileSet, session.getPageHeight());
         }
     }
+
+    /**
+     * Callback for image capture completion or error.
+     */
+    public interface ScrollCaptureCallback {
+        void onComplete(ImageTileSet imageTileSet, int pageHeight);
+        void onError();
+    }
+
+    /**
+     * Callback for image export completion or error.
+     */
+    public interface ExportCallback {
+        void onExportComplete(Uri outputUri);
+        void onError();
+    }
+
 }

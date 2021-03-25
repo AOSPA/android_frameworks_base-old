@@ -400,6 +400,15 @@
             </intent-filter>
         </activity>
 
+        <activity android:name="StretchySurfaceViewActivity"
+                  android:label="SurfaceView/Stretchy Movement"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="com.android.test.hwui.TEST"/>
+            </intent-filter>
+        </activity>
+
         <activity android:name="GetBitmapSurfaceViewActivity"
              android:label="SurfaceView/GetBitmap with Camera source"
              android:exported="true">
@@ -755,6 +764,24 @@
 
         <activity android:name="RenderEffectShaderActivity"
                   android:label="RenderEffect/Shader"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="com.android.test.hwui.TEST"/>
+            </intent-filter>
+        </activity>
+
+        <activity android:name="StretchShaderActivity"
+                  android:label="RenderEffect/Stretch"
+                  android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="com.android.test.hwui.TEST"/>
+            </intent-filter>
+        </activity>
+
+        <activity android:name="EdgeEffectStretchActivity"
+                  android:label="RenderEffect/EdgeEffect stretch"
                   android:exported="true">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN"/>

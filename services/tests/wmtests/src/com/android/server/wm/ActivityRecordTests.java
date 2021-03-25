@@ -555,9 +555,10 @@ public class ActivityRecordTests extends WindowTestsBase {
         activity.setRequestedOrientation(
                 isScreenPortrait ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
 
-        // Asserts it has orientation derived from bounds.
-        assertEquals(isScreenPortrait ? ORIENTATION_LANDSCAPE : ORIENTATION_PORTRAIT,
+        // Asserts it has orientation derived requested orientation (fixed orientation letterbox).
+        assertEquals(isScreenPortrait ? ORIENTATION_PORTRAIT : ORIENTATION_LANDSCAPE,
                 activity.getConfiguration().orientation);
+        assertTrue(activity.isLetterboxedForFixedOrientationAndAspectRatio());
     }
 
     @Test
@@ -1964,17 +1965,17 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         // Non-resizable
         mAtm.mForceResizableActivities = false;
-        mAtm.mSizeCompatFreeform = false;
+        mAtm.mSupportsNonResizableMultiWindow = false;
         assertFalse(activity.supportsFreeform());
 
         // Force resizable
         mAtm.mForceResizableActivities = true;
-        mAtm.mSizeCompatFreeform = false;
+        mAtm.mSupportsNonResizableMultiWindow = false;
         assertTrue(activity.supportsFreeform());
 
         // Allow non-resizable
         mAtm.mForceResizableActivities = false;
-        mAtm.mSizeCompatFreeform = true;
+        mAtm.mSupportsNonResizableMultiWindow = true;
         assertTrue(activity.supportsFreeform());
     }
 
@@ -2288,7 +2289,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 IWindowManager.FIXED_TO_USER_ROTATION_ENABLED);
         reset(task);
         activity.reportDescendantOrientationChangeIfNeeded();
-        verify(task).onConfigurationChanged(any(Configuration.class));
+        verify(task, atLeast(1)).onConfigurationChanged(any(Configuration.class));
     }
 
     @Test

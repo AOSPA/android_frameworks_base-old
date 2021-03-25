@@ -281,6 +281,26 @@ public class ScrollView extends FrameLayout {
     }
 
     /**
+     * API used for prototyping stretch effect parameters in framework sample apps
+     * @hide
+     */
+    public void setEdgeEffectIntensity(float intensity) {
+        mEdgeGlowTop.setMaxStretchIntensity(intensity);
+        mEdgeGlowBottom.setMaxStretchIntensity(intensity);
+        invalidate();
+    }
+
+    /**
+     * API used for prototyping stretch effect parameters in the framework sample apps
+     * @hide
+     */
+    public void setStretchDistance(float distance) {
+        mEdgeGlowTop.setStretchDistance(distance);
+        mEdgeGlowBottom.setStretchDistance(distance);
+        invalidate();
+    }
+
+    /**
      * Sets the bottom edge effect color.
      *
      * @param color The color for the bottom edge effect.
@@ -332,6 +352,27 @@ public class ScrollView extends FrameLayout {
     @ColorInt
     public int getBottomEdgeEffectColor() {
         return mEdgeGlowBottom.getColor();
+    }
+
+    /**
+     * Returns the {@link EdgeEffect#getType()} for the edge effects.
+     * @return the {@link EdgeEffect#getType()} for the edge effects.
+     * @attr ref android.R.styleable#EdgeEffect_edgeEffectType
+     */
+    @EdgeEffect.EdgeEffectType
+    public int getEdgeEffectType() {
+        return mEdgeGlowTop.getType();
+    }
+
+    /**
+     * Sets the {@link EdgeEffect#setType(int)} for the edge effects.
+     * @param type The edge effect type to use for the edge effects.
+     * @attr ref android.R.styleable#EdgeEffect_edgeEffectType
+     */
+    public void setEdgeEffectType(@EdgeEffect.EdgeEffectType int type) {
+        mEdgeGlowTop.setType(type);
+        mEdgeGlowBottom.setType(type);
+        invalidate();
     }
 
     /**

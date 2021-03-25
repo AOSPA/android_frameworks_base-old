@@ -479,6 +479,8 @@ interface IDevicePolicyManager {
 
     boolean setKeyGrantForApp(in ComponentName admin, String callerPackage, String alias, String packageName, boolean hasGrant);
     List<String> getKeyPairGrants(in String callerPackage, in String alias);
+    boolean setKeyGrantToWifiAuth(String callerPackage, String alias, boolean hasGrant);
+    boolean isKeyPairGrantedToWifiAuth(String callerPackage, String alias);
 
     void setUserControlDisabledPackages(in ComponentName admin, in List<String> packages);
 
@@ -502,6 +504,9 @@ interface IDevicePolicyManager {
 
     UserHandle createAndProvisionManagedProfile(in ManagedProfileProvisioningParams provisioningParams, in String callerPackage);
     void provisionFullyManagedDevice(in FullyManagedDeviceProvisioningParams provisioningParams, in String callerPackage);
+
+    void setDeviceOwnerType(in ComponentName admin, in int deviceOwnerType);
+    int getDeviceOwnerType(in ComponentName admin);
 
     void resetDefaultCrossProfileIntentFilters(int userId);
     boolean canAdminGrantSensorsPermissionsForUser(int userId);

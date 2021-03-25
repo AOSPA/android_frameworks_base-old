@@ -84,8 +84,7 @@
     <uses-permission android:name="android.permission.READ_INPUT_STATE" />
     <uses-permission android:name="android.permission.SET_ORIENTATION" />
     <uses-permission android:name="android.permission.INSTALL_PACKAGES" />
-    <!--  TODO(b/152310230): remove once APIs are confirmed to be sufficient -->
-    <uses-permission android:name="com.android.permission.USE_INSTALLER_V2" />
+    <uses-permission android:name="com.android.permission.USE_SYSTEM_DATA_LOADERS" />
     <uses-permission android:name="android.permission.MOVE_PACKAGE" />
     <uses-permission android:name="android.permission.KEEP_UNINSTALLED_PACKAGES" />
     <uses-permission android:name="android.permission.CLEAR_APP_USER_DATA" />
@@ -124,6 +123,8 @@
     <uses-permission android:name="android.permission.MANAGE_CREDENTIAL_MANAGEMENT_APP" />
     <uses-permission android:name="android.permission.MANAGE_DEVICE_ADMINS" />
     <uses-permission android:name="android.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS" />
+    <uses-permission android:name="android.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS" />
+    <uses-permission android:name="android.permission.CLEAR_FREEZE_PERIOD" />
     <uses-permission android:name="android.permission.QUERY_USERS" />
     <uses-permission android:name="android.permission.MODIFY_QUIET_MODE" />
     <uses-permission android:name="android.permission.ACCESS_LOWPAN_STATE"/>
@@ -163,6 +164,7 @@
     <uses-permission android:name="android.permission.MANAGE_APP_PREDICTIONS" />
     <uses-permission android:name="android.permission.MANAGE_SEARCH_UI" />
     <uses-permission android:name="android.permission.MANAGE_SMARTSPACE" />
+    <uses-permission android:name="android.permission.MANAGE_UI_TRANSLATION" />
     <uses-permission android:name="android.permission.NETWORK_SETTINGS" />
     <uses-permission android:name="android.permission.CHANGE_WIFI_STATE" />
     <uses-permission android:name="android.permission.SET_TIME" />
@@ -294,6 +296,9 @@
     <!-- Permission needed for CTS test - MusicRecognitionManagerTest -->
     <uses-permission android:name="android.permission.MANAGE_MUSIC_RECOGNITION" />
 
+    <!-- Permission needed for CTS test - CtsVoiceRecognitionTestCases -->
+    <uses-permission android:name="android.permission.MANAGE_SPEECH_RECOGNITION" />
+
     <!-- Permissions required to test ambient display. -->
     <uses-permission android:name="android.permission.READ_DREAM_STATE"/>
     <uses-permission android:name="android.permission.WRITE_DREAM_STATE"/>
@@ -397,6 +402,7 @@
 
     <!-- Permission required for CTS to test sensor privacy behavior -->
     <uses-permission android:name="android.permission.MANAGE_SENSOR_PRIVACY" />
+    <uses-permission android:name="android.permission.OBSERVE_SENSOR_PRIVACY" />
 
     <!-- Permission needed for CTS test - CallLogTest -->
     <uses-permission android:name="com.android.voicemail.permission.READ_VOICEMAIL" />
@@ -404,7 +410,6 @@
     <!-- Permission required for GTS test - GtsAssistIntentTestCases -->
     <uses-permission android:name="android.permission.MANAGE_SOUND_TRIGGER" />
     <uses-permission android:name="android.permission.CAPTURE_AUDIO_HOTWORD" />
-    <uses-permission android:name="android.permission.BIND_VOICE_INTERACTION" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
     <uses-permission android:name="android.permission.DOWNLOAD_WITHOUT_NOTIFICATION" />
     <uses-permission android:name="android.permission.BIND_RESUME_ON_REBOOT_SERVICE" />
@@ -414,6 +419,12 @@
 
     <!-- Permission required for CTS test - PeopleManagerTest -->
     <uses-permission android:name="android.permission.READ_PEOPLE_DATA" />
+
+    <!-- Permission required for CTS test - CtsGameManagerTestCases -->
+    <uses-permission android:name="android.permission.MANAGE_GAME_MODE" />
+
+    <!-- Permission required for CTS test - ClipboardManagerTest -->
+    <uses-permission android:name="android.permission.SET_CLIP_SOURCE" />
 
     <application android:label="@string/app_label"
                 android:theme="@android:style/Theme.DeviceDefault.DayNight"

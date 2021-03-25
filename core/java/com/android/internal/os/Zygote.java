@@ -18,8 +18,8 @@ package com.android.internal.os;
 
 import static android.system.OsConstants.O_CLOEXEC;
 
-import static com.android.internal.os.ZygoteConnectionConstants.MAX_ZYGOTE_ARGC;
-
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.content.pm.ApplicationInfo;
 import android.net.Credentials;
 import android.net.LocalServerSocket;
@@ -36,17 +36,16 @@ import android.util.Log;
 
 import com.android.internal.net.NetworkUtilsInternal;
 
+import dalvik.annotation.optimization.CriticalNative;
 import dalvik.annotation.optimization.FastNative;
 import dalvik.system.ZygoteHooks;
 
 import libcore.io.IoUtils;
 
-import java.io.BufferedReader;
 import java.io.ByteArrayOutputStream;
 import java.io.DataOutputStream;
 import java.io.FileDescriptor;
 import java.io.IOException;
-import java.io.InputStreamReader;
 
 /** @hide */
 public final class Zygote {
@@ -103,7 +102,7 @@ public final class Zygote {
      */
     public static final int PROFILE_FROM_SHELL = 1 << 15;
 
-    /**
+    /*
      * Enable using the ART app image startup cache
      */
     public static final int USE_APP_IMAGE_STARTUP_CACHE = 1 << 16;
@@ -115,6 +114,13 @@ public final class Zygote {
      * Used for debugging only. Usage: set debug.ignoreappsignalhandler to 1.
      */
     public static final int DEBUG_IGNORE_APP_SIGNAL_HANDLER = 1 << 17;
+
+    /**
+     * Disable runtime access to {@link android.annotation.TestApi} annotated members.
+     *
+     * <p>This only takes effect if Hidden API access restrictions are enabled as well.
+     */
+    public static final int DISABLE_TEST_API_ENFORCEMENT_POLICY = 1 << 18;
 
     public static final int MEMORY_TAG_LEVEL_MASK = (1 << 19) | (1 << 20);
 
@@ -196,7 +202,7 @@ public final class Zygote {
     public static final String PKG_DATA_INFO_MAP = "--pkg-data-info-map";
 
     /** List of allowlisted packages and its app data info: volume uuid and inode. */
-    public static final String WHITELISTED_DATA_INFO_MAP = "--whitelisted-data-info-map";
+    public static final String ALLOWLISTED_DATA_INFO_MAP = "--allowlisted-data-info-map";
 
     /** Bind mount app storage dirs to lower fs not via fuse */
     public static final String BIND_MOUNT_APP_STORAGE_DIRS = "--bind-mount-storage-dirs";
@@ -230,6 +236,8 @@ public final class Zygote {
      * will be enforced with a seccomp filter.
      */
     public static final String CHILD_ZYGOTE_UID_RANGE_END = "--uid-range-end=";
+
+    private static final String TAG = "Zygote";
 
     /** Prefix prepended to socket names created by init */
     private static final String ANDROID_SOCKET_PREFIX = "ANDROID_SOCKET_";
@@ -316,7 +324,7 @@ public final class Zygote {
      * @param isTopApp true if the process is for top (high priority) application.
      * @param pkgDataInfoList A list that stores related packages and its app data
      * info: volume uuid and inode.
-     * @param whitelistedDataInfoList Like pkgDataInfoList, but it's for allowlisted apps.
+     * @param allowlistedDataInfoList Like pkgDataInfoList, but it's for allowlisted apps.
      * @param bindMountAppDataDirs  True if the zygote needs to mount data dirs.
      * @param bindMountAppStorageDirs  True if the zygote needs to mount storage dirs.
      *
@@ -326,14 +334,14 @@ public final class Zygote {
     static int forkAndSpecialize(int uid, int gid, int[] gids, int runtimeFlags,
             int[][] rlimits, int mountExternal, String seInfo, String niceName, int[] fdsToClose,
             int[] fdsToIgnore, boolean startChildZygote, String instructionSet, String appDataDir,
-            boolean isTopApp, String[] pkgDataInfoList, String[] whitelistedDataInfoList,
+            boolean isTopApp, String[] pkgDataInfoList, String[] allowlistedDataInfoList,
             boolean bindMountAppDataDirs, boolean bindMountAppStorageDirs) {
         ZygoteHooks.preFork();
 
         int pid = nativeForkAndSpecialize(
                 uid, gid, gids, runtimeFlags, rlimits, mountExternal, seInfo, niceName, fdsToClose,
                 fdsToIgnore, startChildZygote, instructionSet, appDataDir, isTopApp,
-                pkgDataInfoList, whitelistedDataInfoList, bindMountAppDataDirs,
+                pkgDataInfoList, allowlistedDataInfoList, bindMountAppDataDirs,
                 bindMountAppStorageDirs);
         if (pid == 0) {
             // Note that this event ends at the end of handleChildProc,
@@ -356,7 +364,7 @@ public final class Zygote {
             int runtimeFlags, int[][] rlimits, int mountExternal, String seInfo, String niceName,
             int[] fdsToClose, int[] fdsToIgnore, boolean startChildZygote, String instructionSet,
             String appDataDir, boolean isTopApp, String[] pkgDataInfoList,
-            String[] whitelistedDataInfoList, boolean bindMountAppDataDirs,
+            String[] allowlistedDataInfoList, boolean bindMountAppDataDirs,
             boolean bindMountAppStorageDirs);
 
     /**
@@ -384,22 +392,26 @@ public final class Zygote {
      * volume uuid and CE dir inode. For example, pkgDataInfoList = [app_a_pkg_name,
      * app_a_data_volume_uuid, app_a_ce_inode, app_b_pkg_name, app_b_data_volume_uuid,
      * app_b_ce_inode, ...];
-     * @param whitelistedDataInfoList Like pkgDataInfoList, but it's for allowlisted apps.
+     * @param allowlistedDataInfoList Like pkgDataInfoList, but it's for allowlisted apps.
      * @param bindMountAppDataDirs  True if the zygote needs to mount data dirs.
      * @param bindMountAppStorageDirs  True if the zygote needs to mount storage dirs.
      */
     private static void specializeAppProcess(int uid, int gid, int[] gids, int runtimeFlags,
             int[][] rlimits, int mountExternal, String seInfo, String niceName,
             boolean startChildZygote, String instructionSet, String appDataDir, boolean isTopApp,
-            String[] pkgDataInfoList, String[] whitelistedDataInfoList,
+            String[] pkgDataInfoList, String[] allowlistedDataInfoList,
             boolean bindMountAppDataDirs, boolean bindMountAppStorageDirs) {
         nativeSpecializeAppProcess(uid, gid, gids, runtimeFlags, rlimits, mountExternal, seInfo,
                 niceName, startChildZygote, instructionSet, appDataDir, isTopApp,
-                pkgDataInfoList, whitelistedDataInfoList,
+                pkgDataInfoList, allowlistedDataInfoList,
                 bindMountAppDataDirs, bindMountAppStorageDirs);
 
         // Note that this event ends at the end of handleChildProc.
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "PostFork");
+
+        if (gids != null && gids.length > 0) {
+            NetworkUtilsInternal.setAllowNetworkingForProcess(containsInetGid(gids));
+        }
 
         // Set the Java Language thread priority to the default value for new apps.
         Thread.currentThread().setPriority(Thread.NORM_PRIORITY);
@@ -416,7 +428,7 @@ public final class Zygote {
     private static native void nativeSpecializeAppProcess(int uid, int gid, int[] gids,
             int runtimeFlags, int[][] rlimits, int mountExternal, String seInfo, String niceName,
             boolean startChildZygote, String instructionSet, String appDataDir, boolean isTopApp,
-            String[] pkgDataInfoList, String[] whitelistedDataInfoList,
+            String[] pkgDataInfoList, String[] allowlistedDataInfoList,
             boolean bindMountAppDataDirs, boolean bindMountAppStorageDirs);
 
     /**
@@ -573,114 +585,163 @@ public final class Zygote {
     private static native int nativeGetUsapPoolEventFD();
 
     /**
-     * Fork a new unspecialized app process from the zygote
+     * Fork a new unspecialized app process from the zygote. Adds the Usap to the native
+     * Usap table.
      *
      * @param usapPoolSocket  The server socket the USAP will call accept on
-     * @param sessionSocketRawFDs  Anonymous session sockets that are currently open
-     * @param isPriorityFork  Value controlling the process priority level until accept is called
-     * @return In the Zygote process this function will always return null; in unspecialized app
-     *         processes this function will return a Runnable object representing the new
-     *         application that is passed up from usapMain.
+     * @param sessionSocketRawFDs  Anonymous session sockets that are currently open.
+     *         These are closed in the child.
+     * @param isPriorityFork Raise the initial process priority level because this is on the
+     *         critical path for application startup.
+     * @return In the child process, this returns a Runnable that waits for specialization
+     *         info to start an app process. In the sygote/parent process this returns null.
      */
-    static Runnable forkUsap(LocalServerSocket usapPoolSocket,
-                             int[] sessionSocketRawFDs,
-                             boolean isPriorityFork) {
-        FileDescriptor[] pipeFDs;
+    static @Nullable Runnable forkUsap(LocalServerSocket usapPoolSocket,
+                                       int[] sessionSocketRawFDs,
+                                       boolean isPriorityFork) {
+        FileDescriptor readFD;
+        FileDescriptor writeFD;
 
         try {
-            pipeFDs = Os.pipe2(O_CLOEXEC);
+            FileDescriptor[] pipeFDs = Os.pipe2(O_CLOEXEC);
+            readFD = pipeFDs[0];
+            writeFD = pipeFDs[1];
         } catch (ErrnoException errnoEx) {
             throw new IllegalStateException("Unable to create USAP pipe.", errnoEx);
         }
 
-        int pid =
-                nativeForkUsap(pipeFDs[0].getInt$(), pipeFDs[1].getInt$(),
-                               sessionSocketRawFDs, isPriorityFork);
-
+        int pid = nativeForkApp(readFD.getInt$(), writeFD.getInt$(),
+                                sessionSocketRawFDs, /*argsKnown=*/ false, isPriorityFork);
         if (pid == 0) {
-            IoUtils.closeQuietly(pipeFDs[0]);
-            return usapMain(usapPoolSocket, pipeFDs[1]);
+            IoUtils.closeQuietly(readFD);
+            return childMain(null, usapPoolSocket, writeFD);
+        } else if (pid == -1) {
+            // Fork failed.
+            return null;
         } else {
-            // The read-end of the pipe will be closed by the native code.
-            // See removeUsapTableEntry();
-            IoUtils.closeQuietly(pipeFDs[1]);
+            // readFD will be closed by the native code. See removeUsapTableEntry();
+            IoUtils.closeQuietly(writeFD);
+            nativeAddUsapTableEntry(pid, readFD.getInt$());
             return null;
         }
     }
 
-    private static native int nativeForkUsap(int readPipeFD,
-                                             int writePipeFD,
-                                             int[] sessionSocketRawFDs,
-                                             boolean isPriorityFork);
+    private static native int nativeForkApp(int readPipeFD,
+                                            int writePipeFD,
+                                            int[] sessionSocketRawFDs,
+                                            boolean argsKnown,
+                                            boolean isPriorityFork);
 
     /**
-     * This function is used by unspecialized app processes to wait for specialization requests from
-     * the system server.
+     * Add an entry for a new Usap to the table maintained in native code.
+     */
+    @CriticalNative
+    private static native void nativeAddUsapTableEntry(int pid, int readPipeFD);
+
+    /**
+     * Fork a new app process from the zygote. argBuffer contains a fork command that
+     * request neither a child zygote, nor a wrapped process. Continue to accept connections
+     * on the specified socket, use those to refill argBuffer, and continue to process
+     * sufficiently simple fork requests. We presume that the only open file descriptors
+     * requiring special treatment are the session socket embedded in argBuffer, and
+     * zygoteSocket.
+     * @param argBuffer containing initial command and the connected socket from which to
+     *         read more
+     * @param zygoteSocket socket from which to obtain new connections when current argBuffer
+     *         one is disconnected
+     * @param expectedUId Uid of peer for initial requests. Subsequent requests from a different
+     *               peer will cause us to return rather than perform the requested fork.
+     * @param minUid Minimum Uid enforced for all but first fork request. The caller checks
+     *               the Uid policy for the initial request.
+     * @param firstNiceName name of first created process. Used for error reporting only.
+     * @return A Runnable in each child process, null in the parent.
+     * If this returns in then argBuffer still contains a command needing to be executed.
+     */
+    static @Nullable Runnable forkSimpleApps(@NonNull ZygoteCommandBuffer argBuffer,
+                                             @NonNull FileDescriptor zygoteSocket,
+                                             int expectedUid,
+                                             int minUid,
+                                             @Nullable String firstNiceName) {
+        boolean in_child =
+                argBuffer.forkRepeatedly(zygoteSocket, expectedUid, minUid, firstNiceName);
+        if (in_child) {
+            return childMain(argBuffer, /*usapPoolSocket=*/null, /*writePipe=*/null);
+        } else {
+            return null;
+        }
+    }
+
+    /**
+     * Specialize the current process into one described by argBuffer or the command read from
+     * usapPoolSocket. Exactly one of those must be null. If we are given an argBuffer, we close
+     * it. Used both for a specializing a USAP process, and for process creation without USAPs.
+     * In both cases, we specialize the process after first returning to Java code.
      *
      * @param writePipe  The write end of the reporting pipe used to communicate with the poll loop
      *                   of the ZygoteServer.
      * @return A runnable oject representing the new application.
      */
-    private static Runnable usapMain(LocalServerSocket usapPoolSocket,
-                                     FileDescriptor writePipe) {
+    private static Runnable childMain(@Nullable ZygoteCommandBuffer argBuffer,
+                                      @Nullable LocalServerSocket usapPoolSocket,
+                                      FileDescriptor writePipe) {
         final int pid = Process.myPid();
-        Process.setArgV0(Process.is64Bit() ? "usap64" : "usap32");
 
-        LocalSocket sessionSocket = null;
         DataOutputStream usapOutputStream = null;
-        Credentials peerCredentials = null;
         ZygoteArguments args = null;
 
-        // Change the priority to max before calling accept so we can respond to new specialization
-        // requests as quickly as possible.  This will be reverted to the default priority in the
-        // native specialization code.
-        boostUsapPriority();
+        // Block SIGTERM so we won't be killed if the Zygote flushes the USAP pool.
+        blockSigTerm();
 
-        while (true) {
-            try {
-                sessionSocket = usapPoolSocket.accept();
+        LocalSocket sessionSocket = null;
+        if (argBuffer == null) {
+            // Read arguments from usapPoolSocket instead.
 
-                // Block SIGTERM so we won't be killed if the Zygote flushes the USAP pool.
-                blockSigTerm();
+            Process.setArgV0(Process.is64Bit() ? "usap64" : "usap32");
 
-                BufferedReader usapReader =
-                        new BufferedReader(new InputStreamReader(sessionSocket.getInputStream()));
-                usapOutputStream =
-                        new DataOutputStream(sessionSocket.getOutputStream());
+            // Change the priority to max before calling accept so we can respond to new
+            // specialization requests as quickly as possible.  This will be reverted to the
+            // default priority in the native specialization code.
+            boostUsapPriority();
 
-                peerCredentials = sessionSocket.getPeerCredentials();
+            while (true) {
+                ZygoteCommandBuffer tmpArgBuffer = null;
+                try {
+                    sessionSocket = usapPoolSocket.accept();
 
-                String[] argStrings = readArgumentList(usapReader);
-
-                if (argStrings != null) {
-                    args = new ZygoteArguments(argStrings);
-
+                    usapOutputStream =
+                            new DataOutputStream(sessionSocket.getOutputStream());
+                    Credentials peerCredentials = sessionSocket.getPeerCredentials();
+                    tmpArgBuffer = new ZygoteCommandBuffer(sessionSocket);
+                    args = ZygoteArguments.getInstance(argBuffer);
+                    applyUidSecurityPolicy(args, peerCredentials);
                     // TODO (chriswailes): Should this only be run for debug builds?
                     validateUsapCommand(args);
                     break;
-                } else {
-                    Log.e("USAP", "Truncated command received.");
-                    IoUtils.closeQuietly(sessionSocket);
-
-                    // Re-enable SIGTERM so the USAP can be flushed from the pool if necessary.
-                    unblockSigTerm();
+                } catch (Exception ex) {
+                    Log.e("USAP", ex.getMessage());
                 }
-            } catch (Exception ex) {
-                Log.e("USAP", ex.getMessage());
-                IoUtils.closeQuietly(sessionSocket);
-
                 // Re-enable SIGTERM so the USAP can be flushed from the pool if necessary.
                 unblockSigTerm();
+                IoUtils.closeQuietly(sessionSocket);
+                IoUtils.closeQuietly(tmpArgBuffer);
+                blockSigTerm();
             }
+        } else {
+            try {
+                args = ZygoteArguments.getInstance(argBuffer);
+            } catch (Exception ex) {
+                Log.e("AppStartup", ex.getMessage());
+                throw new AssertionError("Failed to parse application start command", ex);
+            }
+            // peerCredentials were checked in parent.
         }
-
+        if (args == null) {
+            throw new AssertionError("Empty command line");
+        }
         try {
-            // SIGTERM is blocked on loop exit.  This prevents a USAP that is specializing from
-            // being killed during a pool flush.
+            // SIGTERM is blocked here.  This prevents a USAP that is specializing from being
+            // killed during a pool flush.
 
-            setAppProcessName(args, "USAP");
-
-            applyUidSecurityPolicy(args, peerCredentials);
             applyDebuggerSystemProperty(args);
 
             int[][] rlimits = null;
@@ -689,60 +750,64 @@ public final class Zygote {
                 rlimits = args.mRLimits.toArray(INT_ARRAY_2D);
             }
 
-            // This must happen before the SELinux policy for this process is
-            // changed when specializing.
-            try {
-                // Used by ZygoteProcess.zygoteSendArgsAndGetResult to fill in a
-                // Process.ProcessStartResult object.
-                usapOutputStream.writeInt(pid);
-            } catch (IOException ioEx) {
-                Log.e("USAP", "Failed to write response to session socket: "
-                        + ioEx.getMessage());
-                throw new RuntimeException(ioEx);
-            } finally {
-                IoUtils.closeQuietly(sessionSocket);
-
+            if (argBuffer == null) {
+                // This must happen before the SELinux policy for this process is
+                // changed when specializing.
                 try {
-                    // This socket is closed using Os.close due to an issue with the implementation
-                    // of LocalSocketImp.close().  Because the raw FD is created by init and then
-                    // loaded from an environment variable (as opposed to being created by the
-                    // LocalSocketImpl itself) the current implementation will not actually close
-                    // the underlying FD.
-                    //
-                    // See b/130309968 for discussion of this issue.
-                    Os.close(usapPoolSocket.getFileDescriptor());
-                } catch (ErrnoException ex) {
-                    Log.e("USAP", "Failed to close USAP pool socket");
-                    throw new RuntimeException(ex);
+                    // Used by ZygoteProcess.zygoteSendArgsAndGetResult to fill in a
+                    // Process.ProcessStartResult object.
+                    usapOutputStream.writeInt(pid);
+                } catch (IOException ioEx) {
+                    Log.e("USAP", "Failed to write response to session socket: "
+                            + ioEx.getMessage());
+                    throw new RuntimeException(ioEx);
+                } finally {
+                    try {
+                        // Since the raw FD is created by init and then loaded from an environment
+                        // variable (as opposed to being created by the LocalSocketImpl itself),
+                        // the LocalSocket/LocalSocketImpl does not own the Os-level socket. See
+                        // the spec for LocalSocket.createConnectedLocalSocket(FileDescriptor fd).
+                        // Thus closing the LocalSocket does not suffice. See b/130309968 for more
+                        // discussion.
+                        FileDescriptor fd = usapPoolSocket.getFileDescriptor();
+                        usapPoolSocket.close();
+                        Os.close(fd);
+                    } catch (ErrnoException | IOException ex) {
+                        Log.e("USAP", "Failed to close USAP pool socket");
+                        throw new RuntimeException(ex);
+                    }
                 }
             }
 
-            try {
-                ByteArrayOutputStream buffer =
-                        new ByteArrayOutputStream(Zygote.USAP_MANAGEMENT_MESSAGE_BYTES);
-                DataOutputStream outputStream = new DataOutputStream(buffer);
+            if (writePipe != null) {
+                try {
+                    ByteArrayOutputStream buffer =
+                            new ByteArrayOutputStream(Zygote.USAP_MANAGEMENT_MESSAGE_BYTES);
+                    DataOutputStream outputStream = new DataOutputStream(buffer);
 
-                // This is written as a long so that the USAP reporting pipe and USAP pool event FD
-                // handlers in ZygoteServer.runSelectLoop can be unified.  These two cases should
-                // both send/receive 8 bytes.
-                outputStream.writeLong(pid);
-                outputStream.flush();
-
-                Os.write(writePipe, buffer.toByteArray(), 0, buffer.size());
-            } catch (Exception ex) {
-                Log.e("USAP",
-                        String.format("Failed to write PID (%d) to pipe (%d): %s",
-                                pid, writePipe.getInt$(), ex.getMessage()));
-                throw new RuntimeException(ex);
-            } finally {
-                IoUtils.closeQuietly(writePipe);
+                    // This is written as a long so that the USAP reporting pipe and USAP pool
+                    // event FD handlers in ZygoteServer.runSelectLoop can be unified.  These two
+                    // cases should both send/receive 8 bytes.
+                    // TODO: Needs tweaking to handle the non-Usap invoke-with case, which expects
+                    // a different format.
+                    outputStream.writeLong(pid);
+                    outputStream.flush();
+                    Os.write(writePipe, buffer.toByteArray(), 0, buffer.size());
+                } catch (Exception ex) {
+                    Log.e("USAP",
+                            String.format("Failed to write PID (%d) to pipe (%d): %s",
+                                    pid, writePipe.getInt$(), ex.getMessage()));
+                    throw new RuntimeException(ex);
+                } finally {
+                    IoUtils.closeQuietly(writePipe);
+                }
             }
 
             specializeAppProcess(args.mUid, args.mGid, args.mGids,
                                  args.mRuntimeFlags, rlimits, args.mMountExternal,
                                  args.mSeInfo, args.mNiceName, args.mStartChildZygote,
                                  args.mInstructionSet, args.mAppDataDir, args.mIsTopApp,
-                                 args.mPkgDataInfoList, args.mWhitelistedDataInfoList,
+                                 args.mPkgDataInfoList, args.mAllowlistedDataInfoList,
                                  args.mBindMountAppDataDirs, args.mBindMountAppStorageDirs);
 
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
@@ -842,13 +907,29 @@ public final class Zygote {
         return nativeRemoveUsapTableEntry(usapPID);
     }
 
+    @CriticalNative
     private static native boolean nativeRemoveUsapTableEntry(int usapPID);
 
     /**
-     * uid 1000 (Process.SYSTEM_UID) may specify any uid &gt; 1000 in normal
+     * Return the minimum child uid that the given peer is allowed to create.
+     * uid 1000 (Process.SYSTEM_UID) may specify any uid &ge; 1000 in normal
      * operation. It may also specify any gid and setgroups() list it chooses.
      * In factory test mode, it may specify any UID.
-     *
+     */
+    static int minChildUid(Credentials peer) {
+        if (peer.getUid() == Process.SYSTEM_UID
+                && FactoryTest.getMode() == FactoryTest.FACTORY_TEST_OFF) {
+            /* In normal operation, SYSTEM_UID can only specify a restricted
+             * set of UIDs. In factory test mode, SYSTEM_UID may specify any uid.
+             */
+            return Process.SYSTEM_UID;
+        } else {
+            return 0;
+        }
+    }
+
+    /*
+     * Adjust uid and gid arguments, ensuring that the security policy is satisfied.
      * @param args non-null; zygote spawner arguments
      * @param peer non-null; peer credentials
      * @throws ZygoteSecurityException Indicates a security issue when applying the UID based
@@ -857,17 +938,10 @@ public final class Zygote {
     static void applyUidSecurityPolicy(ZygoteArguments args, Credentials peer)
             throws ZygoteSecurityException {
 
-        if (peer.getUid() == Process.SYSTEM_UID) {
-            /* In normal operation, SYSTEM_UID can only specify a restricted
-             * set of UIDs. In factory test mode, SYSTEM_UID may specify any uid.
-             */
-            boolean uidRestricted = FactoryTest.getMode() == FactoryTest.FACTORY_TEST_OFF;
-
-            if (uidRestricted && args.mUidSpecified && (args.mUid < Process.SYSTEM_UID)) {
-                throw new ZygoteSecurityException(
-                        "System UID may not launch process with UID < "
-                        + Process.SYSTEM_UID);
-            }
+        if (args.mUidSpecified && (args.mUid < minChildUid(peer))) {
+            throw new ZygoteSecurityException(
+                    "System UID may not launch process with UID < "
+                    + Process.SYSTEM_UID);
         }
 
         // If not otherwise specified, uid and gid are inherited from peer
@@ -950,45 +1024,6 @@ public final class Zygote {
         if (args.mInvokeWith == null) {
             args.mInvokeWith = getWrapProperty(args.mNiceName);
         }
-    }
-
-    /**
-     * Reads an argument list from the provided socket
-     * @return Argument list or null if EOF is reached
-     * @throws IOException passed straight through
-     */
-    static String[] readArgumentList(BufferedReader socketReader) throws IOException {
-        int argc;
-
-        try {
-            String argc_string = socketReader.readLine();
-
-            if (argc_string == null) {
-                // EOF reached.
-                return null;
-            }
-            argc = Integer.parseInt(argc_string);
-
-        } catch (NumberFormatException ex) {
-            Log.e("Zygote", "Invalid Zygote wire format: non-int at argc");
-            throw new IOException("Invalid wire format");
-        }
-
-        // See bug 1092107: large argc can be used for a DOS attack
-        if (argc > MAX_ZYGOTE_ARGC) {
-            throw new IOException("Max arg count exceeded");
-        }
-
-        String[] args = new String[argc];
-        for (int arg_index = 0; arg_index < argc; arg_index++) {
-            args[arg_index] = socketReader.readLine();
-            if (args[arg_index] == null) {
-                // We got an unexpected EOF.
-                throw new IOException("Truncated request");
-            }
-        }
-
-        return args;
     }
 
     /**

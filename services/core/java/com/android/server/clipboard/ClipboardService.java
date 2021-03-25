@@ -52,6 +52,7 @@ import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.text.TextUtils;
 import android.util.Slog;
@@ -59,9 +60,10 @@ import android.util.SparseArray;
 import android.view.autofill.AutofillManagerInternal;
 import android.widget.Toast;
 
+import com.android.internal.R;
+import com.android.internal.annotations.GuardedBy;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
-import com.android.server.SystemService.TargetUser;
 import com.android.server.UiThread;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
@@ -164,6 +166,10 @@ public class ClipboardService extends SystemService {
     private static final boolean IS_EMULATOR =
         SystemProperties.getBoolean("ro.kernel.qemu", false);
 
+    // DeviceConfig properties
+    private static final String PROPERTY_SHOW_ACCESS_NOTIFICATIONS = "show_access_notifications";
+    private static final boolean DEFAULT_SHOW_ACCESS_NOTIFICATIONS = true;
+
     private final ActivityManagerInternal mAmInternal;
     private final IUriGrantsManager mUgm;
     private final UriGrantsManagerInternal mUgmInternal;
@@ -174,10 +180,15 @@ public class ClipboardService extends SystemService {
     private final ContentCaptureManagerInternal mContentCaptureInternal;
     private final AutofillManagerInternal mAutofillInternal;
     private final IBinder mPermissionOwner;
-    private HostClipboardMonitor mHostClipboardMonitor = null;
-    private Thread mHostMonitorThread = null;
+    private final HostClipboardMonitor mHostClipboardMonitor;
 
+    @GuardedBy("mLock")
     private final SparseArray<PerUserClipboard> mClipboards = new SparseArray<>();
+
+    @GuardedBy("mLock")
+    private boolean mShowAccessNotifications = DEFAULT_SHOW_ACCESS_NOTIFICATIONS;
+
+    private final Object mLock = new Object();
 
     /**
      * Instantiates the clipboard.
@@ -205,15 +216,21 @@ public class ClipboardService extends SystemService {
                             new ClipData("host clipboard",
                                          new String[]{"text/plain"},
                                          new ClipData.Item(contents));
-                        synchronized(mClipboards) {
-                            setPrimaryClipInternal(getClipboard(0), clip,
-                                    android.os.Process.SYSTEM_UID);
+                        synchronized (mLock) {
+                            setPrimaryClipInternalLocked(getClipboardLocked(0), clip,
+                                    android.os.Process.SYSTEM_UID, null);
                         }
                     }
                 });
-            mHostMonitorThread = new Thread(mHostClipboardMonitor);
-            mHostMonitorThread.start();
+            Thread hostMonitorThread = new Thread(mHostClipboardMonitor);
+            hostMonitorThread.start();
+        } else {
+            mHostClipboardMonitor = null;
         }
+
+        updateConfig();
+        DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_CLIPBOARD,
+                getContext().getMainExecutor(), properties -> updateConfig());
     }
 
     @Override
@@ -223,8 +240,15 @@ public class ClipboardService extends SystemService {
 
     @Override
     public void onUserStopped(@NonNull TargetUser user) {
-        synchronized (mClipboards) {
+        synchronized (mLock) {
             mClipboards.remove(user.getUserIdentifier());
+        }
+    }
+
+    private void updateConfig() {
+        synchronized (mLock) {
+            mShowAccessNotifications = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_CLIPBOARD,
+                    PROPERTY_SHOW_ACCESS_NOTIFICATIONS, DEFAULT_SHOW_ACCESS_NOTIFICATIONS);
         }
     }
 
@@ -247,6 +271,8 @@ public class ClipboardService extends SystemService {
         ClipData primaryClip;
         /** UID that set {@link #primaryClip}. */
         int primaryClipUid = android.os.Process.NOBODY_UID;
+        /** Package of the app that set {@link #primaryClip}. */
+        String mPrimaryClipPackage;
 
         final HashSet<String> activePermissionOwners
                 = new HashSet<String>();
@@ -354,47 +380,60 @@ public class ClipboardService extends SystemService {
 
         @Override
         public void setPrimaryClip(ClipData clip, String callingPackage, @UserIdInt int userId) {
-            synchronized (this) {
-                if (clip == null || clip.getItemCount() <= 0) {
-                    throw new IllegalArgumentException("No items");
-                }
-                final int intendingUid = getIntendingUid(callingPackage, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                if (!clipboardAccessAllowed(AppOpsManager.OP_WRITE_CLIPBOARD, callingPackage,
-                            intendingUid, intendingUserId)) {
-                    return;
-                }
-                checkDataOwnerLocked(clip, intendingUid);
-                setPrimaryClipInternal(clip, intendingUid);
+            checkAndSetPrimaryClip(clip, callingPackage, userId, callingPackage);
+        }
+
+        @Override
+        public void setPrimaryClipAsPackage(
+                ClipData clip, String callingPackage, @UserIdInt int userId, String sourcePackage) {
+            getContext().enforceCallingOrSelfPermission(Manifest.permission.SET_CLIP_SOURCE,
+                    "Requires SET_CLIP_SOURCE permission");
+            checkAndSetPrimaryClip(clip, callingPackage, userId, sourcePackage);
+        }
+
+        private void checkAndSetPrimaryClip(
+                ClipData clip, String callingPackage, @UserIdInt int userId, String sourcePackage) {
+            if (clip == null || clip.getItemCount() <= 0) {
+                throw new IllegalArgumentException("No items");
+            }
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_WRITE_CLIPBOARD, callingPackage,
+                    intendingUid, intendingUserId)) {
+                return;
+            }
+            checkDataOwner(clip, intendingUid);
+            synchronized (mLock) {
+                setPrimaryClipInternalLocked(clip, intendingUid, sourcePackage);
             }
         }
 
         @Override
         public void clearPrimaryClip(String callingPackage, @UserIdInt int userId) {
-            synchronized (this) {
-                final int intendingUid = getIntendingUid(callingPackage, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                if (!clipboardAccessAllowed(AppOpsManager.OP_WRITE_CLIPBOARD, callingPackage,
-                        intendingUid, intendingUserId)) {
-                    return;
-                }
-                setPrimaryClipInternal(null, intendingUid);
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_WRITE_CLIPBOARD, callingPackage,
+                    intendingUid, intendingUserId)) {
+                return;
+            }
+            synchronized (mLock) {
+                setPrimaryClipInternalLocked(null, intendingUid, callingPackage);
             }
         }
 
         @Override
         public ClipData getPrimaryClip(String pkg, @UserIdInt int userId) {
-            synchronized (this) {
-                final int intendingUid = getIntendingUid(pkg, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, pkg,
-                        intendingUid, intendingUserId)
-                        || isDeviceLocked(intendingUserId)) {
-                    return null;
-                }
+            final int intendingUid = getIntendingUid(pkg, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, pkg,
+                    intendingUid, intendingUserId)
+                    || isDeviceLocked(intendingUserId)) {
+                return null;
+            }
+            synchronized (mLock) {
                 addActiveOwnerLocked(intendingUid, pkg);
-                PerUserClipboard clipboard = getClipboard(intendingUserId);
-                maybeNotify(pkg, intendingUid, intendingUserId, clipboard);
+                PerUserClipboard clipboard = getClipboardLocked(intendingUserId);
+                maybeNotifyLocked(pkg, intendingUid, intendingUserId, clipboard);
                 return clipboard.primaryClip;
             }
         }
@@ -402,15 +441,15 @@ public class ClipboardService extends SystemService {
         @Override
         public ClipDescription getPrimaryClipDescription(String callingPackage,
                 @UserIdInt int userId) {
-            synchronized (this) {
-                final int intendingUid = getIntendingUid(callingPackage, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
-                        intendingUid, intendingUserId, false)
-                        || isDeviceLocked(intendingUserId)) {
-                    return null;
-                }
-                PerUserClipboard clipboard = getClipboard(intendingUserId);
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
+                    intendingUid, intendingUserId, false)
+                    || isDeviceLocked(intendingUserId)) {
+                return null;
+            }
+            synchronized (mLock) {
+                PerUserClipboard clipboard = getClipboardLocked(intendingUserId);
                 return clipboard.primaryClip != null
                         ? clipboard.primaryClip.getDescription() : null;
             }
@@ -418,25 +457,25 @@ public class ClipboardService extends SystemService {
 
         @Override
         public boolean hasPrimaryClip(String callingPackage, @UserIdInt int userId) {
-            synchronized (this) {
-                final int intendingUid = getIntendingUid(callingPackage, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
-                        intendingUid, intendingUserId, false)
-                        || isDeviceLocked(intendingUserId)) {
-                    return false;
-                }
-                return getClipboard(intendingUserId).primaryClip != null;
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
+                    intendingUid, intendingUserId, false)
+                    || isDeviceLocked(intendingUserId)) {
+                return false;
+            }
+            synchronized (mLock) {
+                return getClipboardLocked(intendingUserId).primaryClip != null;
             }
         }
 
         @Override
         public void addPrimaryClipChangedListener(IOnPrimaryClipChangedListener listener,
                 String callingPackage, @UserIdInt int userId) {
-            synchronized (this) {
-                final int intendingUid = getIntendingUid(callingPackage, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                getClipboard(intendingUserId).primaryClipListeners.register(listener,
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            synchronized (mLock) {
+                getClipboardLocked(intendingUserId).primaryClipListeners.register(listener,
                         new ListenerInfo(intendingUid, callingPackage));
             }
         }
@@ -444,23 +483,23 @@ public class ClipboardService extends SystemService {
         @Override
         public void removePrimaryClipChangedListener(IOnPrimaryClipChangedListener listener,
                 String callingPackage, @UserIdInt int userId) {
-            synchronized (this) {
-                final int intendingUserId = getIntendingUserId(callingPackage, userId);
-                getClipboard(intendingUserId).primaryClipListeners.unregister(listener);
+            final int intendingUserId = getIntendingUserId(callingPackage, userId);
+            synchronized (mLock) {
+                getClipboardLocked(intendingUserId).primaryClipListeners.unregister(listener);
             }
         }
 
         @Override
         public boolean hasClipboardText(String callingPackage, int userId) {
-            synchronized (this) {
-                final int intendingUid = getIntendingUid(callingPackage, userId);
-                final int intendingUserId = UserHandle.getUserId(intendingUid);
-                if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
-                        intendingUid, intendingUserId, false)
-                        || isDeviceLocked(intendingUserId)) {
-                    return false;
-                }
-                PerUserClipboard clipboard = getClipboard(intendingUserId);
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
+                    intendingUid, intendingUserId, false)
+                    || isDeviceLocked(intendingUserId)) {
+                return false;
+            }
+            synchronized (mLock) {
+                PerUserClipboard clipboard = getClipboardLocked(intendingUserId);
                 if (clipboard.primaryClip != null) {
                     CharSequence text = clipboard.primaryClip.getItemAt(0).getText();
                     return text != null && text.length() > 0;
@@ -468,17 +507,36 @@ public class ClipboardService extends SystemService {
                 return false;
             }
         }
+
+        @Override
+        public String getPrimaryClipSource(String callingPackage, int userId) {
+            getContext().enforceCallingOrSelfPermission(Manifest.permission.SET_CLIP_SOURCE,
+                    "Requires SET_CLIP_SOURCE permission");
+            final int intendingUid = getIntendingUid(callingPackage, userId);
+            final int intendingUserId = UserHandle.getUserId(intendingUid);
+            if (!clipboardAccessAllowed(AppOpsManager.OP_READ_CLIPBOARD, callingPackage,
+                    intendingUid, intendingUserId, false)
+                    || isDeviceLocked(intendingUserId)) {
+                return null;
+            }
+            synchronized (mLock) {
+                PerUserClipboard clipboard = getClipboardLocked(intendingUserId);
+                if (clipboard.primaryClip != null) {
+                    return clipboard.mPrimaryClipPackage;
+                }
+                return null;
+            }
+        }
     };
 
-    private PerUserClipboard getClipboard(@UserIdInt int userId) {
-        synchronized (mClipboards) {
-            PerUserClipboard puc = mClipboards.get(userId);
-            if (puc == null) {
-                puc = new PerUserClipboard(userId);
-                mClipboards.put(userId, puc);
-            }
-            return puc;
+    @GuardedBy("mLock")
+    private PerUserClipboard getClipboardLocked(@UserIdInt int userId) {
+        PerUserClipboard puc = mClipboards.get(userId);
+        if (puc == null) {
+            puc = new PerUserClipboard(userId);
+            mClipboards.put(userId, puc);
         }
+        return puc;
     }
 
     List<UserInfo> getRelatedProfiles(@UserIdInt int userId) {
@@ -509,6 +567,14 @@ public class ClipboardService extends SystemService {
     }
 
     void setPrimaryClipInternal(@Nullable ClipData clip, int uid) {
+        synchronized (mLock) {
+            setPrimaryClipInternalLocked(clip, uid, null);
+        }
+    }
+
+    @GuardedBy("mLock")
+    private void setPrimaryClipInternalLocked(
+            @Nullable ClipData clip, int uid, @Nullable String sourcePackage) {
         // Push clipboard to host, if any
         if (mHostClipboardMonitor != null) {
             if (clip == null) {
@@ -524,7 +590,7 @@ public class ClipboardService extends SystemService {
 
         // Update this user
         final int userId = UserHandle.getUserId(uid);
-        setPrimaryClipInternal(getClipboard(userId), clip, uid);
+        setPrimaryClipInternalLocked(getClipboardLocked(userId), clip, uid, sourcePackage);
 
         // Update related users
         List<UserInfo> related = getRelatedProfiles(userId);
@@ -558,7 +624,8 @@ public class ClipboardService extends SystemService {
                         final boolean canCopyIntoProfile = !hasRestriction(
                                 UserManager.DISALLOW_SHARE_INTO_MANAGED_PROFILE, id);
                         if (canCopyIntoProfile) {
-                            setPrimaryClipInternal(getClipboard(id), clip, uid);
+                            setPrimaryClipInternalLocked(
+                                    getClipboardLocked(id), clip, uid, sourcePackage);
                         }
                     }
                 }
@@ -568,6 +635,14 @@ public class ClipboardService extends SystemService {
 
     void setPrimaryClipInternal(PerUserClipboard clipboard, @Nullable ClipData clip,
             int uid) {
+        synchronized ("mLock") {
+            setPrimaryClipInternalLocked(clipboard, clip, uid, null);
+        }
+    }
+
+    @GuardedBy("mLock")
+    private void setPrimaryClipInternalLocked(PerUserClipboard clipboard, @Nullable ClipData clip,
+            int uid, @Nullable String sourcePackage) {
         revokeUris(clipboard);
         clipboard.activePermissionOwners.clear();
         if (clip == null && clipboard.primaryClip == null) {
@@ -576,8 +651,10 @@ public class ClipboardService extends SystemService {
         clipboard.primaryClip = clip;
         if (clip != null) {
             clipboard.primaryClipUid = uid;
+            clipboard.mPrimaryClipPackage = sourcePackage;
         } else {
             clipboard.primaryClipUid = android.os.Process.NOBODY_UID;
+            clipboard.mPrimaryClipPackage = null;
         }
         if (clip != null) {
             final ClipDescription description = clip.getDescription();
@@ -620,7 +697,7 @@ public class ClipboardService extends SystemService {
         }
     }
 
-    private final void checkUriOwnerLocked(Uri uri, int sourceUid) {
+    private void checkUriOwner(Uri uri, int sourceUid) {
         if (uri == null || !ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) return;
 
         final long ident = Binder.clearCallingIdentity();
@@ -635,24 +712,24 @@ public class ClipboardService extends SystemService {
         }
     }
 
-    private final void checkItemOwnerLocked(ClipData.Item item, int uid) {
+    private void checkItemOwner(ClipData.Item item, int uid) {
         if (item.getUri() != null) {
-            checkUriOwnerLocked(item.getUri(), uid);
+            checkUriOwner(item.getUri(), uid);
         }
         Intent intent = item.getIntent();
         if (intent != null && intent.getData() != null) {
-            checkUriOwnerLocked(intent.getData(), uid);
+            checkUriOwner(intent.getData(), uid);
         }
     }
 
-    private final void checkDataOwnerLocked(ClipData data, int uid) {
+    private void checkDataOwner(ClipData data, int uid) {
         final int N = data.getItemCount();
         for (int i=0; i<N; i++) {
-            checkItemOwnerLocked(data.getItemAt(i), uid);
+            checkItemOwner(data.getItemAt(i), uid);
         }
     }
 
-    private final void grantUriLocked(Uri uri, int sourceUid, String targetPkg,
+    private void grantUriPermission(Uri uri, int sourceUid, String targetPkg,
             int targetUserId) {
         if (uri == null || !ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) return;
 
@@ -670,18 +747,19 @@ public class ClipboardService extends SystemService {
         }
     }
 
-    private final void grantItemLocked(ClipData.Item item, int sourceUid, String targetPkg,
+    private void grantItemPermission(ClipData.Item item, int sourceUid, String targetPkg,
             int targetUserId) {
         if (item.getUri() != null) {
-            grantUriLocked(item.getUri(), sourceUid, targetPkg, targetUserId);
+            grantUriPermission(item.getUri(), sourceUid, targetPkg, targetUserId);
         }
         Intent intent = item.getIntent();
         if (intent != null && intent.getData() != null) {
-            grantUriLocked(intent.getData(), sourceUid, targetPkg, targetUserId);
+            grantUriPermission(intent.getData(), sourceUid, targetPkg, targetUserId);
         }
     }
 
-    private final void addActiveOwnerLocked(int uid, String pkg) {
+    @GuardedBy("mLock")
+    private void addActiveOwnerLocked(int uid, String pkg) {
         final IPackageManager pm = AppGlobals.getPackageManager();
         final int targetUserHandle = UserHandle.getCallingUserId();
         final long oldIdentity = Binder.clearCallingIdentity();
@@ -699,18 +777,18 @@ public class ClipboardService extends SystemService {
         } finally {
             Binder.restoreCallingIdentity(oldIdentity);
         }
-        PerUserClipboard clipboard = getClipboard(UserHandle.getUserId(uid));
+        PerUserClipboard clipboard = getClipboardLocked(UserHandle.getUserId(uid));
         if (clipboard.primaryClip != null && !clipboard.activePermissionOwners.contains(pkg)) {
             final int N = clipboard.primaryClip.getItemCount();
             for (int i=0; i<N; i++) {
-                grantItemLocked(clipboard.primaryClip.getItemAt(i), clipboard.primaryClipUid, pkg,
-                        UserHandle.getUserId(uid));
+                grantItemPermission(clipboard.primaryClip.getItemAt(i), clipboard.primaryClipUid,
+                        pkg, UserHandle.getUserId(uid));
             }
             clipboard.activePermissionOwners.add(pkg);
         }
     }
 
-    private final void revokeUriLocked(Uri uri, int sourceUid) {
+    private void revokeUriPermission(Uri uri, int sourceUid) {
         if (uri == null || !ContentResolver.SCHEME_CONTENT.equals(uri.getScheme())) return;
 
         final long ident = Binder.clearCallingIdentity();
@@ -724,23 +802,23 @@ public class ClipboardService extends SystemService {
         }
     }
 
-    private final void revokeItemLocked(ClipData.Item item, int sourceUid) {
+    private void revokeItemPermission(ClipData.Item item, int sourceUid) {
         if (item.getUri() != null) {
-            revokeUriLocked(item.getUri(), sourceUid);
+            revokeUriPermission(item.getUri(), sourceUid);
         }
         Intent intent = item.getIntent();
         if (intent != null && intent.getData() != null) {
-            revokeUriLocked(intent.getData(), sourceUid);
+            revokeUriPermission(intent.getData(), sourceUid);
         }
     }
 
-    private final void revokeUris(PerUserClipboard clipboard) {
+    private void revokeUris(PerUserClipboard clipboard) {
         if (clipboard.primaryClip == null) {
             return;
         }
         final int N = clipboard.primaryClip.getItemCount();
         for (int i=0; i<N; i++) {
-            revokeItemLocked(clipboard.primaryClip.getItemAt(i), clipboard.primaryClipUid);
+            revokeItemPermission(clipboard.primaryClip.getItemAt(i), clipboard.primaryClipUid);
         }
     }
 
@@ -830,13 +908,13 @@ public class ClipboardService extends SystemService {
      * Potentially notifies the user (via a toast) about an app accessing the clipboard.
      * TODO(b/167676460): STOPSHIP as we don't want this code as-is to launch. Just an experiment.
      */
-    private void maybeNotify(String callingPackage, int uid, @UserIdInt int userId,
+    @GuardedBy("mLock")
+    private void maybeNotifyLocked(String callingPackage, int uid, @UserIdInt int userId,
             PerUserClipboard clipboard) {
         if (clipboard.primaryClip == null) {
             return;
         }
-        if (Settings.Global.getInt(getContext().getContentResolver(),
-                "clipboard_access_toast_enabled", 1) == 0) {
+        if (!mShowAccessNotifications) {
             return;
         }
         // Don't notify if the app accessing the clipboard is the same as the current owner.
@@ -861,29 +939,35 @@ public class ClipboardService extends SystemService {
                 && mAutofillInternal.isAugmentedAutofillServiceForUser(uid, userId)) {
             return;
         }
-        // Load the labels for the calling app and the app that set the clipboard content.
-        final long ident = Binder.clearCallingIdentity();
+
+        // Retrieve the app label of the source of the clip data
+        CharSequence sourceAppLabel = null;
+        if (clipboard.mPrimaryClipPackage != null) {
+            try {
+                sourceAppLabel = mPm.getApplicationLabel(mPm.getApplicationInfoAsUser(
+                        clipboard.mPrimaryClipPackage, 0, userId));
+            } catch (PackageManager.NameNotFoundException e) {
+                // leave label as null
+            }
+        }
+
         try {
-            final IPackageManager pm = AppGlobals.getPackageManager();
+            CharSequence callingAppLabel = mPm.getApplicationLabel(
+                    mPm.getApplicationInfoAsUser(callingPackage, 0, userId));
             String message;
-            final CharSequence callingLabel = mPm.getApplicationLabel(
-                    pm.getApplicationInfo(callingPackage, 0, userId));
-            final String[] packagesForUid = pm.getPackagesForUid(clipboard.primaryClipUid);
-            if (packagesForUid != null && packagesForUid.length > 0) {
-                final CharSequence clipLabel = mPm.getApplicationLabel(
-                        pm.getApplicationInfo(packagesForUid[0], 0,
-                                UserHandle.getUserId(clipboard.primaryClipUid)));
-                message = callingLabel + " pasted from " + clipLabel;
+            if (sourceAppLabel != null) {
+                message = getContext().getString(
+                        R.string.pasted_from_app, callingAppLabel, sourceAppLabel);
             } else {
-                message = callingLabel + " pasted from clipboard";
+                message = getContext().getString(R.string.pasted_from_clipboard, callingAppLabel);
             }
             Slog.i(TAG, message);
-            Toast.makeText(getContext(), UiThread.get().getLooper(), message, Toast.LENGTH_SHORT)
-                    .show();
-        } catch (RemoteException e) {
-            /* ignore */
-        } finally {
-            Binder.restoreCallingIdentity(ident);
+            Binder.withCleanCallingIdentity(() ->
+                    Toast.makeText(getContext(), UiThread.get().getLooper(), message,
+                            Toast.LENGTH_SHORT)
+                            .show());
+        } catch (PackageManager.NameNotFoundException e) {
+            // do nothing
         }
     }
 }

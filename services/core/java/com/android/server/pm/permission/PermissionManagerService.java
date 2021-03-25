@@ -24,14 +24,12 @@ import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISALLOWED;
 import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISCOURAGED;
 import static android.content.pm.PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT;
-import static android.content.pm.PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_ROLE;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_ONE_TIME;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
@@ -68,15 +66,10 @@ import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.admin.DevicePolicyManagerInternal;
-import android.app.role.RoleManager;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.PermissionGroupInfoFlags;
 import android.content.pm.PackageManager.PermissionInfoFlags;
@@ -86,7 +79,6 @@ import android.content.pm.PackageParser;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
-import android.content.pm.UserInfo;
 import android.content.pm.parsing.component.ParsedPermission;
 import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.permission.SplitPermissionInfoParcelable;
@@ -401,105 +393,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 new PermissionManagerServiceInternalImpl();
         LocalServices.addService(PermissionManagerServiceInternal.class, localService);
         LocalServices.addService(PermissionManagerInternal.class, localService);
-
-        context.getMainThreadHandler().post(() -> context.registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-                    return;
-                }
-
-                try {
-                    fixBgMicCamera(context);
-                } catch (Throwable t) {
-                    // Don't crash the system if this fails for any reason. Any intermediate state
-                    // this can leave the permissions in is okay and in the worst case the state is
-                    // the same as before the user rebooted.
-                    Log.e(LOG_TAG, "Unable to fix background permissions", t);
-                }
-            }
-
-
-            private void fixBgMicCamera(Context context) {
-                PackageManager pm = context.getPackageManager();
-                for (UserInfo userInfo : context.getSystemService(UserManager.class).getUsers()) {
-                    UserHandle user = userInfo.getUserHandle();
-                    List<String> assistants = context.getSystemService(RoleManager.class)
-                            .getRoleHoldersAsUser(RoleManager.ROLE_ASSISTANT, user);
-                    List<PackageInfo> packages =
-                            pm.getInstalledPackagesAsUser(PackageManager.MATCH_SYSTEM_ONLY
-                                    | PackageManager.GET_PERMISSIONS, user.getIdentifier());
-                    for (PackageInfo packageInfo : packages) {
-                        String[] requestedPermissions = packageInfo.requestedPermissions;
-                        if (requestedPermissions == null) {
-                            continue;
-                        }
-                        for (String permName : requestedPermissions) {
-                            String pkg = packageInfo.packageName;
-                            switch (permName) {
-                                case Manifest.permission.BACKGROUND_CAMERA:
-                                    removeFromAllowlistsAndRevoke(pm, pkg, permName, user);
-                                    break;
-                                case Manifest.permission.RECORD_BACKGROUND_AUDIO:
-                                    if (assistants.contains(pkg)) {
-                                        removeFromAllowlistsAndRevokeForAssistant(pm, pkg, permName,
-                                                user);
-                                    } else {
-                                        removeFromAllowlistsAndRevoke(pm, pkg, permName, user);
-                                    }
-                                    break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            private void removeFromAllowlistsAndRevoke(PackageManager pm, String pkg,
-                    String permName, UserHandle user) {
-                if ((pm.getPermissionFlags(permName, pkg, user)
-                        & FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT) != 0) {
-                    Slog.i(LOG_TAG, "removing " + pkg + " " + permName + " from all allowlists");
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_UPGRADE);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_SYSTEM);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_INSTALLER);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_ALLOWLIST_ROLE);
-                }
-                if (pm.checkPermission(permName, pkg) == PackageManager.PERMISSION_GRANTED) {
-                    Slog.i(LOG_TAG, "revoking " + pkg + " " + permName);
-                    pm.revokeRuntimePermission(pkg, permName, user);
-                }
-            }
-
-            private void removeFromAllowlistsAndRevokeForAssistant(PackageManager pm, String pkg,
-                    String permName, UserHandle user) {
-                int anyNonRoleExempt =
-                        FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT
-                                | FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT
-                                | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
-
-                if ((pm.getPermissionFlags(permName, pkg, user) & anyNonRoleExempt) != 0) {
-                    Slog.i(LOG_TAG, "removing " + pkg + " " + permName
-                            + " from all allowlists except role");
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_UPGRADE);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_SYSTEM);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_INSTALLER);
-                }
-                if ((pm.getPermissionFlags(permName, pkg, user)
-                        & FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT) == 0) {
-                    Slog.i(LOG_TAG, "adding " + pkg + " " + permName
-                            + " to role allowlist");
-                    pm.addWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_ALLOWLIST_ROLE);
-                }
-            }
-        }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED)));
     }
 
     @Override
@@ -876,10 +769,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
             isRuntimePermission = bp.isRuntime();
 
-            if (bp.isInstallerExemptIgnored()) {
-                flagValues &= ~FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-            }
-
             final UidPermissionState uidState = getUidStateLocked(pkg, userId);
             if (uidState == null) {
                 Slog.e(TAG, "Missing permissions state for " + packageName + " and user " + userId);
@@ -1123,8 +1012,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         Preconditions.checkFlagsArgument(flags,
                 PackageManager.FLAG_PERMISSION_WHITELIST_UPGRADE
                         | PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER
-                        | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE);
+                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER);
         Preconditions.checkArgumentNonNegative(userId, null);
 
         if (UserHandle.getCallingUserId() != userId) {
@@ -1148,9 +1036,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final boolean isCallerInstallerOnRecord =
                 mPackageManagerInt.isCallerInstallerOfRecord(pkg, callingUid);
 
-        if ((flags & (PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE)) != 0 && !isCallerPrivileged) {
-            throw new SecurityException("Querying system or role allowlist requires "
+        if ((flags & PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM) != 0
+                && !isCallerPrivileged) {
+            throw new SecurityException("Querying system allowlist requires "
                     + Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS);
         }
 
@@ -1191,9 +1079,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             }
             if ((flags & PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER) != 0) {
                 queryFlags |= FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-            }
-            if ((flags & PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE) != 0) {
-                queryFlags |=  FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
             }
 
             ArrayList<String> allowlistedPermissions = null;
@@ -1287,8 +1172,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         Preconditions.checkFlagsArgument(flags,
                 PackageManager.FLAG_PERMISSION_WHITELIST_UPGRADE
                         | PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER
-                        | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE);
+                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER);
         Preconditions.checkArgument(Integer.bitCount(flags) == 1);
         Preconditions.checkArgumentNonNegative(userId, null);
 
@@ -1314,10 +1198,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final boolean isCallerInstallerOnRecord =
                 mPackageManagerInt.isCallerInstallerOfRecord(pkg, callingUid);
 
-        if ((flags & (PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE)) != 0
-                && !isCallerPrivileged) {
-            throw new SecurityException("Modifying system or role allowlist requires "
+        if ((flags & PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM) != 0 && !isCallerPrivileged) {
+            throw new SecurityException("Modifying system allowlist requires "
                     + Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS);
         }
 
@@ -3589,13 +3471,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             // Special permissions for the device configurator.
             allowed = true;
         }
-        if (!allowed && bp.isWellbeing()
-                && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
-                        PackageManagerInternal.PACKAGE_WELLBEING, UserHandle.USER_SYSTEM),
-                pkg.getPackageName())) {
-            // Special permission granted only to the OEM specified wellbeing app
-            allowed = true;
-        }
         if (!allowed && bp.isDocumenter()
                 && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
                         PackageManagerInternal.PACKAGE_DOCUMENTER, UserHandle.USER_SYSTEM),
@@ -3820,15 +3695,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                             newFlags |= FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
                         } else {
                             newFlags &= ~FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-                        }
-                    }
-                    break;
-                    case FLAG_PERMISSION_ALLOWLIST_ROLE: {
-                        mask |= FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
-                        if (permissions != null && permissions.contains(permissionName)) {
-                            newFlags |= FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
-                        } else {
-                            newFlags &= ~FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
                         }
                     }
                     break;

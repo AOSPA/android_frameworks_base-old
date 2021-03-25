@@ -235,7 +235,10 @@ class ActivityClientController extends IActivityClientController.Stub {
     public void activityRelaunched(IBinder token) {
         final long origId = Binder.clearCallingIdentity();
         synchronized (mGlobalLock) {
-            mTaskSupervisor.activityRelaunchedLocked(token);
+            final ActivityRecord r = ActivityRecord.forTokenLocked(token);
+            if (r != null) {
+                r.finishRelaunching();
+            }
         }
         Binder.restoreCallingIdentity(origId);
     }
@@ -805,7 +808,7 @@ class ActivityClientController extends IActivityClientController.Stub {
 
                 if (rootTask.inFreeformWindowingMode()) {
                     rootTask.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
-                } else if (!mService.mSizeCompatFreeform && r.inSizeCompatMode()) {
+                } else if (!mService.mSupportsNonResizableMultiWindow && r.inSizeCompatMode()) {
                     throw new IllegalStateException("Size-compat windows are currently not"
                             + "freeform-enabled");
                 } else if (rootTask.getParent().inFreeformWindowingMode()) {

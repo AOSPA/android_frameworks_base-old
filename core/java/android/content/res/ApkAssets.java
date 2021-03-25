@@ -22,10 +22,9 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.om.OverlayableInfo;
 import android.content.res.loader.AssetsProvider;
 import android.content.res.loader.ResourcesProvider;
+import android.text.TextUtils;
 
 import com.android.internal.annotations.GuardedBy;
-
-import libcore.util.NativeAllocationRegistry;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -103,30 +102,17 @@ public final class ApkAssets {
     public @interface FormatType {}
 
     @GuardedBy("this")
-    private final long mNativePtr;
+    private long mNativePtr;  // final, except cleared in finalizer.
 
     @Nullable
     @GuardedBy("this")
-    private final StringBlock mStringBlock;
+    private final StringBlock mStringBlock;  // null or closed if mNativePtr = 0.
 
     @PropertyFlags
     private final int mFlags;
 
     @Nullable
     private final AssetsProvider mAssets;
-
-    @GuardedBy("this")
-    @Nullable
-    private final Runnable mRunNativeCleanup;
-
-    // Use a Holder to allow static initialization of ApkAssets in the boot image, and
-    // possibly to avoid some initialization ordering issues.
-    private static class NoImagePreloadHolder {
-        // TODO(175425996): Make size estimate more accurate
-        public static final NativeAllocationRegistry REGISTRY =
-                NativeAllocationRegistry.createMalloced(ApkAssets.class.getClassLoader(),
-                                                        nativeGetFinalizer());
-    }
 
     /**
      * Creates a new ApkAssets instance from the given path on disk.
@@ -302,8 +288,6 @@ public final class ApkAssets {
         mFlags = flags;
         mNativePtr = nativeLoad(format, path, flags, assets);
         mStringBlock = new StringBlock(nativeGetStringBlock(mNativePtr), true /*useSparse*/);
-        mRunNativeCleanup = NoImagePreloadHolder.REGISTRY.registerNativeAllocation(
-                this, mNativePtr);
         mAssets = assets;
     }
 
@@ -315,8 +299,6 @@ public final class ApkAssets {
         mFlags = flags;
         mNativePtr = nativeLoadFd(format, fd, friendlyName, flags, assets);
         mStringBlock = new StringBlock(nativeGetStringBlock(mNativePtr), true /*useSparse*/);
-        mRunNativeCleanup = NoImagePreloadHolder.REGISTRY.registerNativeAllocation(
-                this, mNativePtr);
         mAssets = assets;
     }
 
@@ -328,8 +310,6 @@ public final class ApkAssets {
         mFlags = flags;
         mNativePtr = nativeLoadFdOffsets(format, fd, friendlyName, offset, length, flags, assets);
         mStringBlock = new StringBlock(nativeGetStringBlock(mNativePtr), true /*useSparse*/);
-        mRunNativeCleanup = NoImagePreloadHolder.REGISTRY.registerNativeAllocation(
-                this, mNativePtr);
         mAssets = assets;
     }
 
@@ -337,14 +317,20 @@ public final class ApkAssets {
         mFlags = flags;
         mNativePtr = nativeLoadEmpty(flags, assets);
         mStringBlock = null;
-        mRunNativeCleanup = null;
         mAssets = assets;
     }
 
     @UnsupportedAppUsage
     public @NonNull String getAssetPath() {
         synchronized (this) {
-            return nativeGetAssetPath(mNativePtr);
+            return TextUtils.emptyIfNull(nativeGetAssetPath(mNativePtr));
+        }
+    }
+
+    /** @hide */
+    public @NonNull String getDebugName() {
+        synchronized (this) {
+            return nativeGetDebugName(mNativePtr);
         }
     }
 
@@ -422,7 +408,12 @@ public final class ApkAssets {
 
     @Override
     public String toString() {
-        return "ApkAssets{path=" + getAssetPath() + "}";
+        return "ApkAssets{path=" + getDebugName() + "}";
+    }
+
+    @Override
+    protected void finalize() throws Throwable {
+        close();
     }
 
     /**
@@ -430,11 +421,12 @@ public final class ApkAssets {
      */
     public void close() {
         synchronized (this) {
-            if (mStringBlock != null) {
-                mStringBlock.close();
-            }
-            if (mRunNativeCleanup != null) {
-                mRunNativeCleanup.run();
+            if (mNativePtr != 0) {
+                if (mStringBlock != null) {
+                    mStringBlock.close();
+                }
+                nativeDestroy(mNativePtr);
+                mNativePtr = 0;
             }
         }
     }
@@ -449,12 +441,13 @@ public final class ApkAssets {
     private static native long nativeLoadFdOffsets(@FormatType int format,
             @NonNull FileDescriptor fd, @NonNull String friendlyName, long offset, long length,
             @PropertyFlags int flags, @Nullable AssetsProvider asset) throws IOException;
+    private static native void nativeDestroy(long ptr);
     private static native @NonNull String nativeGetAssetPath(long ptr);
+    private static native @NonNull String nativeGetDebugName(long ptr);
     private static native long nativeGetStringBlock(long ptr);
     private static native boolean nativeIsUpToDate(long ptr);
     private static native long nativeOpenXml(long ptr, @NonNull String fileName) throws IOException;
     private static native @Nullable OverlayableInfo nativeGetOverlayableInfo(long ptr,
             String overlayableName) throws IOException;
     private static native boolean nativeDefinesOverlayable(long ptr) throws IOException;
-    private static native final long nativeGetFinalizer();
 }

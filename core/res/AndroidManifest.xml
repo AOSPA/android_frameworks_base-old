@@ -1317,15 +1317,15 @@
         android:backgroundPermission="android.permission.RECORD_BACKGROUND_AUDIO"
         android:protectionLevel="dangerous|instant" />
 
-    <!-- Allows an application to record audio while in the background.
-         <p>Protection level: dangerous
-    -->
+    <!-- @SystemApi @TestApi Allows an application to record audio while in the background.
+         This permission is not intended to be held by apps.
+         <p>Protection level: internal
+        @hide -->
     <permission android:name="android.permission.RECORD_BACKGROUND_AUDIO"
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_recordBackgroundAudio"
         android:description="@string/permdesc_recordBackgroundAudio"
-        android:permissionFlags="hardRestricted|installerExemptIgnored"
-        android:protectionLevel="dangerous" />
+        android:protectionLevel="internal" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for activity recognition                        -->
@@ -1401,15 +1401,15 @@
         android:backgroundPermission="android.permission.BACKGROUND_CAMERA"
         android:protectionLevel="dangerous|instant" />
 
-    <!-- Required to be able to access the camera device in the background.
-         <p>Protection level: dangerous
-    -->
+    <!-- @SystemApi @TestApi Required to be able to access the camera device in the background.
+         This permission is not intended to be held by apps.
+         <p>Protection level: internal
+        @hide -->
     <permission android:name="android.permission.BACKGROUND_CAMERA"
             android:permissionGroup="android.permission-group.UNDEFINED"
             android:label="@string/permlab_backgroundCamera"
             android:description="@string/permdesc_backgroundCamera"
-            android:permissionFlags="hardRestricted|installerExemptIgnored"
-            android:protectionLevel="dangerous" />
+            android:protectionLevel="internal" />
 
     <!-- @SystemApi Required in addition to android.permission.CAMERA to be able to access
            system only camera devices.
@@ -1914,15 +1914,20 @@
     <permission android:name="android.permission.WIFI_UPDATE_USABILITY_STATS_SCORE"
         android:protectionLevel="signature|privileged" />
 
-    <!-- @SystemApi @hide Allows system APK to update Wifi/Cellular coex channels to avoid.
+    <!-- @SystemApi @hide Allows applications to update Wifi/Cellular coex channels to avoid.
              <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.WIFI_UPDATE_COEX_UNSAFE_CHANNELS"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|role" />
 
     <!-- @SystemApi @hide Allows applications to access Wifi/Cellular coex channels being avoided.
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.WIFI_ACCESS_COEX_UNSAFE_CHANNELS"
-                android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|role" />
+
+    <!-- @SystemApi @hide Allows system APK to manage country code.
+             <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.MANAGE_WIFI_COUNTRY_CODE"
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi @hide Allows an application to manage an automotive device's application network
          preference as it relates to OEM_PAID and OEM_PRIVATE capable networks.
@@ -1948,7 +1953,7 @@
          @hide
     -->
     <permission android:name="android.permission.SUSPEND_APPS"
-        android:protectionLevel="signature|wellbeing" />
+        android:protectionLevel="signature|role" />
 
     <!-- Allows applications to discover and pair bluetooth devices.
          <p>Protection level: normal
@@ -2409,6 +2414,15 @@
     <permission android:name="android.permission.BIND_PHONE_ACCOUNT_SUGGESTION_SERVICE"
         android:protectionLevel="signature" />
 
+    <!-- Must be required by a {@link android.telecom.CallDiagnosticService},
+         to ensure that only the system can bind to it.
+         <p>Protection level: signature
+         @SystemApi
+         @hide
+    -->
+    <permission android:name="android.permission.BIND_CALL_DIAGNOSTIC_SERVICE"
+        android:protectionLevel="signature" />
+
     <!-- Must be required by a {@link android.telecom.CallRedirectionService},
          to ensure that only the system can bind to it.
          <p>Protection level: signature|privileged
@@ -2679,6 +2693,16 @@
         android:label="@string/permlab_manageProfileAndDeviceOwners"
         android:description="@string/permdesc_manageProfileAndDeviceOwners" />
 
+    <!-- @TestApi @hide Allows an application to reset the record of previous system update freeze
+         periods. -->
+    <permission android:name="android.permission.CLEAR_FREEZE_PERIOD"
+                android:protectionLevel="signature" />
+
+    <!-- @TestApi @hide Allows an application to force available DevicePolicyManager logs to
+         DPC. -->
+    <permission android:name="android.permission.FORCE_DEVICE_POLICY_MANAGER_LOGS"
+                android:protectionLevel="signature" />
+
     <!-- Allows an application to get full detailed information about
          recently running tasks, with full fidelity to the real state.
          @hide -->
@@ -2720,9 +2744,10 @@
     <permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"
         android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier" />
 
-    <!-- @SystemApi @hide Allows an application to start foreground services from background -->
+    <!-- Allows an application to start foreground services from background, can only be granted to
+         privileged apps or app that is SMS/EMERGENCY/SYSTEM GALLERY roles. -->
     <permission android:name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"
-                android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier" />
+                android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier|role"/>
 
     <!-- @SystemApi Must be required by activities that handle the intent action
          {@link Intent#ACTION_SEND_SHOW_SUSPENDED_APP_DETAILS}. This is for use by apps that
@@ -2803,7 +2828,7 @@
 
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.SYSTEM_APPLICATION_OVERLAY"
-                android:protectionLevel="signature|recents|wellbeing"/>
+                android:protectionLevel="signature|recents|role"/>
 
     <!-- @deprecated Use {@link android.Manifest.permission#REQUEST_COMPANION_RUN_IN_BACKGROUND}
          @hide
@@ -4010,16 +4035,12 @@
     <permission android:name="com.android.permission.INSTALL_EXISTING_PACKAGES"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Allows an application to use the package installer v2 APIs.
-         <p>The package installer v2 APIs are still a work in progress and we're
-         currently validating they work in all scenarios.
+    <!-- Allows an application to use System Data Loaders.
          <p>Not for use by third-party applications.
-         TODO(b/152310230): use this permission to protect only Incremental installations
-         once the APIs are confirmed to be sufficient.
          @hide
     -->
-    <permission android:name="com.android.permission.USE_INSTALLER_V2"
-        android:protectionLevel="signature|verifier" />
+    <permission android:name="com.android.permission.USE_SYSTEM_DATA_LOADERS"
+                android:protectionLevel="signature" />
 
     <!-- @SystemApi @TestApi Allows an application to clear user data.
          <p>Not for use by third-party applications
@@ -5156,7 +5177,7 @@
     <!-- @SystemApi Allows the holder to access and manage instant applications on the device.
          @hide -->
     <permission android:name="android.permission.ACCESS_INSTANT_APPS"
-            android:protectionLevel="signature|installer|verifier|wellbeing" />
+            android:protectionLevel="signature|installer|verifier|role" />
     <uses-permission android:name="android.permission.ACCESS_INSTANT_APPS"/>
 
     <!-- Allows the holder to view the instant applications on the device.
@@ -5336,7 +5357,7 @@
     <!-- @SystemApi Allows an application to turn on / off quiet mode.
          @hide -->
     <permission android:name="android.permission.MODIFY_QUIET_MODE"
-                android:protectionLevel="signature|privileged|wellbeing|development" />
+                android:protectionLevel="signature|privileged|development" />
 
     <!-- Allows internal management of the camera framework
          @hide -->
@@ -5452,6 +5473,12 @@
          @hide -->
     <permission android:name="android.permission.MANAGE_SENSOR_PRIVACY"
                 android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows sensor privacy changes to be observed.
+         @hide -->
+    <permission android:name="android.permission.OBSERVE_SENSOR_PRIVACY"
+                android:protectionLevel="signature|installer" />
+
     <!-- @SystemApi Permission that protects the {@link Intent#ACTION_REVIEW_ACCESSIBILITY_SERVICES}
          intent.
          @hide -->
@@ -5572,6 +5599,17 @@
          TODO(b/180412052): STOPSHIP: Define a role so it can be granted to Shell and AiAi. -->
     <permission android:name="android.permission.READ_PEOPLE_DATA"
                 android:protectionLevel="signature|appPredictor|recents"/>
+
+    <!-- @hide @SystemApi Allows a logical component within an application to
+         temporarily renounce a set of otherwise granted permissions. -->
+    <permission android:name="android.permission.RENOUNCE_PERMISSIONS"
+                android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows the holder to set the source of the data when setting a clip on the
+         clipboard.
+         @hide -->
+    <permission android:name="android.permission.SET_CLIP_SOURCE"
+                android:protectionLevel="signature|recents" />
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>

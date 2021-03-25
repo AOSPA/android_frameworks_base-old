@@ -471,7 +471,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
         mLastLeafTaskToFrontId = t.mTaskId;
         EventLogTags.writeWmTaskToFront(t.mUserId, t.mTaskId);
-        // Notifying only when a leak task moved to front. Or the listeners would be notified
+        // Notifying only when a leaf task moved to front. Or the listeners would be notified
         // couple times from the leaf task all the way up to the root task.
         mAtmService.getTaskChangeNotificationController().notifyTaskMovedToFront(t.getTaskInfo());
     }
@@ -983,9 +983,10 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         onRootTaskOrderChanged(rootTask);
     }
 
-    void resetPreferredTopFocusableRootTaskIfBelow(Task task) {
+    /** Reset the mPreferredTopFocusableRootTask if it is or below the given task. */
+    void resetPreferredTopFocusableRootTaskIfNeeded(Task task) {
         if (mPreferredTopFocusableRootTask != null
-                && mPreferredTopFocusableRootTask.compareTo(task) < 0) {
+                && mPreferredTopFocusableRootTask.compareTo(task) <= 0) {
             mPreferredTopFocusableRootTask = null;
         }
     }
@@ -1143,12 +1144,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                     "Can't set not mCreatedByOrganizer as launch root tr=" + rootTask);
         }
 
-        LaunchRootTaskDef def = null;
-        for (int i = mLaunchRootTasks.size() - 1; i >= 0; --i) {
-            if (mLaunchRootTasks.get(i).task.mTaskId != rootTask.mTaskId) continue;
-            def = mLaunchRootTasks.get(i);
-        }
-
+        LaunchRootTaskDef def = getLaunchRootTaskDef(rootTask);
         if (def != null) {
             // Remove so we add to the end of the list.
             mLaunchRootTasks.remove(def);
@@ -1162,6 +1158,23 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         if (!ArrayUtils.isEmpty(windowingModes) || !ArrayUtils.isEmpty(activityTypes)) {
             mLaunchRootTasks.add(def);
         }
+    }
+
+    void removeLaunchRootTask(Task rootTask) {
+        LaunchRootTaskDef def = getLaunchRootTaskDef(rootTask);
+        if (def != null) {
+            mLaunchRootTasks.remove(def);
+        }
+    }
+
+    private @Nullable LaunchRootTaskDef getLaunchRootTaskDef(Task rootTask) {
+        LaunchRootTaskDef def = null;
+        for (int i = mLaunchRootTasks.size() - 1; i >= 0; --i) {
+            if (mLaunchRootTasks.get(i).task.mTaskId != rootTask.mTaskId) continue;
+            def = mLaunchRootTasks.get(i);
+            break;
+        }
+        return def;
     }
 
     Task getLaunchRootTask(int windowingMode, int activityType, ActivityOptions options) {

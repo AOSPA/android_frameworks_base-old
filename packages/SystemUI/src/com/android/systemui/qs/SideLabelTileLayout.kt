@@ -18,21 +18,17 @@ package com.android.systemui.qs
 
 import android.content.Context
 import android.util.AttributeSet
-import com.android.systemui.R
 
-open class SideLabelTileLayout(context: Context, attrs: AttributeSet) : TileLayout(context, attrs) {
+open class SideLabelTileLayout(
+    context: Context,
+    attrs: AttributeSet?
+) : TileLayout(context, attrs) {
 
     override fun updateResources(): Boolean {
         return super.updateResources().also {
-            mResourceColumns = 2
             mMaxAllowedRows = 4
-            mCellMarginHorizontal = (mCellMarginHorizontal * 1.2).toInt()
-            mCellMarginVertical = mCellMarginHorizontal
-            mMaxCellHeight = context.resources.getDimensionPixelSize(R.dimen.qs_quick_tile_size)
         }
     }
-
-    override fun setShowLabels(show: Boolean) { }
 
     override fun isFull(): Boolean {
         return mRecords.size >= maxTiles()

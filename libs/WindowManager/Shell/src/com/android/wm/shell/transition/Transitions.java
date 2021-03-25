@@ -25,9 +25,13 @@ import static android.window.TransitionInfo.FLAG_STARTING_WINDOW_TRANSFER_RECIPI
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.content.ContentResolver;
+import android.content.Context;
+import android.database.ContentObserver;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemProperties;
+import android.provider.Settings;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.view.SurfaceControl;
@@ -43,6 +47,7 @@ import android.window.WindowOrganizer;
 
 import androidx.annotation.BinderThread;
 
+import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.ShellTaskOrganizer;
@@ -63,6 +68,7 @@ public class Transitions {
             SystemProperties.getBoolean("persist.debug.shell_transit", false);
 
     private final WindowOrganizer mOrganizer;
+    private final Context mContext;
     private final ShellExecutor mMainExecutor;
     private final ShellExecutor mAnimExecutor;
     private final TransitionPlayerImpl mPlayerImpl;
@@ -71,6 +77,8 @@ public class Transitions {
 
     /** List of possible handlers. Ordered by specificity (eg. tapped back to front). */
     private final ArrayList<TransitionHandler> mHandlers = new ArrayList<>();
+
+    private float mTransitionAnimationScaleSetting = 1.0f;
 
     private static final class ActiveTransition {
         TransitionHandler mFirstHandler = null;
@@ -84,24 +92,44 @@ public class Transitions {
     }
 
     public Transitions(@NonNull WindowOrganizer organizer, @NonNull TransactionPool pool,
-            @NonNull ShellExecutor mainExecutor, @NonNull ShellExecutor animExecutor) {
+            @NonNull Context context, @NonNull ShellExecutor mainExecutor,
+            @NonNull ShellExecutor animExecutor) {
         mOrganizer = organizer;
+        mContext = context;
         mMainExecutor = mainExecutor;
         mAnimExecutor = animExecutor;
         mPlayerImpl = new TransitionPlayerImpl();
         // The very last handler (0 in the list) should be the default one.
-        mHandlers.add(new DefaultTransitionHandler(pool, mainExecutor, animExecutor));
+        mHandlers.add(new DefaultTransitionHandler(pool, context, mainExecutor, animExecutor));
         // Next lowest priority is remote transitions.
         mRemoteTransitionHandler = new RemoteTransitionHandler(mainExecutor);
         mHandlers.add(mRemoteTransitionHandler);
+
+        ContentResolver resolver = context.getContentResolver();
+        mTransitionAnimationScaleSetting = Settings.Global.getFloat(resolver,
+                Settings.Global.TRANSITION_ANIMATION_SCALE,
+                context.getResources().getFloat(
+                        R.dimen.config_appTransitionAnimationDurationScaleDefault));
+        dispatchAnimScaleSetting(mTransitionAnimationScaleSetting);
+
+        resolver.registerContentObserver(
+                Settings.Global.getUriFor(Settings.Global.TRANSITION_ANIMATION_SCALE), false,
+                new SettingsObserver());
     }
 
     private Transitions() {
         mOrganizer = null;
+        mContext = null;
         mMainExecutor = null;
         mAnimExecutor = null;
         mPlayerImpl = null;
         mRemoteTransitionHandler = null;
+    }
+
+    private void dispatchAnimScaleSetting(float scale) {
+        for (int i = mHandlers.size() - 1; i >= 0; --i) {
+            mHandlers.get(i).setAnimScaleSetting(scale);
+        }
     }
 
     /** Create an empty/non-registering transitions object for system-ui tests. */
@@ -186,8 +214,8 @@ public class Transitions {
             final SurfaceControl leash = change.getLeash();
             final int mode = info.getChanges().get(i).getMode();
 
-            // Don't move anything with an animating parent
-            if (change.getParent() != null) {
+            // Don't move anything that isn't independent within its parents
+            if (!TransitionInfo.isIndependent(change, info)) {
                 if (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT || mode == TRANSIT_CHANGE) {
                     t.show(leash);
                     t.setMatrix(leash, 1, 0, 0, 1);
@@ -197,9 +225,13 @@ public class Transitions {
                 continue;
             }
 
-            t.reparent(leash, info.getRootLeash());
-            t.setPosition(leash, change.getStartAbsBounds().left - info.getRootOffset().x,
-                    change.getStartAbsBounds().top - info.getRootOffset().y);
+            boolean hasParent = change.getParent() != null;
+
+            if (!hasParent) {
+                t.reparent(leash, info.getRootLeash());
+                t.setPosition(leash, change.getStartAbsBounds().left - info.getRootOffset().x,
+                        change.getStartAbsBounds().top - info.getRootOffset().y);
+            }
             // Put all the OPEN/SHOW on top
             if (mode == TRANSIT_OPEN || mode == TRANSIT_TO_FRONT) {
                 t.show(leash);
@@ -368,6 +400,13 @@ public class Transitions {
         @Nullable
         WindowContainerTransaction handleRequest(@NonNull IBinder transition,
                 @NonNull TransitionRequestInfo request);
+
+        /**
+         * Sets transition animation scale settings value to handler.
+         *
+         * @param scale The setting value of transition animation scale.
+         */
+        default void setAnimScaleSetting(float scale) {}
     }
 
     @BinderThread
@@ -402,6 +441,23 @@ public class Transitions {
             mMainExecutor.execute(() -> {
                 Transitions.this.unregisterRemote(remoteTransition);
             });
+        }
+    }
+
+    private class SettingsObserver extends ContentObserver {
+
+        SettingsObserver() {
+            super(null);
+        }
+
+        @Override
+        public void onChange(boolean selfChange) {
+            super.onChange(selfChange);
+            mTransitionAnimationScaleSetting = Settings.Global.getFloat(
+                    mContext.getContentResolver(), Settings.Global.TRANSITION_ANIMATION_SCALE,
+                    mTransitionAnimationScaleSetting);
+
+            mMainExecutor.execute(() -> dispatchAnimScaleSetting(mTransitionAnimationScaleSetting));
         }
     }
 }

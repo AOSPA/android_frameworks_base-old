@@ -17,11 +17,11 @@ package com.android.settingslib.mobile;
 
 import android.os.Handler;
 import android.os.Looper;
-import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SignalStrength;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyDisplayInfo;
 import android.telephony.TelephonyManager;
 import android.util.Log;
@@ -43,9 +43,9 @@ public class MobileStatusTracker {
     private final SubscriptionInfo mSubscriptionInfo;
     private final Callback mCallback;
     private final MobileStatus mMobileStatus;
-    private final PhoneStateListener mPhoneStateListener;
     private final SubscriptionDefaults mDefaults;
     private final Handler mReceiverHandler;
+    private final MobileTelephonyCallback mTelephonyCallback;
 
     /**
      * MobileStatusTracker constructors
@@ -61,7 +61,7 @@ public class MobileStatusTracker {
             SubscriptionInfo info, SubscriptionDefaults defaults, Callback callback) {
         mPhone = phone;
         mReceiverHandler = new Handler(receiverLooper);
-        mPhoneStateListener = new MobilePhoneStateListener();
+        mTelephonyCallback = new MobileTelephonyCallback();
         mSubscriptionInfo = info;
         mDefaults = defaults;
         mCallback = callback;
@@ -71,8 +71,8 @@ public class MobileStatusTracker {
                 /* updateTelephony= */false, new MobileStatus(mMobileStatus)));
     }
 
-    public PhoneStateListener getPhoneStateListener() {
-        return mPhoneStateListener;
+    public MobileTelephonyCallback getTelephonyCallback() {
+        return mTelephonyCallback;
     }
 
     /**
@@ -80,9 +80,9 @@ public class MobileStatusTracker {
      */
     public void setListening(boolean listening) {
         if (listening) {
-            mPhone.registerPhoneStateListener(mReceiverHandler::post, mPhoneStateListener);
+            mPhone.registerTelephonyCallback(mReceiverHandler::post, mTelephonyCallback);
         } else {
-            mPhone.unregisterPhoneStateListener(mPhoneStateListener);
+            mPhone.unregisterTelephonyCallback(mTelephonyCallback);
         }
     }
 
@@ -109,15 +109,14 @@ public class MobileStatusTracker {
                 || activity == TelephonyManager.DATA_ACTIVITY_OUT;
     }
 
-    private class MobilePhoneStateListener extends PhoneStateListener implements
-            PhoneStateListener.ServiceStateChangedListener,
-            PhoneStateListener.SignalStrengthsChangedListener,
-            PhoneStateListener.CallStateChangedListener,
-            PhoneStateListener.DataConnectionStateChangedListener,
-            PhoneStateListener.DataActivityListener,
-            PhoneStateListener.CarrierNetworkChangeListener,
-            PhoneStateListener.ActiveDataSubscriptionIdChangedListener,
-            PhoneStateListener.DisplayInfoChangedListener{
+    public class MobileTelephonyCallback extends TelephonyCallback implements
+            TelephonyCallback.ServiceStateListener,
+            TelephonyCallback.SignalStrengthsListener,
+            TelephonyCallback.DataConnectionStateListener,
+            TelephonyCallback.DataActivityListener,
+            TelephonyCallback.CarrierNetworkListener,
+            TelephonyCallback.ActiveDataSubscriptionIdListener,
+            TelephonyCallback.DisplayInfoListener{
 
         @Override
         public void onSignalStrengthsChanged(SignalStrength signalStrength) {
@@ -193,16 +192,6 @@ public class MobileStatusTracker {
             mCallback.onMobileStatusChanged(
                     /* updateTelephony= */ true, new MobileStatus(mMobileStatus));
         }
-
-        @Override
-        public void onCallStateChanged(int state, String phoneNumber) {
-            if (Log.isLoggable(TAG, Log.DEBUG)) {
-                Log.d(TAG, "onCallStateChanged: state=" + state);
-            }
-            // TODO(b/177344083) re-implement as necessary.
-            // updateTelephony();
-        }
-
     }
 
     /**

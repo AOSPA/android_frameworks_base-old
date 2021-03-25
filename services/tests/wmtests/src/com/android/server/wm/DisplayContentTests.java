@@ -32,6 +32,8 @@ import static android.view.DisplayCutout.fromBoundingRect;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
+import static android.view.Surface.ROTATION_180;
+import static android.view.Surface.ROTATION_270;
 import static android.view.Surface.ROTATION_90;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
@@ -121,6 +123,7 @@ import androidx.test.filters.SmallTest;
 
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto;
+import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.utils.WmDisplayCutout;
 
 import org.junit.Test;
@@ -339,6 +342,25 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(imeTarget.getRootDisplayArea()).placeImeContainer(imeContainer);
     }
 
+    @Test
+    public void testUpdateImeParent_forceUpdateRelativeLayer() {
+        final DisplayArea.Tokens imeContainer = mDisplayContent.getImeContainer();
+        final ActivityRecord activity = createActivityRecord(mDisplayContent);
+
+        final WindowState startingWin = createWindow(null, TYPE_APPLICATION_STARTING, activity,
+                "startingWin");
+        startingWin.setHasSurface(true);
+        assertTrue(startingWin.canBeImeTarget());
+        final SurfaceControl imeSurfaceParent = mock(SurfaceControl.class);
+        doReturn(imeSurfaceParent).when(mDisplayContent).computeImeParent();
+        spyOn(imeContainer);
+
+        mDisplayContent.updateImeParent();
+
+        // Force reassign the relative layer when the IME surface parent is changed.
+        verify(imeContainer).assignRelativeLayer(any(), eq(imeSurfaceParent), anyInt(), eq(true));
+    }
+
     /**
      * This tests stack movement between displays and proper stack's, task's and app token's display
      * container references updates.
@@ -515,6 +537,7 @@ public class DisplayContentTests extends WindowTestsBase {
                 TYPE_WALLPAPER, TYPE_APPLICATION);
         final WindowState wallpaper = windows[0];
         assertTrue(wallpaper.mIsWallpaper);
+        wallpaper.mToken.asWallpaperToken().setVisibility(false);
         // By default WindowState#mWallpaperVisible is false.
         assertFalse(wallpaper.isVisible());
 
@@ -955,16 +978,14 @@ public class DisplayContentTests extends WindowTestsBase {
                 IWindowManager.FIXED_TO_USER_ROTATION_DISABLED);
         final int newOrientation = getRotatedOrientation(dc);
 
-        final Task stack = new TaskBuilder(mSupervisor)
+        final Task task = new TaskBuilder(mSupervisor)
                 .setDisplay(dc).setCreateActivity(true).build();
-        final ActivityRecord activity = stack.getTopMostTask().getTopNonFinishingActivity();
+        final ActivityRecord activity = task.getTopMostTask().getTopNonFinishingActivity();
+        dc.setFocusedApp(activity);
 
         activity.setRequestedOrientation(newOrientation);
 
-        final int expectedOrientation = newOrientation == SCREEN_ORIENTATION_PORTRAIT
-                ? Configuration.ORIENTATION_PORTRAIT
-                : Configuration.ORIENTATION_LANDSCAPE;
-        assertEquals(expectedOrientation, dc.getConfiguration().orientation);
+        assertTrue("The display should be rotated.", dc.getRotation() % 2 == 1);
     }
 
     @Test
@@ -972,17 +993,42 @@ public class DisplayContentTests extends WindowTestsBase {
         final DisplayContent dc = createNewDisplay();
         dc.getDisplayRotation().setFixedToUserRotation(
                 IWindowManager.FIXED_TO_USER_ROTATION_ENABLED);
+        dc.getDisplayRotation().setUserRotation(
+                WindowManagerPolicy.USER_ROTATION_LOCKED, ROTATION_180);
         final int newOrientation = getRotatedOrientation(dc);
 
-        final Task stack = new TaskBuilder(mSupervisor)
+        final Task task = new TaskBuilder(mSupervisor)
                 .setDisplay(dc).setCreateActivity(true).build();
-        final ActivityRecord activity = stack.getTopMostTask().getTopNonFinishingActivity();
+        final ActivityRecord activity = task.getTopMostTask().getTopNonFinishingActivity();
+        dc.setFocusedApp(activity);
 
         activity.setRequestedOrientation(newOrientation);
 
         verify(dc, never()).updateDisplayOverrideConfigurationLocked(any(), eq(activity),
                 anyBoolean(), same(null));
-        assertEquals(dc.getDisplayRotation().getUserRotation(), dc.getRotation());
+        assertEquals(ROTATION_180, dc.getRotation());
+    }
+
+    @Test
+    public void testFixedToUserRotationChanged() {
+        final DisplayContent dc = createNewDisplay();
+        dc.getDisplayRotation().setFixedToUserRotation(
+                IWindowManager.FIXED_TO_USER_ROTATION_ENABLED);
+        dc.getDisplayRotation().setUserRotation(
+                WindowManagerPolicy.USER_ROTATION_LOCKED, ROTATION_0);
+        final int newOrientation = getRotatedOrientation(dc);
+
+        final Task task = new TaskBuilder(mSupervisor)
+                .setDisplay(dc).setCreateActivity(true).build();
+        final ActivityRecord activity = task.getTopMostTask().getTopNonFinishingActivity();
+        dc.setFocusedApp(activity);
+
+        activity.setRequestedOrientation(newOrientation);
+
+        dc.getDisplayRotation().setFixedToUserRotation(
+                IWindowManager.FIXED_TO_USER_ROTATION_DISABLED);
+
+        assertTrue("The display should be rotated.", dc.getRotation() % 2 == 1);
     }
 
     @Test
@@ -1418,7 +1464,7 @@ public class DisplayContentTests extends WindowTestsBase {
         // Assume the animation of PipTaskOrganizer is done and then commit fullscreen to task.
         pinnedTask.setWindowingMode(WINDOWING_MODE_FULLSCREEN);
         displayContent.continueUpdateOrientationForDiffOrienLaunchingApp();
-        assertFalse(displayContent.getPinnedStackController().isPipActiveOrWindowingModeChanging());
+        assertFalse(displayContent.getPinnedTaskController().isPipActiveOrWindowingModeChanging());
         assertEquals(pinnedConfigOrientation, displayConfig.orientation);
 
         clearInvocations(mWm);
@@ -1429,7 +1475,7 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(displayContent.hasTopFixedRotationLaunchingApp());
         verify(mWm, atLeastOnce()).startFreezingDisplay(anyInt(), anyInt(), any(), anyInt());
         assertEquals(homeConfigOrientation, displayConfig.orientation);
-        assertTrue(displayContent.getPinnedStackController().isPipActiveOrWindowingModeChanging());
+        assertTrue(displayContent.getPinnedTaskController().isPipActiveOrWindowingModeChanging());
     }
 
     @Test
@@ -1489,7 +1535,7 @@ public class DisplayContentTests extends WindowTestsBase {
     }
 
     @Test
-    public void testClearIntermediateFixedRotation() throws RemoteException {
+    public void testClearIntermediateFixedRotationAdjustments() throws RemoteException {
         final ActivityRecord activity = new ActivityBuilder(mAtm).setCreateTask(true).build();
         mDisplayContent.setFixedRotationLaunchingApp(activity,
                 (mDisplayContent.getRotation() + 1) % 4);
@@ -1508,7 +1554,8 @@ public class DisplayContentTests extends WindowTestsBase {
                 ArgumentCaptor.forClass(FixedRotationAdjustmentsItem.class);
         verify(mAtm.getLifecycleManager(), atLeastOnce()).scheduleTransaction(
                 eq(activity.app.getThread()), adjustmentsCaptor.capture());
-        assertFalse(activity.hasFixedRotationTransform());
+        // The transformation is kept for animation in real case.
+        assertTrue(activity.hasFixedRotationTransform());
         final FixedRotationAdjustmentsItem clearAdjustments = FixedRotationAdjustmentsItem.obtain(
                 activity.token, null /* fixedRotationAdjustments */);
         // The captor may match other items. The first one must be the item to clear adjustments.
@@ -1817,6 +1864,37 @@ public class DisplayContentTests extends WindowTestsBase {
         verify(mWm.mTaskSnapshotController).snapshotImeFromAttachedTask(appWin1.getTask());
         assertNotNull(mDisplayContent.mImeScreenshot);
         verify(t).show(mDisplayContent.mImeScreenshot);
+    }
+
+    @Test
+    public void testRotateBounds_keepSamePhysicalPosition() {
+        final DisplayContent dc =
+                new TestDisplayContent.Builder(mAtm, 1000, 2000).build();
+        final Rect initBounds = new Rect(0, 0, 700, 1500);
+        final Rect rotateBounds = new Rect(initBounds);
+
+        // Rotate from 0 to 0
+        dc.rotateBounds(ROTATION_0, ROTATION_0, rotateBounds);
+
+        assertEquals(new Rect(0, 0, 700, 1500), rotateBounds);
+
+        // Rotate from 0 to 90
+        rotateBounds.set(initBounds);
+        dc.rotateBounds(ROTATION_0, ROTATION_90, rotateBounds);
+
+        assertEquals(new Rect(0, 300, 1500, 1000), rotateBounds);
+
+        // Rotate from 0 to 180
+        rotateBounds.set(initBounds);
+        dc.rotateBounds(ROTATION_0, ROTATION_180, rotateBounds);
+
+        assertEquals(new Rect(300, 500, 1000, 2000), rotateBounds);
+
+        // Rotate from 0 to 270
+        rotateBounds.set(initBounds);
+        dc.rotateBounds(ROTATION_0, ROTATION_270, rotateBounds);
+
+        assertEquals(new Rect(500, 0, 2000, 700), rotateBounds);
     }
 
     private boolean isOptionsPanelAtRight(int displayId) {

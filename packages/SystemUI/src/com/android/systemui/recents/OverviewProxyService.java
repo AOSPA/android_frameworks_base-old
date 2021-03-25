@@ -85,6 +85,7 @@ import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.shared.recents.IOverviewProxy;
 import com.android.systemui.shared.recents.IPinnedStackAnimationListener;
 import com.android.systemui.shared.recents.ISplitScreenListener;
+import com.android.systemui.shared.recents.IStartingWindowListener;
 import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.recents.model.Task;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
@@ -101,6 +102,7 @@ import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.splitscreen.SplitScreen;
+import com.android.wm.shell.startingsurface.StartingSurface;
 import com.android.wm.shell.transition.RemoteTransitions;
 
 import java.io.FileDescriptor;
@@ -150,6 +152,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private final Optional<OneHanded> mOneHandedOptional;
     private final CommandQueue mCommandQueue;
     private final RemoteTransitions mShellTransitions;
+    private final Optional<StartingSurface> mStartingSurface;
 
     private Region mActiveNavBarRegion;
 
@@ -167,6 +170,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private boolean mSupportsRoundedCornersOnWindows;
     private int mNavBarMode = NAV_BAR_MODE_3BUTTON;
     private final ArraySet<IRemoteTransition> mRemoteTransitions = new ArraySet<>();
+    private IStartingWindowListener mIStartingWindowListener;
 
     @VisibleForTesting
     public ISystemUiProxy mSysUiProxy = new ISystemUiProxy.Stub() {
@@ -440,6 +444,21 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
 
         @Override
+        public void setStartingWindowListener(IStartingWindowListener listener) {
+            if (!verifyCaller("setStartingWindowListener")) {
+                return;
+            }
+            mIStartingWindowListener = listener;
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mStartingSurface.ifPresent(s ->
+                        s.setStartingWindowListener(mStartingWindowListener));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
         public void onQuickSwitchToNewTask(@Surface.Rotation int rotation) {
             if (!verifyCaller("onQuickSwitchToNewTask")) {
                 return;
@@ -662,14 +681,29 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
 
         @Override
-        public void startIntent(PendingIntent intent, int stage, int position, Bundle options) {
+        public void startIntent(PendingIntent intent, Intent fillInIntent,
+                int stage, int position, Bundle options) {
             if (!verifyCaller("startIntent")) {
                 return;
             }
             final long token = Binder.clearCallingIdentity();
             try {
                 mSplitScreenOptional.ifPresent(s ->
-                        s.startIntent(intent, stage, position, options));
+                        s.startIntent(intent, mContext, fillInIntent, stage, position, options));
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void removeFromSideStage(int taskId) {
+            if (!verifyCaller("removeFromSideStage")) {
+                return;
+            }
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mSplitScreenOptional.ifPresent(
+                        s -> s.removeFromSideStage(taskId));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -770,6 +804,9 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private final Consumer<Boolean> mPinnedStackAnimationCallback =
             this::notifyPinnedStackAnimationStarted;
 
+    private final BiConsumer<Integer, Integer> mStartingWindowListener =
+            this::notifyTaskLaunching;
+
     // This is the death handler for the binder from the launcher service
     private final IBinder.DeathRecipient mOverviewServiceDeathRcpt
             = this::cleanupAfterDeath;
@@ -789,10 +826,10 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
 
         @Override
-        public void onTaskStageChanged(int taskId, int stage) {
+        public void onTaskStageChanged(int taskId, int stage, boolean visible) {
             try {
                 if (mISplitScreenListener != null) {
-                    mISplitScreenListener.onTaskStageChanged(taskId, stage);
+                    mISplitScreenListener.onTaskStageChanged(taskId, stage, visible);
                 }
             } catch (RemoteException e) {
                 Log.e(TAG_OPS, "onTaskStageChanged", e);
@@ -812,7 +849,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
             Optional<Lazy<StatusBar>> statusBarOptionalLazy,
             Optional<OneHanded> oneHandedOptional,
             BroadcastDispatcher broadcastDispatcher,
-            RemoteTransitions shellTransitions) {
+            RemoteTransitions shellTransitions,
+            Optional<StartingSurface> startingSurface) {
         super(broadcastDispatcher);
         mContext = context;
         mPipOptional = pipOptional;
@@ -872,6 +910,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
         // Connect to the service
         updateEnabledState();
         startConnectionToCurrentUser();
+        mStartingSurface = startingSurface;
     }
 
     @Override
@@ -935,6 +974,18 @@ public class OverviewProxyService extends CurrentUserTracker implements
             mIPinnedStackAnimationListener.onPinnedStackAnimationStarted();
         } catch (RemoteException e) {
             Log.e(TAG_OPS, "Failed to call onPinnedStackAnimationStarted()", e);
+        }
+    }
+
+    private void notifyTaskLaunching(int taskId, int supportedType) {
+        if (mIStartingWindowListener == null) {
+            return;
+        }
+
+        try {
+            mIStartingWindowListener.onTaskLaunching(taskId, supportedType);
+        } catch (RemoteException e) {
+            Log.e(TAG_OPS, "Failed to call notifyTaskLaunching()", e);
         }
     }
 

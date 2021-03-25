@@ -64,6 +64,8 @@ import static android.media.AudioAttributes.FLAG_BYPASS_INTERRUPTION_POLICY;
 import static android.media.AudioAttributes.USAGE_NOTIFICATION_RINGTONE;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_CRITICAL;
 import static android.os.IServiceManager.DUMP_FLAG_PRIORITY_NORMAL;
+import static android.os.PowerWhitelistManager.REASON_NOTIFICATION_SERVICE;
+import static android.os.PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 import static android.os.UserHandle.USER_NULL;
 import static android.os.UserHandle.USER_SYSTEM;
 import static android.service.notification.NotificationListenerService.FLAG_FILTER_TYPE_ALERTING;
@@ -73,6 +75,8 @@ import static android.service.notification.NotificationListenerService.FLAG_FILT
 import static android.service.notification.NotificationListenerService.HINT_HOST_DISABLE_CALL_EFFECTS;
 import static android.service.notification.NotificationListenerService.HINT_HOST_DISABLE_EFFECTS;
 import static android.service.notification.NotificationListenerService.HINT_HOST_DISABLE_NOTIFICATION_EFFECTS;
+import static android.service.notification.NotificationListenerService.META_DATA_DEFAULT_FILTER_TYPES;
+import static android.service.notification.NotificationListenerService.META_DATA_DISABLED_FILTER_TYPES;
 import static android.service.notification.NotificationListenerService.NOTIFICATION_CHANNEL_OR_GROUP_ADDED;
 import static android.service.notification.NotificationListenerService.NOTIFICATION_CHANNEL_OR_GROUP_DELETED;
 import static android.service.notification.NotificationListenerService.NOTIFICATION_CHANNEL_OR_GROUP_UPDATED;
@@ -130,7 +134,6 @@ import android.app.AlarmManager;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
 import android.app.AutomaticZenRule;
-import android.app.BroadcastOptions;
 import android.app.IActivityManager;
 import android.app.INotificationManager;
 import android.app.ITransientNotification;
@@ -1044,15 +1047,19 @@ public class NotificationManagerService extends SystemService {
 
         @Override
         public void onNotificationClear(int callingUid, int callingPid,
-                String pkg, String tag, int id, int userId, String key,
+                String pkg, int userId, String key,
                 @NotificationStats.DismissalSurface int dismissalSurface,
                 @NotificationStats.DismissalSentiment int dismissalSentiment,
                 NotificationVisibility nv) {
+            String tag = null;
+            int id = 0;
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
                     r.recordDismissalSurface(dismissalSurface);
                     r.recordDismissalSentiment(dismissalSentiment);
+                    tag = r.getSbn().getTag();
+                    id = r.getSbn().getId();
                 }
             }
             cancelNotification(callingUid, callingPid, pkg, tag, id, 0,
@@ -1261,7 +1268,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
-        public void onNotificationBubbleChanged(String key, boolean isBubble, int flags) {
+        public void onNotificationBubbleChanged(String key, boolean isBubble, int bubbleFlags) {
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
@@ -1279,7 +1286,7 @@ public class NotificationManagerService extends SystemService {
                         r.getNotification().flags |= FLAG_ONLY_ALERT_ONCE;
                         r.setFlagBubbleRemoved(false);
                         if (r.getNotification().getBubbleMetadata() != null) {
-                            r.getNotification().getBubbleMetadata().setFlags(flags);
+                            r.getNotification().getBubbleMetadata().setFlags(bubbleFlags);
                         }
                         // Force isAppForeground true here, because for sysui's purposes we
                         // want to adjust the flag behaviour.
@@ -1291,7 +1298,8 @@ public class NotificationManagerService extends SystemService {
         }
 
         @Override
-        public void onBubbleNotificationSuppressionChanged(String key, boolean isSuppressed) {
+        public void onBubbleNotificationSuppressionChanged(String key, boolean isNotifSuppressed,
+                boolean isBubbleSuppressed) {
             synchronized (mNotificationLock) {
                 NotificationRecord r = mNotificationsByKey.get(key);
                 if (r != null) {
@@ -1300,26 +1308,36 @@ public class NotificationManagerService extends SystemService {
                         // No data, do nothing
                         return;
                     }
-                    boolean currentlySuppressed = data.isNotificationSuppressed();
-                    if (currentlySuppressed == isSuppressed) {
-                        // No changes, do nothing
-                        return;
-                    }
+
                     int flags = data.getFlags();
-                    if (isSuppressed) {
-                        flags |= Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
-                    } else {
-                        flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+                    boolean flagChanged = false;
+                    if (data.isNotificationSuppressed() != isNotifSuppressed) {
+                        flagChanged = true;
+                        if (isNotifSuppressed) {
+                            flags |= Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+                        } else {
+                            flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
+                        }
                     }
-                    data.setFlags(flags);
-                    r.getNotification().flags |= FLAG_ONLY_ALERT_ONCE;
-                    mHandler.post(new EnqueueNotificationRunnable(r.getUser().getIdentifier(), r,
-                            true /* isAppForeground */));
+                    if (data.isBubbleSuppressed() != isBubbleSuppressed) {
+                        flagChanged = true;
+                        if (isBubbleSuppressed) {
+                            flags |= Notification.BubbleMetadata.FLAG_SUPPRESS_BUBBLE;
+                        } else {
+                            flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_BUBBLE;
+                        }
+                    }
+                    if (flagChanged) {
+                        data.setFlags(flags);
+                        r.getNotification().flags |= FLAG_ONLY_ALERT_ONCE;
+                        mHandler.post(
+                                new EnqueueNotificationRunnable(r.getUser().getIdentifier(), r,
+                                        true /* isAppForeground */));
+                    }
                 }
             }
         }
 
-        @Override
         /**
          * Grant permission to read the specified URI to the package specified in the
          * NotificationRecord associated with the given key. The callingUid represents the UID of
@@ -1329,6 +1347,7 @@ public class NotificationManagerService extends SystemService {
          * user associated with the NotificationRecord, and this grant will fail when trying
          * to grant URI permissions across users.
          */
+        @Override
         public void grantInlineReplyUriPermission(String key, Uri uri, UserHandle user,
                 String packageName, int callingUid) {
             synchronized (mNotificationLock) {
@@ -5997,10 +6016,11 @@ public class NotificationManagerService extends SystemService {
                 for (int i = 0; i < intentCount; i++) {
                     PendingIntent pendingIntent = notification.allPendingIntents.valueAt(i);
                     if (pendingIntent != null) {
-                        am.setPendingIntentWhitelistDuration(pendingIntent.getTarget(),
+                        am.setPendingIntentAllowlistDuration(pendingIntent.getTarget(),
                                 ALLOWLIST_TOKEN, duration,
-                                BroadcastOptions.TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED
-                        );
+                                TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED,
+                                REASON_NOTIFICATION_SERVICE,
+                                "NotificationManagerService");
                         am.setPendingIntentAllowBgActivityStarts(pendingIntent.getTarget(),
                                 ALLOWLIST_TOKEN, (FLAG_ACTIVITY_SENDER | FLAG_BROADCAST_SENDER
                                         | FLAG_SERVICE_SENDER));
@@ -6061,6 +6081,17 @@ public class NotificationManagerService extends SystemService {
             }
         }
 
+        // Ensure CallStyle has all the correct actions
+        if ("android.app.Notification$CallStyle".equals(
+                notification.extras.getString(Notification.EXTRA_TEMPLATE))) {
+            Notification.Builder builder =
+                    Notification.Builder.recoverBuilder(getContext(), notification);
+            Notification.CallStyle style = (Notification.CallStyle) builder.getStyle();
+            List<Notification.Action> actions = style.getActionsListWithSystemActions();
+            notification.actions = new Notification.Action[actions.size()];
+            actions.toArray(notification.actions);
+        }
+
         // Remote views? Are they too big?
         checkRemoteViews(pkg, tag, id, notification);
     }
@@ -6108,16 +6139,25 @@ public class NotificationManagerService extends SystemService {
     }
 
     /**
-     * Some bubble specific flags only work if the app is foreground, this will strip those flags
-     * if the app wasn't foreground.
+     * Strips any flags from BubbleMetadata that wouldn't apply (e.g. app not foreground).
      */
     private void updateNotificationBubbleFlags(NotificationRecord r, boolean isAppForeground) {
-        // Remove any bubble specific flags that only work when foregrounded
         Notification notification = r.getNotification();
         Notification.BubbleMetadata metadata = notification.getBubbleMetadata();
-        if (!isAppForeground && metadata != null) {
+        if (metadata == null) {
+            // Nothing to update
+            return;
+        }
+        if (!isAppForeground) {
+            // Auto expand only works if foreground
             int flags = metadata.getFlags();
             flags &= ~Notification.BubbleMetadata.FLAG_AUTO_EXPAND_BUBBLE;
+            metadata.setFlags(flags);
+        }
+        if (!metadata.isBubbleSuppressable()) {
+            // If it's not suppressable remove the suppress flag
+            int flags = metadata.getFlags();
+            flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_BUBBLE;
             metadata.setFlags(flags);
         }
     }
@@ -6495,9 +6535,11 @@ public class NotificationManagerService extends SystemService {
                     }
 
                     if (mReason == REASON_LISTENER_CANCEL
-                        && (r.getNotification().flags & FLAG_BUBBLE) != 0) {
+                            && r.getNotification().isBubbleNotification()) {
+                        boolean isBubbleSuppressed = r.getNotification().getBubbleMetadata() != null
+                                && r.getNotification().getBubbleMetadata().isBubbleSuppressed();
                         mNotificationDelegate.onBubbleNotificationSuppressionChanged(
-                            r.getKey(), /* suppressed */ true);
+                                r.getKey(), true /* suppressed */, isBubbleSuppressed);
                         return;
                     }
 
@@ -9859,31 +9901,52 @@ public class NotificationManagerService extends SystemService {
             Pair listener = Pair.create(si.getComponentName(), userId);
             NotificationListenerFilter existingNlf =
                     mRequestedNotificationListeners.get(listener);
-            if (existingNlf  == null) {
-                // no stored filters for this listener; see if they provided a default
-                if (si.metaData != null) {
-                    String typeList = si.metaData.getString(
-                            NotificationListenerService.META_DATA_DEFAULT_FILTER_TYPES);
-                    if (typeList != null) {
-                        int types = 0;
-                        String[] typeStrings = typeList.split(XML_SEPARATOR);
-                        for (int i = 0; i < typeStrings.length; i++) {
-                            if (TextUtils.isEmpty(typeStrings[i])) {
-                                continue;
-                            }
-                            try {
-                                types |= Integer.parseInt(typeStrings[i]);
-                            } catch (NumberFormatException e) {
-                                // skip
-                            }
+            if (si.metaData != null) {
+                if (existingNlf  == null) {
+                    // no stored filters for this listener; see if they provided a default
+                    if (si.metaData.containsKey(META_DATA_DEFAULT_FILTER_TYPES)) {
+                        String typeList =
+                                si.metaData.get(META_DATA_DEFAULT_FILTER_TYPES).toString();
+                        if (typeList != null) {
+                            int types = getTypesFromStringList(typeList);
+                            NotificationListenerFilter nlf =
+                                    new NotificationListenerFilter(types, new ArraySet<>());
+                            mRequestedNotificationListeners.put(listener, nlf);
                         }
+                    }
+                }
 
-                         NotificationListenerFilter nlf =
-                                 new NotificationListenerFilter(types, new ArraySet<>());
+                // also check the types they never want bridged
+                if (si.metaData.containsKey(META_DATA_DISABLED_FILTER_TYPES)) {
+                    int neverBridge = getTypesFromStringList(si.metaData.get(
+                            META_DATA_DISABLED_FILTER_TYPES).toString());
+                    if (neverBridge != 0) {
+                        NotificationListenerFilter nlf =
+                                mRequestedNotificationListeners.getOrDefault(
+                                        listener, new NotificationListenerFilter());
+                        nlf.setTypes(nlf.getTypes() & ~neverBridge);
                         mRequestedNotificationListeners.put(listener, nlf);
                     }
                 }
             }
+        }
+
+        private int getTypesFromStringList(String typeList) {
+            int types = 0;
+            if (typeList != null) {
+                String[] typeStrings = typeList.split(XML_SEPARATOR);
+                for (int i = 0; i < typeStrings.length; i++) {
+                    if (TextUtils.isEmpty(typeStrings[i])) {
+                        continue;
+                    }
+                    try {
+                        types |= Integer.parseInt(typeStrings[i]);
+                    } catch (NumberFormatException e) {
+                        // skip
+                    }
+                }
+            }
+            return types;
         }
 
         @GuardedBy("mNotificationLock")

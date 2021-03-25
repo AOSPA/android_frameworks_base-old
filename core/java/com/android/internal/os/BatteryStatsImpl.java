@@ -81,7 +81,6 @@ import android.util.IndentingPrintWriter;
 import android.util.IntArray;
 import android.util.KeyValueListParser;
 import android.util.Log;
-import android.util.LogWriter;
 import android.util.LongSparseArray;
 import android.util.LongSparseLongArray;
 import android.util.MutableInt;
@@ -106,9 +105,8 @@ import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidFreqTimeReader
 import com.android.internal.os.KernelCpuUidTimeReader.KernelCpuUidUserSysTimeReader;
 import com.android.internal.os.SystemServerCpuThreadReader.SystemServiceCpuThreadTimes;
 import com.android.internal.power.MeasuredEnergyStats;
-import com.android.internal.power.MeasuredEnergyStats.StandardEnergyBucket;
+import com.android.internal.power.MeasuredEnergyStats.StandardPowerBucket;
 import com.android.internal.util.ArrayUtils;
-import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.XmlUtils;
 import com.android.net.module.util.NetworkCapabilitiesUtils;
@@ -164,7 +162,6 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final boolean DEBUG_BINDER_STATS = false;
     private static final boolean DEBUG_MEMORY = false;
     private static final boolean DEBUG_HISTORY = false;
-    private static final boolean USE_OLD_HISTORY = false;   // for debugging.
 
     // TODO: remove "tcp" from network methods, since we measure total stats.
 
@@ -172,7 +169,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    static final int VERSION = 193 + (USE_OLD_HISTORY ? 1000 : 0);
+    static final int VERSION = 194;
 
     // The maximum number of names wakelocks we will keep track of
     // per uid; once the limit is reached, we batch the remaining wakelocks
@@ -740,15 +737,11 @@ public class BatteryStatsImpl extends BatteryStats {
     protected boolean mRecordingHistory = false;
     int mNumHistoryItems;
 
+    final HashMap<HistoryTag, Integer> mHistoryTagPool = new HashMap<>();
     final Parcel mHistoryBuffer = Parcel.obtain();
     final HistoryItem mHistoryLastWritten = new HistoryItem();
     final HistoryItem mHistoryLastLastWritten = new HistoryItem();
-    final HistoryItem mHistoryReadTmp = new HistoryItem();
     final HistoryItem mHistoryAddTmp = new HistoryItem();
-    final HashMap<HistoryTag, Integer> mHistoryTagPool = new HashMap<>();
-    String[] mReadHistoryStrings;
-    int[] mReadHistoryUids;
-    int mReadHistoryChars;
     int mNextHistoryTagIdx = 0;
     int mNumHistoryTagChars = 0;
     int mHistoryBufferLastPos = -1;
@@ -789,6 +782,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private final HashMap<Integer, PowerForUid> mUidToPower = ENABLE_FOREGROUND_STATS_COLLECTION
             ? new HashMap<>() : null;
 
+    @NonNull
     final BatteryStatsHistory mBatteryStatsHistory;
 
     final HistoryItem mHistoryCur = new HistoryItem();
@@ -831,9 +825,9 @@ public class BatteryStatsImpl extends BatteryStats {
     long mCurStepStatSoftIrqTimeMs;
     long mCurStepStatIdleTimeMs;
 
+    private BatteryStatsHistoryIterator mBatteryStatsHistoryIterator;
     private HistoryItem mHistoryIterator;
     private boolean mReadOverflow;
-    private boolean mIteratingHistory;
 
     int mStartCount;
 
@@ -1002,9 +996,9 @@ public class BatteryStatsImpl extends BatteryStats {
     int mWifiRadioPowerState = DataConnectionRealTimeInfo.DC_POWER_STATE_LOW;
 
     /**
-     * Accumulated global (generally, device-wide total) energy consumption of various consumers
+     * Accumulated global (generally, device-wide total) charge consumption of various consumers
      * while on battery.
-     * Its '<b>custom</b> energy buckets' correspond to the
+     * Its '<b>custom</b> power buckets' correspond to the
      * {@link android.hardware.power.stats.EnergyConsumer.ordinal}s of (custom) energy consumer
      * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
      *
@@ -1015,6 +1009,8 @@ public class BatteryStatsImpl extends BatteryStats {
     protected @Nullable MeasuredEnergyStats mGlobalMeasuredEnergyStats;
     /** Last known screen state. Needed for apportioning display energy. */
     int mScreenStateAtLastEnergyMeasurement = Display.STATE_UNKNOWN;
+    /** Cpu Power calculator for attributing measured cpu charge consumption to uids */
+    @Nullable CpuPowerCalculator mCpuPowerCalculator = null;
 
     /**
      * These provide time bases that discount the time the device is plugged
@@ -1197,7 +1193,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mStatsFile = null;
         mCheckinFile = null;
         mDailyFile = null;
-        mBatteryStatsHistory = null;
+        mBatteryStatsHistory = new BatteryStatsHistory(mHistoryBuffer);
         mHandler = null;
         mPlatformIdleStateCallback = null;
         mMeasuredEnergyRetriever = null;
@@ -3244,17 +3240,6 @@ public class BatteryStatsImpl extends BatteryStats {
         return idx;
     }
 
-    private void readHistoryTag(int index, HistoryTag tag) {
-        if (index < mReadHistoryStrings.length) {
-            tag.string = mReadHistoryStrings[index];
-            tag.uid = mReadHistoryUids[index];
-        } else {
-            tag.string = null;
-            tag.uid = 0;
-        }
-        tag.poolIdx = index;
-    }
-
     /*
         The history delta format uses flags to denote further data in subsequent ints in the parcel.
 
@@ -3631,137 +3616,6 @@ public class BatteryStatsImpl extends BatteryStats {
         mLastStepStatIdleTimeMs = mCurStepStatIdleTimeMs;
     }
 
-    public void readHistoryDelta(Parcel src, HistoryItem cur) {
-        int firstToken = src.readInt();
-        int deltaTimeToken = firstToken&DELTA_TIME_MASK;
-        cur.cmd = HistoryItem.CMD_UPDATE;
-        cur.numReadInts = 1;
-        if (DEBUG) Slog.i(TAG, "READ DELTA: firstToken=0x" + Integer.toHexString(firstToken)
-                + " deltaTimeToken=" + deltaTimeToken);
-
-        if (deltaTimeToken < DELTA_TIME_ABS) {
-            cur.time += deltaTimeToken;
-        } else if (deltaTimeToken == DELTA_TIME_ABS) {
-            cur.readFromParcel(src);
-            if (DEBUG) Slog.i(TAG, "READ DELTA: ABS time=" + cur.time);
-            return;
-        } else if (deltaTimeToken == DELTA_TIME_INT) {
-            int delta = src.readInt();
-            cur.time += delta;
-            cur.numReadInts += 1;
-            if (DEBUG) Slog.i(TAG, "READ DELTA: time delta=" + delta + " new time=" + cur.time);
-        } else {
-            long delta = src.readLong();
-            if (DEBUG) Slog.i(TAG, "READ DELTA: time delta=" + delta + " new time=" + cur.time);
-            cur.time += delta;
-            cur.numReadInts += 2;
-        }
-
-        final int batteryLevelInt;
-        if ((firstToken&DELTA_BATTERY_LEVEL_FLAG) != 0) {
-            batteryLevelInt = src.readInt();
-            readBatteryLevelInt(batteryLevelInt, cur);
-            cur.numReadInts += 1;
-            if (DEBUG) Slog.i(TAG, "READ DELTA: batteryToken=0x"
-                    + Integer.toHexString(batteryLevelInt)
-                    + " batteryLevel=" + cur.batteryLevel
-                    + " batteryTemp=" + cur.batteryTemperature
-                    + " batteryVolt=" + (int)cur.batteryVoltage);
-        } else {
-            batteryLevelInt = 0;
-        }
-
-        if ((firstToken&DELTA_STATE_FLAG) != 0) {
-            int stateInt = src.readInt();
-            cur.states = (firstToken&DELTA_STATE_MASK) | (stateInt&(~STATE_BATTERY_MASK));
-            cur.batteryStatus = (byte)((stateInt>>STATE_BATTERY_STATUS_SHIFT)
-                    & STATE_BATTERY_STATUS_MASK);
-            cur.batteryHealth = (byte)((stateInt>>STATE_BATTERY_HEALTH_SHIFT)
-                    & STATE_BATTERY_HEALTH_MASK);
-            cur.batteryPlugType = (byte)((stateInt>>STATE_BATTERY_PLUG_SHIFT)
-                    & STATE_BATTERY_PLUG_MASK);
-            switch (cur.batteryPlugType) {
-                case 1:
-                    cur.batteryPlugType = BatteryManager.BATTERY_PLUGGED_AC;
-                    break;
-                case 2:
-                    cur.batteryPlugType = BatteryManager.BATTERY_PLUGGED_USB;
-                    break;
-                case 3:
-                    cur.batteryPlugType = BatteryManager.BATTERY_PLUGGED_WIRELESS;
-                    break;
-            }
-            cur.numReadInts += 1;
-            if (DEBUG) Slog.i(TAG, "READ DELTA: stateToken=0x"
-                    + Integer.toHexString(stateInt)
-                    + " batteryStatus=" + cur.batteryStatus
-                    + " batteryHealth=" + cur.batteryHealth
-                    + " batteryPlugType=" + cur.batteryPlugType
-                    + " states=0x" + Integer.toHexString(cur.states));
-        } else {
-            cur.states = (firstToken&DELTA_STATE_MASK) | (cur.states&(~STATE_BATTERY_MASK));
-        }
-
-        if ((firstToken&DELTA_STATE2_FLAG) != 0) {
-            cur.states2 = src.readInt();
-            if (DEBUG) Slog.i(TAG, "READ DELTA: states2=0x"
-                    + Integer.toHexString(cur.states2));
-        }
-
-        if ((firstToken&DELTA_WAKELOCK_FLAG) != 0) {
-            int indexes = src.readInt();
-            int wakeLockIndex = indexes&0xffff;
-            int wakeReasonIndex = (indexes>>16)&0xffff;
-            if (wakeLockIndex != 0xffff) {
-                cur.wakelockTag = cur.localWakelockTag;
-                readHistoryTag(wakeLockIndex, cur.wakelockTag);
-                if (DEBUG) Slog.i(TAG, "READ DELTA: wakelockTag=#" + cur.wakelockTag.poolIdx
-                    + " " + cur.wakelockTag.uid + ":" + cur.wakelockTag.string);
-            } else {
-                cur.wakelockTag = null;
-            }
-            if (wakeReasonIndex != 0xffff) {
-                cur.wakeReasonTag = cur.localWakeReasonTag;
-                readHistoryTag(wakeReasonIndex, cur.wakeReasonTag);
-                if (DEBUG) Slog.i(TAG, "READ DELTA: wakeReasonTag=#" + cur.wakeReasonTag.poolIdx
-                    + " " + cur.wakeReasonTag.uid + ":" + cur.wakeReasonTag.string);
-            } else {
-                cur.wakeReasonTag = null;
-            }
-            cur.numReadInts += 1;
-        } else {
-            cur.wakelockTag = null;
-            cur.wakeReasonTag = null;
-        }
-
-        if ((firstToken&DELTA_EVENT_FLAG) != 0) {
-            cur.eventTag = cur.localEventTag;
-            final int codeAndIndex = src.readInt();
-            cur.eventCode = (codeAndIndex&0xffff);
-            final int index = ((codeAndIndex>>16)&0xffff);
-            readHistoryTag(index, cur.eventTag);
-            cur.numReadInts += 1;
-            if (DEBUG) Slog.i(TAG, "READ DELTA: event=" + cur.eventCode + " tag=#"
-                    + cur.eventTag.poolIdx + " " + cur.eventTag.uid + ":"
-                    + cur.eventTag.string);
-        } else {
-            cur.eventCode = HistoryItem.EVENT_NONE;
-        }
-
-        if ((batteryLevelInt&BATTERY_DELTA_LEVEL_FLAG) != 0) {
-            cur.stepDetails = mReadHistoryStepDetails;
-            cur.stepDetails.readFromParcel(src);
-        } else {
-            cur.stepDetails = null;
-        }
-
-        if ((firstToken&DELTA_BATTERY_CHARGE_FLAG) != 0) {
-            cur.batteryChargeUah = src.readInt();
-        }
-        cur.modemRailChargeMah = src.readDouble();
-        cur.wifiRailChargeMah = src.readDouble();
-    }
-
     @Override
     public void commitCurrentHistoryBatchLocked() {
         mHistoryLastWritten.cmd = HistoryItem.CMD_NULL;
@@ -3873,7 +3727,7 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     private void addHistoryBufferLocked(long elapsedRealtimeMs, byte cmd, HistoryItem cur) {
-        if (mIteratingHistory) {
+        if (mBatteryStatsHistoryIterator != null) {
             throw new IllegalStateException("Can't do this while iterating history!");
         }
         mHistoryBufferLastPos = mHistoryBuffer.dataPosition();
@@ -3917,44 +3771,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
     void addHistoryRecordInnerLocked(long elapsedRealtimeMs, long uptimeMs, HistoryItem cur) {
         addHistoryBufferLocked(elapsedRealtimeMs, uptimeMs, cur);
-
-        if (!USE_OLD_HISTORY) {
-            return;
-        }
-
-        if (!mHaveBatteryLevel || !mRecordingHistory) {
-            return;
-        }
-
-        // If the current time is basically the same as the last time,
-        // and no states have since the last recorded entry changed and
-        // are now resetting back to their original value, then just collapse
-        // into one record.
-        if (mHistoryEnd != null && mHistoryEnd.cmd == HistoryItem.CMD_UPDATE
-                && (mHistoryBaseTimeMs + elapsedRealtimeMs) < (mHistoryEnd.time + 1000)
-                && ((mHistoryEnd.states^cur.states)&mChangedStates&mActiveHistoryStates) == 0
-                && ((mHistoryEnd.states2^cur.states2)&mChangedStates2&mActiveHistoryStates2) == 0) {
-            // If the current is the same as the one before, then we no
-            // longer need the entry.
-            if (mHistoryLastEnd != null && mHistoryLastEnd.cmd == HistoryItem.CMD_UPDATE
-                    && (mHistoryBaseTimeMs + elapsedRealtimeMs) < (mHistoryEnd.time + 500)
-                    && mHistoryLastEnd.sameNonEvent(cur)) {
-                mHistoryLastEnd.next = null;
-                mHistoryEnd.next = mHistoryCache;
-                mHistoryCache = mHistoryEnd;
-                mHistoryEnd = mHistoryLastEnd;
-                mHistoryLastEnd = null;
-            } else {
-                mChangedStates |= mHistoryEnd.states^(cur.states&mActiveHistoryStates);
-                mChangedStates2 |= mHistoryEnd.states^(cur.states2&mActiveHistoryStates2);
-                mHistoryEnd.setTo(mHistoryEnd.time, HistoryItem.CMD_UPDATE, cur);
-            }
-            return;
-        }
-
-        mChangedStates = 0;
-        mChangedStates2 = 0;
-        addHistoryBufferLocked(elapsedRealtimeMs, HistoryItem.CMD_UPDATE, cur);
     }
 
     public void addHistoryEventLocked(long elapsedRealtimeMs, long uptimeMs, int code,
@@ -3992,15 +3808,6 @@ public class BatteryStatsImpl extends BatteryStats {
 
     void clearHistoryLocked() {
         if (DEBUG_HISTORY) Slog.i(TAG, "********** CLEARING HISTORY!");
-        if (USE_OLD_HISTORY) {
-            if (mHistory != null) {
-                mHistoryEnd.next = mHistoryCache;
-                mHistoryCache = mHistory;
-                mHistory = mHistoryLastEnd = mHistoryEnd = null;
-            }
-            mNumHistoryItems = 0;
-        }
-
         mHistoryBaseTimeMs = 0;
         mLastHistoryElapsedRealtimeMs = 0;
         mTrackRunningHistoryElapsedRealtimeMs = 0;
@@ -7160,35 +6967,35 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     @Override
-    public long getScreenOnEnergy() {
-        return getMeasuredEnergyMicroJoules(MeasuredEnergyStats.ENERGY_BUCKET_SCREEN_ON);
+    public long getScreenOnMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON);
     }
 
     @Override
-    public long getScreenDozeEnergy() {
-        return getMeasuredEnergyMicroJoules(MeasuredEnergyStats.ENERGY_BUCKET_SCREEN_DOZE);
+    public long getScreenDozeMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_DOZE);
     }
 
     /**
-     * Returns the energy in microjoules that the given standard energy bucket consumed.
-     * Will return {@link #ENERGY_DATA_UNAVAILABLE} if data is unavailable
+     * Returns the consumption (in microcoulombs) that the given standard power bucket consumed.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable
      *
-     * @param bucket standard energy bucket of interest
-     * @return energy (in microjoules) used for this energy bucket
+     * @param bucket standard power bucket of interest
+     * @return charge (in microcoulombs) used for this power bucket
      */
-    private long getMeasuredEnergyMicroJoules(@StandardEnergyBucket int bucket) {
+    private long getPowerBucketConsumptionUC(@StandardPowerBucket int bucket) {
         if (mGlobalMeasuredEnergyStats == null) {
-            return ENERGY_DATA_UNAVAILABLE;
+            return POWER_DATA_UNAVAILABLE;
         }
-        return mGlobalMeasuredEnergyStats.getAccumulatedStandardBucketEnergy(bucket);
+        return mGlobalMeasuredEnergyStats.getAccumulatedStandardBucketCharge(bucket);
     }
 
     @Override
-    public @Nullable long[] getCustomMeasuredEnergiesMicroJoules() {
+    public @Nullable long[] getCustomConsumerMeasuredBatteryConsumptionUC() {
         if (mGlobalMeasuredEnergyStats == null) {
             return null;
         }
-        return mGlobalMeasuredEnergyStats.getAccumulatedCustomBucketEnergies();
+        return mGlobalMeasuredEnergyStats.getAccumulatedCustomBucketCharges();
     }
 
     @Override public long getStartClockTime() {
@@ -7542,8 +7349,8 @@ public class BatteryStatsImpl extends BatteryStats {
         private final ArraySet<BinderCallStats> mBinderCallStats = new ArraySet<>();
 
         /**
-         * Measured energies attributed to this uid while on battery.
-         * Its '<b>custom</b> energy buckets' correspond to the
+         * Measured charge consumption by this uid while on battery.
+         * Its '<b>custom</b> power buckets' correspond to the
          * {@link android.hardware.power.stats.EnergyConsumer.ordinal}s of (custom) energy consumer
          * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
          *
@@ -7963,46 +7770,44 @@ public class BatteryStatsImpl extends BatteryStats {
             return mUidMeasuredEnergyStats;
         }
 
-        /** Adds the given energy to the given standard energy bucket for this uid. */
-        private void addEnergyToStandardBucketLocked(long energyDeltaUJ,
-                @StandardEnergyBucket int energyBucket, boolean accumulate) {
-            getOrCreateMeasuredEnergyStatsLocked()
-                    .updateStandardBucket(energyBucket, energyDeltaUJ, accumulate);
+        /** Adds the given charge to the given standard power bucket for this uid. */
+        private void addChargeToStandardBucketLocked(long chargeDeltaUC,
+                @StandardPowerBucket int powerBucket) {
+            getOrCreateMeasuredEnergyStatsLocked().updateStandardBucket(powerBucket, chargeDeltaUC);
         }
 
-        /** Adds the given energy to the given custom energy bucket for this uid. */
-        private void addEnergyToCustomBucketLocked(long energyDeltaUJ, int energyBucket,
-                boolean accumulate) {
-            getOrCreateMeasuredEnergyStatsLocked()
-                    .updateCustomBucket(energyBucket, energyDeltaUJ, accumulate);
+        /** Adds the given charge to the given custom power bucket for this uid. */
+        private void addChargeToCustomBucketLocked(long chargeDeltaUC, int powerBucket) {
+            getOrCreateMeasuredEnergyStatsLocked().updateCustomBucket(powerBucket, chargeDeltaUC);
         }
 
         /**
-         * Returns the energy used by this uid for a standard energy bucket of interest.
-         * @param bucket standard energy bucket of interest
-         * @return energy (in microjoules) used by this uid for this energy bucket
+         * Returns the battery consumption (in microcoulomb) of this uid for a standard power bucket
+         * of interest.
+         * @param bucket standard power bucket of interest
+         * @return consumption (in microcolombs) used by this uid for this power bucket
          */
-        public long getMeasuredEnergyMicroJoules(@StandardEnergyBucket int bucket) {
+        public long getMeasuredBatteryConsumptionUC(@StandardPowerBucket int bucket) {
             if (mBsi.mGlobalMeasuredEnergyStats == null
                     || !mBsi.mGlobalMeasuredEnergyStats.isStandardBucketSupported(bucket)) {
-                return ENERGY_DATA_UNAVAILABLE;
+                return POWER_DATA_UNAVAILABLE;
             }
             if (mUidMeasuredEnergyStats == null) {
                 return 0L; // It is supported, but was never filled, so it must be 0
             }
-            return mUidMeasuredEnergyStats.getAccumulatedStandardBucketEnergy(bucket);
+            return mUidMeasuredEnergyStats.getAccumulatedStandardBucketCharge(bucket);
         }
 
         @Override
-        public long[] getCustomMeasuredEnergiesMicroJoules() {
+        public long[] getCustomConsumerMeasuredBatteryConsumptionUC() {
             if (mBsi.mGlobalMeasuredEnergyStats == null) {
                 return null;
             }
             if (mUidMeasuredEnergyStats == null) {
                 // Custom buckets may exist. But all values for this uid are 0 so we report all 0s.
-                return new long[mBsi.mGlobalMeasuredEnergyStats.getNumberCustomEnergyBuckets()];
+                return new long[mBsi.mGlobalMeasuredEnergyStats.getNumberCustomPowerBuckets()];
             }
-            return mUidMeasuredEnergyStats.getAccumulatedCustomBucketEnergies();
+            return mUidMeasuredEnergyStats.getAccumulatedCustomBucketCharges();
         }
 
         /**
@@ -8673,8 +8478,8 @@ public class BatteryStatsImpl extends BatteryStats {
         }
 
         @Override
-        public long getScreenOnEnergy() {
-            return getMeasuredEnergyMicroJoules(MeasuredEnergyStats.ENERGY_BUCKET_SCREEN_ON);
+        public long getScreenOnMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON);
         }
 
         void initNetworkActivityLocked() {
@@ -10733,7 +10538,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         if (systemDir == null) {
             mStatsFile = null;
-            mBatteryStatsHistory = new BatteryStatsHistory(this, mHistoryBuffer);
+            mBatteryStatsHistory = new BatteryStatsHistory(mHistoryBuffer);
         } else {
             mStatsFile = new AtomicFile(new File(systemDir, "batterystats.bin"));
             mBatteryStatsHistory = new BatteryStatsHistory(this, systemDir, mHistoryBuffer);
@@ -10855,7 +10660,7 @@ public class BatteryStatsImpl extends BatteryStats {
         mExternalSync = null;
         mConstants = new Constants(mHandler);
         clearHistoryLocked();
-        mBatteryStatsHistory = new BatteryStatsHistory(this, mHistoryBuffer);
+        mBatteryStatsHistory = new BatteryStatsHistory(mHistoryBuffer);
         readFromParcel(p);
         mPlatformIdleStateCallback = null;
         mMeasuredEnergyRetriever = null;
@@ -11222,60 +11027,6 @@ public class BatteryStatsImpl extends BatteryStats {
         return mNextMaxDailyDeadlineMs;
     }
 
-    @Override
-    public boolean startIteratingOldHistoryLocked() {
-        if (DEBUG_HISTORY) Slog.i(TAG, "ITERATING: buff size=" + mHistoryBuffer.dataSize()
-                + " pos=" + mHistoryBuffer.dataPosition());
-        if ((mHistoryIterator = mHistory) == null) {
-            return false;
-        }
-        mHistoryBuffer.setDataPosition(0);
-        mHistoryReadTmp.clear();
-        mReadOverflow = false;
-        mIteratingHistory = true;
-        return true;
-    }
-
-    @Override
-    public boolean getNextOldHistoryLocked(HistoryItem out) {
-        boolean end = mHistoryBuffer.dataPosition() >= mHistoryBuffer.dataSize();
-        if (!end) {
-            readHistoryDelta(mHistoryBuffer, mHistoryReadTmp);
-            mReadOverflow |= mHistoryReadTmp.cmd == HistoryItem.CMD_OVERFLOW;
-        }
-        HistoryItem cur = mHistoryIterator;
-        if (cur == null) {
-            if (!mReadOverflow && !end) {
-                Slog.w(TAG, "Old history ends before new history!");
-            }
-            return false;
-        }
-        out.setTo(cur);
-        mHistoryIterator = cur.next;
-        if (!mReadOverflow) {
-            if (end) {
-                Slog.w(TAG, "New history ends before old history!");
-            } else if (!out.same(mHistoryReadTmp)) {
-                PrintWriter pw = new FastPrintWriter(new LogWriter(android.util.Log.WARN, TAG));
-                pw.println("Histories differ!");
-                pw.println("Old history:");
-                (new HistoryPrinter()).printNextItem(pw, out, 0, false, true);
-                pw.println("New history:");
-                (new HistoryPrinter()).printNextItem(pw, mHistoryReadTmp, 0, false,
-                        true);
-                pw.flush();
-            }
-        }
-        return true;
-    }
-
-    @Override
-    public void finishIteratingOldHistoryLocked() {
-        mIteratingHistory = false;
-        mHistoryBuffer.setDataPosition(mHistoryBuffer.dataSize());
-        mHistoryIterator = null;
-    }
-
     public int getHistoryTotalSize() {
         return mConstants.MAX_HISTORY_BUFFER * mConstants.MAX_HISTORY_FILES;
     }
@@ -11287,67 +11038,55 @@ public class BatteryStatsImpl extends BatteryStats {
     @Override
     @UnsupportedAppUsage
     public boolean startIteratingHistoryLocked() {
-        mBatteryStatsHistory.startIteratingHistory();
         mReadOverflow = false;
-        mIteratingHistory = true;
-        mReadHistoryStrings = new String[mHistoryTagPool.size()];
-        mReadHistoryUids = new int[mHistoryTagPool.size()];
-        mReadHistoryChars = 0;
-        for (HashMap.Entry<HistoryTag, Integer> ent : mHistoryTagPool.entrySet()) {
-            final HistoryTag tag = ent.getKey();
-            final int idx = ent.getValue();
-            mReadHistoryStrings[idx] = tag.string;
-            mReadHistoryUids[idx] = tag.uid;
-            mReadHistoryChars += tag.string.length() + 1;
-        }
+        mBatteryStatsHistoryIterator = createBatteryStatsHistoryIterator();
         return true;
+    }
+
+    /**
+     * Creates an iterator for battery stats history.
+     */
+    @VisibleForTesting
+    public BatteryStatsHistoryIterator createBatteryStatsHistoryIterator() {
+        ArrayList<HistoryTag> tags = new ArrayList<>(mHistoryTagPool.size());
+        for (Map.Entry<HistoryTag, Integer> entry: mHistoryTagPool.entrySet()) {
+            final HistoryTag tag = entry.getKey();
+            tag.poolIdx = entry.getValue();
+            tags.add(tag);
+        }
+
+        return new BatteryStatsHistoryIterator(mBatteryStatsHistory, tags);
     }
 
     @Override
     public int getHistoryStringPoolSize() {
-        return mReadHistoryStrings.length;
+        return mBatteryStatsHistoryIterator.getHistoryStringPoolSize();
     }
 
     @Override
     public int getHistoryStringPoolBytes() {
-        // Each entry is a fixed 12 bytes: 4 for index, 4 for uid, 4 for string size
-        // Each string character is 2 bytes.
-        return (mReadHistoryStrings.length * 12) + (mReadHistoryChars * 2);
+        return mBatteryStatsHistoryIterator.getHistoryStringPoolBytes();
     }
 
     @Override
     public String getHistoryTagPoolString(int index) {
-        return mReadHistoryStrings[index];
+        return mBatteryStatsHistoryIterator.getHistoryTagPoolString(index);
     }
 
     @Override
     public int getHistoryTagPoolUid(int index) {
-        return mReadHistoryUids[index];
+        return mBatteryStatsHistoryIterator.getHistoryTagPoolUid(index);
     }
 
     @Override
     @UnsupportedAppUsage
     public boolean getNextHistoryLocked(HistoryItem out) {
-        Parcel p = mBatteryStatsHistory.getNextParcel(out);
-        if (p == null) {
-            return false;
-        }
-        final long lastRealtimeMs = out.time;
-        final long lastWalltimeMs = out.currentTime;
-        readHistoryDelta(p, out);
-        if (out.cmd != HistoryItem.CMD_CURRENT_TIME
-                && out.cmd != HistoryItem.CMD_RESET && lastWalltimeMs != 0) {
-            out.currentTime = lastWalltimeMs + (out.time - lastRealtimeMs);
-        }
-        return true;
+        return mBatteryStatsHistoryIterator.next(out);
     }
 
     @Override
     public void finishIteratingHistoryLocked() {
-        mBatteryStatsHistory.finishIteratingHistory();
-        mIteratingHistory = false;
-        mReadHistoryStrings = null;
-        mReadHistoryUids = null;
+        mBatteryStatsHistoryIterator = null;
     }
 
     @Override
@@ -12433,27 +12172,108 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     /**
-     * Accumulate Display energy and distribute it to the correct state and the apps.
+     * Accumulate Cpu charge consumption and distribute it to the correct state and the apps.
+     * Only call if device is on battery.
+     *
+     * @param clusterChargeUC amount of charge (microcoulombs) consumed by each Cpu Cluster
+     * @param accumulator collection of calculated uid cpu power consumption to smear
+     *                    clusterChargeUC against.
+     */
+    @GuardedBy("this")
+    private void updateCpuMeasuredEnergyStatsLocked(@NonNull long[] clusterChargeUC,
+            @NonNull CpuDeltaPowerAccumulator accumulator) {
+        if (DEBUG_ENERGY) {
+            Slog.d(TAG,
+                    "Updating cpu cluster stats: " + clusterChargeUC.toString());
+        }
+        if (mGlobalMeasuredEnergyStats == null) {
+            return;
+        }
+
+        final int numClusters = clusterChargeUC.length;
+        long totalCpuChargeUC = 0;
+        for (int i = 0; i < numClusters; i++) {
+            totalCpuChargeUC += clusterChargeUC[i];
+        }
+        if (totalCpuChargeUC <= 0) return;
+
+        mGlobalMeasuredEnergyStats.updateStandardBucket(MeasuredEnergyStats.POWER_BUCKET_CPU,
+                totalCpuChargeUC);
+
+        // Calculate the measured microcoulombs/calculated milliamp-hour charge ratio for each
+        // cluster to normalize  each uid's estimated power usage against actual power usage for
+        // a given cluster.
+        final double[] clusterChargeRatio = new double[numClusters];
+        for (int cluster = 0; cluster < numClusters; cluster++) {
+
+            final double totalClusterChargeMah = accumulator.totalClusterChargesMah[cluster];
+            if (totalClusterChargeMah <= 0.0) {
+                // This cluster did not have any work on it, since last update.
+                // Avoid dividing by zero.
+                clusterChargeRatio[cluster] = 0.0;
+            } else {
+                clusterChargeRatio[cluster] =
+                        clusterChargeUC[cluster] / accumulator.totalClusterChargesMah[cluster];
+            }
+        }
+
+        // Assign and distribute power usage to apps based on their calculated cpu cluster charge.
+        final long uidChargeArraySize = accumulator.perUidCpuClusterChargesMah.size();
+        for (int i = 0; i < uidChargeArraySize; i++) {
+            final Uid uid = accumulator.perUidCpuClusterChargesMah.keyAt(i);
+            final double[] uidClusterChargesMah = accumulator.perUidCpuClusterChargesMah.valueAt(i);
+
+            // Iterate each cpu cluster and sum the proportional measured cpu cluster charge to
+            // get the total cpu charge consumed by a uid.
+            long uidCpuChargeUC = 0;
+            for (int cluster = 0; cluster < numClusters; cluster++) {
+                final double uidClusterChargeMah = uidClusterChargesMah[cluster];
+
+                // Proportionally allocate the measured cpu cluster charge to a uid using the
+                // measured charge/calculated charge ratio. Add 0.5 to round the proportional
+                // charge double to the nearest long value.
+                final long uidClusterChargeUC =
+                        (long) (uidClusterChargeMah * clusterChargeRatio[cluster]
+                                + 0.5);
+
+                uidCpuChargeUC += uidClusterChargeUC;
+            }
+
+            if (uidCpuChargeUC < 0) {
+                Slog.wtf(TAG,
+                        "Unexpected proportional measured charge (" + uidCpuChargeUC + ") for uid "
+                                + uid.mUid);
+                continue;
+            }
+
+            uid.addChargeToStandardBucketLocked(uidCpuChargeUC,
+                    MeasuredEnergyStats.POWER_BUCKET_CPU);
+        }
+    }
+
+    /**
+     * Accumulate Display charge consumption and distribute it to the correct state and the apps.
      *
      * NOTE: The algorithm used makes the strong assumption that app foreground activity time
      * is always 0 when the screen is not "ON" and whenever the rail energy is 0 (if supported).
      * To the extent that those assumptions are violated, the algorithm will err.
      *
-     * @param energyUJ amount of energy (microjoules) used by Display since this was last called.
+     * @param chargeUC amount of charge (microcoulombs) used by Display since this was last called.
      * @param screenState screen state at the time this data collection was scheduled
      */
     @GuardedBy("this")
-    public void updateDisplayEnergyLocked(long energyUJ, int screenState, long elapsedRealtimeMs) {
-        if (DEBUG_ENERGY) Slog.d(TAG, "Updating display stats: " + energyUJ);
+    public void updateDisplayMeasuredEnergyStatsLocked(long chargeUC, int screenState,
+            long elapsedRealtimeMs) {
+        if (DEBUG_ENERGY) Slog.d(TAG, "Updating display stats: " + chargeUC);
         if (mGlobalMeasuredEnergyStats == null) {
             return;
         }
 
-        final @StandardEnergyBucket int energyBucket =
-                MeasuredEnergyStats.getDisplayEnergyBucket(mScreenStateAtLastEnergyMeasurement);
+        final @StandardPowerBucket int powerBucket =
+                MeasuredEnergyStats.getDisplayPowerBucket(mScreenStateAtLastEnergyMeasurement);
         mScreenStateAtLastEnergyMeasurement = screenState;
 
-        if (!mOnBatteryInternal || energyUJ <= 0) {
+        if (!mOnBatteryInternal || chargeUC <= 0) {
             // There's nothing further to update.
             return;
         }
@@ -12468,13 +12288,13 @@ public class BatteryStatsImpl extends BatteryStats {
             return;
         }
 
-        mGlobalMeasuredEnergyStats.updateStandardBucket(energyBucket, energyUJ, true);
+        mGlobalMeasuredEnergyStats.updateStandardBucket(powerBucket, chargeUC);
 
         // Now we blame individual apps, but only if the display was ON.
-        if (energyBucket != MeasuredEnergyStats.ENERGY_BUCKET_SCREEN_ON) {
+        if (powerBucket != MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON) {
             return;
         }
-        // TODO(b/175726779): Consider unifying the code with the non-rail display energy blaming.
+        // TODO(b/175726779): Consider unifying the code with the non-rail display power blaming.
 
         // NOTE: fg time is NOT pooled. If two uids are both somehow in fg, then that time is
         // 'double counted' and will simply exceed the realtime that elapsed.
@@ -12493,7 +12313,7 @@ public class BatteryStatsImpl extends BatteryStats {
             fgTimeMsArray.put(uid, fgTimeMs);
             totalFgTimeMs += fgTimeMs;
         }
-        long totalDisplayEnergyMJ = energyUJ / 1000; // not final
+        long totalDisplayChargeMC = chargeUC / 1000; // not final
 
         // Actually assign and distribute power usage to apps based on their fg time since mark.
         // TODO(b/175726326): Decide on 'energy' units and make sure algorithm won't overflow.
@@ -12503,47 +12323,58 @@ public class BatteryStatsImpl extends BatteryStats {
             final long fgTimeMs = fgTimeMsArray.valueAt(i);
 
             // Using long division: "appEnergy = totalEnergy * appFg/totalFg + 0.5" with rounding
-            final long appDisplayEnergyMJ =
-                    (totalDisplayEnergyMJ * fgTimeMs + (totalFgTimeMs / 2))
+            final long appDisplayChargeMC =
+                    (totalDisplayChargeMC * fgTimeMs + (totalFgTimeMs / 2))
                     / totalFgTimeMs;
-            uid.addEnergyToStandardBucketLocked(appDisplayEnergyMJ * 1000, energyBucket, true);
+            uid.addChargeToStandardBucketLocked(appDisplayChargeMC * 1000, powerBucket);
 
             // To mitigate round-off errors, remove this app from numerator & denominator totals
-            totalDisplayEnergyMJ -= appDisplayEnergyMJ;
+            totalDisplayChargeMC -= appDisplayChargeMC;
             totalFgTimeMs -= fgTimeMs;
         }
     }
 
     /**
-     * Accumulate Custom energy bucket energy, globally and for each app.
+     * Accumulate Custom power bucket charge, globally and for each app.
      *
-     * @param totalEnergyUJ energy (microjoules) used for this bucket since this was last called.
-     * @param uidEnergies map of uid->energy (microjoules) for this bucket since last called.
-     *                    Data inside uidEnergies will not be modified (treated immutable).
+     * @param totalChargeUC charge (microcoulombs) used for this bucket since this was last called.
+     * @param uidCharges map of uid->charge (microcoulombs) for this bucket since last called.
+     *                    Data inside uidCharges will not be modified (treated immutable).
+     *                    Uids not already known to BatteryStats will be ignored.
      */
-    public void updateCustomMeasuredEnergyDataLocked(int customEnergyBucket,
-            long totalEnergyUJ, @Nullable SparseLongArray uidEnergies) {
+    public void updateCustomMeasuredEnergyStatsLocked(int customPowerBucket,
+            long totalChargeUC, @Nullable SparseLongArray uidCharges) {
         if (DEBUG_ENERGY) {
-            Slog.d(TAG, "Updating attributed measured energy stats for custom bucket "
-                    + customEnergyBucket
-                    + " with total energy " + totalEnergyUJ
-                    + " and uid energies " + String.valueOf(uidEnergies));
+            Slog.d(TAG, "Updating attributed measured charge stats for custom bucket "
+                    + customPowerBucket
+                    + " with total charge " + totalChargeUC
+                    + " and uid charges " + String.valueOf(uidCharges));
         }
         if (mGlobalMeasuredEnergyStats == null) return;
-        if (!mOnBatteryInternal || mIgnoreNextExternalStats || totalEnergyUJ <= 0) return;
+        if (!mOnBatteryInternal || mIgnoreNextExternalStats || totalChargeUC <= 0) return;
 
-        mGlobalMeasuredEnergyStats.updateCustomBucket(customEnergyBucket, totalEnergyUJ, true);
+        mGlobalMeasuredEnergyStats.updateCustomBucket(customPowerBucket, totalChargeUC);
 
-        if (uidEnergies == null) return;
-        final int numUids = uidEnergies.size();
+        if (uidCharges == null) return;
+        final int numUids = uidCharges.size();
         for (int i = 0; i < numUids; i++) {
-            final int uidInt = mapUid(uidEnergies.keyAt(i));
-            final long uidEnergyUJ = uidEnergies.valueAt(i);
-            if (uidEnergyUJ == 0) continue;
-            // TODO(b/180030409): Worry about dead Uids (no longer in BSI) being revived by this,
-            //  or converse problem of not creating a new Uid if its first blame is recorded here.
-            final Uid uidObj = getUidStatsLocked(uidInt);
-            uidObj.addEnergyToCustomBucketLocked(uidEnergyUJ, customEnergyBucket, true);
+            final int uidInt = mapUid(uidCharges.keyAt(i));
+            final long uidChargeUC = uidCharges.valueAt(i);
+            if (uidChargeUC == 0) continue;
+            final Uid uidObj = getAvailableUidStatsLocked(uidInt);
+            if (uidObj != null) {
+                uidObj.addChargeToCustomBucketLocked(uidChargeUC, customPowerBucket);
+            } else {
+                // Ignore any uid not already known to BatteryStats, rather than creating a new Uid.
+                // Otherwise we could end up reviving dead Uids. Note that the CPU data is updated
+                // first, so any uid that has used any CPU should already be known to BatteryStats.
+                // Recently removed uids (especially common for isolated uids) can reach this path
+                // and are ignored.
+                if (!Process.isIsolated(uidInt)) {
+                    Slog.w(TAG, "Received measured charge " + totalChargeUC + " for custom bucket "
+                            + customPowerBucket + " for non-existent uid " + uidInt);
+                }
+            }
         }
     }
 
@@ -12668,6 +12499,64 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     /**
+     * Object for calculating and accumulating the estimated cpu power used while reading the
+     * various cpu kernel files.
+     */
+    @VisibleForTesting
+    public static class CpuDeltaPowerAccumulator {
+        // Keeps track of total charge used per cluster.
+        public final double[] totalClusterChargesMah;
+        // Keeps track of charge used per cluster per uid.
+        public final ArrayMap<Uid, double[]> perUidCpuClusterChargesMah;
+
+        private final CpuPowerCalculator mCalculator;
+        private Uid mCachedUid = null;
+        private double[] mUidClusterCache = null;
+
+        CpuDeltaPowerAccumulator(CpuPowerCalculator calculator, int nClusters) {
+            mCalculator = calculator;
+            totalClusterChargesMah = new double[nClusters];
+            perUidCpuClusterChargesMah = new ArrayMap<>();
+        }
+
+        /** Add per cpu cluster durations to the currently cached uid. */
+        public void addCpuClusterDurationsMs(Uid uid, long[] durationsMs) {
+            final double[] uidChargesMah = getOrCreateUidCpuClusterCharges(uid);
+            for (int cluster = 0; cluster < durationsMs.length; cluster++) {
+                final double estimatedDeltaMah = mCalculator.calculatePerCpuClusterPowerMah(cluster,
+                        durationsMs[cluster]);
+                uidChargesMah[cluster] += estimatedDeltaMah;
+                totalClusterChargesMah[cluster] += estimatedDeltaMah;
+            }
+        }
+
+        /** Add per speed per cpu cluster durations to the currently cached uid. */
+        public void addCpuClusterSpeedDurationsMs(Uid uid, int cluster, int speed,
+                long durationsMs) {
+            final double[] uidChargesMah = getOrCreateUidCpuClusterCharges(uid);
+            final double estimatedDeltaMah = mCalculator.calculatePerCpuFreqPowerMah(cluster, speed,
+                    durationsMs);
+            uidChargesMah[cluster] += estimatedDeltaMah;
+            totalClusterChargesMah[cluster] += estimatedDeltaMah;
+        }
+
+        private double[] getOrCreateUidCpuClusterCharges(Uid uid) {
+            // Repeated additions on the same uid is very likely.
+            // Skip a lookup if getting the same uid as the last get.
+            if (uid == mCachedUid) return mUidClusterCache;
+
+            double[] uidChargesMah = perUidCpuClusterChargesMah.get(uid);
+            if (uidChargesMah == null) {
+                uidChargesMah = new double[totalClusterChargesMah.length];
+                perUidCpuClusterChargesMah.put(uid, uidChargesMah);
+            }
+            mCachedUid = uid;
+            mUidClusterCache = uidChargesMah;
+            return uidChargesMah;
+        }
+    }
+
+    /**
      * Read and distribute CPU usage across apps. If their are partial wakelocks being held
      * and we are on battery with screen off, we give more of the cpu time to those apps holding
      * wakelocks. If the screen is on, we just assign the actual cpu time an app used.
@@ -12676,7 +12565,8 @@ public class BatteryStatsImpl extends BatteryStats {
      * buckets.
      */
     @GuardedBy("this")
-    public void updateCpuTimeLocked(boolean onBattery, boolean onBatteryScreenOff) {
+    public void updateCpuTimeLocked(boolean onBattery, boolean onBatteryScreenOff,
+            long[] measuredCpuClusterChargeUC) {
         if (mPowerProfile == null) {
             return;
         }
@@ -12730,21 +12620,48 @@ public class BatteryStatsImpl extends BatteryStats {
         mUserInfoProvider.refreshUserIds();
         final SparseLongArray updatedUids = mCpuUidFreqTimeReader.perClusterTimesAvailable()
                 ? null : new SparseLongArray();
+
+        final CpuDeltaPowerAccumulator powerAccumulator;
+        if (mGlobalMeasuredEnergyStats != null
+                && mGlobalMeasuredEnergyStats.isStandardBucketSupported(
+                MeasuredEnergyStats.POWER_BUCKET_CPU) && mCpuPowerCalculator != null) {
+            if (measuredCpuClusterChargeUC == null) {
+                Slog.wtf(TAG,
+                        "POWER_BUCKET_CPU supported but no measured Cpu Cluster charge reported "
+                                + "on updateCpuTimeLocked!");
+                powerAccumulator = null;
+            } else {
+                // Cpu Measured Energy is supported, create an object to accumulate the estimated
+                // charge consumption since the last cpu update
+                final int numClusters = mPowerProfile.getNumCpuClusters();
+                powerAccumulator = new CpuDeltaPowerAccumulator(mCpuPowerCalculator, numClusters);
+            }
+        } else {
+            powerAccumulator = null;
+        }
+
         readKernelUidCpuTimesLocked(partialTimersToConsider, updatedUids, onBattery);
         // updatedUids=null means /proc/uid_time_in_state provides snapshots of per-cluster cpu
         // freqs, so no need to approximate these values.
         if (updatedUids != null) {
-            updateClusterSpeedTimes(updatedUids, onBattery);
+            updateClusterSpeedTimes(updatedUids, onBattery, powerAccumulator);
         }
-        readKernelUidCpuFreqTimesLocked(partialTimersToConsider, onBattery, onBatteryScreenOff);
+        readKernelUidCpuFreqTimesLocked(partialTimersToConsider, onBattery, onBatteryScreenOff,
+                powerAccumulator);
         mNumAllUidCpuTimeReads += 2;
         if (mConstants.TRACK_CPU_ACTIVE_CLUSTER_TIME) {
+            // Cpu Active times do not get any info ony how to attribute measured Cpu Cluster
+            // charge, so not need to provide the powerAccumulator
             readKernelUidCpuActiveTimesLocked(onBattery);
-            readKernelUidCpuClusterTimesLocked(onBattery);
+            readKernelUidCpuClusterTimesLocked(onBattery, powerAccumulator);
             mNumAllUidCpuTimeReads += 2;
         }
 
         updateSystemServerThreadStats();
+
+        if (powerAccumulator != null) {
+            updateCpuMeasuredEnergyStatsLocked(measuredCpuClusterChargeUC, powerAccumulator);
+        }
     }
 
     /**
@@ -12831,12 +12748,16 @@ public class BatteryStatsImpl extends BatteryStats {
 
     /**
      * Take snapshot of cpu times (aggregated over all uids) at different frequencies and
-     * calculate cpu times spent by each uid at different frequencies.
+     * calculate cpu times spent by each uid at different frequencies. Will also add estimated
+     * power consumptions, if powerAccumulator data structure is provided.
      *
-     * @param updatedUids The uids for which times spent at different frequencies are calculated.
+     * @param updatedUids  The uids for which times spent at different frequencies are calculated.
+     * @param onBattery whether or not this is onBattery
+     * @param powerAccumulator object to accumulate the estimated cluster charge consumption.
      */
     @VisibleForTesting
-    public void updateClusterSpeedTimes(@NonNull SparseLongArray updatedUids, boolean onBattery) {
+    public void updateClusterSpeedTimes(@NonNull SparseLongArray updatedUids, boolean onBattery,
+            @Nullable CpuDeltaPowerAccumulator powerAccumulator) {
         long totalCpuClustersTimeMs = 0;
         // Read the time spent for each cluster at various cpu frequencies.
         final long[][] clusterSpeedTimesMs = new long[mKernelCpuSpeedReaders.length][];
@@ -12878,9 +12799,15 @@ public class BatteryStatsImpl extends BatteryStats {
                         if (cpuSpeeds[speed] == null) {
                             cpuSpeeds[speed] = new LongSamplingCounter(mOnBatteryTimeBase);
                         }
-                        cpuSpeeds[speed].addCountLocked(appCpuTimeUs
+                        final long deltaSpeedCount = appCpuTimeUs
                                 * clusterSpeedTimesMs[cluster][speed]
-                                / totalCpuClustersTimeMs, onBattery);
+                                / totalCpuClustersTimeMs;
+                        cpuSpeeds[speed].addCountLocked(deltaSpeedCount, onBattery);
+
+                        if (powerAccumulator != null) {
+                            powerAccumulator.addCpuClusterSpeedDurationsMs(u, cluster,
+                                    speed, deltaSpeedCount);
+                        }
                     }
                 }
             }
@@ -13002,13 +12929,18 @@ public class BatteryStatsImpl extends BatteryStats {
 
     /**
      * Take a snapshot of the cpu times spent by each uid in each freq and update the
-     * corresponding counters.
+     * corresponding counters.  Will also add estimated power consumptions, if powerAccumulator
+     * data structure is provided.
      *
      * @param partialTimers The wakelock holders among which the cpu freq times will be distributed.
+     * @param onBattery whether or not this is onBattery
+     * @param onBatteryScreenOff whether or not this is onBattery with the screen off.
+     * @param powerAccumulator object to accumulate the estimated cluster charge consumption.
      */
     @VisibleForTesting
     public void readKernelUidCpuFreqTimesLocked(@Nullable ArrayList<StopwatchTimer> partialTimers,
-            boolean onBattery, boolean onBatteryScreenOff) {
+            boolean onBattery, boolean onBatteryScreenOff,
+            @Nullable CpuDeltaPowerAccumulator powerAccumulator) {
         final boolean perClusterTimesAvailable =
                 mCpuUidFreqTimeReader.perClusterTimesAvailable();
         final int numWakelocks = partialTimers == null ? 0 : partialTimers.size();
@@ -13017,7 +12949,9 @@ public class BatteryStatsImpl extends BatteryStats {
         final long startTimeMs = mClocks.uptimeMillis();
         final long elapsedRealtimeMs = mClocks.elapsedRealtime();
         final List<Integer> uidsToRemove = new ArrayList<>();
-        mCpuUidFreqTimeReader.readDelta(false, (uid, cpuFreqTimeMs) -> {
+        // If power is being accumulated for attribution, data needs to be read immediately.
+        final boolean forceRead = powerAccumulator != null;
+        mCpuUidFreqTimeReader.readDelta(forceRead, (uid, cpuFreqTimeMs) -> {
             uid = mapUid(uid);
             if (Process.isIsolated(uid)) {
                 uidsToRemove.add(uid);
@@ -13080,6 +13014,11 @@ public class BatteryStatsImpl extends BatteryStats {
                             appAllocationUs = cpuFreqTimeMs[freqIndex] * 1000;
                         }
                         cpuTimesUs[speed].addCountLocked(appAllocationUs, onBattery);
+
+                        if (powerAccumulator != null) {
+                            powerAccumulator.addCpuClusterSpeedDurationsMs(u, cluster,
+                                    speed, appAllocationUs / 1000);
+                        }
                         freqIndex++;
                     }
                 }
@@ -13120,6 +13059,11 @@ public class BatteryStatsImpl extends BatteryStats {
                                 mWakeLockAllocationsUs[cluster][speed] / (numWakelocks - i);
                         cpuTimeUs[speed].addCountLocked(allocationUs, onBattery);
                         mWakeLockAllocationsUs[cluster][speed] -= allocationUs;
+
+                        if (powerAccumulator != null) {
+                            powerAccumulator.addCpuClusterSpeedDurationsMs(u, cluster,
+                                    speed, allocationUs / 1000);
+                        }
                     }
                 }
             }
@@ -13162,14 +13106,21 @@ public class BatteryStatsImpl extends BatteryStats {
 
     /**
      * Take a snapshot of the cpu cluster times spent by each uid and update the corresponding
-     * counters.
+     * counters. Will also add estimated power consumptions, if powerAccumulator data structure
+     * is provided.
+     *
+     * @param onBattery whether or not this is onBattery
+     * @param powerAccumulator object to accumulate the estimated cluster charge consumption.
      */
     @VisibleForTesting
-    public void readKernelUidCpuClusterTimesLocked(boolean onBattery) {
+    public void readKernelUidCpuClusterTimesLocked(boolean onBattery,
+            @Nullable CpuDeltaPowerAccumulator powerAccumulator) {
         final long startTimeMs = mClocks.uptimeMillis();
         final long elapsedRealtimeMs = mClocks.elapsedRealtime();
         final List<Integer> uidsToRemove = new ArrayList<>();
-        mCpuUidClusterTimeReader.readDelta(false, (uid, cpuClusterTimesMs) -> {
+        // If power is being accumulated for attribution, data needs to be read immediately.
+        final boolean forceRead = powerAccumulator != null;
+        mCpuUidClusterTimeReader.readDelta(forceRead, (uid, cpuClusterTimesMs) -> {
             uid = mapUid(uid);
             if (Process.isIsolated(uid)) {
                 uidsToRemove.add(uid);
@@ -13183,6 +13134,10 @@ public class BatteryStatsImpl extends BatteryStats {
             }
             final Uid u = getUidStatsLocked(uid, elapsedRealtimeMs, startTimeMs);
             u.mCpuClusterTimesMs.addCountLocked(cpuClusterTimesMs, onBattery);
+
+            if (powerAccumulator != null) {
+                powerAccumulator.addCpuClusterDurationsMs(u, cpuClusterTimesMs);
+            }
         });
         for (int uid : uidsToRemove) {
             mCpuUidClusterTimeReader.removeUid(uid);
@@ -13449,8 +13404,9 @@ public class BatteryStatsImpl extends BatteryStats {
             }
         }
 
+        mBatteryVoltageMv = voltageMv;
+
         if (ENABLE_FOREGROUND_STATS_COLLECTION) {
-            mBatteryVoltageMv = voltageMv;
             if (onBattery) {
                 final long energyNwh = (voltageMv * (long) chargeUah);
                 final long energyDelta = mLastBatteryEnergyCapacityNwh - energyNwh;
@@ -14234,9 +14190,9 @@ public class BatteryStatsImpl extends BatteryStats {
         registerUsbStateReceiver(context);
     }
     /**
-     * Initialize the measured energy stats data structures.
+     * Initialize the measured charge stats data structures.
      *
-     * @param supportedStandardBuckets boolean array indicating which {@link StandardEnergyBucket}s
+     * @param supportedStandardBuckets boolean array indicating which {@link StandardPowerBucket}s
      *                                 are currently supported.
      *                                 If null, none are supported (regardless of numCustomBuckets).
      * @param numCustomBuckets number of custom (OTHER) EnergyConsumers on this device
@@ -14249,25 +14205,37 @@ public class BatteryStatsImpl extends BatteryStats {
 
         if (supportedStandardBuckets == null) {
             if (mGlobalMeasuredEnergyStats != null) {
-                // Measured energy buckets no longer supported, wipe out the existing data.
+                // Measured energy no longer supported, wipe out the existing data.
                 supportedBucketMismatch = true;
             }
-        } else if (mGlobalMeasuredEnergyStats == null) {
-            mGlobalMeasuredEnergyStats
-                    = new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
-            return;
         } else {
-            supportedBucketMismatch = !mGlobalMeasuredEnergyStats.isSupportEqualTo(
-                    supportedStandardBuckets, numCustomBuckets);
+            if (mGlobalMeasuredEnergyStats == null) {
+                mGlobalMeasuredEnergyStats =
+                        new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
+                return;
+            } else {
+                supportedBucketMismatch = !mGlobalMeasuredEnergyStats.isSupportEqualTo(
+                        supportedStandardBuckets, numCustomBuckets);
+            }
+
+            if (supportedStandardBuckets[MeasuredEnergyStats.POWER_BUCKET_CPU]) {
+                mCpuPowerCalculator = new CpuPowerCalculator(mPowerProfile);
+            }
         }
 
         if (supportedBucketMismatch) {
-            mGlobalMeasuredEnergyStats = supportedStandardBuckets == null ?
-                    null : new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
-            // Supported energy buckets changed since last boot.
+            mGlobalMeasuredEnergyStats = supportedStandardBuckets == null
+                    ? null : new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
+            // Supported power buckets changed since last boot.
             // Existing data is no longer reliable.
             resetAllStatsLocked(SystemClock.uptimeMillis(), SystemClock.elapsedRealtime());
         }
+    }
+
+    /** Get the last known Battery voltage (in millivolts), returns -1 if unknown */
+    @GuardedBy("this")
+    public int getBatteryVoltageMvLocked() {
+        return mBatteryVoltageMv;
     }
 
     @VisibleForTesting
@@ -14545,11 +14513,11 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     /**
-     * Dump measured energy stats
+     * Dump measured charge stats
      */
     @GuardedBy("this")
     public void dumpMeasuredEnergyStatsLocked(PrintWriter pw) {
-        pw.printf("On battery measured energy stats (microjoules) \n");
+        pw.printf("On battery measured charge stats (microcoulombs) \n");
         if (mGlobalMeasuredEnergyStats == null) {
             pw.printf("    Not supported on this device.\n");
             return;
@@ -14566,7 +14534,7 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
-    /** Dump measured energy stats for the given uid */
+    /** Dump measured charge stats for the given uid */
     @GuardedBy("this")
     private void dumpMeasuredEnergyStatsLocked(PrintWriter pw, String name,
             MeasuredEnergyStats stats) {
@@ -14626,7 +14594,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         Parcel p = Parcel.obtain();
         final long start = SystemClock.uptimeMillis();
-        writeHistoryBuffer(p, true, true);
+        writeHistoryBuffer(p, true);
         if (DEBUG) {
             Slog.d(TAG, "writeHistoryBuffer duration ms:"
                     + (SystemClock.uptimeMillis() - start) + " bytes:" + p.dataSize());
@@ -14720,7 +14688,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 if (raw.length > 0) {
                     history.unmarshall(raw, 0, raw.length);
                     history.setDataPosition(0);
-                    readHistoryBuffer(history, true);
+                    readHistoryBuffer(history);
                 }
                 if (DEBUG) {
                     Slog.d(TAG, "readLocked history file::"
@@ -14744,10 +14712,6 @@ public class BatteryStatsImpl extends BatteryStats {
             mRecordingHistory = true;
             final long elapsedRealtimeMs = mClocks.elapsedRealtime();
             final long uptimeMs = mClocks.uptimeMillis();
-            if (USE_OLD_HISTORY) {
-                addHistoryRecordLocked(elapsedRealtimeMs, uptimeMs,
-                        HistoryItem.CMD_START, mHistoryCur);
-            }
             addHistoryBufferLocked(elapsedRealtimeMs, HistoryItem.CMD_START, mHistoryCur);
             startRecordingHistory(elapsedRealtimeMs, uptimeMs, false);
         }
@@ -14759,7 +14723,7 @@ public class BatteryStatsImpl extends BatteryStats {
         return 0;
     }
 
-    void  readHistoryBuffer(Parcel in, boolean andOldHistory) throws ParcelFormatException {
+    void  readHistoryBuffer(Parcel in) throws ParcelFormatException {
         final int version = in.readInt();
         if (version != VERSION) {
             Slog.w("BatteryStats", "readHistoryBuffer: version got " + version
@@ -14785,10 +14749,6 @@ public class BatteryStatsImpl extends BatteryStats {
                     + " bytes at " + curPos);
             mHistoryBuffer.appendFrom(in, curPos, bufSize);
             in.setDataPosition(curPos + bufSize);
-        }
-
-        if (andOldHistory) {
-            readOldHistory(in);
         }
 
         if (DEBUG_HISTORY) {
@@ -14819,18 +14779,7 @@ public class BatteryStatsImpl extends BatteryStats {
         }
     }
 
-    void readOldHistory(Parcel in) {
-        if (!USE_OLD_HISTORY) {
-            return;
-        }
-        mHistory = mHistoryEnd = mHistoryCache = null;
-        while (in.dataAvail() > 0) {
-            HistoryItem rec = new HistoryItem(in);
-            addHistoryRecordLocked(rec);
-        }
-    }
-
-    void writeHistoryBuffer(Parcel out, boolean inclData, boolean andOldHistory) {
+    void writeHistoryBuffer(Parcel out, boolean inclData) {
         if (DEBUG_HISTORY) {
             StringBuilder sb = new StringBuilder(128);
             sb.append("****************** WRITING mHistoryBaseTimeMs: ");
@@ -14851,22 +14800,6 @@ public class BatteryStatsImpl extends BatteryStats {
         if (DEBUG_HISTORY) Slog.i(TAG, "***************** WRITING HISTORY: "
                 + mHistoryBuffer.dataSize() + " bytes at " + out.dataPosition());
         out.appendFrom(mHistoryBuffer, 0, mHistoryBuffer.dataSize());
-
-        if (andOldHistory) {
-            writeOldHistory(out);
-        }
-    }
-
-    void writeOldHistory(Parcel out) {
-        if (!USE_OLD_HISTORY) {
-            return;
-        }
-        HistoryItem rec = mHistory;
-        while (rec != null) {
-            if (rec.time >= 0) rec.writeToParcel(out, 0);
-            rec = rec.next;
-        }
-        out.writeLong(-1);
     }
 
     public void readSummaryFromParcel(Parcel in) throws ParcelFormatException {
@@ -14879,7 +14812,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         boolean inclHistory = in.readBoolean();
         if (inclHistory) {
-            readHistoryBuffer(in, true);
+            readHistoryBuffer(in);
             mBatteryStatsHistory.readFromParcel(in);
         }
 
@@ -15398,7 +15331,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         out.writeBoolean(inclHistory);
         if (inclHistory) {
-            writeHistoryBuffer(out, true, true);
+            writeHistoryBuffer(out, true);
             mBatteryStatsHistory.writeToParcel(out);
         }
 
@@ -15911,7 +15844,7 @@ public class BatteryStatsImpl extends BatteryStats {
             throw new ParcelFormatException("Bad magic number: #" + Integer.toHexString(magic));
         }
 
-        readHistoryBuffer(in, false);
+        readHistoryBuffer(in);
         mBatteryStatsHistory.readFromParcel(in);
 
         mStartCount = in.readInt();
@@ -16150,7 +16083,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         out.writeInt(MAGIC);
 
-        writeHistoryBuffer(out, true, false);
+        writeHistoryBuffer(out, true);
         mBatteryStatsHistory.writeToParcel(out);
 
         out.writeInt(mStartCount);

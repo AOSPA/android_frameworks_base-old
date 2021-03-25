@@ -16,6 +16,7 @@
 
 package com.android.server.net.integrationtests
 
+import android.app.usage.NetworkStatsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.Context.BIND_AUTO_CREATE
@@ -25,7 +26,6 @@ import android.content.ServiceConnection
 import android.net.ConnectivityManager
 import android.net.IDnsResolver
 import android.net.INetd
-import android.net.INetworkStatsService
 import android.net.LinkProperties
 import android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL
 import android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET
@@ -37,7 +37,7 @@ import android.net.Uri
 import android.net.metrics.IpConnectivityLog
 import android.os.ConditionVariable
 import android.os.IBinder
-import android.os.INetworkManagementService
+import android.os.SystemConfigManager
 import android.os.UserHandle
 import android.testing.TestableContext
 import android.util.Log
@@ -57,6 +57,7 @@ import org.junit.BeforeClass
 import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.AdditionalAnswers
+import org.mockito.ArgumentMatchers.anyString
 import org.mockito.Mock
 import org.mockito.Mockito.any
 import org.mockito.Mockito.anyInt
@@ -85,15 +86,15 @@ class ConnectivityServiceIntegrationTest {
     // lateinit used here for mocks as they need to be reinitialized between each test and the test
     // should crash if they are used before being initialized.
     @Mock
-    private lateinit var netManager: INetworkManagementService
-    @Mock
-    private lateinit var statsService: INetworkStatsService
+    private lateinit var statsManager: NetworkStatsManager
     @Mock
     private lateinit var log: IpConnectivityLog
     @Mock
     private lateinit var netd: INetd
     @Mock
     private lateinit var dnsResolver: IDnsResolver
+    @Mock
+    private lateinit var systemConfigManager: SystemConfigManager
     @Spy
     private var context = TestableContext(realContext)
 
@@ -151,6 +152,11 @@ class ConnectivityServiceIntegrationTest {
         doReturn(UserHandle.ALL).`when`(asUserCtx).user
         doReturn(asUserCtx).`when`(context).createContextAsUser(eq(UserHandle.ALL), anyInt())
         doNothing().`when`(context).sendStickyBroadcast(any(), any())
+        doReturn(Context.SYSTEM_CONFIG_SERVICE).`when`(context)
+                .getSystemServiceName(SystemConfigManager::class.java)
+        doReturn(systemConfigManager).`when`(context)
+                .getSystemService(Context.SYSTEM_CONFIG_SERVICE)
+        doReturn(IntArray(0)).`when`(systemConfigManager).getSystemPermissionUids(anyString())
 
         networkStackClient = TestNetworkStackClient(realContext)
         networkStackClient.init()
@@ -163,12 +169,13 @@ class ConnectivityServiceIntegrationTest {
         service = TestConnectivityService(makeDependencies())
         cm = ConnectivityManager(context, service)
         context.addMockSystemService(Context.CONNECTIVITY_SERVICE, cm)
+        context.addMockSystemService(Context.NETWORK_STATS_SERVICE, statsManager)
 
         service.systemReadyInternal()
     }
 
     private inner class TestConnectivityService(deps: Dependencies) : ConnectivityService(
-            context, netManager, statsService, dnsResolver, log, netd, deps)
+            context, dnsResolver, log, netd, deps)
 
     private fun makeDependencies(): ConnectivityService.Dependencies {
         val deps = spy(ConnectivityService.Dependencies())

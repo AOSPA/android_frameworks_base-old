@@ -82,4 +82,16 @@ public class FeatureFlags {
     public boolean isMonetEnabled() {
         return mFlagReader.isEnabled(R.bool.flag_monet);
     }
+
+    public boolean isNavigationBarOverlayEnabled() {
+        return mFlagReader.isEnabled(R.bool.flag_navigation_bar_overlay);
+    }
+
+    public boolean isPMLiteEnabled() {
+        return mFlagReader.isEnabled(R.bool.flag_pm_lite);
+    }
+
+    public boolean isAlarmTileAvailable() {
+        return mFlagReader.isEnabled(R.bool.flag_alarm_tile);
+    }
 }

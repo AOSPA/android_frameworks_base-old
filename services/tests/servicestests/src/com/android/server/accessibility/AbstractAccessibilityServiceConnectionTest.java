@@ -160,6 +160,7 @@ public class AbstractAccessibilityServiceConnectionTest {
     @Mock private AccessibilitySecurityPolicy mMockSecurityPolicy;
     @Mock private AccessibilityWindowManager mMockA11yWindowManager;
     @Mock private AbstractAccessibilityServiceConnection.SystemSupport mMockSystemSupport;
+    @Mock private AccessibilityTrace mMockA11yTrace;
     @Mock private WindowManagerInternal mMockWindowManagerInternal;
     @Mock private SystemActionPerformer mMockSystemActionPerformer;
     @Mock private IBinder mMockService;
@@ -188,6 +189,7 @@ public class AbstractAccessibilityServiceConnectionTest {
         when(mMockContext.getPackageManager()).thenReturn(mMockPackageManager);
         when(mMockPackageManager.hasSystemFeature(FEATURE_FINGERPRINT)).thenReturn(true);
 
+        when(mMockA11yTrace.isA11yTracingEnabled()).thenReturn(false);
         // Fake a11yWindowInfo and remote a11y connection for tests.
         addA11yWindowInfo(mA11yWindowInfos, WINDOWID, false, Display.DEFAULT_DISPLAY);
         addA11yWindowInfo(mA11yWindowInfos, PIP_WINDOWID, true, Display.DEFAULT_DISPLAY);
@@ -227,8 +229,8 @@ public class AbstractAccessibilityServiceConnectionTest {
 
         mServiceConnection = new TestAccessibilityServiceConnection(mMockContext, COMPONENT_NAME,
                 mSpyServiceInfo, SERVICE_ID, mHandler, new Object(), mMockSecurityPolicy,
-                mMockSystemSupport, mMockWindowManagerInternal, mMockSystemActionPerformer,
-                mMockA11yWindowManager);
+                mMockSystemSupport, mMockA11yTrace, mMockWindowManagerInternal,
+                mMockSystemActionPerformer, mMockA11yWindowManager);
         // Assume that the service is connected
         mServiceConnection.mService = mMockService;
         mServiceConnection.mServiceInterface = mMockServiceInterface;
@@ -493,7 +495,8 @@ public class AbstractAccessibilityServiceConnectionTest {
         mServiceConnection.performAccessibilityAction(PIP_WINDOWID, ROOT_NODE_ID,
                 ACTION_ACCESSIBILITY_FOCUS, null, INTERACTION_ID, mMockCallback, TID);
 
-        verify(mMockIPowerManager).userActivity(anyLong(), anyInt(), anyInt());
+        verify(mMockIPowerManager).userActivity(eq(Display.DEFAULT_DISPLAY), anyLong(), anyInt(),
+                anyInt());
         verify(mMockIA11yInteractionConnection).performAccessibilityAction(eq(ROOT_NODE_ID),
                 eq(ACTION_ACCESSIBILITY_FOCUS), any(), eq(INTERACTION_ID), eq(mMockCallback),
                 anyInt(), eq(PID), eq(TID));
@@ -849,12 +852,13 @@ public class AbstractAccessibilityServiceConnectionTest {
         TestAccessibilityServiceConnection(Context context, ComponentName componentName,
                 AccessibilityServiceInfo accessibilityServiceInfo, int id, Handler mainHandler,
                 Object lock, AccessibilitySecurityPolicy securityPolicy,
-                SystemSupport systemSupport, WindowManagerInternal windowManagerInternal,
+                SystemSupport systemSupport, AccessibilityTrace trace,
+                WindowManagerInternal windowManagerInternal,
                 SystemActionPerformer systemActionPerfomer,
                 AccessibilityWindowManager a11yWindowManager) {
             super(context, componentName, accessibilityServiceInfo, id, mainHandler, lock,
-                    securityPolicy, systemSupport, windowManagerInternal, systemActionPerfomer,
-                    a11yWindowManager);
+                    securityPolicy, systemSupport, trace, windowManagerInternal,
+                    systemActionPerfomer, a11yWindowManager);
             mResolvedUserId = USER_ID;
         }
 

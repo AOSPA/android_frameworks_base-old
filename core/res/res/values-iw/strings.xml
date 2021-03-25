@@ -556,13 +556,18 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"מאפשרת לאפליקציה לשנות את אוסף התמונות שלך."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"לקרוא מיקומים מאוסף המדיה שלך"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"מאפשרת לאפליקציה לקרוא מיקומים מאוסף המדיה שלך."</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"שימוש במידע ביומטרי"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"שימוש במידע ביומטרי בנעילת מסך"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"אימות זהותך"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"יש להשתמש במידע ביומטרי כדי להמשיך"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"חומרה ביומטרית לא זמינה"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"האימות בוטל"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"לא זוהתה"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"האימות בוטל"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"עוד לא הוגדרו קוד גישה, קו ביטול נעילה או סיסמה"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"שגיאה באימות"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"שימוש בנעילת מסך"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"יש להזין את פרטי הכניסה של המכשיר כדי להמשיך"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"זוהתה טביעת אצבע חלקית. אפשר לנסות שוב."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"לא ניתן היה לעבד את טביעת האצבע. נסה שוב."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"החיישן של טביעות האצבעות מלוכלך. צריך לנקות אותו ולנסות שוב."</string>
@@ -585,6 +590,8 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"במכשיר זה אין חיישן טביעות אצבע."</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"החיישן מושבת באופן זמני."</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"אצבע <xliff:g id="FINGERID">%d</xliff:g>"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"שימוש בטביעת אצבע"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"שימוש בטביעת אצבע או בנעילת מסך"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"יש להשתמש בטביעת האצבע כדי להמשיך"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
@@ -612,7 +619,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"כבר לא ניתן לזהות פנים. יש לנסות שוב."</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"דומה מדי, יש לשנות תנוחה."</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"עליך ליישר קצת את הראש."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"עליך ליישר קצת את הראש."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"יש ליישר קצת את הראש."</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"עליך ליישר קצת את הראש."</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"יש להסיר כל דבר שמסתיר את הפנים."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"עליך לנקות את החלק העליון של המסך, כולל הסרגל השחור"</string>
@@ -630,6 +637,9 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"המכשיר הזה לא תומך בשחרור נעילה על ידי זיהוי פנים."</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"החיישן מושבת באופן זמני."</string>
     <string name="face_name_template" msgid="3877037340223318119">"פנים <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"שחרור נעילה על ידי זיהוי פנים"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"שימוש בזיהוי פנים או בנעילת מסך"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"יש להשתמש בשחרור נעילה על ידי זיהוי פנים כדי להמשיך"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"סמל הפנים"</string>
@@ -691,10 +701,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"מאפשר לאפליקציה לקרוא ולכתוב את התצורה של \'נא לא להפריע\'."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"התחלת צפייה בהרשאות השימוש"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"מאפשרת לבעלים להפעיל את השימוש בהרשאות עבור אפליקציה מסוימת. הרשאה זו אף פעם לא נדרשת עבור אפליקציות רגילות."</string>
-    <!-- no translation found for permlab_highSamplingRateSensors (3941068435726317070) -->
-    <skip />
-    <!-- no translation found for permdesc_highSamplingRateSensors (8430061978931155995) -->
-    <skip />
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"גישה לנתוני חיישנים בתדירות דגימה גבוהה"</string>
+    <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"האפליקציה תוכל לדגום נתוני חיישנים בתדירות של מעל 200 הרץ"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"הגדר כללי סיסמה"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"קביעת האורך הנדרש והתווים המותרים בסיסמאות ובקודי הגישה של מסך הנעילה."</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"מעקב אחר ניסיונות לביטול של נעילת המסך"</string>
@@ -1713,7 +1721,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"השתמש בקיצור הדרך"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"היפוך צבעים"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"תיקון צבעים"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"הפחתה של עוצמת הבהירות"</string>
+    <string name="reduce_bright_colors_feature_name" msgid="8978255324027479398">"הפחתה של עוצמת הבהירות"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"לחצני עוצמת הקול נלחצו בלחיצה ארוכה. <xliff:g id="SERVICE_NAME">%1$s</xliff:g> הופעל."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"לחצני עוצמת הקול נלחצו בלחיצה ארוכה. <xliff:g id="SERVICE_NAME">%1$s</xliff:g> הושבת."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"יש ללחוץ לחיצה ארוכה על שני לחצני עוצמת הקול למשך שלוש שניות כדי להשתמש בשירות <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
@@ -1935,8 +1943,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"‏בקשת SS שונתה לשיחת וידאו"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"‏בקשת SS שונתה לבקשת USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"‏היה שינוי לבקשת SS חדשה"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"התראה על פישינג"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"פרופיל עבודה"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"נשלחה התראה"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"מאומת"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"הרחב"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"כווץ"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"החלפת מצב הרחבה"</string>
@@ -2010,6 +2020,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"חדשות וכתבי עת"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"מפות וניווט"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"פרודוקטיביות"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"נגישות"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"שטח האחסון במכשיר"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"‏ניקוי באגים ב-USB"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"שעה"</string>
@@ -2288,4 +2299,6 @@
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"‏כדי להמשיך, האפליקציה &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; צריכה גישה למצלמה של המכשיר שלך."</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"הפעלה"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"פרטיות חיישנים"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"סמל האפליקציה"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"תדמית המותג של האפליקציה"</string>
 </resources>

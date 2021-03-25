@@ -553,13 +553,18 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"Дозвољава апликацији да мења колекцију слика."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"читање локација из медијске колекције"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"Дозвољава апликацији да чита локације из медијске колекције."</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"Користите биометрију"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"Користите биометрију или закључавање екрана"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"Потврдите свој идентитет"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"Користите биометријски податак да бисте наставили"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"Биометријски хардвер није доступан"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"Потврда идентитета је отказана"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Није препознато"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Потврда идентитета је отказана"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Нисте подесили ни PIN, ни шаблон, ни лозинку"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"Грешка при потврди идентитета"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"Користите закључавање екрана"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"Унесите акредитив за уређај да бисте наставили"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Откривен је делимични отисак прста. Пробајте поново."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Није успела обрада отиска прста. Пробајте поново."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Сензор за отиске прстију је прљав. Очистите га и покушајте поново."</string>
@@ -582,6 +587,8 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"Овај уређај нема сензор за отисак прста."</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"Сензор је привремено онемогућен."</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"Прст <xliff:g id="FINGERID">%d</xliff:g>"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"Користите отисак прста"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"Користите отисак прста или закључавање екрана"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"Наставите помоћу отиска прста"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
@@ -609,7 +616,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"Више не може да се препозна лице. Пробајте поново."</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"Превише је слично, промените позу."</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"Мало мање померите главу."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"Мало мање померите главу."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"Мало мање нагните главу."</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"Мало мање померите главу."</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"Уклоните све што вам заклања лице."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"Очистите горњи део екрана, укључујући црну траку"</string>
@@ -627,6 +634,9 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"Откључавање лицем није подржано на овом уређају"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"Сензор је привремено онемогућен."</string>
     <string name="face_name_template" msgid="3877037340223318119">"Лице <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"Користите откључавање лицем"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Користите закључавање лицем или закључавање екрана"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"Користите откључавање лицем да бисте наставили"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"Икона лица"</string>
@@ -688,10 +698,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Дозвољава апликацији да чита и уписује конфигурацију подешавања Не узнемиравај."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"почетак коришћења дозволе за преглед"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Дозвољава власнику да започне коришћење дозволе за апликацију. Никада не би требало да буде потребна за уобичајене апликације."</string>
-    <!-- no translation found for permlab_highSamplingRateSensors (3941068435726317070) -->
-    <skip />
-    <!-- no translation found for permdesc_highSamplingRateSensors (8430061978931155995) -->
-    <skip />
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"приступ подацима сензора при великој брзини узорковања"</string>
+    <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"Дозвољава апликацији да узима узорак података сензора при брзини већој од 200 Hz"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"Подешавање правила за лозинку"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"Контролише дужину и знакове дозвољене у лозинкама и PIN-овима за закључавање екрана."</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Надгледајте покушаје откључавања екрана"</string>
@@ -1691,7 +1699,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Користи пречицу"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Инверзија боја"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Корекција боја"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"Смањите осветљеност"</string>
+    <string name="reduce_bright_colors_feature_name" msgid="8978255324027479398">"Смањите осветљеност"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Држали сте тастере за јачину звука. Услуга <xliff:g id="SERVICE_NAME">%1$s</xliff:g> је укључена."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Држали сте тастере за јачину звука. Услуга <xliff:g id="SERVICE_NAME">%1$s</xliff:g> је искључена."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"Притисните и задржите оба тастера за јачину звука три секунде да бисте користили <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
@@ -1904,8 +1912,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"SS захтев је промењен у видео позив"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"SS захтев је промењен у USSD захтев"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"Промењено је у нови SS захтев"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"Упозорење о „пецању“"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"Пословни профил"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"Обавештено"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"Верификовано"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"Прошири"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"Скупи"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"укључите/искључите проширење"</string>
@@ -1978,6 +1988,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"Новости и часописи"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"Мапе и навигација"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"Продуктивност"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"Приступачност"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"Меморијски простор уређаја"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"Отклањање грешака са USB-а"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"сат"</string>
@@ -2254,4 +2265,6 @@
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"&lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; захтева приступ камери уређаја ради настављања."</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"Укључи"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"Приватност сензора"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"Икона апликације"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"Имиџ бренда апликације"</string>
 </resources>

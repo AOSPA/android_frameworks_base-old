@@ -6767,6 +6767,18 @@ public class Intent implements Parcelable, Cloneable {
      */
     private static final int LOCAL_FLAG_FROM_PROTECTED_COMPONENT = 1 << 2;
 
+    /**
+     * Local flag indicating this instance had unfiltered extras copied into it. This could be
+     * from either {@link #putExtras(Intent)} when an unparceled Intent is provided or {@link
+     * #putExtras(Bundle)} when the provided Bundle has not been unparceled.
+     */
+    private static final int LOCAL_FLAG_UNFILTERED_EXTRAS = 1 << 3;
+
+    /**
+     * Local flag indicating this instance was created from a {@link Uri}.
+     */
+    private static final int LOCAL_FLAG_FROM_URI = 1 << 4;
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // toUri() and parseUri() options.
@@ -7179,6 +7191,16 @@ public class Intent implements Parcelable, Cloneable {
      * @see #toUri
      */
     public static Intent parseUri(String uri, @UriFlags int flags) throws URISyntaxException {
+        Intent intent = parseUriInternal(uri, flags);
+        intent.mLocalFlags |= LOCAL_FLAG_FROM_URI;
+        return intent;
+    }
+
+    /**
+     * @see #parseUri(String, int)
+     */
+    private static Intent parseUriInternal(String uri, @UriFlags int flags)
+            throws URISyntaxException {
         int i = 0;
         try {
             final boolean androidApp = uri.startsWith("android-app:");
@@ -7398,7 +7420,9 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     public static Intent getIntentOld(String uri) throws URISyntaxException {
-        return getIntentOld(uri, 0);
+        Intent intent = getIntentOld(uri, 0);
+        intent.mLocalFlags |= LOCAL_FLAG_FROM_URI;
+        return intent;
     }
 
     private static Intent getIntentOld(String uri, int flags) throws URISyntaxException {
@@ -10021,6 +10045,15 @@ public class Intent implements Parcelable, Cloneable {
                 mExtras.putAll(src.mExtras);
             }
         }
+        // If the provided Intent was unparceled and this is not an Intent delivered to a protected
+        // component then mark the extras as unfiltered. An Intent delivered to a protected
+        // component had to come from a trusted component, and if unfiltered data was copied to the
+        // delivered Intent then it would have been reported when that Intent left the sending
+        // process.
+        if ((src.mLocalFlags & LOCAL_FLAG_FROM_PARCEL) != 0
+                && (src.mLocalFlags & LOCAL_FLAG_FROM_PROTECTED_COMPONENT) == 0) {
+            mLocalFlags |= LOCAL_FLAG_UNFILTERED_EXTRAS;
+        }
         return this;
     }
 
@@ -10035,6 +10068,10 @@ public class Intent implements Parcelable, Cloneable {
      * @see #removeExtra
      */
     public @NonNull Intent putExtras(@NonNull Bundle extras) {
+        // If the provided Bundle has not yet been unparceled then treat this as unfiltered extras.
+        if (extras.isParcelled()) {
+            mLocalFlags |= LOCAL_FLAG_UNFILTERED_EXTRAS;
+        }
         if (mExtras == null) {
             mExtras = new Bundle();
         }
@@ -11341,10 +11378,20 @@ public class Intent implements Parcelable, Cloneable {
         }
 
         // Detect cases where we're about to launch a potentially unsafe intent
-        if ((mLocalFlags & LOCAL_FLAG_FROM_PARCEL) != 0
-                && (mLocalFlags & LOCAL_FLAG_FROM_PROTECTED_COMPONENT) == 0
-                && StrictMode.vmUnsafeIntentLaunchEnabled()) {
-            StrictMode.onUnsafeIntentLaunch(this);
+        if (StrictMode.vmUnsafeIntentLaunchEnabled()) {
+            if ((mLocalFlags & LOCAL_FLAG_FROM_PARCEL) != 0
+                    && (mLocalFlags & LOCAL_FLAG_FROM_PROTECTED_COMPONENT) == 0) {
+                StrictMode.onUnsafeIntentLaunch(this);
+            } else if ((mLocalFlags & LOCAL_FLAG_UNFILTERED_EXTRAS) != 0) {
+                StrictMode.onUnsafeIntentLaunch(this);
+            } else if ((mLocalFlags & LOCAL_FLAG_FROM_URI) != 0
+                    && !(mCategories != null && mCategories.contains(CATEGORY_BROWSABLE)
+                        && mComponent == null)) {
+                // Since the docs for #URI_ALLOW_UNSAFE recommend setting the category to browsable
+                // for an implicit Intent parsed from a URI a violation should be reported if these
+                // conditions are not met.
+                StrictMode.onUnsafeIntentLaunch(this);
+            }
         }
     }
 

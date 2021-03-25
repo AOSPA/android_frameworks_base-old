@@ -568,7 +568,7 @@ public class AudioManager {
     public static final int FLAG_FROM_KEY = 1 << 12;
 
     /** @hide */
-    @IntDef(flag = false, prefix = "FLAG", value = {
+    @IntDef(flag = true, prefix = "FLAG", value = {
             FLAG_SHOW_UI,
             FLAG_ALLOW_RINGER_MODES,
             FLAG_PLAY_SOUND,
@@ -3141,52 +3141,57 @@ public class AudioManager {
 
     /**
      * @hide Home sound
-     * Played by the framework when the home app becomes active if config_enableHomeSound is set to
-     * true. This is currently only used on TV devices.
+     * <p>
+     * To be played by the framework when the home app becomes active if config_enableHomeSound is
+     * set to true. This is currently only used on TV devices.
      * Note that this sound is only available if a sound file is specified in audio_assets.xml.
      * @see #playSoundEffect(int)
      */
     public static final int FX_HOME = 11;
 
     /**
-     * @hide Fast scroll sound 1
-     * To be by the framework when a fast-scrolling is performed and
-     * {@link #areFastScrollSoundEffectsEnabled()} is true.
+     * @hide Navigation repeat sound 1
+     * <p>
+     * To be played by the framework when a focus navigation is repeatedly triggered
+     * (e.g. due to long-pressing) and {@link #areNavigationRepeatSoundEffectsEnabled()} is true.
      * This is currently only used on TV devices.
      * Note that this sound is only available if a sound file is specified in audio_assets.xml
      * @see #playSoundEffect(int)
      */
-    public static final int FX_FAST_SCROLL_1 = 12;
+    public static final int FX_FOCUS_NAVIGATION_REPEAT_1 = 12;
 
     /**
-     * @hide Fast scroll sound 2
-     * To be by the framework when a fast-scrolling is performed and
-     * {@link #areFastScrollSoundEffectsEnabled()} is true.
+     * @hide Navigation repeat sound 2
+     * <p>
+     * To be played by the framework when a focus navigation is repeatedly triggered
+     * (e.g. due to long-pressing) and {@link #areNavigationRepeatSoundEffectsEnabled()} is true.
      * This is currently only used on TV devices.
      * Note that this sound is only available if a sound file is specified in audio_assets.xml
      * @see #playSoundEffect(int)
      */
-    public static final int FX_FAST_SCROLL_2 = 13;
+    public static final int FX_FOCUS_NAVIGATION_REPEAT_2 = 13;
 
     /**
-     * @hide Fast scroll sound 3
-     * To be by the framework when a fast-scrolling is performed and
-     * {@link #areFastScrollSoundEffectsEnabled()} is true.
+     * @hide Navigation repeat sound 3
+     * <p>
+     * To be played by the framework when a focus navigation is repeatedly triggered
+     * (e.g. due to long-pressing) and {@link #areNavigationRepeatSoundEffectsEnabled()} is true.
      * This is currently only used on TV devices.
      * Note that this sound is only available if a sound file is specified in audio_assets.xml
      * @see #playSoundEffect(int)
      */
-    public static final int FX_FAST_SCROLL_3 = 14;
+    public static final int FX_FOCUS_NAVIGATION_REPEAT_3 = 14;
 
     /**
-     * @hide Fast scroll sound 4
-     * To be by the framework when a fast-scrolling is performed and
-     * {@link #areFastScrollSoundEffectsEnabled()} is true.
+     * @hide Navigation repeat sound 4
+     * <p>
+     * To be played by the framework when a focus navigation is repeatedly triggered
+     * (e.g. due to long-pressing) and {@link #areNavigationRepeatSoundEffectsEnabled()} is true.
      * This is currently only used on TV devices.
      * Note that this sound is only available if a sound file is specified in audio_assets.xml
      * @see #playSoundEffect(int)
      */
-    public static final int FX_FAST_SCROLL_4 = 15;
+    public static final int FX_FOCUS_NAVIGATION_REPEAT_4 = 15;
 
     /**
      * @hide Number of sound effects
@@ -3195,27 +3200,27 @@ public class AudioManager {
     public static final int NUM_SOUND_EFFECTS = 16;
 
     /**
-     * @hide Number of fast scroll sound effects
+     * @hide Number of FX_FOCUS_NAVIGATION_REPEAT_* sound effects
      */
-    public static final int NUM_FAST_SCROLL_SOUND_EFFECTS = 4;
+    public static final int NUM_NAVIGATION_REPEAT_SOUND_EFFECTS = 4;
 
     /**
      * @hide
-     * @param n a value in [0, {@link #NUM_FAST_SCROLL_SOUND_EFFECTS}[
-     * @return The id of a fast scroll sound effect or -1 if out of bounds
+     * @param n a value in [0, {@link #NUM_NAVIGATION_REPEAT_SOUND_EFFECTS}[
+     * @return The id of a navigation repeat sound effect or -1 if out of bounds
      */
-    public static int getNthFastScrollSoundEffectId(int n) {
+    public static int getNthNavigationRepeatSoundEffect(int n) {
         switch (n) {
             case 0:
-                return FX_FAST_SCROLL_1;
+                return FX_FOCUS_NAVIGATION_REPEAT_1;
             case 1:
-                return FX_FAST_SCROLL_2;
+                return FX_FOCUS_NAVIGATION_REPEAT_2;
             case 2:
-                return FX_FAST_SCROLL_3;
+                return FX_FOCUS_NAVIGATION_REPEAT_3;
             case 3:
-                return FX_FAST_SCROLL_4;
+                return FX_FOCUS_NAVIGATION_REPEAT_4;
             default:
-                Log.w(TAG, "Invalid fast-scroll sound effect id: " + n);
+                Log.w(TAG, "Invalid navigation repeat sound effect id: " + n);
                 return -1;
         }
     }
@@ -3223,9 +3228,9 @@ public class AudioManager {
     /**
      * @hide
      */
-    public void setFastScrollSoundEffectsEnabled(boolean enabled) {
+    public void setNavigationRepeatSoundEffectsEnabled(boolean enabled) {
         try {
-            getService().setFastScrollSoundEffectsEnabled(enabled);
+            getService().setNavigationRepeatSoundEffectsEnabled(enabled);
         } catch (RemoteException e) {
 
         }
@@ -3233,11 +3238,11 @@ public class AudioManager {
 
     /**
      * @hide
-     * @return true if the fast scroll sound effects are enabled
+     * @return true if the navigation repeat sound effects are enabled
      */
-    public boolean areFastScrollSoundEffectsEnabled() {
+    public boolean areNavigationRepeatSoundEffectsEnabled() {
         try {
-            return getService().areFastScrollSoundEffectsEnabled();
+            return getService().areNavigationRepeatSoundEffectsEnabled();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -7107,20 +7112,12 @@ public class AudioManager {
      * Selects the audio device that should be used for communication use cases, for instance voice
      * or video calls. This method can be used by voice or video chat applications to select a
      * different audio device than the one selected by default by the platform.
-     * <p>The device selection is expressed as an {@link AudioDeviceInfo}, of role sink
-     * ({@link AudioDeviceInfo#isSink()} is <code>true</code>) and of one of the following types:
-     * <ul>
-     *   <li> {@link AudioDeviceInfo#TYPE_BUILTIN_EARPIECE}
-     *   <li> {@link AudioDeviceInfo#TYPE_BUILTIN_SPEAKER}
-     *   <li> {@link AudioDeviceInfo#TYPE_WIRED_HEADSET}
-     *   <li> {@link AudioDeviceInfo#TYPE_BLUETOOTH_SCO}
-     *   <li> {@link AudioDeviceInfo#TYPE_USB_HEADSET}
-     *   <li> {@link AudioDeviceInfo#TYPE_BLE_HEADSET}
-     * </ul>
-     * The selection is active as long as the requesting application lives, until
-     * {@link #clearDeviceForCommunication} is called or until the device is disconnected.
+     * <p>The device selection is expressed as an {@link AudioDeviceInfo} among devices returned by
+     * {@link #getAvailableCommunicationDevices()}.
+     * The selection is active as long as the requesting application process lives, until
+     * {@link #clearCommunicationDevice} is called or until the device is disconnected.
      * It is therefore important for applications to clear the request when a call ends or the
-     * application is paused.
+     * the requesting activity or service is stopped or destroyed.
      * <p>In case of simultaneous requests by multiple applications the priority is given to the
      * application currently controlling the audio mode (see {@link #setMode(int)}). This is the
      * latest application having selected mode {@link #MODE_IN_COMMUNICATION} or mode
@@ -7142,7 +7139,7 @@ public class AudioManager {
      * AudioManager audioManager = Context.getSystemService(AudioManager.class);
      * try {
      *     AudioDeviceInfo speakerDevice = null;
-     *     AudioDeviceInfo[] devices = audioManager.getDevices(GET_DEVICES_OUTPUTS);
+     *     List<AudioDeviceInfo> devices = audioManager.getAvailableCommunicationDevices();
      *     for (AudioDeviceInfo device : devices) {
      *         if (device.getType() == AudioDeviceInfo.TYPE_BUILTIN_SPEAKER) {
      *             speakerDevice = device;
@@ -7151,12 +7148,12 @@ public class AudioManager {
      *     }
      *     if (speakerDevice != null) {
      *         // Turn speakerphone ON.
-     *         boolean result = audioManager.setDeviceForCommunication(speakerDevice);
+     *         boolean result = audioManager.setCommunicationDevice(speakerDevice);
      *         if (!result) {
      *             // Handle error.
      *         }
      *         // Turn speakerphone OFF.
-     *         audioManager.clearDeviceForCommunication();
+     *         audioManager.clearCommunicationDevice();
      *     }
      * } catch (IllegalArgumentException e) {
      *     // Handle exception.
@@ -7166,13 +7163,13 @@ public class AudioManager {
      * @return <code>true</code> if the request was accepted, <code>false</code> otherwise.
      * @throws IllegalArgumentException If an invalid device is specified.
      */
-    public boolean setDeviceForCommunication(@NonNull AudioDeviceInfo device) {
+    public boolean setCommunicationDevice(@NonNull AudioDeviceInfo device) {
         Objects.requireNonNull(device);
         try {
             if (device.getId() == 0) {
                 throw new IllegalArgumentException("In valid device: " + device);
             }
-            return getService().setDeviceForCommunication(mICallBack, device.getId());
+            return getService().setCommunicationDevice(mICallBack, device.getId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -7180,11 +7177,11 @@ public class AudioManager {
 
     /**
      * Cancels previous communication device selection made with
-     * {@link #setDeviceForCommunication(AudioDeviceInfo)}.
+     * {@link #setCommunicationDevice(AudioDeviceInfo)}.
      */
-    public void clearDeviceForCommunication() {
+    public void clearCommunicationDevice() {
         try {
-            getService().setDeviceForCommunication(mICallBack, 0);
+            getService().setCommunicationDevice(mICallBack, 0);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -7198,14 +7195,38 @@ public class AudioManager {
      *   <li> {@link #isSpeakerphoneOn()}
      * </ul>
      * @return an {@link AudioDeviceInfo} indicating which audio device is
-     * currently selected or communication use cases or null if default selection
+     * currently selected for communication use cases. Can be null on platforms
+     * not supporting {@link android.content.pm.PackageManager#FEATURE_TELEPHONY}.
      * is used.
      */
     @Nullable
-    public AudioDeviceInfo getDeviceForCommunication() {
+    public AudioDeviceInfo getCommunicationDevice() {
         try {
             return getDeviceForPortId(
-                    getService().getDeviceForCommunication(), GET_DEVICES_OUTPUTS);
+                    getService().getCommunicationDevice(), GET_DEVICES_OUTPUTS);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns a list of audio devices that can be selected for communication use cases via
+     * {@link #setCommunicationDevice(AudioDeviceInfo)}.
+     * @return a list of {@link AudioDeviceInfo} suitable for use with setCommunicationDevice().
+     */
+    @NonNull
+    public List<AudioDeviceInfo> getAvailableCommunicationDevices() {
+        try {
+            ArrayList<AudioDeviceInfo> devices = new ArrayList<>();
+            int[] portIds = getService().getAvailableCommunicationDeviceIds();
+            for (int portId : portIds) {
+                AudioDeviceInfo device = getDeviceForPortId(portId, GET_DEVICES_OUTPUTS);
+                if (device == null) {
+                    continue;
+                }
+                devices.add(device);
+            }
+            return devices;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -7220,7 +7241,7 @@ public class AudioManager {
      * If more than one device of the provided type is connected, an object corresponding to the
      * first device encountered in the enumeration list will be returned.
      * @param deviceType The device device for which an <code>AudioDeviceInfo</code>
-     * object is queried.
+     *                   object is queried.
      * @return An AudioDeviceInfo object or null if no device with the requested type is connected.
      * @throws IllegalArgumentException If an invalid device type is specified.
      */
@@ -7228,30 +7249,59 @@ public class AudioManager {
     @Nullable
     public static AudioDeviceInfo getDeviceInfoFromType(
             @AudioDeviceInfo.AudioDeviceTypeOut int deviceType) {
+        return getDeviceInfoFromTypeAndAddress(deviceType, null);
+    }
+
+        /**
+     * @hide
+     * Returns an {@link AudioDeviceInfo} corresponding to a connected device of the type and
+     * address provided.
+     * The type must be a valid output type defined in <code>AudioDeviceInfo</code> class,
+     * for instance {@link AudioDeviceInfo#TYPE_BUILTIN_SPEAKER}.
+     * If a null address is provided, the matching will happen on the type only.
+     * The method will return null if no device of the provided type and address is connected.
+     * If more than one device of the provided type is connected, an object corresponding to the
+     * first device encountered in the enumeration list will be returned.
+     * @param type The device device for which an <code>AudioDeviceInfo</code>
+     *             object is queried.
+     * @param address The device address for which an <code>AudioDeviceInfo</code>
+     *                object is queried or null if requesting match on type only.
+     * @return An AudioDeviceInfo object or null if no matching device is connected.
+     * @throws IllegalArgumentException If an invalid device type is specified.
+     */
+    @Nullable
+    public static AudioDeviceInfo getDeviceInfoFromTypeAndAddress(
+            @AudioDeviceInfo.AudioDeviceTypeOut int type, @Nullable String address) {
         AudioDeviceInfo[] devices = getDevicesStatic(GET_DEVICES_OUTPUTS);
+        AudioDeviceInfo deviceForType = null;
         for (AudioDeviceInfo device : devices) {
-            if (device.getType() == deviceType) {
-                return device;
+            if (device.getType() == type) {
+                deviceForType = device;
+                if (address == null || address.equals(device.getAddress())) {
+                    return device;
+                }
             }
         }
-        return null;
+        return deviceForType;
     }
 
     /**
      * Listener registered by client to be notified upon communication audio device change.
-     * See {@link #setDeviceForCommunication(AudioDeviceInfo)}.
+     * See {@link #setCommunicationDevice(AudioDeviceInfo)}.
      */
     public interface OnCommunicationDeviceChangedListener {
         /**
          * Callback method called upon communication audio device change.
-         * @param device the audio device selected for communication use cases
+         * @param device the audio device requested for communication use cases.
+         *               Can be null on platforms not supporting
+         *               {@link android.content.pm.PackageManager#FEATURE_TELEPHONY}.
          */
         void onCommunicationDeviceChanged(@Nullable AudioDeviceInfo device);
     }
 
     /**
      * Adds a listener for being notified of changes to the communication audio device.
-     * See {@link #setDeviceForCommunication(AudioDeviceInfo)}.
+     * See {@link #setCommunicationDevice(AudioDeviceInfo)}.
      * @param executor
      * @param listener
      */
@@ -7288,7 +7338,7 @@ public class AudioManager {
 
     /**
      * Removes a previously added listener of changes to the communication audio device.
-     * See {@link #setDeviceForCommunication(AudioDeviceInfo)}.
+     * See {@link #setCommunicationDevice(AudioDeviceInfo)}.
      * @param listener
      */
     public void removeOnCommunicationDeviceChangedListener(

@@ -108,6 +108,7 @@ import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.stream.Collectors;
 
 /**
@@ -199,6 +200,13 @@ public class HdmiControlService extends SystemService {
     public @interface WakeReason {
     }
 
+    private final Executor mServiceThreadExecutor = new Executor() {
+        @Override
+        public void execute(Runnable r) {
+            runOnServiceThread(r);
+        }
+    };
+
     // Logical address of the active source.
     @GuardedBy("mLock")
     protected final ActiveSource mActiveSource = new ActiveSource();
@@ -213,7 +221,7 @@ public class HdmiControlService extends SystemService {
     private int mHdmiCecVolumeControl;
 
     // Make sure HdmiCecConfig is instantiated and the XMLs are read.
-    private final HdmiCecConfig mHdmiCecConfig;
+    private HdmiCecConfig mHdmiCecConfig;
 
     /**
      * Interface to report send result.
@@ -520,14 +528,14 @@ public class HdmiControlService extends SystemService {
                                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED);
                         setControlEnabled(enabled);
                     }
-                });
+                }, mServiceThreadExecutor);
         mHdmiCecConfig.registerChangeListener(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                 new HdmiCecConfig.SettingChangeListener() {
                     @Override
                     public void onChange(String setting) {
                         initializeCec(INITIATED_BY_ENABLE_CEC);
                     }
-                });
+                }, mServiceThreadExecutor);
         mHdmiCecConfig.registerChangeListener(
                 HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
                 new HdmiCecConfig.SettingChangeListener() {
@@ -537,7 +545,7 @@ public class HdmiControlService extends SystemService {
                             setCecOption(OptionKey.WAKEUP, tv().getAutoWakeup());
                         }
                     }
-                });
+                }, mServiceThreadExecutor);
     }
 
     private void bootCompleted() {
@@ -570,6 +578,11 @@ public class HdmiControlService extends SystemService {
     @VisibleForTesting
     void setHdmiCecNetwork(HdmiCecNetwork hdmiCecNetwork) {
         mHdmiCecNetwork = hdmiCecNetwork;
+    }
+
+    @VisibleForTesting
+    void setHdmiCecConfig(HdmiCecConfig hdmiCecConfig) {
+        mHdmiCecConfig = hdmiCecConfig;
     }
 
     public HdmiCecNetwork getHdmiCecNetwork() {

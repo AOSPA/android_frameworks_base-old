@@ -26,6 +26,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECOND
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.res.Configuration.UI_MODE_TYPE_CAR;
 import static android.content.res.Configuration.UI_MODE_TYPE_MASK;
+import static android.util.RotationUtils.deltaRotation;
+import static android.util.RotationUtils.rotateBounds;
 import static android.view.Display.TYPE_INTERNAL;
 import static android.view.InsetsState.ITYPE_BOTTOM_MANDATORY_GESTURES;
 import static android.view.InsetsState.ITYPE_BOTTOM_TAPPABLE_ELEMENT;
@@ -1192,11 +1194,17 @@ public class DisplayPolicy {
             return;
         }
 
-        // Get displayFrames bounds
-        sTmpDisplayFrameBounds.set(0, 0, displayFrames.mDisplayWidth, displayFrames.mDisplayHeight);
+        // Get displayFrames bounds as it is on WindowState's rotation.
+        final int deltaRotation = deltaRotation(windowRotation, displayFrames.mRotation);
+        if (deltaRotation == Surface.ROTATION_90 || deltaRotation == Surface.ROTATION_270) {
+            sTmpDisplayFrameBounds.set(
+                    0, 0, displayFrames.mDisplayHeight, displayFrames.mDisplayWidth);
+        } else {
+            sTmpDisplayFrameBounds.set(
+                    0, 0, displayFrames.mDisplayWidth, displayFrames.mDisplayHeight);
+        }
         // Rotate the WindowState's bounds based on the displayFrames rotation
-        mDisplayContent.rotateBounds(sTmpDisplayFrameBounds, windowRotation,
-                displayFrames.mRotation, outBounds);
+        rotateBounds(outBounds, sTmpDisplayFrameBounds, deltaRotation);
     }
 
     /**
@@ -2824,8 +2832,9 @@ public class DisplayPolicy {
         boolean newImmersiveMode = isImmersiveMode(win);
         if (oldImmersiveMode != newImmersiveMode) {
             mLastImmersiveMode = newImmersiveMode;
-            final String pkg = win.getOwningPackage();
-            mImmersiveModeConfirmation.immersiveModeChangedLw(pkg, newImmersiveMode,
+            // The immersive confirmation window should be attached to the immersive window root.
+            final int rootDisplayAreaId = win.getRootDisplayArea().mFeatureId;
+            mImmersiveModeConfirmation.immersiveModeChangedLw(rootDisplayAreaId, newImmersiveMode,
                     mService.mPolicy.isUserSetupComplete(),
                     isNavBarEmpty(disableFlags));
         }

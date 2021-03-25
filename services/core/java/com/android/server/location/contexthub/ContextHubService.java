@@ -295,7 +295,7 @@ public class ContextHubService extends IContextHubService.Stub {
                 };
             SensorPrivacyManager manager = SensorPrivacyManager.getInstance(mContext);
             manager.addSensorPrivacyListener(
-                    SensorPrivacyManager.INDIVIDUAL_SENSOR_MICROPHONE, listener);
+                    SensorPrivacyManager.Sensors.MICROPHONE, listener);
         }
     }
 
@@ -942,8 +942,8 @@ public class ContextHubService extends IContextHubService.Stub {
         mClientManager.forEachClientOfHub(contextHubId, client -> {
             if (client.getPackageName().equals(packageName)) {
                 client.updateNanoAppAuthState(
-                        nanoAppId, false /* hasPermissions */, false /* gracePeriodExpired */,
-                        true /* forceDenied */);
+                        nanoAppId, Collections.emptyList() /* nanoappPermissions */,
+                        false /* gracePeriodExpired */, true /* forceDenied */);
             }
         });
     }
@@ -1079,8 +1079,8 @@ public class ContextHubService extends IContextHubService.Stub {
      */
     private void sendMicrophoneDisableSettingUpdate() {
         SensorPrivacyManager manager = SensorPrivacyManager.getInstance(mContext);
-        boolean disabled = manager.isIndividualSensorPrivacyEnabled(
-                SensorPrivacyManager.INDIVIDUAL_SENSOR_MICROPHONE);
+        boolean disabled = manager.isSensorPrivacyEnabled(
+                SensorPrivacyManager.Sensors.MICROPHONE);
         Log.d(TAG, "Mic Disabled Setting: " + disabled);
         mContextHubWrapper.onMicrophoneDisableSettingChanged(disabled);
     }

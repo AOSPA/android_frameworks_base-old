@@ -729,7 +729,7 @@ public class AudioService extends IAudioService.Stub
     // caches the value returned by AudioSystem.isMicrophoneMuted()
     private boolean mMicMuteFromSystemCached;
 
-    private boolean mFastScrollSoundEffectsEnabled;
+    private boolean mNavigationRepeatSoundEffectsEnabled;
     private boolean mHomeSoundEffectEnabled;
 
     @GuardedBy("mSettingsLock")
@@ -2328,15 +2328,15 @@ public class AudioService extends IAudioService.Stub
                 VOL_ADJUST_NORMAL);
     }
 
-    public void setFastScrollSoundEffectsEnabled(boolean enabled) {
-        mFastScrollSoundEffectsEnabled = enabled;
+    public void setNavigationRepeatSoundEffectsEnabled(boolean enabled) {
+        mNavigationRepeatSoundEffectsEnabled = enabled;
     }
 
     /**
      * @return true if the fast scroll sound effects are enabled
      */
-    public boolean areFastScrollSoundEffectsEnabled() {
-        return mFastScrollSoundEffectsEnabled;
+    public boolean areNavigationRepeatSoundEffectsEnabled() {
+        return mNavigationRepeatSoundEffectsEnabled;
     }
 
     public void setHomeSoundEffectEnabled(boolean enabled) {
@@ -4770,8 +4770,19 @@ public class AudioService extends IAudioService.Stub
         return false;
     }
 
-    /** @see AudioManager#setDeviceForCommunication(int) */
-    public boolean setDeviceForCommunication(IBinder cb, int portId) {
+    /** @see AudioManager#getAvailableCommunicationDevices(int) */
+    public int[] getAvailableCommunicationDeviceIds() {
+        ArrayList<Integer> deviceIds = new ArrayList<>();
+        AudioDeviceInfo[] devices = AudioManager.getDevicesStatic(AudioManager.GET_DEVICES_OUTPUTS);
+        for (AudioDeviceInfo device : devices) {
+            if (isValidCommunicationDevice(device)) {
+                deviceIds.add(device.getId());
+            }
+        }
+        return deviceIds.stream().mapToInt(Integer::intValue).toArray();
+    }
+        /** @see AudioManager#setCommunicationDevice(int) */
+    public boolean setCommunicationDevice(IBinder cb, int portId) {
         final int uid = Binder.getCallingUid();
         final int pid = Binder.getCallingPid();
 
@@ -4785,7 +4796,7 @@ public class AudioService extends IAudioService.Stub
                 throw new IllegalArgumentException("invalid device type " + device.getType());
             }
         }
-        final String eventSource = new StringBuilder("setDeviceForCommunication(")
+        final String eventSource = new StringBuilder("setCommunicationDevice(")
                 .append(") from u/pid:").append(uid).append("/")
                 .append(pid).toString();
 
@@ -4795,7 +4806,7 @@ public class AudioService extends IAudioService.Stub
             deviceType = device.getPort().type();
             deviceAddress = device.getAddress();
         } else {
-            AudioDeviceInfo curDevice = mDeviceBroker.getDeviceForCommunication();
+            AudioDeviceInfo curDevice = mDeviceBroker.getCommunicationDevice();
             if (curDevice != null) {
                 deviceType = curDevice.getPort().type();
                 deviceAddress = curDevice.getAddress();
@@ -4805,7 +4816,7 @@ public class AudioService extends IAudioService.Stub
         // was selected
         if (deviceType != AudioSystem.DEVICE_OUT_DEFAULT) {
             new MediaMetrics.Item(MediaMetrics.Name.AUDIO_DEVICE
-                    + MediaMetrics.SEPARATOR + "setDeviceForCommunication")
+                    + MediaMetrics.SEPARATOR + "setCommunicationDevice")
                     .set(MediaMetrics.Property.DEVICE,
                             AudioSystem.getDeviceName(deviceType))
                     .set(MediaMetrics.Property.ADDRESS, deviceAddress)
@@ -4816,15 +4827,15 @@ public class AudioService extends IAudioService.Stub
 
         final long ident = Binder.clearCallingIdentity();
         boolean status =
-                mDeviceBroker.setDeviceForCommunication(cb, pid, device, eventSource);
+                mDeviceBroker.setCommunicationDevice(cb, pid, device, eventSource);
         Binder.restoreCallingIdentity(ident);
         return status;
     }
 
-    /** @see AudioManager#getDeviceForCommunication() */
-    public int getDeviceForCommunication() {
+    /** @see AudioManager#getCommunicationDevice() */
+    public int getCommunicationDevice() {
         final long ident = Binder.clearCallingIdentity();
-        AudioDeviceInfo device = mDeviceBroker.getDeviceForCommunication();
+        AudioDeviceInfo device = mDeviceBroker.getCommunicationDevice();
         Binder.restoreCallingIdentity(ident);
         if (device == null) {
             return 0;
@@ -7005,7 +7016,10 @@ public class AudioService extends IAudioService.Stub
     private void onSetVolumeIndexOnDevice(@NonNull DeviceVolumeUpdate update) {
         final VolumeStreamState streamState = mStreamStates[update.mStreamType];
         if (update.hasVolumeIndex()) {
-            final int index = update.getVolumeIndex();
+            int index = update.getVolumeIndex();
+            if (!checkSafeMediaVolume(update.mStreamType, index, update.mDevice)) {
+                index = safeMediaVolumeIndex(update.mDevice);
+            }
             streamState.setIndex(index, update.mDevice, update.mCaller,
                     // trusted as index is always validated before message is posted
                     true /*hasModifyAudioSettings*/);
@@ -8617,6 +8631,7 @@ public class AudioService extends IAudioService.Stub
         public void postDisplaySafeVolumeWarning(int flags) {
             if (mController == null)
                 return;
+            flags = flags | AudioManager.FLAG_SHOW_UI;
             try {
                 mController.displaySafeVolumeWarning(flags);
             } catch (RemoteException e) {

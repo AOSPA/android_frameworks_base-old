@@ -41,6 +41,7 @@ import android.app.Notification;
 import android.app.WindowContext;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.graphics.Bitmap;
 import android.graphics.Insets;
@@ -99,6 +100,8 @@ import javax.inject.Inject;
  */
 public class ScreenshotController {
     private static final String TAG = logTag(ScreenshotController.class);
+
+    private static ScrollCaptureClient.Connection sScrollConnection;
 
     /**
      * POD used in the AsyncTask which saves an image in the background.
@@ -219,6 +222,12 @@ public class ScreenshotController {
                     | ActivityInfo.CONFIG_SCREEN_LAYOUT
                     | ActivityInfo.CONFIG_ASSETS_PATHS);
 
+    public static @Nullable ScrollCaptureClient.Connection takeScrollCaptureConnection() {
+        ScrollCaptureClient.Connection connection = sScrollConnection;
+        sScrollConnection = null;
+        return connection;
+    }
+
     @Inject
     ScreenshotController(
             Context context,
@@ -316,6 +325,7 @@ public class ScreenshotController {
 
         attachWindow();
         mWindow.setContentView(mScreenshotView);
+        mScreenshotView.requestApplyInsets();
 
         mScreenshotView.takePartialScreenshot(
                 rect -> takeScreenshotInternal(finisher, rect));
@@ -509,7 +519,7 @@ public class ScreenshotController {
         setWindowFocusable(true);
 
         if (mConfigProxy.getBoolean(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SCREENSHOT_SCROLLING_ENABLED, false)) {
+                SystemUiDeviceConfigFlags.SCREENSHOT_SCROLLING_ENABLED, true)) {
             View decorView = mWindow.getDecorView();
 
             // Wait until this window is attached to request because it is
@@ -597,21 +607,12 @@ public class ScreenshotController {
     }
 
     private void runScrollCapture(ScrollCaptureClient.Connection connection) {
-        cancelTimeout();
-        ScrollCaptureController controller = new ScrollCaptureController(mContext, connection,
-                mMainExecutor, mBgExecutor, mImageExporter, mUiEventLogger);
-        controller.attach(mWindow);
-        controller.start(new TakeScreenshotService.RequestCallback() {
-            @Override
-            public void reportError() {
-            }
+        sScrollConnection = connection;  // For LongScreenshotActivity to pick up.
 
-            @Override
-            public void onFinish() {
-                Log.d(TAG, "onFinish from ScrollCaptureController");
-                finishDismiss();
-            }
-        });
+        Intent intent = new Intent(mContext, LongScreenshotActivity.class);
+        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+        mContext.startActivity(intent);
+        dismissScreenshot(false);
     }
 
     /**

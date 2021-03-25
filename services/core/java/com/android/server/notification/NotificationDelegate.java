@@ -32,7 +32,7 @@ public interface NotificationDelegate {
     void onNotificationActionClick(int callingUid, int callingPid, String key, int actionIndex,
             Notification.Action action, NotificationVisibility nv, boolean generatedByAssistant);
     void onNotificationClear(int callingUid, int callingPid,
-            String pkg, String tag, int id, int userId, String key,
+            String pkg, int userId, String key,
             @NotificationStats.DismissalSurface int dismissalSurface,
             @NotificationStats.DismissalSentiment int dismissalSentiment,
             NotificationVisibility nv);
@@ -55,9 +55,10 @@ public interface NotificationDelegate {
     void onNotificationBubbleChanged(String key, boolean isBubble, int flags);
     /**
      * Called when the state of {@link Notification.BubbleMetadata#FLAG_SUPPRESS_NOTIFICATION}
-     * changes.
+     * or {@link Notification.BubbleMetadata#FLAG_SUPPRESS_BUBBLE} changes.
      */
-    void onBubbleNotificationSuppressionChanged(String key, boolean isSuppressed);
+    void onBubbleNotificationSuppressionChanged(String key, boolean isNotifSuppressed,
+            boolean isBubbleSuppressed);
 
     /**
      * Grant permission to read the specified URI to the package associated with the

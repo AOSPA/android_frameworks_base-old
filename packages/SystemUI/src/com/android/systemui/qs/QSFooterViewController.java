@@ -16,6 +16,8 @@
 
 package com.android.systemui.qs;
 
+import static com.android.systemui.qs.dagger.QSFlagsModule.PM_LITE_ENABLED;
+
 import android.content.ClipData;
 import android.content.ClipboardManager;
 import android.content.Intent;
@@ -41,6 +43,7 @@ import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.ViewController;
 
 import javax.inject.Inject;
+import javax.inject.Named;
 
 /**
  * Controller for {@link QSFooterView}.
@@ -63,6 +66,8 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
     private final View mEdit;
     private final MultiUserSwitch mMultiUserSwitch;
     private final PageIndicator mPageIndicator;
+    private final View mPowerMenuLite;
+    private final boolean mShowPMLiteButton;
 
     private final UserInfoController.OnUserInfoChangedListener mOnUserInfoChangedListener =
             new UserInfoController.OnUserInfoChangedListener() {
@@ -95,7 +100,6 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
                     mActivityStarter.postQSRunnableDismissingKeyguard(() -> {
                         if (isTunerEnabled()) {
                             mTunerService.showResetRequest(
-                                    mUserTracker.getUserHandle(),
                                     () -> {
                                         // Relaunch settings so that the tuner disappears.
                                         startSettingsActivity();
@@ -103,7 +107,7 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
                         } else {
                             Toast.makeText(getContext(), R.string.tuner_toast,
                                     Toast.LENGTH_LONG).show();
-                            mTunerService.setTunerEnabled(mUserTracker.getUserHandle(), true);
+                            mTunerService.setTunerEnabled(true);
                         }
                         startSettingsActivity();
 
@@ -124,7 +128,8 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
             DeviceProvisionedController deviceProvisionedController, UserTracker userTracker,
             QSPanelController qsPanelController, QSDetailDisplayer qsDetailDisplayer,
             QuickQSPanelController quickQSPanelController,
-            TunerService tunerService, MetricsLogger metricsLogger) {
+            TunerService tunerService, MetricsLogger metricsLogger,
+            @Named(PM_LITE_ENABLED) boolean showPMLiteButton) {
         super(view);
         mUserManager = userManager;
         mUserInfoController = userInfoController;
@@ -142,10 +147,15 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
         mEdit = mView.findViewById(android.R.id.edit);
         mMultiUserSwitch = mView.findViewById(R.id.multi_user_switch);
         mPageIndicator = mView.findViewById(R.id.footer_page_indicator);
+        mPowerMenuLite = mView.findViewById(R.id.pm_lite);
+        mShowPMLiteButton = showPMLiteButton;
     }
 
     @Override
     protected void onViewAttached() {
+        if (!mShowPMLiteButton) {
+            mPowerMenuLite.setVisibility(View.GONE);
+        }
         mView.addOnLayoutChangeListener(
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
                         mView.updateAnimator(
@@ -238,6 +248,6 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
     }
 
     private boolean isTunerEnabled() {
-        return mTunerService.isTunerEnabled(mUserTracker.getUserHandle());
+        return mTunerService.isTunerEnabled();
     }
 }

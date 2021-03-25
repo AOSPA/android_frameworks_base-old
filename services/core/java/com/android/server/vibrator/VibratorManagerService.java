@@ -127,9 +127,9 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
     @GuardedBy("mLock")
     private ExternalVibrationHolder mCurrentExternalVibration;
 
-    private VibrationSettings mVibrationSettings;
-    private VibrationScaler mVibrationScaler;
-    private InputDeviceDelegate mInputDeviceDelegate;
+    private final VibrationSettings mVibrationSettings;
+    private final VibrationScaler mVibrationScaler;
+    private final InputDeviceDelegate mInputDeviceDelegate;
 
     private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
@@ -169,6 +169,10 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
     VibratorManagerService(Context context, Injector injector) {
         mContext = context;
         mHandler = injector.createHandler(Looper.myLooper());
+
+        mVibrationSettings = new VibrationSettings(mContext, mHandler);
+        mVibrationScaler = new VibrationScaler(mContext, mVibrationSettings);
+        mInputDeviceDelegate = new InputDeviceDelegate(mContext, mHandler);
 
         VibrationCompleteListener listener = new VibrationCompleteListener(this);
         mNativeWrapper = injector.getNativeWrapper();
@@ -224,12 +228,12 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
         Slog.v(TAG, "Initializing VibratorManager service...");
         Trace.traceBegin(Trace.TRACE_TAG_VIBRATOR, "systemReady");
         try {
-            mVibrationSettings = new VibrationSettings(mContext, mHandler);
-            mVibrationScaler = new VibrationScaler(mContext, mVibrationSettings);
-            mInputDeviceDelegate = new InputDeviceDelegate(mContext, mHandler);
+            mVibrationSettings.onSystemReady();
+            mInputDeviceDelegate.onSystemReady();
 
             mVibrationSettings.addListener(this::updateServiceState);
 
+            // Will update settings and input devices.
             updateServiceState();
         } finally {
             Slog.v(TAG, "VibratorManager service initialized");
@@ -340,10 +344,11 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
             if (!isEffectValid(effect)) {
                 return;
             }
-            effect = fixupVibrationEffect(effect);
             attrs = fixupVibrationAttributes(attrs);
             Vibration vib = new Vibration(token, mNextVibrationId.getAndIncrement(), effect, attrs,
                     uid, opPkg, reason);
+            // Update with fixed up effect to keep the original effect in Vibration for debugging.
+            vib.updateEffect(fixupVibrationEffect(effect));
 
             synchronized (mLock) {
                 Vibration.Status ignoreStatus = shouldIgnoreVibrationLocked(vib);
@@ -1134,6 +1139,9 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
         void dumpText(PrintWriter pw) {
             pw.println("Vibrator Manager Service:");
             synchronized (mLock) {
+                pw.println("  mVibrationSettings:");
+                pw.println("    " + mVibrationSettings);
+                pw.println();
                 pw.println("  mVibratorControllers:");
                 for (int i = 0; i < mVibrators.size(); i++) {
                     pw.println("    " + mVibrators.valueAt(i));
@@ -1142,14 +1150,15 @@ public class VibratorManagerService extends IVibratorManagerService.Stub {
                 pw.println("  mCurrentVibration:");
                 pw.println("    " + (mCurrentVibration == null
                         ? null : mCurrentVibration.getVibration().getDebugInfo()));
+                pw.println();
                 pw.println("  mNextVibration:");
                 pw.println("    " + (mNextVibration == null
                         ? null : mNextVibration.getVibration().getDebugInfo()));
+                pw.println();
                 pw.println("  mCurrentExternalVibration:");
                 pw.println("    " + (mCurrentExternalVibration == null
                         ? null : mCurrentExternalVibration.getDebugInfo()));
                 pw.println();
-                pw.println("  mVibrationSettings=" + mVibrationSettings);
                 for (int i = 0; i < mPreviousVibrations.size(); i++) {
                     pw.println();
                     pw.print("  Previous vibrations for usage ");

@@ -553,13 +553,18 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"Ļauj lietotnei pārveidot jūsu fotoattēlu kolekciju."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"Lasīt atrašanās vietas no jūsu multivides kolekcijas"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"Ļauj lietotnei lasīt atrašanās vietas no jūsu multivides kolekcijas."</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"Biometrijas izmantošana"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"Biometrijas vai ekrāna bloķēšanas izmantošana"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"Apstipriniet, ka tas esat jūs"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"Lai turpinātu, izmantojiet biometriju"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"Biometrisko datu aparatūra nav pieejama"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"Autentifikācija ir atcelta"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Dati nav atpazīti"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Autentifikācija ir atcelta"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"PIN, kombinācija vai parole nav iestatīta"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"Autentifikācijas kļūda"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"Ekrāna bloķēšanas metodes izmantošana"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"Lai turpinātu, ievadiet savas ierīces akreditācijas datus"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Noteikts daļējs pirksta nospiedums. Lūdzu, mēģiniet vēlreiz."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Nevarēja apstrādāt pirksta nospiedumu. Lūdzu, mēģiniet vēlreiz."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Pirkstu nospiedumu sensors ir netīrs. Lūdzu, notīriet to un mēģiniet vēlreiz."</string>
@@ -582,6 +587,8 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"Šajā ierīcē nav pirksta nospieduma sensora."</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"Sensors ir īslaicīgi atspējots."</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"<xliff:g id="FINGERID">%d</xliff:g>. pirksts"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"Pirksta nospieduma izmantošana"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"Pirksta nospieduma vai ekrāna bloķēšanas metodes izmantošana"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"Lai turpinātu, izmantojiet pirksta nospiedumu"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
@@ -609,7 +616,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"Seju vairs nevar atpazīt. Mēģiniet vēlreiz."</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"Pārāk līdzīgi. Lūdzu, mainiet pozu."</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"Pagrieziet galvu nedaudz mazāk."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"Pagrieziet galvu nedaudz mazāk."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"Nedaudz mazāk nolieciet galvu."</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"Pagrieziet galvu nedaudz mazāk."</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"Noņemiet visu, kas aizsedz jūsu seju."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"Notīriet ekrāna augšdaļu, tostarp melno joslu."</string>
@@ -627,6 +634,9 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"Autorizācija pēc sejas šajā ierīcē netiek atbalstīta"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"Sensors ir īslaicīgi atspējots."</string>
     <string name="face_name_template" msgid="3877037340223318119">"Seja <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"Autorizācija pēc sejas"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Autorizācijas pēc sejas vai ekrāna bloķēšanas metodes izmantošana"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"Lai turpinātu, izmantojiet autorizāciju pēc sejas"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"Sejas ikona"</string>
@@ -688,10 +698,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Ļauj lietotnei lasīt un rakstīt režīma “Netraucēt” konfigurāciju."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"Datu skatīšana par izmantojamajām atļaujām"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Ļauj atļaujas īpašniekam sākt lietotnes atļauju izmantošanu. Parastām lietotnēm tas nekad nav nepieciešams."</string>
-    <!-- no translation found for permlab_highSamplingRateSensors (3941068435726317070) -->
-    <skip />
-    <!-- no translation found for permdesc_highSamplingRateSensors (8430061978931155995) -->
-    <skip />
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"piekļuve sensoru datiem, izmantojot augstu iztveršanas frekvenci"</string>
+    <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"Ļauj lietotnei iztvert sensoru datus, izmantojot frekvenci, kas ir augstāka par 200 Hz."</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"Paroles kārtulu iestatīšana"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"Kontrolēt ekrāna bloķēšanas paroļu un PIN garumu un tajos atļautās rakstzīmes."</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Ekrāna atbloķēšanas mēģinājumu pārraudzīšana"</string>
@@ -1691,7 +1699,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Izmantot saīsni"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Krāsu inversija"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Krāsu korekcija"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"Spilgtuma samazināšana"</string>
+    <string name="reduce_bright_colors_feature_name" msgid="8978255324027479398">"Spilgtuma samazināšana"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Turējāt nospiestas skaļuma pogas. Pakalpojums <xliff:g id="SERVICE_NAME">%1$s</xliff:g> tika ieslēgts."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Turējāt nospiestas skaļuma pogas. Pakalpojums <xliff:g id="SERVICE_NAME">%1$s</xliff:g> tika izslēgts."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"Lai izmantotu pakalpojumu <xliff:g id="SERVICE_NAME">%1$s</xliff:g>, nospiediet abus skaļuma taustiņus un turiet tos trīs sekundes."</string>
@@ -1904,8 +1912,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"SS pieprasījums mainīts uz videozvanu"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"SS pieprasījums mainīts uz USSD pieprasījumu"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"Mainīts uz jaunu SS pieprasījumu"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"Brīdinājums par pikšķerēšanu"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"Darba profils"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"Brīdināts"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"Verificēts"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"Izvērst"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"Sakļaut"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"izvērst/sakļaut"</string>
@@ -1978,6 +1988,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"Ziņas un žurnāli"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"Kartes un navigācija"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"Produktivitāte"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"Pieejamība"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"Ierīces krātuve"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"USB atkļūdošana"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"stunda"</string>
@@ -2254,4 +2265,6 @@
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"Lai turpinātu, lietotnei &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; nepieciešama piekļuve jūsu ierīces kamerai."</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"Ieslēgt"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"Sensoru konfidencialitāte"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"Lietojumprogrammas ikona"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"Lietojumprogrammas zīmola attēls"</string>
 </resources>

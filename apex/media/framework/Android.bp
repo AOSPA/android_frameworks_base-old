@@ -47,6 +47,7 @@ java_library {
     static_libs: [
         "exoplayer2-extractor",
         "mediatranscoding_aidl_interface-java",
+        "modules-annotation-minsdk",
         "modules-utils-build",
     ],
     jarjar_rules: "jarjar_rules.txt",
@@ -108,7 +109,7 @@ filegroup {
 filegroup {
     name: "mediaparser-srcs",
     srcs: [
-        "java/android/media/MediaParser.java"
+        "java/android/media/MediaParser.java",
     ],
     path: "java",
 }
@@ -119,7 +120,6 @@ filegroup {
         "java/android/media/ApplicationMediaCapabilities.java",
         "java/android/media/MediaFeature.java",
         "java/android/media/MediaTranscodeManager.java",
-        "java/android/media/MediaTranscodingException.java",
     ],
     path: "java",
 }

@@ -285,9 +285,6 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the system default text classifier -->
         <flag name="textClassifier" value="0x10000" />
-        <!-- Additional flag from base permission type: this permission will be granted to the
-             wellbeing app, as defined by the OEM. -->
-        <flag name="wellbeing" value="0x20000" />
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the document manager -->
         <flag name="documenter" value="0x40000" />
@@ -825,6 +822,12 @@
             <a href="{@docRoot}guide/topics/fundamentals/tasks-and-back-stack.html">Tasks and Back
             Stack</a> document for more details about tasks.-->
         <enum name="singleInstance" value="3" />
+        <!-- The activity can only be running as the root activity of the task, the first activity
+            that created the task, and therefore there will only be one instance of this activity
+            in a task. In constrast to the {@code singleTask} launch mode, this activity can be
+            started in multiple instances in different tasks if the
+            {@code FLAG_ACTIVITY_MULTIPLE_TASK} is set.-->
+        <enum name="singleInstancePerTask" value="4" />
     </attr>
 
     <!-- Specify the orientation an activity should be run in.  If not
@@ -1370,7 +1373,7 @@
          <p>The default value of this attribute is <code>false</code>. -->
     <attr name="resumeWhilePausing" format="boolean" />
 
-    <!-- Indicates that it is okay for this activity to be put in multi-window mode. Intended for a
+    <!-- Hint to platform that the activity works well in multi-window mode. Intended for a
          multi-window device where there can be multiple activities of various sizes on the screen
          at the same time.
 
@@ -1390,7 +1393,7 @@
          resizeable.
 
          <p>NOTE: The value of {@link android.R.attr#screenOrientation} is ignored for
-         resizeable activities when in multi-window mode. -->
+         resizeable activities when in multi-window mode before Android 12. -->
     <attr name="resizeableActivity" format="boolean" />
 
     <!-- Indicates that the activity specifically supports the picture-in-picture form of
@@ -1773,6 +1776,8 @@
             <enum name="maps" value="6" />
             <!-- Apps which are primarily productivity apps, such as cloud storage or workplace apps. -->
             <enum name="productivity" value="7" />
+            <!-- Apps which are primarily accessibility apps, such as screen-readers. -->
+            <enum name="accessibility" value="8" />
         </attr>
 
         <!-- Declares the kind of classloader this application's classes must be loaded with -->
@@ -1893,6 +1898,11 @@
             <!-- User data will remain unchanged during rollback. -->
             <enum name="retain" value="2" />
         </attr>
+
+        <!-- Applications can set this attribute to an xml resource within their app where they
+         specified the rules determining which files and directories can be copied from the device
+         as part of backup or transfer operations. -->
+        <attr name="dataExtractionRules" format="reference"/>
     </declare-styleable>
 
     <!-- An attribution is a logical part of an app and is identified by a tag.

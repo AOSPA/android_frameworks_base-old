@@ -550,13 +550,18 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"ನಿಮ್ಮ ಫೋಟೋ ಸಂಗ್ರಹಣೆಯನ್ನು ಮಾರ್ಪಡಿಸಲು ಆ್ಯಪ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"ನಿಮ್ಮ ಮೀಡಿಯಾ ಸಂಗ್ರಹಣೆಯಿಂದ ಸ್ಥಳಗಳನ್ನು ಓದಿ"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"ನಿಮ್ಮ ಮೀಡಿಯಾ ಸಂಗ್ರಹಣೆಯಿಂದ ಸ್ಥಳಗಳನ್ನು ಓದಲು ಆ್ಯಪ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ."</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"ಬಯೋಮೆಟ್ರಿಕ್ಸ್ ಬಳಸಿ"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"ಬಯೋಮೆಟ್ರಿಕ್ಸ್ ಅಥವಾ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಅನ್ನು ಬಳಸಿ"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"ಇದು ನೀವೇ ಎಂದು ಪರಿಶೀಲಿಸಿ"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"ಮುಂದುವರಿಸಲು ನಿಮ್ಮ ಬಯೋಮೆಟ್ರಿಕ್ ಬಳಸಿ"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"ಬಯೋಮೆಟ್ರಿಕ್ ಹಾರ್ಡ್‌ವೇರ್‌ ಲಭ್ಯವಿಲ್ಲ"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"ಪ್ರಮಾಣೀಕರಣವನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"ಗುರುತಿಸಲಾಗಿಲ್ಲ"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"ಪ್ರಮಾಣೀಕರಣವನ್ನು ರದ್ದುಗೊಳಿಸಲಾಗಿದೆ"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"ಪಿನ್, ಪ್ಯಾಟರ್ನ್ ಅಥವಾ ಪಾಸ್‌ವರ್ಡ್ ಸೆಟ್ ಮಾಡಿಲ್ಲ"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"ದೃಢೀಕರಿಸುವಾಗ ದೋಷ ಎದುರಾಗಿದೆ"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಬಳಸಿ"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"ಮುಂದುವರಿಸಲು ನಿಮ್ಮ ಸಾಧನದ ರುಜುವಾತನ್ನು‌ ನಮೂದಿಸಿ"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"ಭಾಗಶಃ ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಪತ್ತೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಅನ್ನು ಪ್ರಕ್ರಿಯೆಗೊಳಿಸಲು ಸಾಧ್ಯವಿಲ್ಲ. ದಯವಿಟ್ಟು ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಸೆನ್ಸರ್ ಕೊಳೆಯಾಗಿದೆ. ದಯವಿಟ್ಟು ಅದನ್ನು ಸ್ವಚ್ಛಗೊಳಿಸಿ ಹಾಗೂ ಮತ್ತೆ ಪ್ರಯತ್ನಿಸಿ."</string>
@@ -579,6 +584,8 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"ಈ ಸಾಧನವು ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಸೆನ್ಸರ್‌‌ ಅನ್ನು ಹೊಂದಿಲ್ಲ."</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"ಸೆನ್ಸಾರ್ ಅನ್ನು ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ."</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"ಫಿಂಗರ್ <xliff:g id="FINGERID">%d</xliff:g>"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"ಫಿಂಗರ್ ಪ್ರಿಂಟ್ ಬಳಸಿ"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"ಫಿಂಗರ್‌ ಪ್ರಿಂಟ್ ಅಥವಾ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಬಳಸಿ"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"ಮುಂದುವರಿಸಲು ನಿಮ್ಮ ಫಿಂಗರ್‌ಪ್ರಿಂಟ್ ಬಳಸಿ"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
@@ -606,7 +613,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"ಮುಖ ಗುರುತಿಸಲು ಸಾಧ್ಯವಾಗುವುದಿಲ್ಲ. ಪುನಃ ಪ್ರಯತ್ನಿಸಿ."</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"ತುಂಬಾ ಸಮಾನ, ನಿಮ್ಮ ಪೋಸ್ ಬದಲಾಯಿಸಿ."</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"ನಿಮ್ಮ ತಲೆಯನ್ನು ಹೆಚ್ಚು ತಿರುಗಿಸಬೇಡಿ."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"ನಿಮ್ಮ ತಲೆಯನ್ನು ಹೆಚ್ಚು ತಿರುಗಿಸಬೇಡಿ."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"ನಿಮ್ಮ ತಲೆಯನ್ನು ಸ್ವಲ್ಪ ಓರೆಯಾಗಿಸಿ."</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"ನಿಮ್ಮ ತಲೆಯನ್ನು ಸ್ವಲ್ಪ ಕಡಿಮೆ ತಿರುಗಿಸಿ."</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"ನಿಮ್ಮ ಮುಖವನ್ನು ಮರೆಮಾಡುವ ಯಾವುದನ್ನಾದರೂ ತೆಗೆದುಹಾಕಿ."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"ಬ್ಲ್ಯಾಕ್ ಬಾರ್ ಸೇರಿದಂತೆ ನಿಮ್ಮ ಸ್ಕ್ರೀನ್‌ನ ಮೇಲ್ಭಾಗವನ್ನು ತೆರವುಗೊಳಿಸಿ"</string>
@@ -624,6 +631,9 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"ಈ ಸಾಧನದಲ್ಲಿ ಫೇಸ್ ಅನ್‌ಲಾಕ್ ವೈಶಿಷ್ಟ್ಯವು ಬೆಂಬಲಿತವಾಗಿಲ್ಲ."</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"ಸೆನ್ಸಾರ್ ಅನ್ನು ತಾತ್ಕಾಲಿಕವಾಗಿ ನಿಷ್ಕ್ರಿಯಗೊಳಿಸಲಾಗಿದೆ."</string>
     <string name="face_name_template" msgid="3877037340223318119">"ಮುಖದ <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಅನ್ನು ಬಳಸಿ‌‌"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"ಫೇಸ್ ಅಥವಾ ಸ್ಕ್ರೀನ್ ಲಾಕ್ ಅನ್ನು ಬಳಸಿ"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"ಮುಂದುವರಿಸಲು ಫೇಸ್ ಅನ್‌ಲಾಕ್ ಅನ್ನು ಬಳಸಿ"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"ಮುಖದ ಐಕಾನ್‌"</string>
@@ -685,10 +695,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"ಅಡಚಣೆ ಮಾಡಬೇಡಿ ಕಾನ್ಫಿಗರೇಶನ್ ಅನ್ನು ಓದಲು ಮತ್ತು ಬರೆಯಲು ಅಪ್ಲಿಕೇಶನ್‌ಗೆ ಅನುಮತಿಸುತ್ತದೆ."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"ವೀಕ್ಷಣಾ ಅನುಮತಿಯ ಬಳಕೆಯನ್ನು ಪ್ರಾರಂಭಿಸಿ"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"ಆ್ಯಪ್‌ಗಾಗಿ ಅನುಮತಿ ಬಳಕೆಯನ್ನು ಪ್ರಾರಂಭಿಸಲು ಹೊಂದಿರುವವರಿಗೆ ಅನುಮತಿಸುತ್ತದೆ. ಸಾಮಾನ್ಯ ಆ್ಯಪ್‌ಗಳಿಗೆ ಎಂದಿಗೂ ಅಗತ್ಯವಿರುವುದಿಲ್ಲ."</string>
-    <!-- no translation found for permlab_highSamplingRateSensors (3941068435726317070) -->
-    <skip />
-    <!-- no translation found for permdesc_highSamplingRateSensors (8430061978931155995) -->
-    <skip />
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"ಹೆಚ್ಚಿನ ನಮೂನೆ ದರದಲ್ಲಿ ಸೆನ್ಸಾರ್ ಡೇಟಾ ಪ್ರವೇಶಿಸಿ"</string>
+    <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"200 Hz ಗಿಂತಲೂ ಹೆಚ್ಚಿನ ವೇಗದಲ್ಲಿ ಸೆನ್ಸಾರ್ ಡೇಟಾದ ಮಾದರಿ ಪರೀಕ್ಷಿಸಲು ಆ್ಯಪ್‌ಗೆ ಅನುಮತಿಸಿ"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"ಪಾಸ್‌ವರ್ಡ್ ನಿಮಯಗಳನ್ನು ಹೊಂದಿಸಿ"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"ಪರದೆ ಲಾಕ್‌ನಲ್ಲಿನ ಪಾಸ್‌ವರ್ಡ್‌ಗಳು ಮತ್ತು ಪಿನ್‌ಗಳ ಅನುಮತಿಸಲಾದ ಅಕ್ಷರಗಳ ಪ್ರಮಾಣವನ್ನು ನಿಯಂತ್ರಿಸಿ."</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"ಪರದೆಯ ಅನ್‌ಲಾಕ್ ಪ್ರಯತ್ನಗಳನ್ನು ಮೇಲ್ವಿಚಾರಣೆ ಮಾಡಿ"</string>
@@ -1669,7 +1677,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"ಶಾರ್ಟ್‌ಕಟ್ ಬಳಸಿ"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"ಬಣ್ಣ ವಿಲೋಮ"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"ಬಣ್ಣ ತಿದ್ದುಪಡಿ"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"ಪ್ರಖರತೆಯನ್ನು ಕಡಿಮೆ ಮಾಡಿ"</string>
+    <string name="reduce_bright_colors_feature_name" msgid="8978255324027479398">"ಪ್ರಖರತೆಯನ್ನು ಕಡಿಮೆ ಮಾಡಿ"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"ವಾಲ್ಯೂಮ್ ಕೀಗಳನ್ನು ಹಿಡಿದುಕೊಳ್ಳಿ. <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ಅನ್ನು ಆನ್ ಮಾಡಲಾಗಿದೆ."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"ವಾಲ್ಯೂಮ್ ಕೀಗಳನ್ನು ಹಿಡಿದಿಟ್ಟುಕೊಳ್ಳಲಾಗಿದೆ. <xliff:g id="SERVICE_NAME">%1$s</xliff:g>, ಆಫ್ ಮಾಡಲಾಗಿದೆ."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> ಅನ್ನು ಬಳಸಲು ಎರಡೂ ಧ್ವನಿ ಕೀಗಳನ್ನು ಮೂರು ಸೆಕೆಂಡ್‌ಗಳ ಕಾಲ ಒತ್ತಿ ಹಿಡಿದುಕೊಳ್ಳಿ"</string>
@@ -1873,8 +1881,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"SS ವಿನಂತಿಯನ್ನು ವೀಡಿಯೊ ಕರೆಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"SS ವಿನಂತಿಯನ್ನು USSD ವಿನಂತಿಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"ಹೊಸ SS ವಿನಂತಿಗೆ ಬದಲಾಯಿಸಲಾಗಿದೆ"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"ಫಿಶಿಂಗ್ ಕುರಿತು ಎಚ್ಚರಿಕೆ‌"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"ಉದ್ಯೋಗ ಪ್ರೊಫೈಲ್"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"ಎಚ್ಚರಿಕೆ ನೀಡಲಾಗಿದೆ"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"ಪರಿಶೀಲಿಸಲಾಗಿದೆ"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"ವಿಸ್ತೃತಗೊಳಿಸಿ"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"ಕುಗ್ಗಿಸಿ"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"ವಿಸ್ತರಣೆ ಟಾಗಲ್‌ ಮಾಡಿ"</string>
@@ -1946,6 +1956,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"ಸುದ್ದಿ ಮತ್ತು ನಿಯತಕಾಲಿಕೆಗಳು"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"Maps ಮತ್ತು ನ್ಯಾವಿಗೇಶನ್"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"ಉತ್ಪಾದಕತೆ"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"ಪ್ರವೇಶಿಸುವಿಕೆ"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"ಸಾಧನ ಸಂಗ್ರಹಣೆ"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"USB ಡೀಬಗ್ ಮಾಡುವಿಕೆ"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"ಗಂಟೆ"</string>
@@ -2220,4 +2231,6 @@
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"ಮುಂದುವರಿಯಲು, &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; ಗೆ ನಿಮ್ಮ ಸಾಧನದ ಕ್ಯಾಮರಾದ ಪ್ರವೇಶದ ಅಗತ್ಯವಿದೆ."</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"ಆನ್ ಮಾಡಿ"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"ಸೆನ್ಸರ್ ಗೌಪ್ಯತೆ"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"ಅಪ್ಲಿಕೇಶನ್‌ ಐಕಾನ್‌"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"ಅಪ್ಲಿಕೇಶನ್ ಬ್ರ್ಯಾಂಡಿಂಗ್ ಚಿತ್ರ"</string>
 </resources>

@@ -90,6 +90,13 @@ public final class TextClassificationConstants {
     static final String SYSTEM_TEXT_CLASSIFIER_API_TIMEOUT_IN_SECOND =
             "system_textclassifier_api_timeout_in_second";
 
+    /**
+     * The maximum amount of characters before and after the selected text that is passed to the
+     * TextClassifier for the smart selection. e.g. If this value is 100, then 100 characters before
+     * the selection and 100 characters after the selection will be passed to the TextClassifier.
+     */
+    private static final String SMART_SELECTION_TRIM_DELTA = "smart_selection_trim_delta";
+
     private static final String DEFAULT_TEXT_CLASSIFIER_SERVICE_PACKAGE_OVERRIDE = null;
     private static final boolean LOCAL_TEXT_CLASSIFIER_ENABLED_DEFAULT = true;
     private static final boolean SYSTEM_TEXT_CLASSIFIER_ENABLED_DEFAULT = true;
@@ -100,6 +107,7 @@ public final class TextClassificationConstants {
     private static final boolean SMART_SELECT_ANIMATION_ENABLED_DEFAULT = true;
     private static final int GENERATE_LINKS_MAX_TEXT_LENGTH_DEFAULT = 100 * 1000;
     private static final long SYSTEM_TEXT_CLASSIFIER_API_TIMEOUT_IN_SECOND_DEFAULT = 60;
+    private static final int SMART_SELECTION_TRIM_DELTA_DEFAULT = 120;
 
     @Nullable
     public String getTextClassifierServicePackageOverride() {
@@ -155,6 +163,12 @@ public final class TextClassificationConstants {
                 SYSTEM_TEXT_CLASSIFIER_API_TIMEOUT_IN_SECOND_DEFAULT);
     }
 
+    public int getSmartSelectionTrimDelta() {
+        return DeviceConfig.getInt(DeviceConfig.NAMESPACE_TEXTCLASSIFIER,
+                SMART_SELECTION_TRIM_DELTA,
+                SMART_SELECTION_TRIM_DELTA_DEFAULT);
+    }
+
     void dump(IndentingPrintWriter pw) {
         pw.println("TextClassificationConstants:");
         pw.increaseIndent();
@@ -170,6 +184,7 @@ public final class TextClassificationConstants {
                 getTextClassifierServicePackageOverride()).println();
         pw.print(SYSTEM_TEXT_CLASSIFIER_API_TIMEOUT_IN_SECOND,
                 getSystemTextClassifierApiTimeoutInSecond()).println();
+        pw.print(SMART_SELECTION_TRIM_DELTA, getSmartSelectionTrimDelta()).println();
         pw.decreaseIndent();
     }
 }

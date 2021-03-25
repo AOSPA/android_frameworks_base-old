@@ -166,7 +166,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private int mMaxSmallHeightLarge;
     private int mMaxSmallHeightMedia;
     private int mMaxExpandedHeight;
-    private int mMaxCallHeight;
     private int mIncreasedPaddingBetweenElements;
     private int mNotificationLaunchHeight;
     private boolean mMustStayOnScreen;
@@ -331,7 +330,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mHeadsupDisappearRunning;
     private View mChildAfterViewWhenDismissed;
     private View mGroupParentWhenDismissed;
-    private boolean mShelfIconVisible;
     private boolean mAboveShelf;
     private OnUserInteractionCallback mOnUserInteractionCallback;
     private NotificationGutsManager mNotificationGutsManager;
@@ -568,7 +566,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // The public layouts expand button is always visible
         mPublicLayout.updateExpandButtons(true);
         updateLimits();
-        updateIconVisibilities();
         updateShelfIconColor();
         updateRippleAllowed();
         if (mUpdateBackgroundOnUpdate) {
@@ -689,7 +686,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             //  them a headerless design, then remove this hack.
             smallHeight = mMaxSmallHeightLarge;
         } else if (isCallLayout) {
-            smallHeight = mMaxCallHeight;
+            smallHeight = mMaxExpandedHeight;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
             smallHeight = mMaxSmallHeightLarge;
         } else {
@@ -883,7 +880,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             setDistanceToTopRoundness(NO_ROUNDNESS);
             mNotificationParent.updateBackgroundForGroupState();
         }
-        updateIconVisibilities();
         updateBackgroundClipping();
     }
 
@@ -1481,21 +1477,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return getShelfTransformationTarget() != null;
     }
 
-    /**
-     * Set the icons to be visible of this notification.
-     */
-    public void setShelfIconVisible(boolean iconVisible) {
-        if (iconVisible != mShelfIconVisible) {
-            mShelfIconVisible = iconVisible;
-            updateIconVisibilities();
-        }
-    }
-
-    @Override
-    protected void onBelowSpeedBumpChanged() {
-        updateIconVisibilities();
-    }
-
     @Override
     protected void updateContentTransformation() {
         if (mExpandAnimationRunning) {
@@ -1519,18 +1500,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             mChildrenContainer.setAlpha(contentAlpha);
             mChildrenContainer.setTranslationY(translationY);
             // TODO: handle children fade out better
-        }
-    }
-
-    /** Refreshes the visibility of notification icons */
-    public void updateIconVisibilities() {
-        // The shelf icon is never hidden for children in groups
-        boolean visible = !isChildInGroup() && mShelfIconVisible;
-        for (NotificationContentView l : mLayouts) {
-            l.setShelfIconVisible(visible);
-        }
-        if (mChildrenContainer != null) {
-            mChildrenContainer.setShelfIconVisible(visible);
         }
     }
 
@@ -1651,8 +1620,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 R.dimen.notification_min_height_media);
         mMaxExpandedHeight = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_height);
-        mMaxCallHeight = NotificationUtils.getFontScaledHeight(mContext,
-                R.dimen.call_notification_full_height);
         mMaxHeadsUpHeightBeforeN = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_heads_up_height_legacy);
         mMaxHeadsUpHeightBeforeP = NotificationUtils.getFontScaledHeight(mContext,
@@ -2052,8 +2019,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 mNotificationLaunchHeight,
                 zProgress);
         setTranslationZ(translationZ);
-        float extraWidthForClipping = params.getWidth() - getWidth()
-                + MathUtils.lerp(0, mOutlineRadius * 2, params.getProgress());
+        float extraWidthForClipping = params.getWidth() - getWidth();
         setExtraWidthForClipping(extraWidthForClipping);
         int top = params.getTop();
         float interpolation = Interpolators.FAST_OUT_SLOW_IN.getInterpolation(params.getProgress());

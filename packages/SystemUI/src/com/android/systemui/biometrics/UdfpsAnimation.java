@@ -17,10 +17,13 @@
 package com.android.systemui.biometrics;
 
 import android.content.Context;
+import android.graphics.Rect;
 import android.graphics.RectF;
 import android.graphics.drawable.Drawable;
+import android.view.View;
 
 import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
 
 import com.android.systemui.R;
 
@@ -29,28 +32,49 @@ import com.android.systemui.R;
  * sensor area.
  */
 public abstract class UdfpsAnimation extends Drawable {
-    abstract void updateColor();
+    protected abstract void updateColor();
+    protected abstract void onDestroy();
 
     @NonNull protected final Context mContext;
     @NonNull protected final Drawable mFingerprintDrawable;
+    @Nullable private View mView;
+    private boolean mIlluminationShowing;
 
     public UdfpsAnimation(@NonNull Context context) {
         mContext = context;
         mFingerprintDrawable = context.getResources().getDrawable(R.drawable.ic_fingerprint, null);
+        mFingerprintDrawable.mutate();
     }
 
     public void onSensorRectUpdated(@NonNull RectF sensorRect) {
-        int margin =  (int) (sensorRect.bottom - sensorRect.top) / 5;
-        mFingerprintDrawable.setBounds(
-                (int) sensorRect.left + margin,
+        final int margin =  (int) sensorRect.height() / 8;
+
+        final Rect bounds = new Rect((int) sensorRect.left + margin,
                 (int) sensorRect.top + margin,
                 (int) sensorRect.right - margin,
                 (int) sensorRect.bottom - margin);
+        updateFingerprintIconBounds(bounds);
+    }
+
+    protected void updateFingerprintIconBounds(@NonNull Rect bounds) {
+        mFingerprintDrawable.setBounds(bounds);
     }
 
     @Override
     public void setAlpha(int alpha) {
         mFingerprintDrawable.setAlpha(alpha);
+    }
+
+    public void setAnimationView(UdfpsAnimationView view) {
+        mView = view;
+    }
+
+    boolean isIlluminationShowing() {
+        return mIlluminationShowing;
+    }
+
+    void setIlluminationShowing(boolean showing) {
+        mIlluminationShowing = showing;
     }
 
     /**
@@ -65,5 +89,11 @@ public abstract class UdfpsAnimation extends Drawable {
      */
     public int getPaddingY() {
         return 0;
+    }
+
+    protected void postInvalidateView() {
+        if (mView != null) {
+            mView.postInvalidate();
+        }
     }
 }

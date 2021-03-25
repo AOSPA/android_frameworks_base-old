@@ -194,7 +194,9 @@ import android.view.textclassifier.TextClassifier;
 import android.view.textclassifier.TextLinks;
 import android.view.textservice.SpellCheckerSubtype;
 import android.view.textservice.TextServicesManager;
-import android.view.translation.TranslationRequest;
+import android.view.translation.TranslationRequestValue;
+import android.view.translation.ViewTranslationRequest;
+import android.view.translation.ViewTranslationResponse;
 import android.widget.RemoteViews.RemoteView;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -4756,6 +4758,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see #getJustificationMode()
      */
     @Layout.JustificationMode
+    @android.view.RemotableViewMethod
     public void setJustificationMode(@Layout.JustificationMode int justificationMode) {
         mJustificationMode = justificationMode;
         if (mLayout != null) {
@@ -5232,6 +5235,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see android.view.Gravity
      * @attr ref android.R.styleable#TextView_gravity
      */
+    @android.view.RemotableViewMethod
     public void setGravity(int gravity) {
         if ((gravity & Gravity.RELATIVE_HORIZONTAL_GRAVITY_MASK) == 0) {
             gravity |= Gravity.START;
@@ -5826,6 +5830,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      *
      * @attr ref android.R.styleable#TextView_lineHeight
      */
+    @android.view.RemotableViewMethod
     public void setLineHeight(@Px @IntRange(from = 0) int lineHeight) {
         Preconditions.checkArgumentNonnegative(lineHeight);
 
@@ -10277,6 +10282,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @see #setTransformationMethod(TransformationMethod)
      * @attr ref android.R.styleable#TextView_textAllCaps
      */
+    @android.view.RemotableViewMethod
     public void setAllCaps(boolean allCaps) {
         if (allCaps) {
             setTransformationMethod(new AllCapsTransformationMethod(getContext()));
@@ -13813,7 +13819,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     }
 
     /**
-     * Provides a {@link TranslationRequest} that represents the content to be translated via
+     * Provides a {@link ViewTranslationRequest} that represents the content to be translated via
      * translation service.
      *
      * <p>NOTE: When overriding the method, it should not translate the password. We also suggest
@@ -13827,7 +13833,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      */
     @Nullable
     @Override
-    public TranslationRequest onCreateTranslationRequest() {
+    public ViewTranslationRequest onCreateTranslationRequest() {
         if (mText == null || mText.length() == 0) {
             return null;
         }
@@ -13839,11 +13845,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             return null;
         }
         // TODO(b/176488462): apply the view's important for translation property
-        // TODO(b/174283799): remove the spans from the mText and save the spans informatopn
-        TranslationRequest request =
-                new TranslationRequest.Builder()
-                        .setAutofillId(getAutofillId())
-                        .setTranslationText(mText)
+        // TODO(b/174283799): remove the spans from the mText and save the spans information
+        // TODO: use fixed ids for request texts.
+        ViewTranslationRequest request =
+                new ViewTranslationRequest.Builder(getAutofillId())
+                        .setValue(ViewTranslationRequest.ID_TEXT,
+                                TranslationRequestValue.forText(mText))
                         .build();
         return request;
     }
@@ -13919,12 +13926,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
      * @hide
      */
     @Override
-    public void onTranslationComplete(@NonNull TranslationRequest data) {
+    public void onTranslationComplete(@NonNull ViewTranslationResponse response) {
         // Show the translated text.
         TransformationMethod originalTranslationMethod = mTranslationTransformation != null
                 ? mTranslationTransformation.getOriginalTransformationMethod() : mTransformation;
         mTranslationTransformation =
-                new TranslationTransformationMethod(data, originalTranslationMethod);
+                new TranslationTransformationMethod(response, originalTranslationMethod);
         // TODO(b/178353965): well-handle setTransformationMethod.
         setTransformationMethod(mTranslationTransformation);
     }

@@ -17,15 +17,13 @@
 package com.android.systemui.statusbar.notification.row;
 
 
-import static android.provider.Settings.Global.NOTIFICATION_BUBBLES;
-import static android.provider.Settings.Secure.SHOW_NOTIFICATION_SNOOZE;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
 import android.app.PendingIntent;
 import android.content.Context;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
@@ -34,6 +32,7 @@ import android.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Pair;
+import android.view.ContextThemeWrapper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.NotificationHeaderView;
@@ -173,7 +172,6 @@ public class NotificationContentView extends FrameLayout {
     private int mContentHeightAtAnimationStart = UNDEFINED;
     private boolean mFocusOnVisibilityChange;
     private boolean mHeadsUpAnimatingAway;
-    private boolean mShelfIconVisible;
     private int mClipBottomAmount;
     private boolean mIsLowPriority;
     private boolean mIsContentExpandable;
@@ -878,10 +876,12 @@ public class NotificationContentView extends FrameLayout {
 
     public void setBackgroundTintColor(int color) {
         if (mExpandedSmartReplyView != null) {
-            mExpandedSmartReplyView.setBackgroundTintColor(color);
+            boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
+            mExpandedSmartReplyView.setBackgroundTintColor(color, colorized);
         }
         if (mHeadsUpSmartReplyView != null) {
-            mHeadsUpSmartReplyView.setBackgroundTintColor(color);
+            boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
+            mHeadsUpSmartReplyView.setBackgroundTintColor(color, colorized);
         }
     }
 
@@ -1238,6 +1238,7 @@ public class NotificationContentView extends FrameLayout {
         mCachedHeadsUpRemoteInput = null;
     }
 
+
     private RemoteInputView applyRemoteInput(View view, NotificationEntry entry,
             boolean hasRemoteInput, PendingIntent existingPendingIntent,
             RemoteInputView cachedView, NotificationViewWrapper wrapper) {
@@ -1274,6 +1275,15 @@ public class NotificationContentView extends FrameLayout {
                 int color = entry.getSbn().getNotification().color;
                 if (color == Notification.COLOR_DEFAULT) {
                     color = mContext.getColor(R.color.default_remote_input_background);
+                }
+                if (mContext.getResources().getBoolean(
+                        com.android.internal.R.bool.config_tintNotificationsWithTheme)) {
+                    Resources.Theme theme = new ContextThemeWrapper(mContext,
+                            com.android.internal.R.style.Theme_DeviceDefault_DayNight).getTheme();
+                    TypedArray ta = theme.obtainStyledAttributes(
+                            new int[]{com.android.internal.R.attr.colorAccent});
+                    color = ta.getColor(0, color);
+                    ta.recycle();
                 }
                 existing.setBackgroundColor(ContrastColorUtil.ensureTextBackgroundColor(color,
                         mContext.getColor(R.color.remote_input_text_enabled),
@@ -1317,7 +1327,7 @@ public class NotificationContentView extends FrameLayout {
 
     private boolean isBubblesEnabled() {
         return Settings.Global.getInt(mContext.getContentResolver(),
-                NOTIFICATION_BUBBLES, 0) == 1;
+                Settings.Global.NOTIFICATION_BUBBLES, 0) == 1;
     }
 
     /**
@@ -1346,12 +1356,10 @@ public class NotificationContentView extends FrameLayout {
                 && isPersonWithShortcut
                 && entry.getBubbleMetadata() != null;
         if (showButton) {
-            Drawable d = mContext.getResources().getDrawable(entry.isBubble()
+            // explicitly resolve drawable resource using SystemUI's theme
+            Drawable d = mContext.getDrawable(entry.isBubble()
                     ? R.drawable.bubble_ic_stop_bubble
                     : R.drawable.bubble_ic_create_bubble);
-            mContainingNotification.updateNotificationColor();
-            final int tint = mContainingNotification.getNotificationColor();
-            d.setTint(tint);
 
             String contentDescription = mContext.getResources().getString(entry.isBubble()
                     ? R.string.notification_conversation_unbubble
@@ -1373,27 +1381,25 @@ public class NotificationContentView extends FrameLayout {
         }
         ImageView snoozeButton = layout.findViewById(com.android.internal.R.id.snooze_button);
         View actionContainer = layout.findViewById(com.android.internal.R.id.actions_container);
-        LinearLayout actionContainerLayout =
-                layout.findViewById(com.android.internal.R.id.actions_container_layout);
-        if (snoozeButton == null || actionContainer == null || actionContainerLayout == null) {
+        if (snoozeButton == null || actionContainer == null) {
             return;
         }
         final boolean showSnooze = Settings.Secure.getInt(mContext.getContentResolver(),
-                SHOW_NOTIFICATION_SNOOZE, 0) == 1;
-        if (!showSnooze) {
+                Settings.Secure.SHOW_NOTIFICATION_SNOOZE, 0) == 1;
+        // Notification.Builder can 'disable' the snooze button to prevent it from being shown here
+        boolean snoozeDisabled = !snoozeButton.isEnabled();
+        if (!showSnooze || snoozeDisabled) {
             snoozeButton.setVisibility(GONE);
             return;
         }
 
-        Resources res = mContext.getResources();
-        Drawable snoozeDrawable = res.getDrawable(R.drawable.ic_snooze);
-        mContainingNotification.updateNotificationColor();
-        snoozeDrawable.setTint(mContainingNotification.getNotificationColor());
+        // explicitly resolve drawable resource using SystemUI's theme
+        Drawable snoozeDrawable = mContext.getDrawable(R.drawable.ic_snooze);
         snoozeButton.setImageDrawable(snoozeDrawable);
 
         final NotificationSnooze snoozeGuts = (NotificationSnooze) LayoutInflater.from(mContext)
                 .inflate(R.layout.notification_snooze, null, false);
-        final String snoozeDescription = res.getString(
+        final String snoozeDescription = mContext.getString(
                 R.string.notification_menu_snooze_description);
         final NotificationMenuRowPlugin.MenuItem snoozeMenuItem =
                 new NotificationMenuRow.NotificationMenuItem(
@@ -1505,7 +1511,9 @@ public class NotificationContentView extends FrameLayout {
             smartReplyView.addPreInflatedButtons(
                     inflatedSmartReplyViewHolder.getSmartSuggestionButtons());
             // Ensure the colors of the smart suggestion buttons are up-to-date.
-            smartReplyView.setBackgroundTintColor(entry.getRow().getCurrentBackgroundTint());
+            int backgroundColor = entry.getRow().getCurrentBackgroundTint();
+            boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
+            smartReplyView.setBackgroundTintColor(backgroundColor, colorized);
             smartReplyContainer.setVisibility(View.VISIBLE);
         }
         return smartReplyView;
@@ -1732,23 +1740,6 @@ public class NotificationContentView extends FrameLayout {
 
     public void setFocusOnVisibilityChange() {
         mFocusOnVisibilityChange = true;
-    }
-
-    public void setShelfIconVisible(boolean iconsVisible) {
-        mShelfIconVisible = iconsVisible;
-        updateIconVisibilities();
-    }
-
-    private void updateIconVisibilities() {
-        if (mContractedWrapper != null) {
-            mContractedWrapper.setShelfIconVisible(mShelfIconVisible);
-        }
-        if (mHeadsUpWrapper != null) {
-            mHeadsUpWrapper.setShelfIconVisible(mShelfIconVisible);
-        }
-        if (mExpandedWrapper != null) {
-            mExpandedWrapper.setShelfIconVisible(mShelfIconVisible);
-        }
     }
 
     @Override

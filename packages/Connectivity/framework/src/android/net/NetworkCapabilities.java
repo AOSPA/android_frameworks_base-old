@@ -34,9 +34,9 @@ import android.util.ArraySet;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.util.BitUtils;
 import com.android.internal.util.Preconditions;
 import com.android.net.module.util.CollectionUtils;
+import com.android.net.module.util.NetworkCapabilitiesUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -205,6 +205,7 @@ public final class NetworkCapabilities implements Parcelable {
             NET_CAPABILITY_OEM_PRIVATE,
             NET_CAPABILITY_VEHICLE_INTERNAL,
             NET_CAPABILITY_NOT_VCN_MANAGED,
+            NET_CAPABILITY_ENTERPRISE,
     })
     public @interface NetCapability { }
 
@@ -415,8 +416,17 @@ public final class NetworkCapabilities implements Parcelable {
     @SystemApi
     public static final int NET_CAPABILITY_NOT_VCN_MANAGED = 28;
 
+    /**
+     * Indicates that this network is intended for enterprise use.
+     * <p>
+     * 5G URSP rules may indicate that all data should use a connection dedicated for enterprise
+     * use. If the enterprise capability is requested, all enterprise traffic will be routed over
+     * the connection with this capability.
+     */
+    public static final int NET_CAPABILITY_ENTERPRISE = 29;
+
     private static final int MIN_NET_CAPABILITY = NET_CAPABILITY_MMS;
-    private static final int MAX_NET_CAPABILITY = NET_CAPABILITY_NOT_VCN_MANAGED;
+    private static final int MAX_NET_CAPABILITY = NET_CAPABILITY_ENTERPRISE;
 
     /**
      * Network capabilities that are expected to be mutable, i.e., can change while a particular
@@ -474,7 +484,8 @@ public final class NetworkCapabilities implements Parcelable {
             | (1 << NET_CAPABILITY_MCX)
             | (1 << NET_CAPABILITY_RCS)
             | (1 << NET_CAPABILITY_VEHICLE_INTERNAL)
-            | (1 << NET_CAPABILITY_XCAP);
+            | (1 << NET_CAPABILITY_XCAP)
+            | (1 << NET_CAPABILITY_ENTERPRISE);
 
     /**
      * Capabilities that force network to be restricted.
@@ -599,7 +610,7 @@ public final class NetworkCapabilities implements Parcelable {
      */
     @UnsupportedAppUsage
     public @NetCapability int[] getCapabilities() {
-        return BitUtils.unpackBits(mNetworkCapabilities);
+        return NetworkCapabilitiesUtils.unpackBits(mNetworkCapabilities);
     }
 
     /**
@@ -609,7 +620,7 @@ public final class NetworkCapabilities implements Parcelable {
      * @hide
      */
     public @NetCapability int[] getUnwantedCapabilities() {
-        return BitUtils.unpackBits(mUnwantedNetworkCapabilities);
+        return NetworkCapabilitiesUtils.unpackBits(mUnwantedNetworkCapabilities);
     }
 
 
@@ -621,8 +632,8 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public void setCapabilities(@NetCapability int[] capabilities,
             @NetCapability int[] unwantedCapabilities) {
-        mNetworkCapabilities = BitUtils.packBits(capabilities);
-        mUnwantedNetworkCapabilities = BitUtils.packBits(unwantedCapabilities);
+        mNetworkCapabilities = NetworkCapabilitiesUtils.packBits(capabilities);
+        mUnwantedNetworkCapabilities = NetworkCapabilitiesUtils.packBits(unwantedCapabilities);
     }
 
     /**
@@ -677,7 +688,7 @@ public final class NetworkCapabilities implements Parcelable {
                 & NON_REQUESTABLE_CAPABILITIES;
 
         if (nonRequestable != 0) {
-            return capabilityNameOf(BitUtils.unpackBits(nonRequestable)[0]);
+            return capabilityNameOf(NetworkCapabilitiesUtils.unpackBits(nonRequestable)[0]);
         }
         if (mLinkUpBandwidthKbps != 0 || mLinkDownBandwidthKbps != 0) return "link bandwidth";
         if (hasSignalStrength()) return "signalStrength";
@@ -935,7 +946,7 @@ public final class NetworkCapabilities implements Parcelable {
      */
     @SystemApi
     @NonNull public @Transport int[] getTransportTypes() {
-        return BitUtils.unpackBits(mTransportTypes);
+        return NetworkCapabilitiesUtils.unpackBits(mTransportTypes);
     }
 
     /**
@@ -945,7 +956,7 @@ public final class NetworkCapabilities implements Parcelable {
      * @hide
      */
     public void setTransportTypes(@Transport int[] transportTypes) {
-        mTransportTypes = BitUtils.packBits(transportTypes);
+        mTransportTypes = NetworkCapabilitiesUtils.packBits(transportTypes);
     }
 
     /**
@@ -1710,8 +1721,10 @@ public final class NetworkCapabilities implements Parcelable {
         long oldImmutableCapabilities = this.mNetworkCapabilities & mask;
         long newImmutableCapabilities = that.mNetworkCapabilities & mask;
         if (oldImmutableCapabilities != newImmutableCapabilities) {
-            String before = capabilityNamesOf(BitUtils.unpackBits(oldImmutableCapabilities));
-            String after = capabilityNamesOf(BitUtils.unpackBits(newImmutableCapabilities));
+            String before = capabilityNamesOf(NetworkCapabilitiesUtils.unpackBits(
+                    oldImmutableCapabilities));
+            String after = capabilityNamesOf(NetworkCapabilitiesUtils.unpackBits(
+                    newImmutableCapabilities));
             joiner.add(String.format("immutable capabilities changed: %s -> %s", before, after));
         }
 
@@ -1853,7 +1866,7 @@ public final class NetworkCapabilities implements Parcelable {
                 final ArraySet<T> result = new ArraySet<>(size);
                 for (int i = 0; i < size; i++) {
                     final T value = in.readParcelable(loader);
-                    result.append(value);
+                    result.add(value);
                 }
                 return result;
             }
@@ -2028,8 +2041,9 @@ public final class NetworkCapabilities implements Parcelable {
             case NET_CAPABILITY_PARTIAL_CONNECTIVITY: return "PARTIAL_CONNECTIVITY";
             case NET_CAPABILITY_TEMPORARILY_NOT_METERED:    return "TEMPORARILY_NOT_METERED";
             case NET_CAPABILITY_OEM_PRIVATE:          return "OEM_PRIVATE";
-            case NET_CAPABILITY_VEHICLE_INTERNAL:     return "NET_CAPABILITY_VEHICLE_INTERNAL";
+            case NET_CAPABILITY_VEHICLE_INTERNAL:     return "VEHICLE_INTERNAL";
             case NET_CAPABILITY_NOT_VCN_MANAGED:      return "NOT_VCN_MANAGED";
+            case NET_CAPABILITY_ENTERPRISE:           return "ENTERPRISE";
             default:                                  return Integer.toString(capability);
         }
     }

@@ -28,6 +28,7 @@ import android.os.Bundle;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.Set;
 
 /**
  * A mock location provider used by LocationManagerService to implement test providers.
@@ -38,9 +39,10 @@ public class MockLocationProvider extends AbstractLocationProvider {
 
     @Nullable private Location mLocation;
 
-    public MockLocationProvider(ProviderProperties properties, CallerIdentity identity) {
+    public MockLocationProvider(ProviderProperties properties, CallerIdentity identity,
+            Set<String> extraAttributionTags) {
         // using a direct executor is ok because this class has no locks that could deadlock
-        super(DIRECT_EXECUTOR, identity, properties);
+        super(DIRECT_EXECUTOR, identity, properties, extraAttributionTags);
     }
 
     /** Sets the allowed state of this mock provider. */

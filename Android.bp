@@ -344,8 +344,8 @@ filegroup {
 genrule {
     name: "statslog-telephony-common-java-gen",
     tools: ["stats-log-api-gen"],
-    cmd: "$(location stats-log-api-gen) --java $(out) --module telephony_common"
-        + " --javaPackage com.android.internal.telephony --javaClass TelephonyCommonStatsLog",
+    cmd: "$(location stats-log-api-gen) --java $(out) --module telephony_common" +
+        " --javaPackage com.android.internal.telephony --javaClass TelephonyCommonStatsLog",
     out: ["com/android/internal/telephony/TelephonyCommonStatsLog.java"],
 }
 
@@ -371,7 +371,6 @@ filegroup {
     srcs: [
         // Java/AIDL sources under frameworks/base
         ":framework-blobstore-sources",
-        ":framework-connectivity-sources", // framework-connectivity is not yet a module
         ":framework-core-sources",
         ":framework-drm-sources",
         ":framework-graphics-nonupdatable-sources",
@@ -422,6 +421,7 @@ filegroup {
         ":resourcemanager_aidl",
         ":storaged_aidl",
         ":vold_aidl",
+        ":deviceproductinfoconstants_aidl",
 
         // For the generated R.java and Manifest.java
         ":framework-res{.aapt.srcjar}",
@@ -437,6 +437,7 @@ filegroup {
     name: "framework-updatable-sources",
     srcs: [
         ":framework-appsearch-sources",
+        ":framework-connectivity-sources",
         ":framework-graphics-srcs",
         ":framework-mediaprovider-sources",
         ":framework-permission-sources",
@@ -580,9 +581,11 @@ java_library {
         "android.hardware.vibrator-V1.1-java",
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
+        "android.hardware.vibrator-V2-java",
         "android.security.apc-java",
         "android.security.authorization-java",
         "android.security.usermanager-java",
+        "android.security.vpnprofilestore-java",
         "android.system.keystore2-V1-java",
         "android.system.suspend.control.internal-java",
         "cameraprotosnano",
@@ -661,6 +664,7 @@ java_defaults {
     defaults: ["framework-aidl-export-defaults", "btadva_fwk_java_defaults"],
     srcs: [
         ":framework-non-updatable-sources",
+        ":framework-connectivity-sources",
         "core/java/**/*.logtags",
     ],
     // See comment on framework-atb-backward-compatibility module below
@@ -722,6 +726,8 @@ java_library {
     apex_available: ["//apex_available:platform"],
     visibility: [
         "//frameworks/base",
+        // TODO: remove when framework-connectivity can build against API
+        "//frameworks/base/packages/Connectivity/framework",
         // TODO(b/147128803) remove the below lines
         "//frameworks/base/apex/appsearch/framework",
         "//frameworks/base/apex/blobstore/framework",
@@ -768,8 +774,8 @@ java_library {
 }
 
 platform_compat_config {
-   name: "framework-platform-compat-config",
-   src: ":framework-minus-apex",
+    name: "framework-platform-compat-config",
+    src: ":framework-minus-apex",
 }
 
 // A temporary build target that is conditionally included on the bootclasspath if
@@ -790,7 +796,7 @@ genrule {
     name: "statslog-framework-java-gen",
     tools: ["stats-log-api-gen"],
     cmd: "$(location stats-log-api-gen) --java $(out) --module framework" +
-         " --javaPackage com.android.internal.util --javaClass FrameworkStatsLog --worksource",
+        " --javaPackage com.android.internal.util --javaClass FrameworkStatsLog --worksource",
     out: ["com/android/internal/util/FrameworkStatsLog.java"],
 }
 
@@ -899,7 +905,7 @@ filegroup {
 
 java_library {
     name: "framework-annotations-lib",
-    srcs: [ ":framework-annotations" ],
+    srcs: [":framework-annotations"],
     sdk_version: "core_current",
 }
 
@@ -948,18 +954,21 @@ filegroup {
     ],
 }
 
-// keep these files in sync with the package/Tethering/jarjar-rules.txt for the tethering module.
+// keep these files in sync with the package/Tethering/jarjar-rules.txt and
+// package/Connectivity/jarjar-rules.txt for the tethering module and connectivity module.
 filegroup {
-    name: "framework-tethering-shared-srcs",
+    name: "framework-connectivity-shared-srcs",
     srcs: [
         "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
+        // This should be android.util.IndentingPrintWriter, but it's not available in all branches.
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
         "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/MessageUtils.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
         "core/java/com/android/internal/util/TrafficStatsConstants.java",
+        "core/java/com/android/internal/util/WakeupMessage.java",
     ],
 }
 
@@ -1177,7 +1186,6 @@ cc_library {
     },
 }
 
-
 // This is the full proto version of libplatformprotos. It may only
 // be used by test code that is not shipped on the device.
 cc_library {
@@ -1243,66 +1251,70 @@ filegroup {
     path: "core/java",
 }
 
-aidl_interface {
-    name: "libincremental_aidl",
-    unstable: true,
+cc_defaults {
+    name: "incremental_default",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wextra-semi",
+        "-Werror",
+        "-Wzero-as-null-pointer-constant",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
+    ],
+    shared_libs: [
+        "libbinder",
+        "libutils",
+    ],
+    aidl: {
+        include_dirs: [
+            "frameworks/native/aidl/binder",
+        ],
+        export_aidl_headers: true,
+    },
+}
+
+cc_library {
+    name: "libincremental_aidl-cpp",
     srcs: [
         ":incremental_aidl",
     ],
-    backend: {
-        java: {
-            sdk_version: "28",
-        },
-        cpp: {
-            enabled: true,
-        },
-        ndk: {
-            enabled: true,
-        },
-    },
+    defaults: ["incremental_default"],
 }
 
-aidl_interface {
-    name: "libdataloader_aidl",
-    unstable: true,
+cc_library {
+    name: "libdataloader_aidl-cpp",
     srcs: [
         ":dataloader_aidl",
     ],
-    imports: [
-        "libincremental_aidl",
+    defaults: ["incremental_default"],
+    shared_libs: [
+        "libincremental_aidl-cpp",
     ],
-    backend: {
-        java: {
-            sdk_version: "28",
-        },
-        cpp: {
-            enabled: true,
-        },
-        ndk: {
-            enabled: false,
-        },
-    },
 }
 
-aidl_interface {
-    name: "libincremental_manager_aidl",
-    unstable: true,
+cc_library {
+    name: "libincremental_manager_aidl-cpp",
     srcs: [
         ":incremental_manager_aidl",
     ],
-    imports: [
-        "libincremental_aidl",
-        "libdataloader_aidl",
+    defaults: ["incremental_default"],
+    shared_libs: [
+        "libincremental_aidl-cpp",
+        "libdataloader_aidl-cpp",
+    ],
+}
+
+// Build Rust bindings for PermissionController. Needed by keystore2.
+aidl_interface {
+    name: "android.os.permissions_aidl",
+    unstable: true,
+    local_include_dir: "core/java",
+    srcs: [
+        "core/java/android/os/IPermissionController.aidl",
     ],
     backend: {
-        java: {
-            sdk_version: "28",
-        },
-        cpp: {
+        rust: {
             enabled: true,
-        },
-        ndk: {
-            enabled: false,
         },
     },
 }
@@ -1333,7 +1345,7 @@ java_library {
         "core/java/android/os/RemoteException.java",
         "core/java/android/util/AndroidException.java",
     ],
-    libs: [ "unsupportedappusage" ],
+    libs: ["unsupportedappusage"],
 
     dxflags: ["--core-library"],
     installable: false,
@@ -1474,6 +1486,7 @@ java_library {
     ],
     libs: [
         "framework-annotations-lib",
+        "framework-connectivity",
         "unsupportedappusage",
     ],
     visibility: [
@@ -1551,4 +1564,5 @@ java_library {
         ":protolog-common-src",
     ],
 }
+
 // protolog end

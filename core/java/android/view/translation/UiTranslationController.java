@@ -31,12 +31,17 @@ import android.os.Process;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.Pair;
+import android.util.SparseArray;
 import android.view.View;
+import android.view.ViewGroup;
+import android.view.ViewRootImpl;
+import android.view.WindowManagerGlobal;
 import android.view.autofill.AutofillId;
 import android.view.translation.UiTranslationManager.UiTranslationState;
 
 import com.android.internal.util.function.pooled.PooledLambda;
 
+import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.List;
@@ -130,6 +135,23 @@ public class UiTranslationController {
     }
 
     /**
+     * Called to dump the translation information for Activity.
+     */
+    public void dump(String outerPrefix, PrintWriter pw) {
+        pw.print(outerPrefix); pw.println("UiTranslationController:");
+        final String pfx = outerPrefix + "  ";
+        pw.print(pfx); pw.print("activity: "); pw.println(mActivity);
+        final int translatorSize = mTranslators.size();
+        pw.print(outerPrefix); pw.print("number translator: "); pw.println(translatorSize);
+        for (int i = 0; i < translatorSize; i++) {
+            pw.print(outerPrefix); pw.print("#"); pw.println(i);
+            final Translator translator = mTranslators.valueAt(i);
+            translator.dump(outerPrefix, pw);
+            pw.println();
+        }
+    }
+
+    /**
      * The method is used by {@link Translator}, it will be called when the translation is done. The
      * translation result can be get from here.
      */
@@ -139,19 +161,20 @@ public class UiTranslationController {
             Log.w(TAG, "Fail result from TranslationService, response: " + response);
             return;
         }
-        final List<TranslationRequest> translatedResult = response.getTranslations();
+        final SparseArray<ViewTranslationResponse> translatedResult =
+                response.getViewTranslationResponses();
         onTranslationCompleted(translatedResult);
     }
 
-    private void onTranslationCompleted(List<TranslationRequest> translatedResult) {
+    private void onTranslationCompleted(SparseArray<ViewTranslationResponse> translatedResult) {
         if (!mActivity.isResumed()) {
             return;
         }
         final int resultCount = translatedResult.size();
         synchronized (mLock) {
             for (int i = 0; i < resultCount; i++) {
-                final TranslationRequest request = translatedResult.get(i);
-                final AutofillId autofillId = request.getAutofillId();
+                final ViewTranslationResponse response = translatedResult.get(i);
+                final AutofillId autofillId = response.getAutofillId();
                 if (autofillId == null) {
                     continue;
                 }
@@ -161,7 +184,7 @@ public class UiTranslationController {
                             + " may be gone.");
                     continue;
                 }
-                mActivity.runOnUiThread(() -> view.onTranslationComplete(request));
+                mActivity.runOnUiThread(() -> view.onTranslationComplete(response));
             }
         }
     }
@@ -184,8 +207,11 @@ public class UiTranslationController {
 
     @WorkerThread
     private void sendTranslationRequest(Translator translator,
-            ArrayList<TranslationRequest> requests) {
-        translator.requestUiTranslate(requests, this::onTranslationCompleted);
+            List<ViewTranslationRequest> requests) {
+        final TranslationRequest request = new TranslationRequest.Builder()
+                .setViewTranslationRequests(requests)
+                .build();
+        translator.requestUiTranslate(request, this::onTranslationCompleted);
     }
 
     /**
@@ -194,24 +220,19 @@ public class UiTranslationController {
     private void onUiTranslationStarted(Translator translator, List<AutofillId> views) {
         synchronized (mLock) {
             // Find Views collect the translation data
-            // TODO(b/178084101): try to optimize, e.g. to this in a single traversal
-            final int viewCounts = views.size();
-            final ArrayList<TranslationRequest> requests = new ArrayList<>();
-            for (int i = 0; i < viewCounts; i++) {
-                final AutofillId viewAutofillId = views.get(i);
-                final View view = mActivity.findViewByAutofillIdTraversal(viewAutofillId);
-                if (view == null) {
-                    Log.w(TAG, "Can not find the View for autofill id= " + viewAutofillId);
-                    continue;
-                }
-                mViews.put(viewAutofillId, new WeakReference<>(view));
+            final ArrayList<ViewTranslationRequest> requests = new ArrayList<>();
+            final ArrayList<View> foundViews = new ArrayList<>();
+            findViewsTraversalByAutofillIds(views, foundViews);
+            for (int i = 0; i < foundViews.size(); i++) {
+                final View view = foundViews.get(i);
+                final int currentCount = i;
                 mActivity.runOnUiThread(() -> {
-                    final TranslationRequest translationRequest = view.onCreateTranslationRequest();
-                    if (translationRequest != null
-                            && translationRequest.getTranslationText().length() > 0) {
-                        requests.add(translationRequest);
+                    final ViewTranslationRequest request = view.onCreateTranslationRequest();
+                    if (request != null
+                            && request.getKeys().size() > 0) {
+                        requests.add(request);
                     }
-                    if (requests.size() == viewCounts) {
+                    if (currentCount == (foundViews.size() - 1)) {
                         Log.v(TAG, "onUiTranslationStarted: send " + requests.size() + " request.");
                         mWorkerHandler.sendMessage(PooledLambda.obtainMessage(
                                 UiTranslationController::sendTranslationRequest,
@@ -219,6 +240,42 @@ public class UiTranslationController {
                     }
                 });
             }
+        }
+    }
+
+    private void findViewsTraversalByAutofillIds(List<AutofillId> sourceViewIds,
+            ArrayList<View> foundViews) {
+        final ArrayList<ViewRootImpl> roots =
+                WindowManagerGlobal.getInstance().getRootViews(mActivity.getActivityToken());
+        for (int rootNum = 0; rootNum < roots.size(); rootNum++) {
+            final View rootView = roots.get(rootNum).getView();
+            if (rootView instanceof ViewGroup) {
+                findViewsTraversalByAutofillIds((ViewGroup) rootView, sourceViewIds, foundViews);
+            } else {
+                addViewIfNeeded(sourceViewIds, rootView, foundViews);
+            }
+        }
+    }
+
+    private void findViewsTraversalByAutofillIds(ViewGroup viewGroup,
+            List<AutofillId> sourceViewIds, ArrayList<View> foundViews) {
+        final int childCount = viewGroup.getChildCount();
+        for (int i = 0; i < childCount; ++i) {
+            final View child = viewGroup.getChildAt(i);
+            if (child instanceof ViewGroup) {
+                findViewsTraversalByAutofillIds((ViewGroup) child, sourceViewIds, foundViews);
+            } else {
+                addViewIfNeeded(sourceViewIds, child, foundViews);
+            }
+        }
+    }
+
+    private void addViewIfNeeded(List<AutofillId> sourceViewIds, View view,
+            ArrayList<View> foundViews) {
+        final AutofillId autofillId = view.getAutofillId();
+        if (sourceViewIds.contains(autofillId)) {
+            mViews.put(autofillId, new WeakReference<>(view));
+            foundViews.add(view);
         }
     }
 

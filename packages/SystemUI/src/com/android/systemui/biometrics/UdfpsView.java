@@ -27,12 +27,13 @@ import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.PointF;
 import android.graphics.RectF;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.text.TextUtils;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.LayoutInflater;
+import android.view.MotionEvent;
 import android.view.View;
 import android.widget.FrameLayout;
 
@@ -51,12 +52,11 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
 
     private static final int DEBUG_TEXT_SIZE_PX = 32;
 
-    @NonNull private final UdfpsSurfaceView mHbmSurfaceView;
-    @NonNull private final UdfpsAnimationView mAnimationView;
     @NonNull private final RectF mSensorRect;
     @NonNull private final Paint mDebugTextPaint;
 
-    @Nullable private UdfpsProgressBar mProgressBar;
+    @NonNull private UdfpsSurfaceView mHbmSurfaceView;
+    @Nullable private UdfpsAnimationView mAnimationView;
 
     // Used to obtain the sensor location.
     @NonNull private FingerprintSensorPropertiesInternal mSensorProps;
@@ -66,7 +66,6 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
     private boolean mIlluminationRequested;
     private int mStatusBarState;
     private boolean mNotificationShadeExpanded;
-    @Nullable private UdfpsEnrollHelper mEnrollHelper;
 
     public UdfpsView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -84,19 +83,6 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
             a.recycle();
         }
 
-        // Inflate UdfpsSurfaceView
-        final LayoutInflater inflater = LayoutInflater.from(context);
-        mHbmSurfaceView = (UdfpsSurfaceView) inflater.inflate(R.layout.udfps_surface_view,
-                null, false);
-        addView(mHbmSurfaceView);
-        mHbmSurfaceView.setVisibility(View.INVISIBLE);
-
-        // Inflate UdfpsAnimationView
-        mAnimationView = (UdfpsAnimationView) inflater.inflate(R.layout.udfps_animation_view,
-                null, false);
-        mAnimationView.setParent(this);
-        addView(mAnimationView);
-
         mSensorRect = new RectF();
 
         mDebugTextPaint = new Paint();
@@ -107,21 +93,28 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
         mIlluminationRequested = false;
     }
 
+    // Don't propagate any touch events to the child views.
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        return true;
+    }
+
+    @Override
+    protected void onFinishInflate() {
+        mHbmSurfaceView = findViewById(R.id.hbm_view);
+    }
+
     void setSensorProperties(@NonNull FingerprintSensorPropertiesInternal properties) {
         mSensorProps = properties;
     }
 
-    void setExtras(@Nullable UdfpsAnimation animation, @Nullable UdfpsEnrollHelper enrollHelper) {
-        mAnimationView.setAnimation(animation);
-        mEnrollHelper = enrollHelper;
+    void setAnimationView(@NonNull UdfpsAnimationView animation) {
+        mAnimationView = animation;
+        animation.setParent(this);
 
-        if (enrollHelper != null) {
-            mEnrollHelper.updateProgress(mProgressBar);
-            mProgressBar.setVisibility(enrollHelper.shouldShowProgressBar()
-                    ? View.VISIBLE : View.GONE);
-        } else {
-            mProgressBar.setVisibility(View.GONE);
-        }
+        // TODO: Consider using a ViewStub placeholder to maintain positioning and inflating it
+        //  after the animation type has been decided.
+        addView(animation, 0);
     }
 
     @Override
@@ -131,12 +124,10 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
 
     @Override
     public void dozeTimeTick() {
+        if (mAnimationView == null) {
+            return;
+        }
         mAnimationView.dozeTimeTick();
-    }
-
-    @Override
-    public void onExpandedChanged(boolean isExpanded) {
-        mNotificationShadeExpanded = isExpanded;
     }
 
     @Override
@@ -146,12 +137,11 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
 
     @Override
     public void onExpansionChanged(float expansion, boolean expanded) {
-        mAnimationView.onExpansionChanged(expansion, expanded);
-    }
+        mNotificationShadeExpanded = expanded;
 
-    @Override
-    protected void onFinishInflate() {
-        mProgressBar = findViewById(R.id.progress_bar);
+        if (mAnimationView != null) {
+            mAnimationView.onExpansionChanged(expansion, expanded);
+        }
     }
 
     @Override
@@ -191,19 +181,16 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
         }
     }
 
-    RectF getSensorRect() {
-        return new RectF(mSensorRect);
-    }
-
     void setDebugMessage(String message) {
         mDebugMessage = message;
         postInvalidate();
     }
 
-    boolean isValidTouch(float x, float y, float pressure) {
+    boolean isWithinSensorArea(float x, float y) {
         // The X and Y coordinates of the sensor's center.
-        final float cx = mSensorRect.centerX();
-        final float cy = mSensorRect.centerY();
+        final PointF translation = mAnimationView.getTouchTranslation();
+        final float cx = mSensorRect.centerX() + translation.x;
+        final float cy = mSensorRect.centerY() + translation.y;
         // Radii along the X and Y axes.
         final float rx = (mSensorRect.right - mSensorRect.left) / 2.0f;
         final float ry = (mSensorRect.bottom - mSensorRect.top) / 2.0f;
@@ -236,7 +223,7 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
     @Override
     public void startIllumination(@Nullable Runnable onIlluminatedRunnable) {
         mIlluminationRequested = true;
-        mAnimationView.setVisibility(View.INVISIBLE);
+        mAnimationView.onIlluminationStarting();
         mHbmSurfaceView.setVisibility(View.VISIBLE);
         mHbmSurfaceView.startIllumination(onIlluminatedRunnable);
     }
@@ -244,16 +231,8 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
     @Override
     public void stopIllumination() {
         mIlluminationRequested = false;
-        mAnimationView.setVisibility(View.VISIBLE);
+        mAnimationView.onIlluminationStopped();
         mHbmSurfaceView.setVisibility(View.INVISIBLE);
         mHbmSurfaceView.stopIllumination();
-    }
-
-    void onEnrollmentProgress(int remaining) {
-        mEnrollHelper.onEnrollmentProgress(remaining, mProgressBar);
-    }
-
-    void onEnrollmentHelp() {
-
     }
 }

@@ -22,6 +22,7 @@ import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.am.ProcessRecord.TAG;
 
 import android.app.ActivityManager;
+import android.app.AnrController;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationExitInfo;
 import android.content.ComponentName;
@@ -329,6 +330,22 @@ class ProcessErrorStateRecord {
             info.append("Package is ").append((int) (loadingProgress * 100)).append("% loaded.\n");
         }
 
+        // Retrieve controller with max ANR delay from AnrControllers
+        // Note that we retrieve the controller before dumping stacks because dumping stacks can
+        // take a few seconds, after which the cause of the ANR delay might have completed and
+        // there might no longer be a valid ANR controller to cancel the dialog in that case
+        AnrController anrController = mService.mActivityTaskManager.getAnrController(aInfo);
+        long anrDialogDelayMs = 0;
+        if (anrController != null) {
+            String packageName = aInfo.packageName;
+            int uid = aInfo.uid;
+            anrDialogDelayMs = anrController.getAnrDelayMillis(packageName, uid);
+            // Might execute an async binder call to a system app to show an interim
+            // ANR progress UI
+            anrController.onAnrDelayStarted(packageName, uid);
+            Slog.i(TAG, "ANR delay of " + anrDialogDelayMs + "ms started for " + packageName);
+        }
+
         StringBuilder report = new StringBuilder();
         report.append(MemoryPressureUtil.currentPsiState());
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(true);
@@ -415,14 +432,6 @@ class ProcessErrorStateRecord {
             return;
         }
 
-        // Retrieve max ANR delay from AnrControllers without the mService lock since the
-        // controllers might in turn call into apps
-        long anrDialogDelayMs = mService.mActivityTaskManager.getMaxAnrDelayMillis(aInfo);
-        if (aInfo != null && aInfo.packageName != null && anrDialogDelayMs > 0) {
-            Slog.i(TAG, "Delaying ANR dialog for " + aInfo.packageName + " for " + anrDialogDelayMs
-                    + "ms");
-        }
-
         synchronized (mService) {
             // mBatteryStatsService can be null if the AMS is constructed with injector only. This
             // will only happen in tests.
@@ -439,6 +448,7 @@ class ProcessErrorStateRecord {
                 // Set the app's notResponding state, and look up the errorReportReceiver
                 makeAppNotRespondingLSP(activityShortComponentName,
                         annotation != null ? "ANR " + annotation : "ANR", info.toString());
+                mDialogController.setAnrController(anrController);
             }
 
             // Notify package manager service to possibly update package state

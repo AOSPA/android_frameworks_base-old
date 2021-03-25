@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
+import static android.util.RotationUtils.deltaRotation;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_CROSSFADE;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_JUMPCUT;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_ROTATE;
@@ -536,7 +537,7 @@ public class DisplayRotation {
                 "Display id=%d rotation changed to %d from %d, lastOrientation=%d",
                         displayId, rotation, oldRotation, lastOrientation);
 
-        if (DisplayContent.deltaRotation(rotation, oldRotation) != 2) {
+        if (deltaRotation(oldRotation, rotation) != Surface.ROTATION_180) {
             mDisplayContent.mWaitingForConfig = true;
         }
 
@@ -849,8 +850,13 @@ public class DisplayRotation {
 
         mFixedToUserRotation = fixedToUserRotation;
         mDisplayWindowSettings.setFixedToUserRotation(mDisplayContent, fixedToUserRotation);
-        mService.updateRotation(true /* alwaysSendConfiguration */,
-                false /* forceRelayout */);
+        if (mDisplayContent.mFocusedApp != null) {
+            // We record the last focused TDA that respects orientation request, check if this
+            // change may affect it.
+            mDisplayContent.onLastFocusedTaskDisplayAreaChanged(
+                    mDisplayContent.mFocusedApp.getDisplayArea());
+        }
+        mDisplayContent.updateOrientation();
     }
 
     @VisibleForTesting

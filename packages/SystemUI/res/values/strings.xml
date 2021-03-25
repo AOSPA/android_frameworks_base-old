@@ -294,8 +294,10 @@
     <string name="screenrecord_share_label">Share</string>
     <!-- A toast message shown after successfully canceling a screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_cancel_success">Screen recording canceled</string>
-    <!-- Notification text shown after saving a screen recording to prompt the user to view it [CHAR LIMIT=100] -->
-    <string name="screenrecord_save_message">Screen recording saved, tap to view</string>
+    <!-- Notification text shown after saving a screen recording [CHAR LIMIT=100] -->
+    <string name="screenrecord_save_title">Screen recording saved</string>
+    <!-- Subtext for a notification shown after saving a screen recording to prompt the user to view it [CHAR_LIMIT=100] -->
+    <string name="screenrecord_save_text">Tap to view</string>
     <!-- A toast message shown when there is an error deleting a screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_delete_error">Error deleting screen recording</string>
     <!-- A toast message shown when the screen recording cannot be started due to insufficient permissions [CHAR LIMIT=NONE] -->
@@ -959,7 +961,7 @@
     <!-- QuickSettings: Secondary text for when the Dark theme or some other tile will be on until some user-selected time. [CHAR LIMIT=20] -->
     <string name="quick_settings_dark_mode_secondary_label_until">Until <xliff:g id="time" example="7 am">%s</xliff:g></string>
     <!-- QuickSettings: Label for the toggle that controls whether Reduce Brightness is enabled. [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_reduce_bright_colors_label">Reduce Brightness</string>
+    <string name="quick_settings_reduce_bright_colors_label">Reduce brightness</string>
 
     <!-- QuickSettings: NFC tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_label">NFC</string>
@@ -1054,6 +1056,9 @@
     <!-- Text on keyguard screen and in Quick Settings footer indicating that user's device belongs to their organization. [CHAR LIMIT=40] -->
     <string name="do_disclosure_with_name">This device belongs to <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
 
+    <!-- Text on keyguard screen and in Quick Settings footer indicating that the user's device is provided by the Creditor. [CHAR LIMIT=60] -->
+    <string name="do_financed_disclosure_with_name">This device is provided by <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
+
     <!-- Shows when people have clicked on the phone icon [CHAR LIMIT=60] -->
     <string name="phone_hint">Swipe from icon for phone</string>
 
@@ -1115,9 +1120,6 @@
 
     <!-- Name for a freshly added user [CHAR LIMIT=30] -->
     <string name="user_new_user_name">New user</string>
-
-    <!-- Label for button that exits guest session and clears the guest user data [CHAR LIMIT=50]-->
-    <string name="guest_exit_button">End guest session</string>
 
     <!-- Title of the confirmation dialog when exiting guest session [CHAR LIMIT=NONE] -->
     <string name="guest_exit_guest_dialog_title">Remove guest?</string>
@@ -1557,6 +1559,8 @@
     <string name="volume_stream_content_description_mute">%1$s. Tap to mute. Accessibility services may be muted.</string>
     <string name="volume_stream_content_description_vibrate_a11y">%1$s. Tap to set to vibrate.</string>
     <string name="volume_stream_content_description_mute_a11y">%1$s. Tap to mute.</string>
+
+    <string name="volume_ringer_change">Tap to change ringer mode</string>
 
     <!-- Hint for accessibility. For example: double tap to mute [CHAR_LIMIT=NONE] -->
     <string name="volume_ringer_hint_mute">mute</string>
@@ -2308,6 +2312,9 @@
     <!-- accessibility label for button to edit quick settings [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_edit">Edit order of settings.</string>
 
+    <!-- accessibility label for button to open power menu [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_power_menu">Power menu</string>
+
     <!-- accessibility label for paging indicator in quick settings [CHAR LIMITi=NONE] -->
     <string name="accessibility_quick_settings_page">Page <xliff:g name="current_page" example="1">%1$d</xliff:g> of <xliff:g name="num_pages" example="2">%2$d</xliff:g></string>
 
@@ -2717,6 +2724,9 @@
     <!-- Controls dialog confirmation [CHAR LIMIT=30] -->
     <string name="controls_dialog_confirmation">Controls updated</string>
 
+    <!-- Controls tile secondary label when device is locked and user does not want access to controls from lockscreen [CHAR LIMIT=20] -->
+    <string name="controls_tile_locked">Device locked</string>
+
     <!-- Controls PIN entry dialog, switch to alphanumeric keyboard [CHAR LIMIT=100] -->
     <string name="controls_pin_use_alphanumeric">PIN contains letters or symbols</string>
     <!-- Controls PIN entry dialog, title [CHAR LIMIT=30] -->
@@ -2837,6 +2847,8 @@
     <string name="empty_user_name" translatable="false">Your friend</string>
     <!-- Empty status shown before user has selected a friend [CHAR LIMIT=30] -->
     <string name="empty_status" translatable="false">Their status</string>
+    <!-- Default text for missed call notifications [CHAR LIMIT=30] -->
+    <string name="missed_call" translatable="false">Missed call</string>
 
     <!-- Title to display in a notification when ACTION_BATTERY_CHANGED.EXTRA_PRESENT field is false
     [CHAR LIMIT=NONE] -->
@@ -2849,4 +2861,7 @@
     <string name="qs_remove_labels" translatable="false"></string>
 
     <string name="qs_tile_label_fontFamily" translatable="false">@*android:string/config_headlineFontFamily</string>
+
+    <!-- Secondary label for alarm tile when there is no next alarm information [CHAR LIMIT=20] -->
+    <string name="qs_alarm_tile_no_alarm">No alarm set</string>
 </resources>

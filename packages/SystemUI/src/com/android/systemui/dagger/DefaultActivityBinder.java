@@ -21,7 +21,9 @@ import android.app.Activity;
 import com.android.systemui.ForegroundServicesDialog;
 import com.android.systemui.keyguard.WorkLockActivity;
 import com.android.systemui.people.PeopleSpaceActivity;
+import com.android.systemui.people.widget.LaunchConversationActivity;
 import com.android.systemui.screenrecord.ScreenRecordDialog;
+import com.android.systemui.screenshot.LongScreenshotActivity;
 import com.android.systemui.settings.brightness.BrightnessDialog;
 import com.android.systemui.statusbar.tv.notifications.TvNotificationPanelActivity;
 import com.android.systemui.tuner.TunerActivity;
@@ -99,4 +101,16 @@ public abstract class DefaultActivityBinder {
     @IntoMap
     @ClassKey(PeopleSpaceActivity.class)
     public abstract Activity bindPeopleSpaceActivity(PeopleSpaceActivity activity);
+
+    /** Inject into LongScreenshotActivity. */
+    @Binds
+    @IntoMap
+    @ClassKey(LongScreenshotActivity.class)
+    public abstract Activity bindLongScreenshotActivity(LongScreenshotActivity activity);
+
+    /** Inject into LaunchConversationActivity. */
+    @Binds
+    @IntoMap
+    @ClassKey(LaunchConversationActivity.class)
+    public abstract Activity bindLaunchConversationActivity(LaunchConversationActivity activity);
 }

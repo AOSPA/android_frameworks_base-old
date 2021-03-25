@@ -150,7 +150,8 @@ import android.view.inputmethod.InputConnection;
 import android.view.inspector.InspectableProperty;
 import android.view.inspector.InspectableProperty.EnumEntry;
 import android.view.inspector.InspectableProperty.FlagEntry;
-import android.view.translation.TranslationRequest;
+import android.view.translation.ViewTranslationRequest;
+import android.view.translation.ViewTranslationResponse;
 import android.widget.Checkable;
 import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
@@ -184,10 +185,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -1484,7 +1485,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_AUTO = 0;
 
@@ -1495,7 +1495,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_EXCLUDE = 0x1;
 
@@ -1506,7 +1505,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_INCLUDE = 0x2;
 
@@ -1517,7 +1515,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_EXCLUDE_DESCENDANTS = 0x4;
 
@@ -6996,6 +6993,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getScrollIndicators()
      * @attr ref android.R.styleable#View_scrollIndicators
      */
+    @RemotableViewMethod
     public void setScrollIndicators(@ScrollIndicators int indicators) {
         setScrollIndicators(indicators,
                 SCROLL_INDICATORS_PFLAG3_MASK >>> SCROLL_INDICATORS_TO_PFLAGS3_LSHIFT);
@@ -11881,6 +11879,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusable(int)
      * @attr ref android.R.styleable#View_focusable
      */
+    @RemotableViewMethod
     public void setFocusable(boolean focusable) {
         setFocusable(focusable ? FOCUSABLE : NOT_FOCUSABLE);
     }
@@ -11899,6 +11898,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusableInTouchMode(boolean)
      * @attr ref android.R.styleable#View_focusable
      */
+    @RemotableViewMethod
     public void setFocusable(@Focusable int focusable) {
         if ((focusable & (FOCUSABLE_AUTO | FOCUSABLE)) == 0) {
             setFlags(0, FOCUSABLE_IN_TOUCH_MODE);
@@ -11917,6 +11917,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusable(boolean)
      * @attr ref android.R.styleable#View_focusableInTouchMode
      */
+    @RemotableViewMethod
     public void setFocusableInTouchMode(boolean focusableInTouchMode) {
         // Focusable in touch mode should always be set before the focusable flag
         // otherwise, setting the focusable flag will trigger a focusableViewAvailable()
@@ -12871,6 +12872,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_focusedByDefault
      */
+    @RemotableViewMethod
     public void setFocusedByDefault(boolean isFocusedByDefault) {
         if (isFocusedByDefault == ((mPrivateFlags3 & PFLAG3_FOCUSED_BY_DEFAULT) != 0)) {
             return;
@@ -16854,6 +16856,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_rotation
      */
+    @RemotableViewMethod
     public void setRotation(float rotation) {
         if (rotation != getRotation()) {
             // Double-invalidation is necessary to capture view's old and new areas
@@ -16900,6 +16903,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_rotationY
      */
+    @RemotableViewMethod
     public void setRotationY(float rotationY) {
         if (rotationY != getRotationY()) {
             invalidateViewProperty(true, false);
@@ -16945,6 +16949,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_rotationX
      */
+    @RemotableViewMethod
     public void setRotationX(float rotationX) {
         if (rotationX != getRotationX()) {
             invalidateViewProperty(true, false);
@@ -16982,6 +16987,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scaleX
      */
+    @RemotableViewMethod
     public void setScaleX(float scaleX) {
         if (scaleX != getScaleX()) {
             scaleX = sanitizeFloatPropertyValue(scaleX, "scaleX");
@@ -17020,6 +17026,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scaleY
      */
+    @RemotableViewMethod
     public void setScaleY(float scaleY) {
         if (scaleY != getScaleY()) {
             scaleY = sanitizeFloatPropertyValue(scaleY, "scaleY");
@@ -17065,6 +17072,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_transformPivotX
      */
+    @RemotableViewMethod
     public void setPivotX(float pivotX) {
         if (!mRenderNode.isPivotExplicitlySet() || pivotX != getPivotX()) {
             invalidateViewProperty(true, false);
@@ -17107,6 +17115,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_transformPivotY
      */
+    @RemotableViewMethod
     public void setPivotY(float pivotY) {
         if (!mRenderNode.isPivotExplicitlySet() || pivotY != getPivotY()) {
             invalidateViewProperty(true, false);
@@ -17247,6 +17256,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_alpha
      */
+    @RemotableViewMethod
     public void setAlpha(@FloatRange(from=0.0, to=1.0) float alpha) {
         ensureTransformationInfo();
         if (mTransformationInfo.mAlpha != alpha) {
@@ -17736,6 +17746,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_elevation
      */
+    @RemotableViewMethod
     public void setElevation(float elevation) {
         if (elevation != getElevation()) {
             elevation = sanitizeFloatPropertyValue(elevation, "elevation");
@@ -17770,6 +17781,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_translationX
      */
+    @RemotableViewMethod
     public void setTranslationX(float translationX) {
         if (translationX != getTranslationX()) {
             invalidateViewProperty(true, false);
@@ -17805,6 +17817,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_translationY
      */
+    @RemotableViewMethod
     public void setTranslationY(float translationY) {
         if (translationY != getTranslationY()) {
             invalidateViewProperty(true, false);
@@ -17832,6 +17845,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_translationZ
      */
+    @RemotableViewMethod
     public void setTranslationZ(float translationZ) {
         if (translationZ != getTranslationZ()) {
             translationZ = sanitizeFloatPropertyValue(translationZ, "translationZ");
@@ -22179,9 +22193,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * and hardware acceleration.
      */
     boolean draw(Canvas canvas, ViewGroup parent, long drawingTime) {
-        // Clear the overscroll effect:
-        // TODO: Use internal API instead of overriding the existing RenderEffect
-        setRenderEffect(null);
 
         final boolean hardwareAcceleratedCanvas = canvas.isHardwareAccelerated();
         /* If an attached view draws to a HW canvas, it may use its RenderNode + DisplayList.
@@ -23993,6 +24004,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getBackgroundTintList()
      * @see Drawable#setTintList(ColorStateList)
      */
+    @RemotableViewMethod
     public void setBackgroundTintList(@Nullable ColorStateList tint) {
         if (mBackgroundTint == null) {
             mBackgroundTint = new TintInfo();
@@ -24252,6 +24264,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getForegroundTintList()
      * @see Drawable#setTintList(ColorStateList)
      */
+    @RemotableViewMethod
     public void setForegroundTintList(@Nullable ColorStateList tint) {
         if (mForegroundInfo == null) {
             mForegroundInfo = new ForegroundInfo();
@@ -30038,8 +30051,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Returns the current scroll capture hint for this view.
      *
      * @return the current scroll capture hint
-     *
-     * @hide
      */
     @ScrollCaptureHint
     public int getScrollCaptureHint() {
@@ -30052,8 +30063,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * scroll capture targets.
      *
      * @param hint the scrollCaptureHint flags value to set
-     *
-     * @hide
      */
     public void setScrollCaptureHint(@ScrollCaptureHint int hint) {
         mPrivateFlags4 &= ~PFLAG4_SCROLL_CAPTURE_HINT_MASK;
@@ -30073,10 +30082,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * setting a custom callback to help ensure it is selected as the target.
      *
      * @param callback the new callback to assign
-     *
-     * @hide
      */
-    public void setScrollCaptureCallback(@Nullable ScrollCaptureCallback callback) {
+    public final void setScrollCaptureCallback(@Nullable ScrollCaptureCallback callback) {
         getListenerInfo().mScrollCaptureCallback = callback;
     }
 
@@ -30095,21 +30102,46 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Dispatch a scroll capture search request down the view hierarchy.
+     *
+     * @param localVisibleRect the visible area of this ViewGroup in local coordinates, according to
+     *                         the parent
+     * @param windowOffset     the offset of this view within the window
+     * @param targets          accepts potential scroll capture targets; {@link Consumer#accept
+     *                         results.accept} may be called zero or more times on the calling
+     *                         thread before onScrollCaptureSearch returns
+     */
+    public void dispatchScrollCaptureSearch(
+            @NonNull Rect localVisibleRect, @NonNull Point windowOffset,
+            @NonNull Consumer<ScrollCaptureTarget> targets) {
+        onScrollCaptureSearch(localVisibleRect, windowOffset, targets);
+    }
+
+    /**
      * Called when scroll capture is requested, to search for appropriate content to scroll. If
      * applicable, this view adds itself to the provided list for consideration, subject to the
      * flags set by {@link #setScrollCaptureHint}.
      *
      * @param localVisibleRect the local visible rect of this view
      * @param windowOffset     the offset of localVisibleRect within the window
-     * @param targets          a queue which collects potential targets
-     *
+     * @param targets          accepts potential scroll capture targets; {@link Consumer#accept
+     *                         results.accept} may be called zero or more times on the calling
+     *                         thread before onScrollCaptureSearch returns
      * @throws IllegalStateException if this view is not attached to a window
-     * @hide
      */
-    public void dispatchScrollCaptureSearch(@NonNull Rect localVisibleRect,
-            @NonNull Point windowOffset, @NonNull Queue<ScrollCaptureTarget> targets) {
+    public void onScrollCaptureSearch(@NonNull Rect localVisibleRect,
+            @NonNull Point windowOffset, @NonNull Consumer<ScrollCaptureTarget> targets) {
         int hint = getScrollCaptureHint();
         if ((hint & SCROLL_CAPTURE_HINT_EXCLUDE) != 0) {
+            return;
+        }
+        boolean rectIsVisible = true;
+
+        // Apply clipBounds if present.
+        if (mClipBounds != null) {
+            rectIsVisible = localVisibleRect.intersect(mClipBounds);
+        }
+        if (!rectIsVisible) {
             return;
         }
 
@@ -30117,7 +30149,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         ScrollCaptureCallback callback =
                 (mListenerInfo == null) ? null : mListenerInfo.mScrollCaptureCallback;
 
-        // Try internal support for standard scrolling containers.
+        // Try framework support for standard scrolling containers.
         if (callback == null) {
             callback = createScrollCaptureCallbackInternal(localVisibleRect, windowOffset);
         }
@@ -30127,7 +30159,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // Add to the list for consideration
             Point offset = new Point(windowOffset.x, windowOffset.y);
             Rect rect = new Rect(localVisibleRect);
-            targets.add(new ScrollCaptureTarget(this, rect, offset, callback));
+            targets.accept(new ScrollCaptureTarget(this, rect, offset, callback));
         }
     }
 
@@ -30656,18 +30688,18 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns a {@link TranslationRequest} to the {@link onStartUiTranslation} which represents
+     * Returns a {@link ViewTranslationRequest} to the {@link onStartUiTranslation} which represents
      * the content to be translated.
      *
      * <p>The default implementation does nothing and return null.</p>
      *
      * @hide
      *
-     * @return the {@link TranslationRequest} which contains the information to be translated.
+     * @return the {@link ViewTranslationRequest} which contains the information to be translated.
      */
     @Nullable
     //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public TranslationRequest onCreateTranslationRequest() {
+    public ViewTranslationRequest onCreateTranslationRequest() {
         return null;
     }
 
@@ -30716,10 +30748,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * <p> The default implementation does nothing.</p>
      *
-     * @param request the translated information which can be shown in the view.
+     * @param response the translated information which can be shown in the view.
      */
     //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onTranslationComplete(@NonNull TranslationRequest request) {
+    public void onTranslationComplete(@NonNull ViewTranslationResponse response) {
         // no-op
     }
 

@@ -131,9 +131,28 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
             FullyManagedDeviceProvisioningParams provisioningParams, String callerPackage) {
     }
 
+    @Override
+    public void setDeviceOwnerType(@NonNull ComponentName admin, int deviceOwnerType) {
+    }
+
+    @Override
+    public int getDeviceOwnerType(@NonNull ComponentName admin) {
+        return 0;
+    }
+
     public void resetDefaultCrossProfileIntentFilters(@UserIdInt int userId) {}
 
     public boolean canAdminGrantSensorsPermissionsForUser(int userId) {
+        return false;
+    }
+
+    @Override
+    public boolean setKeyGrantToWifiAuth(String callerPackage, String alias, boolean hasGrant) {
+        return false;
+    }
+
+    @Override
+    public boolean isKeyPairGrantedToWifiAuth(String callerPackage, String alias) {
         return false;
     }
 

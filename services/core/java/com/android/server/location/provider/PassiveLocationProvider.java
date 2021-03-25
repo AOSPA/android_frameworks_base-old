@@ -30,6 +30,7 @@ import android.os.Bundle;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
+import java.util.Collections;
 
 /**
  * A passive location provider reports locations received from other providers
@@ -47,7 +48,8 @@ public class PassiveLocationProvider extends AbstractLocationProvider {
 
     public PassiveLocationProvider(Context context) {
         // using a direct executor is ok because this class has no locks that could deadlock
-        super(DIRECT_EXECUTOR, CallerIdentity.fromContext(context), PROPERTIES);
+        super(DIRECT_EXECUTOR, CallerIdentity.fromContext(context), PROPERTIES,
+                Collections.emptySet());
         setAllowed(true);
     }
 

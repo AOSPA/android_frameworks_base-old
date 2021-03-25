@@ -176,6 +176,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
         } else {
             mDisplayContent = mDefaultDisplay;
         }
+
+        // Ensure letterbox aspect ratio is not overridden on any device target.
+        // {@link com.android.internal.R.dimen.config_fixedOrientationLetterboxAspectRatio}, is set
+        // on some device form factors.
+        mAtm.mWindowManager.setFixedOrientationLetterboxAspectRatio(0);
     }
 
     private void createTestDisplay(UseTestDisplay annotation) {
@@ -245,11 +250,19 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
     private WindowToken createWindowToken(
             DisplayContent dc, int windowingMode, int activityType, int type) {
+        if (type == TYPE_WALLPAPER) {
+            return createWallpaperToken(dc);
+        }
         if (type < FIRST_APPLICATION_WINDOW || type > LAST_APPLICATION_WINDOW) {
             return createTestWindowToken(type, dc);
         }
 
         return createActivityRecord(dc, windowingMode, activityType);
+    }
+
+    private WindowToken createWallpaperToken(DisplayContent dc) {
+        return new WallpaperWindowToken(mWm, mock(IBinder.class), true /* explicit */, dc,
+                true /* ownerCanManageAppTokens */);
     }
 
     WindowState createAppWindow(Task task, int type, String name) {
@@ -696,6 +709,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
         private int mLaunchMode;
         private int mResizeMode = RESIZE_MODE_RESIZEABLE;
         private float mMaxAspectRatio;
+        private boolean mSupportsSizeChanges;
         private int mScreenOrientation = SCREEN_ORIENTATION_UNSPECIFIED;
         private boolean mLaunchTaskBehind = false;
         private int mConfigChanges;
@@ -771,6 +785,11 @@ class WindowTestsBase extends SystemServiceTestsBase {
 
         ActivityBuilder setMaxAspectRatio(float maxAspectRatio) {
             mMaxAspectRatio = maxAspectRatio;
+            return this;
+        }
+
+        ActivityBuilder setSupportsSizeChanges(boolean supportsSizeChanges) {
+            mSupportsSizeChanges = supportsSizeChanges;
             return this;
         }
 
@@ -861,6 +880,7 @@ class WindowTestsBase extends SystemServiceTestsBase {
             aInfo.launchMode = mLaunchMode;
             aInfo.resizeMode = mResizeMode;
             aInfo.maxAspectRatio = mMaxAspectRatio;
+            aInfo.supportsSizeChanges = mSupportsSizeChanges;
             aInfo.screenOrientation = mScreenOrientation;
             aInfo.configChanges |= mConfigChanges;
             aInfo.taskAffinity = mAffinity;

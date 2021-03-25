@@ -47,6 +47,7 @@ import android.app.usage.IUsageStatsManager;
 import android.app.usage.NetworkStatsManager;
 import android.app.usage.StorageStatsManager;
 import android.app.usage.UsageStatsManager;
+import android.apphibernation.AppHibernationManager;
 import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothManager;
 import android.companion.CompanionDeviceManager;
@@ -70,7 +71,6 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.pm.verify.domain.DomainVerificationManager;
-import android.content.pm.verify.domain.DomainVerificationManagerImpl;
 import android.content.pm.verify.domain.IDomainVerificationManager;
 import android.content.res.Resources;
 import android.content.rollback.RollbackManagerFrameworkInitializer;
@@ -99,6 +99,7 @@ import android.hardware.input.InputManager;
 import android.hardware.iris.IIrisService;
 import android.hardware.iris.IrisManager;
 import android.hardware.lights.LightsManager;
+import android.hardware.lights.SystemLightsManager;
 import android.hardware.location.ContextHubManager;
 import android.hardware.radio.RadioManager;
 import android.hardware.usb.IUsbManager;
@@ -1344,7 +1345,7 @@ public final class SystemServiceRegistry {
                 @Override
                 public LightsManager createService(ContextImpl ctx)
                     throws ServiceNotFoundException {
-                    return new LightsManager(ctx);
+                    return new SystemLightsManager(ctx);
                 }});
         registerService(Context.INCREMENTAL_SERVICE, IncrementalManager.class,
                 new CachedServiceFetcher<IncrementalManager>() {
@@ -1376,6 +1377,13 @@ public final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         IBinder b = ServiceManager.getServiceOrThrow(Context.APP_INTEGRITY_SERVICE);
                         return new AppIntegrityManager(IAppIntegrityManager.Stub.asInterface(b));
+                    }});
+        registerService(Context.APP_HIBERNATION_SERVICE, AppHibernationManager.class,
+                new CachedServiceFetcher<AppHibernationManager>() {
+                    @Override
+                    public AppHibernationManager createService(ContextImpl ctx) {
+                        IBinder b = ServiceManager.getService(Context.APP_HIBERNATION_SERVICE);
+                        return b == null ? null : new AppHibernationManager(ctx);
                     }});
         registerService(Context.DREAM_SERVICE, DreamManager.class,
                 new CachedServiceFetcher<DreamManager>() {
@@ -1413,7 +1421,6 @@ public final class SystemServiceRegistry {
                     }
                 });
 
-        // TODO(b/159952358): Only register this service for the domain verification agent?
         registerService(Context.DOMAIN_VERIFICATION_SERVICE, DomainVerificationManager.class,
                 new CachedServiceFetcher<DomainVerificationManager>() {
                     @Override
@@ -1423,7 +1430,7 @@ public final class SystemServiceRegistry {
                                 Context.DOMAIN_VERIFICATION_SERVICE);
                         IDomainVerificationManager service =
                                 IDomainVerificationManager.Stub.asInterface(binder);
-                        return new DomainVerificationManagerImpl(context, service);
+                        return new DomainVerificationManager(context, service);
                     }
                 });
 
