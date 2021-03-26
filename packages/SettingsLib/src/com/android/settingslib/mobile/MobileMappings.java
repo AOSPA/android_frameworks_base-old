@@ -238,6 +238,22 @@ public class MobileMappings {
                 config.hideLtePlus = b.getBoolean(
                         CarrierConfigManager.KEY_HIDE_LTE_PLUS_DATA_ICON_BOOL);
             }
+
+            config.alwaysShowNetworkTypeIcon = res.getBoolean(R.bool.config_alwaysShowTypeIcon);
+            config.showRsrpSignalLevelforLTE =
+                    res.getBoolean(R.bool.config_showRsrpSignalLevelforLTE);
+            config.hideNoInternetState = res.getBoolean(R.bool.config_hideNoInternetState);
+            config.showVolteIcon = res.getBoolean(R.bool.config_display_volte);
+            config.showVowifiIcon = res.getBoolean(R.bool.config_display_vowifi);
+            if ( config.alwaysShowNetworkTypeIcon ) {
+                config.hideLtePlus = false;
+            }
+
+            config.enableRatIconEnhancement =
+                    SystemProperties.getBoolean("persist.sysui.rat_icon_enhancement", false);
+            config.enableDdsRatIconEnhancement =
+                    SystemProperties.getBoolean("persist.sysui.dds_rat_icon_enhancement", false);
+
             return config;
         }
     }
