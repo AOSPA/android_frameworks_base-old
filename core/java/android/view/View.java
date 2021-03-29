@@ -17,6 +17,7 @@
 package android.view;
 
 import static android.content.res.Resources.ID_NULL;
+import static android.view.ContentInfo.SOURCE_DRAG_AND_DROP;
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_INVALID_BOUNDS;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_MISSING_WINDOW;
@@ -150,6 +151,9 @@ import android.view.inputmethod.InputConnection;
 import android.view.inspector.InspectableProperty;
 import android.view.inspector.InspectableProperty.EnumEntry;
 import android.view.inspector.InspectableProperty.FlagEntry;
+import android.view.translation.TranslationCapability;
+import android.view.translation.TranslationSpec.DataFormat;
+import android.view.translation.ViewTranslationCallback;
 import android.view.translation.ViewTranslationRequest;
 import android.view.translation.ViewTranslationResponse;
 import android.widget.Checkable;
@@ -5251,6 +5255,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     @Nullable
     private String[] mOnReceiveContentMimeTypes;
+
+    @Nullable
+    private ViewTranslationCallback mViewTranslationCallback;
 
     /**
      * Simple constructor to use when creating a view from code.
@@ -26139,9 +26146,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>The sound effect will only be played if sound effects are enabled by the user, and
      * {@link #isSoundEffectsEnabled()} is true.
      *
-     * @param soundConstant One of the constants defined in {@link SoundEffectConstants}
+     * @param soundConstant One of the constants defined in {@link SoundEffectConstants}.
      */
-    public void playSoundEffect(int soundConstant) {
+    public void playSoundEffect(@SoundEffectConstants.SoundEffect int soundConstant) {
         if (mAttachInfo == null || mAttachInfo.mRootCallbacks == null || !isSoundEffectsEnabled()) {
             return;
         }
@@ -26751,6 +26758,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link android.view.DragEvent#getAction()} returns one of the action type constants defined
      * in DragEvent. The method uses these to determine what is happening in the drag and drop
      * operation.
+     * </p>
+     * <p>
+     * The default implementation returns false, except if an {@link OnReceiveContentListener}
+     * is {@link #setOnReceiveContentListener set} for this view. If an
+     * {@link OnReceiveContentListener} is set, the default implementation...
+     * <ul>
+     * <li>returns true for an
+     * {@link android.view.DragEvent#ACTION_DRAG_STARTED ACTION_DRAG_STARTED} event
+     * <li>calls {@link #performReceiveContent} for an
+     * {@link android.view.DragEvent#ACTION_DROP ACTION_DROP} event
+     * <li>returns true for an {@link android.view.DragEvent#ACTION_DROP ACTION_DROP} event, if
+     * the listener consumed some or all of the content
+     * </ul>
+     * </p>
+     *
      * @param event The {@link android.view.DragEvent} sent by the system.
      * The {@link android.view.DragEvent#getAction()} method returns an action type constant defined
      * in DragEvent, indicating the type of drag event represented by this object.
@@ -26770,6 +26792,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </p>
      */
     public boolean onDragEvent(DragEvent event) {
+        if (mListenerInfo == null || mListenerInfo.mOnReceiveContentListener == null) {
+            return false;
+        }
+        // Accept drag events by default if there's an OnReceiveContentListener set.
+        if (event.getAction() == DragEvent.ACTION_DRAG_STARTED) {
+            return true;
+        }
+        if (event.getAction() == DragEvent.ACTION_DROP) {
+            final DragAndDropPermissions permissions = DragAndDropPermissions.obtain(event);
+            if (permissions != null) {
+                permissions.takeTransient();
+            }
+            final ContentInfo payload = new ContentInfo.Builder(
+                    event.getClipData(), SOURCE_DRAG_AND_DROP).build();
+            ContentInfo remainingPayload = performReceiveContent(payload);
+            // Return true unless none of the payload was consumed.
+            return remainingPayload != payload;
+        }
         return false;
     }
 
@@ -30688,71 +30728,100 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns a {@link ViewTranslationRequest} to the {@link onStartUiTranslation} which represents
-     * the content to be translated.
+     * Returns a {@link ViewTranslationRequest} which represents the content to be translated.
      *
-     * <p>The default implementation does nothing and return null.</p>
+     * <p>The default implementation does nothing and returns null.</p>
      *
-     * @hide
-     *
-     * @return the {@link ViewTranslationRequest} which contains the information to be translated.
+     * @param supportedFormats the supported translation formats. For now, the only possible value
+     * is the {@link android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
+     * @return the {@link ViewTranslationRequest} which contains the information to be translated or
+     * {@code null} if this View doesn't support translation.
+     * The {@link AutofillId} must be set on the returned value.
      */
     @Nullable
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public ViewTranslationRequest onCreateTranslationRequest() {
+    public ViewTranslationRequest onCreateTranslationRequest(
+            @NonNull @DataFormat int[] supportedFormats) {
         return null;
     }
 
     /**
-     * Called when the user wants to show the original text instead of the translated text.
+     * Returns a {@link ViewTranslationCallback} that is used to display/hide the translated
+     * information. If the View supports displaying translated content, it should implement
+     * {@link ViewTranslationCallback}.
      *
-     * @hide
+     * <p>The default implementation returns null if developers don't set the customized
+     * {@link ViewTranslationCallback} by {@link #setViewTranslationCallback} </p>
      *
-     * <p> The default implementation does nothing.
+     * @return a {@link ViewTranslationCallback} that is used to control how to display the
+     * translated information or {@code null} if this View doesn't support translation.
      */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onPauseUiTranslation() {
+    @Nullable
+    public ViewTranslationCallback getViewTranslationCallback() {
+        return mViewTranslationCallback;
+    }
+
+    /**
+     * Sets a {@link ViewTranslationCallback} that is used to display/hide the translated
+     * information. Developers can provide the customized implementation for show/hide translated
+     * information.
+     *
+     * @param callback a {@link ViewTranslationCallback} that is used to control how to display the
+     * translated information
+     */
+    public void setViewTranslationCallback(@NonNull ViewTranslationCallback callback) {
+        mViewTranslationCallback = callback;
+    }
+
+    /**
+     * Called when the content from {@link View#onCreateTranslationRequest} had been translated by
+     * the TranslationService.
+     *
+     * <p> The default implementation does nothing.</p>
+     *
+     * @param response a {@link ViewTranslationResponse} that contains the translated information
+     * which can be shown in the view.
+     */
+    public void onTranslationResponse(@NonNull ViewTranslationResponse response) {
         // no-op
     }
 
     /**
-     * User can switch back to show the original text, this method called when the user wants to
-     * re-show the translated text again.
+     * Dispatch to collect the {@link ViewTranslationRequest}s for translation purpose by traversing
+     * the hierarchy when the app requests ui translation. Typically, this method should only be
+     * overridden by subclasses that provide a view hierarchy (such as {@link ViewGroup}). Other
+     * classes should override {@link View#onCreateTranslationRequest}. When requested to start the
+     * ui translation, the system will call this method to traverse the view hierarchy to call
+     * {@link View#onCreateTranslationRequest} to build {@link ViewTranslationRequest}s and create a
+     * {@link android.view.translation.Translator} to translate the requests.
      *
-     * @hide
+     * <p> The default implementation will call {@link View#onCreateTranslationRequest} to build
+     * {@link ViewTranslationRequest} if the view should be translated. </p>
      *
-     * <p> The default implementation does nothing.</p>
+     * @param viewIds a map for the view's {@link AutofillId} and its virtual child ids or
+     * {@code null} if the view doesn't have virtual child that should be translated. The virtual
+     * child ids are the same virtual ids provided by ContentCapture.
+     * @param supportedFormats the supported translation formats. For now, the only possible value
+     * is the {@link android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
+     * @param capability a {@link TranslationCapability} that holds translation capability.
+     * information, e.g. source spec, target spec.
+     * @param requests fill in with {@link ViewTranslationRequest}s for translation purpose.
      */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onRestoreUiTranslation() {
-        // no-op
-    }
-
-    /**
-     * Called when the user finish the Ui translation and no longer to show the translated text.
-     *
-     * @hide
-     *
-     * <p> The default implementation does nothing.</p>
-     */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onFinishUiTranslation() {
-        // no-op
-    }
-
-    /**
-     * Called when the request from {@link onStartUiTranslation} is completed by the translation
-     * service so that the translation result can be shown.
-     *
-     * @hide
-     *
-     * <p> The default implementation does nothing.</p>
-     *
-     * @param response the translated information which can be shown in the view.
-     */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onTranslationComplete(@NonNull ViewTranslationResponse response) {
-        // no-op
+    public void dispatchRequestTranslation(@NonNull Map<AutofillId, long[]> viewIds,
+            @NonNull @DataFormat int[] supportedFormats,
+            @Nullable TranslationCapability capability,
+            @NonNull List<ViewTranslationRequest> requests) {
+        AutofillId autofillId = getAutofillId();
+        if (viewIds.containsKey(autofillId)) {
+            ViewTranslationRequest request = null;
+            if (viewIds.get(autofillId) == null) {
+                request = onCreateTranslationRequest(supportedFormats);
+                if (request != null && request.getKeys().size() > 0) {
+                    requests.add(request);
+                }
+            } else {
+                // TODO: handle virtual view
+            }
+        }
     }
 
     /**

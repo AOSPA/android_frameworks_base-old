@@ -20,7 +20,6 @@ import android.annotation.NonNull;
 import android.inputmethodservice.AbstractInputMethodService;
 import android.os.RemoteException;
 import android.os.ServiceManager.ServiceNotFoundException;
-import android.os.ShellCommand;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 import android.view.inputmethod.InputMethodManager;
@@ -42,11 +41,6 @@ class ImeTracingClientImpl extends ImeTracing {
 
     @Override
     public void addToBuffer(ProtoOutputStream proto, int source) {
-    }
-
-    @Override
-    public int onShellCommand(ShellCommand shell) {
-        return -1;
     }
 
     @Override
@@ -105,18 +99,10 @@ class ImeTracingClientImpl extends ImeTracing {
     }
 
     @Override
-    public void writeTracesToFiles() {
-    }
-
-    @Override
     public void startTrace(PrintWriter pw) {
     }
 
     @Override
     public void stopTrace(PrintWriter pw) {
-    }
-
-    @Override
-    public void stopTrace(PrintWriter pw, boolean writeToFile) {
     }
 }

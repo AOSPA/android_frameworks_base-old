@@ -246,6 +246,7 @@ final class HistoricalRegistry {
                                     + " by which to push history on next write");
                         }
                     }
+                    mDiscreteRegistry.systemReady();
                 }
             }
         }
@@ -532,7 +533,7 @@ final class HistoricalRegistry {
                         System.currentTimeMillis()).increaseAccessDuration(op, uid, packageName,
                         attributionTag, uidState, flags, increment);
                 mDiscreteRegistry.recordDiscreteAccess(uid, packageName, op, attributionTag,
-                        flags, uidState, increment, eventStartTime);
+                        flags, uidState, eventStartTime, increment);
             }
         }
     }
@@ -795,7 +796,7 @@ final class HistoricalRegistry {
     private static boolean isApiEnabled() {
         return Binder.getCallingUid() == Process.myUid()
                 || DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PRIVACY,
-                PROPERTY_PERMISSIONS_HUB_ENABLED, false);
+                PROPERTY_PERMISSIONS_HUB_ENABLED, true);
     }
 
     private static final class Persistence {

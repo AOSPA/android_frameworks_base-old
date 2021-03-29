@@ -501,7 +501,8 @@ public class DisplayPolicy {
 
         final Looper looper = UiThread.getHandler().getLooper();
         mHandler = new PolicyHandler(looper);
-        mSystemGestures = new SystemGesturesPointerEventListener(mContext, mHandler,
+        // TODO(b/181821798) Migrate SystemGesturesPointerEventListener to use window context.
+        mSystemGestures = new SystemGesturesPointerEventListener(mUiContext, mHandler,
                 new SystemGesturesPointerEventListener.Callbacks() {
                     @Override
                     public void onSwipeFromTop() {
@@ -1556,9 +1557,9 @@ public class DisplayPolicy {
             boolean localClient) {
         final InsetsState state =
                 mDisplayContent.getInsetsPolicy().getInsetsForWindowMetrics(attrs);
-        final boolean inSizeCompatMode = WindowState.inSizeCompatMode(attrs, windowToken);
-        outInsetsState.set(state, inSizeCompatMode || localClient);
-        if (inSizeCompatMode) {
+        final boolean hasCompatScale = WindowState.hasCompatScale(attrs, windowToken);
+        outInsetsState.set(state, hasCompatScale || localClient);
+        if (hasCompatScale) {
             final float compatScale = windowToken != null
                     ? windowToken.getSizeCompatScale()
                     : mDisplayContent.mCompatibleScreenScale;

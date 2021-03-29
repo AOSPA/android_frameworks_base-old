@@ -17,7 +17,13 @@
 package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
+import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
+import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.graphics.Matrix.MSCALE_X;
+import static android.graphics.Matrix.MSCALE_Y;
+import static android.graphics.Matrix.MSKEW_X;
+import static android.graphics.Matrix.MSKEW_Y;
 import static android.view.RemoteAnimationTarget.MODE_CLOSING;
 import static android.view.RemoteAnimationTarget.MODE_OPENING;
 import static android.view.WindowManager.INPUT_CONSUMER_RECENTS_ANIMATION;
@@ -104,7 +110,8 @@ public class RecentsAnimationController implements DeathRecipient {
     public @interface ReorderMode {}
 
     private final WindowManagerService mService;
-    private final StatusBarManagerInternal mStatusBar;
+    @VisibleForTesting
+    final StatusBarManagerInternal mStatusBar;
     private IRecentsAnimationRunner mRunner;
     private final RecentsAnimationCallbacks mCallbacks;
     private final ArrayList<TaskAnimationAdapter> mPendingAnimations = new ArrayList<>();
@@ -149,6 +156,7 @@ public class RecentsAnimationController implements DeathRecipient {
 
     @VisibleForTesting
     boolean mShouldAttachNavBarToAppDuringTransition;
+    private boolean mNavigationBarAttachedToApp;
 
     /**
      * Animates the screenshot of task that used to be controlled by RecentsAnimation.
@@ -225,7 +233,8 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         @Override
-        public void setFinishTaskBounds(int taskId, Rect destinationBounds) {
+        public void setFinishTaskBounds(int taskId, Rect destinationBounds, Rect windowCrop,
+                float[] float9) {
             ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
                     "setFinishTaskBounds(%d): bounds=%s", taskId, destinationBounds);
             final long token = Binder.clearCallingIdentity();
@@ -235,6 +244,8 @@ public class RecentsAnimationController implements DeathRecipient {
                         final TaskAnimationAdapter taskAdapter = mPendingAnimations.get(i);
                         if (taskAdapter.mTask.mTaskId == taskId) {
                             taskAdapter.mFinishBounds.set(destinationBounds);
+                            taskAdapter.mFinishWindowCrop.set(windowCrop);
+                            taskAdapter.mFinishTransform = float9;
                             break;
                         }
                     }
@@ -369,7 +380,17 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         @Override
-        public void detachNavigationBarFromApp() {}
+        public void detachNavigationBarFromApp(boolean moveHomeToTop) {
+            final long token = Binder.clearCallingIdentity();
+            try {
+                synchronized (mService.getWindowManagerLock()) {
+                    restoreNavigationBarFromApp(moveHomeToTop);
+                    mService.mWindowPlacerLocked.requestTraversal();
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
     };
 
     /**
@@ -440,9 +461,7 @@ public class RecentsAnimationController implements DeathRecipient {
             return;
         }
 
-        if (mShouldAttachNavBarToAppDuringTransition) {
-            attachNavBarToApp();
-        }
+        attachNavigationBarToApp();
 
         // Adjust the wallpaper visibility for the showing target activity
         ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
@@ -549,8 +568,9 @@ public class RecentsAnimationController implements DeathRecipient {
                             ? mMinimizedHomeBounds
                             : null;
             final Rect contentInsets;
-            if (mTargetActivityRecord != null && mTargetActivityRecord.findMainWindow() != null) {
-                contentInsets = mTargetActivityRecord.findMainWindow()
+            final WindowState targetAppMainWindow = getTargetAppMainWindow();
+            if (targetAppMainWindow != null) {
+                contentInsets = targetAppMainWindow
                         .getInsetsStateWithVisibilityOverride()
                         .calculateInsets(mTargetActivityRecord.getBounds(), Type.systemBars(),
                                 false /* ignoreVisibility */);
@@ -577,32 +597,52 @@ public class RecentsAnimationController implements DeathRecipient {
         }
     }
 
-    @VisibleForTesting
-    WindowToken getNavigationBarWindowToken() {
-        WindowState navBar = mDisplayContent.getDisplayPolicy().getNavigationBar();
-        if (navBar != null) {
-            return navBar.mToken;
-        }
-        return null;
+    boolean isNavigationBarAttachedToApp() {
+        return mNavigationBarAttachedToApp;
     }
 
-    private void attachNavBarToApp() {
+    @VisibleForTesting
+    WindowState getNavigationBarWindow() {
+        return mDisplayContent.getDisplayPolicy().getNavigationBar();
+    }
+
+    private void attachNavigationBarToApp() {
+        if (!mShouldAttachNavBarToAppDuringTransition
+                // Skip the case where the nav bar is controlled by fade rotation.
+                || mDisplayContent.getFadeRotationAnimationController() != null) {
+            return;
+        }
         ActivityRecord topActivity = null;
+        boolean shouldTranslateNavBar = false;
+        final boolean isDisplayLandscape =
+                mDisplayContent.getConfiguration().orientation == ORIENTATION_LANDSCAPE;
         for (int i = mPendingAnimations.size() - 1; i >= 0; i--) {
             final TaskAnimationAdapter adapter = mPendingAnimations.get(i);
             final Task task = adapter.mTask;
-            if (!task.isHomeOrRecentsRootTask()) {
-                topActivity = task.getTopVisibleActivity();
-                break;
+            final boolean isSplitScreenSecondary =
+                    task.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_SECONDARY;
+            if (task.isHomeOrRecentsRootTask()
+                    // TODO(b/178449492): Will need to update for the new split screen mode once
+                    // it's ready.
+                    // Skip if the task is the secondary split screen and in landscape.
+                    || (isSplitScreenSecondary && isDisplayLandscape)) {
+                continue;
             }
-        }
-        final WindowToken navToken = getNavigationBarWindowToken();
-        if (topActivity == null || navToken == null) {
-            return;
+            shouldTranslateNavBar = isSplitScreenSecondary;
+            topActivity = task.getTopVisibleActivity();
+            break;
         }
 
-        final SurfaceControl.Transaction t = navToken.getPendingTransaction();
-        final SurfaceControl navSurfaceControl = navToken.getSurfaceControl();
+        final WindowState navWindow = getNavigationBarWindow();
+        if (topActivity == null || navWindow == null || navWindow.mToken == null) {
+            return;
+        }
+        mNavigationBarAttachedToApp = true;
+        final SurfaceControl.Transaction t = navWindow.mToken.getPendingTransaction();
+        final SurfaceControl navSurfaceControl = navWindow.mToken.getSurfaceControl();
+        if (shouldTranslateNavBar) {
+            navWindow.setSurfaceTranslationY(-topActivity.getBounds().top);
+        }
         t.reparent(navSurfaceControl, topActivity.getSurfaceControl());
         t.show(navSurfaceControl);
 
@@ -613,16 +653,32 @@ public class RecentsAnimationController implements DeathRecipient {
             // Place the nav bar on top of anything else in the top activity.
             t.setLayer(navSurfaceControl, Integer.MAX_VALUE);
         }
+        if (mStatusBar != null) {
+            mStatusBar.setNavigationBarLumaSamplingEnabled(mDisplayId, false);
+        }
     }
 
-    private void restoreNavBarFromApp(boolean animate) {
-        // Reparent the SurfaceControl of nav bar token back.
-        final WindowToken navToken = getNavigationBarWindowToken();
-        final SurfaceControl.Transaction t = mDisplayContent.getPendingTransaction();
-        if (navToken != null) {
-            final WindowContainer parent = navToken.getParent();
-            t.reparent(navToken.getSurfaceControl(), parent.getSurfaceControl());
+    private void restoreNavigationBarFromApp(boolean animate) {
+        if (!mNavigationBarAttachedToApp) {
+            return;
         }
+        if (mStatusBar != null) {
+            mStatusBar.setNavigationBarLumaSamplingEnabled(mDisplayId, true);
+        }
+
+        final WindowState navWindow = getNavigationBarWindow();
+        if (navWindow == null) {
+            return;
+        }
+        navWindow.setSurfaceTranslationY(0);
+
+        if (navWindow.mToken == null) {
+            return;
+        }
+        final SurfaceControl.Transaction t = mDisplayContent.getPendingTransaction();
+        final WindowContainer parent = navWindow.mToken.getParent();
+        // Reparent the SurfaceControl of nav bar token back.
+        t.reparent(navWindow.mToken.getSurfaceControl(), parent.getSurfaceControl());
 
         if (animate) {
             // Run fade-in animation to show navigation bar back to bottom of the display.
@@ -852,9 +908,7 @@ public class RecentsAnimationController implements DeathRecipient {
             removeWallpaperAnimation(wallpaperAdapter);
         }
 
-        if (mShouldAttachNavBarToAppDuringTransition) {
-            restoreNavBarFromApp(reorderMode == REORDER_MOVE_TO_TOP);
-        }
+        restoreNavigationBarFromApp(reorderMode == REORDER_MOVE_TO_TOP);
 
         // Clear any pending failsafe runnables
         mService.mH.removeCallbacks(mFailsafeRunnable);
@@ -951,9 +1005,7 @@ public class RecentsAnimationController implements DeathRecipient {
 
     boolean updateInputConsumerForApp(InputWindowHandle inputWindowHandle) {
         // Update the input consumer touchable region to match the target app main window
-        final WindowState targetAppMainWindow = mTargetActivityRecord != null
-                ? mTargetActivityRecord.findMainWindow()
-                : null;
+        final WindowState targetAppMainWindow = getTargetAppMainWindow();
         if (targetAppMainWindow != null) {
             targetAppMainWindow.getBounds(mTmpRect);
             inputWindowHandle.touchableRegion.set(mTmpRect);
@@ -971,6 +1023,13 @@ public class RecentsAnimationController implements DeathRecipient {
             return false;
         }
         return mTargetActivityRecord.windowsCanBeWallpaperTarget();
+    }
+
+    WindowState getTargetAppMainWindow() {
+        if (mTargetActivityRecord == null) {
+            return null;
+        }
+        return mTargetActivityRecord.findMainWindow();
     }
 
     boolean isAnimatingTask(Task task) {
@@ -1038,6 +1097,9 @@ public class RecentsAnimationController implements DeathRecipient {
         private final Rect mLocalBounds = new Rect();
         // The bounds of the target when animation is finished
         private final Rect mFinishBounds = new Rect();
+        // Bounds and transform for the final transaction.
+        private final Rect mFinishWindowCrop = new Rect();
+        private float[] mFinishTransform;
 
         TaskAnimationAdapter(Task task, boolean isRecentTaskInvisible) {
             mTask = task;
@@ -1074,13 +1136,31 @@ public class RecentsAnimationController implements DeathRecipient {
 
         void onCleanup() {
             if (!mFinishBounds.isEmpty()) {
-                // Apply any pending bounds changes
-                final SurfaceControl taskSurface = mTask.getSurfaceControl();
-                mTask.getPendingTransaction()
-                        .setPosition(taskSurface, mFinishBounds.left, mFinishBounds.top)
-                        .setWindowCrop(taskSurface, mFinishBounds.width(), mFinishBounds.height())
+                final SurfaceControl taskSurface = mTask.mSurfaceControl;
+                final Transaction pendingTransaction = mTask.getPendingTransaction();
+                if (mFinishTransform != null) {
+                    pendingTransaction
+                            .setMatrix(taskSurface,
+                                    mFinishTransform[MSCALE_X], mFinishTransform[MSKEW_Y],
+                                    mFinishTransform[MSKEW_X], mFinishTransform[MSCALE_Y]);
+                }
+                float left = mFinishBounds.left;
+                float top = mFinishBounds.top;
+                if (!mFinishWindowCrop.isEmpty()) {
+                    pendingTransaction.setWindowCrop(taskSurface, mFinishWindowCrop);
+                    if (mFinishTransform != null) {
+                        // adjust the position for insets.
+                        left -= mFinishWindowCrop.left * mFinishTransform[MSCALE_X];
+                        top -= mFinishWindowCrop.top * mFinishTransform[MSCALE_Y];
+                    }
+                }
+                pendingTransaction
+                        .setPosition(taskSurface, left, top)
                         .apply();
                 mTask.mLastRecentsAnimationBounds.set(mFinishBounds);
+                // reset the variables
+                mFinishTransform = null;
+                mFinishWindowCrop.setEmpty();
                 mFinishBounds.setEmpty();
             } else if (!mTask.isAttached()) {
                 // Apply the task's pending transaction in case it is detached and its transaction

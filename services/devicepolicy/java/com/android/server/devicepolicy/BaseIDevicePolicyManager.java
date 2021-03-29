@@ -111,6 +111,14 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
         return 0;
     }
 
+    @Override
+    public void acknowledgeDeviceCompliant() {}
+
+    @Override
+    public boolean isComplianceAcknowledgementRequired() {
+        return false;
+    }
+
     public boolean canProfileOwnerResetPasswordWhenLocked(int userId) {
         return false;
     }

@@ -1993,6 +1993,13 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.CARRIER_APPS_HANDLED,
                 SecureSettingsProto.CARRIER_APPS_HANDLED);
+
+        final long clipboardToken = p.start(SecureSettingsProto.CLIPBOARD);
+        dumpSetting(s, p,
+                Settings.Secure.CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS,
+                SecureSettingsProto.Clipboard.SHOW_ACCESS_NOTIFICATIONS);
+        p.end(clipboardToken);
+
         dumpSetting(s, p,
                 Settings.Secure.CMAS_ADDITIONAL_BROADCAST_PKG,
                 SecureSettingsProto.CMAS_ADDITIONAL_BROADCAST_PKG);
@@ -2146,6 +2153,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD,
                 SecureSettingsProto.InputMethods.SHOW_IME_WITH_HARD_KEYBOARD);
+        dumpSetting(s, p,
+                Settings.Secure.DEFAULT_VOICE_INPUT_METHOD,
+                SecureSettingsProto.InputMethods.DEFAULT_VOICE_INPUT_METHOD);
         p.end(inputMethodsToken);
 
         dumpSetting(s, p,

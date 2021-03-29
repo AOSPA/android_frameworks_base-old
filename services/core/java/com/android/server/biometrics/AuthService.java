@@ -214,6 +214,13 @@ public class AuthService extends SystemService {
                 return;
             }
 
+            if (promptInfo.containsTestConfigurations()) {
+                if (getContext().checkCallingOrSelfPermission(TEST_BIOMETRIC)
+                        != PackageManager.PERMISSION_GRANTED) {
+                    checkInternalPermission();
+                }
+            }
+
             // Only allow internal clients to enable non-public options.
             if (promptInfo.containsPrivateApiConfigurations()) {
                 checkInternalPermission();
@@ -340,6 +347,20 @@ public class AuthService extends SystemService {
         }
 
         @Override
+        public void resetLockoutTimeBound(IBinder token, String opPackageName, int fromSensorId,
+                int userId, byte[] hardwareAuthToken) throws RemoteException {
+            checkInternalPermission();
+
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                mBiometricService.resetLockoutTimeBound(token, opPackageName, fromSensorId, userId,
+                        hardwareAuthToken);
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        @Override
         public CharSequence getButtonLabel(
                 int userId,
                 String opPackageName,
@@ -406,26 +427,49 @@ public class AuthService extends SystemService {
                         mBiometricService.getCurrentModality(
                                 opPackageName, userId, callingUserId, authenticators);
 
+                final boolean isCredentialAllowed = Utils.isCredentialRequested(authenticators);
+
                 final String result;
                 switch (getCredentialBackupModality(modality)) {
                     case BiometricAuthenticator.TYPE_NONE:
                         result = null;
                         break;
+
                     case BiometricAuthenticator.TYPE_CREDENTIAL:
                         result = getContext().getString(
                                 R.string.screen_lock_dialog_default_subtitle);
                         break;
+
                     case BiometricAuthenticator.TYPE_FINGERPRINT:
-                        result = getContext().getString(
-                                R.string.fingerprint_dialog_default_subtitle);
+                        if (isCredentialAllowed) {
+                            result = getContext().getString(
+                                    R.string.fingerprint_or_screen_lock_dialog_default_subtitle);
+                        } else {
+                            result = getContext().getString(
+                                    R.string.fingerprint_dialog_default_subtitle);
+                        }
                         break;
+
                     case BiometricAuthenticator.TYPE_FACE:
-                        result = getContext().getString(R.string.face_dialog_default_subtitle);
+                        if (isCredentialAllowed) {
+                            result = getContext().getString(
+                                    R.string.face_or_screen_lock_dialog_default_subtitle);
+                        } else {
+                            result = getContext().getString(R.string.face_dialog_default_subtitle);
+                        }
                         break;
+
                     default:
-                        result = getContext().getString(R.string.biometric_dialog_default_subtitle);
+                        if (isCredentialAllowed) {
+                            result = getContext().getString(
+                                    R.string.biometric_or_screen_lock_dialog_default_subtitle);
+                        } else {
+                            result = getContext().getString(
+                                    R.string.biometric_dialog_default_subtitle);
+                        }
                         break;
                 }
+
                 return result;
             } finally {
                 Binder.restoreCallingIdentity(identity);

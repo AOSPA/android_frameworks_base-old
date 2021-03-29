@@ -825,24 +825,40 @@ public class TelephonyRegistryManager {
     }
 
     /**
-     * Notify emergency number list changed on certain subscription.
-     *
-     * @param slotIndex for which emergency number list changed. Can be derived from subId except
-     * when subId is invalid.
-     * @param subId for which emergency number list changed.
+     * Notify the allowed network types has changed for a specific subscription and the specific
+     * reason.
+     * @param slotIndex for which allowed network types changed.
+     * @param subId for which allowed network types changed.
+     * @param reason an allowed network type reasons.
+     * @param allowedNetworkType an allowed network type bitmask value.
      */
     public void notifyAllowedNetworkTypesChanged(int slotIndex, int subId,
-            Map<Integer, Long> allowedNetworkTypeList) {
+            int reason, long allowedNetworkType) {
         try {
-            sRegistry.notifyAllowedNetworkTypesChanged(slotIndex, subId, allowedNetworkTypeList);
+            sRegistry.notifyAllowedNetworkTypesChanged(slotIndex, subId, reason,
+                    allowedNetworkType);
         } catch (RemoteException ex) {
             // system process is dead
         }
     }
 
+    /**
+     * Notify that the link capacity estimate has changed.
+     * @param slotIndex for the phone object that gets the updated link capacity estimate
+     * @param subId for subscription that gets the updated link capacity estimate
+     * @param linkCapacityEstimateList a list of {@link  LinkCapacityEstimate}
+     */
+    public void notifyLinkCapacityEstimateChanged(int slotIndex, int subId,
+            List<LinkCapacityEstimate> linkCapacityEstimateList) {
+        try {
+            sRegistry.notifyLinkCapacityEstimateChanged(slotIndex, subId, linkCapacityEstimateList);
+        } catch (RemoteException ex) {
+            // system server crash
+        }
+    }
+
     public @NonNull Set<Integer> getEventsFromCallback(
             @NonNull TelephonyCallback telephonyCallback) {
-
         Set<Integer> eventList = new ArraySet<>();
 
         if (telephonyCallback instanceof TelephonyCallback.ServiceStateListener) {
@@ -972,6 +988,10 @@ public class TelephonyRegistryManager {
 
         if (telephonyCallback instanceof TelephonyCallback.AllowedNetworkTypesListener) {
             eventList.add(TelephonyCallback.EVENT_ALLOWED_NETWORK_TYPE_LIST_CHANGED);
+        }
+
+        if (telephonyCallback instanceof TelephonyCallback.LinkCapacityEstimateChangedListener) {
+            eventList.add(TelephonyCallback.EVENT_LINK_CAPACITY_ESTIMATE_CHANGED);
         }
 
         return eventList;

@@ -1416,7 +1416,7 @@ public final class BroadcastQueue {
             }
         }
         if (!skip && info.activityInfo.applicationInfo.uid != Process.SYSTEM_UID &&
-            r.requiredPermissions != null && r.requiredPermissions.length > 0) {
+                r.requiredPermissions != null && r.requiredPermissions.length > 0) {
             for (int i = 0; i < r.requiredPermissions.length; i++) {
                 String requiredPermission = r.requiredPermissions[i];
                 try {
@@ -1424,7 +1424,7 @@ public final class BroadcastQueue {
                             checkPermission(requiredPermission,
                                     info.activityInfo.applicationInfo.packageName,
                                     UserHandle
-                                            .getUserId(info.activityInfo.applicationInfo.uid));
+                                    .getUserId(info.activityInfo.applicationInfo.uid));
                 } catch (RemoteException e) {
                     perm = PackageManager.PERMISSION_DENIED;
                 }
@@ -1439,36 +1439,18 @@ public final class BroadcastQueue {
                     break;
                 }
                 int appOp = AppOpsManager.permissionToOpCode(requiredPermission);
-                if (appOp != AppOpsManager.OP_NONE && appOp != r.appOp
-                        && mService.getAppOpsManager().noteOpNoThrow(appOp,
-                        info.activityInfo.applicationInfo.uid, info.activityInfo.packageName,
-                        null /* default featureId */,
-                        "Broadcast delivered to " + info.activityInfo.name)
-                        != AppOpsManager.MODE_ALLOWED) {
-                    Slog.w(TAG, "Appop Denial: receiving "
-                            + r.intent + " to "
-                            + component.flattenToShortString()
-                            + " requires appop " + AppOpsManager.permissionToOp(
-                            requiredPermission)
-                            + " due to sender " + r.callerPackage
-                            + " (uid " + r.callingUid + ")");
-                    skip = true;
-                    break;
+                if (appOp != AppOpsManager.OP_NONE && appOp != r.appOp) {
+                    if (!noteOpForManifestReceiver(appOp, r, info, component)) {
+                        skip = true;
+                        break;
+                    }
                 }
             }
         }
-        if (!skip && r.appOp != AppOpsManager.OP_NONE
-                && mService.getAppOpsManager().noteOpNoThrow(r.appOp,
-                info.activityInfo.applicationInfo.uid, info.activityInfo.packageName,
-                null  /* default featureId */, "Broadcast delivered to " + info.activityInfo.name)
-                != AppOpsManager.MODE_ALLOWED) {
-            Slog.w(TAG, "Appop Denial: receiving "
-                    + r.intent + " to "
-                    + component.flattenToShortString()
-                    + " requires appop " + AppOpsManager.opToName(r.appOp)
-                    + " due to sender " + r.callerPackage
-                    + " (uid " + r.callingUid + ")");
-            skip = true;
+        if (!skip && r.appOp != AppOpsManager.OP_NONE) {
+            if (!noteOpForManifestReceiver(r.appOp, r, info, component)) {
+                skip = true;
+            }
         }
         boolean isSingleton = false;
         try {
@@ -1562,7 +1544,7 @@ public final class BroadcastQueue {
         }
         String targetProcess = info.activityInfo.processName;
         ProcessRecord app = mService.getProcessRecordLocked(targetProcess,
-                info.activityInfo.applicationInfo.uid, false);
+                info.activityInfo.applicationInfo.uid);
 
         if (!skip) {
             final int allowed = mService.getAppStartModeLOSP(
@@ -1696,7 +1678,7 @@ public final class BroadcastQueue {
                 r.intent.getFlags() | Intent.FLAG_FROM_BACKGROUND,
                 new HostingRecord("broadcast", r.curComponent), isActivityCapable
                 ? ZYGOTE_POLICY_FLAG_LATENCY_SENSITIVE : ZYGOTE_POLICY_FLAG_EMPTY,
-                (r.intent.getFlags() & Intent.FLAG_RECEIVER_BOOT_UPGRADE) != 0, false, false);
+                (r.intent.getFlags() & Intent.FLAG_RECEIVER_BOOT_UPGRADE) != 0, false);
         if (r.curApp == null) {
             // Ah, this recipient is unavailable.  Finish it if necessary,
             // and mark the broadcast record as ready for the next.
@@ -1715,6 +1697,40 @@ public final class BroadcastQueue {
         maybeAddAllowBackgroundActivityStartsToken(r.curApp, r);
         mPendingBroadcast = r;
         mPendingBroadcastRecvIndex = recIdx;
+    }
+
+    private boolean noteOpForManifestReceiver(int appOp, BroadcastRecord r, ResolveInfo info,
+            ComponentName component) {
+        if (info.activityInfo.attributionTags == null) {
+            return noteOpForManifestReceiverInner(appOp, r, info, component, null);
+        } else {
+            // Attribution tags provided, noteOp each tag
+            for (String tag : info.activityInfo.attributionTags) {
+                if (!noteOpForManifestReceiverInner(appOp, r, info, component, tag)) {
+                    return false;
+                }
+            }
+            return true;
+        }
+    }
+
+    private boolean noteOpForManifestReceiverInner(int appOp, BroadcastRecord r, ResolveInfo info,
+            ComponentName component, String tag) {
+        if (mService.getAppOpsManager().noteOpNoThrow(appOp,
+                    info.activityInfo.applicationInfo.uid,
+                    info.activityInfo.packageName,
+                    tag,
+                    "Broadcast delivered to " + info.activityInfo.name)
+                != AppOpsManager.MODE_ALLOWED) {
+            Slog.w(TAG, "Appop Denial: receiving "
+                    + r.intent + " to "
+                    + component.flattenToShortString()
+                    + " requires appop " + AppOpsManager.opToName(appOp)
+                    + " due to sender " + r.callerPackage
+                    + " (uid " + r.callingUid + ")");
+            return false;
+        }
+        return true;
     }
 
     private void maybeAddAllowBackgroundActivityStartsToken(ProcessRecord proc, BroadcastRecord r) {

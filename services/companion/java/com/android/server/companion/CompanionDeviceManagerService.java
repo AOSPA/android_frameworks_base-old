@@ -639,6 +639,16 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             }));
         }
 
+        @Override
+        public boolean createAssociation(String packageName, String macAddress, int userId) {
+            getContext().enforceCallingOrSelfPermission(
+                    android.Manifest.permission.ASSOCIATE_COMPANION_DEVICES, "createAssociation");
+
+            addAssociation(new Association(
+                    userId, macAddress, packageName, null, false, System.currentTimeMillis()));
+            return true;
+        }
+
         private void checkCanCallNotificationApi(String callingPackage) throws RemoteException {
             checkCallerIsSystemOr(callingPackage);
             int userId = getCallingUserId();
@@ -963,7 +973,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     private Set<Association> getAllAssociations(int userId, @Nullable String packageFilter) {
         return CollectionUtils.filter(
                 getAllAssociations(userId),
-                a -> Objects.equals(packageFilter, a.getPackageName()));
+                // Null filter == get all associations
+                a -> packageFilter == null || Objects.equals(packageFilter, a.getPackageName()));
     }
 
     private Set<Association> getAllAssociations() {
@@ -983,8 +994,10 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
             int userId, @Nullable String packageFilter, @Nullable String addressFilter) {
         return CollectionUtils.filter(
                 getAllAssociations(userId),
-                a -> Objects.equals(packageFilter, a.getPackageName())
-                        && Objects.equals(addressFilter, a.getDeviceMacAddress()));
+                // Null filter == get all associations
+                a -> (packageFilter == null || Objects.equals(packageFilter, a.getPackageName()))
+                        && (addressFilter == null
+                                || Objects.equals(addressFilter, a.getDeviceMacAddress())));
     }
 
     private Set<Association> readAllAssociations(int userId) {
@@ -1075,6 +1088,7 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         Date lastSeen = mDevicesLastNearby.get(address);
         if (isDeviceDisappeared(lastSeen)) {
             onDeviceDisappeared(address);
+            unscheduleTriggerDeviceDisappearedRunnable(address);
         }
     }
 
@@ -1201,8 +1215,6 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
 
         public void schedule() {
-            Slog.d(LOG_TAG,
-                    "TriggerDeviceDisappearedRunnable.schedule(address = " + mAddress + ")");
             mMainHandler.removeCallbacks(this);
             mMainHandler.postDelayed(this, this, DEVICE_DISAPPEARED_TIMEOUT_MS);
         }
@@ -1210,7 +1222,18 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         @Override
         public void run() {
             Slog.d(LOG_TAG, "TriggerDeviceDisappearedRunnable.run(address = " + mAddress + ")");
-            onDeviceDisappeared(mAddress);
+            if (!mCurrentlyConnectedDevices.contains(mAddress)) {
+                onDeviceDisappeared(mAddress);
+            }
+        }
+    }
+
+    private void unscheduleTriggerDeviceDisappearedRunnable(String address) {
+        Runnable r = mTriggerDeviceDisappearedRunnables.get(address);
+        if (r != null) {
+            Slog.d(LOG_TAG,
+                    "unscheduling TriggerDeviceDisappearedRunnable(address = " + address + ")");
+            mMainHandler.removeCallbacks(r);
         }
     }
 
@@ -1229,8 +1252,6 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     }
 
     private void onDeviceNearby(String address) {
-        Slog.i(LOG_TAG, "onDeviceNearby(address = " + address + ")");
-
         Date timestamp = new Date();
         Date oldTimestamp = mDevicesLastNearby.put(address, timestamp);
 
@@ -1244,13 +1265,11 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         boolean justAppeared = oldTimestamp == null
                 || timestamp.getTime() - oldTimestamp.getTime() >= DEVICE_DISAPPEARED_TIMEOUT_MS;
         if (justAppeared) {
+            Slog.i(LOG_TAG, "onDeviceNearby(justAppeared, address = " + address + ")");
             for (Association association : getAllAssociations(address)) {
                 if (association.isNotifyOnDeviceNearby()) {
-                    if (DEBUG) {
-                        Slog.i(LOG_TAG, "Device " + address
-                                + " managed by " + association.getPackageName()
-                                + " is nearby on " + timestamp);
-                    }
+                    Slog.i(LOG_TAG,
+                            "Sending onDeviceAppeared to " + association.getPackageName() + ")");
                     getDeviceListenerServiceConnector(association).run(
                             service -> service.onDeviceAppeared(association.getDeviceMacAddress()));
                 }
@@ -1264,12 +1283,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         boolean hasDeviceListeners = false;
         for (Association association : getAllAssociations(address)) {
             if (association.isNotifyOnDeviceNearby()) {
-                if (DEBUG) {
-                    Slog.i(LOG_TAG, "Device " + address
-                            + " managed by " + association.getPackageName()
-                            + " disappeared; last seen on " + mDevicesLastNearby.get(address));
-                }
-
+                Slog.i(LOG_TAG,
+                        "Sending onDeviceDisappeared to " + association.getPackageName() + ")");
                 getDeviceListenerServiceConnector(association).run(
                         service -> service.onDeviceDisappeared(address));
                 hasDeviceListeners = true;

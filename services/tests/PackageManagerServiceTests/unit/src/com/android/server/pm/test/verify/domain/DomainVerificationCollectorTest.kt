@@ -25,8 +25,8 @@ import android.os.PatternMatcher
 import android.util.ArraySet
 import com.android.server.SystemConfig
 import com.android.server.compat.PlatformCompat
-import com.android.server.pm.verify.domain.DomainVerificationCollector
 import com.android.server.pm.parsing.pkg.AndroidPackage
+import com.android.server.pm.verify.domain.DomainVerificationCollector
 import com.android.server.testutils.mockThrowOnUnmocked
 import com.android.server.testutils.whenever
 import com.google.common.truth.Truth.assertThat
@@ -41,7 +41,12 @@ class DomainVerificationCollectorTest {
     }
 
     private val platformCompat: PlatformCompat = mockThrowOnUnmocked {
-        whenever(isChangeEnabled(eq(DomainVerificationCollector.RESTRICT_DOMAINS), any())) {
+        whenever(
+            isChangeEnabledInternalNoLogging(
+                eq(DomainVerificationCollector.RESTRICT_DOMAINS),
+                any()
+            )
+        ) {
             (arguments[1] as ApplicationInfo).targetSdkVersion >= Build.VERSION_CODES.S
         }
     }

@@ -62,13 +62,15 @@ public class PolicyVersionUpgrader {
      *                 managed profile user IDs.
      * @param dpmsVersion The version to upgrade to.
      */
-    public void upgradePolicy(int[] allUsers, int dpmsVersion) {
+    public void upgradePolicy(int dpmsVersion) {
         int oldVersion = readVersion();
         if (oldVersion >= dpmsVersion) {
             Slog.i(LOG_TAG, String.format("Current version %d, latest version %d, not upgrading.",
                     oldVersion, dpmsVersion));
             return;
         }
+
+        final int[] allUsers = mProvider.getUsersForUpgrade();
 
         //NOTE: The current version is provided in case the XML file format changes in a
         // non-backwards-compatible way, so that DeviceAdminData could load it with
@@ -81,6 +83,27 @@ public class PolicyVersionUpgrader {
             // The first upgrade (from no version to version 1) is to overwrite
             // the "active-password" tag in case it was left around.
             currentVersion = 1;
+        }
+
+        if (currentVersion == 1) {
+            Slog.i(LOG_TAG, String.format("Upgrading from version %d", currentVersion));
+            // This upgrade step is for Device Owner scenario only: For devices upgrading to S,
+            // if there is a device owner, it retains the ability to control sensors-related
+            // permission grants.
+            for (int userId : allUsers) {
+                DevicePolicyData userData = allUsersData.get(userId);
+                if (userData == null) {
+                    continue;
+                }
+                for (ActiveAdmin admin : userData.mAdminList) {
+                    if (mProvider.isDeviceOwner(userId, admin.info.getComponent())) {
+                        Slog.i(LOG_TAG, String.format(
+                                "Marking Device Owner in user %d for permission grant ", userId));
+                        admin.mAdminCanGrantSensorsPermissions = true;
+                    }
+                }
+            }
+            currentVersion = 2;
         }
 
         writePoliciesAndVersion(allUsers, allUsersData, currentVersion);

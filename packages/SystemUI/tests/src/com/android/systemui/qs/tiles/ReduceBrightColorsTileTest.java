@@ -30,9 +30,10 @@ import android.testing.TestableLooper;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
-import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.classifier.FalsingManagerFake;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSTileHost;
@@ -82,6 +83,7 @@ public class ReduceBrightColorsTileTest extends SysuiTestCase {
                 mHost,
                 mTestableLooper.getLooper(),
                 new Handler(mTestableLooper.getLooper()),
+                new FalsingManagerFake(),
                 mMetricsLogger,
                 mStatusBarStateController,
                 mActivityStarter,
@@ -97,7 +99,7 @@ public class ReduceBrightColorsTileTest extends SysuiTestCase {
 
         assertEquals(Tile.STATE_INACTIVE, mTile.getState().state);
         assertEquals(mTile.getState().label.toString(),
-                mContext.getString(R.string.quick_settings_reduce_bright_colors_label));
+                mContext.getString(R.string.reduce_bright_colors_feature_name));
     }
 
     @Test
@@ -108,7 +110,7 @@ public class ReduceBrightColorsTileTest extends SysuiTestCase {
 
         assertEquals(Tile.STATE_ACTIVE, mTile.getState().state);
         assertEquals(mTile.getState().label.toString(),
-                mContext.getString(R.string.quick_settings_reduce_bright_colors_label));
+                mContext.getString(R.string.reduce_bright_colors_feature_name));
     }
 
     @Test

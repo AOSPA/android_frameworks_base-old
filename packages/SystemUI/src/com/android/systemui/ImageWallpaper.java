@@ -25,15 +25,20 @@ import android.os.HandlerThread;
 import android.os.SystemClock;
 import android.os.Trace;
 import android.service.wallpaper.WallpaperService;
+import android.util.ArraySet;
 import android.util.Log;
+import android.util.MathUtils;
 import android.util.Size;
+import android.view.Choreographer;
 import android.view.SurfaceHolder;
+import android.view.WindowManager;
 
 import androidx.annotation.NonNull;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.glwallpaper.EglHelper;
 import com.android.systemui.glwallpaper.ImageWallpaperRenderer;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -54,14 +59,19 @@ public class ImageWallpaper extends WallpaperService {
     private static final @android.annotation.NonNull RectF LOCAL_COLOR_BOUNDS =
             new RectF(0, 0, 1, 1);
     private static final boolean DEBUG = false;
-    private ArrayList<RectF> mLocalColorsToAdd = new ArrayList<>();
+    private final StatusBarStateController mStatusBarStateController;
+    private final ArrayList<RectF> mLocalColorsToAdd = new ArrayList<>();
+    private final ArraySet<RectF> mColorAreas = new ArraySet<>();
+    private float mShift;
+    private volatile int mPages;
     private HandlerThread mWorker;
     // scaled down version
     private Bitmap mMiniBitmap;
 
     @Inject
-    public ImageWallpaper() {
+    public ImageWallpaper(StatusBarStateController statusBarStateController) {
         super();
+        mStatusBarStateController = statusBarStateController;
     }
 
     @Override
@@ -84,7 +94,9 @@ public class ImageWallpaper extends WallpaperService {
         mMiniBitmap = null;
     }
 
-    class GLEngine extends Engine {
+
+    class GLEngine extends Engine implements StatusBarStateController.StateListener,
+            Choreographer.FrameCallback {
         // Surface is rejected if size below a threshold on some devices (ie. 8px on elfin)
         // set min to 64 px (CTS covers this), please refer to ag/4867989 for detail.
         @VisibleForTesting
@@ -95,7 +107,14 @@ public class ImageWallpaper extends WallpaperService {
         private ImageWallpaperRenderer mRenderer;
         private EglHelper mEglHelper;
         private final Runnable mFinishRenderingTask = this::finishRendering;
-        private boolean mNeedRedraw;
+        private final Runnable mInitChoreographerTask = this::initChoreographerInternal;
+        private int mWidth = 1;
+        private int mHeight = 1;
+        private int mImgWidth = 1;
+        private int mImgHeight = 1;
+        private volatile float mDozeAmount;
+        private volatile boolean mNewDozeValue = false;
+        private volatile boolean mShouldScheduleFrame = false;
 
         GLEngine() {
         }
@@ -111,12 +130,20 @@ public class ImageWallpaper extends WallpaperService {
             // Deferred init renderer because we need to get wallpaper by display context.
             mRenderer = getRendererInstance();
             setFixedSizeAllowed(true);
-            setOffsetNotificationsEnabled(false);
             updateSurfaceSize();
+            Rect window = getDisplayContext()
+                    .getSystemService(WindowManager.class)
+                    .getCurrentWindowMetrics()
+                    .getBounds();
+            mHeight = window.height();
+            mWidth = window.width();
             mMiniBitmap = null;
             if (mWorker != null && mWorker.getThreadHandler() != null) {
                 mWorker.getThreadHandler().post(this::updateMiniBitmap);
             }
+
+            mDozeAmount = mStatusBarStateController.getDozeAmount();
+            mStatusBarStateController.addCallback(this);
         }
 
         EglHelper getEglHelperInstance() {
@@ -127,6 +154,41 @@ public class ImageWallpaper extends WallpaperService {
             return new ImageWallpaperRenderer(getDisplayContext());
         }
 
+        @Override
+        public void onOffsetsChanged(float xOffset, float yOffset,
+                float xOffsetStep, float yOffsetStep,
+                int xPixelOffset, int yPixelOffset) {
+            if (mMiniBitmap == null || mMiniBitmap.isRecycled()) return;
+            final int pages;
+            if (xOffsetStep > 0 && xOffsetStep <= 1) {
+                pages = (int) (1 / xOffsetStep + 1);
+            } else {
+                pages = 1;
+            }
+            if (pages == mPages) return;
+            mPages = pages;
+            updateShift();
+            mWorker.getThreadHandler().post(() ->
+                    computeAndNotifyLocalColors(new ArrayList<>(mColorAreas), mMiniBitmap));
+        }
+
+        private void updateShift() {
+            if (mImgHeight == 0) {
+                mShift = 0;
+                return;
+            }
+            // calculate shift
+            float imgWidth = (float) mImgWidth / (float) mImgHeight;
+            float displayWidth =
+                    (float) mWidth / (float) mHeight;
+            // if need to shift
+            if (imgWidth > displayWidth) {
+                mShift = imgWidth / imgWidth - displayWidth / imgWidth;
+            } else {
+                mShift = 0;
+            }
+        }
+
         private void updateMiniBitmap() {
             mRenderer.useBitmap(b -> {
                 int size = Math.min(b.getWidth(), b.getHeight());
@@ -134,6 +196,8 @@ public class ImageWallpaper extends WallpaperService {
                 if (size > MIN_SURFACE_WIDTH) {
                     scale = (float) MIN_SURFACE_WIDTH / (float) size;
                 }
+                mImgHeight = b.getHeight();
+                mImgWidth = b.getWidth();
                 mMiniBitmap = Bitmap.createScaledBitmap(b, Math.round(scale * b.getWidth()),
                         Math.round(scale * b.getHeight()), false);
                 computeAndNotifyLocalColors(mLocalColorsToAdd, mMiniBitmap);
@@ -157,7 +221,11 @@ public class ImageWallpaper extends WallpaperService {
         @Override
         public void onDestroy() {
             mMiniBitmap = null;
+
+            mStatusBarStateController.removeCallback(this);
+
             mWorker.getThreadHandler().post(() -> {
+                finishChoreographerInternal();
                 mRenderer.finish();
                 mRenderer = null;
                 mEglHelper.finish();
@@ -173,6 +241,9 @@ public class ImageWallpaper extends WallpaperService {
         @Override
         public void addLocalColorsAreas(@NonNull List<RectF> regions) {
             mWorker.getThreadHandler().post(() -> {
+                if (mColorAreas.size() + mLocalColorsToAdd.size() == 0) {
+                    setOffsetNotificationsEnabled(true);
+                }
                 Bitmap bitmap = mMiniBitmap;
                 if (bitmap == null) {
                     mLocalColorsToAdd.addAll(regions);
@@ -184,6 +255,7 @@ public class ImageWallpaper extends WallpaperService {
 
         private void computeAndNotifyLocalColors(@NonNull List<RectF> regions, Bitmap b) {
             List<WallpaperColors> colors = getLocalWallpaperColors(regions, b);
+            mColorAreas.addAll(regions);
             try {
                 notifyLocalColorsChanged(regions, colors);
             } catch (RuntimeException e) {
@@ -193,14 +265,45 @@ public class ImageWallpaper extends WallpaperService {
 
         @Override
         public void removeLocalColorsAreas(@NonNull List<RectF> regions) {
-            // No-OP
+            mWorker.getThreadHandler().post(() -> {
+                mColorAreas.removeAll(regions);
+                mLocalColorsToAdd.removeAll(regions);
+                if (mColorAreas.size() + mLocalColorsToAdd.size() == 0) {
+                    setOffsetNotificationsEnabled(false);
+                }
+            });
+        }
+
+        private RectF pageToImgRect(RectF area) {
+            float pageWidth = 1f / (float) mPages;
+            if (pageWidth < 1 && pageWidth >= 0) pageWidth = 1;
+            float imgWidth = (float) mImgWidth / (float) mImgHeight;
+            float displayWidth =
+                    (float) mWidth / (float) mHeight;
+            float expansion = imgWidth > displayWidth ? displayWidth / imgWidth : 1;
+            int page = (int) Math.floor(area.centerX() / pageWidth);
+            float shiftWidth = mShift * page * pageWidth;
+            RectF imgArea = new RectF();
+            imgArea.bottom = area.bottom;
+            imgArea.top = area.top;
+            imgArea.left = MathUtils.constrain(area.left % pageWidth, 0, 1)
+                    * expansion + shiftWidth;
+            imgArea.right = MathUtils.constrain(area.right % pageWidth, 0, 1)
+                    * expansion + shiftWidth;
+            if (imgArea.left > imgArea.right) {
+                // take full page
+                imgArea.left = shiftWidth;
+                imgArea.right = 1 - (mShift - shiftWidth);
+            }
+            return imgArea;
         }
 
         private List<WallpaperColors> getLocalWallpaperColors(@NonNull List<RectF> areas,
                 Bitmap b) {
             List<WallpaperColors> colors = new ArrayList<>(areas.size());
+            updateShift();
             for (int i = 0; i < areas.size(); i++) {
-                RectF area = areas.get(i);
+                RectF area = pageToImgRect(areas.get(i));
                 if (area == null || !LOCAL_COLOR_BOUNDS.contains(area)) {
                     colors.add(null);
                     continue;
@@ -236,7 +339,16 @@ public class ImageWallpaper extends WallpaperService {
         @Override
         public void onSurfaceRedrawNeeded(SurfaceHolder holder) {
             if (mWorker == null) return;
+            mDozeAmount = mStatusBarStateController.getDozeAmount();
             mWorker.getThreadHandler().post(this::drawFrame);
+        }
+
+        @Override
+        public void onDozeAmountChanged(float linear, float eased) {
+            initChoreographer();
+
+            mDozeAmount = linear;
+            mNewDozeValue = true;
         }
 
         private void drawFrame() {
@@ -245,8 +357,10 @@ public class ImageWallpaper extends WallpaperService {
             postRender();
         }
 
+        /**
+         * Important: this method should only be invoked from the ImageWallpaper (worker) Thread.
+         */
         public void preRender() {
-            // This method should only be invoked from worker thread.
             Trace.beginSection("ImageWallpaper#preRender");
             preRenderInternal();
             Trace.endSection();
@@ -281,8 +395,10 @@ public class ImageWallpaper extends WallpaperService {
             }
         }
 
+        /**
+         * Important: this method should only be invoked from the ImageWallpaper (worker) Thread.
+         */
         public void requestRender() {
-            // This method should only be invoked from worker thread.
             Trace.beginSection("ImageWallpaper#requestRender");
             requestRenderInternal();
             Trace.endSection();
@@ -294,6 +410,7 @@ public class ImageWallpaper extends WallpaperService {
                     && frame.width() > 0 && frame.height() > 0;
 
             if (readyToRender) {
+                mRenderer.setExposureValue(1 - mDozeAmount);
                 mRenderer.onDrawFrame();
                 if (!mEglHelper.swapBuffer()) {
                     Log.e(TAG, "drawFrame failed!");
@@ -305,8 +422,10 @@ public class ImageWallpaper extends WallpaperService {
             }
         }
 
+        /**
+         * Important: this method should only be invoked from the ImageWallpaper (worker) Thread.
+         */
         public void postRender() {
-            // This method should only be invoked from worker thread.
             Trace.beginSection("ImageWallpaper#postRender");
             scheduleFinishRendering();
             Trace.endSection();
@@ -325,11 +444,41 @@ public class ImageWallpaper extends WallpaperService {
 
         private void finishRendering() {
             Trace.beginSection("ImageWallpaper#finishRendering");
+            finishChoreographerInternal();
             if (mEglHelper != null) {
                 mEglHelper.destroyEglSurface();
                 mEglHelper.destroyEglContext();
             }
             Trace.endSection();
+        }
+
+        private void initChoreographer() {
+            if (!mWorker.getThreadHandler().hasCallbacks(mInitChoreographerTask)
+                    && !mShouldScheduleFrame) {
+                mWorker.getThreadHandler().post(mInitChoreographerTask);
+            }
+        }
+
+        /**
+         * Subscribes the engine to listen to Choreographer frame events.
+         * Important: this method should only be invoked from the ImageWallpaper (worker) Thread.
+         */
+        private void initChoreographerInternal() {
+            if (!mShouldScheduleFrame) {
+                // Prepare EGL Context and Surface
+                preRender();
+                mShouldScheduleFrame = true;
+                Choreographer.getInstance().postFrameCallback(GLEngine.this);
+            }
+        }
+
+        /**
+         * Unsubscribe the engine from listening to Choreographer frame events.
+         * Important: this method should only be invoked from the ImageWallpaper (worker) Thread.
+         */
+        private void finishChoreographerInternal() {
+            mShouldScheduleFrame = false;
+            Choreographer.getInstance().removeFrameCallback(GLEngine.this);
         }
 
         private boolean needSupportWideColorGamut() {
@@ -350,6 +499,18 @@ public class ImageWallpaper extends WallpaperService {
 
             mEglHelper.dump(prefix, fd, out, args);
             mRenderer.dump(prefix, fd, out, args);
+        }
+
+        @Override
+        public void doFrame(long frameTimeNanos) {
+            if (mNewDozeValue) {
+                drawFrame();
+                mNewDozeValue = false;
+            }
+
+            if (mShouldScheduleFrame) {
+                Choreographer.getInstance().postFrameCallback(this);
+            }
         }
     }
 }

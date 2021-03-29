@@ -523,6 +523,10 @@ public class LocalBluetoothProfileManager {
         return mHearingAidProfile;
     }
 
+    SapProfile getSapProfile() {
+        return mSapProfile;
+    }
+
     public Object getBroadcastProfile() {
         return mBroadcastProfileObject;
     }

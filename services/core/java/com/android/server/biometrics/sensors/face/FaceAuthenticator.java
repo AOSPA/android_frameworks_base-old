@@ -61,10 +61,10 @@ public final class FaceAuthenticator extends IBiometricAuthenticator.Stub {
     @Override
     public void prepareForAuthentication(boolean requireConfirmation, IBinder token,
             long operationId, int userId, IBiometricSensorReceiver sensorReceiver,
-            String opPackageName, int cookie)
+            String opPackageName, int cookie, boolean allowBackgroundAuthentication)
             throws RemoteException {
         mFaceService.prepareForAuthentication(mSensorId, requireConfirmation, token, operationId,
-                userId, sensorReceiver, opPackageName, cookie);
+                userId, sensorReceiver, opPackageName, cookie, allowBackgroundAuthentication);
     }
 
     @Override
@@ -103,5 +103,12 @@ public final class FaceAuthenticator extends IBiometricAuthenticator.Stub {
     @Override
     public long getAuthenticatorId(int callingUserId) throws RemoteException {
         return mFaceService.getAuthenticatorId(mSensorId, callingUserId);
+    }
+
+    @Override
+    public void resetLockout(IBinder token, String opPackageName, int userId,
+            byte[] hardwareAuthToken) throws RemoteException {
+        mFaceService.resetLockout(token, mSensorId, userId, hardwareAuthToken,
+                opPackageName);
     }
 }

@@ -31,17 +31,18 @@ import android.os.SharedMemory;
 import android.os.ShellCallback;
 import android.system.ErrnoException;
 import android.text.FontConfig;
+import android.text.TextUtils;
 import android.util.AndroidException;
 import android.util.IndentingPrintWriter;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.graphics.fonts.IFontManager;
+import com.android.internal.security.VerityUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.Preconditions;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
-import com.android.server.security.VerityUtils;
 
 import java.io.File;
 import java.io.FileDescriptor;
@@ -66,6 +67,8 @@ public final class FontManagerService extends IFontManager.Stub {
 
     @Override
     public FontConfig getFontConfig() {
+        getContext().enforceCallingPermission(Manifest.permission.UPDATE_FONTS,
+                "UPDATE_FONTS permission required.");
         return getSystemFontConfig();
     }
 
@@ -148,10 +151,24 @@ public final class FontManagerService extends IFontManager.Stub {
 
     /* package */ static class OtfFontFileParser implements UpdatableFontDir.FontFileParser {
         @Override
-        public String getPostScriptName(File file) throws IOException {
+        public String getCanonicalFileName(File file) throws IOException {
             ByteBuffer buffer = mmap(file);
             try {
-                return FontFileUtil.getPostScriptName(buffer, 0);
+                String psName = FontFileUtil.getPostScriptName(buffer, 0);
+                int isType1Font = FontFileUtil.isPostScriptType1Font(buffer, 0);
+                int isCollection = FontFileUtil.isCollectionFont(buffer);
+
+                if (TextUtils.isEmpty(psName) || isType1Font == -1 || isCollection == -1) {
+                    return null;
+                }
+
+                String extension;
+                if (isCollection == 1) {
+                    extension = isType1Font == 1 ? ".otc" : ".ttc";
+                } else {
+                    extension = isType1Font == 1 ? ".otf" : ".ttf";
+                }
+                return psName + extension;
             } finally {
                 NioUtils.freeDirectBuffer(buffer);
             }

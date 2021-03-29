@@ -81,6 +81,7 @@ import static android.view.WindowLayoutParamsProto.X;
 import static android.view.WindowLayoutParamsProto.Y;
 
 import android.Manifest.permission;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
@@ -121,6 +122,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
@@ -864,6 +866,33 @@ public interface WindowManager extends ViewManager {
     }
 
     /**
+     * Adds a listener, which will be called when cross-window blurs are enabled/disabled at
+     * runtime. This affects both window blur behind (see {@link LayoutParams#setBlurBehindRadius})
+     * and window background blur (see {@link Window#setBackgroundBlurRadius}).
+     *
+     * Cross-window blur might not be supported by some devices due to GPU limitations. It can also
+     * be disabled at runtime, e.g. during battery saving mode, when multimedia tunneling is used or
+     * when minimal post processing is requested. In such situations, no blur will be computed or
+     * drawn, so the blur target area will not be blurred. To handle this, the app might want to
+     * change its theme to one that does not use blurs.
+     *
+     * If the listener is added successfully, it will be called immediately with the current
+     * cross-window blur enabled state.
+     *
+     * @param executor {@link Executor} to handle the listener callback
+     * @param listener the listener to be added. It will be called back with a boolean parameter,
+     *                 which is true if cross-window blur is enabled and false if it is disabled
+     *
+     * @see #removeCrossWindowBlurEnabledListener
+     * @see #isCrossWindowBlurEnabled
+     * @see LayoutParams#setBlurBehindRadius
+     * @see Window#setBackgroundBlurRadius
+     */
+    default void addCrossWindowBlurEnabledListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> listener) {
+    }
+
+    /**
      * Removes a listener, previously added with {@link #addCrossWindowBlurEnabledListener}
      *
      * @param listener the listener to be removed
@@ -871,6 +900,20 @@ public interface WindowManager extends ViewManager {
      * @see #addCrossWindowBlurEnabledListener
      */
     default void removeCrossWindowBlurEnabledListener(@NonNull Consumer<Boolean> listener) {
+    }
+
+    /**
+     * Disables cross-window blurs device-wide. This includes window blur behind
+     * (see {@link LayoutParams#setBlurBehindRadius}) and window background blur
+     * (see {@link Window#setBackgroundBlurRadius}).
+     *
+     * @param disable specifies whether to disable the blur. Note that calling this
+     *                with 'disable=false' will not enable blurs if there is something
+     *                else disabling blurs.
+     * @hide
+     */
+    @TestApi
+    default void setForceCrossWindowBlurDisabled(boolean disable) {
     }
 
     public static class LayoutParams extends ViewGroup.LayoutParams implements Parcelable {
@@ -2175,26 +2218,6 @@ public interface WindowManager extends ViewManager {
         public int flags;
 
         /**
-         * If the window has requested hardware acceleration, but this is not
-         * allowed in the process it is in, then still render it as if it is
-         * hardware accelerated.  This is used for the starting preview windows
-         * in the system process, which don't need to have the overhead of
-         * hardware acceleration (they are just a static rendering), but should
-         * be rendered as such to match the actual window of the app even if it
-         * is hardware accelerated.
-         * Even if the window isn't hardware accelerated, still do its rendering
-         * as if it was.
-         * Like {@link #FLAG_HARDWARE_ACCELERATED} except for trusted system windows
-         * that need hardware acceleration (e.g. LockScreen), where hardware acceleration
-         * is generally disabled. This flag must be specified in addition to
-         * {@link #FLAG_HARDWARE_ACCELERATED} to enable hardware acceleration for system
-         * windows.
-         *
-         * @hide
-         */
-        public static final int PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED = 0x00000001;
-
-        /**
          * In the system process, we globally do not use hardware acceleration
          * because there are many threads doing UI there and they conflict.
          * If certain parts of the UI that really do want to use hardware
@@ -2420,7 +2443,6 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         @IntDef(flag = true, prefix="PRIVATE_FLAG_", value = {
-                PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
                 PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
                 PRIVATE_FLAG_WANTS_OFFSET_NOTIFICATIONS,
                 SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
@@ -2455,10 +2477,6 @@ public interface WindowManager extends ViewManager {
          */
         @UnsupportedAppUsage
         @ViewDebug.ExportedProperty(flagMapping = {
-                @ViewDebug.FlagToString(
-                        mask = PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
-                        equals = PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
-                        name = "FAKE_HARDWARE_ACCELERATED"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
                         equals = PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
@@ -2924,7 +2942,7 @@ public interface WindowManager extends ViewManager {
         public IBinder token = null;
 
         /**
-         * The token of {@link android.app.WindowContext}. It is usually a
+         * The token of {@link android.window.WindowContext}. It is usually a
          * {@link android.app.WindowTokenClient} and is used for associating the params with an
          * existing node in the WindowManager hierarchy and getting the corresponding
          * {@link Configuration} and {@link android.content.res.Resources} values with updates

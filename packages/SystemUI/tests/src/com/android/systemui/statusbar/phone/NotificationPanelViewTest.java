@@ -66,6 +66,7 @@ import com.android.keyguard.KeyguardStatusView;
 import com.android.keyguard.KeyguardStatusViewController;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.dagger.KeyguardQsUserSwitchComponent;
+import com.android.keyguard.dagger.KeyguardStatusBarViewComponent;
 import com.android.keyguard.dagger.KeyguardStatusViewComponent;
 import com.android.keyguard.dagger.KeyguardUserSwitcherComponent;
 import com.android.systemui.R;
@@ -206,9 +207,15 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     @Mock
     private KeyguardStatusViewComponent mKeyguardStatusViewComponent;
     @Mock
+    private KeyguardStatusBarViewComponent.Factory mKeyguardStatusBarViewComponentFactory;
+    @Mock
+    private KeyguardStatusBarViewComponent mKeyguardStatusBarViewComponent;
+    @Mock
     private KeyguardClockSwitchController mKeyguardClockSwitchController;
     @Mock
     private KeyguardStatusViewController mKeyguardStatusViewController;
+    @Mock
+    private KeyguardStatusBarViewController mKeyguardStatusBarViewController;
     @Mock
     private NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
     @Mock
@@ -296,6 +303,10 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 .thenReturn(mKeyguardClockSwitchController);
         when(mKeyguardStatusViewComponent.getKeyguardStatusViewController())
                 .thenReturn(mKeyguardStatusViewController);
+        when(mKeyguardStatusBarViewComponentFactory.build(any()))
+                .thenReturn(mKeyguardStatusBarViewComponent);
+        when(mKeyguardStatusBarViewComponent.getKeyguardStatusBarViewController())
+                .thenReturn(mKeyguardStatusBarViewController);
 
         mNotificationPanelViewController = new NotificationPanelViewController(mView,
                 mResources,
@@ -314,6 +325,7 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 mKeyguardStatusViewComponentFactory,
                 mKeyguardQsUserSwitchComponentFactory,
                 mKeyguardUserSwitcherComponentFactory,
+                mKeyguardStatusBarViewComponentFactory,
                 mQSDetailDisplayer,
                 mGroupManager,
                 mNotificationAreaController,
@@ -536,8 +548,7 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     @Test
     public void testCanCollapsePanelOnTouch_falseInDualPaneShade() {
         mStatusBarStateController.setState(SHADE);
-        when(mResources.getBoolean(R.bool.config_use_split_notification_shade)).thenReturn(true);
-        when(mFeatureFlags.isTwoColumnNotificationShadeEnabled()).thenReturn(true);
+        enableSplitShade();
         mNotificationPanelViewController.setQsExpanded(true);
 
         assertThat(mNotificationPanelViewController.canCollapsePanelOnTouch()).isFalse();
@@ -562,6 +573,7 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     private void enableSplitShade() {
         when(mResources.getBoolean(R.bool.config_use_split_notification_shade)).thenReturn(true);
         when(mFeatureFlags.isTwoColumnNotificationShadeEnabled()).thenReturn(true);
+        mNotificationPanelViewController.updateResources();
     }
 
     private void onTouchEvent(MotionEvent ev) {

@@ -31,7 +31,10 @@ import com.android.internal.util.CallbackRegistry;
 import com.android.internal.util.CallbackRegistry.NotifierCallback;
 
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+
+import javax.inject.Inject;
 
 /**
  * Owns a series of partial screen captures (tiles).
@@ -46,6 +49,7 @@ class ImageTileSet {
     private CallbackRegistry<OnBoundsChangedListener, ImageTileSet, Rect> mOnBoundsListeners;
     private CallbackRegistry<OnContentChangedListener, ImageTileSet, Rect> mContentListeners;
 
+    @Inject
     ImageTileSet(@UiThread Handler handler) {
         mHandler = handler;
     }
@@ -68,9 +72,6 @@ class ImageTileSet {
     private final List<ImageTile> mTiles = new ArrayList<>();
     private final Rect mBounds = new Rect();
     private final Handler mHandler;
-
-    private OnContentChangedListener mOnContentChangedListener;
-    private OnBoundsChangedListener mOnBoundsChangedListener;
 
     void addOnBoundsChangedListener(OnBoundsChangedListener listener) {
         if (mOnBoundsListeners == null) {
@@ -204,18 +205,17 @@ class ImageTileSet {
         return mBounds.height();
     }
 
-    @AnyThread
     void clear() {
-        if (!mHandler.getLooper().isCurrentThread()) {
-            mHandler.post(this::clear);
-            return;
-        }
         if (mTiles.isEmpty()) {
             return;
         }
         mBounds.setEmpty();
-        mTiles.forEach(ImageTile::close);
-        mTiles.clear();
+        Iterator<ImageTile> i = mTiles.iterator();
+        while (i.hasNext()) {
+            ImageTile next = i.next();
+            next.close();
+            i.remove();
+        }
         notifyBoundsChanged(mBounds);
         notifyContentChanged();
     }

@@ -84,8 +84,6 @@ import static android.view.WindowManagerGlobal.RELAYOUT_RES_SURFACE_CHANGED;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_INVALID;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_MISSING_WINDOW;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN;
-import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_UNKNOWN;
-import static android.view.displayhash.DisplayHashResultCallback.EXTRA_DISPLAY_HASH_ERROR_CODE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_BOOT;
@@ -234,7 +232,7 @@ import android.view.IOnKeyguardExitResult;
 import android.view.IPinnedTaskListener;
 import android.view.IRecentsAnimationRunner;
 import android.view.IRotationWatcher;
-import android.view.IScrollCaptureCallbacks;
+import android.view.IScrollCaptureResponseListener;
 import android.view.ISystemGestureExclusionListener;
 import android.view.IWallpaperVisibilityListener;
 import android.view.IWindow;
@@ -274,7 +272,6 @@ import android.window.TaskSnapshot;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.internal.policy.IShortcutService;
@@ -369,9 +366,6 @@ public class WindowManagerService extends IWindowManager.Stub
     /** Amount of time (in milliseconds) to delay before declaring a window freeze timeout. */
     static final int WINDOW_FREEZE_TIMEOUT_DURATION = 2000;
 
-    /** Amount of time (in milliseconds) to delay before declaring a seamless rotation timeout. */
-    static final int SEAMLESS_ROTATION_TIMEOUT_DURATION = 2000;
-
     /** Amount of time (in milliseconds) to delay before declaring a window replacement timeout. */
     static final int WINDOW_REPLACEMENT_TIMEOUT_DURATION = 2000;
 
@@ -441,11 +435,6 @@ public class WindowManagerService extends IWindowManager.Stub
     public static boolean sEnableRemoteKeyguardAnimation =
             SystemProperties.getBoolean(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, false);
 
-    private static final String DISABLE_TRIPLE_BUFFERING_PROPERTY =
-            "ro.sf.disable_triple_buffer";
-
-    static boolean sEnableTripleBuffering = !SystemProperties.getBoolean(
-            DISABLE_TRIPLE_BUFFERING_PROPERTY, false);
 
     /**
      * Allows a fullscreen windowing mode activity to launch in its desired orientation directly
@@ -533,14 +522,6 @@ public class WindowManagerService extends IWindowManager.Stub
         @Override
         public void dumpCritical(FileDescriptor fd, PrintWriter pw, String[] args,
                 boolean asProto) {
-            // Bugreport dumps the trace 2x, 1x as proto and 1x as text. Save file to disk only 1x.
-            if (asProto && mWindowTracing.isEnabled()) {
-                mWindowTracing.stopTrace(null, false /* writeToFile */);
-                BackgroundThread.getHandler().post(() -> {
-                    mWindowTracing.writeTraceToFile();
-                    mWindowTracing.startTrace(null);
-                });
-            }
             doDump(fd, pw, new String[] {"-a"}, asProto);
         }
 
@@ -1618,11 +1599,17 @@ public class WindowManagerService extends IWindowManager.Stub
                     ProtoLog.w(WM_ERROR, "Attempted to add window with exiting application token "
                             + ".%s Aborting.", token);
                     return WindowManagerGlobal.ADD_APP_EXITING;
-                } else if (type == TYPE_APPLICATION_STARTING && activity.mStartingWindow != null) {
-                    ProtoLog.w(WM_ERROR,
-                            "Attempted to add starting window to token with already existing"
-                                    + " starting window");
-                    return WindowManagerGlobal.ADD_DUPLICATE_ADD;
+                } else if (type == TYPE_APPLICATION_STARTING) {
+                    if (activity.mStartingWindow != null) {
+                        ProtoLog.w(WM_ERROR, "Attempted to add starting window to "
+                                + "token with already existing starting window");
+                        return WindowManagerGlobal.ADD_DUPLICATE_ADD;
+                    }
+                    if (activity.mStartingData == null) {
+                        ProtoLog.w(WM_ERROR, "Attempted to add starting window to "
+                                + "token but already cleaned");
+                        return WindowManagerGlobal.ADD_DUPLICATE_ADD;
+                    }
                 }
             } else if (rootType == TYPE_INPUT_METHOD) {
                 if (token.windowType != TYPE_INPUT_METHOD) {
@@ -1758,9 +1745,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (mUseBLAST) {
                 res |= WindowManagerGlobal.ADD_FLAG_USE_BLAST;
-            }
-            if (sEnableTripleBuffering) {
-                res |= WindowManagerGlobal.ADD_FLAG_USE_TRIPLE_BUFFERING;
             }
 
             if (displayContent.mCurrentFocus == null) {
@@ -2248,20 +2232,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
             win.setFrameNumber(frameNumber);
 
-            final DisplayContent dc = win.getDisplayContent();
-            if (!dc.mWaitingForConfig) {
-                win.finishSeamlessRotation(false /* timeout */);
-            }
-
-            if (win.mPendingPositionChanged != null) {
-                win.mPendingPositionChanged.updateLeashPosition(frameNumber);
-                win.mPendingPositionChanged = null;
-            }
-
-            if (mUseBLASTSync && win.useBLASTSync() && viewVisibility != View.GONE) {
-                result |= RELAYOUT_RES_BLAST_SYNC;
-            }
-
             int attrChanges = 0;
             int flagChanges = 0;
             int privateFlagChanges = 0;
@@ -2534,6 +2504,12 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             win.mInRelayout = false;
 
+            if (mUseBLASTSync && win.useBLASTSync() && viewVisibility != View.GONE) {
+                win.prepareDrawHandlers();
+                win.markRedrawForSyncReported();
+                result |= RELAYOUT_RES_BLAST_SYNC;
+            }
+
             if (configChanged) {
                 Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER,
                         "relayoutWindow: postNewConfigurationToHandler");
@@ -2729,7 +2705,7 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     /**
-     * Registers a listener for a {@link android.app.WindowContext} to subscribe to configuration
+     * Registers a listener for a {@link android.window.WindowContext} to subscribe to configuration
      * changes of a {@link DisplayArea}.
      *
      * @param clientToken the window context's token
@@ -3003,8 +2979,8 @@ public class WindowManagerService extends IWindowManager.Stub
     }
 
     @Override
-    public void screenTurningOff(ScreenOffListener listener) {
-        mTaskSnapshotController.screenTurningOff(listener);
+    public void screenTurningOff(int displayId, ScreenOffListener listener) {
+        mTaskSnapshotController.screenTurningOff(displayId, listener);
     }
 
     @Override
@@ -4178,12 +4154,19 @@ public class WindowManagerService extends IWindowManager.Stub
                                 .notifyOnActivityRotation(displayContent.mDisplayId);
                     }
 
-                    if (!rotationChanged || forceRelayout) {
-                        displayContent.setLayoutNeeded();
-                        layoutNeeded = true;
-                    }
-                    if (rotationChanged || alwaysSendConfiguration) {
-                        displayContent.sendNewConfiguration();
+                    final boolean pendingRemoteRotation = rotationChanged
+                            && (displayContent.getDisplayRotation().isWaitingForRemoteRotation()
+                            || mAtmService.getTransitionController().isCollecting());
+                    // Even if alwaysSend, we are waiting for a transition or remote to provide
+                    // rotated configuration, so we can't update configuration yet.
+                    if (!pendingRemoteRotation) {
+                        if (!rotationChanged || forceRelayout) {
+                            displayContent.setLayoutNeeded();
+                            layoutNeeded = true;
+                        }
+                        if (rotationChanged || alwaysSendConfiguration) {
+                            displayContent.sendNewConfiguration();
+                        }
                     }
                 }
 
@@ -5115,7 +5098,6 @@ public class WindowManagerService extends IWindowManager.Stub
 
         public static final int UPDATE_ANIMATION_SCALE = 51;
         public static final int WINDOW_HIDE_TIMEOUT = 52;
-        public static final int SEAMLESS_ROTATION_TIMEOUT = 54;
         public static final int RESTORE_POINTER_ICON = 55;
         public static final int SET_HAS_OVERLAY_UI = 58;
         public static final int ANIMATION_FAILSAFE = 60;
@@ -5395,13 +5377,6 @@ public class WindowManagerService extends IWindowManager.Stub
                 case RESTORE_POINTER_ICON: {
                     synchronized (mGlobalLock) {
                         restorePointerIconLocked((DisplayContent)msg.obj, msg.arg1, msg.arg2);
-                    }
-                    break;
-                }
-                case SEAMLESS_ROTATION_TIMEOUT: {
-                    final DisplayContent displayContent = (DisplayContent) msg.obj;
-                    synchronized (mGlobalLock) {
-                        displayContent.getDisplayRotation().onSeamlessRotationTimeout();
                     }
                     break;
                 }
@@ -5720,6 +5695,11 @@ public class WindowManagerService extends IWindowManager.Stub
     public void unregisterCrossWindowBlurEnabledListener(
                 ICrossWindowBlurEnabledListener listener) {
         mBlurController.unregisterCrossWindowBlurEnabledListener(listener);
+    }
+
+    @Override
+    public void setForceCrossWindowBlurDisabled(boolean disable) {
+        mBlurController.setForceCrossWindowBlurDisabled(disable);
     }
 
     // -------------------------------------------------------------
@@ -7193,10 +7173,10 @@ public class WindowManagerService extends IWindowManager.Stub
      * @param displayId the display for the request
      * @param behindClient token for a window, used to filter the search to windows behind it
      * @param taskId specifies the id of a task the result must belong to or -1 to match any task
-     * @param callbacks to receive responses
+     * @param listener to receive the response
      */
     public void requestScrollCapture(int displayId, @Nullable IBinder behindClient, int taskId,
-            IScrollCaptureCallbacks callbacks) {
+            IScrollCaptureResponseListener listener) {
         if (!checkCallingPermission(READ_FRAME_BUFFER, "requestScrollCapture()")) {
             throw new SecurityException("Requires READ_FRAME_BUFFER permission");
         }
@@ -7209,7 +7189,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     ProtoLog.e(WM_ERROR,
                             "Invalid displayId for requestScrollCapture: %d", displayId);
                     responseBuilder.setDescription(String.format("bad displayId: %d", displayId));
-                    callbacks.onScrollCaptureResponse(responseBuilder.build());
+                    listener.onScrollCaptureResponse(responseBuilder.build());
                     return;
                 }
                 WindowState topWindow = null;
@@ -7219,19 +7199,19 @@ public class WindowManagerService extends IWindowManager.Stub
                 WindowState targetWindow = dc.findScrollCaptureTargetWindow(topWindow, taskId);
                 if (targetWindow == null) {
                     responseBuilder.setDescription("findScrollCaptureTargetWindow returned null");
-                    callbacks.onScrollCaptureResponse(responseBuilder.build());
+                    listener.onScrollCaptureResponse(responseBuilder.build());
                     return;
                 }
                 try {
                     // Forward to the window for handling, which will respond using the callback.
-                    targetWindow.mClient.requestScrollCapture(callbacks);
+                    targetWindow.mClient.requestScrollCapture(listener);
                 } catch (RemoteException e) {
                     ProtoLog.w(WM_ERROR,
                             "requestScrollCapture: caught exception dispatching to window."
                                     + "token=%s", targetWindow.mClient.asBinder());
                     responseBuilder.setWindowTitle(targetWindow.getName());
                     responseBuilder.setDescription(String.format("caught exception: %s", e));
-                    callbacks.onScrollCaptureResponse(responseBuilder.build());
+                    listener.onScrollCaptureResponse(responseBuilder.build());
                 }
             }
         } catch (RemoteException e) {
@@ -7766,8 +7746,7 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         @Override
-        public void updateInputMethodWindowStatus(@NonNull IBinder imeToken,
-                boolean imeWindowVisible, boolean dismissImeOnBackKeyPressed) {
+        public void setDismissImeOnBackKeyPressed(boolean dismissImeOnBackKeyPressed) {
             mPolicy.setDismissImeOnBackKeyPressed(dismissImeOnBackKeyPressed);
         }
 
@@ -8684,14 +8663,16 @@ public class WindowManagerService extends IWindowManager.Stub
             final WindowState win = windowForClientLocked(session, window, false);
             if (win == null) {
                 Slog.w(TAG, "Failed to generate DisplayHash. Invalid window");
-                sendDisplayHashError(callback, DISPLAY_HASH_ERROR_MISSING_WINDOW);
+                mDisplayHashController.sendDisplayHashError(callback,
+                        DISPLAY_HASH_ERROR_MISSING_WINDOW);
                 return;
             }
 
             DisplayContent displayContent = win.getDisplayContent();
             if (displayContent == null) {
                 Slog.w(TAG, "Failed to generate DisplayHash. Window is not on a display");
-                sendDisplayHashError(callback, DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN);
+                mDisplayHashController.sendDisplayHashError(callback,
+                        DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN);
                 return;
             }
 
@@ -8701,7 +8682,8 @@ public class WindowManagerService extends IWindowManager.Stub
 
             if (boundsInDisplay.isEmpty()) {
                 Slog.w(TAG, "Failed to generate DisplayHash. Bounds are not on screen");
-                sendDisplayHashError(callback, DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN);
+                mDisplayHashController.sendDisplayHashError(callback,
+                        DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN);
                 return;
             }
         }
@@ -8711,23 +8693,13 @@ public class WindowManagerService extends IWindowManager.Stub
         // be covering it with the same uid. We want to make sure we include content that's
         // covering to ensure we get as close as possible to what the user sees
         final int uid = session.mUid;
-        SurfaceControl.LayerCaptureArgs args =
+        SurfaceControl.LayerCaptureArgs.Builder args =
                 new SurfaceControl.LayerCaptureArgs.Builder(displaySurfaceControl)
                         .setUid(uid)
-                        .setSourceCrop(boundsInDisplay)
-                        .build();
+                        .setSourceCrop(boundsInDisplay);
 
-        SurfaceControl.ScreenshotHardwareBuffer screenshotHardwareBuffer =
-                SurfaceControl.captureLayers(args);
-        if (screenshotHardwareBuffer == null
-                || screenshotHardwareBuffer.getHardwareBuffer() == null) {
-            Slog.w(TAG, "Failed to generate DisplayHash. Couldn't capture content");
-            sendDisplayHashError(callback, DISPLAY_HASH_ERROR_UNKNOWN);
-            return;
-        }
-
-        mDisplayHashController.generateDisplayHash(screenshotHardwareBuffer.getHardwareBuffer(),
-                boundsInWindow, hashAlgorithm, callback);
+        mDisplayHashController.generateDisplayHash(args, boundsInWindow,
+                hashAlgorithm, callback);
     }
 
     boolean shouldRestoreImeVisibility(IBinder imeTargetWindowToken) {
@@ -8744,11 +8716,5 @@ public class WindowManagerService extends IWindowManager.Stub
                     false /* isLowResolution */);
             return snapshot != null && snapshot.hasImeSurface();
         }
-    }
-
-    private void sendDisplayHashError(RemoteCallback callback, int errorCode) {
-        Bundle bundle = new Bundle();
-        bundle.putInt(EXTRA_DISPLAY_HASH_ERROR_CODE, errorCode);
-        callback.sendResult(bundle);
     }
 }

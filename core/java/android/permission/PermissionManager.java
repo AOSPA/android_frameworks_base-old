@@ -26,6 +26,7 @@ import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.annotation.TestApi;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityThread;
@@ -41,6 +42,7 @@ import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.permission.SplitPermissionInfoParcelable;
+import android.location.LocationManager;
 import android.media.AudioManager;
 import android.os.Build;
 import android.os.Handler;
@@ -50,12 +52,14 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.provider.DeviceConfig;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.DebugUtils;
 import android.util.Log;
 import android.util.Slog;
 
+import com.android.internal.R;
 import com.android.internal.annotations.Immutable;
 import com.android.internal.util.CollectionUtils;
 
@@ -76,11 +80,16 @@ public final class PermissionManager {
     private static final String LOG_TAG = PermissionManager.class.getName();
 
     /** @hide */
+    public static final String LOG_TAG_TRACE_GRANTS = "PermissionGrantTrace";
+
+    /** @hide */
     public static final String KILL_APP_REASON_PERMISSIONS_REVOKED =
             "permissions revoked";
     /** @hide */
     public static final String KILL_APP_REASON_GIDS_CHANGED =
             "permission grant or revoke changed gids";
+
+    private static final String SYSTEM_PKG = "android";
 
     /**
      * Refuse to install package if groups of permissions are bad
@@ -96,6 +105,8 @@ public final class PermissionManager {
     /**
      * Note: Changing this won't do anything on its own - you should also change the filtering in
      * {@link #shouldTraceGrant}.
+     *
+     * See log output for tag {@link #LOG_TAG_TRACE_GRANTS}
      *
      * @hide
      */
@@ -313,8 +324,10 @@ public final class PermissionManager {
     }
 
     /** @hide */
-    public static boolean shouldTraceGrant(String packageName, String permissionName, int userId) {
+    public static boolean shouldTraceGrant(
+            @NonNull String packageName, @NonNull String permissionName, int userId) {
         // To be modified when debugging
+        // template: if ("".equals(packageName) && "".equals(permissionName)) return true;
         return false;
     }
 
@@ -342,7 +355,8 @@ public final class PermissionManager {
             @NonNull String permissionName, @NonNull UserHandle user) {
         if (DEBUG_TRACE_GRANTS
                 && shouldTraceGrant(packageName, permissionName, user.getIdentifier())) {
-            Log.i(LOG_TAG, "App " + mContext.getPackageName() + " is granting " + packageName + " "
+            Log.i(LOG_TAG_TRACE_GRANTS, "App " + mContext.getPackageName() + " is granting "
+                    + packageName + " "
                     + permissionName + " for user " + user.getIdentifier(), new RuntimeException());
         }
         try {
@@ -846,6 +860,7 @@ public final class PermissionManager {
      *
      * @hide
      */
+    @TestApi
     @NonNull
     @RequiresPermission(Manifest.permission.GET_APP_OPS_STATS)
     public List<PermGroupUsage> getIndicatorAppOpUsageData() {
@@ -856,6 +871,23 @@ public final class PermissionManager {
         return mUsageHelper.getOpUsageData(new AudioManager().isMicrophoneMute());
     }
 
+    /**
+     * Check if this package/op combination is exempted from indicators
+     * @return
+     * @hide
+     */
+    public static boolean isSpecialCaseShownIndicator(@NonNull Context context,
+            @NonNull String packageName) {
+
+        if (packageName.equals(SYSTEM_PKG)) {
+            return false;
+        }
+
+        return DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PRIVACY, "permissions_hub_2_enabled",
+                false)
+                || packageName.equals(context.getString(R.string.config_systemSpeechRecognizer))
+                || context.getSystemService(LocationManager.class).isProviderPackage(packageName);
+    }
     /**
      * Gets the list of packages that have permissions that specified
      * {@code requestDontAutoRevokePermissions=true} in their

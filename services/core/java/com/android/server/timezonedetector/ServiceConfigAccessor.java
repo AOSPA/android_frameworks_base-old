@@ -18,8 +18,8 @@ package com.android.server.timezonedetector;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.content.res.Resources;
-import android.net.ConnectivityManager;
 import android.os.SystemProperties;
 import android.util.ArraySet;
 
@@ -115,13 +115,16 @@ public final class ServiceConfigAccessor {
 
     /** Returns {@code true} if any form of automatic time zone detection is supported. */
     public boolean isAutoDetectionFeatureSupported() {
-        return deviceHasTelephonyNetwork() || isGeoTimeZoneDetectionFeatureSupported();
+        return isTelephonyTimeZoneDetectionFeatureSupported()
+                || isGeoTimeZoneDetectionFeatureSupported();
     }
 
-    private boolean deviceHasTelephonyNetwork() {
-        // TODO b/150583524 Avoid the use of a deprecated API.
-        return mContext.getSystemService(ConnectivityManager.class)
-                .isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
+    /**
+     * Returns {@code true} if the telephony-based time zone detection feature is supported on the
+     * device.
+     */
+    public boolean isTelephonyTimeZoneDetectionFeatureSupported() {
+        return mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_TELEPHONY);
     }
 
     /**

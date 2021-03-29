@@ -32,6 +32,7 @@ import android.util.Log
 import android.view.HapticFeedbackConstants
 import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.broadcast.BroadcastDispatcher
+import com.android.systemui.controls.ControlsMetricsLogger
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.globalactions.GlobalActionsComponent
@@ -53,14 +54,16 @@ class ControlActionCoordinatorImpl @Inject constructor(
     private val globalActionsComponent: GlobalActionsComponent,
     private val taskViewFactory: Optional<TaskViewFactory>,
     private val broadcastDispatcher: BroadcastDispatcher,
-    private val lazyUiController: Lazy<ControlsUiController>
+    private val lazyUiController: Lazy<ControlsUiController>,
+    private val controlsMetricsLogger: ControlsMetricsLogger
 ) : ControlActionCoordinator {
     private var dialog: Dialog? = null
     private val vibrator = context.getSystemService(Context.VIBRATOR_SERVICE) as Vibrator
     private var pendingAction: Action? = null
     private var actionsInProgress = mutableSetOf<String>()
-
-    override var startedFromGlobalActions: Boolean = true
+    private val isLocked: Boolean
+        get() = !keyguardStateController.isUnlocked()
+    override var activityContext: Context? = null
 
     companion object {
         private const val RESPONSE_TIMEOUT_IN_MILLIS = 3000L
@@ -72,6 +75,7 @@ class ControlActionCoordinatorImpl @Inject constructor(
     }
 
     override fun toggle(cvh: ControlViewHolder, templateId: String, isChecked: Boolean) {
+        controlsMetricsLogger.touch(cvh, isLocked)
         bouncerOrRun(createAction(cvh.cws.ci.controlId, {
             cvh.layout.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             cvh.action(BooleanAction(templateId, !isChecked))
@@ -79,11 +83,12 @@ class ControlActionCoordinatorImpl @Inject constructor(
     }
 
     override fun touch(cvh: ControlViewHolder, templateId: String, control: Control) {
+        controlsMetricsLogger.touch(cvh, isLocked)
         val blockable = cvh.usePanel()
         bouncerOrRun(createAction(cvh.cws.ci.controlId, {
             cvh.layout.performHapticFeedback(HapticFeedbackConstants.CONTEXT_CLICK)
             if (cvh.usePanel()) {
-                showDialog(cvh, control.getAppIntent().getIntent())
+                showDetail(cvh, control.getAppIntent().getIntent())
             } else {
                 cvh.action(CommandAction(templateId))
             }
@@ -99,23 +104,25 @@ class ControlActionCoordinatorImpl @Inject constructor(
     }
 
     override fun setValue(cvh: ControlViewHolder, templateId: String, newValue: Float) {
+        controlsMetricsLogger.drag(cvh, isLocked)
         bouncerOrRun(createAction(cvh.cws.ci.controlId, {
             cvh.action(FloatAction(templateId, newValue))
         }, false /* blockable */))
     }
 
     override fun longPress(cvh: ControlViewHolder) {
+        controlsMetricsLogger.longPress(cvh, isLocked)
         bouncerOrRun(createAction(cvh.cws.ci.controlId, {
             // Long press snould only be called when there is valid control state, otherwise ignore
             cvh.cws.control?.let {
                 cvh.layout.performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
-                showDialog(cvh, it.getAppIntent().getIntent())
+                showDetail(cvh, it.getAppIntent().getIntent())
             }
         }, false /* blockable */))
     }
 
     override fun runPendingAction(controlId: String) {
-        if (!keyguardStateController.isUnlocked()) return
+        if (isLocked) return
         if (pendingAction?.controlId == controlId) {
             pendingAction?.invoke()
             pendingAction = null
@@ -140,22 +147,17 @@ class ControlActionCoordinatorImpl @Inject constructor(
     @VisibleForTesting
     fun bouncerOrRun(action: Action) {
         if (keyguardStateController.isShowing()) {
-            var closeDialog = !keyguardStateController.isUnlocked()
-            if (closeDialog) {
+            if (isLocked) {
                 context.sendBroadcast(Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS))
 
                 // pending actions will only run after the control state has been refreshed
                 pendingAction = action
             }
-
+            val wasLocked = isLocked
             activityStarter.dismissKeyguardThenExecute({
                 Log.d(ControlsUiController.TAG, "Device unlocked, invoking controls action")
-                if (closeDialog) {
-                    if (startedFromGlobalActions) {
-                        globalActionsComponent.handleShowGlobalActionsMenu()
-                    } else {
-                        ControlsDialog(context, broadcastDispatcher).show(lazyUiController.get())
-                    }
+                if (wasLocked && activityContext == null) {
+                    globalActionsComponent.handleShowGlobalActionsMenu()
                 } else {
                     action.invoke()
                 }
@@ -170,9 +172,9 @@ class ControlActionCoordinatorImpl @Inject constructor(
         bgExecutor.execute { vibrator.vibrate(effect) }
     }
 
-    private fun showDialog(cvh: ControlViewHolder, intent: Intent) {
+    private fun showDetail(cvh: ControlViewHolder, intent: Intent) {
         bgExecutor.execute {
-            val activities: List<ResolveInfo> = cvh.context.packageManager.queryIntentActivities(
+            val activities: List<ResolveInfo> = context.packageManager.queryIntentActivities(
                 intent,
                 PackageManager.MATCH_DEFAULT_ONLY
             )
@@ -180,8 +182,8 @@ class ControlActionCoordinatorImpl @Inject constructor(
             uiExecutor.execute {
                 // make sure the intent is valid before attempting to open the dialog
                 if (activities.isNotEmpty() && taskViewFactory.isPresent) {
-                    taskViewFactory.get().create(cvh.context, uiExecutor, {
-                        dialog = DetailDialog(cvh, it, intent).also {
+                    taskViewFactory.get().create(context, uiExecutor, {
+                        dialog = DetailDialog(activityContext, it, intent, cvh).also {
                             it.setOnDismissListener { _ -> dialog = null }
                             it.show()
                         }

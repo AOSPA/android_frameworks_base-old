@@ -28,6 +28,7 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
 import android.content.Context;
+import android.hardware.SensorPrivacyManager;
 import android.os.Binder;
 import android.os.CancellationSignal;
 import android.os.ResultReceiver;
@@ -35,6 +36,7 @@ import android.os.ShellCallback;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
 import android.rotationresolver.RotationResolverInternal;
+import android.service.rotationresolver.RotationResolutionRequest;
 import android.text.TextUtils;
 import android.util.IndentingPrintWriter;
 import android.util.Slog;
@@ -78,6 +80,7 @@ public class RotationResolverManagerService extends
             FrameworkStatsLog.AUTO_ROTATE_REPORTED__PROPOSED_ORIENTATION__FAILURE;
 
     private final Context mContext;
+    private final SensorPrivacyManager mPrivacyManager;
     boolean mIsServiceEnabled;
 
     public RotationResolverManagerService(Context context) {
@@ -88,6 +91,7 @@ public class RotationResolverManagerService extends
                 PACKAGE_UPDATE_POLICY_REFRESH_EAGER
                         | /*To avoid high rotation latency*/ PACKAGE_RESTART_POLICY_REFRESH_EAGER);
         mContext = context;
+        mPrivacyManager = SensorPrivacyManager.getInstance(context);
     }
 
     @Override
@@ -155,14 +159,22 @@ public class RotationResolverManagerService extends
             Objects.requireNonNull(callbackInternal);
             Objects.requireNonNull(cancellationSignalInternal);
             synchronized (mLock) {
-                if (mIsServiceEnabled) {
-                    final RotationResolverManagerPerUserService service = getServiceForUserLocked(
-                            UserHandle.getCallingUserId());
-                    service.resolveRotationLocked(callbackInternal, proposedRotation,
-                            currentRotation, /* packageName */ "", timeout,
+                final boolean isCameraAvailable = !mPrivacyManager.isSensorPrivacyEnabled(
+                        SensorPrivacyManager.Sensors.CAMERA);
+                if (mIsServiceEnabled && isCameraAvailable) {
+                    final RotationResolverManagerPerUserService service =
+                            getServiceForUserLocked(
+                                    UserHandle.getCallingUserId());
+                    final RotationResolutionRequest request = new RotationResolutionRequest("",
+                            currentRotation, proposedRotation, true, timeout);
+                    service.resolveRotationLocked(callbackInternal, request,
                             cancellationSignalInternal);
                 } else {
-                    Slog.w(TAG, "Rotation Resolver service is disabled.");
+                    if (isCameraAvailable) {
+                        Slog.w(TAG, "Rotation Resolver service is disabled.");
+                    } else {
+                        Slog.w(TAG, "Camera is locked by a toggle.");
+                    }
                     callbackInternal.onFailure(ROTATION_RESULT_FAILURE_CANCELLED);
                     logRotationStats(proposedRotation, currentRotation, RESOLUTION_DISABLED);
                 }

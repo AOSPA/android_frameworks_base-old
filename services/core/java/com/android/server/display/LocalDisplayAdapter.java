@@ -704,7 +704,10 @@ final class LocalDisplayAdapter extends DisplayAdapter {
                                     || oldState == Display.STATE_ON_SUSPEND) {
                                 setDisplayState(Display.STATE_ON);
                                 currentState = Display.STATE_ON;
-                            } else {
+
+                            // If UNKNOWN, we still want to set the initial display state,
+                            // otherwise, return early.
+                            } else if (oldState != Display.STATE_UNKNOWN) {
                                 return; // old state and new state is off
                             }
                         }
@@ -872,14 +875,6 @@ final class LocalDisplayAdapter extends DisplayAdapter {
             // Do not lock when calling these SurfaceControl methods because they are sync
             // operations that may block for a while when setting display power mode.
             mSurfaceControlProxy.setDesiredDisplayModeSpecs(displayToken, modeSpecs);
-
-            final int sfActiveModeId = mSurfaceControlProxy
-                    .getDynamicDisplayInfo(displayToken).activeDisplayModeId;
-            synchronized (getSyncRoot()) {
-                if (updateActiveModeLocked(sfActiveModeId)) {
-                    updateDeviceInfoLocked();
-                }
-            }
         }
 
         @Override

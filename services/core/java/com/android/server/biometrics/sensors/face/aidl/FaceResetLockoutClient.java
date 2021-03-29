@@ -62,6 +62,7 @@ public class FaceResetLockoutClient extends HalClientMonitor<ISession> {
         // Nothing to do here
     }
 
+    @Override
     public void start(@NonNull Callback callback) {
         super.start(callback);
         startHalOperation();
@@ -70,7 +71,7 @@ public class FaceResetLockoutClient extends HalClientMonitor<ISession> {
     @Override
     protected void startHalOperation() {
         try {
-            getFreshDaemon().resetLockout(mSequentialId, mHardwareAuthToken);
+            getFreshDaemon().resetLockout(mHardwareAuthToken);
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to reset lockout", e);
             mCallback.onClientFinished(this, false /* success */);

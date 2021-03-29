@@ -60,6 +60,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ToBooleanFunction;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.internal.util.function.pooled.PooledPredicate;
+import com.android.server.wm.LaunchParamsController.LaunchParams;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
@@ -402,7 +403,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         final boolean moveToBottom = position <= 0;
 
         final int oldPosition = mChildren.indexOf(child);
-        if (child.getWindowConfiguration().isAlwaysOnTop() && !moveToTop) {
+        if (child.isAlwaysOnTop() && !moveToTop) {
             // This root task is always-on-top, override the default behavior.
             Slog.w(TAG_WM, "Ignoring move of always-on-top root task=" + this + " to bottom");
 
@@ -971,6 +972,22 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
     }
 
+    @Override
+    void migrateToNewSurfaceControl(SurfaceControl.Transaction t) {
+        super.migrateToNewSurfaceControl(t);
+        if (mAppAnimationLayer == null) {
+            return;
+        }
+
+        // As TaskDisplayArea is getting a new surface, reparent and reorder the child surfaces.
+        t.reparent(mAppAnimationLayer, mSurfaceControl);
+        t.reparent(mBoostedAppAnimationLayer, mSurfaceControl);
+        t.reparent(mHomeAppAnimationLayer, mSurfaceControl);
+        t.reparent(mSplitScreenDividerAnchor, mSurfaceControl);
+        reassignLayer(t);
+        scheduleAnimation();
+    }
+
     void onRootTaskRemoved(Task rootTask) {
         if (ActivityTaskManagerDebugConfig.DEBUG_ROOT_TASK) {
             Slog.v(TAG_ROOT_TASK, "onRootTaskRemoved: detaching " + rootTask + " from displayId="
@@ -981,14 +998,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
         mDisplayContent.releaseSelfIfNeeded();
         onRootTaskOrderChanged(rootTask);
-    }
-
-    /** Reset the mPreferredTopFocusableRootTask if it is or below the given task. */
-    void resetPreferredTopFocusableRootTaskIfNeeded(Task task) {
-        if (mPreferredTopFocusableRootTask != null
-                && mPreferredTopFocusableRootTask.compareTo(task) <= 0) {
-            mPreferredTopFocusableRootTask = null;
-        }
     }
 
     /**
@@ -1089,11 +1098,17 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      * @see #getOrCreateRootTask(int, int, boolean)
      */
     Task getOrCreateRootTask(@Nullable ActivityRecord r,
-            @Nullable ActivityOptions options, @Nullable Task candidateTask, int activityType,
-            boolean onTop) {
-        // First preference is the windowing mode in the activity options if set.
-        int windowingMode = (options != null)
-                ? options.getLaunchWindowingMode() : WINDOWING_MODE_UNDEFINED;
+            @Nullable ActivityOptions options, @Nullable Task candidateTask,
+            @Nullable LaunchParams launchParams, int activityType, boolean onTop) {
+        int windowingMode = WINDOWING_MODE_UNDEFINED;
+        if (launchParams != null) {
+            // If launchParams isn't null, windowing mode is already resolved.
+            windowingMode = launchParams.mWindowingMode;
+        } else if (options != null) {
+            // If launchParams is null and options isn't let's use the windowing mode in the
+            // options.
+            windowingMode = options.getLaunchWindowingMode();
+        }
         // Validate that our desired windowingMode will work under the current conditions.
         // UNDEFINED windowing mode is a valid result and means that the new root task will inherit
         // it's display's windowing mode.

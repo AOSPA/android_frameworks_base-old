@@ -18,6 +18,8 @@ package com.android.wm.shell.flicker.apppairs
 
 import android.os.SystemClock
 import android.platform.test.annotations.Presubmit
+import android.provider.Settings
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -25,6 +27,8 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.appPairsDividerIsInvisible
 import com.android.wm.shell.flicker.helpers.AppPairsHelper
+import org.junit.After
+import org.junit.Before
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -32,11 +36,10 @@ import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
 
 /**
- * Test AppPairs launch.
- * To run this test: `atest WMShellFlickerTests:AppPairsTest`
- */
-/**
- * Test cold launch app from launcher.
+ * Test cold launch app from launcher. When the device doesn't support non-resizable in multi window
+ * {@link Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW}, app pairs should not pair
+ * non-resizable apps.
+ *
  * To run this test: `atest WMShellFlickerTests:AppPairsTestCannotPairNonResizeableApps`
  */
 @RequiresDevice
@@ -46,6 +49,7 @@ import org.junit.runners.Parameterized
 class AppPairsTestCannotPairNonResizeableApps(
     testSpec: FlickerTestParameter
 ) : AppPairsTransition(testSpec) {
+    var prevSupportNonResizableInMultiWindow = 0
 
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
         get() = {
@@ -58,6 +62,32 @@ class AppPairsTestCannotPairNonResizeableApps(
                 SystemClock.sleep(AppPairsHelper.TIMEOUT_MS)
             }
         }
+
+    @Before
+    fun setup() {
+        prevSupportNonResizableInMultiWindow = Settings.Global.getInt(context.contentResolver,
+            Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW)
+        if (prevSupportNonResizableInMultiWindow == 1) {
+            // Not support non-resizable in multi window
+            Settings.Global.putInt(context.contentResolver,
+                    Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 0)
+        }
+    }
+
+    @After
+    fun teardown() {
+        Settings.Global.putInt(context.contentResolver,
+                Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW,
+                prevSupportNonResizableInMultiWindow)
+    }
+
+    @FlakyTest
+    @Test
+    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+
+    @FlakyTest
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
 
     @Presubmit
     @Test

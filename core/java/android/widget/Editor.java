@@ -988,6 +988,12 @@ public class Editor {
 
         if (mTextView.isTextEditable() && mTextView.isSuggestionsEnabled()
                 && !(mTextView.isInExtractedMode())) {
+            final InputMethodManager imm = getInputMethodManager();
+            if (imm != null && imm.isInputMethodSuppressingSpellChecker()) {
+                // Do not close mSpellChecker here as it may be reused when the current IME has been
+                // changed.
+                return;
+            }
             if (mSpellChecker == null && createSpellChecker) {
                 mSpellChecker = new SpellChecker(mTextView);
             }
@@ -2898,9 +2904,6 @@ public class Editor {
         } finally {
             mTextView.endBatchEdit();
             mUndoInputFilter.freezeLastEdit();
-            if (permissions != null) {
-                permissions.release();
-            }
         }
     }
 
@@ -3790,7 +3793,7 @@ public class Editor {
         }
 
         public SuggestionsPopupWindow() {
-            mCursorWasVisibleBeforeSuggestions = mCursorVisible;
+            mCursorWasVisibleBeforeSuggestions = mTextView.isCursorVisibleFromAttr();
         }
 
         @Override
@@ -3957,7 +3960,7 @@ public class Editor {
             }
 
             if (updateSuggestions()) {
-                mCursorWasVisibleBeforeSuggestions = mCursorVisible;
+                mCursorWasVisibleBeforeSuggestions = mTextView.isCursorVisibleFromAttr();
                 mTextView.setCursorVisible(false);
                 mIsShowingUp = true;
                 super.show();

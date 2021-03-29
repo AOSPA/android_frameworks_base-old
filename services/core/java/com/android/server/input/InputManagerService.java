@@ -76,6 +76,8 @@ import android.os.ShellCallback;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.VibrationEffect;
+import android.os.vibrator.StepSegment;
+import android.os.vibrator.VibrationEffectSegment;
 import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.provider.Settings.SettingNotFoundException;
@@ -304,7 +306,7 @@ public class InputManagerService extends IInputManager.Stub
             int displayId, InputApplicationHandle application);
     private static native void nativeSetFocusedDisplay(long ptr, int displayId);
     private static native boolean nativeTransferTouchFocus(long ptr,
-            IBinder fromChannelToken, IBinder toChannelToken);
+            IBinder fromChannelToken, IBinder toChannelToken, boolean isDragDrop);
     private static native void nativeSetPointerSpeed(long ptr, int speed);
     private static native void nativeSetShowTouches(long ptr, boolean enabled);
     private static native void nativeSetInteractive(long ptr, boolean interactive);
@@ -586,18 +588,13 @@ public class InputManagerService extends IInputManager.Stub
     private void setDisplayViewportsInternal(List<DisplayViewport> viewports) {
         final DisplayViewport[] vArray = new DisplayViewport[viewports.size()];
         if (ENABLE_PER_WINDOW_INPUT_ROTATION) {
-            // Remove all viewport operations. They will be built-into the window transforms.
+            // Remove display projection information from DisplayViewport, leaving only the
+            // orientation. The display projection will be built-into the window transforms.
             for (int i = viewports.size() - 1; i >= 0; --i) {
                 final DisplayViewport v = vArray[i] = viewports.get(i).makeCopy();
-                // deviceWidth/Height are apparently in "rotated" space, so flip them if needed.
-                if (v.orientation % 2 != 0) {
-                    final int dw = v.deviceWidth;
-                    v.deviceWidth = v.deviceHeight;
-                    v.deviceHeight = dw;
-                }
+                // Note: the deviceWidth/Height are in rotated with the orientation.
                 v.logicalFrame.set(0, 0, v.deviceWidth, v.deviceHeight);
                 v.physicalFrame.set(0, 0, v.deviceWidth, v.deviceHeight);
-                v.orientation = 0;
             }
         } else {
             for (int i = viewports.size() - 1; i >= 0; --i) {
@@ -1732,12 +1729,14 @@ public class InputManagerService extends IInputManager.Stub
      * @param fromChannel The channel of a window that currently has touch focus.
      * @param toChannel The channel of the window that should receive touch focus in
      * place of the first.
+     * @param isDragDrop True if transfer touch focus for drag and drop.
      * @return True if the transfer was successful.  False if the window with the
      * specified channel did not actually have touch focus at the time of the request.
      */
     public boolean transferTouchFocus(@NonNull InputChannel fromChannel,
-            @NonNull InputChannel toChannel) {
-        return nativeTransferTouchFocus(mPtr, fromChannel.getToken(), toChannel.getToken());
+            @NonNull InputChannel toChannel, boolean isDragDrop) {
+        return nativeTransferTouchFocus(mPtr, fromChannel.getToken(), toChannel.getToken(),
+                isDragDrop);
     }
 
     /**
@@ -1757,7 +1756,8 @@ public class InputManagerService extends IInputManager.Stub
             @NonNull IBinder toChannelToken) {
         Objects.nonNull(fromChannelToken);
         Objects.nonNull(toChannelToken);
-        return nativeTransferTouchFocus(mPtr, fromChannelToken, toChannelToken);
+        return nativeTransferTouchFocus(mPtr, fromChannelToken, toChannelToken,
+                false /* isDragDrop */);
     }
 
     @Override // Binder call
@@ -1919,9 +1919,9 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     private static class VibrationInfo {
-        private long[] mPattern = new long[0];
-        private int[] mAmplitudes = new int[0];
-        private int mRepeat = -1;
+        private final long[] mPattern;
+        private final int[] mAmplitudes;
+        private final int mRepeat;
 
         public long[] getPattern() {
             return mPattern;
@@ -1936,40 +1936,55 @@ public class InputManagerService extends IInputManager.Stub
         }
 
         VibrationInfo(VibrationEffect effect) {
-            // First replace prebaked effects with its fallback, if any available.
-            if (effect instanceof VibrationEffect.Prebaked) {
-                VibrationEffect fallback = ((VibrationEffect.Prebaked) effect).getFallbackEffect();
-                if (fallback != null) {
-                    effect = fallback;
+            long[] pattern = null;
+            int[] amplitudes = null;
+            int patternRepeatIndex = -1;
+            int amplitudeCount = -1;
+
+            if (effect instanceof VibrationEffect.Composed) {
+                VibrationEffect.Composed composed = (VibrationEffect.Composed) effect;
+                int segmentCount = composed.getSegments().size();
+                pattern = new long[segmentCount];
+                amplitudes = new int[segmentCount];
+                patternRepeatIndex = composed.getRepeatIndex();
+                amplitudeCount = 0;
+                for (int i = 0; i < segmentCount; i++) {
+                    VibrationEffectSegment segment = composed.getSegments().get(i);
+                    if (composed.getRepeatIndex() == i) {
+                        patternRepeatIndex = amplitudeCount;
+                    }
+                    if (!(segment instanceof StepSegment)) {
+                        Slog.w(TAG, "Input devices don't support segment " + segment);
+                        amplitudeCount = -1;
+                        break;
+                    }
+                    float amplitude = ((StepSegment) segment).getAmplitude();
+                    if (Float.compare(amplitude, VibrationEffect.DEFAULT_AMPLITUDE) == 0) {
+                        amplitudes[amplitudeCount] = DEFAULT_VIBRATION_MAGNITUDE;
+                    } else {
+                        amplitudes[amplitudeCount] =
+                                (int) (amplitude * VibrationEffect.MAX_AMPLITUDE);
+                    }
+                    pattern[amplitudeCount++] = segment.getDuration();
                 }
             }
-            if (effect instanceof VibrationEffect.OneShot) {
-                VibrationEffect.OneShot oneShot = (VibrationEffect.OneShot) effect;
-                mPattern = new long[] { 0, oneShot.getDuration() };
-                int amplitude = oneShot.getAmplitude();
-                // android framework uses DEFAULT_AMPLITUDE to signal that the vibration
-                // should use some built-in default value, denoted here as
-                // DEFAULT_VIBRATION_MAGNITUDE
-                if (amplitude == VibrationEffect.DEFAULT_AMPLITUDE) {
-                    amplitude = DEFAULT_VIBRATION_MAGNITUDE;
-                }
-                mAmplitudes = new int[] { 0, amplitude };
+
+            if (amplitudeCount < 0) {
+                Slog.w(TAG, "Only oneshot and step waveforms are supported on input devices");
+                mPattern = new long[0];
+                mAmplitudes = new int[0];
                 mRepeat = -1;
-            } else if (effect instanceof VibrationEffect.Waveform) {
-                VibrationEffect.Waveform waveform = (VibrationEffect.Waveform) effect;
-                mPattern = waveform.getTimings();
-                mAmplitudes = waveform.getAmplitudes();
-                for (int i = 0; i < mAmplitudes.length; i++) {
-                    if (mAmplitudes[i] == VibrationEffect.DEFAULT_AMPLITUDE) {
-                        mAmplitudes[i] = DEFAULT_VIBRATION_MAGNITUDE;
-                    }
-                }
-                mRepeat = waveform.getRepeatIndex();
-                if (mRepeat >= mPattern.length) {
-                    throw new ArrayIndexOutOfBoundsException();
-                }
             } else {
-                Slog.w(TAG, "Pre-baked and composed effects aren't supported on input devices");
+                mRepeat = patternRepeatIndex;
+                mPattern = new long[amplitudeCount];
+                mAmplitudes = new int[amplitudeCount];
+                System.arraycopy(pattern, 0, mPattern, 0, amplitudeCount);
+                System.arraycopy(amplitudes, 0, mAmplitudes, 0, amplitudeCount);
+                if (mRepeat >= mPattern.length) {
+                    throw new ArrayIndexOutOfBoundsException("Repeat index " + mRepeat
+                            + " must be within the bounds of the pattern.length "
+                            + mPattern.length);
+                }
             }
         }
     }
@@ -2608,6 +2623,11 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     // Native callback
+    private void notifyDropWindow(IBinder token, float x, float y) {
+        mWindowManagerCallbacks.notifyDropWindow(token, x, y);
+    }
+
+    // Native callback
     private void notifyUntrustedTouch(String packageName) {
         // TODO(b/169067926): Remove toast after gathering feedback on dogfood.
         if (!UNTRUSTED_TOUCHES_TOAST || ArrayUtils.contains(
@@ -3037,6 +3057,11 @@ public class InputManagerService extends IInputManager.Stub
          * Called when the focused window has changed.
          */
         void notifyFocusChanged(IBinder oldToken, IBinder newToken);
+
+        /**
+         * Called when the drag over window has changed.
+         */
+        void notifyDropWindow(IBinder token, float x, float y);
     }
 
     /**

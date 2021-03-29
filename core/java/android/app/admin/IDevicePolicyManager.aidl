@@ -177,6 +177,7 @@ interface IDevicePolicyManager {
 
     String[] setPackagesSuspended(in ComponentName admin, in String callerPackage, in String[] packageNames, boolean suspended);
     boolean isPackageSuspended(in ComponentName admin, in String callerPackage, String packageName);
+    List<String> listPolicyExemptApps();
 
     boolean installCaCert(in ComponentName admin, String callerPackage, in byte[] certBuffer);
     void uninstallCaCerts(in ComponentName admin, String callerPackage, in String[] aliases);
@@ -267,8 +268,8 @@ interface IDevicePolicyManager {
     void setSecondaryLockscreenEnabled(in ComponentName who, boolean enabled);
     boolean isSecondaryLockscreenEnabled(in UserHandle userHandle);
 
-    void setNetworkSlicingEnabled(in boolean enabled);
-    boolean isNetworkSlicingEnabled(int userHandle);
+    void setEnterpriseNetworkPreferenceEnabled(in boolean enabled);
+    boolean isEnterpriseNetworkPreferenceEnabled(int userHandle);
 
     void setLockTaskPackages(in ComponentName who, in String[] packages);
     String[] getLockTaskPackages(in ComponentName who);
@@ -385,10 +386,10 @@ interface IDevicePolicyManager {
     List<String> getAffiliationIds(in ComponentName admin);
     boolean isAffiliatedUser();
 
-    void setSecurityLoggingEnabled(in ComponentName admin, boolean enabled);
-    boolean isSecurityLoggingEnabled(in ComponentName admin);
-    ParceledListSlice retrieveSecurityLogs(in ComponentName admin);
-    ParceledListSlice retrievePreRebootSecurityLogs(in ComponentName admin);
+    void setSecurityLoggingEnabled(in ComponentName admin, String packageName, boolean enabled);
+    boolean isSecurityLoggingEnabled(in ComponentName admin, String packageName);
+    ParceledListSlice retrieveSecurityLogs(in ComponentName admin, String packageName);
+    ParceledListSlice retrievePreRebootSecurityLogs(in ComponentName admin, String packageName);
     long forceNetworkLogs();
     long forceSecurityLogs();
 
@@ -494,6 +495,10 @@ interface IDevicePolicyManager {
 
     long getManagedProfileMaximumTimeOff(in ComponentName admin);
     void setManagedProfileMaximumTimeOff(in ComponentName admin, long timeoutMs);
+
+    void acknowledgeDeviceCompliant();
+    boolean isComplianceAcknowledgementRequired();
+
     boolean canProfileOwnerResetPasswordWhenLocked(int userId);
 
     void setNextOperationSafety(int operation, int reason);

@@ -59,11 +59,12 @@ class FingerprintAuthenticationClient extends AuthenticationClient<ISession> imp
             boolean restricted, @NonNull String owner, int cookie, boolean requireConfirmation,
             int sensorId, boolean isStrongBiometric, int statsClient,
             @Nullable TaskStackListener taskStackListener, @NonNull LockoutCache lockoutCache,
-            @Nullable IUdfpsOverlayController udfpsOverlayController, boolean isKeyguard) {
+            @Nullable IUdfpsOverlayController udfpsOverlayController,
+            boolean allowBackgroundAuthentication) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted, owner,
                 cookie, requireConfirmation, sensorId, isStrongBiometric,
                 BiometricsProtoEnums.MODALITY_FINGERPRINT, statsClient, taskStackListener,
-                lockoutCache, isKeyguard);
+                lockoutCache, allowBackgroundAuthentication);
         mLockoutCache = lockoutCache;
         mUdfpsOverlayController = udfpsOverlayController;
     }
@@ -91,7 +92,7 @@ class FingerprintAuthenticationClient extends AuthenticationClient<ISession> imp
         UdfpsHelper.showUdfpsOverlay(getSensorId(), Utils.getUdfpsAuthReason(this),
                 mUdfpsOverlayController, this);
         try {
-            mCancellationSignal = getFreshDaemon().authenticate(mSequentialId, mOperationId);
+            mCancellationSignal = getFreshDaemon().authenticate(mOperationId);
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception", e);
             onError(BiometricFingerprintConstants.FINGERPRINT_ERROR_HW_UNAVAILABLE,

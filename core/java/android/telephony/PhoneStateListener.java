@@ -20,7 +20,6 @@ import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
-import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Binder;
 import android.os.Build;
@@ -344,11 +343,14 @@ public class PhoneStateListener {
     /**
      *  Listen for display info changed event.
      *
-     *  Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE
-     *  READ_PHONE_STATE} or that the calling app has carrier privileges (see
-     *  {@link TelephonyManager#hasCarrierPrivileges}).
+     * For clients compiled on Android 11 SDK, requires permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE} or that the calling app has carrier
+     * privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
+     * For clients compiled on Android 12 SDK or newer,
+     * {@link android.Manifest.permission#READ_PHONE_STATE} or carrier privileges is not required
+     * anymore.
      *
-     *  @see #onDisplayInfoChanged
+     * @see #onDisplayInfoChanged
      * @deprecated Use {@link TelephonyCallback.DisplayInfoListener} instead.
      */
     @Deprecated
@@ -982,8 +984,12 @@ public class PhoneStateListener {
      * <p> The {@link TelephonyDisplayInfo} contains status information shown to the user based on
      * carrier policy.
      *
-     * Requires Permission: {@link android.Manifest.permission#READ_PHONE_STATE} or that the calling
-     * app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
+     * For clients compiled on Android 11 SDK, requires permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE} or that the calling app has carrier
+     * privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
+     * For clients compiled on Android 12 SDK or newer,
+     * {@link android.Manifest.permission#READ_PHONE_STATE} or carrier privileges is not required
+     * anymore.
      *
      * @param telephonyDisplayInfo The display information.
      * @deprecated Use {@link TelephonyCallback.DisplayInfoListener} instead.
@@ -1261,6 +1267,8 @@ public class PhoneStateListener {
     public void onBarringInfoChanged(@NonNull BarringInfo barringInfo) {
         // default implementation empty
     }
+
+
 
     /**
      * The callback methods need to be called on the handler thread where
@@ -1577,7 +1585,12 @@ public class PhoneStateListener {
             // default implementation empty
         }
 
-        public void onAllowedNetworkTypesChanged(Map allowedNetworkTypesList) {
+        public void onAllowedNetworkTypesChanged(int reason, long allowedNetworkType) {
+            // default implementation empty
+        }
+
+        public void onLinkCapacityEstimateChanged(
+                List<LinkCapacityEstimate> linkCapacityEstimateList) {
             // default implementation empty
         }
     }

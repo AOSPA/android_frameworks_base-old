@@ -139,7 +139,6 @@ public class SettingsBackupTest {
                     Settings.Global.AUTOFILL_MAX_VISIBLE_DATASETS,
                     Settings.Global.AUTOMATIC_POWER_SAVE_MODE,
                     Settings.Global.AVERAGE_TIME_TO_DISCHARGE,
-                    Settings.Global.BACKPORT_S_NOTIF_RULES,
                     Settings.Global.BATTERY_CHARGING_STATE_UPDATE_DELAY,
                     Settings.Global.BATTERY_ESTIMATES_LAST_UPDATE_TIME,
                     Settings.Global.BROADCAST_BG_CONSTANTS,
@@ -217,7 +216,6 @@ public class SettingsBackupTest {
                     Settings.Global.DEBUG_APP,
                     Settings.Global.DEBUG_VIEW_ATTRIBUTES,
                     Settings.Global.DEBUG_VIEW_ATTRIBUTES_APPLICATION_PACKAGE,
-                    Settings.Global.DECORATED_CUSTOM_VIEW_NOTIF_DECORATION,
                     Settings.Global.DEFAULT_DNS_SERVER,
                     Settings.Global.DEFAULT_INSTALL_LOCATION,
                     Settings.Global.DEFAULT_RESTRICT_BACKGROUND_DATA,
@@ -289,7 +287,6 @@ public class SettingsBackupTest {
                     Settings.Global.WIFI_ON_WHEN_PROXY_DISCONNECTED,
                     Settings.Global.FSTRIM_MANDATORY_INTERVAL,
                     Settings.Global.FOREGROUND_SERVICE_STARTS_LOGGING_ENABLED,
-                    Settings.Global.FULLY_CUSTOM_VIEW_NOTIF_DECORATION,
                     Settings.Global.GLOBAL_HTTP_PROXY_EXCLUSION_LIST,
                     Settings.Global.GLOBAL_HTTP_PROXY_HOST,
                     Settings.Global.GLOBAL_HTTP_PROXY_PAC,
@@ -745,13 +742,15 @@ public class SettingsBackupTest {
                  Settings.Secure.SILENCE_GESTURE,
                  Settings.Secure.DOZE_WAKE_LOCK_SCREEN_GESTURE,
                  Settings.Secure.DOZE_WAKE_DISPLAY_GESTURE,
+                 Settings.Secure.DOZE_QUICK_PICKUP_GESTURE,
                  Settings.Secure.FACE_UNLOCK_RE_ENROLL,
                  Settings.Secure.TAP_GESTURE,
                  Settings.Secure.NEARBY_SHARING_COMPONENT, // not user configurable
                  Settings.Secure.ACCESSIBILITY_SHORTCUT_TARGET_MAGNIFICATION_CONTROLLER,
                  Settings.Secure.SUPPRESS_DOZE,
                  Settings.Secure.REDUCE_BRIGHT_COLORS_ACTIVATED,
-                 Settings.Secure.ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT);
+                 Settings.Secure.ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT,
+                 Settings.Secure.TRANSFORM_ENABLED);
 
     @Test
     public void systemSettingsBackedUpOrDenied() {

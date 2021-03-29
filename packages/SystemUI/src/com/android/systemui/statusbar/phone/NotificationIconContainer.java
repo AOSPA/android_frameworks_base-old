@@ -28,6 +28,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Icon;
 import android.util.AttributeSet;
 import android.util.Property;
+import android.view.ContextThemeWrapper;
 import android.view.View;
 import android.view.animation.Interpolator;
 
@@ -35,6 +36,7 @@ import androidx.collection.ArrayMap;
 
 import com.android.internal.statusbar.StatusBarIcon;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.settingslib.Utils;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.AlphaOptimizedFrameLayout;
@@ -150,6 +152,7 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
     private boolean mDozing;
     private boolean mOnLockScreen;
     private int mLockScreenMode = KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
+    private boolean mInNotificationIconShelf;
     private boolean mChangingViewPositions;
     private int mAddAnimationStartIndex = -1;
     private int mCannedAnimationStartIndex = -1;
@@ -168,6 +171,7 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
     private Rect mIsolatedIconLocation;
     private int[] mAbsolutePosition = new int[2];
     private View mIsolatedIconForAnimation;
+    private int mThemedTextColorPrimary;
 
     public NotificationIconContainer(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -179,6 +183,10 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
         mDotPadding = getResources().getDimensionPixelSize(R.dimen.overflow_icon_dot_padding);
         mStaticDotRadius = getResources().getDimensionPixelSize(R.dimen.overflow_dot_radius);
         mStaticDotDiameter = 2 * mStaticDotRadius;
+        final Context themedContext = new ContextThemeWrapper(getContext(),
+                com.android.internal.R.style.Theme_DeviceDefault_DayNight);
+        mThemedTextColorPrimary = Utils.getColorAttr(themedContext,
+                com.android.internal.R.attr.textColorPrimary).getDefaultColor();
     }
 
     @Override
@@ -695,6 +703,10 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
         mLockScreenMode = lockScreenMode;
     }
 
+    public void setInNotificationIconShelf(boolean inShelf) {
+        mInNotificationIconShelf = inShelf;
+    }
+
     public class IconState extends ViewState {
         public static final int NO_VALUE = NotificationIconContainer.NO_VALUE;
         public float iconAppearAmount = 1.0f;
@@ -806,7 +818,8 @@ public class NotificationIconContainer extends AlphaOptimizedFrameLayout {
                     }
                 }
                 icon.setVisibleState(visibleState, animationsAllowed);
-                icon.setIconColor(iconColor, needsCannedAnimation && animationsAllowed);
+                icon.setIconColor(mInNotificationIconShelf ? mThemedTextColorPrimary : iconColor,
+                        needsCannedAnimation && animationsAllowed);
                 if (animate) {
                     animateTo(icon, animationProperties);
                 } else {

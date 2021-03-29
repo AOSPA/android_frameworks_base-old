@@ -122,7 +122,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.ThreadLocalRandom;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.Consumer;
 
 /**
  * Helper class for {@link ActivityManagerService} responsible for multi-user functionality.
@@ -335,13 +334,15 @@ class UserController implements Handler.Callback {
     volatile boolean mBootCompleted;
 
     /**
-     * In this mode, user is always stopped when switched out but locking of user data is
+     * In this mode, user is always stopped when switched out (unless overridden by the
+     * {@code fw.stop_bg_users_on_switch} system property) but locking of user data is
      * postponed until total number of unlocked users in the system reaches mMaxRunningUsers.
      * Once total number of unlocked users reach mMaxRunningUsers, least recently used user
      * will be locked.
      */
     @GuardedBy("mLock")
     private boolean mDelayUserDataLocking;
+
     /**
      * Keep track of last active users for mDelayUserDataLocking.
      * The latest stopped user is placed in front while the least recently stopped user in back.
@@ -407,10 +408,9 @@ class UserController implements Handler.Callback {
         }
     }
 
-    private boolean isDelayUserDataLockingEnabled() {
-        synchronized (mLock) {
-            return mDelayUserDataLocking;
-        }
+    private boolean shouldStopBackgroundUsersOnSwitch() {
+        int property = SystemProperties.getInt("fw.stop_bg_users_on_switch", -1);
+        return property == -1 ? mDelayUserDataLocking : property == 1;
     }
 
     void finishUserSwitch(UserState uss) {
@@ -518,18 +518,12 @@ class UserController implements Handler.Callback {
             if (!mInjector.getUserManager().isPreCreated(userId)) {
                 mHandler.sendMessage(mHandler.obtainMessage(REPORT_LOCKED_BOOT_COMPLETE_MSG,
                         userId, 0));
-                Intent intent = new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED, null);
-                intent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
-                intent.addFlags(Intent.FLAG_RECEIVER_NO_ABORT
-                        | Intent.FLAG_RECEIVER_OFFLOAD
-                        | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
-                mInjector.broadcastIntent(intent, null, resultTo, 0, null, null,
-                        new String[]{android.Manifest.permission.RECEIVE_BOOT_COMPLETED},
-                        AppOpsManager.OP_NONE,
-                        getTemporaryAppAllowlistBroadcastOptions(REASON_LOCKED_BOOT_COMPLETED)
-                                .toBundle(), true,
-                        false, MY_PID, SYSTEM_UID,
-                        Binder.getCallingUid(), Binder.getCallingPid(), userId);
+                // In case of headless system user mode, do not send boot complete broadcast for
+                // system user as it is sent by sendBootCompleted call.
+                if (!(UserManager.isHeadlessSystemUserMode() && uss.mHandle.isSystem())) {
+                    // ACTION_LOCKED_BOOT_COMPLETED
+                    sendLockedBootCompletedBroadcast(resultTo, userId);
+                }
             }
         }
 
@@ -550,6 +544,21 @@ class UserController implements Handler.Callback {
         } else {
             maybeUnlockUser(userId);
         }
+    }
+
+    private void sendLockedBootCompletedBroadcast(IIntentReceiver receiver, @UserIdInt int userId) {
+        final Intent intent = new Intent(Intent.ACTION_LOCKED_BOOT_COMPLETED, null);
+        intent.putExtra(Intent.EXTRA_USER_HANDLE, userId);
+        intent.addFlags(Intent.FLAG_RECEIVER_NO_ABORT
+                | Intent.FLAG_RECEIVER_OFFLOAD
+                | Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
+        mInjector.broadcastIntent(intent, null, receiver, 0, null, null,
+                new String[]{android.Manifest.permission.RECEIVE_BOOT_COMPLETED},
+                AppOpsManager.OP_NONE,
+                getTemporaryAppAllowlistBroadcastOptions(REASON_LOCKED_BOOT_COMPLETED)
+                        .toBundle(), true,
+                false, MY_PID, SYSTEM_UID,
+                Binder.getCallingUid(), Binder.getCallingPid(), userId);
     }
 
     /**
@@ -1033,6 +1042,11 @@ class UserController implements Handler.Callback {
 
     void finishUserStopped(UserState uss, boolean allowDelayedLocking) {
         final int userId = uss.mHandle.getIdentifier();
+        if (DEBUG_MU) {
+            Slog.i(TAG, "finishUserStopped(%d): allowDelayedLocking=%b", userId,
+                    allowDelayedLocking);
+        }
+
         EventLog.writeEvent(EventLogTags.UC_FINISH_USER_STOPPED, userId);
         final boolean stopped;
         boolean lockUser = true;
@@ -1145,11 +1159,9 @@ class UserController implements Handler.Callback {
                 Slog.i(TAG, "finishUserStopped, stopping user:" + userId
                         + " lock user:" + userIdToLock);
             } else {
-                Slog.i(TAG, "finishUserStopped, user:" + userId
-                        + ",skip locking");
+                Slog.i(TAG, "finishUserStopped, user:" + userId + ", skip locking");
                 // do not lock
                 userIdToLock = UserHandle.USER_NULL;
-
             }
         }
         return userIdToLock;
@@ -1184,6 +1196,7 @@ class UserController implements Handler.Callback {
     }
 
     private void forceStopUser(@UserIdInt int userId, String reason) {
+        if (DEBUG_MU) Slog.i(TAG, "forceStopUser(%d): %s", userId, reason);
         mInjector.activityManagerForceStopPackage(userId, reason);
         if (mInjector.getUserManager().isPreCreated(userId)) {
             // Don't fire intent for precreated.
@@ -1362,6 +1375,7 @@ class UserController implements Handler.Callback {
 
     private boolean startUserInternal(@UserIdInt int userId, boolean foreground,
             @Nullable IProgressListener unlockListener, @NonNull TimingsTraceAndSlog t) {
+        if (DEBUG_MU) Slog.i(TAG, "Starting user %d%s", userId, foreground ? " in foreground" : "");
         EventLog.writeEvent(EventLogTags.UC_START_USER_INTERNAL, userId);
 
         final int callingUid = Binder.getCallingUid();
@@ -1627,6 +1641,13 @@ class UserController implements Handler.Callback {
      * PIN or pattern.
      */
     private boolean maybeUnlockUser(final @UserIdInt int userId) {
+        if (mInjector.isFileEncryptedNativeOnly() && mLockPatternUtils.isSecure(userId)) {
+            // A token is needed, so don't bother trying to unlock without one.
+            // This keeps misleading error messages from being logged.
+            Slog.d(TAG, "Not unlocking user " + userId
+                    + "'s CE storage yet because a credential token is needed");
+            return false;
+        }
         // Try unlocking storage using empty token
         return unlockUserCleared(userId, null, null, null);
     }
@@ -1782,20 +1803,28 @@ class UserController implements Handler.Callback {
         mUserSwitchObservers.finishBroadcast();
     }
 
-    private void stopBackgroundUsersIfEnforced(int oldUserId) {
+    private void stopBackgroundUsersOnSwitchIfEnforced(@UserIdInt int oldUserId) {
         // Never stop system user
         if (oldUserId == UserHandle.USER_SYSTEM) {
             return;
         }
-        // If running in background is disabled or mDelayUserDataLocking mode, stop the user.
-        boolean disallowRunInBg = hasUserRestriction(UserManager.DISALLOW_RUN_IN_BACKGROUND,
-                oldUserId) || isDelayUserDataLockingEnabled();
-        if (!disallowRunInBg) {
-            return;
-        }
+        boolean hasRestriction =
+                hasUserRestriction(UserManager.DISALLOW_RUN_IN_BACKGROUND, oldUserId);
         synchronized (mLock) {
-            if (DEBUG_MU) Slog.i(TAG, "stopBackgroundUsersIfEnforced stopping " + oldUserId
-                    + " and related users");
+            // If running in background is disabled or mStopBackgroundUsersOnSwitch mode,
+            // stop the user.
+            boolean disallowRunInBg = hasRestriction || shouldStopBackgroundUsersOnSwitch();
+            if (!disallowRunInBg) {
+                if (DEBUG_MU) {
+                    Slog.i(TAG, "stopBackgroundUsersIfEnforced() NOT stopping %d and related users",
+                            oldUserId);
+                }
+                return;
+            }
+            if (DEBUG_MU) {
+                Slog.i(TAG, "stopBackgroundUsersIfEnforced() stopping %d and related users",
+                        oldUserId);
+            }
             stopUsersLU(oldUserId, /* force= */ false, /* allowDelayedLocking= */ true,
                     null, null);
         }
@@ -1896,7 +1925,7 @@ class UserController implements Handler.Callback {
         mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
         mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG, newUserId, 0));
         stopGuestOrEphemeralUserIfBackground(oldUserId);
-        stopBackgroundUsersIfEnforced(oldUserId);
+        stopBackgroundUsersOnSwitchIfEnforced(oldUserId);
     }
 
     private void moveUserToForeground(UserState uss, int oldUserId, int newUserId) {
@@ -2167,26 +2196,22 @@ class UserController implements Handler.Callback {
     }
 
     void sendBootCompleted(IIntentReceiver resultTo) {
-        final boolean systemUserFinishedBooting;
-
         // Get a copy of mStartedUsers to use outside of lock
         SparseArray<UserState> startedUsers;
         synchronized (mLock) {
-            systemUserFinishedBooting = mCurrentUserId != UserHandle.USER_SYSTEM;
             startedUsers = mStartedUsers.clone();
         }
         for (int i = 0; i < startedUsers.size(); i++) {
             UserState uss = startedUsers.valueAt(i);
-            if (systemUserFinishedBooting && uss.mHandle.isSystem()) {
-                // On Automotive, at this point the system user has already been started and
-                // unlocked, and some of the tasks we do here have already been done. So skip those
-                // in that case.
-                // TODO(b/132262830): this workdound shouldn't be necessary once we move the
-                // headless-user start logic to UserManager-land
-                Slog.d(TAG, "sendBootCompleted(): skipping on non-current system user");
-                continue;
+            if (!UserManager.isHeadlessSystemUserMode()) {
+                finishUserBoot(uss, resultTo);
+            } else if (uss.mHandle.isSystem()) {
+                // In case of headless system user mode, send only locked boot complete broadcast
+                // for system user since finishUserBoot call will be made using other code path;
+                // for non-system user, do nothing since finishUserBoot will be called elsewhere.
+                sendLockedBootCompletedBroadcast(resultTo, uss.mHandle.getIdentifier());
+                return;
             }
-            finishUserBoot(uss, resultTo);
         }
     }
 
@@ -2590,6 +2615,8 @@ class UserController implements Handler.Callback {
             pw.println("  mTargetUserId:" + mTargetUserId);
             pw.println("  mLastActiveUsers:" + mLastActiveUsers);
             pw.println("  mDelayUserDataLocking:" + mDelayUserDataLocking);
+            pw.println("  shouldStopBackgroundUsersOnSwitch:"
+                    + shouldStopBackgroundUsersOnSwitch());
             pw.println("  mMaxRunningUsers:" + mMaxRunningUsers);
             pw.println("  mUserSwitchUiEnabled:" + mUserSwitchUiEnabled);
             pw.println("  mInitialized:" + mInitialized);
@@ -3080,6 +3107,12 @@ class UserController implements Handler.Callback {
 
         protected IStorageManager getStorageManager() {
             return IStorageManager.Stub.asInterface(ServiceManager.getService("mount"));
+        }
+
+        // This is needed because isFileEncryptedNativeOnly is a static method,
+        // but it needs to be mocked out in tests.
+        protected boolean isFileEncryptedNativeOnly() {
+            return StorageManager.isFileEncryptedNativeOnly();
         }
     }
 }

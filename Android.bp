@@ -401,6 +401,13 @@ filegroup {
         ":platform-compat-native-aidl",
 
         // AIDL sources from external directories
+        ":android.hardware.security.keymint-V1-java-source",
+        ":android.hardware.security.secureclock-V1-java-source",
+        ":android.security.apc-java-source",
+        ":android.security.authorization-java-source",
+        ":android.security.maintenance-java-source",
+        ":android.security.vpnprofilestore-java-source",
+        ":android.system.keystore2-V1-java-source",
         ":credstore_aidl",
         ":dumpstate_aidl",
         ":framework_native_aidl",
@@ -458,6 +465,7 @@ java_library {
     static_libs: [
         "android.net.ipsec.ike.stubs.module_lib",
         "framework-appsearch.stubs.module_lib",
+        "framework-connectivity.stubs.module_lib",
         "framework-graphics.stubs.module_lib",
         "framework-media.stubs.module_lib",
         "framework-mediaprovider.stubs.module_lib",
@@ -480,6 +488,7 @@ java_library {
         "android.net.ipsec.ike.impl",
         "framework-minus-apex",
         "framework-appsearch.impl",
+        "framework-connectivity.impl",
         "framework-graphics.impl",
         "framework-mediaprovider.impl",
         "framework-permission.impl",
@@ -582,13 +591,7 @@ java_library {
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
         "android.hardware.vibrator-V2-java",
-        "android.security.apc-java",
-        "android.security.authorization-java",
-        "android.security.usermanager-java",
-        "android.security.vpnprofilestore-java",
-        "android.system.keystore2-V1-java",
         "android.system.suspend.control.internal-java",
-        "cameraprotosnano",
         "devicepolicyprotosnano",
 
         "com.android.sysprop.apex",
@@ -664,14 +667,17 @@ java_defaults {
     defaults: ["framework-aidl-export-defaults", "btadva_fwk_java_defaults"],
     srcs: [
         ":framework-non-updatable-sources",
-        ":framework-connectivity-sources",
         "core/java/**/*.logtags",
     ],
     // See comment on framework-atb-backward-compatibility module below
     exclude_srcs: ["core/java/android/content/pm/AndroidTestBaseUpdater.java"],
     aidl: {
         generate_get_transaction_name: true,
-        local_include_dirs: ["media/aidl"],
+        local_include_dirs: [
+            "media/aidl",
+            // TODO: move to include_dirs when migrated to packages/modules
+            "packages/Connectivity/framework/aidl-export",
+        ],
         include_dirs: ["frameworks/av/aidl"],
     },
     dxflags: [
@@ -687,11 +693,9 @@ java_defaults {
     ],
     required: [
         "framework-platform-compat-config",
-        // TODO: remove gps_debug, cec_config.xml and protolog.conf.json when the build system propagates "required" properly.
+        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
         "gps_debug.conf",
-        "cec_config.xml",
         "icu4j-platform-compat-config",
-        "libcore-platform-compat-config",
         "protolog.conf.json.gz",
         "services-platform-compat-config",
         "documents-ui-compat-config",
@@ -726,8 +730,6 @@ java_library {
     apex_available: ["//apex_available:platform"],
     visibility: [
         "//frameworks/base",
-        // TODO: remove when framework-connectivity can build against API
-        "//frameworks/base/packages/Connectivity/framework",
         // TODO(b/147128803) remove the below lines
         "//frameworks/base/apex/appsearch/framework",
         "//frameworks/base/apex/blobstore/framework",
@@ -766,6 +768,7 @@ java_library {
     static_libs: [
         "app-compat-annotations",
         "framework-minus-apex",
+        "framework-connectivity.impl", // TODO(b/182859030): should be removed
         "framework-appsearch.impl", // TODO(b/146218515): should be removed
         "framework-updatable-stubs-module_libs_api",
     ],
@@ -940,7 +943,6 @@ filegroup {
         "core/java/com/android/internal/util/RingBufferIndices.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
-        "core/java/com/android/internal/util/TrafficStatsConstants.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
         "core/java/com/android/internal/util/TokenBucket.java",
     ],
@@ -967,7 +969,6 @@ filegroup {
         "core/java/com/android/internal/util/MessageUtils.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
-        "core/java/com/android/internal/util/TrafficStatsConstants.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
     ],
 }
@@ -1486,7 +1487,7 @@ java_library {
     ],
     libs: [
         "framework-annotations-lib",
-        "framework-connectivity",
+        "framework-connectivity.stubs.module_lib",
         "unsupportedappusage",
     ],
     visibility: [

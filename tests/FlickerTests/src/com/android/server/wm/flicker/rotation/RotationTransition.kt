@@ -28,18 +28,14 @@ import com.android.server.wm.flicker.focusDoesNotChange
 import com.android.server.wm.flicker.helpers.StandardAppHelper
 import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
 import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
 import com.android.server.wm.flicker.navBarLayerRotatesAndScales
 import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
 import com.android.server.wm.flicker.noUncoveredRegions
-import com.android.server.wm.flicker.repetitions
 import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
-import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEntry
 import org.junit.Test
 
 abstract class RotationTransition(protected val testSpec: FlickerTestParameter) {
@@ -50,12 +46,7 @@ abstract class RotationTransition(protected val testSpec: FlickerTestParameter) 
     protected val endingPos get() = WindowUtils.getDisplayBounds(testSpec.config.endRotation)
 
     protected open val transition: FlickerBuilder.(Map<String, Any?>) -> Unit = {
-        withTestName { testSpec.name }
-        repeat { testSpec.config.repetitions }
         setup {
-            test {
-                device.wakeUpAndGoToHomeScreen()
-            }
             eachRun {
                 this.setRotation(testSpec.config.startRotation)
             }
@@ -83,13 +74,13 @@ abstract class RotationTransition(protected val testSpec: FlickerTestParameter) 
         testSpec.navBarWindowIsAlwaysVisible()
     }
 
-    @FlakyTest(bugId = 140855415)
+    @Presubmit
     @Test
     open fun navBarLayerIsAlwaysVisible() {
         testSpec.navBarLayerIsAlwaysVisible()
     }
 
-    @FlakyTest(bugId = 140855415)
+    @FlakyTest
     @Test
     open fun navBarLayerRotatesAndScales() {
         testSpec.navBarLayerRotatesAndScales(
@@ -102,44 +93,49 @@ abstract class RotationTransition(protected val testSpec: FlickerTestParameter) 
         testSpec.statusBarWindowIsAlwaysVisible()
     }
 
-    @FlakyTest(bugId = 140855415)
+    @Presubmit
     @Test
     open fun statusBarLayerIsAlwaysVisible() {
         testSpec.statusBarLayerIsAlwaysVisible()
     }
 
-    @FlakyTest(bugId = 140855415)
+    @FlakyTest
     @Test
     open fun statusBarLayerRotatesScales() {
         testSpec.statusBarLayerRotatesScales(
             testSpec.config.startRotation, testSpec.config.endRotation)
     }
 
-    @FlakyTest(bugId = 140855415)
+    @FlakyTest
     @Test
-    open fun visibleLayersShownMoreThanOneConsecutiveEntry() =
-        testSpec.visibleLayersShownMoreThanOneConsecutiveEntry()
+    open fun visibleLayersShownMoreThanOneConsecutiveEntry() {
+        testSpec.assertLayers {
+            this.visibleLayersShownMoreThanOneConsecutiveEntry()
+        }
+    }
 
     @Presubmit
     @Test
     open fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
-        testSpec.visibleWindowsShownMoreThanOneConsecutiveEntry()
+        testSpec.assertWm {
+            this.visibleWindowsShownMoreThanOneConsecutiveEntry()
+        }
     }
 
-    @Presubmit
+    @FlakyTest
     @Test
     open fun noUncoveredRegions() {
         testSpec.noUncoveredRegions(testSpec.config.startRotation,
             testSpec.config.endRotation, allStates = false)
     }
 
-    @FlakyTest(bugId = 151179149)
+    @Presubmit
     @Test
     open fun focusDoesNotChange() {
         testSpec.focusDoesNotChange()
     }
 
-    @FlakyTest(bugId = 140855415)
+    @FlakyTest
     @Test
     open fun appLayerRotates_StartingPos() {
         testSpec.assertLayersStart {
@@ -147,7 +143,7 @@ abstract class RotationTransition(protected val testSpec: FlickerTestParameter) 
         }
     }
 
-    @FlakyTest(bugId = 140855415)
+    @FlakyTest
     @Test
     open fun appLayerRotates_EndingPos() {
         testSpec.assertLayersEnd {
