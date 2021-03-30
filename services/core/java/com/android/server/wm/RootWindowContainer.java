@@ -75,6 +75,7 @@ import static com.android.server.wm.Task.ActivityState.PAUSED;
 import static com.android.server.wm.Task.ActivityState.RESUMED;
 import static com.android.server.wm.Task.ActivityState.STOPPED;
 import static com.android.server.wm.Task.ActivityState.STOPPING;
+import static com.android.server.wm.Task.ActivityState.DESTROYED;
 import static com.android.server.wm.Task.REPARENT_LEAVE_ROOT_TASK_IN_PLACE;
 import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
 import static com.android.server.wm.Task.TASK_VISIBILITY_INVISIBLE;
@@ -133,6 +134,7 @@ import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.IntArray;
 import android.util.Pair;
@@ -249,6 +251,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     WindowManagerService mWindowManager;
     DisplayManager mDisplayManager;
     private DisplayManagerInternal mDisplayManagerInternal;
+
+    public static boolean mPerfSendTapHint = false;
+    public static boolean mIsPerfBoostAcquired = false;
+    public static int mPerfHandle = -1;
+    public BoostFramework mPerfBoost = null;
+    public BoostFramework mUxPerf = null;
 
     /** Reference to default display so we can quickly look it up. */
     private DisplayContent mDefaultDisplay;
@@ -2211,15 +2219,72 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
+    void acquireAppLaunchPerfLock(ActivityRecord r) {
+        /* Acquire perf lock during new app launch */
+        if (mPerfBoost == null) {
+            mPerfBoost = new BoostFramework();
+        }
+        if (mPerfBoost != null) {
+            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+            mPerfSendTapHint = true;
+            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+            if (mWmService.mAtmService != null && r != null && r.info != null
+                && r.info.applicationInfo != null) {
+                final WindowProcessController wpc =
+                    mWmService.mAtmService.getProcessController(r.processName,
+                        r.info.applicationInfo.uid);
+                if (wpc != null && wpc.hasThread()) {
+                    // If target process didn't start yet,
+                    // this operation will be done when app call attach
+                    mPerfBoost.perfHint(
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, wpc.getPid(),
+                            BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+                }
+            }
+
+            if(mPerfBoost.perfGetFeedback(
+                BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) ==
+                    BoostFramework.WorkloadType.GAME)
+            {
+                mPerfHandle = mPerfBoost.perfHint(
+                    BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+            } else {
+                mPerfHandle = mPerfBoost.perfHint(
+                    BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+            }
+            if (mPerfHandle > 0)
+                mIsPerfBoostAcquired = true;
+            // Start IOP
+            if(r.info.applicationInfo != null &&
+                r.info.applicationInfo.sourceDir != null) {
+                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+                    r.info.applicationInfo.sourceDir.substring(
+                        0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+            }
+        }
+    }
+
+    void acquireUxPerfLock(int opcode, String packageName) {
+         mUxPerf = new BoostFramework();
+         if (mUxPerf != null) {
+             mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
+         }
+     }
+
     @Nullable
     ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea) {
         return findTask(r.getActivityType(), r.taskAffinity, r.intent, r.info,
-                preferredTaskDisplayArea);
+                preferredTaskDisplayArea, r);
     }
 
     @Nullable
     ActivityRecord findTask(int activityType, String taskAffinity, Intent intent, ActivityInfo info,
-            TaskDisplayArea preferredTaskDisplayArea) {
+            TaskDisplayArea preferredTaskDisplayArea, ActivityRecord r) {
         ProtoLog.d(WM_DEBUG_TASKS, "Looking for task of type=%s, taskAffinity=%s, intent=%s"
                         + ", info=%s, preferredTDA=%s", activityType, taskAffinity, intent, info,
                 preferredTaskDisplayArea);
@@ -2230,10 +2295,26 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         if (preferredTaskDisplayArea != null) {
             mTmpFindTaskResult.process(preferredTaskDisplayArea);
             if (mTmpFindTaskResult.mIdealRecord != null) {
+                if(mTmpFindTaskResult.mIdealRecord.getState() == DESTROYED) {
+                    /*It's a new app launch */
+                    acquireAppLaunchPerfLock(r);
+                }
+
+                if(mTmpFindTaskResult.mIdealRecord.getState() == STOPPED) {
+                     /*Warm launch */
+                     acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH,
+                         r.packageName);
+                }
                 return mTmpFindTaskResult.mIdealRecord;
             } else if (mTmpFindTaskResult.mCandidateRecord != null) {
                 candidateActivity = mTmpFindTaskResult.mCandidateRecord;
             }
+        }
+
+        /* Acquire perf lock *only* during new app launch */
+        if ((mTmpFindTaskResult.mIdealRecord == null) ||
+            (mTmpFindTaskResult.mIdealRecord.getState() == DESTROYED)) {
+            acquireAppLaunchPerfLock(r);
         }
 
         final ActivityRecord idealMatchActivity = getItemFromTaskDisplayAreas(taskDisplayArea -> {
