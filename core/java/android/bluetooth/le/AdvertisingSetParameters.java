@@ -20,6 +20,7 @@ import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.app.ActivityThread;
 
 /**
  * The {@link AdvertisingSetParameters} provide a way to adjust advertising
@@ -389,10 +390,20 @@ public final class AdvertisingSetParameters implements Parcelable {
          * {@link AdvertisingSetParameters#TX_POWER_MEDIUM},
          * or {@link AdvertisingSetParameters#TX_POWER_HIGH}.
          * @throws IllegalArgumentException If the {@code txPowerLevel} is invalid.
+         * Allow tx power level to be set more than {@link AdvertisingSetParameters#TX_POWER_HIGH},
+         * if the setTxPowerLevel is invoked from com.android.bluetooth process
          */
         public Builder setTxPowerLevel(int txPowerLevel) {
-            if (txPowerLevel < TX_POWER_MIN || txPowerLevel > TX_POWER_MAX) {
-                throw new IllegalArgumentException("unknown txPowerLevel " + txPowerLevel);
+            String packageName = ActivityThread.currentPackageName();
+            if (packageName.equals("com.android.bluetooth")) {
+                int maxPowerLevel = 20;
+                if (txPowerLevel < TX_POWER_MIN || txPowerLevel > maxPowerLevel) {
+                    throw new IllegalArgumentException("invalid txPowerLevel " + txPowerLevel);
+                }
+            } else {
+                if (txPowerLevel < TX_POWER_MIN || txPowerLevel > TX_POWER_MAX) {
+                    throw new IllegalArgumentException("unknown txPowerLevel " + txPowerLevel);
+                }
             }
             mTxPowerLevel = txPowerLevel;
             return this;
