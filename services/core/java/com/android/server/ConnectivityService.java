@@ -5586,12 +5586,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             incrementRequestCountOrThrow(this);
             mCallbackFlags = callbackFlags;
             mCallingAttributionTag = callingAttributionTag;
-
-            try {
-                mBinder.linkToDeath(this, 0);
-            } catch (RemoteException e) {
-                binderDied();
-            }
+            linkDeathRecipient();
         }
 
         NetworkRequestInfo(@NonNull final NetworkRequestInfo nri,
@@ -5629,6 +5624,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             incrementRequestCountOrThrow(this);
             mCallbackFlags = nri.mCallbackFlags;
             mCallingAttributionTag = nri.mCallingAttributionTag;
+            linkDeathRecipient();
         }
 
         NetworkRequestInfo(int asUid, @NonNull final NetworkRequest r) {
@@ -5657,8 +5653,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return Collections.unmodifiableList(tempRequests);
         }
 
+        void linkDeathRecipient() {
+            if (null != mBinder) {
+                try {
+                    mBinder.linkToDeath(this, 0);
+                } catch (RemoteException e) {
+                    binderDied();
+                }
+            }
+        }
+
         void unlinkDeathRecipient() {
-            if (mBinder != null) {
+            if (null != mBinder) {
                 mBinder.unlinkToDeath(this, 0);
             }
         }
