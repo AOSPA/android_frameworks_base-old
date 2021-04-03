@@ -344,6 +344,8 @@ public class KeyguardSimPukViewController
             mSubId = subId;
             mShowDefaultMessage = true;
             mRemainingAttempts = -1;
+        }else{
+            mShowDefaultMessage = false;
         }
     }
 
