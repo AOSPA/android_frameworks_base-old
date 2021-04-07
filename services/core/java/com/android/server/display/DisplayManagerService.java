@@ -2498,6 +2498,11 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
+        public int[] getUserDisabledHdrTypes() {
+            return mUserDisabledHdrTypes;
+        }
+
+        @Override // Binder call
         public void requestColorMode(int displayId, int colorMode) {
             mContext.enforceCallingOrSelfPermission(
                     Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE,
@@ -2947,9 +2952,6 @@ public final class DisplayManagerService extends SystemService {
 
         @Override // Binder call
         public int getRefreshRateSwitchingType() {
-            mContext.enforceCallingOrSelfPermission(
-                    Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE,
-                    "Permission required read refresh rate switching type.");
             final long token = Binder.clearCallingIdentity();
             try {
                 return getRefreshRateSwitchingTypeInternal();

@@ -60,6 +60,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
     private View mMobileRoamingSpace;
     private int mVisibleState = -1;
     private DualToneHandler mDualToneHandler;
+    private boolean mForceHidden;
 
     private ImageView mVolte;
 
@@ -166,7 +167,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
 
     private void initViewState() {
         setContentDescription(mState.contentDescription);
-        if (!mState.visible) {
+        if (!mState.visible || mForceHidden) {
             mMobileGroup.setVisibility(View.GONE);
         } else {
             mMobileGroup.setVisibility(View.VISIBLE);
@@ -203,8 +204,9 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
         boolean needsLayout = false;
 
         setContentDescription(state.contentDescription);
-        if (mState.visible != state.visible) {
-            mMobileGroup.setVisibility(state.visible ? View.VISIBLE : View.GONE);
+        int newVisibility = state.visible && !mForceHidden ? View.VISIBLE : View.GONE;
+        if (newVisibility != mMobileGroup.getVisibility()) {
+            mMobileGroup.setVisibility(newVisibility);
             needsLayout = true;
         }
         if (state.strengthId >= 0) {
@@ -293,7 +295,7 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
 
     @Override
     public boolean isIconVisible() {
-        return mState.visible;
+        return mState.visible && !mForceHidden;
     }
 
     @Override
@@ -317,6 +319,23 @@ public class StatusBarMobileView extends FrameLayout implements DarkReceiver,
                 mMobileGroup.setVisibility(View.INVISIBLE);
                 mDotView.setVisibility(View.INVISIBLE);
                 break;
+        }
+    }
+
+    /**
+     * Forces the state to be hidden (views will be GONE) and if necessary updates the layout.
+     *
+     * Makes sure that the {@link StatusBarIconController} cannot make it visible while this flag
+     * is enabled.
+     * @param forceHidden {@code true} if the icon should be GONE in its view regardless of its
+     *                                state.
+     *               {@code false} if the icon should show as determined by its controller.
+     */
+    public void forceHidden(boolean forceHidden) {
+        if (mForceHidden != forceHidden) {
+            mForceHidden = forceHidden;
+            updateState(mState);
+            requestLayout();
         }
     }
 

@@ -2187,6 +2187,10 @@ class ShortcutPackage extends ShortcutPackageItem {
 
     private void saveShortcut(@NonNull final Collection<ShortcutInfo> shortcuts) {
         Objects.requireNonNull(shortcuts);
+        if (shortcuts.isEmpty()) {
+            // No need to invoke AppSearch when there's nothing to save.
+            return;
+        }
         ConcurrentUtils.waitForFutureNoInterrupt(
                 runInAppSearch(session -> {
                     final AndroidFuture<Boolean> future = new AndroidFuture<>();
@@ -2412,6 +2416,20 @@ class ShortcutPackage extends ShortcutPackageItem {
             return AndroidFuture.completedFuture(null);
         } finally {
             Binder.restoreCallingIdentity(callingIdentity);
+        }
+    }
+
+    void closeAppSearchSession() {
+        synchronized (mLock) {
+            if (mAppSearchSession != null) {
+                final long callingIdentity = Binder.clearCallingIdentity();
+                try {
+                    mAppSearchSession.close();
+                } finally {
+                    Binder.restoreCallingIdentity(callingIdentity);
+                }
+            }
+            mAppSearchSession = null;
         }
     }
 
