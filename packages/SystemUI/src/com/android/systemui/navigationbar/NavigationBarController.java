@@ -43,6 +43,7 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.RegisterStatusBarResult;
 import com.android.settingslib.applications.InterestingConfigChanges;
 import com.android.systemui.Dumpable;
+import com.android.systemui.accessibility.AccessibilityButtonModeObserver;
 import com.android.systemui.accessibility.SystemActions;
 import com.android.systemui.assist.AssistHandleViewController;
 import com.android.systemui.assist.AssistManager;
@@ -91,6 +92,7 @@ public class NavigationBarController implements Callbacks,
     private final MetricsLogger mMetricsLogger;
     private final OverviewProxyService mOverviewProxyService;
     private final NavigationModeController mNavigationModeController;
+    private final AccessibilityButtonModeObserver mAccessibilityButtonModeObserver;
     private final StatusBarStateController mStatusBarStateController;
     private final SysUiState mSysUiFlagsContainer;
     private final BroadcastDispatcher mBroadcastDispatcher;
@@ -127,6 +129,7 @@ public class NavigationBarController implements Callbacks,
             MetricsLogger metricsLogger,
             OverviewProxyService overviewProxyService,
             NavigationModeController navigationModeController,
+            AccessibilityButtonModeObserver accessibilityButtonModeObserver,
             StatusBarStateController statusBarStateController,
             SysUiState sysUiFlagsContainer,
             BroadcastDispatcher broadcastDispatcher,
@@ -151,6 +154,7 @@ public class NavigationBarController implements Callbacks,
         mMetricsLogger = metricsLogger;
         mOverviewProxyService = overviewProxyService;
         mNavigationModeController = navigationModeController;
+        mAccessibilityButtonModeObserver = accessibilityButtonModeObserver;
         mStatusBarStateController = statusBarStateController;
         mSysUiFlagsContainer = sysUiFlagsContainer;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -210,6 +214,14 @@ public class NavigationBarController implements Callbacks,
     public void onDisplayReady(int displayId) {
         Display display = mDisplayManager.getDisplay(displayId);
         createNavigationBar(display, null /* savedState */, null /* result */);
+    }
+
+    @Override
+    public void setNavigationBarLumaSamplingEnabled(int displayId, boolean enable) {
+        final NavigationBarView navigationBarView = getNavigationBarView(displayId);
+        if (navigationBarView != null) {
+            navigationBarView.setNavigationBarLumaSamplingEnabled(enable);
+        }
     }
 
     /**
@@ -281,6 +293,7 @@ public class NavigationBarController implements Callbacks,
                 mMetricsLogger,
                 mOverviewProxyService,
                 mNavigationModeController,
+                mAccessibilityButtonModeObserver,
                 mStatusBarStateController,
                 mSysUiFlagsContainer,
                 mBroadcastDispatcher,
@@ -316,7 +329,7 @@ public class NavigationBarController implements Callbacks,
         });
     }
 
-    private void removeNavigationBar(int displayId) {
+    void removeNavigationBar(int displayId) {
         NavigationBar navBar = mNavigationBars.get(displayId);
         if (navBar != null) {
             navBar.setAutoHideController(/* autoHideController */ null);

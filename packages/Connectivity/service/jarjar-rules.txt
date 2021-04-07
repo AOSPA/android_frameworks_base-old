@@ -1,3 +1,4 @@
+rule android.sysprop.** com.android.connectivity.sysprop.@1
 rule com.android.net.module.util.** com.android.connectivity.net-utils.@1
 rule com.android.modules.utils.** com.android.connectivity.modules-utils.@1
 
@@ -11,3 +12,6 @@ rule android.util.LocalLog* com.android.connectivity.util.LocalLog@1
 # the one in com.android.internal.util
 rule android.util.IndentingPrintWriter* android.connectivity.util.IndentingPrintWriter@1
 rule com.android.internal.util.** com.android.connectivity.util.@1
+
+rule com.android.internal.messages.** com.android.connectivity.messages.@1
+rule com.google.protobuf.** com.android.connectivity.protobuf.@1

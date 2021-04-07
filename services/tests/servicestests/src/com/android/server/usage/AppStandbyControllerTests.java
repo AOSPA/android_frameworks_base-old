@@ -940,7 +940,22 @@ public class AppStandbyControllerTests {
                 .setLong("elapsed_threshold_restricted", -1);
         mInjector.mPropertiesChangedListener
                 .onPropertiesChanged(mInjector.getDeviceConfigProperties());
-        testTimeout();
+
+        reportEvent(mController, USER_INTERACTION, 0, PACKAGE_1);
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_ACTIVE);
+
+        mInjector.mElapsedRealtime = HOUR_MS;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_FREQUENT);
+
+        mInjector.mElapsedRealtime = 2 * HOUR_MS;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RARE);
+
+        mInjector.mElapsedRealtime = 4 * HOUR_MS;
+        mController.checkIdleStates(USER_ID);
+        assertBucket(STANDBY_BUCKET_RESTRICTED);
     }
 
     /**
@@ -1387,6 +1402,21 @@ public class AppStandbyControllerTests {
         // Flags should not be combined since the bucket changed.
         assertEquals(REASON_MAIN_FORCED_BY_SYSTEM | REASON_SUB_FORCED_SYSTEM_FLAG_UNDEFINED,
                 getStandbyBucketReason(PACKAGE_1));
+    }
+
+    @Test
+    public void testRestrictApp_MainReason() throws Exception {
+        mController.setAppStandbyBucket(PACKAGE_1, USER_ID, STANDBY_BUCKET_ACTIVE,
+                REASON_MAIN_DEFAULT);
+        mInjector.mElapsedRealtime += 4 * RESTRICTED_THRESHOLD;
+
+        mController.restrictApp(PACKAGE_1, USER_ID, REASON_MAIN_PREDICTED, 0);
+        // Call should be ignored.
+        assertEquals(STANDBY_BUCKET_ACTIVE, getStandbyBucket(mController, PACKAGE_1));
+
+        mController.restrictApp(PACKAGE_1, USER_ID, REASON_MAIN_FORCED_BY_USER, 0);
+        // Call should go through
+        assertEquals(STANDBY_BUCKET_RESTRICTED, getStandbyBucket(mController, PACKAGE_1));
     }
 
     @Test

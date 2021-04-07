@@ -131,7 +131,6 @@ import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 import static com.android.server.wm.WindowManagerService.H.REPORT_HARD_KEYBOARD_STATUS_CHANGE;
 import static com.android.server.wm.WindowManagerService.H.WINDOW_HIDE_TIMEOUT;
 import static com.android.server.wm.WindowManagerService.LAYOUT_REPEAT_THRESHOLD;
-import static com.android.server.wm.WindowManagerService.SEAMLESS_ROTATION_TIMEOUT_DURATION;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_PLACING_SURFACES;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_REMOVING_FOCUS;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_ASSIGN_LAYERS;
@@ -517,7 +516,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
 
     /** The delay to avoid toggling the animation quickly. */
     private static final long FIXED_ROTATION_HIDE_ANIMATION_DEBOUNCE_DELAY_MS = 250;
-    private FixedRotationAnimationController mFixedRotationAnimationController;
+    private FadeRotationAnimationController mFadeRotationAnimationController;
 
     final FixedRotationTransitionListener mFixedRotationTransitionListener =
             new FixedRotationTransitionListener();
@@ -1429,7 +1428,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             computeScreenConfiguration(config);
         } else if (currentConfig != null
                 // If waiting for a remote rotation, don't prematurely update configuration.
-                && !mDisplayRotation.isWaitingForRemoteRotation()) {
+                && !(mDisplayRotation.isWaitingForRemoteRotation()
+                        || mAtmService.getTransitionController().isCollecting(this))) {
             // No obvious action we need to take, but if our current state mismatches the
             // activity manager's, update it, disregarding font scale, which should remain set
             // to the value of the previous configuration.
@@ -1469,6 +1469,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
         }
         return mDisplayRotation.updateOrientation(orientation, forceUpdate);
+    }
+
+    @Override
+    boolean isSyncFinished() {
+        if (mDisplayRotation.isWaitingForRemoteRotation()) return false;
+        return super.isSyncFinished();
     }
 
     /**
@@ -1584,8 +1590,8 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     @VisibleForTesting
-    @Nullable FixedRotationAnimationController getFixedRotationAnimationController() {
-        return mFixedRotationAnimationController;
+    @Nullable FadeRotationAnimationController getFadeRotationAnimationController() {
+        return mFadeRotationAnimationController;
     }
 
     void setFixedRotationLaunchingAppUnchecked(@Nullable ActivityRecord r) {
@@ -1595,13 +1601,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void setFixedRotationLaunchingAppUnchecked(@Nullable ActivityRecord r, int rotation) {
         if (mFixedRotationLaunchingApp == null && r != null) {
             mWmService.mDisplayNotificationController.dispatchFixedRotationStarted(this, rotation);
-            startFixedRotationAnimation(
+            startFadeRotationAnimation(
                     // Delay the hide animation to avoid blinking by clicking navigation bar that
                     // may toggle fixed rotation in a short time.
                     r == mFixedRotationTransitionListener.mAnimatingRecents /* shouldDebounce */);
         } else if (mFixedRotationLaunchingApp != null && r == null) {
             mWmService.mDisplayNotificationController.dispatchFixedRotationFinished(this);
-            finishFixedRotationAnimationIfPossible();
+            finishFadeRotationAnimationIfPossible();
         }
         mFixedRotationLaunchingApp = r;
     }
@@ -1708,12 +1714,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      *
      * @return {@code true} if the animation is executed right now.
      */
-    private boolean startFixedRotationAnimation(boolean shouldDebounce) {
+    private boolean startFadeRotationAnimation(boolean shouldDebounce) {
         if (shouldDebounce) {
             mWmService.mH.postDelayed(() -> {
                 synchronized (mWmService.mGlobalLock) {
                     if (mFixedRotationLaunchingApp != null
-                            && startFixedRotationAnimation(false /* shouldDebounce */)) {
+                            && startFadeRotationAnimation(false /* shouldDebounce */)) {
                         // Apply the transaction so the animation leash can take effect immediately.
                         getPendingTransaction().apply();
                     }
@@ -1721,21 +1727,39 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }, FIXED_ROTATION_HIDE_ANIMATION_DEBOUNCE_DELAY_MS);
             return false;
         }
-        if (mFixedRotationAnimationController == null) {
-            mFixedRotationAnimationController = new FixedRotationAnimationController(this);
-            mFixedRotationAnimationController.hide();
+        if (mFadeRotationAnimationController == null) {
+            mFadeRotationAnimationController = new FadeRotationAnimationController(this);
+            mFadeRotationAnimationController.hide();
             return true;
         }
         return false;
     }
 
     /** Re-show the previously hidden windows if all seamless rotated windows are done. */
-    void finishFixedRotationAnimationIfPossible() {
-        final FixedRotationAnimationController controller = mFixedRotationAnimationController;
+    void finishFadeRotationAnimationIfPossible() {
+        final FadeRotationAnimationController controller = mFadeRotationAnimationController;
         if (controller != null && !mDisplayRotation.hasSeamlessRotatingWindow()) {
             controller.show();
-            mFixedRotationAnimationController = null;
+            mFadeRotationAnimationController = null;
         }
+    }
+
+    /** Shows the given window which may be hidden for screen frozen. */
+    void finishFadeRotationAnimation(WindowState w) {
+        final FadeRotationAnimationController controller = mFadeRotationAnimationController;
+        if (controller != null && controller.show(w.mToken)) {
+            mFadeRotationAnimationController = null;
+        }
+    }
+
+    /** Returns {@code true} if the display should wait for the given window to stop freezing. */
+    boolean waitForUnfreeze(WindowState w) {
+        if (w.mForceSeamlesslyRotate) {
+            // The window should look no different before and after rotation.
+            return false;
+        }
+        final FadeRotationAnimationController controller = mFadeRotationAnimationController;
+        return controller == null || !controller.isTargetToken(w.mToken);
     }
 
     void notifyInsetsChanged(Consumer<WindowState> dispatchInsetsChanged) {
@@ -1764,7 +1788,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      * Update rotation of the display.
      *
      * @return {@code true} if the rotation has been changed.  In this case YOU MUST CALL
-     *         {@link #sendNewConfiguration} TO UNFREEZE THE SCREEN.
+     *         {@link #sendNewConfiguration} TO UNFREEZE THE SCREEN unless using Shell transitions.
      */
     boolean updateRotationUnchecked() {
         return mDisplayRotation.updateRotationUnchecked(false /* forceUpdate */);
@@ -1779,8 +1803,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     private void applyRotation(final int oldRotation, final int rotation) {
         mDisplayRotation.applyCurrentRotation(rotation);
-        final boolean rotateSeamlessly = mDisplayRotation.isRotatingSeamlessly();
-        final Transaction transaction = getPendingTransaction();
+        final boolean shellTransitions =
+                mWmService.mAtmService.getTransitionController().getTransitionPlayer() != null;
+        final boolean rotateSeamlessly =
+                mDisplayRotation.isRotatingSeamlessly() && !shellTransitions;
+        final Transaction transaction =
+                shellTransitions ? getSyncTransaction() : getPendingTransaction();
         ScreenRotationAnimation screenRotationAnimation = rotateSeamlessly
                 ? null : getRotationAnimation();
         // We need to update our screen size information to match the new rotation. If the rotation
@@ -1796,9 +1824,11 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             screenRotationAnimation.setRotation(transaction, rotation);
         }
 
-        forAllWindows(w -> {
-            w.seamlesslyRotateIfAllowed(transaction, oldRotation, rotation, rotateSeamlessly);
-        }, true /* traverseTopToBottom */);
+        if (!shellTransitions) {
+            forAllWindows(w -> {
+                w.seamlesslyRotateIfAllowed(transaction, oldRotation, rotation, rotateSeamlessly);
+            }, true /* traverseTopToBottom */);
+        }
 
         mWmService.mDisplayManagerInternal.performTraversal(transaction);
         scheduleAnimation();
@@ -1810,11 +1840,6 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             }
             w.mReportOrientationChanged = true;
         }, true /* traverseTopToBottom */);
-
-        if (rotateSeamlessly) {
-            mWmService.mH.sendNewMessageDelayed(WindowManagerService.H.SEAMLESS_ROTATION_TIMEOUT,
-                    this, SEAMLESS_ROTATION_TIMEOUT_DURATION);
-        }
 
         for (int i = mWmService.mRotationWatchers.size() - 1; i >= 0; i--) {
             final WindowManagerService.RotationWatcher rotationWatcher
@@ -1868,6 +1893,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // Update application display metrics.
         final WmDisplayCutout wmDisplayCutout = calculateDisplayCutoutForRotation(rotation);
         final DisplayCutout displayCutout = wmDisplayCutout.getDisplayCutout();
+        final RoundedCorners roundedCorners = calculateRoundedCornersForRotation(rotation);
 
         final int appWidth = mDisplayPolicy.getNonDecorDisplayWidth(dw, dh, rotation, uiMode,
                 displayCutout);
@@ -1884,6 +1910,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     CompatibilityInfo.DEFAULT_COMPATIBILITY_INFO, null);
         }
         mDisplayInfo.displayCutout = displayCutout.isEmpty() ? null : displayCutout;
+        mDisplayInfo.roundedCorners = roundedCorners;
         mDisplayInfo.getAppMetrics(mDisplayMetrics);
         if (mDisplayScalingDisabled) {
             mDisplayInfo.flags |= Display.FLAG_SCALING_DISABLED;
@@ -2955,6 +2982,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             mScreenRotationAnimation.kill();
         }
         mScreenRotationAnimation = screenRotationAnimation;
+
+        // Hide the windows which are not significant in rotation animation. So that the windows
+        // don't need to block the unfreeze time.
+        if (screenRotationAnimation != null && screenRotationAnimation.hasScreenshot()
+                && mFadeRotationAnimationController == null) {
+            startFadeRotationAnimation(false /* shouldDebounce */);
+        }
     }
 
     public ScreenRotationAnimation getRotationAnimation() {
@@ -3432,7 +3466,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     /** Updates the layer assignment of windows on this display. */
     void assignWindowLayers(boolean setLayoutNeeded) {
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "assignWindowLayers");
-        assignChildLayers(getPendingTransaction());
+        assignChildLayers(getSyncTransaction());
         if (setLayoutNeeded) {
             setLayoutNeeded();
         }
@@ -3690,10 +3724,15 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // config. (Only happens when the target window is in a different root DA)
         if (target != null) {
             RootDisplayArea targetRoot = target.getRootDisplayArea();
-            if (targetRoot != null) {
+            if (targetRoot != null && targetRoot != mImeWindowsContainer.getRootDisplayArea()) {
                 // Reposition the IME container to the target root to get the correct bounds and
                 // config.
                 targetRoot.placeImeContainer(mImeWindowsContainer);
+                // Directly hide the IME window so it doesn't flash immediately after reparenting.
+                // InsetsController will make IME visible again before animating it.
+                if (mInputMethodWindow != null) {
+                    mInputMethodWindow.hide(false /* doAnimation */, false /* requestAnim */);
+                }
             }
         }
         // 2. Assign window layers based on the IME surface parent to make sure it is on top of the
@@ -4575,6 +4614,12 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
      */
     SurfaceControl.Builder makeOverlay() {
         return mWmService.makeSurfaceBuilder(mSession).setParent(getOverlayLayer());
+    }
+
+    @Override
+    public SurfaceControl.Builder makeAnimationLeash() {
+        return mWmService.makeSurfaceBuilder(mSession).setParent(mSurfaceControl)
+                .setContainerLayer();
     }
 
     /**
@@ -5665,16 +5710,18 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     }
                     return false; /* continue */
                 }
-                if (taskId != INVALID_TASK_ID) {
+                if (taskId == INVALID_TASK_ID) {
+                    if (!nextWindow.canReceiveKeys()) {
+                        return false; /* continue */
+                    }
+                } else {
                     Task task = nextWindow.getTask();
                     if (task == null || !task.isTaskId(taskId)) {
                         return false; /* continue */
                     }
                 }
-                if (!nextWindow.canReceiveKeys()) {
-                    return false; /* continue */
-                }
-                return true; /* stop */
+
+                return true; /* stop, match found */
             }
         });
     }
@@ -5920,5 +5967,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         }
         return mDisplayAreaPolicy.getDisplayAreaForWindowToken(windowType, options,
                 ownerCanManageAppToken, roundedCornerOverlay);
+    }
+
+    @Override
+    DisplayContent asDisplayContent() {
+        return this;
     }
 }

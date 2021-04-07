@@ -498,19 +498,14 @@ static void nativeSetAnimationTransaction(JNIEnv* env, jclass clazz, jlong trans
     transaction->setAnimationTransaction();
 }
 
-static void nativeSetEarlyWakeup(JNIEnv* env, jclass clazz, jlong transactionObj) {
-    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->setEarlyWakeup();
-}
-
 static void nativeSetEarlyWakeupStart(JNIEnv* env, jclass clazz, jlong transactionObj) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->setExplicitEarlyWakeupStart();
+    transaction->setEarlyWakeupStart();
 }
 
 static void nativeSetEarlyWakeupEnd(JNIEnv* env, jclass clazz, jlong transactionObj) {
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-    transaction->setExplicitEarlyWakeupEnd();
+    transaction->setEarlyWakeupEnd();
 }
 
 static void nativeSetLayer(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -746,7 +741,7 @@ static void nativeSetWindowCrop(JNIEnv* env, jclass clazz, jlong transactionObj,
 
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
     Rect crop(l, t, r, b);
-    transaction->setCrop_legacy(ctrl, crop);
+    transaction->setCrop(ctrl, crop);
 }
 
 static void nativeSetCornerRadius(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -1465,6 +1460,27 @@ static void nativeReparent(JNIEnv* env, jclass clazz, jlong transactionObj,
     transaction->reparent(ctrl, newParent);
 }
 
+static void nativeOverrideHdrTypes(JNIEnv* env, jclass clazz, jobject tokenObject,
+                                   jintArray jHdrTypes) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObject));
+    if (token == nullptr || jHdrTypes == nullptr) return;
+
+    int* hdrTypes = env->GetIntArrayElements(jHdrTypes, 0);
+    int numHdrTypes = env->GetArrayLength(jHdrTypes);
+
+    std::vector<ui::Hdr> hdrTypesVector;
+    for (int i = 0; i < numHdrTypes; i++) {
+        hdrTypesVector.push_back(static_cast<ui::Hdr>(hdrTypes[i]));
+    }
+    env->ReleaseIntArrayElements(jHdrTypes, hdrTypes, 0);
+
+    status_t error = SurfaceComposerClient::overrideHdrTypes(token, hdrTypesVector);
+    if (error != NO_ERROR) {
+        jniThrowExceptionFmt(env, "java/lang/SecurityException",
+                             "ACCESS_SURFACE_FLINGER is missing");
+    }
+}
+
 static void nativeSetAutoLowLatencyMode(JNIEnv* env, jclass clazz, jobject tokenObject, jboolean on) {
     sp<IBinder> token(ibinderForJavaObject(env, tokenObject));
     if (token == NULL) return;
@@ -1528,11 +1544,17 @@ static jboolean nativeGetDisplayBrightnessSupport(JNIEnv* env, jclass clazz,
 }
 
 static jboolean nativeSetDisplayBrightness(JNIEnv* env, jclass clazz, jobject displayTokenObject,
-        jfloat brightness) {
+                                           jfloat sdrBrightness, jfloat sdrBrightnessNits,
+                                           jfloat displayBrightness, jfloat displayBrightnessNits) {
     sp<IBinder> displayToken(ibinderForJavaObject(env, displayTokenObject));
     if (displayToken == nullptr) {
         return JNI_FALSE;
     }
+    gui::DisplayBrightness brightness;
+    brightness.sdrWhitePoint = sdrBrightness;
+    brightness.sdrWhitePointNits = sdrBrightnessNits;
+    brightness.displayBrightness = displayBrightness;
+    brightness.displayBrightnessNits = displayBrightnessNits;
     status_t error = SurfaceComposerClient::setDisplayBrightness(displayToken, brightness);
     return error == OK ? JNI_TRUE : JNI_FALSE;
 }
@@ -1657,10 +1679,12 @@ public:
             jobject jJankData = env->NewObject(gJankDataClassInfo.clazz,
                     gJankDataClassInfo.ctor, jankData[i].frameVsyncId, jankData[i].jankType);
             env->SetObjectArrayElement(jJankDataArray, i, jJankData);
+            env->DeleteLocalRef(jJankData);
         }
         env->CallVoidMethod(target,
                 gJankDataListenerClassInfo.onJankDataAvailable,
                 jJankDataArray);
+        env->DeleteLocalRef(jJankDataArray);
         env->DeleteLocalRef(target);
     }
 
@@ -1731,8 +1755,6 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeMergeTransaction },
     {"nativeSetAnimationTransaction", "(J)V",
             (void*)nativeSetAnimationTransaction },
-    {"nativeSetEarlyWakeup", "(J)V",
-            (void*)nativeSetEarlyWakeup },
     {"nativeSetEarlyWakeupStart", "(J)V",
             (void*)nativeSetEarlyWakeupStart },
     {"nativeSetEarlyWakeupEnd", "(J)V",
@@ -1820,6 +1842,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetGameContentType },
     {"nativeGetCompositionDataspaces", "()[I",
             (void*)nativeGetCompositionDataspaces},
+    {"nativeOverrideHdrTypes", "(Landroid/os/IBinder;[I)V",
+                (void*)nativeOverrideHdrTypes },
     {"nativeClearContentFrameStats", "(J)Z",
             (void*)nativeClearContentFrameStats },
     {"nativeGetContentFrameStats", "(JLandroid/view/WindowContentFrameStats;)Z",
@@ -1860,7 +1884,7 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSyncInputWindows },
     {"nativeGetDisplayBrightnessSupport", "(Landroid/os/IBinder;)Z",
             (void*)nativeGetDisplayBrightnessSupport },
-    {"nativeSetDisplayBrightness", "(Landroid/os/IBinder;F)Z",
+    {"nativeSetDisplayBrightness", "(Landroid/os/IBinder;FFFF)Z",
             (void*)nativeSetDisplayBrightness },
     {"nativeReadTransactionFromParcel", "(Landroid/os/Parcel;)J",
             (void*)nativeReadTransactionFromParcel },

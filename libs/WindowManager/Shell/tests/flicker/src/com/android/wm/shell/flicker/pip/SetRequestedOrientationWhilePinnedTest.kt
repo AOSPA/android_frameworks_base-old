@@ -25,10 +25,6 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.WindowUtils
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
 import com.android.wm.shell.flicker.testapp.Components.FixedActivity.EXTRA_FIXED_ORIENTATION
 import com.android.wm.shell.flicker.testapp.Components.PipActivity.EXTRA_ENTER_PIP
@@ -83,6 +79,14 @@ class SetRequestedOrientationWhilePinnedTest(
             }
         }
 
+    @FlakyTest
+    @Test
+    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+
+    @FlakyTest
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+
     @Presubmit
     @Test
     fun pipWindowInsideDisplay() {
@@ -101,18 +105,16 @@ class SetRequestedOrientationWhilePinnedTest(
 
     @Presubmit
     @Test
-    fun navBarWindowIsAlwaysVisible() = testSpec.navBarWindowIsAlwaysVisible()
-
-    @Presubmit
-    @Test
-    fun statusBarWindowIsAlwaysVisible() = testSpec.statusBarWindowIsAlwaysVisible()
-
-    @Presubmit
-    @Test
     fun pipLayerInsideDisplay() {
         testSpec.assertLayersStart {
             coversAtMost(startingBounds, pipApp.defaultWindowName)
         }
+    }
+
+    @Presubmit
+    @Test
+    fun pipAlwaysVisible() = testSpec.assertWm {
+        this.showsAppWindow(pipApp.windowName)
     }
 
     @Presubmit
@@ -122,14 +124,6 @@ class SetRequestedOrientationWhilePinnedTest(
             coversExactly(endingBounds, pipApp.defaultWindowName)
         }
     }
-
-    @Presubmit
-    @Test
-    fun navBarLayerIsAlwaysVisible() = testSpec.navBarLayerIsAlwaysVisible()
-
-    @Presubmit
-    @Test
-    fun statusBarLayerIsAlwaysVisible() = testSpec.statusBarLayerIsAlwaysVisible()
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

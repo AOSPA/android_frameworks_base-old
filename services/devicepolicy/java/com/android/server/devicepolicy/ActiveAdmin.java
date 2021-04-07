@@ -19,6 +19,8 @@ package com.android.server.devicepolicy;
 import static android.app.admin.DevicePolicyManager.PASSWORD_COMPLEXITY_NONE;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_UNSPECIFIED;
 
+import static com.android.server.devicepolicy.DevicePolicyManagerService.LOG_TAG;
+
 import static org.xmlpull.v1.XmlPullParser.END_DOCUMENT;
 import static org.xmlpull.v1.XmlPullParser.END_TAG;
 import static org.xmlpull.v1.XmlPullParser.TEXT;
@@ -38,7 +40,6 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
-import android.util.Log;
 import android.util.Slog;
 import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
@@ -138,12 +139,13 @@ class ActiveAdmin {
     private static final String TAG_ENROLLMENT_SPECIFIC_ID = "enrollment-specific-id";
     private static final String TAG_ADMIN_CAN_GRANT_SENSORS_PERMISSIONS =
             "admin-can-grant-sensors-permissions";
-    private static final String TAG_NETWORK_SLICING_ENABLED = "network-slicing-enabled";
+    private static final String TAG_ENTERPRISE_NETWORK_PREFERENCE_ENABLED =
+            "enterprise-network-preference-enabled";
     private static final String TAG_USB_DATA_SIGNALING = "usb-data-signaling";
     private static final String ATTR_VALUE = "value";
     private static final String ATTR_LAST_NETWORK_LOGGING_NOTIFICATION = "last-notification";
     private static final String ATTR_NUM_NETWORK_LOGGING_NOTIFICATIONS = "num-notifications";
-    private static final boolean NETWORK_SLICING_ENABLED_DEFAULT = true;
+    private static final boolean ENTERPRISE_NETWORK_PREFERENCE_ENABLED_DEFAULT = true;
 
     DeviceAdminInfo info;
 
@@ -283,7 +285,8 @@ class ActiveAdmin {
     public String mOrganizationId;
     public String mEnrollmentSpecificId;
     public boolean mAdminCanGrantSensorsPermissions;
-    public boolean mNetworkSlicingEnabled = NETWORK_SLICING_ENABLED_DEFAULT;
+    public boolean mEnterpriseNetworkPreferenceEnabled =
+            ENTERPRISE_NETWORK_PREFERENCE_ENABLED_DEFAULT;
 
     private static final boolean USB_DATA_SIGNALING_ENABLED_DEFAULT = true;
     boolean mUsbDataSignalingEnabled = USB_DATA_SIGNALING_ENABLED_DEFAULT;
@@ -455,8 +458,7 @@ class ActiveAdmin {
                     try {
                         trustAgentInfo.options.saveToXml(out);
                     } catch (XmlPullParserException e) {
-                        Log.e(DevicePolicyManagerService.LOG_TAG,
-                                "Failed to save TrustAgent options", e);
+                        Slog.e(LOG_TAG, e, "Failed to save TrustAgent options");
                     }
                     out.endTag(null, TAG_TRUST_AGENT_COMPONENT_OPTIONS);
                 }
@@ -555,8 +557,9 @@ class ActiveAdmin {
         }
         writeAttributeValueToXml(out, TAG_ADMIN_CAN_GRANT_SENSORS_PERMISSIONS,
                 mAdminCanGrantSensorsPermissions);
-        if (mNetworkSlicingEnabled != NETWORK_SLICING_ENABLED_DEFAULT) {
-            writeAttributeValueToXml(out, TAG_NETWORK_SLICING_ENABLED, mNetworkSlicingEnabled);
+        if (mEnterpriseNetworkPreferenceEnabled != ENTERPRISE_NETWORK_PREFERENCE_ENABLED_DEFAULT) {
+            writeAttributeValueToXml(out, TAG_ENTERPRISE_NETWORK_PREFERENCE_ENABLED,
+                    mEnterpriseNetworkPreferenceEnabled);
         }
         if (mUsbDataSignalingEnabled != USB_DATA_SIGNALING_ENABLED_DEFAULT) {
             writeAttributeValueToXml(out, TAG_USB_DATA_SIGNALING, mUsbDataSignalingEnabled);
@@ -629,8 +632,7 @@ class ActiveAdmin {
             String tag = parser.getName();
             if (TAG_POLICIES.equals(tag)) {
                 if (shouldOverridePolicies) {
-                    Log.d(DevicePolicyManagerService.LOG_TAG,
-                            "Overriding device admin policies from XML.");
+                    Slog.d(LOG_TAG, "Overriding device admin policies from XML.");
                     info.readPoliciesFromXml(parser);
                 }
             } else if (TAG_PASSWORD_QUALITY.equals(tag)) {
@@ -726,16 +728,14 @@ class ActiveAdmin {
                 if (type == TypedXmlPullParser.TEXT) {
                     shortSupportMessage = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing text when loading short support message");
+                    Slog.w(LOG_TAG, "Missing text when loading short support message");
                 }
             } else if (TAG_LONG_SUPPORT_MESSAGE.equals(tag)) {
                 type = parser.next();
                 if (type == TypedXmlPullParser.TEXT) {
                     longSupportMessage = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing text when loading long support message");
+                    Slog.w(LOG_TAG, "Missing text when loading long support message");
                 }
             } else if (TAG_PARENT_ADMIN.equals(tag)) {
                 Preconditions.checkState(!isParent);
@@ -748,8 +748,7 @@ class ActiveAdmin {
                 if (type == TypedXmlPullParser.TEXT) {
                     organizationName = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing text when loading organization name");
+                    Slog.w(LOG_TAG, "Missing text when loading organization name");
                 }
             } else if (TAG_IS_LOGOUT_ENABLED.equals(tag)) {
                 isLogoutEnabled = parser.getAttributeBoolean(null, ATTR_VALUE, false);
@@ -758,16 +757,14 @@ class ActiveAdmin {
                 if (type == TypedXmlPullParser.TEXT) {
                     startUserSessionMessage = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing text when loading start session message");
+                    Slog.w(LOG_TAG, "Missing text when loading start session message");
                 }
             } else if (TAG_END_USER_SESSION_MESSAGE.equals(tag)) {
                 type = parser.next();
                 if (type == TypedXmlPullParser.TEXT) {
                     endUserSessionMessage = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing text when loading end session message");
+                    Slog.w(LOG_TAG, "Missing text when loading end session message");
                 }
             } else if (TAG_CROSS_PROFILE_CALENDAR_PACKAGES.equals(tag)) {
                 mCrossProfileCalendarPackages = readPackageList(parser, tag);
@@ -790,9 +787,9 @@ class ActiveAdmin {
                 mAlwaysOnVpnPackage = parser.getAttributeValue(null, ATTR_VALUE);
             } else if (TAG_ALWAYS_ON_VPN_LOCKDOWN.equals(tag)) {
                 mAlwaysOnVpnLockdown = parser.getAttributeBoolean(null, ATTR_VALUE, false);
-            } else if (TAG_NETWORK_SLICING_ENABLED.equals(tag)) {
-                mNetworkSlicingEnabled = parser.getAttributeBoolean(
-                        null, ATTR_VALUE, NETWORK_SLICING_ENABLED_DEFAULT);
+            } else if (TAG_ENTERPRISE_NETWORK_PREFERENCE_ENABLED.equals(tag)) {
+                mEnterpriseNetworkPreferenceEnabled = parser.getAttributeBoolean(
+                        null, ATTR_VALUE, ENTERPRISE_NETWORK_PREFERENCE_ENABLED_DEFAULT);
             } else if (TAG_COMMON_CRITERIA_MODE.equals(tag)) {
                 mCommonCriteriaMode = parser.getAttributeBoolean(null, ATTR_VALUE, false);
             } else if (TAG_PASSWORD_COMPLEXITY.equals(tag)) {
@@ -802,16 +799,14 @@ class ActiveAdmin {
                 if (type == TypedXmlPullParser.TEXT) {
                     mOrganizationId = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing Organization ID.");
+                    Slog.w(LOG_TAG, "Missing Organization ID.");
                 }
             } else if (TAG_ENROLLMENT_SPECIFIC_ID.equals(tag)) {
                 type = parser.next();
                 if (type == TypedXmlPullParser.TEXT) {
                     mEnrollmentSpecificId = parser.getText();
                 } else {
-                    Log.w(DevicePolicyManagerService.LOG_TAG,
-                            "Missing Enrollment-specific ID.");
+                    Slog.w(LOG_TAG, "Missing Enrollment-specific ID.");
                 }
             } else if (TAG_ADMIN_CAN_GRANT_SENSORS_PERMISSIONS.equals(tag)) {
                 mAdminCanGrantSensorsPermissions = parser.getAttributeBoolean(null, ATTR_VALUE,
@@ -820,7 +815,7 @@ class ActiveAdmin {
                 mUsbDataSignalingEnabled = parser.getAttributeBoolean(null, ATTR_VALUE,
                         USB_DATA_SIGNALING_ENABLED_DEFAULT);
             } else {
-                Slog.w(DevicePolicyManagerService.LOG_TAG, "Unknown admin tag: " + tag);
+                Slog.w(LOG_TAG, "Unknown admin tag: %s", tag);
                 XmlUtils.skipCurrentTag(parser);
             }
         }
@@ -842,12 +837,10 @@ class ActiveAdmin {
                 if (packageName != null) {
                     result.add(packageName);
                 } else {
-                    Slog.w(DevicePolicyManagerService.LOG_TAG,
-                            "Package name missing under " + outerTag);
+                    Slog.w(LOG_TAG, "Package name missing under %s", outerTag);
                 }
             } else {
-                Slog.w(DevicePolicyManagerService.LOG_TAG,
-                        "Unknown tag under " + tag +  ": " + outerTag);
+                Slog.w(LOG_TAG, "Unknown tag under %s: ", tag, outerTag);
             }
         }
         return result;
@@ -868,8 +861,7 @@ class ActiveAdmin {
             if (tag.equals(tagDAM)) {
                 result.add(parser.getAttributeValue(null, ATTR_VALUE));
             } else {
-                Slog.e(DevicePolicyManagerService.LOG_TAG,
-                        "Expected tag " + tag +  " but found " + tagDAM);
+                Slog.e(LOG_TAG, "Expected tag %s but found %s", tag, tagDAM);
             }
         }
     }
@@ -891,8 +883,7 @@ class ActiveAdmin {
                 final TrustAgentInfo trustAgentInfo = getTrustAgentInfo(parser, tag);
                 result.put(component, trustAgentInfo);
             } else {
-                Slog.w(DevicePolicyManagerService.LOG_TAG,
-                        "Unknown tag under " + tag +  ": " + tagDAM);
+                Slog.w(LOG_TAG, "Unknown tag under %s: %s", tag, tagDAM);
             }
         }
         return result;
@@ -912,8 +903,7 @@ class ActiveAdmin {
             if (TAG_TRUST_AGENT_COMPONENT_OPTIONS.equals(tagDAM)) {
                 result.options = PersistableBundle.restoreFromXml(parser);
             } else {
-                Slog.w(DevicePolicyManagerService.LOG_TAG,
-                        "Unknown tag under " + tag +  ": " + tagDAM);
+                Slog.w(LOG_TAG, "Unknown tag under %s: %s", tag, tagDAM);
             }
         }
         return result;
@@ -1155,8 +1145,8 @@ class ActiveAdmin {
         pw.print("mAlwaysOnVpnLockdown=");
         pw.println(mAlwaysOnVpnLockdown);
 
-        pw.print("mNetworkSlicingEnabled=");
-        pw.println(mNetworkSlicingEnabled);
+        pw.print("mEnterpriseNetworkPreferenceEnabled=");
+        pw.println(mEnterpriseNetworkPreferenceEnabled);
 
         pw.print("mCommonCriteriaMode=");
         pw.println(mCommonCriteriaMode);

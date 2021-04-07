@@ -36,6 +36,7 @@ import android.os.SystemProperties
 import android.os.UserHandle
 import android.os.UserManager
 import android.os.incremental.IncrementalManager
+import android.provider.DeviceConfig
 import android.util.ArrayMap
 import android.util.DisplayMetrics
 import android.util.EventLog
@@ -131,6 +132,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
                 .mockStatic(LockGuard::class.java)
                 .mockStatic(EventLog::class.java)
                 .mockStatic(LocalServices::class.java)
+                .mockStatic(DeviceConfig::class.java)
                 .apply(withSession)
         session = apply.startMocking()
         whenever(mocks.settings.insertPackageSettingLPw(
@@ -163,7 +165,7 @@ class MockSystem(withSession: (StaticMockitoSessionBuilder) -> Unit = {}) {
     /** Collection of mocks used for PackageManagerService tests. */
 
     class Mocks {
-        val lock = Any()
+        val lock = PackageManagerTracedLock()
         val installLock = Any()
         val injector: PackageManagerService.Injector = mock()
         val systemWrapper: PackageManagerService.SystemWrapper = mock()

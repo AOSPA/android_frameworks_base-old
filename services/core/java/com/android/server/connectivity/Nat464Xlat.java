@@ -16,6 +16,8 @@
 
 package com.android.server.connectivity;
 
+import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
+
 import static com.android.net.module.util.CollectionUtils.contains;
 
 import android.annotation.NonNull;
@@ -36,6 +38,7 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.net.module.util.NetworkStackConstants;
+import com.android.server.ConnectivityService;
 
 import java.net.Inet6Address;
 import java.util.Objects;
@@ -95,12 +98,15 @@ public class Nat464Xlat {
     private Inet6Address mIPv6Address;
     private State mState = State.IDLE;
 
+    private boolean mEnableClatOnCellular;
     private boolean mPrefixDiscoveryRunning;
 
-    public Nat464Xlat(NetworkAgentInfo nai, INetd netd, IDnsResolver dnsResolver) {
+    public Nat464Xlat(NetworkAgentInfo nai, INetd netd, IDnsResolver dnsResolver,
+            ConnectivityService.Dependencies deps) {
         mDnsResolver = dnsResolver;
         mNetd = netd;
         mNetwork = nai;
+        mEnableClatOnCellular = deps.getCellular464XlatEnabled();
     }
 
     /**
@@ -112,7 +118,7 @@ public class Nat464Xlat {
      * @return true if the network requires clat, false otherwise.
      */
     @VisibleForTesting
-    protected static boolean requiresClat(NetworkAgentInfo nai) {
+    protected boolean requiresClat(NetworkAgentInfo nai) {
         // TODO: migrate to NetworkCapabilities.TRANSPORT_*.
         final int netType = nai.networkInfo.getType();
         final boolean supported = contains(NETWORK_TYPES, nai.networkInfo.getType());
@@ -134,7 +140,9 @@ public class Nat464Xlat {
         }
 
         return supported && connected && isIpv6OnlyNetwork && !skip464xlat
-            && ((netType == ConnectivityManager.TYPE_MOBILE) ? doXlat : true);
+            && ((netType == ConnectivityManager.TYPE_MOBILE) ? doXlat : true)
+            && (nai.networkCapabilities.hasTransport(TRANSPORT_CELLULAR)
+                ? isCellular464XlatEnabled() : true);
     }
 
     /**
@@ -145,7 +153,7 @@ public class Nat464Xlat {
      * @return true if the network should start clat, false otherwise.
      */
     @VisibleForTesting
-    protected static boolean shouldStartClat(NetworkAgentInfo nai) {
+    protected boolean shouldStartClat(NetworkAgentInfo nai) {
         LinkProperties lp = nai.linkProperties;
         return requiresClat(nai) && lp != null && lp.getNat64Prefix() != null;
     }
@@ -514,5 +522,10 @@ public class Nat464Xlat {
     @VisibleForTesting
     protected int getNetId() {
         return mNetwork.network.getNetId();
+    }
+
+    @VisibleForTesting
+    protected boolean isCellular464XlatEnabled() {
+        return mEnableClatOnCellular;
     }
 }

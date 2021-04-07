@@ -128,8 +128,8 @@ public class SetSchemaResponse {
      * Returns a {@link Set} of schema type whose new definitions set in the {@link
      * AppSearchSession#setSchema} call were incompatible with the pre-existing schema.
      *
-     * <p>If a {@link android.app.appsearch.AppSearchSchema.Migrator} is provided for this type and
-     * the migration is success triggered. The type will also appear in {@link #getMigratedTypes()}.
+     * <p>If a {@link Migrator} is provided for this type and the migration is success triggered.
+     * The type will also appear in {@link #getMigratedTypes()}.
      *
      * @see AppSearchSession#setSchema
      * @see SetSchemaRequest.Builder#setForceOverride
@@ -160,12 +160,8 @@ public class SetSchemaResponse {
                 .addMigrationFailures(mMigrationFailures);
     }
 
-    /**
-     * Builder for {@link SetSchemaResponse} objects.
-     *
-     * @hide
-     */
-    public static class Builder {
+    /** Builder for {@link SetSchemaResponse} objects. */
+    public static final class Builder {
         private final ArrayList<MigrationFailure> mMigrationFailures = new ArrayList<>();
         private final ArrayList<String> mDeletedTypes = new ArrayList<>();
         private final ArrayList<String> mMigratedTypes = new ArrayList<>();
@@ -309,12 +305,8 @@ public class SetSchemaResponse {
                     mBundle.getString(ERROR_MESSAGE_FIELD, /*defaultValue=*/ ""));
         }
 
-        /**
-         * Builder for {@link MigrationFailure} objects.
-         *
-         * @hide
-         */
-        public static class Builder {
+        /** Builder for {@link MigrationFailure} objects. */
+        public static final class Builder {
             private String mSchemaType;
             private String mNamespace;
             private String mUri;

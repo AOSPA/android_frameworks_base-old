@@ -38,7 +38,6 @@ import android.app.ActivityOptions;
 import android.app.ExitTransitionCoordinator;
 import android.app.ExitTransitionCoordinator.ExitTransitionCallbacks;
 import android.app.Notification;
-import android.app.WindowContext;
 import android.content.ComponentName;
 import android.content.Context;
 import android.content.Intent;
@@ -55,7 +54,6 @@ import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
-import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.util.DisplayMetrics;
 import android.util.Log;
@@ -65,6 +63,7 @@ import android.view.DisplayAddress;
 import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
+import android.view.ScrollCaptureResponse;
 import android.view.SurfaceControl;
 import android.view.View;
 import android.view.ViewTreeObserver;
@@ -74,9 +73,9 @@ import android.view.WindowManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityManager;
 import android.widget.Toast;
+import android.window.WindowContext;
 
 import com.android.internal.app.ChooserActivity;
-import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.policy.PhoneWindow;
 import com.android.settingslib.applications.InterestingConfigChanges;
@@ -84,12 +83,16 @@ import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.screenshot.ScreenshotController.SavedImageData.ActionTransition;
 import com.android.systemui.screenshot.TakeScreenshotService.RequestCallback;
-import com.android.systemui.util.DeviceConfigProxy;
+
+import com.google.common.util.concurrent.ListenableFuture;
 
 import java.util.List;
+import java.util.concurrent.CancellationException;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -101,7 +104,8 @@ import javax.inject.Inject;
 public class ScreenshotController {
     private static final String TAG = logTag(ScreenshotController.class);
 
-    private static ScrollCaptureClient.Connection sScrollConnection;
+    private ScrollCaptureResponse mLastScrollCaptureResponse;
+    private ListenableFuture<ScrollCaptureResponse> mLastScrollCaptureRequest;
 
     /**
      * POD used in the AsyncTask which saves an image in the background.
@@ -185,7 +189,6 @@ public class ScreenshotController {
     private final AccessibilityManager mAccessibilityManager;
     private final MediaActionSound mCameraSound;
     private final ScrollCaptureClient mScrollCaptureClient;
-    private final DeviceConfigProxy mConfigProxy;
     private final PhoneWindow mWindow;
     private final DisplayManager mDisplayManager;
 
@@ -222,12 +225,6 @@ public class ScreenshotController {
                     | ActivityInfo.CONFIG_SCREEN_LAYOUT
                     | ActivityInfo.CONFIG_ASSETS_PATHS);
 
-    public static @Nullable ScrollCaptureClient.Connection takeScrollCaptureConnection() {
-        ScrollCaptureClient.Connection connection = sScrollConnection;
-        sScrollConnection = null;
-        return connection;
-    }
-
     @Inject
     ScreenshotController(
             Context context,
@@ -235,7 +232,6 @@ public class ScreenshotController {
             ScreenshotNotificationsController screenshotNotificationsController,
             ScrollCaptureClient scrollCaptureClient,
             UiEventLogger uiEventLogger,
-            DeviceConfigProxy configProxy,
             ImageExporter imageExporter,
             @Main Executor mainExecutor) {
         mScreenshotSmartActions = screenshotSmartActions;
@@ -252,7 +248,6 @@ public class ScreenshotController {
         mWindowManager = mContext.getSystemService(WindowManager.class);
 
         mAccessibilityManager = AccessibilityManager.getInstance(mContext);
-        mConfigProxy = configProxy;
 
         // Setup the window that we are going to use
         mWindowLayoutParams = new WindowManager.LayoutParams(
@@ -351,6 +346,11 @@ public class ScreenshotController {
             finishDismiss();
         } else {
             mScreenshotView.animateDismissal();
+        }
+
+        if (mLastScrollCaptureResponse != null) {
+            mLastScrollCaptureResponse.close();
+            mLastScrollCaptureResponse = null;
         }
     }
 
@@ -518,23 +518,17 @@ public class ScreenshotController {
         // The window is focusable by default
         setWindowFocusable(true);
 
-        if (mConfigProxy.getBoolean(DeviceConfig.NAMESPACE_SYSTEMUI,
-                SystemUiDeviceConfigFlags.SCREENSHOT_SCROLLING_ENABLED, true)) {
-            View decorView = mWindow.getDecorView();
-
-            // Wait until this window is attached to request because it is
-            // the reference used to locate the target window (below).
-            withWindowAttached(() -> {
-                mScrollCaptureClient.setHostWindowToken(decorView.getWindowToken());
-                mScrollCaptureClient.request(DEFAULT_DISPLAY,
-                        /* onConnection */
-                        (connection) -> mScreenshotHandler.post(() ->
-                                mScreenshotView.showScrollChip(() ->
-                                        /* onClick */
-                                        runScrollCapture(connection))));
-            });
-        }
-
+        // Wait until this window is attached to request because it is
+        // the reference used to locate the target window (below).
+        withWindowAttached(() -> {
+            mScrollCaptureClient.setHostWindowToken(mWindow.getDecorView().getWindowToken());
+            if (mLastScrollCaptureRequest != null) {
+                mLastScrollCaptureRequest.cancel(true);
+            }
+            mLastScrollCaptureRequest = mScrollCaptureClient.request(DEFAULT_DISPLAY);
+            mLastScrollCaptureRequest.addListener(() ->
+                    onScrollCaptureResponseReady(mLastScrollCaptureRequest), mMainExecutor);
+        });
 
         attachWindow();
         mScreenshotView.getViewTreeObserver().addOnPreDrawListener(
@@ -558,6 +552,38 @@ public class ScreenshotController {
         mWindow.getDecorView().setOnApplyWindowInsetsListener(
                 (v, insets) -> WindowInsets.CONSUMED);
         cancelTimeout(); // restarted after animation
+    }
+
+    private void onScrollCaptureResponseReady(Future<ScrollCaptureResponse> responseFuture) {
+        try {
+            if (mLastScrollCaptureResponse != null) {
+                mLastScrollCaptureResponse.close();
+            }
+            mLastScrollCaptureResponse = responseFuture.get();
+            if (!mLastScrollCaptureResponse.isConnected()) {
+                // No connection means that the target window wasn't found
+                // or that it cannot support scroll capture.
+                Log.d(TAG, "ScrollCapture: " + mLastScrollCaptureResponse.getDescription() + " ["
+                 + mLastScrollCaptureResponse.getWindowTitle() + "]");
+                return;
+            }
+            Log.d(TAG, "ScrollCapture: connected to window ["
+                    + mLastScrollCaptureResponse.getWindowTitle() + "]");
+            final Intent intent = new Intent(mContext, LongScreenshotActivity.class);
+            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            intent.putExtra(LongScreenshotActivity.EXTRA_CAPTURE_RESPONSE,
+                    mLastScrollCaptureResponse);
+            mScreenshotView.showScrollChip(/* onClick */ () -> {
+                // Clear the reference to prevent close() in dismissScreenshot
+                mLastScrollCaptureResponse = null;
+                mContext.startActivity(intent);
+                dismissScreenshot(false);
+            });
+        } catch (CancellationException e) {
+            // Ignore
+        } catch (InterruptedException | ExecutionException e) {
+            Log.e(TAG, "requestScrollCapture failed", e);
+        }
     }
 
     private void withWindowAttached(Runnable action) {
@@ -604,15 +630,6 @@ public class ScreenshotController {
             }
             mWindowManager.removeViewImmediate(decorView);
         }
-    }
-
-    private void runScrollCapture(ScrollCaptureClient.Connection connection) {
-        sScrollConnection = connection;  // For LongScreenshotActivity to pick up.
-
-        Intent intent = new Intent(mContext, LongScreenshotActivity.class);
-        intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-        mContext.startActivity(intent);
-        dismissScreenshot(false);
     }
 
     /**

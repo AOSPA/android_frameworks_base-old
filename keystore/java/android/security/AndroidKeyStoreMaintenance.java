@@ -20,7 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
-import android.security.usermanager.IKeystoreUserManager;
+import android.security.maintenance.IKeystoreMaintenance;
 import android.system.keystore2.Domain;
 import android.system.keystore2.ResponseCode;
 import android.util.Log;
@@ -34,9 +34,9 @@ public class AndroidKeyStoreMaintenance {
 
     public static final int SYSTEM_ERROR = ResponseCode.SYSTEM_ERROR;
 
-    private static IKeystoreUserManager getService() {
-        return IKeystoreUserManager.Stub.asInterface(
-                ServiceManager.checkService("android.security.usermanager"));
+    private static IKeystoreMaintenance getService() {
+        return IKeystoreMaintenance.Stub.asInterface(
+                ServiceManager.checkService("android.security.maintenance"));
     }
 
     /**
@@ -119,6 +119,38 @@ public class AndroidKeyStoreMaintenance {
         } catch (Exception e) {
             Log.e(TAG, "Can not connect to keystore", e);
             return SYSTEM_ERROR;
+        }
+    }
+
+    /**
+     * Queries user state from Keystore 2.0.
+     *
+     * @param userId - Android user id of the user.
+     * @return UserState enum variant as integer if successful or an error
+     */
+    public static int getState(int userId) {
+        try {
+            return getService().getState(userId);
+        } catch (ServiceSpecificException e) {
+            Log.e(TAG, "getState failed", e);
+            return e.errorCode;
+        } catch (Exception e) {
+            Log.e(TAG, "Can not connect to keystore", e);
+            return SYSTEM_ERROR;
+        }
+    }
+
+    /**
+     * Informs Keystore 2.0 that an off body event was detected.
+     */
+    public static void onDeviceOffBody() {
+        if (!android.security.keystore2.AndroidKeyStoreProvider.isInstalled()) return;
+        try {
+            getService().onDeviceOffBody();
+        } catch (Exception e) {
+            // TODO This fails open. This is not a regression with respect to keystore1 but it
+            //      should get fixed.
+            Log.e(TAG, "Error while reporting device off body event.", e);
         }
     }
 }

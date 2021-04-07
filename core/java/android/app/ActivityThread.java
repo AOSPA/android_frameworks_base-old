@@ -159,7 +159,6 @@ import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.SparseIntArray;
 import android.util.SuperNotCalledException;
 import android.util.UtilConfig;
 import android.util.proto.ProtoOutputStream;
@@ -181,6 +180,7 @@ import android.view.contentcapture.IContentCaptureManager;
 import android.view.contentcapture.IContentCaptureOptionsCallback;
 import android.view.translation.TranslationSpec;
 import android.webkit.WebView;
+import android.window.SizeConfigurationBuckets;
 import android.window.SplashScreen;
 import android.window.SplashScreenView;
 
@@ -293,7 +293,6 @@ public final class ActivityThread extends ClientTransactionHandler
     /** Use background GC policy and default JIT threshold. */
     private static final int VM_PROCESS_STATE_JANK_IMPERCEPTIBLE = 1;
 
-    private static final int REMOVE_SPLASH_SCREEN_VIEW_TIMEOUT = 5000;
     /**
      * Denotes an invalid sequence number corresponding to a process state change.
      */
@@ -604,6 +603,8 @@ public final class ActivityThread extends ClientTransactionHandler
 
         @LifecycleState
         private int mLifecycleState = PRE_ON_CREATE;
+
+        private SizeConfigurationBuckets mSizeConfigurations;
 
         @VisibleForTesting
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
@@ -1955,8 +1956,6 @@ public final class ActivityThread extends ClientTransactionHandler
         public static final int INSTRUMENT_WITHOUT_RESTART = 170;
         public static final int FINISH_INSTRUMENTATION_WITHOUT_RESTART = 171;
 
-        public static final int REMOVE_SPLASH_SCREEN_VIEW = 172;
-
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
                 switch (code) {
@@ -2005,8 +2004,6 @@ public final class ActivityThread extends ClientTransactionHandler
                     case INSTRUMENT_WITHOUT_RESTART: return "INSTRUMENT_WITHOUT_RESTART";
                     case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                         return "FINISH_INSTRUMENTATION_WITHOUT_RESTART";
-                    case REMOVE_SPLASH_SCREEN_VIEW:
-                        return "REMOVE_SPLASH_SCREEN_VIEW";
                 }
             }
             return Integer.toString(code);
@@ -2203,9 +2200,6 @@ public final class ActivityThread extends ClientTransactionHandler
                 case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                     handleFinishInstrumentationWithoutRestart();
                     break;
-                case REMOVE_SPLASH_SCREEN_VIEW:
-                    handleRemoveSplashScreenView((ActivityClientRecord) msg.obj);
-                    break;
             }
             Object obj = msg.obj;
             if (obj instanceof SomeArgs) {
@@ -2335,7 +2329,7 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     @UnsupportedAppUsage
-    final Handler getHandler() {
+    public Handler getHandler() {
         return mH;
     }
 
@@ -3765,23 +3759,8 @@ public final class ActivityThread extends ClientTransactionHandler
         if (configurations == null) {
             return;
         }
-        SparseIntArray horizontal = new SparseIntArray();
-        SparseIntArray vertical = new SparseIntArray();
-        SparseIntArray smallest = new SparseIntArray();
-        for (int i = configurations.length - 1; i >= 0; i--) {
-            Configuration config = configurations[i];
-            if (config.screenHeightDp != Configuration.SCREEN_HEIGHT_DP_UNDEFINED) {
-                vertical.put(config.screenHeightDp, 0);
-            }
-            if (config.screenWidthDp != Configuration.SCREEN_WIDTH_DP_UNDEFINED) {
-                horizontal.put(config.screenWidthDp, 0);
-            }
-            if (config.smallestScreenWidthDp != Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED) {
-                smallest.put(config.smallestScreenWidthDp, 0);
-            }
-        }
-        ActivityClient.getInstance().reportSizeConfigurations(r.token, horizontal.copyKeys(),
-                vertical.copyKeys(), smallest.copyKeys());
+        r.mSizeConfigurations = new SizeConfigurationBuckets(configurations);
+        ActivityClient.getInstance().reportSizeConfigurations(r.token, r.mSizeConfigurations);
     }
 
     private void deliverNewIntents(ActivityClientRecord r, List<ReferrerIntent> intents) {
@@ -4034,6 +4013,7 @@ public final class ActivityThread extends ClientTransactionHandler
         view.cacheRootWindow(r.window);
         view.makeSystemUIColorsTransparent();
         r.activity.mSplashScreenView = view;
+        view.attachHostActivity(r.activity);
         view.requestLayout();
         // Ensure splash screen view is shown before remove the splash screen window.
         final ViewRootImpl impl = decorView.getViewRootImpl();
@@ -4076,24 +4056,12 @@ public final class ActivityThread extends ClientTransactionHandler
     @Override
     public void handOverSplashScreenView(@NonNull ActivityClientRecord r) {
         if (r.activity.mSplashScreenView != null) {
-            Message msg = mH.obtainMessage(H.REMOVE_SPLASH_SCREEN_VIEW, r);
-            mH.sendMessageDelayed(msg, REMOVE_SPLASH_SCREEN_VIEW_TIMEOUT);
             synchronized (this) {
                 if (mSplashScreenGlobal != null) {
                     mSplashScreenGlobal.dispatchOnExitAnimation(r.token,
                             r.activity.mSplashScreenView);
                 }
             }
-        }
-    }
-
-    /**
-     * Force remove splash screen view.
-     */
-    private void handleRemoveSplashScreenView(@NonNull ActivityClientRecord r) {
-        if (r.activity.mSplashScreenView != null) {
-            r.activity.mSplashScreenView.remove();
-            r.activity.mSplashScreenView = null;
         }
     }
 
@@ -5774,13 +5742,19 @@ public final class ActivityThread extends ClientTransactionHandler
             // onConfigurationChanged.
             // TODO(b/173090263): Use diff instead after the improvement of AssetManager and
             // ResourcesImpl constructions.
-            final int diff = activity.mCurrentConfig.diffPublicOnly(newConfig);
+            int diff = activity.mCurrentConfig.diffPublicOnly(newConfig);
+            final ActivityClientRecord cr = getActivityClient(activityToken);
+            diff = SizeConfigurationBuckets.filterDiff(diff, activity.mCurrentConfig, newConfig,
+                    cr != null ? cr.mSizeConfigurations : null);
 
-            if (diff == 0 && !shouldUpdateWindowMetricsBounds(activity.mCurrentConfig, newConfig)
-                    && !movedToDifferentDisplay && mResourcesManager.isSameResourcesOverrideConfig(
-                            activityToken, amOverrideConfig)) {
-                // Nothing significant, don't proceed with updating and reporting.
-                return null;
+            if (diff == 0) {
+                if (!shouldUpdateWindowMetricsBounds(activity.mCurrentConfig, newConfig)
+                        && !movedToDifferentDisplay
+                        && mResourcesManager.isSameResourcesOverrideConfig(
+                                activityToken, amOverrideConfig)) {
+                    // Nothing significant, don't proceed with updating and reporting.
+                    return null;
+                }
             } else if ((~activity.mActivityInfo.getRealConfigChanged() & diff) == 0) {
                 // If this activity doesn't handle any of the config changes, then don't bother
                 // calling onConfigurationChanged. Otherwise, report to the activity for the

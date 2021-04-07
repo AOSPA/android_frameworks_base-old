@@ -48,7 +48,7 @@ interface IBiometricAuthenticator {
     // startPreparedClient().
     void prepareForAuthentication(boolean requireConfirmation, IBinder token, long operationId,
             int userId, IBiometricSensorReceiver sensorReceiver, String opPackageName,
-            int cookie);
+            int cookie, boolean allowBackgroundAuthentication);
 
     // Starts authentication with the previously prepared client.
     void startPreparedClient(int cookie);
@@ -70,4 +70,8 @@ interface IBiometricAuthenticator {
 
     // Gets the authenticator ID representing the current set of enrolled templates
     long getAuthenticatorId(int callingUserId);
+
+    // Requests the sensor to reset its lockout state
+    void resetLockout(IBinder token, String opPackageName, int userId,
+            in byte[] hardwareAuthToken);
 }

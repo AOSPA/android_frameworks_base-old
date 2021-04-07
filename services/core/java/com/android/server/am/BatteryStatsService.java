@@ -17,6 +17,7 @@
 package com.android.server.am;
 
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
+import static android.os.BatteryStats.POWER_DATA_UNAVAILABLE;
 
 import android.annotation.NonNull;
 import android.bluetooth.BluetoothActivityEnergyInfo;
@@ -32,6 +33,7 @@ import android.net.ConnectivityManager;
 import android.net.INetworkManagementEventObserver;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.os.BatteryManagerInternal;
 import android.os.BatteryStats;
 import android.os.BatteryStatsInternal;
 import android.os.BatteryUsageStats;
@@ -183,6 +185,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     }
                 }
             };
+
+    private BatteryManagerInternal mBatteryManagerInternal;
 
     private void populatePowerEntityMaps() {
         PowerEntity[] entities = mPowerStatsInternal.getPowerEntityInfo();
@@ -370,6 +374,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 Slog.e(TAG, "Could not register PowerStatsInternal");
             }
         }
+        mBatteryManagerInternal = LocalServices.getService(BatteryManagerInternal.class);
 
         Watchdog.getInstance().addMonitor(this);
 
@@ -669,6 +674,13 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     public List<BatteryUsageStats> getBatteryUsageStats(List<BatteryUsageStatsQuery> queries) {
         mContext.enforceCallingPermission(
                 android.Manifest.permission.BATTERY_STATS, null);
+        awaitCompletion();
+
+        if (mBatteryUsageStatsProvider.shouldUpdateStats(queries,
+                mWorker.getLastCollectionTimeStamp())) {
+            syncStats("get-stats", BatteryExternalStatsWorker.UPDATE_ALL);
+        }
+
         return mBatteryUsageStatsProvider.getBatteryUsageStats(queries);
     }
 
@@ -1923,7 +1935,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
             mHandler.post(() -> {
-                mStats.updateWifiState(info, elapsedRealtime, uptime);
+                mStats.updateWifiState(info, POWER_DATA_UNAVAILABLE, elapsedRealtime, uptime);
             });
         }
     }
@@ -1941,7 +1953,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             final long uptime = SystemClock.uptimeMillis();
             mHandler.post(() -> {
                 synchronized (mStats) {
-                    mStats.updateBluetoothStateLocked(info, elapsedRealtime, uptime);
+                    mStats.updateBluetoothStateLocked(
+                            info, POWER_DATA_UNAVAILABLE, elapsedRealtime, uptime);
                 }
             });
         }
@@ -1960,7 +1973,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             final long elapsedRealtime = SystemClock.elapsedRealtime();
             final long uptime = SystemClock.uptimeMillis();
             mHandler.post(() -> {
-                mStats.noteModemControllerActivity(info, elapsedRealtime, uptime);
+                mStats.noteModemControllerActivity(info, POWER_DATA_UNAVAILABLE, elapsedRealtime,
+                        uptime);
             });
         }
     }
@@ -2714,5 +2728,45 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                 }
             });
         }
+    }
+
+    /**
+     * Sets battery AC charger to enabled/disabled, and freezes the battery state.
+     */
+    @Override
+    public void setChargerAcOnline(boolean online, boolean forceUpdate) {
+        mBatteryManagerInternal.setChargerAcOnline(online, forceUpdate);
+    }
+
+    /**
+     * Sets battery level, and freezes the battery state.
+     */
+    @Override
+    public void setBatteryLevel(int level, boolean forceUpdate) {
+        mBatteryManagerInternal.setBatteryLevel(level, forceUpdate);
+    }
+
+    /**
+     * Unplugs battery, and freezes the battery state.
+     */
+    @Override
+    public void unplugBattery(boolean forceUpdate) {
+        mBatteryManagerInternal.unplugBattery(forceUpdate);
+    }
+
+    /**
+     * Unfreezes battery state, returning to current hardware values.
+     */
+    @Override
+    public void resetBattery(boolean forceUpdate) {
+        mBatteryManagerInternal.resetBattery(forceUpdate);
+    }
+
+    /**
+     * Suspend charging even if plugged in.
+     */
+    @Override
+    public void suspendBatteryInput() {
+        mBatteryManagerInternal.suspendBatteryInput();
     }
 }

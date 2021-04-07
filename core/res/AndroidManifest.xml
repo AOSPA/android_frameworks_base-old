@@ -534,6 +534,8 @@
     <protected-broadcast android:name="android.app.action.ACTION_PASSWORD_FAILED" />
     <protected-broadcast android:name="android.app.action.ACTION_PASSWORD_SUCCEEDED" />
     <protected-broadcast android:name="com.android.server.ACTION_EXPIRED_PASSWORD_NOTIFICATION" />
+    <protected-broadcast android:name="com.android.server.ACTION_PROFILE_OFF_DEADLINE" />
+    <protected-broadcast android:name="com.android.server.ACTION_TURN_PROFILE_ON_NOTIFICATION" />
 
     <protected-broadcast android:name="android.intent.action.MANAGED_PROFILE_ADDED" />
     <protected-broadcast android:name="android.intent.action.MANAGED_PROFILE_UNLOCKED" />
@@ -601,6 +603,7 @@
     <protected-broadcast android:name="android.intent.action.MEDIA_RESOURCE_GRANTED" />
     <protected-broadcast android:name="android.app.action.NETWORK_LOGS_AVAILABLE" />
     <protected-broadcast android:name="android.app.action.SECURITY_LOGS_AVAILABLE" />
+    <protected-broadcast android:name="android.app.action.COMPLIANCE_ACKNOWLEDGEMENT_REQUIRED" />
 
     <protected-broadcast android:name="android.app.action.INTERRUPTION_FILTER_CHANGED" />
     <protected-broadcast android:name="android.app.action.INTERRUPTION_FILTER_CHANGED_INTERNAL" />
@@ -725,6 +728,7 @@
 
     <!-- Added in S -->
     <protected-broadcast android:name="android.intent.action.REBOOT_READY" />
+    <protected-broadcast android:name="android.app.action.DEVICE_POLICY_CONSTANTS_CHANGED" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -1018,6 +1022,23 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:protectionLevel="signature|appop|preinstalled" />
 
+    <!-- Allows an application to modify and delete media files on this device or any connected
+         storage device without user confirmation. Applications must already be granted the
+         {@link #READ_EXTERNAL_STORAGE} or {@link #MANAGE_EXTERNAL_STORAGE}} permissions for this
+         permission to take effect.
+         <p>Even if applications are granted this permission, if applications want to modify or
+         delete media files, they also must get the access by calling
+         {@link android.provider.MediaStore#createWriteRequest(ContentResolver, Collection)},
+         {@link android.provider.MediaStore#createDeleteRequest(ContentResolver, Collection)}, or
+         {@link android.provider.MediaStore#createTrashRequest(ContentResolver, Collection, boolean)}.
+         <p>This permission doesn't give read or write access directly. It only prevents the user
+         confirmation dialog for these requests.
+         <p>If applications are not granted {@link #ACCESS_MEDIA_LOCATION}, the system also pops up
+         the user confirmation dialog for the write request.
+         <p>Protection level: signature|appop|preinstalled -->
+    <permission android:name="android.permission.MANAGE_MEDIA"
+        android:protectionLevel="signature|appop|preinstalled" />
+
     <!-- ====================================================================== -->
     <!-- Permissions for accessing the device location                          -->
     <!-- ====================================================================== -->
@@ -1243,7 +1264,7 @@
         android:description="@string/permdesc_answerPhoneCalls"
         android:protectionLevel="dangerous|runtime" />
 
-    <!-- Allows a calling application which manages it own calls through the self-managed
+    <!-- Allows a calling application which manages its own calls through the self-managed
          {@link android.telecom.ConnectionService} APIs.  See
          {@link android.telecom.PhoneAccount#CAPABILITY_SELF_MANAGED} for more information on the
          self-managed ConnectionService APIs.
@@ -1400,6 +1421,14 @@
         android:description="@string/permdesc_camera"
         android:backgroundPermission="android.permission.BACKGROUND_CAMERA"
         android:protectionLevel="dangerous|instant" />
+
+    <!-- Required to be able to discover and connect to nearby Bluetooth devices.
+         <p>Protection level: dangerous -->
+    <permission-group android:name="android.permission-group.NEARBY_DEVICES"
+        android:icon="@drawable/ic_qs_bluetooth"
+        android:label="@string/permgrouplab_nearby_devices"
+        android:description="@string/permgroupdesc_nearby_devices"
+        android:priority="750" />
 
     <!-- @SystemApi @TestApi Required to be able to access the camera device in the background.
          This permission is not intended to be held by apps.
@@ -1948,6 +1977,22 @@
         android:label="@string/permlab_bluetooth"
         android:protectionLevel="normal" />
 
+    <!-- Required to be able to discover and pair nearby Bluetooth devices.
+         <p>Protection level: dangerous -->
+    <permission android:name="android.permission.BLUETOOTH_SCAN"
+        android:permissionGroup="android.permission-group.UNDEFINED"
+        android:description="@string/permdesc_bluetooth_scan"
+        android:label="@string/permlab_bluetooth_scan"
+        android:protectionLevel="dangerous" />
+
+    <!-- Required to be able to connect to paired Bluetooth devices.
+         <p>Protection level: dangerous -->
+    <permission android:name="android.permission.BLUETOOTH_CONNECT"
+        android:permissionGroup="android.permission-group.UNDEFINED"
+        android:description="@string/permdesc_bluetooth_connect"
+        android:label="@string/permlab_bluetooth_connect"
+        android:protectionLevel="dangerous" />
+
     <!-- @SystemApi @TestApi Allows an application to suspend other apps, which will prevent the
          user from using them until they are unsuspended.
          @hide
@@ -1979,6 +2024,12 @@
          @hide This should only be used by Bluetooth apk.
     -->
     <permission android:name="android.permission.BLUETOOTH_STACK"
+        android:protectionLevel="signature" />
+
+    <!-- Allows uhid write access for creating virtual input devices
+         @hide
+    -->
+    <permission android:name="android.permission.VIRTUAL_INPUT_DEVICE"
         android:protectionLevel="signature" />
 
     <!-- Allows applications to perform I/O operations over NFC.
@@ -2326,11 +2377,6 @@
     <!-- @SystemApi @TestApi Allows read access to privileged phone state.
          @hide Used internally. -->
     <permission android:name="android.permission.READ_PRIVILEGED_PHONE_STATE"
-        android:protectionLevel="signature|privileged" />
-
-    <!-- @SystemApi Allows read access to privileged network state in the device config.
-         @hide Used internally. -->
-    <permission android:name="android.permission.READ_NETWORK_DEVICE_CONFIG"
         android:protectionLevel="signature|privileged" />
 
     <!-- Allows to read device identifiers and use ICC based authentication like EAP-AKA.
@@ -2682,9 +2728,10 @@
     <permission android:name="android.permission.CREATE_USERS"
         android:protectionLevel="signature" />
 
-    <!-- @TestApi @hide Allows an application to query user info for all users on the device. -->
-    <permission android:name="android.permission.QUERY_USERS"
-                android:protectionLevel="signature" />
+    <!-- @SystemApi @hide Allows an application to access data blobs across users.
+         This permission is not available to third party applications. -->
+    <permission android:name="android.permission.ACCESS_BLOBS_ACROSS_USERS"
+        android:protectionLevel="signature|privileged|development" />
 
     <!-- @hide Allows an application to set the profile owners and the device owner.
          This permission is not available to third party applications.-->
@@ -2811,11 +2858,11 @@
          The app can check whether it has this authorization by calling
          {@link android.provider.Settings#canDrawOverlays
          Settings.canDrawOverlays()}.
-         <p>Protection level: signature|appop|installer|appPredictor|pre23|development -->
+         <p>Protection level: signature|setup|appop|installer|appPredictor|pre23|development -->
     <permission android:name="android.permission.SYSTEM_ALERT_WINDOW"
         android:label="@string/permlab_systemAlertWindow"
         android:description="@string/permdesc_systemAlertWindow"
-        android:protectionLevel="signature|appop|installer|appPredictor|pre23|development" />
+        android:protectionLevel="signature|setup|appop|installer|appPredictor|pre23|development" />
 
     <!-- @SystemApi @hide Allows an application to create windows using the type
          {@link android.view.WindowManager.LayoutParams#TYPE_APPLICATION_OVERLAY},
@@ -2965,6 +3012,15 @@
     -->
     <permission android:name="android.permission.SUGGEST_MANUAL_TIME_AND_ZONE"
         android:protectionLevel="signature" />
+
+    <!-- Allows system clock time suggestions from an external clock / time source to be made.
+         The nature of "external" could be highly form-factor specific. Example, times
+         obtained via the VHAL for Android Auto OS.
+         <p>Not for use by third-party applications.
+         @SystemApi @hide
+    -->
+    <permission android:name="android.permission.SUGGEST_EXTERNAL_TIME"
+        android:protectionLevel="signature|privileged" />
 
     <!-- Allows applications like settings to manage configuration associated with automatic time
          and time zone detection.
@@ -3470,6 +3526,14 @@
     <permission android:name="android.permission.INTERNAL_SYSTEM_WINDOW"
         android:protectionLevel="signature" />
 
+    <!-- Allows an application to avoid all toast rate limiting restrictions.
+         <p>Not for use by third-party applications.
+         @hide
+    -->
+    <permission android:name="android.permission.UNLIMITED_TOASTS"
+                android:protectionLevel="signature" />
+    <uses-permission android:name="android.permission.UNLIMITED_TOASTS" />
+
     <!-- @SystemApi Allows an application to use
          {@link android.view.WindowManager.LayoutsParams#SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS}
          to hide non-system-overlay windows.
@@ -3573,7 +3637,7 @@
          @hide
     -->
     <permission android:name="android.permission.GET_TOP_ACTIVITY_INFO"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|recents" />
 
     <!-- Allows an application to retrieve the current state of keys and
          switches.
@@ -3725,6 +3789,13 @@
     -->
     <permission android:name="android.permission.BIND_HOTWORD_DETECTION_SERVICE"
         android:protectionLevel="signature" />
+
+    <!-- @SystemApi Allows an application to manage hotword detection on the device.
+         <p>Protection level: internal|preinstalled
+         @hide This is not a third-party API (intended for OEMs and system apps).
+    -->
+    <permission android:name="android.permission.MANAGE_HOTWORD_DETECTION"
+                android:protectionLevel="internal|preinstalled" />
 
     <!-- Must be required by a {@link android.service.autofill.AutofillService},
          to ensure that only the system can bind to it.
@@ -3971,6 +4042,15 @@
     <permission android:name="android.permission.SET_KEYBOARD_LAYOUT"
         android:protectionLevel="signature" />
 
+    <!-- Allows an app to schedule a prioritized alarm that can be used to perform
+         background work even when the device is in doze.
+         <p>Not for use by third-party applications.
+         @hide
+         @SystemApi
+     -->
+    <permission android:name="android.permission.SCHEDULE_PRIORITIZED_ALARM"
+                android:protectionLevel="signature|privileged"/>
+
     <!-- Allows an app to use exact alarm scheduling APIs to perform timing
          sensitive background work.
      -->
@@ -4200,6 +4280,11 @@
     <permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE"
                 android:protectionLevel="normal" />
 
+    <!-- Allows an application to create new companion device associations.
+         @hide -->
+    <permission android:name="android.permission.ASSOCIATE_COMPANION_DEVICES"
+        android:protectionLevel="internal|role" />
+
     <!-- @SystemApi Allows an application to use SurfaceFlinger's low level features.
          <p>Not for use by third-party applications.
          @hide
@@ -4401,11 +4486,23 @@
     <permission android:name="android.permission.MODIFY_AUDIO_ROUTING"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @TestApi Allows an application to query audio related state.
+         @hide -->
+    <permission android:name="android.permission.QUERY_AUDIO_STATE"
+                android:protectionLevel="signature" />
+
     <!-- Allows an application to modify what effects are applied to all audio
          (matching certain criteria) from any application.
          <p>Not for use by third-party applications.</p>
          @hide -->
     <permission android:name="android.permission.MODIFY_DEFAULT_AUDIO_EFFECTS"
+        android:protectionLevel="signature|privileged" />
+
+    <!-- @SystemApi Allows an application to disable system sound effects when the user exits one of
+         the application's activities.
+         <p>Not for use by third-party applications.</p>
+         @hide -->
+    <permission android:name="android.permission.DISABLE_SYSTEM_SOUND_EFFECTS"
         android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Allows an application to provide remote displays.
@@ -4495,7 +4592,7 @@
     <permission android:name="android.permission.FACTORY_TEST"
         android:protectionLevel="signature" />
 
-    <!-- @hide @TestApi Allows an application to broadcast the intent {@link
+    <!-- @hide @TestApi @SystemApi Allows an application to broadcast the intent {@link
          android.content.Intent#ACTION_CLOSE_SYSTEM_DIALOGS}.
          <p>Not for use by third-party applications.
     -->
@@ -4835,7 +4932,7 @@
          TODO(159952358): STOPSHIP: This must be updated to the new "internal" protectionLevel
     -->
     <permission android:name="android.permission.DOMAIN_VERIFICATION_AGENT"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="internal|privileged" />
 
     <!-- @SystemApi @hide Must be required by the domain verification agent's intent
          BroadcastReceiver, to ensure that only the system can interact with it.
@@ -4917,6 +5014,11 @@
          <p>Not for use by third-party applications. @hide -->
     <permission android:name="android.permission.SET_INITIAL_LOCK"
         android:protectionLevel="signature|setup"/>
+
+    <!-- @TestApi Allows applications to set and verify lockscreen credentials.
+        @hide -->
+    <permission android:name="android.permission.SET_AND_VERIFY_LOCKSCREEN_CREDENTIALS"
+                android:protectionLevel="signature"/>
 
     <!-- Allows managing (adding, removing) fingerprint templates. Reserved for the system. @hide -->
     <permission android:name="android.permission.MANAGE_FINGERPRINT"
@@ -5295,15 +5397,20 @@
     <permission android:name="android.permission.MANAGE_MUSIC_RECOGNITION"
         android:protectionLevel="signature|privileged" />
 
+    <!-- @SystemApi Allows an application to manage speech recognition service.
+     @hide  <p>Not for use by third-party applications.</p> -->
+    <permission android:name="android.permission.MANAGE_SPEECH_RECOGNITION"
+        android:protectionLevel="signature" />
+
     <!-- @SystemApi Allows an application to manage the content suggestions service.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_CONTENT_SUGGESTIONS"
-         android:protectionLevel="signature" />
+        android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows an application to manage the app predictions service.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_APP_PREDICTIONS"
-         android:protectionLevel="signature|appPredictor" />
+        android:protectionLevel="signature|appPredictor" />
 
     <!-- @SystemApi Allows an application to manage the search ui service.
      @hide  <p>Not for use by third-party applications.</p> -->
@@ -5375,12 +5482,6 @@
     <permission android:name="android.permission.WATCH_APPOPS"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Allows an application to directly open the "Open by default" page inside a package's
-         Details screen.
-         @hide <p>Not for use by third-party applications. -->
-    <permission android:name="android.permission.OPEN_APP_OPEN_BY_DEFAULT_SETTINGS"
-                android:protectionLevel="signature" />
-
     <!-- Allows hidden API checks to be disabled when starting a process.
          @hide <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.DISABLE_HIDDEN_API_CHECKS"
@@ -5450,6 +5551,8 @@
          intents}.
          <p>Protection level: normal -->
     <permission android:name="android.permission.USE_FULL_SCREEN_INTENT"
+                android:label="@string/permlab_fullScreenIntent"
+                android:description="@string/permdesc_fullScreenIntent"
                 android:protectionLevel="normal" />
 
     <!-- @SystemApi Allows requesting the framework broadcast the
@@ -5505,8 +5608,16 @@
     <permission android:name="android.permission.READ_COMPAT_CHANGE_CONFIG"
                 android:protectionLevel="signature|privileged" />
     <!-- Allows an app to override compat change config.
+         This permission only allows to override config on debuggable builds or test-apks and is
+         therefore a less powerful version of OVERRIDE_COMPAT_CHANGE_CONFIG_ON_RELEASE_BUILD.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.OVERRIDE_COMPAT_CHANGE_CONFIG"
+                android:protectionLevel="signature|privileged" />
+    <uses-permission android:name="android.permission.OVERRIDE_COMPAT_CHANGE_CONFIG"/>
+    <!-- @SystemApi Allows an app to override compat change config on release builds.
+        Only ChangeIds that are annotated as @Overridable can be overridden on release builds.
+        @hide -->
+    <permission android:name="android.permission.OVERRIDE_COMPAT_CHANGE_CONFIG_ON_RELEASE_BUILD"
                 android:protectionLevel="signature|privileged" />
 
     <!-- Allows input events to be monitored. Very dangerous!  @hide -->
@@ -5549,6 +5660,10 @@
     <!-- @hide @SystemApi Allows an application to access locusId events in the usage stats. -->
     <permission android:name="android.permission.ACCESS_LOCUS_ID_USAGE_STATS"
                 android:protectionLevel="signature|appPredictor" />
+
+    <!-- @hide @SystemApi Allows an application to manage app hibernation state. -->
+    <permission android:name="android.permission.MANAGE_APP_HIBERNATION"
+        android:protectionLevel="signature|installer" />
 
     <!-- @hide @TestApi Allows apps to reset the state of {@link com.android.server.am.AppErrors}.
          <p>CTS tests will use UiAutomation.adoptShellPermissionIdentity() to gain access.  -->
@@ -5611,6 +5726,19 @@
     <permission android:name="android.permission.SET_CLIP_SOURCE"
                 android:protectionLevel="signature|recents" />
 
+    <!-- Allows an application to request installs that update existing packages do so without
+         user action via
+         {@link android.content.pm.PackageInstaller.SessionParams#setRequireUserAction(boolean)}.
+         This permission only grants the ability to make the request and is not a guarantee that the
+         request will be honored. In order to execute the install, the caller must also have the
+         "android.permission.REQUEST_INSTALL_PACKAGES" or "android.permission.INSTALL_PACKAGES"
+         permissions.
+         <p>Protection level: normal
+    -->
+    <permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"
+                android:protectionLevel="normal" />
+    <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"/>
+
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>
     <!-- Attribution for Country Detector. -->
@@ -5631,6 +5759,10 @@
     <!-- Attribution for Gnss Time Update service. -->
     <attribution android:tag="GnssTimeUpdateService"
                  android:label="@string/gnss_time_update_service"/>
+    <!-- Attribution for MusicRecognitionManagerService.
+         <p>Not for use by third-party applications.</p> -->
+    <attribution android:tag="MusicRecognitionManagerService"
+        android:label="@string/music_recognition_manager_service"/>
 
     <application android:process="system"
                  android:persistent="true"

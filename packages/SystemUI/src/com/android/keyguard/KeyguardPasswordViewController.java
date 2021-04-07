@@ -40,6 +40,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
+import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 
@@ -111,10 +112,13 @@ public class KeyguardPasswordViewController
             KeyguardMessageAreaController.Factory messageAreaControllerFactory,
             LatencyTracker latencyTracker,
             InputMethodManager inputMethodManager,
+            EmergencyButtonController emergencyButtonController,
             @Main DelayableExecutor mainExecutor,
-            @Main Resources resources) {
+            @Main Resources resources,
+            FalsingCollector falsingCollector) {
         super(view, keyguardUpdateMonitor, securityMode, lockPatternUtils, keyguardSecurityCallback,
-                messageAreaControllerFactory, latencyTracker);
+                messageAreaControllerFactory, latencyTracker, falsingCollector,
+                emergencyButtonController);
         mKeyguardSecurityCallback = keyguardSecurityCallback;
         mInputMethodManager = inputMethodManager;
         mMainExecutor = mainExecutor;
@@ -187,23 +191,22 @@ public class KeyguardPasswordViewController
             return;
         }
         if (wasDisabled) {
-            mInputMethodManager.showSoftInput(mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
+            showInput();
         }
     }
 
     @Override
     public void onResume(int reason) {
         super.onResume(reason);
-
-        mPasswordEntry.requestFocus();
         if (reason != KeyguardSecurityView.SCREEN_ON || mShowImeAtScreenOn) {
             showInput();
         }
     }
 
     private void showInput() {
-        mPasswordEntry.post(() -> {
-            if (mPasswordEntry.isFocused() && mView.isShown()) {
+        mView.post(() -> {
+            if (mView.isShown()) {
+                mPasswordEntry.requestFocus();
                 mInputMethodManager.showSoftInput(
                         mPasswordEntry, InputMethodManager.SHOW_IMPLICIT);
             }
@@ -212,7 +215,18 @@ public class KeyguardPasswordViewController
 
     @Override
     public void onPause() {
-        super.onPause();
+        if (!mPasswordEntry.isVisibleToUser()) {
+            // Reset all states directly and then hide IME when the screen turned off.
+            super.onPause();
+        } else {
+            // In order not to break the IME hide animation by resetting states too early after
+            // the password checked, make sure resetting states after the IME hiding animation
+            // finished.
+            mView.setOnFinishImeAnimationRunnable(() -> {
+                mPasswordEntry.clearFocus();
+                super.onPause();
+            });
+        }
         mInputMethodManager.hideSoftInputFromWindow(mView.getWindowToken(), 0);
     }
 

@@ -138,6 +138,27 @@ public final class Call {
     public static final int STATE_SIMULATED_RINGING = 13;
 
     /**
+     * @hide
+     */
+    @IntDef(prefix = { "STATE_" },
+            value = {
+                    STATE_NEW,
+                    STATE_DIALING,
+                    STATE_RINGING,
+                    STATE_HOLDING,
+                    STATE_ACTIVE,
+                    STATE_DISCONNECTED,
+                    STATE_SELECT_PHONE_ACCOUNT,
+                    STATE_CONNECTING,
+                    STATE_DISCONNECTING,
+                    STATE_PULLING_CALL,
+                    STATE_AUDIO_PROCESSING,
+                    STATE_SIMULATED_RINGING
+            })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface CallState {};
+
+    /**
      * The key to retrieve the optional {@code PhoneAccount}s Telecom can bundle with its Call
      * extras. Used to pass the phone accounts to display on the front end to the user in order to
      * select phone accounts to (for example) place a call.
@@ -673,7 +694,11 @@ public final class Call {
         public static final int PROPERTY_IS_ADHOC_CONFERENCE = 0x00002000;
 
         /**
-         * Connection is using Cross SIM Calling.
+         * Connection is using cross sim technology.
+         * <p>
+         * Indicates that the {@link Connection} is using a cross sim technology which would
+         * register IMS over internet APN of default data subscription.
+         * <p>
          */
         public static final int PROPERTY_CROSS_SIM = 0x00004000;
 
@@ -681,6 +706,7 @@ public final class Call {
         // Next PROPERTY value: 0x00004000
         //******************************************************************************************
 
+        private final @CallState int mState;
         private final String mTelecomCallId;
         private final Uri mHandle;
         private final int mHandlePresentation;
@@ -876,6 +902,13 @@ public final class Call {
             }
             builder.append("]");
             return builder.toString();
+        }
+
+        /**
+         * @return the state of the {@link Call} represented by this {@link Call.Details}.
+         */
+        public final @CallState int getState() {
+            return mState;
         }
 
         /** {@hide} */
@@ -1079,6 +1112,7 @@ public final class Call {
             if (o instanceof Details) {
                 Details d = (Details) o;
                 return
+                        Objects.equals(mState, d.mState) &&
                         Objects.equals(mHandle, d.mHandle) &&
                         Objects.equals(mHandlePresentation, d.mHandlePresentation) &&
                         Objects.equals(mCallerDisplayName, d.mCallerDisplayName) &&
@@ -1105,7 +1139,8 @@ public final class Call {
 
         @Override
         public int hashCode() {
-            return Objects.hash(mHandle,
+            return Objects.hash(mState,
+                            mHandle,
                             mHandlePresentation,
                             mCallerDisplayName,
                             mCallerDisplayNamePresentation,
@@ -1127,6 +1162,7 @@ public final class Call {
 
         /** {@hide} */
         public Details(
+                @CallState int state,
                 String telecomCallId,
                 Uri handle,
                 int handlePresentation,
@@ -1146,6 +1182,7 @@ public final class Call {
                 String contactDisplayName,
                 int callDirection,
                 int callerNumberVerificationStatus) {
+            mState = state;
             mTelecomCallId = telecomCallId;
             mHandle = handle;
             mHandlePresentation = handlePresentation;
@@ -1170,6 +1207,7 @@ public final class Call {
         /** {@hide} */
         public static Details createFromParcelableCall(ParcelableCall parcelableCall) {
             return new Details(
+                    parcelableCall.getState(),
                     parcelableCall.getId(),
                     parcelableCall.getHandle(),
                     parcelableCall.getHandlePresentation(),
@@ -1196,6 +1234,8 @@ public final class Call {
             StringBuilder sb = new StringBuilder();
             sb.append("[id: ");
             sb.append(mTelecomCallId);
+            sb.append(", state: ");
+            sb.append(Call.stateToString(mState));
             sb.append(", pa: ");
             sb.append(mAccountHandle);
             sb.append(", hdl: ");
@@ -1312,7 +1352,7 @@ public final class Call {
          * @param call The {@code Call} invoking this method.
          * @param state The new state of the {@code Call}.
          */
-        public void onStateChanged(Call call, int state) {}
+        public void onStateChanged(Call call, @CallState int state) {}
 
         /**
          * Invoked when the parent of this {@code Call} has changed. See {@link #getParent()}.
@@ -2181,9 +2221,11 @@ public final class Call {
     /**
      * Obtains the state of this {@code Call}.
      *
-     * @return A state value, chosen from the {@code STATE_*} constants.
+     * @return The call state.
+     * @deprecated The call state is available via {@link Call.Details#getState()}.
      */
-    public int getState() {
+    @Deprecated
+    public @CallState int getState() {
         return mState;
     }
 
@@ -2561,6 +2603,30 @@ public final class Call {
     final void internalSetDisconnected() {
         if (mState != Call.STATE_DISCONNECTED) {
             mState = Call.STATE_DISCONNECTED;
+            if (mDetails != null) {
+                mDetails = new Details(mState,
+                        mDetails.getTelecomCallId(),
+                        mDetails.getHandle(),
+                        mDetails.getHandlePresentation(),
+                        mDetails.getCallerDisplayName(),
+                        mDetails.getCallerDisplayNamePresentation(),
+                        mDetails.getAccountHandle(),
+                        mDetails.getCallCapabilities(),
+                        mDetails.getCallProperties(),
+                        mDetails.getDisconnectCause(),
+                        mDetails.getConnectTimeMillis(),
+                        mDetails.getGatewayInfo(),
+                        mDetails.getVideoState(),
+                        mDetails.getStatusHints(),
+                        mDetails.getExtras(),
+                        mDetails.getIntentExtras(),
+                        mDetails.getCreationTimeMillis(),
+                        mDetails.getContactDisplayName(),
+                        mDetails.getCallDirection(),
+                        mDetails.getCallerNumberVerificationStatus()
+                        );
+                fireDetailsChanged(mDetails);
+            }
             fireStateChanged(mState);
             fireCallDestroyed();
         }

@@ -25,17 +25,25 @@ import static android.window.StartingWindowInfo.TYPE_PARAMETER_NEW_TASK;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_PROCESS_RUNNING;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_TASK_SWITCH;
 
+import static com.android.wm.shell.common.ExecutorUtils.executeRemoteCallWithTaskPermission;
+
 import android.app.ActivityManager.RunningTaskInfo;
 import android.app.ActivityTaskManager;
 import android.content.Context;
+import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.util.Slog;
+import android.view.SurfaceControl;
 import android.window.StartingWindowInfo;
 import android.window.TaskOrganizer;
 import android.window.TaskSnapshot;
 
+import androidx.annotation.BinderThread;
+
+import com.android.wm.shell.common.RemoteCallable;
 import com.android.wm.shell.common.ShellExecutor;
+import com.android.wm.shell.common.TransactionPool;
 
 import java.util.function.BiConsumer;
 
@@ -55,7 +63,7 @@ import java.util.function.BiConsumer;
  * constructor to keep everything synchronized.
  * @hide
  */
-public class StartingWindowController {
+public class StartingWindowController implements RemoteCallable<StartingWindowController> {
     private static final String TAG = StartingWindowController.class.getSimpleName();
     static final boolean DEBUG_SPLASH_SCREEN = false;
     static final boolean DEBUG_TASK_SNAPSHOT = false;
@@ -65,10 +73,18 @@ public class StartingWindowController {
 
     private BiConsumer<Integer, Integer> mTaskLaunchingCallback;
     private final StartingSurfaceImpl mImpl = new StartingSurfaceImpl();
+    private final Context mContext;
     private final ShellExecutor mSplashScreenExecutor;
 
+    // For Car Launcher
     public StartingWindowController(Context context, ShellExecutor splashScreenExecutor) {
-        mStartingSurfaceDrawer = new StartingSurfaceDrawer(context, splashScreenExecutor);
+        this(context, splashScreenExecutor, new TransactionPool());
+    }
+
+    public StartingWindowController(Context context, ShellExecutor splashScreenExecutor,
+            TransactionPool pool) {
+        mContext = context;
+        mStartingSurfaceDrawer = new StartingSurfaceDrawer(context, splashScreenExecutor, pool);
         mSplashScreenExecutor = splashScreenExecutor;
     }
 
@@ -77,6 +93,16 @@ public class StartingWindowController {
      */
     public StartingSurface asStartingSurface() {
         return mImpl;
+    }
+
+    @Override
+    public Context getContext() {
+        return mContext;
+    }
+
+    @Override
+    public ShellExecutor getRemoteCallExecutor() {
+        return mSplashScreenExecutor;
     }
 
     private static class StartingTypeChecker {
@@ -112,7 +138,8 @@ public class StartingWindowController {
                         + " allowTaskSnapshot " + allowTaskSnapshot
                         + " activityCreated " + activityCreated);
             }
-            if (newTask || !processRunning || (taskSwitch && !activityCreated)) {
+            if ((newTask || !processRunning || (taskSwitch && !activityCreated))
+                    && windowInfo.taskInfo.topActivityType != ACTIVITY_TYPE_HOME) {
                 return STARTING_WINDOW_TYPE_SPLASH_SCREEN;
             }
             if (taskSwitch && allowTaskSnapshot) {
@@ -135,6 +162,13 @@ public class StartingWindowController {
             if (snapshot == null) {
                 if (DEBUG_SPLASH_SCREEN || DEBUG_TASK_SNAPSHOT) {
                     Slog.d(TAG, "isSnapshotCompatible no snapshot " + windowInfo.taskInfo.taskId);
+                }
+                return false;
+            }
+            if (!snapshot.getTopActivityComponent().equals(windowInfo.taskInfo.topActivity)) {
+                if (DEBUG_SPLASH_SCREEN || DEBUG_TASK_SNAPSHOT) {
+                    Slog.d(TAG, "isSnapshotCompatible obsoleted snapshot "
+                            + windowInfo.taskInfo.topActivity);
                 }
                 return false;
             }
@@ -176,56 +210,121 @@ public class StartingWindowController {
     /**
      * Called when a task need a starting window.
      */
-    void addStartingWindow(StartingWindowInfo windowInfo, IBinder appToken) {
-        final int suggestionType = mStartingTypeChecker.estimateStartingWindowType(windowInfo);
-        final RunningTaskInfo runningTaskInfo = windowInfo.taskInfo;
-        if (mTaskLaunchingCallback != null) {
-            mTaskLaunchingCallback.accept(runningTaskInfo.taskId, suggestionType);
-        }
-        if (suggestionType == STARTING_WINDOW_TYPE_SPLASH_SCREEN) {
-            mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, appToken);
-        } else if (suggestionType == STARTING_WINDOW_TYPE_SNAPSHOT) {
-            final TaskSnapshot snapshot = mStartingTypeChecker.mSnapshot;
-            mStartingSurfaceDrawer.makeTaskSnapshotWindow(windowInfo, appToken, snapshot);
-        }
-        // If prefer don't show, then don't show!
+    public void addStartingWindow(StartingWindowInfo windowInfo, IBinder appToken) {
+        mSplashScreenExecutor.execute(() -> {
+            final int suggestionType = mStartingTypeChecker.estimateStartingWindowType(windowInfo);
+            final RunningTaskInfo runningTaskInfo = windowInfo.taskInfo;
+            if (mTaskLaunchingCallback != null) {
+                mTaskLaunchingCallback.accept(runningTaskInfo.taskId, suggestionType);
+            }
+            if (suggestionType == STARTING_WINDOW_TYPE_SPLASH_SCREEN) {
+                mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, appToken);
+            } else if (suggestionType == STARTING_WINDOW_TYPE_SNAPSHOT) {
+                final TaskSnapshot snapshot = mStartingTypeChecker.mSnapshot;
+                mStartingSurfaceDrawer.makeTaskSnapshotWindow(windowInfo, appToken, snapshot);
+            }
+            // If prefer don't show, then don't show!
+        });
     }
 
-    void copySplashScreenView(int taskId) {
-        mStartingSurfaceDrawer.copySplashScreenView(taskId);
+    public void copySplashScreenView(int taskId) {
+        mSplashScreenExecutor.execute(() -> {
+            mStartingSurfaceDrawer.copySplashScreenView(taskId);
+        });
     }
 
     /**
      * Called when the content of a task is ready to show, starting window can be removed.
      */
-    void removeStartingWindow(int taskId) {
-        mStartingSurfaceDrawer.removeStartingWindow(taskId);
+    public void removeStartingWindow(int taskId, SurfaceControl leash, Rect frame,
+            boolean playRevealAnimation) {
+        mSplashScreenExecutor.execute(() -> {
+            mStartingSurfaceDrawer.removeStartingWindow(taskId, leash, frame, playRevealAnimation);
+        });
     }
 
+    /**
+     * The interface for calls from outside the Shell, within the host process.
+     */
     private class StartingSurfaceImpl implements StartingSurface {
+        private IStartingWindowImpl mIStartingWindow;
 
         @Override
-        public void addStartingWindow(StartingWindowInfo windowInfo, IBinder appToken) {
-            mSplashScreenExecutor.execute(() ->
-                    StartingWindowController.this.addStartingWindow(windowInfo, appToken));
+        public IStartingWindowImpl createExternalInterface() {
+            if (mIStartingWindow != null) {
+                mIStartingWindow.invalidate();
+            }
+            mIStartingWindow = new IStartingWindowImpl(StartingWindowController.this);
+            return mIStartingWindow;
+        }
+    }
+
+    /**
+     * The interface for calls from outside the host process.
+     */
+    @BinderThread
+    private static class IStartingWindowImpl extends IStartingWindow.Stub {
+        private StartingWindowController mController;
+        private IStartingWindowListener mListener;
+        private final BiConsumer<Integer, Integer> mStartingWindowListener =
+                this::notifyIStartingWindowListener;
+        private final IBinder.DeathRecipient mListenerDeathRecipient =
+                new IBinder.DeathRecipient() {
+                    @Override
+                    @BinderThread
+                    public void binderDied() {
+                        final StartingWindowController controller = mController;
+                        controller.getRemoteCallExecutor().execute(() -> {
+                            mListener = null;
+                            controller.setStartingWindowListener(null);
+                        });
+                    }
+                };
+
+        public IStartingWindowImpl(StartingWindowController controller) {
+            mController = controller;
+        }
+
+        /**
+         * Invalidates this instance, preventing future calls from updating the controller.
+         */
+        void invalidate() {
+            mController = null;
         }
 
         @Override
-        public void removeStartingWindow(int taskId) {
-            mSplashScreenExecutor.execute(() ->
-                    StartingWindowController.this.removeStartingWindow(taskId));
+        public void setStartingWindowListener(IStartingWindowListener listener) {
+            executeRemoteCallWithTaskPermission(mController, "setStartingWindowListener",
+                    (controller) -> {
+                        if (mListener != null) {
+                            // Reset the old death recipient
+                            mListener.asBinder().unlinkToDeath(mListenerDeathRecipient,
+                                    0 /* flags */);
+                        }
+                        if (listener != null) {
+                            try {
+                                listener.asBinder().linkToDeath(mListenerDeathRecipient,
+                                        0 /* flags */);
+                            } catch (RemoteException e) {
+                                Slog.e(TAG, "Failed to link to death");
+                                return;
+                            }
+                        }
+                        mListener = listener;
+                        controller.setStartingWindowListener(mStartingWindowListener);
+                    });
         }
 
-        @Override
-        public void copySplashScreenView(int taskId) {
-            mSplashScreenExecutor.execute(() ->
-                    StartingWindowController.this.copySplashScreenView(taskId));
-        }
+        private void notifyIStartingWindowListener(int taskId, int supportedType) {
+            if (mListener == null) {
+                return;
+            }
 
-        @Override
-        public void setStartingWindowListener(BiConsumer<Integer, Integer> listener) {
-            mSplashScreenExecutor.execute(() ->
-                    StartingWindowController.this.setStartingWindowListener(listener));
+            try {
+                mListener.onTaskLaunching(taskId, supportedType);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Failed to notify task launching", e);
+            }
         }
     }
 }

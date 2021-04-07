@@ -16,37 +16,17 @@
 
 package com.android.server.wm.flicker.launch
 
-import android.app.Instrumentation
-import android.platform.test.annotations.Presubmit
-import android.view.Surface
+import android.platform.test.annotations.Postsubmit
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerBuilderProvider
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.endRotation
-import com.android.server.wm.flicker.focusChanges
-import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
-import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEntry
 import com.android.server.wm.flicker.helpers.reopenAppFromOverview
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.noUncoveredRegions
-import com.android.server.wm.flicker.repetitions
 import com.android.server.wm.flicker.startRotation
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.server.wm.flicker.wallpaperWindowBecomesInvisible
-import com.android.server.wm.flicker.appLayerReplacesWallpaperLayer
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.helpers.SimpleAppHelper
-import org.junit.Assume
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -61,18 +41,12 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class OpenAppFromOverviewTest(private val testSpec: FlickerTestParameter) {
-    private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
-    private val testApp = SimpleAppHelper(instrumentation)
-
-    @FlickerBuilderProvider
-    fun buildFlicker(): FlickerBuilder {
-        return FlickerBuilder(instrumentation).apply {
-            withTestName { testSpec.name }
-            repeat { testSpec.config.repetitions }
+class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) : OpenAppTransition(testSpec) {
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = {
+            super.transition(this, it)
             setup {
                 test {
-                    device.wakeUpAndGoToHomeScreen()
                     testApp.launchViaIntent(wmHelper)
                 }
                 eachRun {
@@ -87,98 +61,42 @@ class OpenAppFromOverviewTest(private val testSpec: FlickerTestParameter) {
                 device.reopenAppFromOverview(wmHelper)
                 wmHelper.waitForFullScreenApp(testApp.component)
             }
-            teardown {
-                test {
-                    testApp.exit()
-                }
-            }
         }
-    }
 
-    @Presubmit
+    @Postsubmit
     @Test
-    fun navBarWindowIsAlwaysVisible() = testSpec.navBarWindowIsAlwaysVisible()
+    override fun appWindowReplacesLauncherAsTopWindow() =
+        super.appWindowReplacesLauncherAsTopWindow()
 
-    @Presubmit
+    @Postsubmit
     @Test
-    fun statusBarWindowIsAlwaysVisible() = testSpec.statusBarWindowIsAlwaysVisible()
-
-    @Test
-    fun appWindowReplacesLauncherAsTopWindow() =
-        testSpec.appWindowReplacesLauncherAsTopWindow(testApp)
-
-    @Test
-    fun wallpaperWindowBecomesInvisible() = testSpec.wallpaperWindowBecomesInvisible()
-
-    @Presubmit
-    @Test
-    fun appLayerReplacesWallpaperLayer() =
-        testSpec.appLayerReplacesWallpaperLayer(testApp.`package`)
-
-    @Presubmit
-    @Test
-    fun navBarLayerRotatesAndScales() {
-        Assume.assumeFalse(testSpec.isRotated)
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.startRotation, Surface.ROTATION_0)
-    }
-
-    @Presubmit
-    @Test
-    fun statusBarLayerRotatesScales() {
-        Assume.assumeFalse(testSpec.isRotated)
-        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation, Surface.ROTATION_0)
-    }
-
-    @Presubmit
-    @Test
-    fun statusBarLayerIsAlwaysVisible() {
-        Assume.assumeTrue(testSpec.isRotated)
-        testSpec.statusBarLayerIsAlwaysVisible()
-    }
-
-    @Presubmit
-    @Test
-    fun navBarLayerIsAlwaysVisible() {
-        Assume.assumeTrue(testSpec.isRotated)
-        testSpec.navBarLayerIsAlwaysVisible()
-    }
-
-    @Presubmit
-    @Test
-    fun focusChanges() = testSpec.focusChanges("NexusLauncherActivity", testApp.`package`)
-
-    @Presubmit
-    @Test
-    fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
-        Assume.assumeFalse(testSpec.isRotated)
-        testSpec.visibleWindowsShownMoreThanOneConsecutiveEntry()
+    override fun wallpaperWindowBecomesInvisible() {
+        testSpec.wallpaperWindowBecomesInvisible()
     }
 
     @FlakyTest
     @Test
-    fun visibleWindowsShownMoreThanOneConsecutiveEntry_Flaky() {
-        Assume.assumeTrue(testSpec.isRotated)
-        testSpec.visibleWindowsShownMoreThanOneConsecutiveEntry()
-    }
-
-    @Presubmit
-    @Test
-    fun visibleLayersShownMoreThanOneConsecutiveEntry() {
-        Assume.assumeFalse(testSpec.isRotated)
-        testSpec.visibleLayersShownMoreThanOneConsecutiveEntry()
+    override fun navBarLayerRotatesAndScales() {
+        super.navBarLayerRotatesAndScales()
     }
 
     @FlakyTest
     @Test
-    fun visibleLayersShownMoreThanOneConsecutiveEntry_Flaky() {
-        Assume.assumeTrue(testSpec.isRotated)
-        testSpec.visibleLayersShownMoreThanOneConsecutiveEntry()
+    override fun statusBarLayerRotatesScales() {
+        super.statusBarLayerRotatesScales()
     }
 
-    @Presubmit
+    @FlakyTest
     @Test
-    fun noUncoveredRegions() = testSpec.noUncoveredRegions(Surface.ROTATION_0,
-        testSpec.config.endRotation)
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    }
+
+    @FlakyTest
+    @Test
+    override fun focusChanges() {
+        super.focusChanges()
+    }
 
     companion object {
         @Parameterized.Parameters(name = "{0}")

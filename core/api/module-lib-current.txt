@@ -55,8 +55,17 @@ package android.app.usage {
 
 package android.content {
 
+  public abstract class ContentProvider implements android.content.ComponentCallbacks2 {
+    method @NonNull public static android.net.Uri createContentUriAsUser(@NonNull android.net.Uri, @NonNull android.os.UserHandle);
+  }
+
   public abstract class Context {
     method @NonNull public android.os.UserHandle getUser();
+    field public static final String TEST_NETWORK_SERVICE = "test_network";
+  }
+
+  public class Intent implements java.lang.Cloneable android.os.Parcelable {
+    field public static final String ACTION_CLEAR_DNS_CACHE = "android.intent.action.CLEAR_DNS_CACHE";
   }
 
 }
@@ -183,6 +192,21 @@ package android.net {
     method public int getResourceId();
   }
 
+  public class NetworkPolicyManager {
+    method @NonNull public static String blockedReasonsToString(int);
+    method @RequiresPermission(android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK) public int getMultipathPreference(@NonNull android.net.Network);
+    method @RequiresPermission(android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK) public int getRestrictBackgroundStatus(int);
+    method public static boolean isUidBlocked(int, boolean);
+    method @RequiresPermission(android.Manifest.permission.OBSERVE_NETWORK_POLICY) public boolean isUidNetworkingBlocked(int, boolean);
+    method @RequiresPermission(android.Manifest.permission.OBSERVE_NETWORK_POLICY) public boolean isUidRestrictedOnMeteredNetworks(int);
+    method @RequiresPermission(android.Manifest.permission.OBSERVE_NETWORK_POLICY) public void registerNetworkPolicyCallback(@Nullable java.util.concurrent.Executor, @NonNull android.net.NetworkPolicyManager.NetworkPolicyCallback);
+    method @RequiresPermission(android.Manifest.permission.OBSERVE_NETWORK_POLICY) public void unregisterNetworkPolicyCallback(@NonNull android.net.NetworkPolicyManager.NetworkPolicyCallback);
+  }
+
+  public static interface NetworkPolicyManager.NetworkPolicyCallback {
+    method public default void onUidBlockedReasonChanged(int, int);
+  }
+
   public final class NetworkStateSnapshot implements android.os.Parcelable {
     ctor public NetworkStateSnapshot(@NonNull android.net.Network, @NonNull android.net.NetworkCapabilities, @NonNull android.net.LinkProperties, @Nullable String, int);
     method public int describeContents();
@@ -199,6 +223,16 @@ package android.net {
     method @Nullable public byte[] getWatchlistConfigHash();
   }
 
+  public class PacProxyManager {
+    method @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_STACK, android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK, android.Manifest.permission.NETWORK_SETTINGS}) public void addPacProxyInstalledListener(@NonNull java.util.concurrent.Executor, @NonNull android.net.PacProxyManager.PacProxyInstalledListener);
+    method @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_STACK, android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK, android.Manifest.permission.NETWORK_SETTINGS}) public void removePacProxyInstalledListener(@NonNull android.net.PacProxyManager.PacProxyInstalledListener);
+    method @RequiresPermission(anyOf={android.Manifest.permission.NETWORK_STACK, android.net.NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK, android.Manifest.permission.NETWORK_SETTINGS}) public void setCurrentProxyScriptUrl(@Nullable android.net.ProxyInfo);
+  }
+
+  public static interface PacProxyManager.PacProxyInstalledListener {
+    method public void onPacProxyInstalled(@Nullable android.net.Network, @NonNull android.net.ProxyInfo);
+  }
+
   public final class Proxy {
     method public static void setHttpProxyConfiguration(@Nullable android.net.ProxyInfo);
   }
@@ -211,6 +245,14 @@ package android.net {
     field @NonNull public final String iface;
     field public final int ownerUid;
     field @NonNull public final java.util.List<java.lang.String> underlyingIfaces;
+  }
+
+  public class VpnManager {
+    field @Deprecated public static final int TYPE_VPN_LEGACY = 3; // 0x3
+    field public static final int TYPE_VPN_NONE = -1; // 0xffffffff
+    field public static final int TYPE_VPN_OEM = 4; // 0x4
+    field public static final int TYPE_VPN_PLATFORM = 2; // 0x2
+    field public static final int TYPE_VPN_SERVICE = 1; // 0x1
   }
 
 }
@@ -231,6 +273,10 @@ package android.os {
 
   public interface Parcelable {
     method public default int getStability();
+  }
+
+  public class Process {
+    field public static final int VPN_UID = 1016; // 0x3f8
   }
 
   public class StatsServiceManager {
@@ -255,7 +301,12 @@ package android.os.storage {
   public class StorageManager {
     method public void notifyAppIoBlocked(@NonNull java.util.UUID, int, int, int);
     method public void notifyAppIoResumed(@NonNull java.util.UUID, int, int, int);
-    field public static final int APP_IO_BLOCKED_REASON_TRANSCODING = 0; // 0x0
+    field public static final int APP_IO_BLOCKED_REASON_TRANSCODING = 1; // 0x1
+    field public static final int APP_IO_BLOCKED_REASON_UNKNOWN = 0; // 0x0
+  }
+
+  public final class StorageVolume implements android.os.Parcelable {
+    method @NonNull public android.os.UserHandle getOwner();
   }
 
 }

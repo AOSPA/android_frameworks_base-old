@@ -16,11 +16,11 @@
 
 package com.android.systemui.shared.system;
 
-import android.window.TaskSnapshot;
 import android.graphics.Rect;
 import android.os.RemoteException;
 import android.util.Log;
 import android.view.IRecentsAnimationController;
+import android.window.TaskSnapshot;
 
 import com.android.systemui.shared.recents.model.ThumbnailData;
 
@@ -76,10 +76,14 @@ public class RecentsAnimationControllerCompat {
      * accordingly. This should be called before `finish`
      * @param taskId Task id of the Activity in PiP mode.
      * @param destinationBounds Bounds of the PiP window on home.
+     * @param windowCrop bounds to crop as part of final transform.
+     * @param float9 An array of 9 floats to be used as matrix transform.
      */
-    public void setFinishTaskBounds(int taskId, Rect destinationBounds) {
+    public void setFinishTaskBounds(int taskId, Rect destinationBounds, Rect windowCrop,
+            float[] float9) {
         try {
-            mAnimationController.setFinishTaskBounds(taskId, destinationBounds);
+            mAnimationController.setFinishTaskBounds(taskId, destinationBounds, windowCrop,
+                    float9);
         } catch (RemoteException e) {
             Log.d(TAG, "Failed to set finish task bounds", e);
         }
@@ -141,9 +145,9 @@ public class RecentsAnimationControllerCompat {
     /**
      * @see IRecentsAnimationController#detachNavigationBarFromApp
      */
-    public void detachNavigationBarFromApp() {
+    public void detachNavigationBarFromApp(boolean moveHomeToTop) {
         try {
-            mAnimationController.detachNavigationBarFromApp();
+            mAnimationController.detachNavigationBarFromApp(moveHomeToTop);
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to detach the navigation bar from app", e);
         }

@@ -36,6 +36,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
+import android.net.ConnectivityResources;
 import android.net.NetworkCapabilities;
 import android.net.NetworkInfo;
 import android.os.UserHandle;
@@ -45,12 +46,11 @@ import android.util.DisplayMetrics;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
-import com.android.internal.R;
+import com.android.connectivity.resources.R;
 import com.android.server.connectivity.NetworkNotificationManager.NotificationType;
 
-import org.junit.AfterClass;
+import org.junit.After;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
@@ -102,17 +102,6 @@ public class NetworkNotificationManagerTest {
 
     NetworkNotificationManager mManager;
 
-
-    @BeforeClass
-    public static void setUpClass() {
-        Notification.DevFlags.sForceDefaults = true;
-    }
-
-    @AfterClass
-    public static void tearDownClass() {
-        Notification.DevFlags.sForceDefaults = false;
-    }
-
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
@@ -134,10 +123,24 @@ public class NetworkNotificationManagerTest {
         when(mCtx.getSystemService(eq(Context.NOTIFICATION_SERVICE)))
                 .thenReturn(mNotificationManager);
         when(mNetworkInfo.getExtraInfo()).thenReturn(TEST_EXTRA_INFO);
+        ConnectivityResources.setResourcesContextForTest(mCtx);
         when(mResources.getColor(anyInt(), any())).thenReturn(0xFF607D8B);
         when(mResources.getDisplayMetrics()).thenReturn(mDisplayMetrics);
 
+        // Come up with some credible-looking transport names. The actual values do not matter.
+        String[] transportNames = new String[NetworkCapabilities.MAX_TRANSPORT + 1];
+        for (int transport = 0; transport <= NetworkCapabilities.MAX_TRANSPORT; transport++) {
+            transportNames[transport] = NetworkCapabilities.transportNameOf(transport);
+        }
+        when(mResources.getStringArray(R.array.network_switch_type_name))
+            .thenReturn(transportNames);
+
         mManager = new NetworkNotificationManager(mCtx, mTelephonyManager);
+    }
+
+    @After
+    public void tearDown() {
+        ConnectivityResources.setResourcesContextForTest(null);
     }
 
     private void verifyTitleByNetwork(final int id, final NetworkAgentInfo nai, final int title) {

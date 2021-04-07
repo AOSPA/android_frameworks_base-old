@@ -1507,6 +1507,26 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @Override
+    public boolean isCloneProfile(@UserIdInt int userId) {
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId, "isCloneProfile");
+        synchronized (mUsersLock) {
+            UserInfo userInfo = getUserInfoLU(userId);
+            return userInfo != null && userInfo.isCloneProfile();
+        }
+    }
+
+    @Override
+    public boolean sharesMediaWithParent(@UserIdInt int userId) {
+        checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId,
+                "sharesMediaWithParent");
+        synchronized (mUsersLock) {
+            UserTypeDetails userTypeDetails = getUserTypeDetailsNoChecks(userId);
+            return userTypeDetails != null ? userTypeDetails.isProfile()
+                    && userTypeDetails.sharesMediaWithParent() : false;
+        }
+    }
+
+    @Override
     public boolean isUserUnlockingOrUnlocked(@UserIdInt int userId) {
         checkManageOrInteractPermissionIfCallerInOtherProfileGroup(userId,
                 "isUserUnlockingOrUnlocked");
@@ -2859,6 +2879,100 @@ public class UserManagerService extends IUserManager.Stub {
                 writeUserListLP();
             }
         }
+    }
+
+    @GuardedBy("mUsersLock")
+    @VisibleForTesting
+    void upgradeUserTypesLU(@NonNull List<UserTypeFactory.UserTypeUpgrade> upgradeOps,
+            @NonNull ArrayMap<String, UserTypeDetails> userTypes,
+            final int formerUserTypeVersion,
+            @NonNull Set<Integer> userIdsToWrite) {
+        for (UserTypeFactory.UserTypeUpgrade userTypeUpgrade : upgradeOps) {
+            if (DBG) {
+                Slog.i(LOG_TAG, "Upgrade: " + userTypeUpgrade.getFromType() + " to: "
+                        + userTypeUpgrade.getToType() + " maxVersion: "
+                        + userTypeUpgrade.getUpToVersion());
+            }
+
+            // upgrade user type if version up to getUpToVersion()
+            if (formerUserTypeVersion <= userTypeUpgrade.getUpToVersion()) {
+                for (int i = 0; i < mUsers.size(); i++) {
+                    UserData userData = mUsers.valueAt(i);
+                    if (userTypeUpgrade.getFromType().equals(userData.info.userType)) {
+                        final UserTypeDetails newUserType = userTypes.get(
+                                userTypeUpgrade.getToType());
+
+                        if (newUserType == null) {
+                            throw new IllegalStateException(
+                                    "Upgrade destination user type not defined: "
+                                            + userTypeUpgrade.getToType());
+                        }
+
+                        upgradeProfileToTypeLU(userData.info, newUserType);
+                        userIdsToWrite.add(userData.info.id);
+                    }
+                }
+            }
+        }
+    }
+
+    /**
+     * Changes the user type of a profile to a new user type.
+     * @param userInfo    The user to be updated.
+     * @param newUserType The new user type.
+     */
+    @GuardedBy("mUsersLock")
+    @VisibleForTesting
+    void upgradeProfileToTypeLU(@NonNull UserInfo userInfo, @NonNull UserTypeDetails newUserType) {
+        Slog.i(LOG_TAG, "Upgrading user " + userInfo.id
+                + " from " + userInfo.userType
+                + " to " + newUserType.getName());
+
+        if (!userInfo.isProfile()) {
+            throw new IllegalStateException(
+                    "Can only upgrade profile types. " + userInfo.userType
+                            + " is not a profile type.");
+        }
+
+        // Exceeded maximum profiles for parent user: log error, but allow upgrade
+        if (!canAddMoreProfilesToUser(newUserType.getName(), userInfo.profileGroupId, false)) {
+            Slog.w(LOG_TAG,
+                    "Exceeded maximum profiles of type " + newUserType.getName() + " for user "
+                            + userInfo.id + ". Maximum allowed= "
+                            + newUserType.getMaxAllowedPerParent());
+        }
+
+        final UserTypeDetails oldUserType = mUserTypes.get(userInfo.userType);
+        final int oldFlags;
+        if (oldUserType != null) {
+            oldFlags = oldUserType.getDefaultUserInfoFlags();
+        } else {
+            // if oldUserType is missing from config_user_types.xml -> can only assume FLAG_PROFILE
+            oldFlags = UserInfo.FLAG_PROFILE;
+        }
+
+        //convert userData to newUserType
+        userInfo.userType = newUserType.getName();
+        // remove old default flags and add newUserType's default flags
+        userInfo.flags = newUserType.getDefaultUserInfoFlags() | (userInfo.flags ^ oldFlags);
+
+        // merge existing base restrictions with the new type's default restrictions
+        synchronized (mRestrictionsLock) {
+            if (!BundleUtils.isEmpty(newUserType.getDefaultRestrictions())) {
+                final Bundle newRestrictions = BundleUtils.clone(
+                        mBaseUserRestrictions.getRestrictions(userInfo.id));
+                UserRestrictionsUtils.merge(newRestrictions,
+                        newUserType.getDefaultRestrictions());
+                updateUserRestrictionsInternalLR(newRestrictions, userInfo.id);
+                if (DBG) {
+                    Slog.i(LOG_TAG, "Updated user " + userInfo.id
+                            + " restrictions to " + newRestrictions);
+                }
+            }
+        }
+
+        // re-compute badge index
+        userInfo.profileBadge = getFreeProfileBadgeLU(userInfo.profileGroupId, userInfo.userType);
     }
 
     @GuardedBy({"mPackagesLock", "mRestrictionsLock"})
@@ -5758,99 +5872,5 @@ public class UserManagerService extends IUserManager.Stub {
                     LocalServices.getService(DevicePolicyManagerInternal.class);
         }
         return mDevicePolicyManagerInternal;
-    }
-
-    @GuardedBy("mUsersLock")
-    @VisibleForTesting
-    void upgradeUserTypesLU(@NonNull List<UserTypeFactory.UserTypeUpgrade> upgradeOps,
-            @NonNull ArrayMap<String, UserTypeDetails> userTypes,
-            final int formerUserTypeVersion,
-            @NonNull Set<Integer> userIdsToWrite) {
-        for (UserTypeFactory.UserTypeUpgrade userTypeUpgrade : upgradeOps) {
-            if (DBG) {
-                Slog.i(LOG_TAG, "Upgrade: " + userTypeUpgrade.getFromType() + " to: "
-                        + userTypeUpgrade.getToType() + " maxVersion: "
-                        + userTypeUpgrade.getUpToVersion());
-            }
-
-            // upgrade user type if version up to getUpToVersion()
-            if (formerUserTypeVersion <= userTypeUpgrade.getUpToVersion()) {
-                for (int i = 0; i < mUsers.size(); i++) {
-                    UserData userData = mUsers.valueAt(i);
-                    if (userTypeUpgrade.getFromType().equals(userData.info.userType)) {
-                        final UserTypeDetails newUserType = userTypes.get(
-                                userTypeUpgrade.getToType());
-
-                        if (newUserType == null) {
-                            throw new IllegalStateException(
-                                    "Upgrade destination user type not defined: "
-                                            + userTypeUpgrade.getToType());
-                        }
-
-                        upgradeProfileToTypeLU(userData.info, newUserType);
-                        userIdsToWrite.add(userData.info.id);
-                    }
-                }
-            }
-        }
-    }
-
-    /**
-     * Changes the user type of a profile to a new user type.
-     * @param userInfo    The user to be updated.
-     * @param newUserType The new user type.
-     */
-    @GuardedBy("mUsersLock")
-    @VisibleForTesting
-    void upgradeProfileToTypeLU(@NonNull UserInfo userInfo, @NonNull UserTypeDetails newUserType) {
-        Slog.i(LOG_TAG, "Upgrading user " + userInfo.id
-                + " from " + userInfo.userType
-                + " to " + newUserType.getName());
-
-        if (!userInfo.isProfile()) {
-            throw new IllegalStateException(
-                    "Can only upgrade profile types. " + userInfo.userType
-                            + " is not a profile type.");
-        }
-
-        // Exceeded maximum profiles for parent user: log error, but allow upgrade
-        if (!canAddMoreProfilesToUser(newUserType.getName(), userInfo.profileGroupId, false)) {
-            Slog.w(LOG_TAG,
-                    "Exceeded maximum profiles of type " + newUserType.getName() + " for user "
-                            + userInfo.id + ". Maximum allowed= "
-                            + newUserType.getMaxAllowedPerParent());
-        }
-
-        final UserTypeDetails oldUserType = mUserTypes.get(userInfo.userType);
-        final int oldFlags;
-        if (oldUserType != null) {
-            oldFlags = oldUserType.getDefaultUserInfoFlags();
-        } else {
-            // if oldUserType is missing from config_user_types.xml -> can only assume FLAG_PROFILE
-            oldFlags = UserInfo.FLAG_PROFILE;
-        }
-
-        //convert userData to newUserType
-        userInfo.userType = newUserType.getName();
-        // remove old default flags and add newUserType's default flags
-        userInfo.flags = newUserType.getDefaultUserInfoFlags() | (userInfo.flags ^ oldFlags);
-
-        // merge existing base restrictions with the new type's default restrictions
-        synchronized (mRestrictionsLock) {
-            if (!BundleUtils.isEmpty(newUserType.getDefaultRestrictions())) {
-                final Bundle newRestrictions = BundleUtils.clone(
-                        mBaseUserRestrictions.getRestrictions(userInfo.id));
-                UserRestrictionsUtils.merge(newRestrictions,
-                        newUserType.getDefaultRestrictions());
-                updateUserRestrictionsInternalLR(newRestrictions, userInfo.id);
-                if (DBG) {
-                    Slog.i(LOG_TAG, "Updated user " + userInfo.id
-                            + " restrictions to " + newRestrictions);
-                }
-            }
-        }
-
-        // re-compute badge index
-        userInfo.profileBadge = getFreeProfileBadgeLU(userInfo.profileGroupId, userInfo.userType);
     }
 }

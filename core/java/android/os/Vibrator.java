@@ -208,6 +208,28 @@ public abstract class Vibrator {
     public abstract boolean hasAmplitudeControl();
 
     /**
+     * Gets the resonant frequency of the vibrator.
+     *
+     * @return the resonant frequency of the vibrator, or {@link Float#NaN NaN} if it's unknown or
+     *         this vibrator is a composite of multiple physical devices.
+     * @hide
+     */
+    public float getResonantFrequency() {
+        return Float.NaN;
+    }
+
+    /**
+     * Gets the <a href="https://en.wikipedia.org/wiki/Q_factor">Q factor</a> of the vibrator.
+     *
+     * @return the Q factor of the vibrator, or {@link Float#NaN NaN} if it's unknown or
+     *         this vibrator is a composite of multiple physical devices.
+     * @hide
+     */
+    public float getQFactor() {
+        return Float.NaN;
+    }
+
+    /**
      * Configure an always-on haptics effect.
      *
      * @param alwaysOnId The board-specific always-on ID to configure.
@@ -445,7 +467,7 @@ public abstract class Vibrator {
      */
     @NonNull
     public boolean[] arePrimitivesSupported(
-            @NonNull @VibrationEffect.Composition.Primitive int... primitiveIds) {
+            @NonNull @VibrationEffect.Composition.PrimitiveType int... primitiveIds) {
         return new boolean[primitiveIds.length];
     }
 
@@ -456,7 +478,7 @@ public abstract class Vibrator {
      * @return Whether primitives effects are supported.
      */
     public final boolean areAllPrimitivesSupported(
-            @NonNull @VibrationEffect.Composition.Primitive int... primitiveIds) {
+            @NonNull @VibrationEffect.Composition.PrimitiveType int... primitiveIds) {
         for (boolean supported : arePrimitivesSupported(primitiveIds)) {
             if (!supported) {
                 return false;

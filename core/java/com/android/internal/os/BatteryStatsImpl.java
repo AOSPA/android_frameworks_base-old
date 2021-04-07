@@ -89,6 +89,7 @@ import android.util.PrintWriterPrinter;
 import android.util.Printer;
 import android.util.Slog;
 import android.util.SparseArray;
+import android.util.SparseDoubleArray;
 import android.util.SparseIntArray;
 import android.util.SparseLongArray;
 import android.util.TimeUtils;
@@ -169,7 +170,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    static final int VERSION = 194;
+    static final int VERSION = 196;
 
     // The maximum number of names wakelocks we will keep track of
     // per uid; once the limit is reached, we batch the remaining wakelocks
@@ -1009,8 +1010,15 @@ public class BatteryStatsImpl extends BatteryStats {
     protected @Nullable MeasuredEnergyStats mGlobalMeasuredEnergyStats;
     /** Last known screen state. Needed for apportioning display energy. */
     int mScreenStateAtLastEnergyMeasurement = Display.STATE_UNKNOWN;
+    /** Bluetooth Power calculator for attributing measured bluetooth charge consumption to uids */
+    @Nullable BluetoothPowerCalculator mBluetoothPowerCalculator = null;
     /** Cpu Power calculator for attributing measured cpu charge consumption to uids */
     @Nullable CpuPowerCalculator mCpuPowerCalculator = null;
+    /** Mobile Radio Power calculator for attributing measured radio charge consumption to uids */
+    @Nullable
+    MobileRadioPowerCalculator mMobileRadioPowerCalculator = null;
+    /** Wifi Power calculator for attributing measured wifi charge consumption to uids */
+    @Nullable WifiPowerCalculator mWifiPowerCalculator = null;
 
     /**
      * These provide time bases that discount the time the device is plugged
@@ -1190,6 +1198,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
     public BatteryStatsImpl(Clocks clocks) {
         init(clocks);
+        mStartClockTimeMs = System.currentTimeMillis();
         mStatsFile = null;
         mCheckinFile = null;
         mDailyFile = null;
@@ -6967,6 +6976,26 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     @Override
+    public long getBluetoothMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_BLUETOOTH);
+    }
+
+    @Override
+    public long getCpuMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_CPU);
+    }
+
+    @Override
+    public long getGnssMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_GNSS);
+    }
+
+    @Override
+    public long getMobileRadioMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_MOBILE_RADIO);
+    }
+
+    @Override
     public long getScreenOnMeasuredBatteryConsumptionUC() {
         return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON);
     }
@@ -6974,6 +7003,11 @@ public class BatteryStatsImpl extends BatteryStats {
     @Override
     public long getScreenDozeMeasuredBatteryConsumptionUC() {
         return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_DOZE);
+    }
+
+    @Override
+    public long getWifiMeasuredBatteryConsumptionUC() {
+        return getPowerBucketConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_WIFI);
     }
 
     /**
@@ -7810,6 +7844,36 @@ public class BatteryStatsImpl extends BatteryStats {
             return mUidMeasuredEnergyStats.getAccumulatedCustomBucketCharges();
         }
 
+        @Override
+        public long getBluetoothMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_BLUETOOTH);
+        }
+
+        @Override
+        public long getCpuMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_CPU);
+        }
+
+        @Override
+        public long getGnssMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_GNSS);
+        }
+
+        @Override
+        public long getMobileRadioMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_MOBILE_RADIO);
+        }
+
+        @Override
+        public long getScreenOnMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON);
+        }
+
+        @Override
+        public long getWifiMeasuredBatteryConsumptionUC() {
+            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_WIFI);
+        }
+
         /**
          * Gets the minimum of the uid's foreground activity time and its PROCESS_STATE_TOP time
          * since last marked. Also sets the mark time for both these timers.
@@ -7837,6 +7901,27 @@ public class BatteryStatsImpl extends BatteryStats {
 
             // Return the min of the two
             return (topTimeUs < fgTimeUs) ? topTimeUs : fgTimeUs;
+        }
+
+
+        /**
+         * Gets the uid's time spent using the GNSS since last marked. Also sets the mark time for
+         * the GNSS timer.
+         */
+        private long markGnssTimeUs(long elapsedRealtimeMs) {
+            final Sensor sensor = mSensorStats.get(Sensor.GPS);
+            if (sensor == null) {
+                return 0;
+            }
+
+            final StopwatchTimer timer = sensor.mTimer;
+            if (timer == null) {
+                return 0;
+            }
+
+            final long gnssTimeUs = timer.getTimeSinceMarkLocked(elapsedRealtimeMs * 1000);
+            timer.setMark(elapsedRealtimeMs);
+            return gnssTimeUs;
         }
 
         public StopwatchTimer createAudioTurnedOnTimerLocked() {
@@ -8475,11 +8560,6 @@ public class BatteryStatsImpl extends BatteryStats {
                 }
                 sb.append(" ");
             }
-        }
-
-        @Override
-        public long getScreenOnMeasuredBatteryConsumptionUC() {
-            return getMeasuredBatteryConsumptionUC(MeasuredEnergyStats.POWER_BUCKET_SCREEN_ON);
         }
 
         void initNetworkActivityLocked() {
@@ -11427,7 +11507,7 @@ public class BatteryStatsImpl extends BatteryStats {
      * @param info The energy information from the WiFi controller.
      */
     public void updateWifiState(@Nullable final WifiActivityEnergyInfo info,
-            long elapsedRealtimeMs, long uptimeMs) {
+            final long consumedChargeUC, long elapsedRealtimeMs, long uptimeMs) {
         if (DEBUG_ENERGY) {
             Slog.d(TAG, "Updating wifi stats: " + Arrays.toString(mWifiIfaces));
         }
@@ -11449,8 +11529,20 @@ public class BatteryStatsImpl extends BatteryStats {
                 if (delta != null) {
                     mNetworkStatsPool.release(delta);
                 }
+                if (mIgnoreNextExternalStats) {
+                    // TODO: Strictly speaking, we should re-mark all 5 timers for each uid (and the
+                    //  global one) here like we do for display. But I'm not sure it's worth the
+                    //  complicated code for a codepath that shouldn't ever actually happen in real
+                    //  life.
+                }
                 return;
             }
+
+            final SparseDoubleArray uidEstimatedConsumptionMah =
+                    (mGlobalMeasuredEnergyStats != null
+                            && mWifiPowerCalculator != null && consumedChargeUC > 0) ?
+                            new SparseDoubleArray() : null;
+            double totalEstimatedConsumptionMah = 0;
 
             SparseLongArray rxPackets = new SparseLongArray();
             SparseLongArray txPackets = new SparseLongArray();
@@ -11486,6 +11578,7 @@ public class BatteryStatsImpl extends BatteryStats {
                         mNetworkPacketActivityCounters[NETWORK_WIFI_RX_DATA].addCountLocked(
                                 entry.rxPackets);
 
+                        // TODO(b/182845426): What if u was a mapped isolated uid? Shouldn't we sum?
                         rxPackets.put(u.getUid(), entry.rxPackets);
 
                         // Sum the total number of packets so that the Rx Power can
@@ -11505,11 +11598,41 @@ public class BatteryStatsImpl extends BatteryStats {
                         mNetworkPacketActivityCounters[NETWORK_WIFI_TX_DATA].addCountLocked(
                                 entry.txPackets);
 
+                        // TODO(b/182845426): What if u was a mapped isolated uid? Shouldn't we sum?
                         txPackets.put(u.getUid(), entry.txPackets);
 
                         // Sum the total number of packets so that the Tx Power can
                         // be evenly distributed amongst the apps.
                         totalTxPackets += entry.txPackets;
+                    }
+
+                    // Calculate consumed energy for this uid. Only do so if WifiReporting isn't
+                    // enabled (if it is, we'll do it later instead using info).
+                    if (uidEstimatedConsumptionMah != null && info == null && !mHasWifiReporting) {
+                        final long uidRunningMs = u.mWifiRunningTimer
+                                .getTimeSinceMarkLocked(elapsedRealtimeMs * 1000) / 1000;
+                        if (uidRunningMs > 0) u.mWifiRunningTimer.setMark(elapsedRealtimeMs);
+
+                        final long uidScanMs = u.mWifiScanTimer
+                                .getTimeSinceMarkLocked(elapsedRealtimeMs * 1000) / 1000;
+                        if (uidScanMs > 0) u.mWifiScanTimer.setMark(elapsedRealtimeMs);
+
+                        long uidBatchScanMs = 0;
+                        for (int bn = 0; bn < BatteryStats.Uid.NUM_WIFI_BATCHED_SCAN_BINS; bn++) {
+                            if (u.mWifiBatchedScanTimer[bn] != null) {
+                                long bnMs = u.mWifiBatchedScanTimer[bn]
+                                        .getTimeSinceMarkLocked(elapsedRealtimeMs * 1000) / 1000;
+                                if (bnMs > 0) {
+                                    u.mWifiBatchedScanTimer[bn].setMark(elapsedRealtimeMs);
+                                }
+                                uidBatchScanMs += bnMs;
+                            }
+                        }
+
+                        uidEstimatedConsumptionMah.add(u.getUid(),
+                                mWifiPowerCalculator.calcPowerWithoutControllerDataMah(
+                                        entry.rxPackets, entry.txPackets,
+                                        uidRunningMs, uidScanMs, uidBatchScanMs));
                     }
                 }
                 mNetworkStatsPool.release(delta);
@@ -11571,14 +11694,13 @@ public class BatteryStatsImpl extends BatteryStats {
                 for (int i = 0; i < uidStatsSize; i++) {
                     final Uid uid = mUidStats.valueAt(i);
 
-                    long scanTimeSinceMarkMs = uid.mWifiScanTimer.getTimeSinceMarkLocked(
+                    final long scanTimeSinceMarkMs = uid.mWifiScanTimer.getTimeSinceMarkLocked(
                             elapsedRealtimeMs * 1000) / 1000;
+                    long scanRxTimeSinceMarkMs = scanTimeSinceMarkMs; // not final
+                    long scanTxTimeSinceMarkMs = scanTimeSinceMarkMs; // not final
                     if (scanTimeSinceMarkMs > 0) {
                         // Set the new mark so that next time we get new data since this point.
                         uid.mWifiScanTimer.setMark(elapsedRealtimeMs);
-
-                        long scanRxTimeSinceMarkMs = scanTimeSinceMarkMs;
-                        long scanTxTimeSinceMarkMs = scanTimeSinceMarkMs;
 
                         // Our total scan time is more than the reported Tx/Rx time.
                         // This is possible because the cost of a scan is approximate.
@@ -11613,6 +11735,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
                     // Distribute evenly the power consumed while Idle to each app holding a WiFi
                     // lock.
+                    long myIdleTimeMs = 0;
                     final long wifiLockTimeSinceMarkMs =
                             uid.mFullWifiLockTimer.getTimeSinceMarkLocked(
                                     elapsedRealtimeMs * 1000) / 1000;
@@ -11620,14 +11743,19 @@ public class BatteryStatsImpl extends BatteryStats {
                         // Set the new mark so that next time we get new data since this point.
                         uid.mFullWifiLockTimer.setMark(elapsedRealtimeMs);
 
-                        final long myIdleTimeMs = (wifiLockTimeSinceMarkMs * idleTimeMs)
-                                / totalWifiLockTimeMs;
+                        myIdleTimeMs = (wifiLockTimeSinceMarkMs * idleTimeMs) / totalWifiLockTimeMs;
                         if (DEBUG_ENERGY) {
                             Slog.d(TAG, "  IdleTime for UID " + uid.getUid() + ": "
                                     + myIdleTimeMs + " ms");
                         }
                         uid.getOrCreateWifiControllerActivityLocked().getIdleTimeCounter()
                                 .addCountLocked(myIdleTimeMs);
+                    }
+
+                    if (uidEstimatedConsumptionMah != null) {
+                        double uidEstMah = mWifiPowerCalculator.calcPowerFromControllerDataMah(
+                                scanRxTimeSinceMarkMs, scanTxTimeSinceMarkMs, myIdleTimeMs);
+                        uidEstimatedConsumptionMah.add(uid.getUid(), uidEstMah);
                     }
                 }
 
@@ -11648,6 +11776,11 @@ public class BatteryStatsImpl extends BatteryStats {
                     }
                     uid.getOrCreateWifiControllerActivityLocked().getTxTimeCounters()[0]
                             .addCountLocked(myTxTimeMs);
+                    if (uidEstimatedConsumptionMah != null) {
+                        uidEstimatedConsumptionMah.add(uid.getUid(),
+                                mWifiPowerCalculator.calcPowerFromControllerDataMah(
+                                        0, myTxTimeMs, 0));
+                    }
                 }
 
                 // Distribute the remaining Rx power appropriately between all apps that received
@@ -11662,6 +11795,11 @@ public class BatteryStatsImpl extends BatteryStats {
                     }
                     uid.getOrCreateWifiControllerActivityLocked().getRxTimeCounter()
                             .addCountLocked(myRxTimeMs);
+                    if (uidEstimatedConsumptionMah != null) {
+                        uidEstimatedConsumptionMah.add(uid.getUid(),
+                                mWifiPowerCalculator.calcPowerFromControllerDataMah(
+                                        myRxTimeMs, 0, 0));
+                    }
                 }
 
                 // Any left over power use will be picked up by the WiFi category in BatteryStatsHelper.
@@ -11680,10 +11818,11 @@ public class BatteryStatsImpl extends BatteryStats {
                 // POWER_WIFI_CONTROLLER_OPERATING_VOLTAGE is measured in mV, so convert to V.
                 final double opVolt = mPowerProfile.getAveragePower(
                         PowerProfile.POWER_WIFI_CONTROLLER_OPERATING_VOLTAGE) / 1000.0;
+                double controllerMaMs = 0;
                 if (opVolt != 0) {
                     // We store the power drain as mAms.
-                    mWifiActivity.getPowerCounter().addCountLocked(
-                            (long) (info.getControllerEnergyUsedMicroJoules() / opVolt));
+                    controllerMaMs = info.getControllerEnergyUsedMicroJoules() / opVolt;
+                    mWifiActivity.getPowerCounter().addCountLocked((long) controllerMaMs);
                 }
                 // Converting uWs to mAms.
                 // Conversion: (uWs * (1000ms / 1s) * (1mW / 1000uW)) / mV = mAms
@@ -11695,6 +11834,29 @@ public class BatteryStatsImpl extends BatteryStats {
                         (monitoredRailChargeConsumedMaMs / MILLISECONDS_IN_HOUR);
                 addHistoryRecordLocked(elapsedRealtimeMs, uptimeMs);
                 mTmpRailStats.resetWifiTotalEnergyUsed();
+
+                if (uidEstimatedConsumptionMah != null) {
+                    totalEstimatedConsumptionMah = Math.max(controllerMaMs / MILLISECONDS_IN_HOUR,
+                            mWifiPowerCalculator.calcPowerFromControllerDataMah(
+                                    rxTimeMs, txTimeMs, idleTimeMs));
+                }
+            }
+
+            // Update the MeasuredEnergyStats information.
+            if (uidEstimatedConsumptionMah != null) {
+                mGlobalMeasuredEnergyStats.updateStandardBucket(
+                        MeasuredEnergyStats.POWER_BUCKET_WIFI, consumedChargeUC);
+
+                // Now calculate the consumption for each uid, according to its proportional usage.
+                if (!mHasWifiReporting) {
+                    final long globalTimeMs = mGlobalWifiRunningTimer
+                            .getTimeSinceMarkLocked(elapsedRealtimeMs * 1000) / 1000;
+                    mGlobalWifiRunningTimer.setMark(elapsedRealtimeMs);
+                    totalEstimatedConsumptionMah = mWifiPowerCalculator
+                            .calcGlobalPowerWithoutControllerDataMah(globalTimeMs);
+                }
+                distributeEnergyToUidsLocked(MeasuredEnergyStats.POWER_BUCKET_WIFI,
+                        consumedChargeUC, uidEstimatedConsumptionMah, totalEstimatedConsumptionMah);
             }
         }
     }
@@ -11705,7 +11867,7 @@ public class BatteryStatsImpl extends BatteryStats {
      * Distribute Cell radio energy info and network traffic to apps.
      */
     public void noteModemControllerActivity(@Nullable final ModemActivityInfo activityInfo,
-            long elapsedRealtimeMs, long uptimeMs) {
+            final long consumedChargeUC, long elapsedRealtimeMs, long uptimeMs) {
         if (DEBUG_ENERGY) {
             Slog.d(TAG, "Updating mobile radio stats with " + activityInfo);
         }
@@ -11734,6 +11896,16 @@ public class BatteryStatsImpl extends BatteryStats {
                     mNetworkStatsPool.release(delta);
                 }
                 return;
+            }
+
+            final SparseDoubleArray uidEstimatedConsumptionMah;
+            if (consumedChargeUC > 0 && mMobileRadioPowerCalculator != null
+                    && mGlobalMeasuredEnergyStats != null) {
+                mGlobalMeasuredEnergyStats.updateStandardBucket(
+                        MeasuredEnergyStats.POWER_BUCKET_MOBILE_RADIO, consumedChargeUC);
+                uidEstimatedConsumptionMah = new SparseDoubleArray();
+            } else {
+                uidEstimatedConsumptionMah = null;
             }
 
             if (deltaInfo != null) {
@@ -11780,7 +11952,7 @@ public class BatteryStatsImpl extends BatteryStats {
                     mTmpRailStats.resetCellularTotalEnergyUsed();
                 }
             }
-            long radioTimeUs = mMobileRadioActivePerAppTimer.getTimeSinceMarkLocked(
+            long totalAppRadioTimeUs = mMobileRadioActivePerAppTimer.getTimeSinceMarkLocked(
                     elapsedRealtimeMs * 1000);
             mMobileRadioActivePerAppTimer.setMark(elapsedRealtimeMs);
 
@@ -11840,12 +12012,21 @@ public class BatteryStatsImpl extends BatteryStats {
 
                         // Distribute total radio active time in to this app.
                         final long appPackets = entry.rxPackets + entry.txPackets;
-                        final long appRadioTimeUs = (radioTimeUs * appPackets) / totalPackets;
+                        final long appRadioTimeUs =
+                                (totalAppRadioTimeUs * appPackets) / totalPackets;
                         u.noteMobileRadioActiveTimeLocked(appRadioTimeUs);
+
+                        // Distribute measured mobile radio charge consumption based on app radio
+                        // active time
+                        if (uidEstimatedConsumptionMah != null) {
+                            uidEstimatedConsumptionMah.add(u.getUid(),
+                                    mMobileRadioPowerCalculator.calcPowerFromRadioActiveDurationMah(
+                                            appRadioTimeUs / 1000));
+                        }
 
                         // Remove this app from the totals, so that we don't lose any time
                         // due to rounding.
-                        radioTimeUs -= appRadioTimeUs;
+                        totalAppRadioTimeUs -= appRadioTimeUs;
                         totalPackets -= appPackets;
 
                         if (deltaInfo != null) {
@@ -11870,10 +12051,49 @@ public class BatteryStatsImpl extends BatteryStats {
                     }
                 }
 
-                if (radioTimeUs > 0) {
+                if (totalAppRadioTimeUs > 0) {
                     // Whoops, there is some radio time we can't blame on an app!
-                    mMobileRadioActiveUnknownTime.addCountLocked(radioTimeUs);
+                    mMobileRadioActiveUnknownTime.addCountLocked(totalAppRadioTimeUs);
                     mMobileRadioActiveUnknownCount.addCountLocked(1);
+                }
+
+
+                // Update the MeasuredEnergyStats information.
+                if (uidEstimatedConsumptionMah != null) {
+                    double totalEstimatedConsumptionMah = 0.0;
+
+                    // Estimate total active radio power consumption since last mark.
+                    final long totalRadioTimeMs = mMobileRadioActiveTimer.getTimeSinceMarkLocked(
+                            elapsedRealtimeMs * 1000) / 1000;
+                    mMobileRadioActiveTimer.setMark(elapsedRealtimeMs);
+                    totalEstimatedConsumptionMah +=
+                            mMobileRadioPowerCalculator.calcPowerFromRadioActiveDurationMah(
+                                    totalRadioTimeMs);
+
+                    // Estimate idle power consumption at each signal strength level
+                    final int numSignalStrengthLevels = mPhoneSignalStrengthsTimer.length;
+                    for (int strengthLevel = 0; strengthLevel < numSignalStrengthLevels;
+                            strengthLevel++) {
+                        final long strengthLevelDurationMs =
+                                mPhoneSignalStrengthsTimer[strengthLevel].getTimeSinceMarkLocked(
+                                        elapsedRealtimeMs * 1000) / 1000;
+                        mPhoneSignalStrengthsTimer[strengthLevel].setMark(elapsedRealtimeMs);
+
+                        totalEstimatedConsumptionMah +=
+                                mMobileRadioPowerCalculator.calcIdlePowerAtSignalStrengthMah(
+                                        strengthLevelDurationMs, strengthLevel);
+                    }
+
+                    // Estimate total active radio power consumption since last mark.
+                    final long scanTimeMs = mPhoneSignalScanningTimer.getTimeSinceMarkLocked(
+                            elapsedRealtimeMs * 1000) / 1000;
+                    mPhoneSignalScanningTimer.setMark(elapsedRealtimeMs);
+                    totalEstimatedConsumptionMah +=
+                            mMobileRadioPowerCalculator.calcScanTimePowerMah(scanTimeMs);
+
+                    distributeEnergyToUidsLocked(MeasuredEnergyStats.POWER_BUCKET_MOBILE_RADIO,
+                            consumedChargeUC, uidEstimatedConsumptionMah,
+                            totalEstimatedConsumptionMah);
                 }
 
                 mNetworkStatsPool.release(delta);
@@ -11938,7 +12158,7 @@ public class BatteryStatsImpl extends BatteryStats {
      * @param info The energy information from the bluetooth controller.
      */
     public void updateBluetoothStateLocked(@Nullable final BluetoothActivityEnergyInfo info,
-            long elapsedRealtimeMs, long uptimeMs) {
+            final long consumedChargeUC, long elapsedRealtimeMs, long uptimeMs) {
         if (DEBUG_ENERGY) {
             Slog.d(TAG, "Updating bluetooth stats: " + info);
         }
@@ -11969,6 +12189,11 @@ public class BatteryStatsImpl extends BatteryStats {
             Slog.d(TAG, "  Rx Time:    " + rxTimeMs + " ms");
             Slog.d(TAG, "  Idle Time:  " + idleTimeMs + " ms");
         }
+
+        final SparseDoubleArray uidEstimatedConsumptionMah =
+                (mGlobalMeasuredEnergyStats != null
+                        && mBluetoothPowerCalculator != null && consumedChargeUC > 0) ?
+                        new SparseDoubleArray() : null;
 
         long totalScanTimeMs = 0;
 
@@ -12027,6 +12252,12 @@ public class BatteryStatsImpl extends BatteryStats {
                         u.getOrCreateBluetoothControllerActivityLocked();
                 counter.getRxTimeCounter().addCountLocked(scanTimeRxSinceMarkMs);
                 counter.getTxTimeCounters()[0].addCountLocked(scanTimeTxSinceMarkMs);
+
+                if (uidEstimatedConsumptionMah != null) {
+                    uidEstimatedConsumptionMah.add(u.getUid(),
+                            mBluetoothPowerCalculator.calculatePowerMah(
+                                    scanTimeRxSinceMarkMs, scanTimeTxSinceMarkMs, 0));
+                }
 
                 leftOverRxTimeMs -= scanTimeRxSinceMarkMs;
                 leftOverTxTimeMs -= scanTimeTxSinceMarkMs;
@@ -12088,6 +12319,11 @@ public class BatteryStatsImpl extends BatteryStats {
                         Slog.d(TAG, "UID=" + uid + " rx_bytes=" + rxBytes + " rx_time=" + timeRxMs);
                     }
                     counter.getRxTimeCounter().addCountLocked(timeRxMs);
+
+                    if (uidEstimatedConsumptionMah != null) {
+                        uidEstimatedConsumptionMah.add(u.getUid(),
+                                mBluetoothPowerCalculator.calculatePowerMah(timeRxMs, 0, 0));
+                    }
                 }
 
                 if (totalTxBytes > 0 && txBytes > 0) {
@@ -12096,6 +12332,11 @@ public class BatteryStatsImpl extends BatteryStats {
                         Slog.d(TAG, "UID=" + uid + " tx_bytes=" + txBytes + " tx_time=" + timeTxMs);
                     }
                     counter.getTxTimeCounters()[0].addCountLocked(timeTxMs);
+
+                    if (uidEstimatedConsumptionMah != null) {
+                        uidEstimatedConsumptionMah.add(u.getUid(),
+                                mBluetoothPowerCalculator.calculatePowerMah(0, timeTxMs, 0));
+                    }
                 }
             }
         }
@@ -12107,12 +12348,26 @@ public class BatteryStatsImpl extends BatteryStats {
         // POWER_BLUETOOTH_CONTROLLER_OPERATING_VOLTAGE is measured in mV, so convert to V.
         final double opVolt = mPowerProfile.getAveragePower(
                 PowerProfile.POWER_BLUETOOTH_CONTROLLER_OPERATING_VOLTAGE) / 1000.0;
+        double controllerMaMs = 0;
         if (opVolt != 0) {
+            controllerMaMs = (info.getControllerEnergyUsed() - mLastBluetoothActivityInfo.energy)
+                    / opVolt;
             // We store the power drain as mAms.
-            mBluetoothActivity.getPowerCounter().addCountLocked(
-                    (long) ((info.getControllerEnergyUsed() - mLastBluetoothActivityInfo.energy)
-                            / opVolt));
+            mBluetoothActivity.getPowerCounter().addCountLocked((long) controllerMaMs);
         }
+
+        // Update the MeasuredEnergyStats information.
+        if (uidEstimatedConsumptionMah != null) {
+            mGlobalMeasuredEnergyStats.updateStandardBucket(
+                    MeasuredEnergyStats.POWER_BUCKET_BLUETOOTH, consumedChargeUC);
+
+            double totalEstimatedMah
+                    = mBluetoothPowerCalculator.calculatePowerMah(rxTimeMs, txTimeMs, idleTimeMs);
+            totalEstimatedMah = Math.max(totalEstimatedMah, controllerMaMs / MILLISECONDS_IN_HOUR);
+            distributeEnergyToUidsLocked(MeasuredEnergyStats.POWER_BUCKET_BLUETOOTH,
+                    consumedChargeUC, uidEstimatedConsumptionMah, totalEstimatedMah);
+        }
+
         mLastBluetoothActivityInfo.set(info);
     }
 
@@ -12300,38 +12555,62 @@ public class BatteryStatsImpl extends BatteryStats {
         // 'double counted' and will simply exceed the realtime that elapsed.
         // If multidisplay becomes a reality, this is probably more reasonable than pooling.
 
-        // On the first pass, collect total time since mark so that we can normalize power.
-        long totalFgTimeMs = 0L;
-        final ArrayMap<Uid, Long> fgTimeMsArray = new ArrayMap<>();
+        // Collect total time since mark so that we can normalize power.
+        final SparseDoubleArray fgTimeUsArray = new SparseDoubleArray();
         final long elapsedRealtimeUs = elapsedRealtimeMs * 1000;
         // TODO(b/175726779): Update and optimize the algorithm (e.g. avoid iterating over ALL uids)
         final int uidStatsSize = mUidStats.size();
         for (int i = 0; i < uidStatsSize; i++) {
             final Uid uid = mUidStats.valueAt(i);
-            final long fgTimeMs = uid.markProcessForegroundTimeUs(elapsedRealtimeMs, true) / 1000;
-            if (fgTimeMs == 0) continue;
-            fgTimeMsArray.put(uid, fgTimeMs);
-            totalFgTimeMs += fgTimeMs;
+            final long fgTimeUs = uid.markProcessForegroundTimeUs(elapsedRealtimeMs, true);
+            if (fgTimeUs == 0) continue;
+            fgTimeUsArray.put(uid.getUid(), (double) fgTimeUs);
         }
-        long totalDisplayChargeMC = chargeUC / 1000; // not final
+        distributeEnergyToUidsLocked(powerBucket, chargeUC, fgTimeUsArray, 0);
+    }
 
-        // Actually assign and distribute power usage to apps based on their fg time since mark.
-        // TODO(b/175726326): Decide on 'energy' units and make sure algorithm won't overflow.
-        final long fgTimeArraySize = fgTimeMsArray.size();
-        for (int i = 0; i < fgTimeArraySize; i++) {
-            final Uid uid = fgTimeMsArray.keyAt(i);
-            final long fgTimeMs = fgTimeMsArray.valueAt(i);
-
-            // Using long division: "appEnergy = totalEnergy * appFg/totalFg + 0.5" with rounding
-            final long appDisplayChargeMC =
-                    (totalDisplayChargeMC * fgTimeMs + (totalFgTimeMs / 2))
-                    / totalFgTimeMs;
-            uid.addChargeToStandardBucketLocked(appDisplayChargeMC * 1000, powerBucket);
-
-            // To mitigate round-off errors, remove this app from numerator & denominator totals
-            totalDisplayChargeMC -= appDisplayChargeMC;
-            totalFgTimeMs -= fgTimeMs;
+    /**
+     * Accumulate GNSS charge consumption and distribute it to the correct state and the apps.
+     *
+     * @param chargeUC amount of charge (microcoulombs) used by GNSS since this was last called.
+     */
+    @GuardedBy("this")
+    public void updateGnssMeasuredEnergyStatsLocked(long chargeUC, long elapsedRealtimeMs) {
+        if (DEBUG_ENERGY) Slog.d(TAG, "Updating gnss stats: " + chargeUC);
+        if (mGlobalMeasuredEnergyStats == null) {
+            return;
         }
+
+        if (!mOnBatteryInternal || chargeUC <= 0) {
+            // There's nothing further to update.
+            return;
+        }
+        if (mIgnoreNextExternalStats) {
+            // Although under ordinary resets we won't get here, and typically a new sync will
+            // happen right after the reset, strictly speaking we need to set all mark times to now.
+            final int uidStatsSize = mUidStats.size();
+            for (int i = 0; i < uidStatsSize; i++) {
+                final Uid uid = mUidStats.valueAt(i);
+                uid.markGnssTimeUs(elapsedRealtimeMs);
+            }
+            return;
+        }
+
+        mGlobalMeasuredEnergyStats.updateStandardBucket(MeasuredEnergyStats.POWER_BUCKET_GNSS,
+                chargeUC);
+
+        // Collect the per uid time since mark so that we can normalize power.
+        final SparseDoubleArray gnssTimeUsArray = new SparseDoubleArray();
+        // TODO(b/175726779): Update and optimize the algorithm (e.g. avoid iterating over ALL uids)
+        final int uidStatsSize = mUidStats.size();
+        for (int i = 0; i < uidStatsSize; i++) {
+            final Uid uid = mUidStats.valueAt(i);
+            final long gnssTimeUs = uid.markGnssTimeUs(elapsedRealtimeMs);
+            if (gnssTimeUs == 0) continue;
+            gnssTimeUsArray.put(uid.getUid(), (double) gnssTimeUs);
+        }
+        distributeEnergyToUidsLocked(MeasuredEnergyStats.POWER_BUCKET_GNSS, chargeUC,
+                gnssTimeUsArray, 0);
     }
 
     /**
@@ -12375,6 +12654,44 @@ public class BatteryStatsImpl extends BatteryStats {
                             + customPowerBucket + " for non-existent uid " + uidInt);
                 }
             }
+        }
+    }
+
+    /**
+     * Attributes energy (for the given bucket) to each uid according to the following formula:
+     *     blamedEnergy[uid] = totalEnergy * ratioNumerators[uid] / ratioDenominator;
+     * <p>Does nothing if ratioDenominator is 0.
+     *
+     * <p>Here, ratioDenominator = max(sumOfAllRatioNumerators, minRatioDenominator),
+     * so if given minRatioDenominator <= 0, then sumOfAllRatioNumerators will be used implicitly.
+     *
+     * <p>Note that ratioNumerators and minRatioDenominator must use the same units, but need not
+     * use the same units as totalConsumedChargeUC (which must be in microcoulombs).
+     *
+     * <p>A consequence of minRatioDenominator is that the sum over all uids might be less than
+     * totalConsumedChargeUC. This is intentional; the remainder is purposefully unnaccounted rather
+     * than incorrectly blamed on uids, and implies unknown (non-uid) sources of drain.
+     *
+     * <p>All uids in ratioNumerators must exist in mUidStats already.
+     */
+    private void distributeEnergyToUidsLocked(@StandardPowerBucket int bucket,
+            long totalConsumedChargeUC, SparseDoubleArray ratioNumerators,
+            double minRatioDenominator) {
+
+        // If the sum of all app usage was greater than the total, use that instead:
+        double sumRatioNumerators = 0;
+        for (int i = ratioNumerators.size() - 1; i >= 0; i--) {
+            sumRatioNumerators += ratioNumerators.valueAt(i);
+        }
+        final double ratioDenominator = Math.max(sumRatioNumerators, minRatioDenominator);
+        if (ratioDenominator <= 0) return;
+
+        for (int i = ratioNumerators.size() - 1; i >= 0; i--) {
+            final Uid uid = getAvailableUidStatsLocked(ratioNumerators.keyAt(i));
+            final double ratioNumerator = ratioNumerators.valueAt(i);
+            final long uidActualUC
+                    = (long) (totalConsumedChargeUC * ratioNumerator / ratioDenominator + 0.5);
+            uid.addChargeToStandardBucketLocked(uidActualUC, bucket);
         }
     }
 
@@ -14212,14 +14529,22 @@ public class BatteryStatsImpl extends BatteryStats {
             if (mGlobalMeasuredEnergyStats == null) {
                 mGlobalMeasuredEnergyStats =
                         new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
-                return;
             } else {
                 supportedBucketMismatch = !mGlobalMeasuredEnergyStats.isSupportEqualTo(
                         supportedStandardBuckets, numCustomBuckets);
             }
 
+            if (supportedStandardBuckets[MeasuredEnergyStats.POWER_BUCKET_BLUETOOTH]) {
+                mBluetoothPowerCalculator = new BluetoothPowerCalculator(mPowerProfile);
+            }
             if (supportedStandardBuckets[MeasuredEnergyStats.POWER_BUCKET_CPU]) {
                 mCpuPowerCalculator = new CpuPowerCalculator(mPowerProfile);
+            }
+            if (supportedStandardBuckets[MeasuredEnergyStats.POWER_BUCKET_MOBILE_RADIO]) {
+                mMobileRadioPowerCalculator = new MobileRadioPowerCalculator(mPowerProfile);
+            }
+            if (supportedStandardBuckets[MeasuredEnergyStats.POWER_BUCKET_WIFI]) {
+                mWifiPowerCalculator = new WifiPowerCalculator(mPowerProfile);
             }
         }
 
@@ -16349,6 +16674,8 @@ public class BatteryStatsImpl extends BatteryStats {
         // Pull the clock time.  This may update the time and make a new history entry
         // if we had originally pulled a time before the RTC was set.
         getStartClockTime();
+
+        updateSystemServiceCallStats();
     }
 
     public void dumpLocked(Context context, PrintWriter pw, int flags, int reqUid, long histStart) {

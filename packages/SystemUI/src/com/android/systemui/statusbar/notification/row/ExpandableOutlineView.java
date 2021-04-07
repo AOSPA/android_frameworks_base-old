@@ -25,9 +25,9 @@ import android.graphics.Rect;
 import android.graphics.RectF;
 import android.util.AttributeSet;
 import android.view.View;
+import android.view.ViewGroup;
 import android.view.ViewOutlineProvider;
 
-import com.android.settingslib.Utils;
 import com.android.systemui.R;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
@@ -83,8 +83,8 @@ public abstract class ExpandableOutlineView extends ExpandableView {
     private final ViewOutlineProvider mProvider = new ViewOutlineProvider() {
         @Override
         public void getOutline(View view, Outline outline) {
-            if (!mCustomOutline && mCurrentTopRoundness == 0.0f
-                    && mCurrentBottomRoundness == 0.0f && !mAlwaysRoundBothCorners
+            if (!mCustomOutline && getCurrentTopRoundness() == 0.0f
+                    && getCurrentBottomRoundness() == 0.0f && !mAlwaysRoundBothCorners
                     && !mTopAmountRounded) {
                 int translation = mShouldTranslateContents ? (int) getTranslation() : 0;
                 int left = Math.max(translation, 0);
@@ -102,6 +102,28 @@ public abstract class ExpandableOutlineView extends ExpandableView {
         }
     };
 
+    /**
+     * Get the relative start padding of a view relative to this view. This recursively walks up the
+     * hierarchy and does the corresponding measuring.
+     *
+     * @param view the view to get the padding for. The requested view has to be a child of this
+     *             notification.
+     * @return the start padding
+     */
+    public int getRelativeStartPadding(View view) {
+        boolean isRtl = isLayoutRtl();
+        int startPadding = 0;
+        while (view.getParent() instanceof ViewGroup) {
+            View parent = (View) view.getParent();
+            startPadding += isRtl ? parent.getWidth() - view.getRight() : view.getLeft();
+            view = parent;
+            if (view == this) {
+                return startPadding;
+            }
+        }
+        return startPadding;
+    }
+
     protected Path getClipPath(boolean ignoreTranslation) {
         int left;
         int top;
@@ -110,15 +132,17 @@ public abstract class ExpandableOutlineView extends ExpandableView {
         int height;
         float topRoundness = mAlwaysRoundBothCorners
                 ? mOutlineRadius : getCurrentBackgroundRadiusTop();
+
         if (!mCustomOutline) {
-            int translation = mShouldTranslateContents && !ignoreTranslation
-                    ? (int) getTranslation() : 0;
-            int halfExtraWidth = (int) (mExtraWidthForClipping / 2.0f);
-            left = Math.max(translation, 0) - halfExtraWidth;
-            top = mClipTopAmount + mBackgroundTop;
-            right = getWidth() + halfExtraWidth + Math.min(translation, 0);
+            // Extend left/right clip bounds beyond the notification by the
+            // 1) space between the notification and edge of screen
+            // 2) corner radius (so we do not see any rounding as the notification goes off screen)
+            left = (int) (-getRelativeStartPadding(this) - mOutlineRadius);
+            right = (int) (((View) getParent()).getWidth() + mOutlineRadius);
+
             // If the top is rounded we want the bottom to be at most at the top roundness, in order
             // to avoid the shadow changing when scrolling up.
+            top = mClipTopAmount + mBackgroundTop;
             bottom = Math.max(mMinimumHeightForClipping,
                     Math.max(getActualHeight() - mClipBottomAmount, (int) (top + topRoundness)));
         } else {
@@ -135,10 +159,12 @@ public abstract class ExpandableOutlineView extends ExpandableView {
                 ? mOutlineRadius : getCurrentBackgroundRadiusBottom();
         if (topRoundness + bottomRoundness > height) {
             float overShoot = topRoundness + bottomRoundness - height;
-            topRoundness -= overShoot * mCurrentTopRoundness
-                    / (mCurrentTopRoundness + mCurrentBottomRoundness);
-            bottomRoundness -= overShoot * mCurrentBottomRoundness
-                    / (mCurrentTopRoundness + mCurrentBottomRoundness);
+            float currentTopRoundness = getCurrentTopRoundness();
+            float currentBottomRoundness = getCurrentBottomRoundness();
+            topRoundness -= overShoot * currentTopRoundness
+                    / (currentTopRoundness + currentBottomRoundness);
+            bottomRoundness -= overShoot * currentBottomRoundness
+                    / (currentTopRoundness + currentBottomRoundness);
         }
         getRoundedRectPath(left, top, right, bottom, topRoundness, bottomRoundness, mTmpPath);
         return mTmpPath;
@@ -267,7 +293,7 @@ public abstract class ExpandableOutlineView extends ExpandableView {
         if (mTopAmountRounded) {
             return mOutlineRadius;
         }
-        return mCurrentTopRoundness * mOutlineRadius;
+        return getCurrentTopRoundness() * mOutlineRadius;
     }
 
     public float getCurrentTopRoundness() {
@@ -278,8 +304,8 @@ public abstract class ExpandableOutlineView extends ExpandableView {
         return mCurrentBottomRoundness;
     }
 
-    protected float getCurrentBackgroundRadiusBottom() {
-        return mCurrentBottomRoundness * mOutlineRadius;
+    public float getCurrentBackgroundRadiusBottom() {
+        return getCurrentBottomRoundness() * mOutlineRadius;
     }
 
     @Override

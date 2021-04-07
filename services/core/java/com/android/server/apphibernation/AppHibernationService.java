@@ -38,6 +38,7 @@ import android.content.IntentFilter;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
+import android.content.pm.PackageManagerInternal;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.RemoteException;
@@ -69,6 +70,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 
@@ -91,8 +93,10 @@ public final class AppHibernationService extends SystemService {
     private final Object mLock = new Object();
     private final Context mContext;
     private final IPackageManager mIPackageManager;
+    private final PackageManagerInternal mPackageManagerInternal;
     private final IActivityManager mIActivityManager;
     private final UserManager mUserManager;
+
     @GuardedBy("mLock")
     private final SparseArray<Map<String, UserLevelState>> mUserStates = new SparseArray<>();
     private final SparseArray<HibernationStateDiskStore<UserLevelState>> mUserDiskStores =
@@ -101,6 +105,7 @@ public final class AppHibernationService extends SystemService {
     private final Map<String, GlobalLevelState> mGlobalHibernationStates = new ArrayMap<>();
     private final HibernationStateDiskStore<GlobalLevelState> mGlobalLevelHibernationDiskStore;
     private final Injector mInjector;
+    private final Executor mBackgroundExecutor;
 
     @VisibleForTesting
     boolean mIsServiceEnabled;
@@ -123,9 +128,11 @@ public final class AppHibernationService extends SystemService {
         super(injector.getContext());
         mContext = injector.getContext();
         mIPackageManager = injector.getPackageManager();
+        mPackageManagerInternal = injector.getPackageManagerInternal();
         mIActivityManager = injector.getActivityManager();
         mUserManager = injector.getUserManager();
         mGlobalLevelHibernationDiskStore = injector.getGlobalLevelDiskStore();
+        mBackgroundExecutor = injector.getBackgroundExecutor();
         mInjector = injector;
 
         final Context userAllContext = mContext.createContextAsUser(UserHandle.ALL, 0 /* flags */);
@@ -147,11 +154,13 @@ public final class AppHibernationService extends SystemService {
     @Override
     public void onBootPhase(int phase) {
         if (phase == PHASE_BOOT_COMPLETED) {
-            List<GlobalLevelState> states =
-                    mGlobalLevelHibernationDiskStore.readHibernationStates();
-            synchronized (mLock) {
-                initializeGlobalHibernationStates(states);
-            }
+            mBackgroundExecutor.execute(() -> {
+                List<GlobalLevelState> states =
+                        mGlobalLevelHibernationDiskStore.readHibernationStates();
+                synchronized (mLock) {
+                    initializeGlobalHibernationStates(states);
+                }
+            });
         }
         if (phase == SystemService.PHASE_SYSTEM_SERVICES_READY) {
             mIsServiceEnabled = isAppHibernationEnabled();
@@ -170,14 +179,15 @@ public final class AppHibernationService extends SystemService {
      * @return true if package is hibernating for the user
      */
     boolean isHibernatingForUser(String packageName, int userId) {
-        if (!checkHibernationEnabled("isHibernatingForUser")) {
+        String methodName = "isHibernatingForUser";
+        if (!checkHibernationEnabled(methodName)) {
             return false;
         }
-
-        userId = handleIncomingUser(userId, "isHibernating");
-        if (!mUserManager.isUserUnlockingOrUnlocked(userId)) {
-            Slog.e(TAG, "Attempt to get hibernation state of stopped or nonexistent user "
-                    + userId);
+        getContext().enforceCallingOrSelfPermission(
+                android.Manifest.permission.MANAGE_APP_HIBERNATION,
+                "Caller does not have MANAGE_APP_HIBERNATION permission.");
+        userId = handleIncomingUser(userId, methodName);
+        if (!checkUserStatesExist(userId, methodName)) {
             return false;
         }
         synchronized (mLock) {
@@ -202,11 +212,15 @@ public final class AppHibernationService extends SystemService {
         if (!checkHibernationEnabled("isHibernatingGlobally")) {
             return false;
         }
+        getContext().enforceCallingOrSelfPermission(
+                android.Manifest.permission.MANAGE_APP_HIBERNATION,
+                "Caller does not have MANAGE_APP_HIBERNATION permission.");
         synchronized (mLock) {
             GlobalLevelState state = mGlobalHibernationStates.get(packageName);
             if (state == null) {
-                throw new IllegalArgumentException(
-                        String.format("Package %s is not installed", packageName));
+                // This API can be legitimately called before installation finishes as part of
+                // dex optimization, so we just return false here.
+                return false;
             }
             return state.hibernated;
         }
@@ -220,13 +234,15 @@ public final class AppHibernationService extends SystemService {
      * @param isHibernating new hibernation state
      */
     void setHibernatingForUser(String packageName, int userId, boolean isHibernating) {
-        if (!checkHibernationEnabled("setHibernatingForUser")) {
+        String methodName = "setHibernatingForUser";
+        if (!checkHibernationEnabled(methodName)) {
             return;
         }
-        userId = handleIncomingUser(userId, "setHibernating");
-        if (!mUserManager.isUserUnlockingOrUnlocked(userId)) {
-            Slog.w(TAG, "Attempt to set hibernation state for a stopped or nonexistent user "
-                    + userId);
+        getContext().enforceCallingOrSelfPermission(
+                android.Manifest.permission.MANAGE_APP_HIBERNATION,
+                "Caller does not have MANAGE_APP_HIBERNATION permission.");
+        userId = handleIncomingUser(userId, methodName);
+        if (!checkUserStatesExist(userId, methodName)) {
             return;
         }
         synchronized (mLock) {
@@ -263,6 +279,9 @@ public final class AppHibernationService extends SystemService {
         if (!checkHibernationEnabled("setHibernatingGlobally")) {
             return;
         }
+        getContext().enforceCallingOrSelfPermission(
+                android.Manifest.permission.MANAGE_APP_HIBERNATION,
+                "Caller does not have MANAGE_APP_HIBERNATION permission.");
         synchronized (mLock) {
             GlobalLevelState state = mGlobalHibernationStates.get(packageName);
             if (state == null) {
@@ -278,6 +297,34 @@ public final class AppHibernationService extends SystemService {
                 List<GlobalLevelState> states = new ArrayList<>(mGlobalHibernationStates.values());
                 mGlobalLevelHibernationDiskStore.scheduleWriteHibernationStates(states);
             }
+        }
+    }
+
+    /**
+     * Get the hibernating packages for the given user. This is equivalent to the list of
+     * packages for the user that return true for {@link #isHibernatingForUser}.
+     */
+    @NonNull List<String> getHibernatingPackagesForUser(int userId) {
+        ArrayList<String> hibernatingPackages = new ArrayList<>();
+        String methodName = "getHibernatingPackagesForUser";
+        if (!checkHibernationEnabled(methodName)) {
+            return hibernatingPackages;
+        }
+        getContext().enforceCallingOrSelfPermission(
+                android.Manifest.permission.MANAGE_APP_HIBERNATION,
+                "Caller does not have MANAGE_APP_HIBERNATION permission.");
+        userId = handleIncomingUser(userId, methodName);
+        if (!checkUserStatesExist(userId, methodName)) {
+            return hibernatingPackages;
+        }
+        synchronized (mLock) {
+            Map<String, UserLevelState> userStates = mUserStates.get(userId);
+            for (UserLevelState state : userStates.values()) {
+                if (state.hibernated) {
+                    hibernatingPackages.add(state.packageName);
+                }
+            }
+            return hibernatingPackages;
         }
     }
 
@@ -324,7 +371,7 @@ public final class AppHibernationService extends SystemService {
     @GuardedBy("mLock")
     private void hibernatePackageGlobally(@NonNull String packageName, GlobalLevelState state) {
         Trace.traceBegin(Trace.TRACE_TAG_SYSTEM_SERVER, "hibernatePackageGlobally");
-        // TODO(175830194): Delete vdex/odex when DexManager API is built out
+        mPackageManagerInternal.deleteOatArtifactsOfPackage(packageName);
         state.hibernated = true;
         Trace.traceEnd(Trace.TRACE_TAG_SYSTEM_SERVER);
     }
@@ -428,10 +475,15 @@ public final class AppHibernationService extends SystemService {
         HibernationStateDiskStore<UserLevelState> diskStore =
                 mInjector.getUserLevelDiskStore(userId);
         mUserDiskStores.put(userId, diskStore);
-        List<UserLevelState> storedStates = diskStore.readHibernationStates();
-        synchronized (mLock) {
-            initializeUserHibernationStates(userId, storedStates);
-        }
+        mBackgroundExecutor.execute(() -> {
+            List<UserLevelState> storedStates = diskStore.readHibernationStates();
+            synchronized (mLock) {
+                // Ensure user hasn't stopped in the time to execute.
+                if (mUserManager.isUserUnlockingOrUnlocked(userId)) {
+                    initializeUserHibernationStates(userId, storedStates);
+                }
+            }
+        });
     }
 
     @Override
@@ -499,6 +551,20 @@ public final class AppHibernationService extends SystemService {
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
+    }
+
+    private boolean checkUserStatesExist(int userId, String methodName) {
+        if (!mUserManager.isUserUnlockingOrUnlocked(userId)) {
+            Slog.e(TAG, String.format(
+                    "Attempt to call %s on stopped or nonexistent user %d", methodName, userId));
+            return false;
+        }
+        if (!mUserStates.contains(userId)) {
+            Slog.w(TAG, String.format(
+                    "Attempt to call %s before states have been read from disk", methodName));
+            return false;
+        }
+        return true;
     }
 
     private boolean checkHibernationEnabled(String methodName) {
@@ -599,6 +665,11 @@ public final class AppHibernationService extends SystemService {
         }
 
         @Override
+        public List<String> getHibernatingPackagesForUser(int userId) {
+            return mService.getHibernatingPackagesForUser(userId);
+        }
+
+        @Override
         public void onShellCommand(@Nullable FileDescriptor in, @Nullable FileDescriptor out,
                 @Nullable FileDescriptor err, @NonNull String[] args,
                 @Nullable ShellCallback callback, @NonNull ResultReceiver resultReceiver) {
@@ -662,9 +733,13 @@ public final class AppHibernationService extends SystemService {
 
         IPackageManager getPackageManager();
 
+        PackageManagerInternal getPackageManagerInternal();
+
         IActivityManager getActivityManager();
 
         UserManager getUserManager();
+
+        Executor getBackgroundExecutor();
 
         HibernationStateDiskStore<GlobalLevelState> getGlobalLevelDiskStore();
 
@@ -694,6 +769,11 @@ public final class AppHibernationService extends SystemService {
         }
 
         @Override
+        public PackageManagerInternal getPackageManagerInternal() {
+            return LocalServices.getService(PackageManagerInternal.class);
+        }
+
+        @Override
         public IActivityManager getActivityManager() {
             return ActivityManager.getService();
         }
@@ -701,6 +781,11 @@ public final class AppHibernationService extends SystemService {
         @Override
         public UserManager getUserManager() {
             return mContext.getSystemService(UserManager.class);
+        }
+
+        @Override
+        public Executor getBackgroundExecutor() {
+            return mScheduledExecutorService;
         }
 
         @Override
