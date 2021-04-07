@@ -195,7 +195,8 @@ public final class AuthSession implements IBinder.DeathRecipient {
             final int cookie = mRandom.nextInt(Integer.MAX_VALUE - 1) + 1;
             final boolean requireConfirmation = isConfirmationRequired(sensor);
             sensor.goToStateWaitingForCookie(requireConfirmation, mToken, mOperationId,
-                    mUserId, mSensorReceiver, mOpPackageName, cookie);
+                    mUserId, mSensorReceiver, mOpPackageName, cookie,
+                    mPromptInfo.isAllowBackgroundAuthentication());
         }
     }
 
@@ -596,7 +597,8 @@ public final class AuthSession implements IBinder.DeathRecipient {
                     mPreAuthInfo.confirmationRequested,
                     FrameworkStatsLog.BIOMETRIC_AUTHENTICATED__STATE__CONFIRMED,
                     latency,
-                    mDebugEnabled);
+                    mDebugEnabled,
+                    -1 /* sensorId */);
         } else {
             final long latency = System.currentTimeMillis() - mStartTimeMs;
 
@@ -624,7 +626,8 @@ public final class AuthSession implements IBinder.DeathRecipient {
                     error,
                     0 /* vendorCode */,
                     mDebugEnabled,
-                    latency);
+                    latency,
+                    -1 /* sensorId */);
         }
     }
 

@@ -44,6 +44,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.telephony.CallQuality;
 import android.telephony.ims.ImsStreamMediaProfile;
 import android.util.ArraySet;
 import android.view.Surface;
@@ -963,7 +964,7 @@ public abstract class Connection extends Conferenceable {
      * {@link CallDiagnosticService} implementation which is active.
      * <p>
      * Likewise, if a {@link CallDiagnosticService} sends a message using
-     * {@link DiagnosticCall#sendDeviceToDeviceMessage(int, int)}, it will be routed to telephony
+     * {@link CallDiagnostics#sendDeviceToDeviceMessage(int, int)}, it will be routed to telephony
      * via {@link Connection#onCallEvent(String, Bundle)}.  The telephony stack will relay the
      * message to the other device.
      * @hide
@@ -976,7 +977,7 @@ public abstract class Connection extends Conferenceable {
      * Sent along with {@link #EVENT_DEVICE_TO_DEVICE_MESSAGE} to indicate the device to device
      * message type.
      *
-     * See {@link DiagnosticCall} for more information.
+     * See {@link CallDiagnostics} for more information.
      * @hide
      */
     @SystemApi
@@ -987,12 +988,29 @@ public abstract class Connection extends Conferenceable {
      * Sent along with {@link #EVENT_DEVICE_TO_DEVICE_MESSAGE} to indicate the device to device
      * message value.
      * <p>
-     * See {@link DiagnosticCall} for more information.
+     * See {@link CallDiagnostics} for more information.
      * @hide
      */
     @SystemApi
     public static final String EXTRA_DEVICE_TO_DEVICE_MESSAGE_VALUE =
             "android.telecom.extra.DEVICE_TO_DEVICE_MESSAGE_VALUE";
+
+    /**
+     * Connection event used to communicate a {@link android.telephony.CallQuality} report from
+     * telephony to Telecom for relaying to
+     * {@link DiagnosticCall#onCallQualityReceived(CallQuality)}.
+     * @hide
+     */
+    public static final String EVENT_CALL_QUALITY_REPORT =
+            "android.telecom.event.CALL_QUALITY_REPORT";
+
+    /**
+     * Extra sent with {@link #EVENT_CALL_QUALITY_REPORT} containing the
+     * {@link android.telephony.CallQuality} data.
+     * @hide
+     */
+    public static final String EXTRA_CALL_QUALITY_REPORT =
+            "android.telecom.extra.CALL_QUALITY_REPORT";
 
     // Flag controlling whether PII is emitted into the logs
     private static final boolean PII_DEBUG = Log.isLoggable(android.util.Log.DEBUG);

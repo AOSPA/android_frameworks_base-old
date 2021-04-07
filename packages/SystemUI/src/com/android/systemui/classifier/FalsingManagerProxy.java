@@ -131,8 +131,8 @@ public class FalsingManagerProxy implements FalsingManager, Dumpable {
     }
 
     @Override
-    public boolean isFalseTap(boolean robustCheck) {
-        return mInternalFalsingManager.isFalseTap(robustCheck);
+    public boolean isFalseTap(boolean robustCheck, double falsePenalty) {
+        return mInternalFalsingManager.isFalseTap(robustCheck, falsePenalty);
     }
 
     @Override
@@ -158,6 +158,16 @@ public class FalsingManagerProxy implements FalsingManager, Dumpable {
     @Override
     public boolean isReportingEnabled() {
         return mInternalFalsingManager.isReportingEnabled();
+    }
+
+    @Override
+    public void addFalsingBeliefListener(FalsingBeliefListener listener) {
+        mInternalFalsingManager.addFalsingBeliefListener(listener);
+    }
+
+    @Override
+    public void removeFalsingBeliefListener(FalsingBeliefListener listener) {
+        mInternalFalsingManager.removeFalsingBeliefListener(listener);
     }
 
     @Override

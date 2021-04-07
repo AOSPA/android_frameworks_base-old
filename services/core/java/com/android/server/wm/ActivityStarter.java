@@ -1433,6 +1433,7 @@ class ActivityStarter {
                 + "; allowBackgroundActivityStart: " + allowBackgroundActivityStart
                 + "; intent: " + intent
                 + "; callerApp: " + callerApp
+                + "; inVisibleTask: " + (callerApp != null && callerApp.hasActivityInVisibleTask())
                 + "]");
         // log aborted activity start to TRON
         if (mService.isActivityStartsLoggingEnabled()) {
@@ -2723,7 +2724,8 @@ class ActivityStarter {
                     launchFlags |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
                     break;
                 case ActivityInfo.DOCUMENT_LAUNCH_NEVER:
-                    launchFlags &= ~FLAG_ACTIVITY_MULTIPLE_TASK;
+                    launchFlags &=
+                            ~(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | FLAG_ACTIVITY_MULTIPLE_TASK);
                     break;
             }
         }

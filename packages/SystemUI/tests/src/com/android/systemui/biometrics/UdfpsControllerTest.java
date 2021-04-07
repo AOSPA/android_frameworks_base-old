@@ -26,6 +26,7 @@ import static org.mockito.Mockito.when;
 
 import android.content.res.Resources;
 import android.content.res.TypedArray;
+import android.hardware.biometrics.ComponentInfoInternal;
 import android.hardware.biometrics.SensorProperties;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorProperties;
@@ -44,8 +45,10 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
 
@@ -91,6 +94,12 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Mock
     private StatusBar mStatusBar;
     @Mock
+    private StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
+    @Mock
+    private DumpManager mDumpManager;
+    @Mock
+    private AuthRippleController mAuthRippleController;
+    @Mock
     private IUdfpsOverlayControllerCallback mUdfpsOverlayControllerCallback;
 
     private FakeExecutor mFgExecutor;
@@ -114,9 +123,19 @@ public class UdfpsControllerTest extends SysuiTestCase {
         setUpResources();
         when(mLayoutInflater.inflate(R.layout.udfps_view, null, false)).thenReturn(mUdfpsView);
         final List<FingerprintSensorPropertiesInternal> props = new ArrayList<>();
+
+        final List<ComponentInfoInternal> componentInfo = new ArrayList<>();
+        componentInfo.add(new ComponentInfoInternal("faceSensor" /* componentId */,
+                "vendor/model/revision" /* hardwareVersion */, "1.01" /* firmwareVersion */,
+                "00000001" /* serialNumber */, "" /* softwareVersion */));
+        componentInfo.add(new ComponentInfoInternal("matchingAlgorithm" /* componentId */,
+                "" /* hardwareVersion */, "" /* firmwareVersion */, "" /* serialNumber */,
+                "vendor/version/revision" /* softwareVersion */));
+
         props.add(new FingerprintSensorPropertiesInternal(TEST_UDFPS_SENSOR_ID,
                 SensorProperties.STRENGTH_STRONG,
                 5 /* maxEnrollmentsPerUser */,
+                componentInfo,
                 FingerprintSensorProperties.TYPE_UDFPS_OPTICAL,
                 true /* resetLockoutRequiresHardwareAuthToken */));
         when(mFingerprintManager.getSensorPropertiesInternal()).thenReturn(props);
@@ -129,7 +148,10 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mWindowManager,
                 mStatusBarStateController,
                 mFgExecutor,
-                mStatusBar);
+                mStatusBar,
+                mStatusBarKeyguardViewManager,
+                mDumpManager,
+                mAuthRippleController);
         verify(mFingerprintManager).setUdfpsOverlayController(mOverlayCaptor.capture());
         mOverlayController = mOverlayCaptor.getValue();
 
@@ -245,21 +267,5 @@ public class UdfpsControllerTest extends SysuiTestCase {
         mFgExecutor.runAllReady();
         // THEN the illumination is hidden
         verify(mUdfpsView).stopIllumination();
-    }
-
-    @Test
-    public void registersAndUnregistersViewForCallbacks() throws RemoteException {
-        mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
-                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD, mUdfpsOverlayControllerCallback);
-        mFgExecutor.runAllReady();
-        verify(mStatusBarStateController).addCallback(mUdfpsController.mStatusBarStateListener);
-        verify(mStatusBar).addExpansionChangedListener(
-                mUdfpsController.mStatusBarExpansionListener);
-
-        mOverlayController.hideUdfpsOverlay(TEST_UDFPS_SENSOR_ID);
-        mFgExecutor.runAllReady();
-        verify(mStatusBarStateController).removeCallback(mUdfpsController.mStatusBarStateListener);
-        verify(mStatusBar).removeExpansionChangedListener(
-                mUdfpsController.mStatusBarExpansionListener);
     }
 }

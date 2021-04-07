@@ -16,7 +16,7 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.launcher3.tapl.LauncherInstrumentation
@@ -24,8 +24,6 @@ import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.google.common.truth.Truth
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -57,19 +55,19 @@ class PipMovesInAllApps(testSpec: FlickerTestParameter) : PipTransition(testSpec
             }
         }
 
-    @Postsubmit
-    @Test
-    fun navBarWindowIsAlwaysVisible() = testSpec.navBarWindowIsAlwaysVisible()
-
-    @Postsubmit
-    @Test
-    fun statusBarWindowIsAlwaysVisible() = testSpec.statusBarWindowIsAlwaysVisible()
-
-    @Postsubmit
+    @Presubmit
     @Test
     fun pipAlwaysVisible() = testSpec.assertWm { this.showsAppWindow(pipApp.windowName) }
 
-    @Postsubmit
+    @Presubmit
+    @Test
+    fun pipLayerInsideDisplay() {
+        testSpec.assertLayersStart {
+            coversAtMost(displayBounds, pipApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
     @Test
     fun pipWindowMovesUp() = testSpec.assertWmEnd {
         val initialState = this.trace?.first()?.wmState

@@ -86,6 +86,7 @@ public class CompatConfigTest {
         // Assume userdebug/eng non-final build
         when(mBuildClassifier.isDebuggableBuild()).thenReturn(true);
         when(mBuildClassifier.isFinalBuild()).thenReturn(false);
+        when(mBuildClassifier.platformTargetSdk()).thenReturn(30);
         ChangeIdStateCache.disable();
         when(mPackageManager.getApplicationInfo(anyString(), anyInt()))
                 .thenThrow(new NameNotFoundException());
@@ -256,6 +257,36 @@ public class CompatConfigTest {
                 () -> compatConfig.addOverride(1234L, "com.some.package", true)
         );
         assertThat(compatConfig.isChangeEnabled(1234L, applicationInfo)).isFalse();
+    }
+
+    @Test
+    public void testInstallerCanSetOverrides() throws Exception {
+        final long changeId = 1234L;
+        final int installerUid = 23;
+        CompatConfig compatConfig = CompatConfigBuilder.create(mBuildClassifier, mContext)
+                .addOverridableChangeWithId(1234L)
+                .build();
+        ApplicationInfo applicationInfo = ApplicationInfoBuilder.create()
+                .withPackageName("com.some.package")
+                .build();
+        PackageManager packageManager = mock(PackageManager.class);
+        when(mContext.getPackageManager()).thenReturn(packageManager);
+        when(packageManager.getApplicationInfo(eq("com.some.package"), anyInt()))
+                .thenReturn(applicationInfo);
+
+        // Force the validator to prevent overriding the change by using a user build.
+        when(mBuildClassifier.isDebuggableBuild()).thenReturn(false);
+        when(mBuildClassifier.isFinalBuild()).thenReturn(true);
+
+        CompatibilityOverrideConfig config = new CompatibilityOverrideConfig(
+                Collections.singletonMap(1234L,
+                        new PackageOverride.Builder()
+                                .setMaxVersionCode(99L)
+                                .setEnabled(true)
+                                .build()));
+
+        compatConfig.addOverrides(config, "com.some.package");
+        assertThat(compatConfig.isChangeEnabled(1234L, applicationInfo)).isTrue();
     }
 
     @Test
@@ -567,6 +598,34 @@ public class CompatConfigTest {
     }
 
     @Test
+    public void testReadApexConfig() throws IOException {
+        String configXml = "<config>"
+                + "<compat-change id=\"1234\" name=\"MY_CHANGE1\" enableAfterTargetSdk=\"2\" />"
+                + "<compat-change id=\"1235\" name=\"MY_CHANGE2\" disabled=\"true\" />"
+                + "<compat-change id=\"1236\" name=\"MY_CHANGE3\" />"
+                + "<compat-change id=\"1237\" name=\"MY_CHANGE4\" enableSinceTargetSdk=\"31\" />"
+                + "</config>";
+
+        File dir = createTempDir();
+        writeToFile(dir, "platform_compat_config.xml", configXml);
+        CompatConfig compatConfig = new CompatConfig(mBuildClassifier, mContext);
+        compatConfig.forceNonDebuggableFinalForTest(false);
+
+        compatConfig.initConfigFromLib(dir);
+
+        assertThat(compatConfig.isChangeEnabled(1234L,
+            ApplicationInfoBuilder.create().withTargetSdk(1).build())).isFalse();
+        assertThat(compatConfig.isChangeEnabled(1234L,
+            ApplicationInfoBuilder.create().withTargetSdk(3).build())).isTrue();
+        assertThat(compatConfig.isChangeEnabled(1235L,
+            ApplicationInfoBuilder.create().withTargetSdk(5).build())).isFalse();
+        assertThat(compatConfig.isChangeEnabled(1236L,
+            ApplicationInfoBuilder.create().withTargetSdk(1).build())).isTrue();
+        assertThat(compatConfig.isChangeEnabled(1237L,
+            ApplicationInfoBuilder.create().withTargetSdk(31).build())).isTrue();
+    }
+
+    @Test
     public void testReadConfigMultipleFiles() throws IOException {
         String configXml1 = "<config>"
                 + "<compat-change id=\"1234\" name=\"MY_CHANGE1\" enableAfterTargetSdk=\"2\" />"
@@ -610,9 +669,18 @@ public class CompatConfigTest {
                         .build());
         when(mPackageManager.getApplicationInfo(eq("bar.baz"), anyInt()))
                 .thenThrow(new NameNotFoundException());
-
-        compatConfig.addOverride(1L, "foo.bar", true);
-        compatConfig.addOverride(2L, "bar.baz", false);
+        compatConfig.addOverrides(
+                new CompatibilityOverrideConfig(
+                        Collections.singletonMap(
+                                1L,
+                                new PackageOverride.Builder().setEnabled(true).build())),
+                "foo.bar");
+        compatConfig.addOverrides(
+                new CompatibilityOverrideConfig(
+                        Collections.singletonMap(
+                                2L,
+                                new PackageOverride.Builder().setEnabled(false).build())),
+                "bar.baz");
 
         assertThat(readFile(overridesFile)).isEqualTo("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n"
                 + "<overrides>\n"

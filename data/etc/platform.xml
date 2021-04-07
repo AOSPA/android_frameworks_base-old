@@ -48,6 +48,10 @@
         <group gid="uhid" />
     </permission>
 
+    <permission name="android.permission.VIRTUAL_INPUT_DEVICE" >
+        <group gid="uhid" />
+    </permission>
+
     <permission name="android.permission.NET_TUNNELING" >
         <group gid="vpn" />
     </permission>
@@ -58,10 +62,6 @@
 
     <permission name="android.permission.READ_LOGS" >
         <group gid="log" />
-    </permission>
-
-    <permission name="android.permission.MANAGE_EXTERNAL_STORAGE" >
-        <group gid="external_storage" />
     </permission>
 
     <permission name="android.permission.ACCESS_MTP" >
@@ -154,6 +154,8 @@
     <assign-permission name="android.permission.GET_PROCESS_STATE_AND_OOM_SCORE" uid="media" />
     <assign-permission name="android.permission.PACKAGE_USAGE_STATS" uid="media" />
     <assign-permission name="android.permission.REGISTER_MEDIA_RESOURCE_OBSERVER" uid="media" />
+    <assign-permission name="android.permission.REGISTER_STATS_PULL_ATOM" uid="media" />
+    <assign-permission name="android.permission.INTERACT_ACROSS_USERS" uid="media" />
 
     <assign-permission name="android.permission.INTERNET" uid="media" />
 
@@ -226,7 +228,22 @@
                       targetSdk="29">
         <new-permission name="android.permission.ACCESS_MEDIA_LOCATION" />
     </split-permission>
-
+    <split-permission name="android.permission.BLUETOOTH"
+                      targetSdk="31">
+        <new-permission name="android.permission.BLUETOOTH_SCAN" />
+    </split-permission>
+    <split-permission name="android.permission.BLUETOOTH"
+                      targetSdk="31">
+        <new-permission name="android.permission.BLUETOOTH_CONNECT" />
+    </split-permission>
+    <split-permission name="android.permission.BLUETOOTH_ADMIN"
+                      targetSdk="31">
+        <new-permission name="android.permission.BLUETOOTH_SCAN" />
+    </split-permission>
+    <split-permission name="android.permission.BLUETOOTH_ADMIN"
+                      targetSdk="31">
+        <new-permission name="android.permission.BLUETOOTH_CONNECT" />
+    </split-permission>
 
     <!-- This is a list of all the libraries available for application
          code to link against. -->

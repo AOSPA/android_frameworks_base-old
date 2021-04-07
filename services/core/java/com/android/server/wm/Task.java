@@ -2385,11 +2385,11 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     @Override
-    void migrateToNewSurfaceControl() {
-        super.migrateToNewSurfaceControl();
+    void migrateToNewSurfaceControl(SurfaceControl.Transaction t) {
+        super.migrateToNewSurfaceControl(t);
         mLastSurfaceSize.x = 0;
         mLastSurfaceSize.y = 0;
-        updateSurfaceSize(getPendingTransaction());
+        updateSurfaceSize(t);
     }
 
     void updateSurfaceSize(SurfaceControl.Transaction transaction) {
@@ -3598,7 +3598,7 @@ class Task extends WindowContainer<WindowContainer> {
             return false;
         }
 
-        if (r.occludesParent() || r.hasWallpaper) {
+        if (r.occludesParent()) {
             // Root task isn't translucent if it has at least one fullscreen activity
             // that is visible.
             return true;
@@ -4138,6 +4138,8 @@ class Task extends WindowContainer<WindowContainer> {
         final StartingWindowInfo info = new StartingWindowInfo();
         info.taskInfo = getTaskInfo();
 
+        info.isKeyguardOccluded =
+            mAtmService.mKeyguardController.isDisplayOccluded(DEFAULT_DISPLAY);
         final ActivityRecord topActivity = getTopMostActivity();
         if (topActivity != null) {
             info.startingWindowTypeParameter =
@@ -4912,9 +4914,15 @@ class Task extends WindowContainer<WindowContainer> {
         task.mLastNonFullscreenBounds = lastNonFullscreenBounds;
         task.setBounds(lastNonFullscreenBounds);
         task.mWindowLayoutAffinity = windowLayoutAffinity;
+        if (activities.size() > 0) {
+            // We need to add the task into hierarchy before adding child to it.
+            final DisplayContent dc =
+                    taskSupervisor.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY);
+            dc.getDefaultTaskDisplayArea().addChild(task, POSITION_BOTTOM);
 
-        for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
-            task.addChild(activities.get(activityNdx));
+            for (int activityNdx = activities.size() - 1; activityNdx >= 0; --activityNdx) {
+                task.addChild(activities.get(activityNdx));
+            }
         }
 
         if (DEBUG_RECENTS) Slog.d(TAG_RECENTS, "Restored task=" + task);
@@ -5248,15 +5256,27 @@ class Task extends WindowContainer<WindowContainer> {
         if (mForceHiddenFlags == newFlags) {
             return false;
         }
+
         final boolean wasHidden = isForceHidden();
+        final boolean wasVisible = isVisible();
         mForceHiddenFlags = newFlags;
-        if (wasHidden != isForceHidden() && isTopActivityFocusable()) {
-            // The change in force-hidden state will change visibility without triggering a root
-            // task order change, so we should reset the preferred top focusable root task to ensure
-            // it's not used if a new activity is started from this task.
-            getDisplayArea().resetPreferredTopFocusableRootTaskIfNeeded(this);
+        final boolean nowHidden = isForceHidden();
+        if (wasHidden != nowHidden) {
+            final String reason = "setForceHidden";
+            if (wasVisible && nowHidden) {
+                // Move this visible task to back when the task is forced hidden
+                moveToBack(reason, null);
+            } else if (isAlwaysOnTop()) {
+                // Move this always-on-top task to front when no longer hidden
+                moveToFront(reason);
+            }
         }
         return true;
+    }
+
+    @Override
+    public boolean isAlwaysOnTop() {
+        return !isForceHidden() && super.isAlwaysOnTop();
     }
 
     /**
@@ -7499,17 +7519,22 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     public void setAlwaysOnTop(boolean alwaysOnTop) {
-        if (isAlwaysOnTop() == alwaysOnTop) {
+        // {@link #isAwaysonTop} overrides the original behavior which also evaluates if this
+        // task is force hidden, so super.isAlwaysOnTop() is used here to see whether the
+        // alwaysOnTop attributes should be updated.
+        if (super.isAlwaysOnTop() == alwaysOnTop) {
             return;
         }
         super.setAlwaysOnTop(alwaysOnTop);
-        final TaskDisplayArea taskDisplayArea = getDisplayArea();
         // positionChildAtTop() must be called even when always on top gets turned off because we
         // need to make sure that the root task is moved from among always on top windows to
         // below other always on top windows. Since the position the root task should be inserted
         // into is calculated properly in {@link DisplayContent#getTopInsertPosition()} in both
         // cases, we can just request that the root task is put at top here.
-        taskDisplayArea.positionChildAt(POSITION_TOP, this, false /* includingParents */);
+        // Don't bother moving task to top if this task is force hidden and invisible to user.
+        if (!isForceHidden()) {
+            getDisplayArea().positionChildAt(POSITION_TOP, this, false /* includingParents */);
+        }
     }
 
     void dismissPip() {

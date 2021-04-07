@@ -114,10 +114,13 @@ public class FullScreenMagnificationController {
         private boolean mUnregisterPending;
         private boolean mDeleteAfterUnregister;
 
+        private boolean mForceShowMagnifiableBounds;
+
         private final int mDisplayId;
 
         private static final int INVALID_ID = -1;
         private int mIdOfLastServiceToMagnify = INVALID_ID;
+        private boolean mMagnificationActivated = false;
 
         DisplayMagnification(int displayId) {
             mDisplayId = displayId;
@@ -322,6 +325,13 @@ public class FullScreenMagnificationController {
                         mSpecAnimationBridge, spec, animationCallback);
                 mControllerCtx.getHandler().sendMessage(m);
             }
+
+            final boolean lastMagnificationActivated = mMagnificationActivated;
+            mMagnificationActivated = spec.scale > 1.0f;
+            if (mMagnificationActivated != lastMagnificationActivated) {
+                mMagnificationRequestObserver.onFullScreenMagnificationActivationState(
+                        mMagnificationActivated);
+            }
         }
 
         /**
@@ -412,9 +422,15 @@ public class FullScreenMagnificationController {
         @GuardedBy("mLock")
         void setForceShowMagnifiableBounds(boolean show) {
             if (mRegistered) {
+                mForceShowMagnifiableBounds = show;
                 mControllerCtx.getWindowManager().setForceShowMagnifiableBounds(
                         mDisplayId, show);
             }
+        }
+
+        @GuardedBy("mLock")
+        boolean isForceShowMagnifiableBounds() {
+            return mRegistered && mForceShowMagnifiableBounds;
         }
 
         @GuardedBy("mLock")
@@ -434,6 +450,7 @@ public class FullScreenMagnificationController {
                 onMagnificationChangedLocked();
             }
             mIdOfLastServiceToMagnify = INVALID_ID;
+            mForceShowMagnifiableBounds = false;
             sendSpecToAnimation(spec, animationCallback);
             return changed;
         }
@@ -1150,6 +1167,21 @@ public class FullScreenMagnificationController {
         }
     }
 
+    /**
+     * Returns {@code true} if the magnifiable regions of the display is forced to be shown.
+     *
+     * @param displayId The logical display id.
+     */
+    public boolean isForceShowMagnifiableBounds(int displayId) {
+        synchronized (mLock) {
+            final DisplayMagnification display = mDisplays.get(displayId);
+            if (display == null) {
+                return false;
+            }
+            return display.isForceShowMagnifiableBounds();
+        }
+    }
+
     private void onScreenTurnedOff() {
         final Message m = PooledLambda.obtainMessage(
                 FullScreenMagnificationController::resetAllIfNeeded, this, false);
@@ -1506,5 +1538,14 @@ public class FullScreenMagnificationController {
          * @param serviceId the ID of the service requesting the change
          */
         void onRequestMagnificationSpec(int displayId, int serviceId);
+
+        /**
+         * Called when the state of the magnification activation is changed.
+         * It is for the logging data of the magnification activation state.
+         *
+         * @param activated {@code true} if the magnification is activated, otherwise {@code false}.
+         */
+        @GuardedBy("mLock")
+        void onFullScreenMagnificationActivationState(boolean activated);
     }
 }

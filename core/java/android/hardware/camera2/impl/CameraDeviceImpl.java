@@ -21,6 +21,7 @@ import static com.android.internal.util.function.pooled.PooledLambda.obtainRunna
 
 import android.annotation.NonNull;
 import android.content.Context;
+import android.graphics.ImageFormat;
 import android.hardware.ICameraService;
 import android.app.ActivityThread;
 import android.graphics.ImageFormat;
@@ -67,6 +68,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashSet;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Iterator;
 import java.util.List;
 import java.util.Objects;
@@ -119,6 +122,7 @@ public class CameraDeviceImpl extends CameraDevice
 
     private final String mCameraId;
     private final CameraCharacteristics mCharacteristics;
+    private final Map<String, CameraCharacteristics> mPhysicalIdsToChars;
     private final int mTotalPartialCount;
     private final Context mContext;
 
@@ -263,7 +267,9 @@ public class CameraDeviceImpl extends CameraDevice
     };
 
     public CameraDeviceImpl(String cameraId, StateCallback callback, Executor executor,
-                        CameraCharacteristics characteristics, int appTargetSdkVersion,
+                        CameraCharacteristics characteristics,
+                        Map<String, CameraCharacteristics> physicalIdsToChars,
+                        int appTargetSdkVersion,
                         Context ctx) {
         if (cameraId == null || callback == null || executor == null || characteristics == null) {
             throw new IllegalArgumentException("Null argument given");
@@ -272,6 +278,7 @@ public class CameraDeviceImpl extends CameraDevice
         mDeviceCallback = callback;
         mDeviceExecutor = executor;
         mCharacteristics = characteristics;
+        mPhysicalIdsToChars = physicalIdsToChars;
         mAppTargetSdkVersion = appTargetSdkVersion;
         mContext = ctx;
 
@@ -1369,6 +1376,66 @@ public class CameraDeviceImpl extends CameraDevice
         }
     }
 
+    private boolean checkInputConfigurationWithStreamConfigurationsAs(
+            InputConfiguration inputConfig, StreamConfigurationMap configMap) {
+        int[] inputFormats = configMap.getInputFormats();
+        boolean validFormat = false;
+        int inputFormat = inputConfig.getFormat();
+        for (int format : inputFormats) {
+            if (format == inputFormat) {
+                validFormat = true;
+            }
+        }
+
+        if (validFormat == false) {
+            return false;
+        }
+
+        boolean validSize = false;
+        Size[] inputSizes = configMap.getInputSizes(inputFormat);
+        for (Size s : inputSizes) {
+            if (inputConfig.getWidth() == s.getWidth() &&
+                    inputConfig.getHeight() == s.getHeight()) {
+                validSize = true;
+            }
+        }
+
+        if (validSize == false) {
+            return false;
+        }
+        return true;
+    }
+
+    private boolean checkInputConfigurationWithStreamConfigurations(
+            InputConfiguration inputConfig, boolean maxResolution) {
+        // Check if either this logical camera or any of its physical cameras support the
+        // input config. If they do, the input config is valid.
+        CameraCharacteristics.Key<StreamConfigurationMap> ck =
+                CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP;
+
+        if (maxResolution) {
+            ck = CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP_MAXIMUM_RESOLUTION;
+        }
+
+        StreamConfigurationMap configMap = mCharacteristics.get(ck);
+
+        if (configMap != null &&
+                checkInputConfigurationWithStreamConfigurationsAs(inputConfig, configMap)) {
+            return true;
+        }
+
+        for (Map.Entry<String, CameraCharacteristics> entry : mPhysicalIdsToChars.entrySet()) {
+            configMap = entry.getValue().get(ck);
+
+            if (configMap != null &&
+                    checkInputConfigurationWithStreamConfigurationsAs(inputConfig, configMap)) {
+                // Input config supported.
+                return true;
+            }
+        }
+        return false;
+    }
+
     private boolean checkPrivilegedAppList() {
         String packageName = ActivityThread.currentOpPackageName();
         String packageList = SystemProperties.get("persist.vendor.camera.privapp.list");
@@ -1394,7 +1461,7 @@ public class CameraDeviceImpl extends CameraDevice
         if (inputConfig == null) {
             return;
         }
-
+        int inputFormat = inputConfig.getFormat();
         if (inputConfig.isMultiResolution()) {
             MultiResolutionStreamConfigurationMap configMap = mCharacteristics.get(
                     CameraCharacteristics.SCALER_MULTI_RESOLUTION_STREAM_CONFIGURATION_MAP);
@@ -1402,19 +1469,19 @@ public class CameraDeviceImpl extends CameraDevice
             int[] inputFormats = configMap.getInputFormats();
             boolean validFormat = false;
             for (int format : inputFormats) {
-                if (format == inputConfig.getFormat()) {
+                if (format == inputFormat) {
                     validFormat = true;
                 }
             }
 
             if (validFormat == false) {
                 throw new IllegalArgumentException("multi-resolution input format " +
-                        inputConfig.getFormat() + " is not valid");
+                        inputFormat + " is not valid");
             }
 
             boolean validSize = false;
             Collection<MultiResolutionStreamInfo> inputStreamInfo =
-                    configMap.getInputInfo(inputConfig.getFormat());
+                    configMap.getInputInfo(inputFormat);
             for (MultiResolutionStreamInfo info : inputStreamInfo) {
                 if (inputConfig.getWidth() == info.getWidth() &&
                         inputConfig.getHeight() == info.getHeight()) {
@@ -1427,9 +1494,6 @@ public class CameraDeviceImpl extends CameraDevice
                         inputConfig.getWidth() + "x" + inputConfig.getHeight() + " is not valid");
             }
         } else {
-            StreamConfigurationMap configMap = mCharacteristics.get(
-                    CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP);
-
             /*
              * don't check input format and size,
              * if the package name is in the white list
@@ -1438,32 +1502,11 @@ public class CameraDeviceImpl extends CameraDevice
                 Log.w(TAG, "ignore input format/size check for white listed app");
                 return;
             }
-
-            int[] inputFormats = configMap.getInputFormats();
-            boolean validFormat = false;
-            for (int format : inputFormats) {
-                if (format == inputConfig.getFormat()) {
-                    validFormat = true;
-                }
-            }
-
-            if (validFormat == false) {
-                throw new IllegalArgumentException("input format " + inputConfig.getFormat() +
-                        " is not valid");
-            }
-
-            boolean validSize = false;
-            Size[] inputSizes = configMap.getInputSizes(inputConfig.getFormat());
-            for (Size s : inputSizes) {
-                if (inputConfig.getWidth() == s.getWidth() &&
-                        inputConfig.getHeight() == s.getHeight()) {
-                    validSize = true;
-                }
-            }
-
-            if (validSize == false) {
-                throw new IllegalArgumentException("input size " + inputConfig.getWidth() + "x" +
-                        inputConfig.getHeight() + " is not valid");
+            if (!checkInputConfigurationWithStreamConfigurations(inputConfig, /*maxRes*/false) &&
+                    !checkInputConfigurationWithStreamConfigurations(inputConfig, /*maxRes*/true)) {
+                throw new IllegalArgumentException("Input config with format " +
+                        inputFormat + " and size " + inputConfig.getWidth() + "x" +
+                        inputConfig.getHeight() + " not supported by camera id " + mCameraId);
             }
         }
     }

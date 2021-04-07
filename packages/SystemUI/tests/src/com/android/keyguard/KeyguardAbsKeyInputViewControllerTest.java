@@ -36,6 +36,8 @@ import com.android.keyguard.KeyguardAbsKeyInputView.KeyDownListener;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.classifier.FalsingCollector;
+import com.android.systemui.classifier.FalsingCollectorFake;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -69,6 +71,9 @@ public class KeyguardAbsKeyInputViewControllerTest extends SysuiTestCase {
     private KeyguardMessageAreaController mKeyguardMessageAreaController;
     @Mock
     private LatencyTracker mLatencyTracker;
+    private final FalsingCollector mFalsingCollector = new FalsingCollectorFake();
+    @Mock
+    private EmergencyButtonController mEmergencyButtonController;
 
     private KeyguardAbsKeyInputViewController mKeyguardAbsKeyInputViewController;
 
@@ -84,7 +89,8 @@ public class KeyguardAbsKeyInputViewControllerTest extends SysuiTestCase {
                 .thenReturn(mKeyguardMessageArea);
         mKeyguardAbsKeyInputViewController = new KeyguardAbsKeyInputViewController(mAbsKeyInputView,
                 mKeyguardUpdateMonitor, mSecurityMode, mLockPatternUtils, mKeyguardSecurityCallback,
-                mKeyguardMessageAreaControllerFactory, mLatencyTracker) {
+                mKeyguardMessageAreaControllerFactory, mLatencyTracker, mFalsingCollector,
+                mEmergencyButtonController) {
             @Override
             void resetState() {
             }

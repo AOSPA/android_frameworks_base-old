@@ -433,6 +433,20 @@ public final class Settings {
             "android.settings.REQUEST_SCHEDULE_EXACT_ALARM";
 
     /**
+     * Activity Action: Show settings to allow configuration of
+     * {@link Manifest.permission#MANAGE_MEDIA} permission
+     *
+     * Input: Optionally, the Intent's data URI can specify the application package name to
+     * directly invoke the management GUI specific to the package name. For example
+     * "package:com.my.app".
+     * <p>
+     * Output: Nothing.
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_REQUEST_MANAGE_MEDIA =
+            "android.settings.REQUEST_MANAGE_MEDIA";
+
+    /**
      * Activity Action: Show settings to allow configuration of cross-profile access for apps
      *
      * Input: Optionally, the Intent's data URI can specify the application package name to
@@ -456,8 +470,8 @@ public final class Settings {
      * to be shown, with the "package" scheme. That is "package:com.my.app".
      * <p>
      * Output: Nothing.
-     * @hide
      */
+    @SuppressLint("ActionValue")
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_APP_OPEN_BY_DEFAULT_SETTINGS =
             "com.android.settings.APP_OPEN_BY_DEFAULT_SETTINGS";
@@ -1054,8 +1068,8 @@ public final class Settings {
      * Output: Nothing.
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
-    public static final String ACTION_MANAGE_ALL_SUBSCRIPTIONS_SETTINGS =
-            "android.settings.MANAGE_ALL_SUBSCRIPTIONS_SETTINGS";
+    public static final String ACTION_MANAGE_ALL_SIM_PROFILES_SETTINGS =
+            "android.settings.MANAGE_ALL_SIM_PROFILES_SETTINGS";
 
     /**
      * Activity Action: Show screen for controlling which apps can draw on top of other apps.
@@ -4128,7 +4142,6 @@ public final class Settings {
          * unset or a match is not made, only the standard color modes will be restored.
          * @hide
          */
-        @Readable
         public static final String DISPLAY_COLOR_MODE_VENDOR_HINT =
                 "display_color_mode_vendor_hint";
 
@@ -6174,7 +6187,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String CAMERA_AUTOROTATE = "camera_autorotate";
 
         /**
@@ -6288,6 +6300,20 @@ public final class Settings {
         @Readable
         public static final String SELECTED_INPUT_METHOD_SUBTYPE =
                 "selected_input_method_subtype";
+
+        /**
+         * The {@link android.view.inputmethod.InputMethodInfo.InputMethodInfo#getId() ID} of the
+         * default voice input method.
+         * <p>
+         * This stores the last known default voice IME. If the related system config value changes,
+         * this is reset by InputMethodManagerService.
+         * <p>
+         * This IME is not necessarily in the enabled IME list. That state is still stored in
+         * {@link #ENABLED_INPUT_METHODS}.
+         *
+         * @hide
+         */
+        public static final String DEFAULT_VOICE_INPUT_METHOD = "default_voice_input_method";
 
         /**
          * Setting to record the history of input method subtype, holding the pair of ID of IME
@@ -6735,7 +6761,6 @@ public final class Settings {
          * android.app.timezonedetector.TimeZoneDetector#updateConfiguration} to update.
          * @hide
          */
-        @Readable
         public static final String LOCATION_TIME_ZONE_DETECTION_ENABLED =
                 "location_time_zone_detection_enabled";
 
@@ -7049,6 +7074,15 @@ public final class Settings {
         @Readable
         public static final String ENABLED_ACCESSIBILITY_SERVICES =
             "enabled_accessibility_services";
+
+        /**
+         * List of the notified non-accessibility category accessibility services.
+         *
+         * @hide
+         */
+        @Readable
+        public static final String NOTIFIED_NON_ACCESSIBILITY_CATEGORY_SERVICES =
+                "notified_non_accessibility_category_services";
 
         /**
          * List of the accessibility services to which the user has granted
@@ -7526,7 +7560,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String REDUCE_BRIGHT_COLORS_ACTIVATED =
                 "reduce_bright_colors_activated";
 
@@ -7536,7 +7569,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String REDUCE_BRIGHT_COLORS_LEVEL =
                 "reduce_bright_colors_level";
 
@@ -7545,7 +7577,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String REDUCE_BRIGHT_COLORS_PERSIST_ACROSS_REBOOTS =
                 "reduce_bright_colors_persist_across_reboots";
 
@@ -8256,7 +8287,6 @@ public final class Settings {
          * @see #MATCH_CONTENT_FRAMERATE_ALWAYS
          * @hide
          */
-        @Readable
         public static final String MATCH_CONTENT_FRAME_RATE =
                 "match_content_frame_rate";
 
@@ -8380,6 +8410,13 @@ public final class Settings {
         public static final String DOZE_WAKE_DISPLAY_GESTURE = "doze_wake_display_gesture";
 
         /**
+         * Gesture that wakes up the display on quick pickup, toggling between
+         * {@link Display.STATE_OFF} and {@link Display.STATE_DOZE}.
+         * @hide
+         */
+        public static final String DOZE_QUICK_PICKUP_GESTURE = "doze_quick_pickup_gesture";
+
+        /**
          * Whether the device should suppress the current doze configuration and disable dozing.
          * @hide
          */
@@ -8482,7 +8519,6 @@ public final class Settings {
          * For user preference if swipe bottom to expand notification gesture enabled.
          * @hide
          */
-        @Readable
         public static final String SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED =
                 "swipe_bottom_to_notification_enabled";
 
@@ -8490,30 +8526,35 @@ public final class Settings {
          * For user preference if One-Handed Mode enabled.
          * @hide
          */
-        @Readable
         public static final String ONE_HANDED_MODE_ENABLED = "one_handed_mode_enabled";
 
         /**
          * For user preference if One-Handed Mode timeout.
          * @hide
          */
-        @Readable
         public static final String ONE_HANDED_MODE_TIMEOUT = "one_handed_mode_timeout";
 
         /**
          * For user taps app to exit One-Handed Mode.
          * @hide
          */
-        @Readable
         public static final String TAPS_APP_TO_EXIT = "taps_app_to_exit";
 
         /**
          * Internal use, one handed mode tutorial showed times.
          * @hide
          */
-        @Readable
         public static final String ONE_HANDED_TUTORIAL_SHOW_COUNT =
                 "one_handed_tutorial_show_count";
+
+        /**
+         * Indicates whether transform is enabled.
+         * <p>
+         * Type: int (0 for false, 1 for true)
+         *
+         * @hide
+         */
+        public static final String TRANSFORM_ENABLED = "transform_enabled";
 
         /**
          * The current night mode that has been selected by the user.  Owned
@@ -8537,7 +8578,6 @@ public final class Settings {
          * The last computed night mode bool the last time the phone was on
          * @hide
          */
-        @Readable
         public static final String UI_NIGHT_MODE_LAST_COMPUTED = "ui_night_mode_last_computed";
 
         /**
@@ -8956,7 +8996,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String EMERGENCY_GESTURE_ENABLED = "emergency_gesture_enabled";
 
         /**
@@ -8964,7 +9003,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String EMERGENCY_GESTURE_SOUND_ENABLED =
                 "emergency_gesture_sound_enabled";
 
@@ -9697,7 +9735,6 @@ public final class Settings {
          * @see Settings.Secure#MEDIA_CONTROLS_RESUME
          * @hide
          */
-        @Readable
         public static final String MEDIA_CONTROLS_RESUME_BLOCKED = "qs_media_resumption_blocked";
 
         /**
@@ -9755,7 +9792,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ACCESSIBILITY_SHOW_WINDOW_MAGNIFICATION_PROMPT =
                 "accessibility_show_window_magnification_prompt";
 
@@ -9772,7 +9808,6 @@ public final class Settings {
          * @see #ACCESSIBILITY_BUTTON_MODE_FLOATING_MENU
          * @hide
          */
-        @Readable
         public static final String ACCESSIBILITY_BUTTON_MODE =
                 "accessibility_button_mode";
 
@@ -9801,7 +9836,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ACCESSIBILITY_FLOATING_MENU_SIZE =
                 "accessibility_floating_menu_size";
 
@@ -9814,7 +9848,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ACCESSIBILITY_FLOATING_MENU_ICON_TYPE =
                 "accessibility_floating_menu_icon_type";
 
@@ -9823,7 +9856,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED =
                 "accessibility_floating_menu_fade_enabled";
 
@@ -9833,7 +9865,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ACCESSIBILITY_FLOATING_MENU_OPACITY =
                 "accessibility_floating_menu_opacity";
 
@@ -9842,7 +9873,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ADAPTIVE_CONNECTIVITY_ENABLED = "adaptive_connectivity_enabled";
 
         /**
@@ -9866,7 +9896,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ASSIST_HANDLES_LEARNING_TIME_ELAPSED_MILLIS =
                 "reminder_exp_learning_time_elapsed";
 
@@ -9875,9 +9904,16 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ASSIST_HANDLES_LEARNING_EVENT_COUNT =
                 "reminder_exp_learning_event_count";
+
+        /**
+         * Whether to show clipboard access notifications.
+         *
+         * @hide
+         */
+        public static final String CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS =
+                "clipboard_show_access_notifications";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -10576,7 +10612,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String DEVELOPMENT_WM_DISPLAY_SETTINGS_PATH =
                 "wm_display_settings_path";
 
@@ -10756,7 +10791,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String HDMI_CONTROL_SEND_STANDBY_ON_SLEEP =
                 "hdmi_control_send_standby_on_sleep";
 
@@ -13116,7 +13150,7 @@ public final class Settings {
          * @see #ENABLE_RESTRICTED_BUCKET
          * @hide
          */
-        public static final int DEFAULT_ENABLE_RESTRICTED_BUCKET = 0;
+        public static final int DEFAULT_ENABLE_RESTRICTED_BUCKET = 1;
 
         /**
          * Whether or not app auto restriction is enabled. When it is enabled, settings app will
@@ -14036,6 +14070,40 @@ public final class Settings {
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         public static final int ZEN_MODE_ALARMS = 3;
 
+        /**
+         * A comma-separated list of HDR formats that have been disabled by the user.
+         * <p>
+         * If present, these formats will not be reported to apps, even if the display supports
+         * them. This list is treated as empty if the ARE_USER_DISABLED_HDR_FORMATS_ALLOWED setting
+         * is '1'.
+         * </p>
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String USER_DISABLED_HDR_FORMATS = "user_disabled_hdr_formats";
+
+        /**
+         * Whether or not user-disabled HDR formats are allowed.
+         * <p>
+         * The value is boolean (1 or 0). The value '1' means the user preference for disabling a
+         * format is ignored, and the disabled formats are still reported to apps (if supported
+         * by the display). The value '0' means the user-disabled formats are not reported to
+         * apps, even if the display supports them.
+         * </p><p>
+         * The list of formats disabled by the user are contained in the
+         * USER_DISABLED_HDR_FORMATS setting. This list is treated as empty when the value of
+         * this setting is '1'.
+         * </p>
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String ARE_USER_DISABLED_HDR_FORMATS_ALLOWED =
+                "are_user_disabled_hdr_formats_allowed";
+
         /** @hide */ public static String zenModeToString(int mode) {
             if (mode == ZEN_MODE_IMPORTANT_INTERRUPTIONS) return "ZEN_MODE_IMPORTANT_INTERRUPTIONS";
             if (mode == ZEN_MODE_ALARMS) return "ZEN_MODE_ALARMS";
@@ -14437,7 +14505,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String EUICC_SWITCH_SLOT_TIMEOUT_MILLIS =
                 "euicc_switch_slot_timeout_millis";
 
@@ -14447,7 +14514,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ENABLE_MULTI_SLOT_TIMEOUT_MILLIS =
                 "enable_multi_slot_timeout_millis";
 
@@ -14571,7 +14637,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String FORCE_NON_DEBUGGABLE_FINAL_BUILD_FOR_COMPAT =
                 "force_non_debuggable_final_build_for_compat";
 
@@ -14651,7 +14716,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ONE_HANDED_KEYGUARD_SIDE = "one_handed_keyguard_side";
 
         /**
@@ -15342,7 +15406,6 @@ public final class Settings {
          * The value 1 - enable, 0 - disable
          * @hide
          */
-        @Readable
         public static final String NOTIFICATION_FEEDBACK_ENABLED = "notification_feedback_enabled";
 
         /**
@@ -15585,7 +15648,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String GNSS_SATELLITE_BLOCKLIST = "gnss_satellite_blocklist";
 
         /**
@@ -15790,7 +15852,6 @@ public final class Settings {
          * 1: Enabled
          * @hide
          */
-        @Readable
         public static final String SHOW_PEOPLE_SPACE = "show_people_space";
 
         /**
@@ -15801,7 +15862,6 @@ public final class Settings {
          * 2: All conversations
          * @hide
          */
-        @Readable
         public static final String PEOPLE_SPACE_CONVERSATION_TYPE =
                 "people_space_conversation_type";
 
@@ -15812,53 +15872,7 @@ public final class Settings {
          * 1: Enabled
          * @hide
          */
-        @Readable
         public static final String SHOW_NEW_NOTIF_DISMISS = "show_new_notif_dismiss";
-
-        /**
-         * Whether to enforce the new notification rules (aka rules that are only applied to
-         * notifications from apps targeting S) on all notifications.
-         * - Collapsed custom view notifications will get the new 76dp height instead of 106dp.
-         * - Custom view notifications will be partially decorated.
-         * - Large icons will be given an aspect ratio of up to 16:9.
-         *
-         * Values are:
-         * 0: Disabled (Only apps targeting S will receive the new rules)
-         * 1: Enabled (All apps will receive the new rules)
-         * @hide
-         */
-        @Readable
-        public static final String BACKPORT_S_NOTIF_RULES = "backport_s_notif_rules";
-
-        /**
-         * The decoration to put on fully custom views that target S.
-         *
-         * <p>Values are:
-         * <br>0: DECORATION_NONE: no decorations.
-         * <br>1: DECORATION_MINIMAL: most minimal template; just the icon and the expander.
-         * <br>2: DECORATION_PARTIAL: basic template without the top line.
-         * <br>3: DECORATION_FULL_COMPATIBLE: basic template with the top line; 40dp of height.
-         * <br>4: DECORATION_FULL_CONSTRAINED: basic template with the top line;  28dp of height.
-         * <p>See {@link android.app.Notification.DevFlags} for more details.
-         * @hide
-         */
-        @Readable
-        public static final String FULLY_CUSTOM_VIEW_NOTIF_DECORATION =
-                "fully_custom_view_notif_decoration";
-
-        /**
-         * The decoration to put on decorated custom views that target S.
-         *
-         * <p>Values are:
-         * <br>2: DECORATION_PARTIAL: basic template without the top line.
-         * <br>3: DECORATION_FULL_COMPATIBLE: basic template with the top line; 40dp of height.
-         * <br>4: DECORATION_FULL_CONSTRAINED: basic template with the top line;  28dp of height.
-         * <p>See {@link android.app.Notification.DevFlags} for more details.
-         * @hide
-         */
-        @Readable
-        public static final String DECORATED_CUSTOM_VIEW_NOTIF_DECORATION =
-                "decorated_custom_view_notif_decoration";
 
         /**
          * Block untrusted touches mode.
@@ -15912,7 +15926,6 @@ public final class Settings {
          * 1: enabled
          * @hide
          */
-        @Readable
         public static final String RESTRICTED_NETWORKING_MODE = "restricted_networking_mode";
     }
 

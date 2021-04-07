@@ -59,23 +59,13 @@ public final class RemoveByUriRequest {
      * <p>Once {@link #build} is called, the instance can no longer be used.
      */
     public static final class Builder {
-        private String mNamespace = GenericDocument.DEFAULT_NAMESPACE;
+        private final String mNamespace;
         private final Set<String> mUris = new ArraySet<>();
         private boolean mBuilt = false;
 
-        /**
-         * Sets the namespace to remove documents for.
-         *
-         * <p>If this is not set, it defaults to {@link GenericDocument#DEFAULT_NAMESPACE}.
-         *
-         * @throws IllegalStateException if the builder has already been used.
-         */
-        @NonNull
-        public Builder setNamespace(@NonNull String namespace) {
-            Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(namespace);
-            mNamespace = namespace;
-            return this;
+        /** Creates a {@link RemoveByUriRequest.Builder} instance. */
+        public Builder(@NonNull String namespace) {
+            mNamespace = Preconditions.checkNotNull(namespace);
         }
 
         /**

@@ -35,7 +35,6 @@ import org.junit.runner.RunWith;
 import java.util.List;
 
 @SmallTest
-@SkipPresubmit("b/180015146")
 @RunWith(AndroidJUnit4.class)
 public class BatteryUsageStatsTest {
 
@@ -69,7 +68,8 @@ public class BatteryUsageStatsTest {
 
         final BatteryUsageStats.Builder builder = new BatteryUsageStats.Builder(1, 1)
                 .setDischargePercentage(20)
-                .setDischargedPowerRange(1000, 2000);
+                .setDischargedPowerRange(1000, 2000)
+                .setStatsStartTimestamp(1000);
 
         builder.getOrCreateUidBatteryConsumerBuilder(batteryStatsUid)
                 .setPackageWithHighestDrain("foo")
@@ -96,16 +96,18 @@ public class BatteryUsageStatsTest {
                 .setUsageDurationMillis(
                         BatteryConsumer.TIME_COMPONENT_CPU, 10300)
                 .setUsageDurationForCustomComponentMillis(
-                        BatteryConsumer.FIRST_CUSTOM_TIME_COMPONENT_ID, 10400);
+                        BatteryConsumer.FIRST_CUSTOM_TIME_COMPONENT_ID, 10400)
+                .setPowerConsumedByApps(20000);
 
         return builder.build();
     }
 
     public void validateBatteryUsageStats(BatteryUsageStats batteryUsageStats) {
-        assertThat(batteryUsageStats.getConsumedPower()).isEqualTo(100);
+        assertThat(batteryUsageStats.getConsumedPower()).isEqualTo(21500);
         assertThat(batteryUsageStats.getDischargePercentage()).isEqualTo(20);
         assertThat(batteryUsageStats.getDischargedPowerRange().getLower()).isEqualTo(1000);
         assertThat(batteryUsageStats.getDischargedPowerRange().getUpper()).isEqualTo(2000);
+        assertThat(batteryUsageStats.getStatsStartTimestamp()).isEqualTo(1000);
 
         final List<UidBatteryConsumer> uidBatteryConsumers =
                 batteryUsageStats.getUidBatteryConsumers();
@@ -128,7 +130,7 @@ public class BatteryUsageStatsTest {
                         BatteryConsumer.TIME_COMPONENT_CPU_FOREGROUND)).isEqualTo(700);
                 assertThat(uidBatteryConsumer.getUsageDurationForCustomComponentMillis(
                         BatteryConsumer.FIRST_CUSTOM_TIME_COMPONENT_ID)).isEqualTo(800);
-                assertThat(uidBatteryConsumer.getConsumedPower()).isEqualTo(1710);
+                assertThat(uidBatteryConsumer.getConsumedPower()).isEqualTo(1200);
             } else {
                 fail("Unexpected UID " + uidBatteryConsumer.getUid());
             }
@@ -146,7 +148,8 @@ public class BatteryUsageStatsTest {
                         BatteryConsumer.TIME_COMPONENT_CPU)).isEqualTo(10300);
                 assertThat(systemBatteryConsumer.getUsageDurationForCustomComponentMillis(
                         BatteryConsumer.FIRST_CUSTOM_TIME_COMPONENT_ID)).isEqualTo(10400);
-                assertThat(systemBatteryConsumer.getConsumedPower()).isEqualTo(30510);
+                assertThat(systemBatteryConsumer.getConsumedPower()).isEqualTo(20300);
+                assertThat(systemBatteryConsumer.getPowerConsumedByApps()).isEqualTo(20000);
             } else {
                 fail("Unexpected drain type " + systemBatteryConsumer.getDrainType());
             }

@@ -40,9 +40,8 @@ public class StartingSurfaceController {
     private static final String TAG = TAG_WITH_CLASS_NAME
             ? StartingSurfaceController.class.getSimpleName() : TAG_WM;
     /** Set to {@code true} to enable shell starting surface drawer. */
-    private static final boolean DEBUG_ENABLE_SHELL_DRAWER =
-            SystemProperties.getBoolean("persist.debug.shell_starting_surface", false);
-
+    static final boolean DEBUG_ENABLE_SHELL_DRAWER =
+            SystemProperties.getBoolean("persist.debug.shell_starting_surface", true);
     private final WindowManagerService mService;
 
     public StartingSurfaceController(WindowManagerService wm) {
@@ -53,8 +52,8 @@ public class StartingSurfaceController {
             int theme, CompatibilityInfo compatInfo, CharSequence nonLocalizedLabel, int labelRes,
             int icon, int logo, int windowFlags, Configuration overrideConfig, int displayId) {
         if (!DEBUG_ENABLE_SHELL_DRAWER) {
-            return mService.mPolicy.addSplashScreen(activity.token, packageName, theme,
-                    compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
+            return mService.mPolicy.addSplashScreen(activity.token, activity.mUserId, packageName,
+                    theme, compatInfo, nonLocalizedLabel, labelRes, icon, logo, windowFlags,
                     overrideConfig, displayId);
         }
 
@@ -139,8 +138,9 @@ public class StartingSurfaceController {
         }
 
         @Override
-        public void remove() {
-            mService.mAtmService.mTaskOrganizerController.removeStartingWindow(mTask);
+        public void remove(boolean animate) {
+            mService.mAtmService.mTaskOrganizerController.removeStartingWindow(mTask,
+                    animate);
         }
     }
 }

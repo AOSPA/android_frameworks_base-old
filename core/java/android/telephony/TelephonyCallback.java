@@ -546,9 +546,6 @@ public class TelephonyCallback {
     /**
      * Event for changes to allowed network list based on all active subscriptions.
      *
-     * <p>Requires permission {@link android.Manifest.permission#READ_PHONE_STATE} or the calling
-     * app has carrier privileges (see {@link TelephonyManager#hasCarrierPrivileges}).
-     *
      * @hide
      * @see AllowedNetworkTypesListener#onAllowedNetworkTypesChanged
      */
@@ -567,6 +564,21 @@ public class TelephonyCallback {
     @SystemApi
     @RequiresPermission(android.Manifest.permission.READ_CALL_LOG)
     public static final int EVENT_LEGACY_CALL_STATE_CHANGED = 36;
+
+
+    /**
+     * Event for changes to the link capacity estimate (LCE)
+     *
+     * <p>Requires permission {@link android.Manifest.permission#READ_PRECISE_PHONE_STATE}
+     *
+     * @see LinkCapacityEstimateChangedListener#onLinkCapacityEstimateChanged
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(Manifest.permission.READ_PRECISE_PHONE_STATE)
+    public static final int EVENT_LINK_CAPACITY_ESTIMATE_CHANGED = 37;
+
 
     /**
      * @hide
@@ -607,7 +619,8 @@ public class TelephonyCallback {
             EVENT_PHYSICAL_CHANNEL_CONFIG_CHANGED,
             EVENT_DATA_ENABLED_CHANGED,
             EVENT_ALLOWED_NETWORK_TYPE_LIST_CHANGED,
-            EVENT_LEGACY_CALL_STATE_CHANGED
+            EVENT_LEGACY_CALL_STATE_CHANGED,
+            EVENT_LINK_CAPACITY_ESTIMATE_CHANGED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface TelephonyEvent {
@@ -1044,7 +1057,6 @@ public class TelephonyCallback {
          *
          * @param telephonyDisplayInfo The display information.
          */
-        @RequiresPermission(android.Manifest.permission.READ_PHONE_STATE)
         public void onDisplayInfoChanged(@NonNull TelephonyDisplayInfo telephonyDisplayInfo);
     }
 
@@ -1265,30 +1277,34 @@ public class TelephonyCallback {
     public interface AllowedNetworkTypesListener {
         /**
          * Callback invoked when the current allowed network type list has changed on the
-         * registered subscription.
+         * registered subscription for a specified reason.
          * Note, the registered subscription is associated with {@link TelephonyManager} object
-         * on which
-         * {@link TelephonyManager#registerTelephonyCallback(Executor, TelephonyCallback)}
+         * on which {@link TelephonyManager#registerTelephonyCallback(Executor, TelephonyCallback)}
          * was called.
          * If this TelephonyManager object was created with
          * {@link TelephonyManager#createForSubscriptionId(int)}, then the callback applies to the
          * given subscription ID. Otherwise, this callback applies to
          * {@link SubscriptionManager#getDefaultSubscriptionId()}.
          *
-         * @param allowedNetworkTypesList Map associating all allowed network type reasons
-         * ({@link TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_USER},
-         * {@link TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_POWER},
-         * {@link TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_CARRIER}, and
-         * {@link TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G}) with reason's allowed
-         * network type values.
+         * @param reason an allowed network type reasons.
+         * @see TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_USER
+         * @see TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_POWER
+         * @see TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_CARRIER
+         * @see TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G
+         *
+         * @param allowedNetworkType an allowed network type bitmask value. (for example,
+         * the long bitmask value is {{@link TelephonyManager#NETWORK_TYPE_BITMASK_NR}|
+         * {@link TelephonyManager#NETWORK_TYPE_BITMASK_LTE}})
+         *
          * For example:
-         * map{{TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_USER, long type value},
-         *     {TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_POWER, long type value},
-         *     {TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_CARRIER, long type value},
-         *     {TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_ENABLE_2G, long type value}}
+         * If the latest allowed network type is changed by user, then the system
+         * notifies the {@link TelephonyManager#ALLOWED_NETWORK_TYPES_REASON_USER} and
+         * long type value}.
          */
         @RequiresPermission(android.Manifest.permission.READ_PRIVILEGED_PHONE_STATE)
-        void onAllowedNetworkTypesChanged(@NonNull Map<Integer, Long> allowedNetworkTypesList);
+        void onAllowedNetworkTypesChanged(
+                @TelephonyManager.AllowedNetworkTypesReason int reason,
+                @TelephonyManager.NetworkTypeBitMask long allowedNetworkType);
     }
 
     /**
@@ -1336,10 +1352,7 @@ public class TelephonyCallback {
 
     /**
      * Interface for current physical channel configuration listener.
-     *
-     * @hide
      */
-    @SystemApi
     public interface PhysicalChannelConfigListener {
         /**
          * Callback invoked when the current physical channel configuration has changed
@@ -1369,6 +1382,25 @@ public class TelephonyCallback {
             @TelephonyManager.DataEnabledReason int reason);
     }
 
+    /**
+     * Interface for link capacity estimate changed listener.
+     *
+     * @hide
+     */
+    @SystemApi
+    public interface LinkCapacityEstimateChangedListener {
+        /**
+         * Callback invoked when the link capacity estimate (LCE) changes
+         *
+         * @param linkCapacityEstimateList a list of {@link LinkCapacityEstimate}
+         * The list size is at least 1.
+         * In case of a dual connected network, the list size could be 2.
+         * Use {@link LinkCapacityEstimate#getType()} to get the type of each element.
+         */
+        @RequiresPermission(Manifest.permission.READ_PRECISE_PHONE_STATE)
+        void onLinkCapacityEstimateChanged(
+                @NonNull List<LinkCapacityEstimate> linkCapacityEstimateList);
+    }
 
     /**
      * The callback methods need to be called on the handler thread where
@@ -1707,14 +1739,26 @@ public class TelephonyCallback {
                             enabled, reason)));
         }
 
-        public void onAllowedNetworkTypesChanged(Map allowedNetworkTypesList) {
+        public void onAllowedNetworkTypesChanged(int reason, long allowedNetworkType) {
             AllowedNetworkTypesListener listener =
                     (AllowedNetworkTypesListener) mTelephonyCallbackWeakRef.get();
             if (listener == null) return;
 
             Binder.withCleanCallingIdentity(
                     () -> mExecutor.execute(
-                            () -> listener.onAllowedNetworkTypesChanged(allowedNetworkTypesList)));
+                            () -> listener.onAllowedNetworkTypesChanged(reason,
+                                    allowedNetworkType)));
+        }
+
+        public void onLinkCapacityEstimateChanged(
+                List<LinkCapacityEstimate> linkCapacityEstimateList) {
+            LinkCapacityEstimateChangedListener listener =
+                    (LinkCapacityEstimateChangedListener) mTelephonyCallbackWeakRef.get();
+            if (listener == null) return;
+
+            Binder.withCleanCallingIdentity(
+                    () -> mExecutor.execute(() -> listener.onLinkCapacityEstimateChanged(
+                            linkCapacityEstimateList)));
         }
     }
 }

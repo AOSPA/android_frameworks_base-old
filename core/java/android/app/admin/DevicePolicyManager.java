@@ -872,8 +872,7 @@ public class DevicePolicyManager {
      *
      * The name is displayed only during provisioning.
      *
-     * <p>Use in an intent with action {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE}
-     * or {@link #ACTION_PROVISION_FINANCED_DEVICE}
+     * <p>Use in an intent with action {@link #ACTION_PROVISION_FINANCED_DEVICE}
      *
      * @hide
      */
@@ -987,7 +986,8 @@ public class DevicePolicyManager {
      * The default for this extra is {@code false} - by default, the admin of a fully-managed
      * device has the ability to grant sensors-related permissions.
      *
-     * <p>Use with {@link #ACTION_PROVISION_MANAGED_DEVICE} only.
+     * <p>Use only for device owner provisioning.
+     * @see #ACTION_GET_PROVISIONING_MODE
      */
     public static final String EXTRA_PROVISIONING_PERMISSION_GRANT_OPT_OUT =
             "android.app.extra.PROVISIONING_PERMISSION_GRANT_OPT_OUT";
@@ -1765,6 +1765,16 @@ public class DevicePolicyManager {
             "android.app.action.DATA_SHARING_RESTRICTION_APPLIED";
 
     /**
+     * Broadcast action: notify that a value of {@link Settings.Global#DEVICE_POLICY_CONSTANTS}
+     * has been changed.
+     * @hide
+     */
+    @TestApi
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_DEVICE_POLICY_CONSTANTS_CHANGED =
+            "android.app.action.DEVICE_POLICY_CONSTANTS_CHANGED";
+
+    /**
      * Permission policy to prompt user for new permission requests for runtime permissions.
      * Already granted or denied permissions are not affected by this.
      */
@@ -1892,6 +1902,20 @@ public class DevicePolicyManager {
      * <p> Can be granted by Device Owner or Profile Owner.
      */
     public static final String DELEGATION_CERT_SELECTION = "delegation-cert-selection";
+
+    /**
+     * Grants access to {@link #setSecurityLoggingEnabled}, {@link #isSecurityLoggingEnabled},
+     * {@link #retrieveSecurityLogs}, and {@link #retrievePreRebootSecurityLogs}. Once granted the
+     * delegated app will start receiving {@link DelegatedAdminReceiver#onSecurityLogsAvailable}
+     * callback, and Device owner or Profile Owner will no longer receive the
+     * {@link DeviceAdminReceiver#onSecurityLogsAvailable} callback. There can be at most one app
+     * that has this delegation. If another app already had delegated security logging access, it
+     * will lose the delegation when a new app is delegated.
+     *
+     * <p> Can only be granted by Device Owner or Profile Owner of an organnization owned and
+     * managed profile.
+     */
+    public static final String DELEGATION_SECURITY_LOGGING = "delegation-security-logging";
 
     /**
      * No management for current user in-effect. This is the default.
@@ -2425,7 +2449,7 @@ public class DevicePolicyManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(flag = true, prefix = {"PRIVATE_DNS_MODE_"}, value = {
+    @IntDef(prefix = {"PRIVATE_DNS_MODE_"}, value = {
             PRIVATE_DNS_MODE_UNKNOWN,
             PRIVATE_DNS_MODE_OFF,
             PRIVATE_DNS_MODE_OPPORTUNISTIC,
@@ -2986,7 +3010,7 @@ public class DevicePolicyManager {
     /**
      * Checks if it's safe to run operations that can be affected by the given {@code reason}.
      *
-     * <p><b>Note:/b> notice that the operation safety state might change between the time this
+     * <p><b>Note:</b> notice that the operation safety state might change between the time this
      * method returns and the operation's method is called, so calls to the latter could still throw
      * a {@link UnsafeStateException} even when this method returns {@code true}.
      *
@@ -3280,6 +3304,41 @@ public class DevicePolicyManager {
     @SystemApi
     public static final String ACCOUNT_FEATURE_DEVICE_OR_PROFILE_OWNER_DISALLOWED =
             "android.account.DEVICE_OR_PROFILE_OWNER_DISALLOWED";
+
+    /**
+     * A {@code boolean} metadata to be included in a mainline module's {@code <application>}
+     * manifest element, which declares that the module should be considered a required app for
+     * managed users.
+     * <p>Being declared as a required app prevents removal of this package during the
+     * provisioning process.
+     * @hide
+     */
+    @SystemApi
+    public static final String REQUIRED_APP_MANAGED_USER = "android.app.REQUIRED_APP_MANAGED_USER";
+
+    /**
+     * A {@code boolean} metadata to be included in a mainline module's {@code <application>}
+     * manifest element, which declares that the module should be considered a required app for
+     * managed devices.
+     * <p>Being declared as a required app prevents removal of this package during the
+     * provisioning process.
+     * @hide
+     */
+    @SystemApi
+    public static final String REQUIRED_APP_MANAGED_DEVICE =
+            "android.app.REQUIRED_APP_MANAGED_DEVICE";
+
+    /**
+     * A {@code boolean} metadata to be included in a mainline module's {@code <application>}
+     * manifest element, which declares that the module should be considered a required app for
+     * managed profiles.
+     * <p>Being declared as a required app prevents removal of this package during the
+     * provisioning process.
+     * @hide
+     */
+    @SystemApi
+    public static final String REQUIRED_APP_MANAGED_PROFILE =
+            "android.app.REQUIRED_APP_MANAGED_PROFILE";
 
     /**
      * Called by an application that is administering the device to set the password restrictions it
@@ -6158,13 +6217,22 @@ public class DevicePolicyManager {
 
     // STOPSHIP(b/174298501): clarify the expected return value following generateKeyPair call.
     /**
-     * Called by a device or profile owner, or delegated certificate installer, to query whether a
-     * certificate and private key are installed under a given alias.
+     * This API can be called by the following to query whether a certificate and private key are
+     * installed under a given alias:
+     * <ul>
+     *    <li>Device owner</li>
+     *    <li>Profile owner</li>
+     *    <li>Delegated certificate installer</li>
+     *    <li>Credential management app</li>
+     * </ul>
+     *
+     * If called by the credential management app, the alias must exist in the credential
+     * management app's {@link android.security.AppUriAuthenticationPolicy}.
      *
      * @param alias The alias under which the key pair is installed.
      * @return {@code true} if a key pair with this alias exists, {@code false} otherwise.
-     * @throws SecurityException if the caller is not a device or profile owner or a delegated
-     *         certificate installer.
+     * @throws SecurityException if the caller is not a device or profile owner, a delegated
+     *         certificate installer or the credential management app.
      * @see #setDelegatedScopes
      * @see #DELEGATION_CERT_INSTALL
      */
@@ -9956,26 +10024,24 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Sets whether 5g slicing is enabled on the work profile.
+     * Sets whether enterprise network preference is enabled on the work profile.
      *
-     * Slicing allows operators to virtually divide their networks in portions and use different
-     * portions for specific use cases; for example, a corporation can have a deal/agreement with
-     * a carrier that all of its employees’ devices use data on a slice dedicated for enterprise
-     * use.
+     * For example, a corporation can have a deal/agreement with a carrier that all of its
+     * employees’ devices use data on a network preference dedicated for enterprise use.
      *
-     * By default, 5g slicing is enabled on the work profile on supported carriers and devices.
-     * Admins can explicitly disable it with this API.
+     * By default, enterprise network preference is enabled on the work profile on supported
+     * carriers and devices. Admins can explicitly disable it with this API.
      *
      * <p>This method can only be called by the profile owner of a managed profile.
      *
-     * @param enabled whether 5g Slice should be enabled.
+     * @param enabled whether enterprise network preference should be enabled.
      * @throws SecurityException if the caller is not the profile owner.
      **/
-    public void setNetworkSlicingEnabled(boolean enabled) {
-        throwIfParentInstance("setNetworkSlicingEnabled");
+    public void setEnterpriseNetworkPreferenceEnabled(boolean enabled) {
+        throwIfParentInstance("setEnterpriseNetworkPreferenceEnabled");
         if (mService != null) {
             try {
-                mService.setNetworkSlicingEnabled(enabled);
+                mService.setEnterpriseNetworkPreferenceEnabled(enabled);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -9983,51 +10049,20 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Indicates whether 5g slicing is enabled.
+     * Indicates whether whether enterprise network preference is enabled.
      *
      * <p>This method can be called by the profile owner of a managed profile.
      *
-     * @return whether 5g Slice is enabled.
+     * @return whether whether enterprise network preference is enabled.
      * @throws SecurityException if the caller is not the profile owner.
      */
-    public boolean isNetworkSlicingEnabled() {
-        throwIfParentInstance("isNetworkSlicingEnabled");
+    public boolean isEnterpriseNetworkPreferenceEnabled() {
+        throwIfParentInstance("isEnterpriseNetworkPreferenceEnabled");
         if (mService == null) {
             return false;
         }
         try {
-            return mService.isNetworkSlicingEnabled(myUserId());
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Indicates whether 5g slicing is enabled for specific user.
-     *
-     * This method can be called with permission
-     * {@link android.Manifest.permission#READ_NETWORK_DEVICE_CONFIG} by the profile owner of
-     * a managed profile. And the caller must hold the
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permission if query for
-     * other users.
-     *
-     * @param userHandle indicates the user to query the state
-     * @return indicates whether 5g Slice is enabled.
-     * @throws SecurityException if the caller is not granted the permission
-     *         {@link android.Manifest.permission#READ_NETWORK_DEVICE_CONFIG}
-     *         and not profile owner of a managed profile, and not granted the permission
-     *         {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} if query for
-     *         other users.
-     * @hide
-     */
-    @SystemApi
-    public boolean isNetworkSlicingEnabledForUser(@NonNull UserHandle userHandle) {
-        throwIfParentInstance("isNetworkSlicingEnabledForUser");
-        if (mService == null) {
-            return false;
-        }
-        try {
-            return mService.isNetworkSlicingEnabled(userHandle.getIdentifier());
+            return mService.isEnterpriseNetworkPreferenceEnabled(myUserId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -11252,7 +11287,7 @@ public class DevicePolicyManager {
     public void setSecurityLoggingEnabled(@NonNull ComponentName admin, boolean enabled) {
         throwIfParentInstance("setSecurityLoggingEnabled");
         try {
-            mService.setSecurityLoggingEnabled(admin, enabled);
+            mService.setSecurityLoggingEnabled(admin, mContext.getPackageName(), enabled);
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -11271,7 +11306,7 @@ public class DevicePolicyManager {
     public boolean isSecurityLoggingEnabled(@Nullable ComponentName admin) {
         throwIfParentInstance("isSecurityLoggingEnabled");
         try {
-            return mService.isSecurityLoggingEnabled(admin);
+            return mService.isSecurityLoggingEnabled(admin, mContext.getPackageName());
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
         }
@@ -11296,10 +11331,12 @@ public class DevicePolicyManager {
      * @see #isAffiliatedUser
      * @see DeviceAdminReceiver#onSecurityLogsAvailable
      */
+    @SuppressLint("NullableCollection")
     public @Nullable List<SecurityEvent> retrieveSecurityLogs(@NonNull ComponentName admin) {
         throwIfParentInstance("retrieveSecurityLogs");
         try {
-            ParceledListSlice<SecurityEvent> list = mService.retrieveSecurityLogs(admin);
+            ParceledListSlice<SecurityEvent> list = mService.retrieveSecurityLogs(
+                    admin, mContext.getPackageName());
             if (list != null) {
                 return list.getList();
             } else {
@@ -11449,11 +11486,13 @@ public class DevicePolicyManager {
      * @see #isAffiliatedUser
      * @see #retrieveSecurityLogs
      */
+    @SuppressLint("NullableCollection")
     public @Nullable List<SecurityEvent> retrievePreRebootSecurityLogs(
             @NonNull ComponentName admin) {
         throwIfParentInstance("retrievePreRebootSecurityLogs");
         try {
-            ParceledListSlice<SecurityEvent> list = mService.retrievePreRebootSecurityLogs(admin);
+            ParceledListSlice<SecurityEvent> list = mService.retrievePreRebootSecurityLogs(
+                    admin, mContext.getPackageName());
             if (list != null) {
                 return list.getList();
             } else {
@@ -11838,7 +11877,7 @@ public class DevicePolicyManager {
 
     /**
      * @hide
-     * Force update user setup completed status. This API has no effect on user build.
+     * Force update user setup completed status.
      * @throws {@link SecurityException} if the caller has no
      *         {@code android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS} or the caller is
      *         not {@link UserHandle#SYSTEM_USER}
@@ -13370,6 +13409,63 @@ public class DevicePolicyManager {
     }
 
     /**
+     * Called by a profile owner of an organization-owned managed profile to acknowledge that the
+     * device is compliant and the user can turn the profile off if needed according to the maximum
+     * time off policy.
+     *
+     * This method should be called when the device is deemed compliant after getting
+     * {@link DeviceAdminReceiver#onComplianceAcknowledgementRequired(Context, Intent)} callback in
+     * case it is overridden. Before this method is called the user is still free to turn the
+     * profile off, but the timer won't be reset, so personal apps will be suspended sooner.
+     *
+     * DPCs only need acknowledging device compliance if they override
+     * {@link DeviceAdminReceiver#onComplianceAcknowledgementRequired(Context, Intent)}, otherwise
+     * compliance is acknowledged automatically.
+     *
+     * @throws IllegalStateException if the user isn't unlocked
+     * @see #isComplianceAcknowledgementRequired()
+     * @see #setManagedProfileMaximumTimeOff(ComponentName, long)
+     * @see DeviceAdminReceiver#onComplianceAcknowledgementRequired(Context, Intent)
+     */
+    public void acknowledgeDeviceCompliant() {
+        throwIfParentInstance("acknowledgeDeviceCompliant");
+        if (mService != null) {
+            try {
+                mService.acknowledgeDeviceCompliant();
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+    }
+
+    /**
+     * Called by a profile owner of an organization-owned managed profile to query whether it needs
+     * to acknowledge device compliance to allow the user to turn the profile off if needed
+     * according to the maximum profile time off policy.
+     *
+     * Normally when acknowledgement is needed the DPC gets a
+     * {@link DeviceAdminReceiver#onComplianceAcknowledgementRequired(Context, Intent)} callback.
+     * But if the callback was not delivered or handled for some reason, this method can be used to
+     * verify if acknowledgement is needed.
+     *
+     * @throws IllegalStateException if the user isn't unlocked
+     * @see #acknowledgeDeviceCompliant()
+     * @see #setManagedProfileMaximumTimeOff(ComponentName, long)
+     * @see DeviceAdminReceiver#onComplianceAcknowledgementRequired(Context, Intent)
+     */
+    public boolean isComplianceAcknowledgementRequired() {
+        throwIfParentInstance("isComplianceAcknowledgementRequired");
+        if (mService != null) {
+            try {
+                return mService.isComplianceAcknowledgementRequired();
+            } catch (RemoteException re) {
+                throw re.rethrowFromSystemServer();
+            }
+        }
+        return false;
+    }
+
+    /**
      * Returns {@code true} when {@code userId} has a profile owner that is capable of resetting
      * password in RUNNING_LOCKED state. For that it should have at least one direct boot aware
      * component and have an active password reset token. Can only be called by the system.
@@ -13723,6 +13819,24 @@ public class DevicePolicyManager {
             return mService.listForegroundAffiliatedUsers();
         } catch (RemoteException re) {
             throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Lists apps that are exempt from policies (such as
+     * {@link #setPackagesSuspended(ComponentName, String[], boolean)}).
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(value = android.Manifest.permission.MANAGE_DEVICE_ADMINS)
+    public @NonNull Set<String> getPolicyExemptApps() {
+        if (mService == null) return Collections.emptySet();
+
+        try {
+            return new HashSet<>(mService.listPolicyExemptApps());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 }

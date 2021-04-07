@@ -456,10 +456,13 @@ public final class CachedAppOptimizer {
     @GuardedBy("mProcLock")
     void compactAppSome(ProcessRecord app) {
         app.mOptRecord.setReqCompactAction(COMPACT_PROCESS_SOME);
-        mPendingCompactionProcesses.add(app);
-        mCompactionHandler.sendMessage(
-                mCompactionHandler.obtainMessage(
-                COMPACT_PROCESS_MSG, app.mState.getSetAdj(), app.mState.getSetProcState()));
+        if (!app.mOptRecord.hasPendingCompact()) {
+            app.mOptRecord.setHasPendingCompact(true);
+            mPendingCompactionProcesses.add(app);
+            mCompactionHandler.sendMessage(
+                    mCompactionHandler.obtainMessage(
+                    COMPACT_PROCESS_MSG, app.mState.getSetAdj(), app.mState.getSetProcState()));
+        }
     }
 
     @GuardedBy("mProcLock")
@@ -470,10 +473,13 @@ public final class CachedAppOptimizer {
                 && app.mState.getCurAdj() >= mCompactThrottleMinOomAdj
                 && app.mState.getCurAdj() <= mCompactThrottleMaxOomAdj) {
             app.mOptRecord.setReqCompactAction(COMPACT_PROCESS_FULL);
-            mPendingCompactionProcesses.add(app);
-            mCompactionHandler.sendMessage(
-                mCompactionHandler.obtainMessage(
-                    COMPACT_PROCESS_MSG, app.mState.getSetAdj(), app.mState.getSetProcState()));
+            if (!app.mOptRecord.hasPendingCompact()) {
+                app.mOptRecord.setHasPendingCompact(true);
+                mPendingCompactionProcesses.add(app);
+                mCompactionHandler.sendMessage(
+                        mCompactionHandler.obtainMessage(
+                        COMPACT_PROCESS_MSG, app.mState.getSetAdj(), app.mState.getSetProcState()));
+            }
         } else {
             if (DEBUG_COMPACTION) {
                 Slog.d(TAG_AM, "Skipping full compaction for " + app.processName
@@ -486,10 +492,13 @@ public final class CachedAppOptimizer {
     @GuardedBy("mProcLock")
     void compactAppPersistent(ProcessRecord app) {
         app.mOptRecord.setReqCompactAction(COMPACT_PROCESS_PERSISTENT);
-        mPendingCompactionProcesses.add(app);
-        mCompactionHandler.sendMessage(
-                mCompactionHandler.obtainMessage(
+        if (!app.mOptRecord.hasPendingCompact()) {
+            app.mOptRecord.setHasPendingCompact(true);
+            mPendingCompactionProcesses.add(app);
+            mCompactionHandler.sendMessage(
+                    mCompactionHandler.obtainMessage(
                     COMPACT_PROCESS_MSG, app.mState.getCurAdj(), app.mState.getSetProcState()));
+        }
     }
 
     @GuardedBy("mProcLock")
@@ -501,10 +510,13 @@ public final class CachedAppOptimizer {
     @GuardedBy("mProcLock")
     void compactAppBfgs(ProcessRecord app) {
         app.mOptRecord.setReqCompactAction(COMPACT_PROCESS_BFGS);
-        mPendingCompactionProcesses.add(app);
-        mCompactionHandler.sendMessage(
-                mCompactionHandler.obtainMessage(
+        if (!app.mOptRecord.hasPendingCompact()) {
+            app.mOptRecord.setHasPendingCompact(true);
+            mPendingCompactionProcesses.add(app);
+            mCompactionHandler.sendMessage(
+                    mCompactionHandler.obtainMessage(
                     COMPACT_PROCESS_MSG, app.mState.getCurAdj(), app.mState.getSetProcState()));
+        }
     }
 
     @GuardedBy("mProcLock")
@@ -1034,6 +1046,7 @@ public final class CachedAppOptimizer {
                         pendingAction = opt.getReqCompactAction();
                         pid = proc.getPid();
                         name = proc.processName;
+                        opt.setHasPendingCompact(false);
 
                         // don't compact if the process has returned to perceptible
                         // and this is only a cached/home/prev compaction

@@ -1125,6 +1125,15 @@
              to framework controls (via colorControlActivated). -->
         <attr name="colorAccent" format="color" />
 
+        <!-- Light accent color used on Material NEXT buttons. @hide -->
+        <attr name="colorAccentPrimary" format="color" />
+
+        <!-- Secondary accent color used on Material NEXT buttons. @hide -->
+        <attr name="colorAccentSecondary" format="color" />
+
+        <!-- Tertiary accent color used on Material NEXT buttons. @hide -->
+        <attr name="colorAccentTertiary" format="color" />
+
         <!-- The color applied to framework controls in their normal state. -->
         <attr name="colorControlNormal" format="color" />
 
@@ -2194,6 +2203,7 @@
              Note that even if no splashscreen content is set on the theme, the system may still
              show a splash screen using the other attributes on the theme, like the
              {@link android.R.attr#windowBackground}.
+             {@deprecated Use windowSplashscreenAnimatedIcon instead.}
              -->
         <attr name="windowSplashscreenContent" format="reference" />
 
@@ -2279,6 +2289,10 @@
         <!-- Place an drawable image in the bottom of the starting window, it can be used to
              represent the branding of the application. -->
         <attr name="windowSplashScreenBrandingImage" format="reference"/>
+        <!-- Set a background behind the splash screen icon. This is useful if there is not enough
+             contrast between the window background and the icon. Note the shape would also be
+             masking like an icon. -->
+        <attr name="windowSplashScreenIconBackgroundColor" format="color"/>
     </declare-styleable>
 
     <!-- The set of attributes that describe a AlertDialog's theme. -->
@@ -3564,16 +3578,7 @@
         <attr name="__removed2" format="boolean" />
         <!-- Specifies whether the IME supports showing inline suggestions. -->
         <attr name="supportsInlineSuggestions" format="boolean" />
-        <!-- Specify one or more configuration changes that the IME will handle itself. If not
-             specified, the IME will be restarted if any of these configuration changes happen in
-              the system.  Otherwise, the IME will remain running and its
-             {@link android.inputmethodservice.InputMethodService#onConfigurationChanged}
-             method is called with the new configuration.
-             <p>Note that all of these configuration changes can impact the
-             resource values seen by the application, so you will generally need
-             to re-retrieve all resources (including view layouts, drawables, etc)
-             to correctly handle any configuration change.-->
-        <attr name="configChanges" />
+        <attr name="suppressesSpellChecker" format="boolean" />
     </declare-styleable>
 
     <!-- This is the subtype of InputMethod. Subtype can describe locales (for example, en_US and
@@ -8173,7 +8178,7 @@
             <flag name="hide_from_picker" value="0x2" />
               <!-- The widget provides a default configuration. The host may decide not to launch
                    the provided configuration activity. -->
-           <flag name="configuration_optional" value="0x3" />
+           <flag name="configuration_optional" value="0x4" />
         </attr>
         <!-- A resource identifier for a string containing a short description of the widget. -->
         <attr name="description" />

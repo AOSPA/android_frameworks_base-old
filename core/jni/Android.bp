@@ -1,4 +1,3 @@
-
 package {
     default_applicable_licenses: ["frameworks_base_core_jni_license"],
 }
@@ -71,10 +70,9 @@ cc_library_shared {
         "liblog",
         "libminikin",
         "libz",
-        "libziparchive",
     ],
 
-    static_libs: ["libnativehelper_lazy"],
+    static_libs: ["libnativehelper_lazy", "libziparchive_for_incfs", ],
 
     export_include_dirs: [
         ".",
@@ -153,7 +151,6 @@ cc_library_shared {
                 "android_os_VintfRuntimeInfo.cpp",
                 "android_os_incremental_IncrementalManager.cpp",
                 "android_net_LocalSocketImpl.cpp",
-                "android_net_NetworkUtils.cpp",
                 "android_service_DataLoaderService.cpp",
                 "android_util_AssetManager.cpp",
                 "android_util_Binder.cpp",
@@ -216,10 +213,12 @@ cc_library_shared {
                 "com_android_internal_os_Zygote.cpp",
                 "com_android_internal_os_ZygoteCommandBuffer.cpp",
                 "com_android_internal_os_ZygoteInit.cpp",
+                "com_android_internal_security_VerityUtils.cpp",
                 "hwbinder/EphemeralStorage.cpp",
                 "fd_utils.cpp",
                 "android_hardware_input_InputWindowHandle.cpp",
                 "android_hardware_input_InputApplicationHandle.cpp",
+                "permission_utils.cpp",
             ],
 
             static_libs: [
@@ -238,6 +237,7 @@ cc_library_shared {
                 "audioflinger-aidl-cpp",
                 "av-types-aidl-cpp",
                 "android.hardware.camera.device@3.2",
+                "media_permission-aidl-cpp",
                 "libandroidicu",
                 "libbpf_android",
                 "libnetdbpf",

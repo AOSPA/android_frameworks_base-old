@@ -31,7 +31,6 @@ import android.service.carrier.CarrierIdentifier;
 import android.telecom.PhoneAccount;
 import android.telecom.PhoneAccountHandle;
 import android.telephony.CallForwardingInfo;
-import android.telephony.CarrierBandwidth;
 import android.telephony.CarrierRestrictionRules;
 import android.telephony.CellIdentity;
 import android.telephony.CellInfo;
@@ -55,6 +54,7 @@ import android.telephony.TelephonyHistogram;
 import android.telephony.VisualVoicemailSmsFilterSettings;
 import android.telephony.emergency.EmergencyNumber;
 import android.telephony.ims.RcsClientConfiguration;
+import android.telephony.ims.RcsContactUceCapability;
 import android.telephony.ims.aidl.IImsCapabilityCallback;
 import android.telephony.ims.aidl.IImsConfig;
 import android.telephony.ims.aidl.IImsConfigCallback;
@@ -2238,12 +2238,6 @@ interface ITelephony {
     boolean isNrDualConnectivityEnabled(int subId);
 
     /**
-     * Get carrier bandwidth per primary and secondary carrier
-     * @return CarrierBandwidth with bandwidth of both primary and secondary carrier.
-     */
-    CarrierBandwidth getCarrierBandwidth(int subId);
-
-    /**
      * Checks whether the device supports the given capability on the radio interface.
      *
      * @param capability the name of the capability
@@ -2256,10 +2250,12 @@ interface ITelephony {
      *
      * @param subId the id of the subscription
      * @param thermalMitigationRequest holds the parameters necessary for the request.
+     * @param callingPackage the package name of the calling package.
      * @throws InvalidThermalMitigationRequestException if the parametes are invalid.
      */
     int sendThermalMitigationRequest(int subId,
-            in ThermalMitigationRequest thermalMitigationRequest);
+            in ThermalMitigationRequest thermalMitigationRequest,
+            String callingPackage);
 
     /**
      * get the Generic Bootstrapping Architecture authentication keys
@@ -2355,6 +2351,16 @@ interface ITelephony {
     boolean getCarrierSingleRegistrationEnabled(int subId);
 
     /**
+     * Overrides the ims feature validation result
+     */
+    boolean setImsFeatureValidationOverride(int subId, String enabled);
+
+    /**
+     * Gets the ims feature validation override value
+     */
+    boolean getImsFeatureValidationOverride(int subId);
+
+    /**
      *  Return the mobile provisioning url that is used to launch a browser to allow users to manage
      *  their mobile plan.
      */
@@ -2379,6 +2385,41 @@ interface ITelephony {
      * Set the device supports RCS User Capability Exchange.
      */
      void setDeviceUceEnabled(boolean isEnabled);
+
+    /**
+     * Add feature tags to the IMS registration being tracked by UCE and potentially
+     * generate a new PUBLISH to the network.
+     * Note: This is designed for a SHELL command only.
+     */
+    RcsContactUceCapability addUceRegistrationOverrideShell(int subId, in List<String> featureTags);
+
+    /**
+     * Remove feature tags from the IMS registration being tracked by UCE and potentially
+     * generate a new PUBLISH to the network.
+     * Note: This is designed for a SHELL command only.
+     */
+    RcsContactUceCapability removeUceRegistrationOverrideShell(int subId,
+            in List<String> featureTags);
+
+    /**
+     * Clear overridden feature tags in the IMS registration being tracked by UCE and potentially
+     * generate a new PUBLISH to the network.
+     * Note: This is designed for a SHELL command only.
+     */
+    RcsContactUceCapability clearUceRegistrationOverrideShell(int subId);
+
+    /**
+     * Get the latest RcsContactUceCapability structure that is used in SIP PUBLISH procedures.
+     * Note: This is designed for a SHELL command only.
+     */
+    RcsContactUceCapability getLatestRcsContactUceCapabilityShell(int subId);
+
+    /**
+     * Returns the last PIDF XML sent to the network during the last PUBLISH or "none" if the
+     * device does not have an active PUBLISH.
+     * Note: This is designed for a SHELL command only.
+     */
+    String getLastUcePidfXmlShell(int subId);
 
     /**
      * Set a SignalStrengthUpdateRequest to receive notification when Signal Strength breach the
@@ -2411,4 +2452,10 @@ interface ITelephony {
      * of error.
      */
     int prepareForUnattendedReboot();
+
+    /**
+     * Request to get the current slicing configuration including URSP rules and
+     * NSSAIs (configured, allowed and rejected).
+     */
+    void getSlicingConfig(in ResultReceiver callback);
 }

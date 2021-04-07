@@ -74,12 +74,14 @@ final class CompatConfig {
     private final LongSparseArray<CompatChange> mChanges = new LongSparseArray<>();
 
     private final OverrideValidatorImpl mOverrideValidator;
+    private final AndroidBuildClassifier mAndroidBuildClassifier;
     private Context mContext;
     private File mOverridesFile;
 
     @VisibleForTesting
     CompatConfig(AndroidBuildClassifier androidBuildClassifier, Context context) {
         mOverrideValidator = new OverrideValidatorImpl(androidBuildClassifier, context, this);
+        mAndroidBuildClassifier = androidBuildClassifier;
         mContext = context;
     }
 
@@ -133,7 +135,7 @@ final class CompatConfig {
         synchronized (mChanges) {
             for (int i = 0; i < mChanges.size(); ++i) {
                 CompatChange c = mChanges.valueAt(i);
-                if (!c.isEnabled(app)) {
+                if (!c.isEnabled(app, mAndroidBuildClassifier)) {
                     disabled.add(c.getId());
                 }
             }
@@ -175,7 +177,7 @@ final class CompatConfig {
                 // we know nothing about this change: default behaviour is enabled.
                 return true;
             }
-            return c.isEnabled(app);
+            return c.isEnabled(app, mAndroidBuildClassifier);
         }
     }
 
@@ -302,6 +304,16 @@ final class CompatConfig {
     }
 
     /**
+     * Returns whether the change is overridable.
+     */
+    boolean isOverridable(long changeId) {
+        synchronized (mChanges) {
+            CompatChange c = mChanges.get(changeId);
+            return c != null && c.getOverridable();
+        }
+    }
+
+    /**
      * Removes an override previously added via {@link #addOverride(long, String, boolean)}.
      *
      * <p>This restores the default behaviour for the given change and app, once any app processes
@@ -341,7 +353,7 @@ final class CompatConfig {
 
     /**
      * Removes all overrides previously added via {@link #addOverride(long, String, boolean)} or
-     * {@link #addOverrides(CompatibilityChangeConfig, String)} for a certain package.
+     * {@link #addOverrides(CompatibilityOverrideConfig, String)} for a certain package.
      *
      * <p>This restores the default behaviour for the given app.
      *
@@ -475,7 +487,7 @@ final class CompatConfig {
         synchronized (mChanges) {
             for (int i = 0; i < mChanges.size(); ++i) {
                 CompatChange c = mChanges.valueAt(i);
-                if (c.isEnabled(applicationInfo)) {
+                if (c.isEnabled(applicationInfo, mAndroidBuildClassifier)) {
                     enabled.add(c.getId());
                 } else {
                     disabled.add(c.getId());
@@ -630,8 +642,11 @@ final class CompatConfig {
         }
         boolean shouldInvalidateCache = false;
         for (CompatChange c: changes) {
+            if (!c.hasPackageOverride(packageName)) {
+                continue;
+            }
             OverrideAllowedState allowedState =
-                    mOverrideValidator.getOverrideAllowedState(c.getId(), packageName);
+                    mOverrideValidator.getOverrideAllowedStateForRecheck(c.getId(), packageName);
             shouldInvalidateCache |= c.recheckOverride(packageName, allowedState, mContext);
         }
         if (shouldInvalidateCache) {

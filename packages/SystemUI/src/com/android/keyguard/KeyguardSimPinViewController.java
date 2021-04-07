@@ -79,11 +79,11 @@ public class KeyguardSimPinViewController
             KeyguardSecurityCallback keyguardSecurityCallback,
             KeyguardMessageAreaController.Factory messageAreaControllerFactory,
             LatencyTracker latencyTracker, LiftToActivateListener liftToActivateListener,
-            TelephonyManager telephonyManager,
-            FalsingCollector falsingCollector, boolean isNewLayoutEnabled) {
+            TelephonyManager telephonyManager, FalsingCollector falsingCollector,
+            EmergencyButtonController emergencyButtonController, boolean isNewLayoutEnabled) {
         super(view, keyguardUpdateMonitor, securityMode, lockPatternUtils, keyguardSecurityCallback,
                 messageAreaControllerFactory, latencyTracker, liftToActivateListener,
-                falsingCollector);
+                emergencyButtonController, falsingCollector);
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mTelephonyManager = telephonyManager;
         mSimImageView = mView.findViewById(R.id.keyguard_sim);

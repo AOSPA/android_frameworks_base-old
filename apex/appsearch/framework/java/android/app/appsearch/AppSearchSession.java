@@ -19,6 +19,8 @@ package android.app.appsearch;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.app.appsearch.exceptions.AppSearchException;
+import android.app.appsearch.util.SchemaMigrationUtil;
 import android.os.Bundle;
 import android.os.ParcelableException;
 import android.os.RemoteException;
@@ -26,14 +28,17 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.util.Preconditions;
 
 import java.io.Closeable;
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -45,14 +50,15 @@ import java.util.function.Consumer;
  */
 public final class AppSearchSession implements Closeable {
     private static final String TAG = "AppSearchSession";
+
     private final String mPackageName;
     private final String mDatabaseName;
     @UserIdInt
     private final int mUserId;
     private final IAppSearchManager mService;
+
     private boolean mIsMutated = false;
     private boolean mIsClosed = false;
-
 
     /**
      * Creates a search session for the client, defined by the {@code userId} and
@@ -111,20 +117,22 @@ public final class AppSearchSession implements Closeable {
      * no-op call.
      *
      * @param request the schema to set or update the AppSearch database to.
-     * @param executor Executor on which to invoke the callback.
+     * @param workExecutor Executor on which to schedule heavy client-side background work such as
+     *                     transforming documents.
+     * @param callbackExecutor Executor on which to invoke the callback.
      * @param callback Callback to receive errors resulting from setting the schema. If the
      *                 operation succeeds, the callback will be invoked with {@code null}.
-     * @see android.app.appsearch.AppSearchSchema.Migrator
-     * @see android.app.appsearch.AppSearchMigrationHelper.Transformer
      */
     // TODO(b/169883602): Change @code references to @link when setPlatformSurfaceable APIs are
     //  exposed.
     public void setSchema(
             @NonNull SetSchemaRequest request,
-            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Executor workExecutor,
+            @NonNull @CallbackExecutor Executor callbackExecutor,
             @NonNull Consumer<AppSearchResult<SetSchemaResponse>> callback) {
         Objects.requireNonNull(request);
-        Objects.requireNonNull(executor);
+        Objects.requireNonNull(workExecutor);
+        Objects.requireNonNull(callbackExecutor);
         Objects.requireNonNull(callback);
         Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         List<Bundle> schemaBundles = new ArrayList<>(request.getSchemas().size());
@@ -141,23 +149,65 @@ public final class AppSearchSession implements Closeable {
             }
             schemasPackageAccessibleBundles.put(entry.getKey(), packageIdentifierBundles);
         }
+
+        // No need to trigger migration if user never set migrator
+        if (request.getMigrators().isEmpty()) {
+            setSchemaNoMigrations(
+                    request,
+                    schemaBundles,
+                    schemasPackageAccessibleBundles,
+                    callbackExecutor,
+                    callback);
+            return;
+        }
+
         try {
+            // Migration process
+            // 1. Generate the current and the final version map.
+            // TODO(b/182855402) Release binder thread and move the heavy work into worker thread.
+            AndroidFuture<AppSearchResult<GetSchemaResponse>> future = new AndroidFuture<>();
+            getSchema(callbackExecutor, future::complete);
+            AppSearchResult<GetSchemaResponse> getSchemaResult = future.get();
+            if (!getSchemaResult.isSuccess()) {
+                callback.accept(AppSearchResult.newFailedResult(getSchemaResult));
+                return;
+            }
+            GetSchemaResponse getSchemaResponse = getSchemaResult.getResultValue();
+            Set<AppSearchSchema> currentSchemas = getSchemaResponse.getSchemas();
+            Map<String, Integer> currentVersionMap =
+                    SchemaMigrationUtil.buildVersionMap(currentSchemas,
+                            getSchemaResponse.getVersion());
+            Map<String, Integer> finalVersionMap =
+                    SchemaMigrationUtil.buildVersionMap(request.getSchemas(), request.getVersion());
+
+            // 2. SetSchema with forceOverride=false, to retrieve the list of incompatible/deleted
+            // types.
             mService.setSchema(
                     mPackageName,
                     mDatabaseName,
                     schemaBundles,
                     new ArrayList<>(request.getSchemasNotDisplayedBySystem()),
                     schemasPackageAccessibleBundles,
-                    request.isForceOverride(),
+                    /*forceOverride=*/ false,
                     mUserId,
+                    request.getVersion(),
                     new IAppSearchResultCallback.Stub() {
                         public void onResult(AppSearchResult result) {
-                            executor.execute(() -> {
+                            callbackExecutor.execute(() -> {
                                 if (result.isSuccess()) {
-                                    callback.accept(
-                                            // TODO(b/177266929) implement Migration in platform.
-                                            AppSearchResult.newSuccessfulResult(
-                                                    new SetSchemaResponse.Builder().build()));
+                                    // TODO(b/183177268): once migration is implemented, run
+                                    //  it on workExecutor.
+                                    try {
+                                        Bundle bundle = (Bundle) result.getResultValue();
+                                        SetSchemaResponse setSchemaResponse =
+                                                new SetSchemaResponse(bundle);
+                                        setSchemaMigration(
+                                                request, setSchemaResponse, schemaBundles,
+                                                schemasPackageAccessibleBundles, currentVersionMap,
+                                                finalVersionMap, callback);
+                                    } catch (Throwable t) {
+                                        callback.accept(AppSearchResult.throwableToFailedResult(t));
+                                    }
                                 } else {
                                     callback.accept(result);
                                 }
@@ -167,6 +217,8 @@ public final class AppSearchSession implements Closeable {
             mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }  catch (Throwable t) {
+            callback.accept(AppSearchResult.throwableToFailedResult(t));
         }
     }
 
@@ -178,7 +230,7 @@ public final class AppSearchSession implements Closeable {
      */
     public void getSchema(
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull Consumer<AppSearchResult<Set<AppSearchSchema>>> callback) {
+            @NonNull Consumer<AppSearchResult<GetSchemaResponse>> callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
         Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
@@ -191,14 +243,46 @@ public final class AppSearchSession implements Closeable {
                         public void onResult(AppSearchResult result) {
                             executor.execute(() -> {
                                 if (result.isSuccess()) {
-                                    List<Bundle> schemaBundles =
-                                            (List<Bundle>) result.getResultValue();
-                                    Set<AppSearchSchema> schemas = new ArraySet<>(
-                                            schemaBundles.size());
-                                    for (int i = 0; i < schemaBundles.size(); i++) {
-                                        schemas.add(new AppSearchSchema(schemaBundles.get(i)));
-                                    }
-                                    callback.accept(AppSearchResult.newSuccessfulResult(schemas));
+                                    Bundle responseBundle = (Bundle) result.getResultValue();
+                                    GetSchemaResponse response =
+                                            new GetSchemaResponse(responseBundle);
+                                    callback.accept(AppSearchResult.newSuccessfulResult(response));
+                                } else {
+                                    callback.accept(result);
+                                }
+                            });
+                        }
+                    });
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Retrieves the set of all namespaces in the current database with at least one document.
+     *
+     * @param executor        Executor on which to invoke the callback.
+     * @param callback        Callback to receive the namespaces.
+     */
+    public void getNamespaces(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<AppSearchResult<Set<String>>> callback) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
+        try {
+            mService.getNamespaces(
+                    mPackageName,
+                    mDatabaseName,
+                    mUserId,
+                    new IAppSearchResultCallback.Stub() {
+                        public void onResult(AppSearchResult result) {
+                            executor.execute(() -> {
+                                if (result.isSuccess()) {
+                                    Set<String> namespaces =
+                                            new ArraySet<>((List<String>) result.getResultValue());
+                                    callback.accept(
+                                            AppSearchResult.newSuccessfulResult(namespaces));
                                 } else {
                                     callback.accept(result);
                                 }
@@ -241,6 +325,7 @@ public final class AppSearchSession implements Closeable {
             documentBundles.add(documents.get(i).getBundle());
         }
         try {
+            // TODO(b/173532925) a timestamp needs to be sent here to calculate binder latency
             mService.putDocuments(mPackageName, mDatabaseName, documentBundles, mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         public void onResult(AppSearchBatchResult result) {
@@ -298,8 +383,7 @@ public final class AppSearchSession implements Closeable {
 
                                 // Translate successful results
                                 for (Map.Entry<String, Bundle> bundleEntry :
-                                        (Set<Map.Entry<String, Bundle>>)
-                                                result.getSuccesses().entrySet()) {
+                                        ((Map<String, Bundle>) result.getSuccesses()).entrySet()) {
                                     GenericDocument document;
                                     try {
                                         document = new GenericDocument(bundleEntry.getValue());
@@ -318,8 +402,8 @@ public final class AppSearchSession implements Closeable {
 
                                 // Translate failed results
                                 for (Map.Entry<String, AppSearchResult<Bundle>> bundleEntry :
-                                        (Set<Map.Entry<String, AppSearchResult<Bundle>>>)
-                                                result.getFailures().entrySet()) {
+                                        ((Map<String, AppSearchResult<Bundle>>)
+                                                result.getFailures()).entrySet()) {
                                     documentResultBuilder.setFailure(
                                             bundleEntry.getKey(),
                                             bundleEntry.getValue().getResultCode(),
@@ -438,6 +522,7 @@ public final class AppSearchSession implements Closeable {
                     request.getNamespace(),
                     request.getUri(),
                     request.getUsageTimeMillis(),
+                    /*systemUsage=*/ false,
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
                         public void onResult(AppSearchResult result) {
@@ -542,6 +627,25 @@ public final class AppSearchSession implements Closeable {
     }
 
     /**
+     * Gets the storage info for this {@link AppSearchSession} database.
+     *
+     * <p>This may take time proportional to the number of documents and may be inefficient to
+     * call repeatedly.
+     *
+     * @param executor        Executor on which to invoke the callback.
+     * @param callback        Callback to receive the storage info.
+     */
+    public void getStorageInfo(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<AppSearchResult<StorageInfo>> callback) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
+        Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
+        // TODO(b/182909475): Implement getStorageInfo
+        throw new UnsupportedOperationException();
+    }
+
+    /**
      * Closes the {@link AppSearchSession} to persist all schema and document updates, additions,
      * and deletes to disk.
      */
@@ -554,6 +658,161 @@ public final class AppSearchSession implements Closeable {
             } catch (RemoteException e) {
                 Log.e(TAG, "Unable to close the AppSearchSession", e);
             }
+        }
+    }
+
+    /**
+     * Set schema to Icing for no-migration scenario.
+     *
+     * <p>We only need one time {@link #setSchema} call for no-migration scenario by using the
+     * forceoverride in the request.
+     */
+    private void setSchemaNoMigrations(@NonNull SetSchemaRequest request,
+            @NonNull List<Bundle> schemaBundles,
+            @NonNull Map<String, List<Bundle>> schemasPackageAccessibleBundles,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<AppSearchResult<SetSchemaResponse>> callback) {
+        try {
+            mService.setSchema(
+                    mPackageName,
+                    mDatabaseName,
+                    schemaBundles,
+                    new ArrayList<>(request.getSchemasNotDisplayedBySystem()),
+                    schemasPackageAccessibleBundles,
+                    request.isForceOverride(),
+                    mUserId,
+                    request.getVersion(),
+                    new IAppSearchResultCallback.Stub() {
+                        public void onResult(AppSearchResult result) {
+                            executor.execute(() -> {
+                                if (result.isSuccess()) {
+                                    try {
+                                        SetSchemaResponse setSchemaResponse =
+                                                new SetSchemaResponse(
+                                                        (Bundle) result.getResultValue());
+                                        if (!request.isForceOverride()) {
+                                            // Throw exception if there is any deleted types or
+                                            // incompatible types. That's the only case we swallowed
+                                            // in the AppSearchImpl#setSchema().
+                                            checkDeletedAndIncompatible(
+                                                    setSchemaResponse.getDeletedTypes(),
+                                                    setSchemaResponse.getIncompatibleTypes());
+                                        }
+                                        callback.accept(AppSearchResult
+                                                .newSuccessfulResult(setSchemaResponse));
+                                    } catch (Throwable t) {
+                                        callback.accept(AppSearchResult.throwableToFailedResult(t));
+                                    }
+                                } else {
+                                    callback.accept(result);
+                                }
+                            });
+                        }
+                    });
+            mIsMutated = true;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Set schema to Icing for migration scenario.
+     *
+     * <p>First time {@link #setSchema} call with forceOverride is false gives us all incompatible
+     * changes. After trigger migrations, the second time call {@link #setSchema} will actually
+     * apply the changes.
+     *
+     * @param setSchemaResponse the result of the first setSchema call with forceOverride=false.
+     */
+    private void setSchemaMigration(@NonNull SetSchemaRequest request,
+            @NonNull SetSchemaResponse setSchemaResponse,
+            @NonNull List<Bundle> schemaBundles,
+            @NonNull Map<String, List<Bundle>> schemasPackageAccessibleBundles,
+            @NonNull Map<String, Integer> currentVersionMap, Map<String, Integer> finalVersionMap,
+            @NonNull Consumer<AppSearchResult<SetSchemaResponse>> callback)
+            throws AppSearchException, IOException, RemoteException, ExecutionException,
+            InterruptedException {
+        // 1. If forceOverride is false, check that all incompatible types will be migrated.
+        // If some aren't we must throw an error, rather than proceeding and deleting those
+        // types.
+        if (!request.isForceOverride()) {
+            Set<String> unmigratedTypes = SchemaMigrationUtil.getUnmigratedIncompatibleTypes(
+                    setSchemaResponse.getIncompatibleTypes(),
+                    request.getMigrators(),
+                    currentVersionMap,
+                    finalVersionMap);
+            // check if there are any unmigrated types or deleted types. If there are, we will throw
+            // an exception.
+            // Since the force override is false, the schema will not have been set if there are any
+            // incompatible or deleted types.
+            checkDeletedAndIncompatible(setSchemaResponse.getDeletedTypes(),
+                    unmigratedTypes);
+        }
+
+        try (AppSearchMigrationHelper migrationHelper =
+                     new AppSearchMigrationHelper(mService, mUserId, currentVersionMap,
+                             finalVersionMap, mPackageName, mDatabaseName)) {
+            Map<String, Migrator> migratorMap = request.getMigrators();
+
+            // 2. Trigger migration for all migrators.
+            // TODO(b/177266929) trigger migration for all types together rather than separately.
+            Set<String> migratedTypes = new ArraySet<>();
+            for (Map.Entry<String, Migrator> entry : migratorMap.entrySet()) {
+                String schemaType = entry.getKey();
+                Migrator migrator = entry.getValue();
+                if (SchemaMigrationUtil.shouldTriggerMigration(
+                        schemaType, migrator, currentVersionMap, finalVersionMap)) {
+                    migrationHelper.queryAndTransform(schemaType, migrator);
+                    migratedTypes.add(schemaType);
+                }
+            }
+
+            // 3. SetSchema a second time with forceOverride=true if the first attempted failed.
+            if (!setSchemaResponse.getIncompatibleTypes().isEmpty()
+                    || !setSchemaResponse.getDeletedTypes().isEmpty()) {
+                AndroidFuture<AppSearchResult<SetSchemaResponse>> future = new AndroidFuture<>();
+                // only trigger second setSchema() call if the first one is fail.
+                mService.setSchema(
+                        mPackageName,
+                        mDatabaseName,
+                        schemaBundles,
+                        new ArrayList<>(request.getSchemasNotDisplayedBySystem()),
+                        schemasPackageAccessibleBundles,
+                        /*forceOverride=*/ true,
+                        mUserId,
+                        request.getVersion(),
+                        new IAppSearchResultCallback.Stub() {
+                            @Override
+                            public void onResult(AppSearchResult result) throws RemoteException {
+                                future.complete(result);
+                            }
+                        });
+                AppSearchResult<SetSchemaResponse> secondSetSchemaResult = future.get();
+                if (!secondSetSchemaResult.isSuccess()) {
+                    // we failed to set the schema in second time with force override = true, which
+                    // is an impossible case. Since we only swallow the incompatible error in the
+                    // first setSchema call, all other errors will be thrown at the first time.
+                    callback.accept(secondSetSchemaResult);
+                    return;
+                }
+            }
+
+            SetSchemaResponse.Builder responseBuilder = setSchemaResponse.toBuilder()
+                    .addMigratedTypes(migratedTypes);
+            callback.accept(migrationHelper.putMigratedDocuments(responseBuilder));
+        }
+    }
+
+    /**  Checks the setSchema() call won't delete any types or has incompatible types. */
+    //TODO(b/177266929) move this method to util
+    private void checkDeletedAndIncompatible(Set<String> deletedTypes,
+            Set<String> incompatibleTypes)
+            throws AppSearchException {
+        if (!deletedTypes.isEmpty() || !incompatibleTypes.isEmpty()) {
+            String newMessage = "Schema is incompatible."
+                    + "\n  Deleted types: " + deletedTypes
+                    + "\n  Incompatible types: " + incompatibleTypes;
+            throw new AppSearchException(AppSearchResult.RESULT_INVALID_SCHEMA, newMessage);
         }
     }
 }

@@ -1922,6 +1922,7 @@ public class AppOpsService extends IAppOpsService.Stub {
         synchronized (this) {
             if (mWriteScheduled) {
                 mWriteScheduled = false;
+                mFastWriteScheduled = false;
                 mHandler.removeCallbacks(mWriteRunner);
                 doWrite = true;
             }
@@ -2098,26 +2099,28 @@ public class AppOpsService extends IAppOpsService.Stub {
         ensureHistoricalOpRequestIsValid(uid, packageName, attributionTag, opNames, filter,
                 beginTimeMillis, endTimeMillis, flags);
         Objects.requireNonNull(callback, "callback cannot be null");
-
         ActivityManagerInternal ami = LocalServices.getService(ActivityManagerInternal.class);
-        boolean isCallerInstrumented = ami.isUidCurrentlyInstrumented(Binder.getCallingUid());
-        boolean isCallerSystem = Binder.getCallingPid() == Process.myPid();
-        boolean isCallerPermissionController;
-        try {
-            isCallerPermissionController = pm.getPackageUid(
-                    mContext.getPackageManager().getPermissionControllerPackageName(), 0)
-                    == Binder.getCallingUid();
-        } catch (PackageManager.NameNotFoundException doesNotHappen) {
-            return;
-        }
+        boolean isSelfRequest = (filter & FILTER_BY_UID) != 0 && uid == Binder.getCallingUid();
+        if (!isSelfRequest) {
+            boolean isCallerInstrumented = ami.isUidCurrentlyInstrumented(Binder.getCallingUid());
+            boolean isCallerSystem = Binder.getCallingPid() == Process.myPid();
+            boolean isCallerPermissionController;
+            try {
+                isCallerPermissionController = pm.getPackageUid(
+                        mContext.getPackageManager().getPermissionControllerPackageName(), 0)
+                        == Binder.getCallingUid();
+            } catch (PackageManager.NameNotFoundException doesNotHappen) {
+                return;
+            }
 
-        if (!isCallerSystem && !isCallerInstrumented && !isCallerPermissionController) {
-            mHandler.post(() -> callback.sendResult(new Bundle()));
-            return;
-        }
+            if (!isCallerSystem && !isCallerInstrumented && !isCallerPermissionController) {
+                mHandler.post(() -> callback.sendResult(new Bundle()));
+                return;
+            }
 
-        mContext.enforcePermission(android.Manifest.permission.GET_APP_OPS_STATS,
-                Binder.getCallingPid(), Binder.getCallingUid(), "getHistoricalOps");
+            mContext.enforcePermission(android.Manifest.permission.GET_APP_OPS_STATS,
+                    Binder.getCallingPid(), Binder.getCallingUid(), "getHistoricalOps");
+        }
 
         final String[] opNamesArray = (opNames != null)
                 ? opNames.toArray(new String[opNames.size()]) : null;
@@ -3089,14 +3092,10 @@ public class AppOpsService extends IAppOpsService.Stub {
             return AppOpsManager.MODE_IGNORED;
         }
 
-        // This is a workaround for R QPR, new API change is not allowed. We only allow the current
-        // voice recognizer is also the voice interactor to noteproxy op.
-        final boolean isTrustVoiceServiceProxy = AppOpsManager.isTrustedVoiceServiceProxy(mContext,
-                proxyPackageName, code, UserHandle.getUserId(proxyUid));
         final boolean isSelfBlame = Binder.getCallingUid() == proxiedUid;
         final boolean isProxyTrusted = mContext.checkPermission(
                 Manifest.permission.UPDATE_APP_OPS_STATS, -1, proxyUid)
-                == PackageManager.PERMISSION_GRANTED || isTrustVoiceServiceProxy || isSelfBlame;
+                == PackageManager.PERMISSION_GRANTED || isSelfBlame;
 
         final int proxyFlags = isProxyTrusted ? AppOpsManager.OP_FLAG_TRUSTED_PROXY
                 : AppOpsManager.OP_FLAG_UNTRUSTED_PROXY;
@@ -3574,14 +3573,10 @@ public class AppOpsService extends IAppOpsService.Stub {
             return AppOpsManager.MODE_IGNORED;
         }
 
-        // This is a workaround for R QPR, new API change is not allowed. We only allow the current
-        // voice recognizer is also the voice interactor to noteproxy op.
-        final boolean isTrustVoiceServiceProxy = AppOpsManager.isTrustedVoiceServiceProxy(mContext,
-                proxyPackageName, code, UserHandle.getUserId(proxyUid));
         final boolean isSelfBlame = Binder.getCallingUid() == proxiedUid;
         final boolean isProxyTrusted = mContext.checkPermission(
                 Manifest.permission.UPDATE_APP_OPS_STATS, -1, proxyUid)
-                == PackageManager.PERMISSION_GRANTED || isTrustVoiceServiceProxy || isSelfBlame;
+                == PackageManager.PERMISSION_GRANTED || isSelfBlame;
 
         final int proxyFlags = isProxyTrusted ? AppOpsManager.OP_FLAG_TRUSTED_PROXY
                 : AppOpsManager.OP_FLAG_UNTRUSTED_PROXY;

@@ -182,8 +182,6 @@ class DragDropController {
                     if (SHOW_LIGHT_TRANSACTIONS) {
                         Slog.i(TAG_WM, "<<< CLOSE TRANSACTION performDrag");
                     }
-
-                    mDragState.notifyLocationLocked(touchX, touchY);
                 } finally {
                     if (surface != null) {
                         surface.release();
@@ -285,11 +283,7 @@ class DragDropController {
                 return;
             }
 
-            if (keepHandling) {
-                mDragState.notifyMoveLocked(newX, newY);
-            } else {
-                mDragState.notifyDropLocked(newX, newY);
-            }
+            mDragState.updateDragSurfaceLocked(keepHandling, newX, newY);
         }
     }
 
@@ -330,6 +324,12 @@ class DragDropController {
             return;
         }
         mDragState = null;
+    }
+
+    void reportDropWindow(IBinder token, float x, float y) {
+        synchronized (mService.mGlobalLock) {
+            mDragState.reportDropWindowLock(token, x, y);
+        }
     }
 
     private class DragHandler extends Handler {

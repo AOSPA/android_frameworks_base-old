@@ -22,7 +22,6 @@ import android.annotation.Nullable;
 import android.inputmethodservice.AbstractInputMethodService;
 import android.os.RemoteException;
 import android.os.ServiceManager.ServiceNotFoundException;
-import android.os.ShellCommand;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
 import android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceFileProto;
@@ -106,32 +105,6 @@ class ImeTracingServerImpl extends ImeTracing {
         }
     }
 
-    /**
-     * Responds to a shell command of the format "adb shell cmd input_method ime tracing <command>"
-     *
-     * @param shell The shell command to process
-     * @return {@code 0} if the command was valid and successfully processed, {@code -1} otherwise
-     */
-    @Override
-    public int onShellCommand(ShellCommand shell) {
-        PrintWriter pw = shell.getOutPrintWriter();
-        String cmd = shell.getNextArgRequired();
-        switch (cmd) {
-            case "start":
-                startTrace(pw);
-                return 0;
-            case "stop":
-                stopTrace(pw);
-                return 0;
-            default:
-                pw.println("Unknown command: " + cmd);
-                pw.println("Input method trace options:");
-                pw.println("  start: Start tracing");
-                pw.println("  stop: Stop tracing");
-                return -1;
-        }
-    }
-
     @Override
     public void triggerClientDump(String where, InputMethodManager immInstance,
             ProtoOutputStream icProto) {
@@ -163,14 +136,6 @@ class ImeTracingServerImpl extends ImeTracing {
             Log.e(TAG, "Exception while sending ime-related manager service dump to server", e);
         } finally {
             mDumpInProgress = false;
-        }
-    }
-
-    @GuardedBy("mEnabledLock")
-    @Override
-    public void writeTracesToFiles() {
-        synchronized (mEnabledLock) {
-            writeTracesToFilesLocked();
         }
     }
 
@@ -219,12 +184,6 @@ class ImeTracingServerImpl extends ImeTracing {
 
     @Override
     public void stopTrace(@Nullable PrintWriter pw) {
-        stopTrace(pw, true /* writeToFile */);
-    }
-
-    @GuardedBy("mEnabledLock")
-    @Override
-    public void stopTrace(@Nullable PrintWriter pw, boolean writeToFile) {
         if (IS_USER) {
             Log.w(TAG, "Warn: Tracing is not supported on user builds.");
             return;
@@ -240,9 +199,35 @@ class ImeTracingServerImpl extends ImeTracing {
                     + TRACE_FILENAME_CLIENTS + ", " + TRACE_FILENAME_IMS + ", "
                     + TRACE_FILENAME_IMMS);
             sEnabled = false;
-            if (writeToFile) {
-                writeTracesToFilesLocked();
+            writeTracesToFilesLocked();
+        }
+    }
+
+    /**
+     * {@inheritDoc}
+     */
+    @Override
+    public void saveForBugreport(@Nullable PrintWriter pw) {
+        if (IS_USER) {
+            return;
+        }
+        synchronized (mEnabledLock) {
+            if (!isAvailable() || !isEnabled()) {
+                return;
             }
+            // Temporarily stop accepting logs from trace event providers.  There is a small chance
+            // that we may drop some trace events while writing the file, but we currently need to
+            // live with that.  Note that addToBuffer() also has a bug that it doesn't do
+            // read-acquire so flipping sEnabled here doesn't even guarantee that addToBuffer() will
+            // temporarily stop accepting incoming events...
+            // TODO(b/175761228): Implement atomic snapshot to avoid downtime.
+            // TODO(b/175761228): Fix synchronization around sEnabled.
+            sEnabled = false;
+            logAndPrintln(pw, "Writing traces in " + TRACE_DIRNAME + ": "
+                    + TRACE_FILENAME_CLIENTS + ", " + TRACE_FILENAME_IMS + ", "
+                    + TRACE_FILENAME_IMMS);
+            writeTracesToFilesLocked();
+            sEnabled = true;
         }
     }
 

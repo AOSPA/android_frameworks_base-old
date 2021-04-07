@@ -44,6 +44,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Process;
 import android.os.SystemClock;
+import android.util.ArraySet;
 import android.util.DisplayMetrics;
 import android.util.Log;
 
@@ -84,6 +85,7 @@ public final class Display {
     private static final String TAG = "Display";
     private static final boolean DEBUG = false;
 
+    private final Object mLock = new Object();
     private final DisplayManagerGlobal mGlobal;
     private final int mDisplayId;
     private final int mFlags;
@@ -569,7 +571,7 @@ public final class Display {
      * @return True if the display is still valid.
      */
     public boolean isValid() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mIsValid;
         }
@@ -584,7 +586,7 @@ public final class Display {
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P)
     public boolean getDisplayInfo(DisplayInfo outDisplayInfo) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             outDisplayInfo.copyFrom(mDisplayInfo);
             return mIsValid;
@@ -601,7 +603,7 @@ public final class Display {
      * @hide
      */
     public int getLayerStack() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.layerStack;
         }
@@ -648,7 +650,7 @@ public final class Display {
      * @hide
      */
     public DisplayAddress getAddress() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.address;
         }
@@ -708,7 +710,7 @@ public final class Display {
      * @return The display's name.
      */
     public String getName() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.name;
         }
@@ -721,7 +723,7 @@ public final class Display {
      * @hide
      */
     public float getBrightnessDefault() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.brightnessDefault;
         }
@@ -760,7 +762,7 @@ public final class Display {
      */
     @Deprecated
     public void getSize(Point outSize) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             mDisplayInfo.getAppMetrics(mTempMetrics, getDisplayAdjustments());
             outSize.x = mTempMetrics.widthPixels;
@@ -777,7 +779,7 @@ public final class Display {
      */
     @Deprecated
     public void getRectSize(Rect outSize) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             mDisplayInfo.getAppMetrics(mTempMetrics, getDisplayAdjustments());
             outSize.set(0, 0, mTempMetrics.widthPixels, mTempMetrics.heightPixels);
@@ -815,7 +817,7 @@ public final class Display {
      * for example, screen decorations like the status bar are being hidden.
      */
     public void getCurrentSizeRange(Point outSmallestSize, Point outLargestSize) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             outSmallestSize.x = mDisplayInfo.smallestNominalAppWidth;
             outSmallestSize.y = mDisplayInfo.smallestNominalAppHeight;
@@ -831,7 +833,7 @@ public final class Display {
      */
     @UnsupportedAppUsage
     public int getMaximumSizeDimension() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return Math.max(mDisplayInfo.logicalWidth, mDisplayInfo.logicalHeight);
         }
@@ -842,7 +844,7 @@ public final class Display {
      */
     @Deprecated
     public int getWidth() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateCachedAppSizeIfNeededLocked();
             return mCachedAppWidthCompat;
         }
@@ -853,7 +855,7 @@ public final class Display {
      */
     @Deprecated
     public int getHeight() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateCachedAppSizeIfNeededLocked();
             return mCachedAppHeightCompat;
         }
@@ -878,7 +880,7 @@ public final class Display {
      */
     @Surface.Rotation
     public int getRotation() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mMayAdjustByFixedRotation
                     ? getDisplayAdjustments().getRotation(mDisplayInfo.rotation)
@@ -904,7 +906,7 @@ public final class Display {
      */
     @Nullable
     public DisplayCutout getCutout() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mMayAdjustByFixedRotation
                     ? getDisplayAdjustments().getDisplayCutout(mDisplayInfo.displayCutout)
@@ -922,7 +924,7 @@ public final class Display {
     @SuppressLint("VisiblySynchronized")
     @Nullable
     public RoundedCorner getRoundedCorner(@RoundedCorner.Position int position) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             RoundedCorners roundedCorners;
             if (mMayAdjustByFixedRotation) {
@@ -954,7 +956,7 @@ public final class Display {
      * Gets the refresh rate of this display in frames per second.
      */
     public float getRefreshRate() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.getRefreshRate();
         }
@@ -970,7 +972,7 @@ public final class Display {
      */
     @Deprecated
     public float[] getSupportedRefreshRates() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.getDefaultRefreshRates();
         }
@@ -980,7 +982,7 @@ public final class Display {
      * Returns the active mode of the display.
      */
     public Mode getMode() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.getMode();
         }
@@ -990,7 +992,7 @@ public final class Display {
      * Gets the supported modes of this display.
      */
     public Mode[] getSupportedModes() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             final Display.Mode[] modes = mDisplayInfo.supportedModes;
             return Arrays.copyOf(modes, modes.length);
@@ -1016,7 +1018,7 @@ public final class Display {
      */
     @SuppressLint("VisiblySynchronized")
     public boolean isMinimalPostProcessingSupported() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.minimalPostProcessingSupported;
         }
@@ -1036,7 +1038,7 @@ public final class Display {
      * @hide
      */
     public int getColorMode() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.colorMode;
         }
@@ -1063,9 +1065,33 @@ public final class Display {
      * @see #isHdr()
      */
     public HdrCapabilities getHdrCapabilities() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
-            return mDisplayInfo.hdrCapabilities;
+            if (mDisplayInfo.userDisabledHdrTypes.length == 0) {
+                return mDisplayInfo.hdrCapabilities;
+            }
+            ArraySet<Integer> enabledTypesSet = new ArraySet<>();
+            for (int supportedType : mDisplayInfo.hdrCapabilities.getSupportedHdrTypes()) {
+                boolean typeDisabled = false;
+                for (int userDisabledType : mDisplayInfo.userDisabledHdrTypes) {
+                    if (supportedType == userDisabledType) {
+                        typeDisabled = true;
+                        break;
+                    }
+                }
+                if (!typeDisabled) {
+                    enabledTypesSet.add(supportedType);
+                }
+            }
+            int[] enabledTypes = new int[enabledTypesSet.size()];
+            int index = 0;
+            for (int enabledType : enabledTypesSet) {
+                enabledTypes[index++] = enabledType;
+            }
+            return new HdrCapabilities(enabledTypes,
+                    mDisplayInfo.hdrCapabilities.mMaxLuminance,
+                    mDisplayInfo.hdrCapabilities.mMaxAverageLuminance,
+                    mDisplayInfo.hdrCapabilities.mMinLuminance);
         }
     }
 
@@ -1076,9 +1102,9 @@ public final class Display {
      * @see HdrCapabilities#getSupportedHdrTypes()
      */
     public boolean isHdr() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
-            return mDisplayInfo.isHdr();
+            return !(getHdrCapabilities().getSupportedHdrTypes().length == 0);
         }
     }
 
@@ -1089,7 +1115,7 @@ public final class Display {
      * {@link Configuration#isScreenWideColorGamut()}.
      */
     public boolean isWideColorGamut() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.isWideColorGamut();
         }
@@ -1104,7 +1130,7 @@ public final class Display {
      */
     @Nullable
     public ColorSpace getPreferredWideGamutColorSpace() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             if (mDisplayInfo.isWideColorGamut()) {
                 return mGlobal.getPreferredWideGamutColorSpace();
@@ -1118,7 +1144,7 @@ public final class Display {
      * @hide
      */
     public int[] getSupportedColorModes() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             int[] colorModes = mDisplayInfo.supportedColorModes;
             return Arrays.copyOf(colorModes, colorModes.length);
@@ -1135,7 +1161,7 @@ public final class Display {
     @NonNull
     @TestApi
     public @ColorMode ColorSpace[] getSupportedWideColorGamut() {
-        synchronized (this) {
+        synchronized (mLock) {
             final ColorSpace[] defaultColorSpaces = new ColorSpace[0];
             updateDisplayInfoLocked();
             if (!isWideColorGamut()) {
@@ -1169,7 +1195,7 @@ public final class Display {
      * A/V synchronization.
      */
     public long getAppVsyncOffsetNanos() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.appVsyncOffsetNanos;
         }
@@ -1187,7 +1213,7 @@ public final class Display {
      * ({@link System#nanoTime}).
      */
     public long getPresentationDeadlineNanos() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mDisplayInfo.presentationDeadlineNanos;
         }
@@ -1202,7 +1228,10 @@ public final class Display {
      */
     @Nullable
     public DeviceProductInfo getDeviceProductInfo() {
-        return mDisplayInfo.deviceProductInfo;
+        synchronized (mLock) {
+            updateDisplayInfoLocked();
+            return mDisplayInfo.deviceProductInfo;
+        }
     }
 
     /**
@@ -1235,7 +1264,7 @@ public final class Display {
      */
     @Deprecated
     public void getMetrics(DisplayMetrics outMetrics) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             mDisplayInfo.getAppMetrics(outMetrics, getDisplayAdjustments());
         }
@@ -1288,7 +1317,7 @@ public final class Display {
      */
     @Deprecated
     public void getRealSize(Point outSize) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             if (shouldReportMaxBounds()) {
                 final Rect bounds = mResources.getConfiguration()
@@ -1358,7 +1387,7 @@ public final class Display {
      */
     @Deprecated
     public void getRealMetrics(DisplayMetrics outMetrics) {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             if (shouldReportMaxBounds()) {
                 mDisplayInfo.getMaxBoundsMetrics(outMetrics,
@@ -1434,7 +1463,7 @@ public final class Display {
      * {@link #STATE_UNKNOWN}.
      */
     public int getState() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             return mIsValid ? mDisplayInfo.state : STATE_UNKNOWN;
         }
@@ -1518,7 +1547,7 @@ public final class Display {
     // For debugging purposes
     @Override
     public String toString() {
-        synchronized (this) {
+        synchronized (mLock) {
             updateDisplayInfoLocked();
             final DisplayAdjustments adjustments = getDisplayAdjustments();
             mDisplayInfo.getAppMetrics(mTempMetrics, adjustments);
@@ -1849,6 +1878,14 @@ public final class Display {
          * HDR10+ display.
          */
         public static final int HDR_TYPE_HDR10_PLUS = 4;
+
+        /** @hide */
+        public static final int[] HDR_TYPES = {
+                HDR_TYPE_DOLBY_VISION,
+                HDR_TYPE_HDR10,
+                HDR_TYPE_HLG,
+                HDR_TYPE_HDR10_PLUS
+        };
 
         /** @hide */
         @IntDef(prefix = { "HDR_TYPE_" }, value = {

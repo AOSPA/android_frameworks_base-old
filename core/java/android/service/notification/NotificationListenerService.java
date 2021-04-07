@@ -251,6 +251,10 @@ public abstract class NotificationListenerService extends Service {
     public static final int REASON_SNOOZED = 18;
     /** Notification was canceled due to timeout */
     public static final int REASON_TIMEOUT = 19;
+    /** Notification was canceled due to the backing channel being deleted */
+    public static final int REASON_CHANNEL_REMOVED = 20;
+    /** Notification was canceled due to the app's storage being cleared */
+    public static final int REASON_CLEAR_DATA = 21;
 
     /**
      * @hide
@@ -1786,7 +1790,8 @@ public abstract class NotificationListenerService extends Service {
          * {@link NotificationListenerService.Ranking#VISIBILITY_NO_OVERRIDE} if
          * no such preference has been expressed.
          */
-        public int getLockscreenVisibilityOverride() {
+        public @Notification.NotificationVisibilityOverride
+        int getLockscreenVisibilityOverride() {
             return mVisibilityOverride;
         }
 

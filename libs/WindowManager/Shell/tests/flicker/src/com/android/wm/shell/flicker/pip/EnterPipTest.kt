@@ -18,20 +18,11 @@ package com.android.wm.shell.flicker.pip
 
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
-import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.noUncoveredRegions
-import com.android.server.wm.flicker.startRotation
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -57,28 +48,11 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
 
     @Presubmit
     @Test
-    fun navBarWindowIsAlwaysVisible() = testSpec.navBarWindowIsAlwaysVisible()
-
-    @Presubmit
-    @Test
-    fun statusBarWindowIsAlwaysVisible() = testSpec.statusBarWindowIsAlwaysVisible()
-
-    @Presubmit
-    @Test
-    fun pipWindowBecomesVisible() {
+    fun pipAppWindowAlwaysVisible() {
         testSpec.assertWm {
             this.showsAppWindow(pipApp.defaultWindowName)
         }
     }
-
-    @Presubmit
-    @Test
-    fun statusBarLayerIsAlwaysVisible() = testSpec.statusBarLayerIsAlwaysVisible()
-
-    @Presubmit
-    @Test
-    fun statusBarLayerRotatesScales() =
-        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation, Surface.ROTATION_0)
 
     @Presubmit
     @Test
@@ -88,19 +62,15 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
         }
     }
 
-    @FlakyTest(bugId = 140855415)
+    @Presubmit
     @Test
-    fun navBarLayerIsAlwaysVisible() = testSpec.navBarLayerIsAlwaysVisible()
-
-    @FlakyTest(bugId = 140855415)
-    @Test
-    fun navBarLayerRotatesAndScales() =
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.startRotation, Surface.ROTATION_0)
-
-    @FlakyTest(bugId = 140855415)
-    @Test
-    fun noUncoveredRegions() =
-        testSpec.noUncoveredRegions(testSpec.config.startRotation, Surface.ROTATION_0)
+    fun pipWindowBecomesVisible() {
+        testSpec.assertWm {
+            invoke("pipWindowIsNotVisible") { !it.wmState.hasPipWindow() }
+                .then()
+                .invoke("pipWindowIsVisible") { it.wmState.hasPipWindow() }
+        }
+    }
 
     companion object {
         @Parameterized.Parameters(name = "{0}")
