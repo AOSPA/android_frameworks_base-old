@@ -542,11 +542,11 @@ public class DisplayRotation {
 
         mRotation = rotation;
 
+        mDisplayContent.setLayoutNeeded();
+
         mService.mWindowsFreezingScreen = WINDOWS_FREEZING_SCREENS_ACTIVE;
         mService.mH.sendNewMessageDelayed(WindowManagerService.H.WINDOW_FREEZE_TIMEOUT,
                 mDisplayContent, WINDOW_FREEZE_TIMEOUT_DURATION);
-
-        mDisplayContent.setLayoutNeeded();
 
         if (shouldRotateSeamlessly(oldRotation, rotation, forceUpdate)) {
             // The screen rotation animation uses a screenshot to freeze the screen while windows
@@ -1560,6 +1560,21 @@ public class DisplayRotation {
                             false /* forceRelayout */);
                 }
             }
+        }
+
+        @Override
+        public boolean canUseRotationResolver() {
+            if (mUserRotationMode == WindowManagerPolicy.USER_ROTATION_LOCKED) return false;
+
+            switch (mCurrentAppOrientation) {
+                case ActivityInfo.SCREEN_ORIENTATION_FULL_USER:
+                case ActivityInfo.SCREEN_ORIENTATION_USER:
+                case ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED:
+                case ActivityInfo.SCREEN_ORIENTATION_USER_LANDSCAPE:
+                case ActivityInfo.SCREEN_ORIENTATION_USER_PORTRAIT:
+                    return true;
+            }
+            return false;
         }
 
         @Override

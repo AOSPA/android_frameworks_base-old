@@ -2232,6 +2232,7 @@ public class DisplayPolicy {
                 pi.getResDir(),
                 null /* splitResDirs */,
                 pi.getOverlayDirs(),
+                pi.getOverlayPaths(),
                 pi.getApplicationInfo().sharedLibraryFiles,
                 mDisplayContent.getDisplayId(),
                 null /* overrideConfig */,

@@ -66,9 +66,13 @@
     <!-- Color for rounded background for activated user in keyguard user switcher -->
     <color name="kg_user_switcher_activated_background_color">#26000000</color>
     <!-- Icon color for user avatars in keyguard user switcher -->
-    <color name="kg_user_switcher_avatar_icon_color">@android:color/background_light</color>
-    <!-- Icon color for selected user avatars in keyguard user switcher -->
-    <color name="kg_user_switcher_selected_avatar_icon_color">@android:color/background_light</color>
+    <color name="kg_user_switcher_avatar_icon_color">@color/GM2_grey_800</color>
+    <!-- Icon color for user avatars in keyguard user switcher that restricted
+         (e.g. cannot be switched to) -->
+    <color name="kg_user_switcher_restricted_avatar_icon_color">@color/GM2_grey_600</color>
+    <!-- Color of background circle of user avatars in keyguard user switcher -->
+    <color name="kg_user_switcher_avatar_background">@color/GM2_grey_300</color>
+
     <!-- Icon color for user avatars in user switcher quick settings -->
     <color name="qs_user_switcher_avatar_icon_color">#3C4043</color>
     <!-- Icon color for selected user avatars in user switcher quick settings -->
@@ -240,11 +244,8 @@
     <color name="magnification_switch_button_color">#7F000000</color>
 
     <!-- media -->
-    <color name="media_primary_text">@android:color/white</color>
-    <color name="media_secondary_text">#99ffffff</color> <!-- 60% -->
-    <color name="media_seekbar_progress">#c0ffffff</color>
     <color name="media_disabled">#80ffffff</color>
-    <color name="media_seamless_border">#26ffffff</color> <!-- 15% -->
+    <color name="media_seamless_border">?android:attr/colorAccent</color>
     <color name="media_divider">#1d000000</color>
 
     <!-- controls -->

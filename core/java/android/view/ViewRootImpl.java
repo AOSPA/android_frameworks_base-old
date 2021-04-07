@@ -1377,6 +1377,7 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean translucent = attrs.format != PixelFormat.OPAQUE || hasSurfaceInsets;
                 mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent,
                         attrs.getTitle().toString());
+                mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
                 updateColorModeIfNeeded(attrs.getColorMode());
                 updateForceDarkMode();
                 if (mAttachInfo.mThreadedRenderer != null) {
@@ -1677,7 +1678,8 @@ public final class ViewRootImpl implements ViewParent,
         requestLayout();
 
         // See comment for View.sForceLayoutWhenInsetsChanged
-        if (View.sForceLayoutWhenInsetsChanged && mView != null) {
+        if (View.sForceLayoutWhenInsetsChanged && mView != null
+                && mWindowAttributes.softInputMode == SOFT_INPUT_ADJUST_RESIZE) {
             forceLayout(mView);
         }
 
@@ -1899,11 +1901,12 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     private void setBoundsLayerCrop(Transaction t) {
-        // mWinFrame is already adjusted for surface insets. So offset it and use it as
-        // the cropping bounds.
-        mTempBoundsRect.set(mWinFrame);
-        mTempBoundsRect.offsetTo(mWindowAttributes.surfaceInsets.left,
-                mWindowAttributes.surfaceInsets.top);
+        // Adjust of insets and update the bounds layer so child surfaces do not draw into
+        // the surface inset region.
+        mTempBoundsRect.set(0, 0, mSurfaceSize.x, mSurfaceSize.y);
+        mTempBoundsRect.inset(mWindowAttributes.surfaceInsets.left,
+                mWindowAttributes.surfaceInsets.top,
+                mWindowAttributes.surfaceInsets.right, mWindowAttributes.surfaceInsets.bottom);
         t.setWindowCrop(mBoundsLayer, mTempBoundsRect);
     }
 
@@ -1914,25 +1917,18 @@ public final class ViewRootImpl implements ViewParent,
     private boolean updateBoundsLayer(SurfaceControl.Transaction t) {
         if (mBoundsLayer != null) {
             setBoundsLayerCrop(t);
-            t.deferTransactionUntil(mBoundsLayer, getSurfaceControl(),
-                mSurface.getNextFrameNumber());
             return true;
         }
         return false;
     }
 
-    private void prepareSurfaces(boolean sizeChanged) {
+    private void prepareSurfaces() {
         final SurfaceControl.Transaction t = mTransaction;
         final SurfaceControl sc = getSurfaceControl();
         if (!sc.isValid()) return;
 
-        boolean applyTransaction = updateBoundsLayer(t);
-        if (sizeChanged) {
-            applyTransaction = true;
-            t.setBufferSize(sc, mSurfaceSize.x, mSurfaceSize.y);
-        }
-        if (applyTransaction) {
-            t.apply();
+        if (updateBoundsLayer(t)) {
+              mergeWithNextTransaction(t, mSurface.getNextFrameNumber());
         }
     }
 
@@ -1947,6 +1943,10 @@ public final class ViewRootImpl implements ViewParent,
         if (mBlastBufferQueue != null) {
             mBlastBufferQueue.destroy();
             mBlastBufferQueue = null;
+        }
+
+        if (mAttachInfo.mThreadedRenderer != null) {
+            mAttachInfo.mThreadedRenderer.setSurfaceControl(null);
         }
     }
 
@@ -2843,8 +2843,7 @@ public final class ViewRootImpl implements ViewParent,
                         mScroller.abortAnimation();
                     }
                     // Our surface is gone
-                    if (mAttachInfo.mThreadedRenderer != null &&
-                            mAttachInfo.mThreadedRenderer.isEnabled()) {
+                    if (isHardwareEnabled()) {
                         mAttachInfo.mThreadedRenderer.destroy();
                     }
                 } else if ((surfaceReplaced
@@ -3037,7 +3036,7 @@ public final class ViewRootImpl implements ViewParent,
             // stopping, but on the client side it doesn't get stopped since it's restarted quick
             // enough. WMS doesn't want to keep around old children since they will leak when the
             // client creates new children.
-            prepareSurfaces(surfaceSizeChanged);
+            prepareSurfaces();
         }
 
         final boolean didLayout = layoutRequested && (!mStopped || mReportNextDraw);
@@ -3065,10 +3064,15 @@ public final class ViewRootImpl implements ViewParent,
                 if (!mTransparentRegion.equals(mPreviousTransparentRegion)) {
                     mPreviousTransparentRegion.set(mTransparentRegion);
                     mFullRedrawNeeded = true;
-                    // reconfigure window manager
-                    try {
-                        mWindowSession.setTransparentRegion(mWindow, mTransparentRegion);
-                    } catch (RemoteException e) {
+                    // TODO: Ideally we would do this in prepareSurfaces,
+                    // but prepareSurfaces is currently working under
+                    // the assumption that we paused the render thread
+                    // via the WM relayout code path. We probably eventually
+                    // want to synchronize transparent region hint changes
+                    // with draws.
+                    SurfaceControl sc = getSurfaceControl();
+                    if (sc.isValid()) {
+                        mTransaction.setTransparentRegionHint(sc, mTransparentRegion).apply();
                     }
                 }
             }
@@ -3925,8 +3929,15 @@ public final class ViewRootImpl implements ViewParent,
         };
     }
 
+    /**
+     * @hide
+     */
+    public boolean isHardwareEnabled() {
+        return mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled();
+    }
+
     private boolean addFrameCompleteCallbackIfNeeded() {
-        if (mAttachInfo.mThreadedRenderer == null || !mAttachInfo.mThreadedRenderer.isEnabled()) {
+        if (!isHardwareEnabled()) {
             return false;
         }
 
@@ -4270,7 +4281,7 @@ public final class ViewRootImpl implements ViewParent,
 
         boolean useAsyncReport = false;
         if (!dirty.isEmpty() || mIsAnimating || accessibilityFocusDirty) {
-            if (mAttachInfo.mThreadedRenderer != null && mAttachInfo.mThreadedRenderer.isEnabled()) {
+            if (isHardwareEnabled()) {
                 // If accessibility focus moved, always invalidate the root.
                 boolean invalidateRoot = accessibilityFocusDirty || mInvalidateRootRequested;
                 mInvalidateRootRequested = false;
@@ -7653,6 +7664,9 @@ public final class ViewRootImpl implements ViewParent,
                     mSurface.transferFrom(blastSurface);
                 }
             }
+            if (mAttachInfo.mThreadedRenderer != null) {
+                mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
+            }
         } else {
             destroySurface();
         }
@@ -10146,9 +10160,11 @@ public final class ViewRootImpl implements ViewParent,
      * Merges the transaction passed in with the next transaction in BLASTBufferQueue. This ensures
      * you can add transactions to the upcoming frame.
      */
-    void mergeWithNextTransaction(Transaction t, long frameNumber) {
+    public void mergeWithNextTransaction(Transaction t, long frameNumber) {
         if (mBlastBufferQueue != null) {
             mBlastBufferQueue.mergeWithNextTransaction(t, frameNumber);
+        } else {
+            t.apply();
         }
     }
 }

@@ -23,6 +23,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.om.IOverlayManager;
 import android.content.om.OverlayInfo;
+import android.content.res.Configuration;
 import android.database.ContentObserver;
 import android.graphics.Point;
 import android.os.Handler;
@@ -31,6 +32,7 @@ import android.os.ServiceManager;
 import android.os.SystemProperties;
 import android.provider.Settings;
 import android.util.Slog;
+import android.view.ViewConfiguration;
 import android.view.accessibility.AccessibilityManager;
 
 import androidx.annotation.NonNull;
@@ -65,6 +67,7 @@ public class OneHandedController {
     private volatile boolean mIsOneHandedEnabled;
     private volatile boolean mIsSwipeToNotificationEnabled;
     private boolean mTaskChangeToExit;
+    private boolean mLockedDisabled;
     private float mOffSetFraction;
 
     private final Context mContext;
@@ -134,10 +137,10 @@ public class OneHandedController {
 
 
     /**
-     * Creates {@link OneHanded}, returns {@code null} if the feature is not supported.
+     * Creates {@link OneHandedController}, returns {@code null} if the feature is not supported.
      */
     @Nullable
-    public static OneHanded create(
+    public static OneHandedController create(
             Context context, DisplayController displayController,
             TaskStackListenerImpl taskStackListener, UiEventLogger uiEventLogger,
             ShellExecutor mainExecutor, Handler mainHandler) {
@@ -154,7 +157,7 @@ public class OneHandedController {
         OneHandedTouchHandler touchHandler = new OneHandedTouchHandler(timeoutHandler,
                 mainExecutor);
         OneHandedGestureHandler gestureHandler = new OneHandedGestureHandler(
-                context, displayController, mainExecutor);
+                context, displayController, ViewConfiguration.get(context), mainExecutor);
         OneHandedBackgroundPanelOrganizer oneHandedBackgroundPanelOrganizer =
                 new OneHandedBackgroundPanelOrganizer(context, displayController, mainExecutor);
         OneHandedDisplayAreaOrganizer organizer = new OneHandedDisplayAreaOrganizer(
@@ -166,7 +169,7 @@ public class OneHandedController {
         return new OneHandedController(context, displayController,
                 oneHandedBackgroundPanelOrganizer, organizer, touchHandler, tutorialHandler,
                 gestureHandler, timeoutHandler, oneHandedUiEventsLogger, overlayManager,
-                taskStackListener, mainExecutor, mainHandler).mImpl;
+                taskStackListener, mainExecutor, mainHandler);
     }
 
     @VisibleForTesting
@@ -222,10 +225,13 @@ public class OneHandedController {
         setupGesturalOverlay();
         updateSettings();
 
-        mAccessibilityManager = (AccessibilityManager)
-                context.getSystemService(Context.ACCESSIBILITY_SERVICE);
+        mAccessibilityManager = AccessibilityManager.getInstance(context);
         mAccessibilityManager.addAccessibilityStateChangeListener(
                 mAccessibilityStateChangeListener);
+    }
+
+    public OneHanded asOneHanded() {
+        return mImpl;
     }
 
     /**
@@ -258,6 +264,10 @@ public class OneHandedController {
 
     @VisibleForTesting
     void startOneHanded() {
+        if (isLockedDisabled()) {
+            Slog.d(TAG, "Temporary lock disabled");
+            return;
+        }
         if (!mDisplayAreaOrganizer.isInOneHanded()) {
             final int yOffSet = Math.round(getDisplaySize().y * mOffSetFraction);
             mDisplayAreaOrganizer.scheduleOffset(0, yOffSet);
@@ -341,7 +351,8 @@ public class OneHandedController {
         };
     }
 
-    private void onEnabledSettingChanged() {
+    @VisibleForTesting
+    void onEnabledSettingChanged() {
         final boolean enabled = OneHandedSettingsUtil.getSettingsOneHandedModeEnabled(
                 mContext.getContentResolver());
         mOneHandedUiEventLogger.writeEvent(enabled
@@ -356,7 +367,8 @@ public class OneHandedController {
                         mContext.getContentResolver()));
     }
 
-    private void onTimeoutSettingChanged() {
+    @VisibleForTesting
+    void onTimeoutSettingChanged() {
         final int newTimeout = OneHandedSettingsUtil.getSettingsOneHandedModeTimeout(
                 mContext.getContentResolver());
         int metricsId = OneHandedUiEventLogger.OneHandedSettingsTogglesEvent.INVALID.getId();
@@ -384,7 +396,8 @@ public class OneHandedController {
         }
     }
 
-    private void onTaskChangeExitSettingChanged() {
+    @VisibleForTesting
+    void onTaskChangeExitSettingChanged() {
         final boolean enabled = OneHandedSettingsUtil.getSettingsTapsAppToExit(
                 mContext.getContentResolver());
         mOneHandedUiEventLogger.writeEvent(enabled
@@ -394,7 +407,8 @@ public class OneHandedController {
         setTaskChangeToExit(enabled);
     }
 
-    private void onSwipeToNotificationEnabledSettingChanged() {
+    @VisibleForTesting
+    void onSwipeToNotificationEnabledSettingChanged() {
         final boolean enabled =
                 OneHandedSettingsUtil.getSettingsSwipeToNotificationEnabled(
                         mContext.getContentResolver());
@@ -424,21 +438,35 @@ public class OneHandedController {
         return displaySize;
     }
 
+    @VisibleForTesting
+    boolean isLockedDisabled() {
+        return mLockedDisabled;
+    }
+
     private void updateOneHandedEnabled() {
         if (mDisplayAreaOrganizer.isInOneHanded()) {
             stopOneHanded();
         }
-        // TODO Be aware to unregisterOrganizer() after animation finished
-        mDisplayAreaOrganizer.unregisterOrganizer();
-        mBackgroundPanelOrganizer.unregisterOrganizer();
-        if (mIsOneHandedEnabled) {
+
+        mTouchHandler.onOneHandedEnabled(mIsOneHandedEnabled);
+        mGestureHandler.onOneHandedEnabled(mIsOneHandedEnabled || mIsSwipeToNotificationEnabled);
+
+        if (!mIsOneHandedEnabled) {
+            mDisplayAreaOrganizer.unregisterOrganizer();
+            mBackgroundPanelOrganizer.unregisterOrganizer();
+            // Do NOT register + unRegister DA in the same call
+            return;
+        }
+
+        if (mDisplayAreaOrganizer.getDisplayAreaTokenMap().isEmpty()) {
             mDisplayAreaOrganizer.registerOrganizer(
                     OneHandedDisplayAreaOrganizer.FEATURE_ONE_HANDED);
+        }
+
+        if (mBackgroundPanelOrganizer.getBackgroundSurface() == null) {
             mBackgroundPanelOrganizer.registerOrganizer(
                     OneHandedBackgroundPanelOrganizer.FEATURE_ONE_HANDED_BACKGROUND_PANEL);
         }
-        mTouchHandler.onOneHandedEnabled(mIsOneHandedEnabled);
-        mGestureHandler.onOneHandedEnabled(mIsOneHandedEnabled || mIsSwipeToNotificationEnabled);
     }
 
     private void setupGesturalOverlay() {
@@ -448,7 +476,6 @@ public class OneHandedController {
 
         OverlayInfo info = null;
         try {
-            // TODO(b/157958539) migrate new RRO config file after S+
             mOverlayManager.setHighestPriority(ONE_HANDED_MODE_GESTURAL_OVERLAY, USER_CURRENT);
             info = mOverlayManager.getOverlayInfo(ONE_HANDED_MODE_GESTURAL_OVERLAY, USER_CURRENT);
         } catch (RemoteException e) { /* Do nothing */ }
@@ -468,11 +495,31 @@ public class OneHandedController {
         }
     }
 
-    private void dump(@NonNull PrintWriter pw) {
+    @VisibleForTesting
+    void setLockedDisabled(boolean locked, boolean enabled) {
+        if (enabled == mIsOneHandedEnabled) {
+            return;
+        }
+        mLockedDisabled = locked && !enabled;
+    }
+
+    private void onConfigChanged(Configuration newConfig) {
+        if (mTutorialHandler != null) {
+            if (!mIsOneHandedEnabled
+                    || newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
+                return;
+            }
+            mTutorialHandler.onConfigurationChanged(newConfig);
+        }
+    }
+
+    public void dump(@NonNull PrintWriter pw) {
         final String innerPrefix = "  ";
         pw.println(TAG + "states: ");
         pw.print(innerPrefix + "mOffSetFraction=");
         pw.println(mOffSetFraction);
+        pw.print(innerPrefix + "mLockedDisabled=");
+        pw.println(mLockedDisabled);
 
         if (mDisplayAreaOrganizer != null) {
             mDisplayAreaOrganizer.dump(pw);
@@ -549,6 +596,13 @@ public class OneHandedController {
         }
 
         @Override
+        public void setLockedDisabled(boolean locked, boolean enabled) {
+            mMainExecutor.execute(() -> {
+                OneHandedController.this.setLockedDisabled(locked, enabled);
+            });
+        }
+
+        @Override
         public void registerTransitionCallback(OneHandedTransitionCallback callback) {
             mMainExecutor.execute(() -> {
                 OneHandedController.this.registerTransitionCallback(callback);
@@ -563,9 +617,9 @@ public class OneHandedController {
         }
 
         @Override
-        public void dump(@NonNull PrintWriter pw) {
+        public void onConfigChanged(Configuration newConfig) {
             mMainExecutor.execute(() -> {
-                OneHandedController.this.dump(pw);
+                OneHandedController.this.onConfigChanged(newConfig);
             });
         }
     }

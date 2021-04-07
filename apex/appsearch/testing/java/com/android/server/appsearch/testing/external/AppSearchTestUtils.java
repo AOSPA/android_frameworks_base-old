@@ -25,7 +25,6 @@ import android.app.appsearch.GenericDocument;
 import android.app.appsearch.GetByUriRequest;
 import android.app.appsearch.SearchResult;
 import android.app.appsearch.SearchResultsShim;
-import android.app.appsearch.SetSchemaResponse;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -43,15 +42,6 @@ public class AppSearchTestUtils {
         return result;
     }
 
-    // TODO(b/151178558) check setSchemaResponse.xxxtypes for the test need to verify.
-    public static void checkIsSetSchemaResponseSuccess(Future<SetSchemaResponse> future)
-            throws Exception {
-        SetSchemaResponse setSchemaResponse = future.get();
-        assertWithMessage("SetSchemaResponse not successful.")
-                .that(setSchemaResponse.isSuccess())
-                .isTrue();
-    }
-
     public static List<GenericDocument> doGet(
             AppSearchSessionShim session, String namespace, String... uris) throws Exception {
         AppSearchBatchResult<String, GenericDocument> result =
@@ -59,7 +49,7 @@ public class AppSearchTestUtils {
                         session.getByUri(
                                 new GetByUriRequest.Builder()
                                         .setNamespace(namespace)
-                                        .addUri(uris)
+                                        .addUris(uris)
                                         .build()));
         assertThat(result.getSuccesses()).hasSize(uris.length);
         assertThat(result.getFailures()).isEmpty();

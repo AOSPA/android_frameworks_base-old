@@ -74,10 +74,15 @@ public abstract class NotificationViewWrapper implements TransformableView {
                 return new NotificationMessagingTemplateViewWrapper(ctx, v, row);
             } else if ("conversation".equals(v.getTag())) {
                 return new NotificationConversationTemplateViewWrapper(ctx, v, row);
+            } else if ("call".equals(v.getTag())) {
+                return new NotificationCallTemplateViewWrapper(ctx, v, row);
             }
             Class<? extends Notification.Style> style =
                     row.getEntry().getSbn().getNotification().getNotificationStyle();
             if (Notification.DecoratedCustomViewStyle.class.equals(style)) {
+                return new NotificationDecoratedCustomViewWrapper(ctx, v, row);
+            }
+            if (NotificationDecoratedCustomViewWrapper.hasCustomView(v)) {
                 return new NotificationDecoratedCustomViewWrapper(ctx, v, row);
             }
             return new NotificationTemplateViewWrapper(ctx, v, row);

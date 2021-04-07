@@ -89,7 +89,6 @@ import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_PLACING_SURFACES;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_WILL_PLACE_SURFACES;
 import static com.android.server.wm.WindowManagerService.WINDOWS_FREEZING_SCREENS_NONE;
-import static com.android.server.wm.WindowSurfacePlacer.SET_ORIENTATION_CHANGE_COMPLETE;
 import static com.android.server.wm.WindowSurfacePlacer.SET_UPDATE_ROTATION;
 import static com.android.server.wm.WindowSurfacePlacer.SET_WALLPAPER_ACTION_PENDING;
 
@@ -266,9 +265,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      * activities.
      */
     final SparseArray<SleepToken> mSleepTokens = new SparseArray<>();
-
-    /** Set when a power mode launch has started, but not ended. */
-    private boolean mPowerModeLaunchStarted;
 
     // The default minimal size that will be used if the activity doesn't specify its minimal size.
     // It will be calculated when the default display gets added.
@@ -851,7 +847,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mWmService.openSurfaceTransaction();
         try {
             applySurfaceChangesTransaction();
-            mWmService.mSyncEngine.onSurfacePlacement();
         } catch (RuntimeException e) {
             Slog.wtf(TAG, "Unhandled exception in Window Manager", e);
         } finally {
@@ -865,6 +860,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
         // Send any pending task-info changes that were queued-up during a layout deferment
         mWmService.mAtmService.mTaskOrganizerController.dispatchPendingEvents();
+        mWmService.mSyncEngine.onSurfacePlacement();
         mWmService.mAnimator.executeAfterPrepareSurfacesRunnables();
 
         checkAppTransitionReady(surfacePlacer);
@@ -1184,10 +1180,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             mUpdateRotation = true;
             doRequest = true;
         }
-        if ((bulkUpdateParams & SET_ORIENTATION_CHANGE_COMPLETE) == 0) {
-            mOrientationChangeComplete = false;
-        } else {
-            mOrientationChangeComplete = true;
+        if (mOrientationChangeComplete) {
             mLastWindowFreezeSource = mWmService.mAnimator.mLastWindowFreezeSource;
             if (mWmService.mWindowsFreezingScreen != WINDOWS_FREEZING_SCREENS_NONE) {
                 doRequest = true;
@@ -2663,7 +2656,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     void addStartingWindowsForVisibleActivities() {
         forAllActivities((r) -> {
             if (r.mVisibleRequested) {
-                r.showStartingWindow(null /* prev */, false /* newTask */, true /*taskSwitch*/);
+                r.showStartingWindow(true /*taskSwitch*/);
             }
         });
     }
@@ -3327,7 +3320,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
         }
         // End power mode launch when idle.
-        endPowerModeLaunchIfNeeded();
+        mService.endLaunchPowerMode(ActivityTaskManagerService.POWER_MODE_REASON_START_ACTIVITY);
         return true;
     }
 
@@ -3540,17 +3533,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             sendPowerModeLaunch = noResumedActivities[0] || allFocusedProcessesDiffer[0];
         }
 
-        if (sendPowerModeLaunch && mService.mPowerManagerInternal != null) {
-            mService.mPowerManagerInternal.setPowerMode(Mode.LAUNCH, true);
-            mPowerModeLaunchStarted = true;
-        }
-    }
-
-    void endPowerModeLaunchIfNeeded() {
-        // Trigger launch power mode off if activity is launched
-        if (mPowerModeLaunchStarted && mService.mPowerManagerInternal != null) {
-            mService.mPowerManagerInternal.setPowerMode(Mode.LAUNCH, false);
-            mPowerModeLaunchStarted = false;
+        if (sendPowerModeLaunch) {
+            mService.startLaunchPowerMode(
+                    ActivityTaskManagerService.POWER_MODE_REASON_START_ACTIVITY);
         }
     }
 

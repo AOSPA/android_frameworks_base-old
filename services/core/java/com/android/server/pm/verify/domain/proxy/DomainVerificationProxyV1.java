@@ -30,20 +30,21 @@ import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.pm.verify.domain.DomainVerificationState;
 import android.os.Process;
 import android.os.UserHandle;
-import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Pair;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.verify.domain.DomainVerificationCollector;
+import com.android.server.pm.verify.domain.DomainVerificationDebug;
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
 import com.android.server.pm.verify.domain.DomainVerificationMessageCodes;
-import com.android.server.pm.parsing.pkg.AndroidPackage;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
@@ -52,7 +53,7 @@ public class DomainVerificationProxyV1 implements DomainVerificationProxy {
 
     private static final String TAG = "DomainVerificationProxyV1";
 
-    private static final boolean DEBUG_BROADCASTS = false;
+    private static final boolean DEBUG_BROADCASTS = DomainVerificationDebug.DEBUG_BROADCASTS;
 
     @NonNull
     private final Context mContext;
@@ -152,33 +153,73 @@ public class DomainVerificationProxyV1 implements DomainVerificationProxy {
 
                 UUID domainSetId = pair.first;
                 String packageName = pair.second;
-                DomainVerificationInfo set;
+                DomainVerificationInfo info;
                 try {
-                    set = mManager.getDomainVerificationInfo(packageName);
+                    info = mManager.getDomainVerificationInfo(packageName);
                 } catch (PackageManager.NameNotFoundException ignored) {
                     return true;
                 }
 
-                if (!Objects.equals(domainSetId, set.getIdentifier())) {
+                if (info == null) {
                     return true;
                 }
 
-                Set<String> successfulDomains = new ArraySet<>(set.getHostToStateMap().keySet());
-                successfulDomains.removeAll(response.failedDomains);
+                if (!Objects.equals(domainSetId, info.getIdentifier())) {
+                    return true;
+                }
+
+                AndroidPackage pkg = mConnection.getPackage(packageName);
+                if (pkg == null) {
+                    return true;
+                }
+
+                ArraySet<String> failedDomains = new ArraySet<>(response.failedDomains);
+                Map<String, Integer> hostToStateMap = info.getHostToStateMap();
+                Set<String> hostKeySet = hostToStateMap.keySet();
+                ArraySet<String> successfulDomains = new ArraySet<>(hostKeySet);
+                successfulDomains.removeAll(failedDomains);
+
+                // v1 doesn't handle wildcard domains, so check them here for the verifier
+                int size = successfulDomains.size();
+                for (int index = size - 1; index >= 0; index--) {
+                    String domain = successfulDomains.valueAt(index);
+                    if (domain.startsWith("*.")) {
+                        String nonWildcardDomain = domain.substring(2);
+                        if (failedDomains.contains(nonWildcardDomain)) {
+                            failedDomains.add(domain);
+                            successfulDomains.removeAt(index);
+
+                            // It's possible to declare a wildcard without declaring its
+                            // non-wildcard equivalent, so if it wasn't originally declared,
+                            // remove the transformed domain from the failed set. Otherwise the
+                            // manager will not accept the failed set as it contains an undeclared
+                            // domain.
+                            if (!hostKeySet.contains(nonWildcardDomain)) {
+                                failedDomains.remove(nonWildcardDomain);
+                            }
+                        }
+                    }
+                }
 
                 int callingUid = response.callingUid;
-                try {
-                    mManager.setDomainVerificationStatusInternal(callingUid, domainSetId,
-                            successfulDomains, DomainVerificationState.STATE_SUCCESS);
-                } catch (DomainVerificationManager.InvalidDomainSetException
-                        | PackageManager.NameNotFoundException ignored) {
+                if (!successfulDomains.isEmpty()) {
+                    try {
+                        mManager.setDomainVerificationStatusInternal(callingUid, domainSetId,
+                                successfulDomains, DomainVerificationState.STATE_SUCCESS);
+                    } catch (DomainVerificationManager.InvalidDomainSetException
+                            | PackageManager.NameNotFoundException e) {
+                        Slog.e(TAG, "Failure reporting successful domains for " + packageName, e);
+                    }
                 }
-                try {
-                    mManager.setDomainVerificationStatusInternal(callingUid, domainSetId,
-                            new ArraySet<>(response.failedDomains),
-                            DomainVerificationState.STATE_LEGACY_FAILURE);
-                } catch (DomainVerificationManager.InvalidDomainSetException
-                        | PackageManager.NameNotFoundException ignored) {
+
+                if (!failedDomains.isEmpty()) {
+                    try {
+                        mManager.setDomainVerificationStatusInternal(callingUid, domainSetId,
+                                failedDomains, DomainVerificationState.STATE_LEGACY_FAILURE);
+                    } catch (DomainVerificationManager.InvalidDomainSetException
+                            | PackageManager.NameNotFoundException e) {
+                        Slog.e(TAG, "Failure reporting failed domains for " + packageName, e);
+                    }
                 }
 
                 return true;
@@ -230,7 +271,21 @@ public class DomainVerificationProxyV1 implements DomainVerificationProxy {
         // The collector itself handles the v1 vs v2 behavior, which is based on targetSdkVersion,
         // not the version of the verification agent on device.
         ArraySet<String> domains = mCollector.collectAutoVerifyDomains(pkg);
-        return TextUtils.join(" ", domains);
+
+        // v1 doesn't handle wildcard domains, so transform them here to the root
+        StringBuilder builder = new StringBuilder();
+        int size = domains.size();
+        for (int index = 0; index < size; index++) {
+            if (index > 0) {
+                builder.append(" ");
+            }
+            String domain = domains.valueAt(index);
+            if (domain.startsWith("*.")) {
+                domain = domain.substring(2);
+            }
+            builder.append(domain);
+        }
+        return builder.toString();
     }
 
     private static class Response {

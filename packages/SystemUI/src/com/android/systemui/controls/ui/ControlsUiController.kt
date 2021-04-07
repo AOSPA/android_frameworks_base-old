@@ -27,9 +27,10 @@ interface ControlsUiController {
     companion object {
         public const val TAG = "ControlsUiController"
         public const val EXTRA_ANIMATE = "extra_animate"
+        public const val BACK_TO_GLOBAL_ACTIONS = "back_to_global_actions"
     }
 
-    fun show(parent: ViewGroup, dismissGlobalActions: Runnable)
+    fun show(parent: ViewGroup, onDismiss: Runnable, startedFromGlobalActions: Boolean)
     fun hide()
 
     /**

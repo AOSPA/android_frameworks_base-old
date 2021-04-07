@@ -316,6 +316,8 @@ applications that come with the platform
         <permission name="android.permission.MODIFY_DAY_NIGHT_MODE"/>
         <permission name="android.permission.ACCESS_LOWPAN_STATE"/>
         <permission name="android.permission.BACKUP"/>
+        <!-- Needed for test only -->
+        <permission name="android.permission.BATTERY_PREDICTION"/>
         <permission name="android.permission.BATTERY_STATS"/>
         <permission name="android.permission.BIND_APPWIDGET"/>
         <permission name="android.permission.CHANGE_APP_IDLE_STATE"/>
@@ -465,10 +467,19 @@ applications that come with the platform
         <permission name="android.permission.WIFI_UPDATE_COEX_UNSAFE_CHANNELS" />
         <!-- Permission required for CTS test CarrierMessagingServiceWrapperTest -->
         <permission name="android.permission.BIND_CARRIER_SERVICES"/>
+        <!-- Permission required for CTS test - MusicRecognitionManagerTest -->
+        <permission name="android.permission.MANAGE_MUSIC_RECOGNITION" />
         <!-- Permission required for CTS test - CallLogTest -->
         <permission name="com.android.voicemail.permission.READ_VOICEMAIL"/>
         <permission name="android.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS"/>
         <permission name="android.permission.MODIFY_QUIET_MODE" />
+        <!-- Permission required for GTS test - GtsAssistIntentTestCases -->
+        <permission name="android.permission.MANAGE_SOUND_TRIGGER" />
+        <permission name="android.permission.CAPTURE_AUDIO_HOTWORD" />
+        <!-- Permission required for CTS test - CtsRebootReadinessTestCases -->
+        <permission name="android.permission.SIGNAL_REBOOT_READINESS" />
+        <!-- Permission required for CTS test - PeopleManagerTest -->
+        <permission name="android.permission.READ_PEOPLE_DATA" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">
@@ -482,6 +493,8 @@ applications that come with the platform
         <permission name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"/>
         <!-- Permissions required for quick settings tile -->
         <permission name="android.permission.STATUS_BAR"/>
+        <!-- Permissions required to query Betterbug -->
+        <permission name="android.permission.QUERY_ALL_PACKAGES"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.tv">

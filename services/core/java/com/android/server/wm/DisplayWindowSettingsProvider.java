@@ -109,12 +109,13 @@ class DisplayWindowSettingsProvider implements SettingsProvider {
      */
     void setBaseSettingsFilePath(@Nullable String path) {
         AtomicFile settingsFile;
-        if (path != null) {
-            settingsFile = new AtomicFile(new File(path), WM_DISPLAY_COMMIT_TAG);
+        File file = path != null ? new File(path) : null;
+        if (file != null && file.exists()) {
+            settingsFile = new AtomicFile(file, WM_DISPLAY_COMMIT_TAG);
         } else {
+            Slog.w(TAG, "display settings " + path + " does not exist, using vendor defaults");
             settingsFile = getVendorSettingsFile();
         }
-
         setBaseSettingsStorage(new AtomicFileStorage(settingsFile));
     }
 
@@ -405,6 +406,9 @@ class DisplayWindowSettingsProvider implements SettingsProvider {
                     "ignoreOrientationRequest", null /* defaultValue */);
             settingsEntry.mIgnoreDisplayCutout = getBooleanAttribute(parser,
                     "ignoreDisplayCutout", null /* defaultValue */);
+            settingsEntry.mDontMoveToTop = getBooleanAttribute(parser,
+                    "dontMoveToTop", null /* defaultValue */);
+
             fileData.mSettings.put(name, settingsEntry);
         }
         XmlUtils.skipCurrentTag(parser);
@@ -495,6 +499,10 @@ class DisplayWindowSettingsProvider implements SettingsProvider {
                 if (settingsEntry.mIgnoreDisplayCutout != null) {
                     out.attributeBoolean(null, "ignoreDisplayCutout",
                             settingsEntry.mIgnoreDisplayCutout);
+                }
+                if (settingsEntry.mDontMoveToTop != null) {
+                    out.attributeBoolean(null, "dontMoveToTop",
+                            settingsEntry.mDontMoveToTop);
                 }
                 out.endTag(null, "display");
             }

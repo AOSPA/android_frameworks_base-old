@@ -14,6 +14,23 @@
 // limitations under the License.
 //
 
+package {
+    default_applicable_licenses: ["frameworks_base_packages_SystemUI_license"],
+}
+
+// Added automatically by a large-scale-change
+// See: http://go/android-license-faq
+license {
+    name: "frameworks_base_packages_SystemUI_license",
+    visibility: [":__subpackages__"],
+    license_kinds: [
+        "SPDX-license-identifier-Apache-2.0",
+    ],
+    license_text: [
+        "NOTICE",
+    ],
+}
+
 java_library {
     name: "SystemUI-proto",
 
@@ -76,8 +93,8 @@ android_library {
         "androidx.dynamicanimation_dynamicanimation",
         "androidx-constraintlayout_constraintlayout",
         "androidx.exifinterface_exifinterface",
-        "kotlinx-coroutines-android",
-        "kotlinx-coroutines-core",
+        "kotlinx_coroutines_android",
+        "kotlinx_coroutines",
         "iconloader_base",
         "SystemUI-tags",
         "SystemUI-proto",
@@ -209,12 +226,12 @@ android_app {
         "ims-common",
         "extphonelib",
     ],
+    enforce_uses_libs: false,
 
     kotlincflags: ["-Xjvm-default=enable"],
 
     dxflags: ["--multi-dex"],
     required: [
         "privapp_whitelist_com.android.systemui",
-        "checked-wm_shell_protolog.json",
     ],
 }

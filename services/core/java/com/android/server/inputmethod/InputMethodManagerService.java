@@ -178,6 +178,7 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.HandlerCaller;
 import com.android.internal.os.SomeArgs;
 import com.android.internal.os.TransferPipe;
+import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
 import com.android.internal.view.IInlineSuggestionsResponseCallback;
@@ -5227,15 +5228,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @Override
     protected void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        boolean asProto = false;
-        for (int argIndex = 0; argIndex < args.length; argIndex++) {
-            if (args[argIndex].equals(PROTO_ARG)) {
-                asProto = true;
-                break;
-            }
-        }
+        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
 
-        if (asProto) {
+        if (ArrayUtils.contains(args, PROTO_ARG)) {
             final ImeTracing imeTracing = ImeTracing.getInstance();
             if (imeTracing.isEnabled()) {
                 imeTracing.stopTrace(null, false /* writeToFile */);
@@ -5244,14 +5239,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     imeTracing.startTrace(null);
                 });
             }
-        }
-        doDump(fd, pw, args, asProto);
-    }
 
-    private void doDump(FileDescriptor fd, PrintWriter pw, String[] args, boolean useProto) {
-        if (!DumpUtils.checkDumpPermission(mContext, TAG, pw)) return;
-
-        if (useProto) {
             final ProtoOutputStream proto = new ProtoOutputStream(fd);
             dumpDebug(proto, InputMethodManagerServiceTraceProto.INPUT_METHOD_MANAGER_SERVICE);
             proto.flush();

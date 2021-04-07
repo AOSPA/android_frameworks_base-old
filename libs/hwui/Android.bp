@@ -1,3 +1,33 @@
+package {
+    default_applicable_licenses: ["frameworks_base_libs_hwui_license"],
+}
+
+// Added automatically by a large-scale-change that took the approach of
+// 'apply every license found to every target'. While this makes sure we respect
+// every license restriction, it may not be entirely correct.
+//
+// e.g. GPL in an MIT project might only apply to the contrib/ directory.
+//
+// Please consider splitting the single license below into multiple licenses,
+// taking care not to lose any license_kind information, and overriding the
+// default license using the 'licenses: [...]' property on targets as needed.
+//
+// For unused files, consider creating a 'fileGroup' with "//visibility:private"
+// to attach the license to, and including a comment whether the files may be
+// used in the current project.
+// See: http://go/android-license-faq
+license {
+    name: "frameworks_base_libs_hwui_license",
+    visibility: [":__subpackages__"],
+    license_kinds: [
+        "SPDX-license-identifier-Apache-2.0",
+        "SPDX-license-identifier-BSD",
+    ],
+    license_text: [
+        "NOTICE",
+    ],
+}
+
 cc_defaults {
     name: "hwui_defaults",
     defaults: [
@@ -335,7 +365,6 @@ cc_defaults {
         "jni/YuvToJpegEncoder.cpp",
         "jni/fonts/Font.cpp",
         "jni/fonts/FontFamily.cpp",
-        "jni/fonts/NativeFont.cpp",
         "jni/text/LineBreaker.cpp",
         "jni/text/MeasuredText.cpp",
         "jni/text/TextShaper.cpp",
@@ -358,11 +387,12 @@ cc_defaults {
         "libharfbuzz_ng",
         "liblog",
         "libminikin",
-        "libnativehelper",
         "libz",
         "libziparchive",
         "libjpeg",
     ],
+
+    static_libs: ["libnativehelper_lazy"],
 
     target: {
         android: {
@@ -445,6 +475,7 @@ cc_defaults {
         "renderthread/TimeLord.cpp",
         "hwui/AnimatedImageDrawable.cpp",
         "hwui/Bitmap.cpp",
+        "hwui/BlurDrawLooper.cpp",
         "hwui/Canvas.cpp",
         "hwui/ImageDecoder.cpp",
         "hwui/MinikinSkia.cpp",
@@ -481,6 +512,8 @@ cc_defaults {
 
     target: {
         android: {
+            header_libs: ["libandroid_headers_private" ],
+
             srcs: [
                 "hwui/AnimatedImageThread.cpp",
                 "pipeline/skia/ATraceMemoryDump.cpp",
@@ -568,6 +601,7 @@ cc_defaults {
     name: "hwui_test_defaults",
     defaults: ["hwui_defaults"],
     test_suites: ["device-tests"],
+    header_libs: ["libandroid_headers_private"],
     target: {
         android: {
             shared_libs: [
@@ -605,7 +639,6 @@ cc_test {
     shared_libs: [
         "libmemunreachable",
     ],
-
     srcs: [
         "tests/unit/main.cpp",
         "tests/unit/ABitmapTests.cpp",

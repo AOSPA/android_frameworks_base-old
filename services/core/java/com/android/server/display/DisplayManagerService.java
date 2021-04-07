@@ -107,9 +107,9 @@ import android.view.DisplayAddress;
 import android.view.Surface;
 import android.view.SurfaceControl;
 
-import com.android.internal.BrightnessSynchronizer;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.display.BrightnessSynchronizer;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.server.AnimationThread;
@@ -1197,6 +1197,7 @@ public final class DisplayManagerService extends SystemService {
             final LogicalDisplay display = mLogicalDisplayMapper.getLocked(device);
             final int state;
             final int displayId = display.getDisplayIdLocked();
+
             if (display.isEnabled()) {
                 state = mDisplayStates.get(displayId);
             } else {
@@ -1570,12 +1571,6 @@ public final class DisplayManagerService extends SystemService {
             if (displayPowerController != null) {
                 displayPowerController.setAmbientColorTemperatureOverride(cct);
             }
-        }
-    }
-
-    void setFoldOverride(Boolean isFolded) {
-        synchronized (mSyncRoot) {
-            mLogicalDisplayMapper.setFoldOverrideLocked(isFolded);
         }
     }
 
@@ -2599,14 +2594,14 @@ public final class DisplayManagerService extends SystemService {
         }
 
         @Override // Binder call
-        public void setTemporaryBrightness(float brightness) {
+        public void setTemporaryBrightness(int displayId, float brightness) {
             mContext.enforceCallingOrSelfPermission(
                     Manifest.permission.CONTROL_DISPLAY_BRIGHTNESS,
                     "Permission required to set the display's brightness");
             final long token = Binder.clearCallingIdentity();
             try {
                 synchronized (mSyncRoot) {
-                    mDisplayPowerControllers.get(Display.DEFAULT_DISPLAY)
+                    mDisplayPowerControllers.get(displayId)
                             .setTemporaryBrightness(brightness);
                 }
             } finally {

@@ -39,6 +39,7 @@ import android.view.IGraphicsStatsCallback;
 import android.view.NativeVectorDrawableAnimator;
 import android.view.PixelCopy;
 import android.view.Surface;
+import android.view.SurfaceControl;
 import android.view.SurfaceHolder;
 import android.view.animation.AnimationUtils;
 
@@ -46,7 +47,6 @@ import java.io.File;
 import java.io.FileDescriptor;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.Arrays;
 import java.util.Optional;
 import java.util.concurrent.Executor;
 import java.util.stream.Stream;
@@ -312,6 +312,16 @@ public class HardwareRenderer {
             throw new IllegalArgumentException("Surface is invalid. surface.isValid() == false.");
         }
         nSetSurface(mNativeProxy, surface, discardBuffer);
+    }
+
+    /**
+     * Sets the SurfaceControl to be used internally inside render thread
+     * @hide
+     * @param surfaceControl The surface control to pass to render thread in hwui.
+     *        If null, any previous references held in render thread will be discarded.
+    */
+    public void setSurfaceControl(@Nullable SurfaceControl surfaceControl) {
+        nSetSurfaceControl(mNativeProxy, surfaceControl != null ? surfaceControl.mNativeObject : 0);
     }
 
     /**
@@ -1148,24 +1158,14 @@ public class HardwareRenderer {
                             // Default to SRGB if the display doesn't support wide color
                             .orElse(Dataspace.SRGB);
 
-            float maxRefreshRate =
-                    (float) Arrays.stream(display.getSupportedModes())
-                            .mapToDouble(Mode::getRefreshRate)
-                            .max()
-                            .orElseGet(() -> {
-                                Log.i(LOG_TAG, "Failed to find the maximum display refresh rate");
-                                // Assume that the max refresh rate is 60hz if we can't find one.
-                                return 60.0;
-                            });
             // Grab the physical screen dimensions from the active display mode
             // Strictly speaking the screen resolution may not always be constant - it is for
             // sizing the font cache for the underlying rendering thread. Since it's a
             // heuristic we don't need to be always 100% correct.
             Mode activeMode = display.getMode();
             nInitDisplayInfo(activeMode.getPhysicalWidth(), activeMode.getPhysicalHeight(),
-                    display.getRefreshRate(), maxRefreshRate,
-                    wideColorDataspace.mNativeDataspace, display.getAppVsyncOffsetNanos(),
-                    display.getPresentationDeadlineNanos());
+                    display.getRefreshRate(), wideColorDataspace.mNativeDataspace,
+                    display.getAppVsyncOffsetNanos(), display.getPresentationDeadlineNanos());
 
             // Defensively clear out the context
             mContext = null;
@@ -1226,6 +1226,8 @@ public class HardwareRenderer {
     private static native void nSetName(long nativeProxy, String name);
 
     private static native void nSetSurface(long nativeProxy, Surface window, boolean discardBuffer);
+
+    private static native void nSetSurfaceControl(long nativeProxy, long nativeSurfaceControl);
 
     private static native boolean nPause(long nativeProxy);
 
@@ -1324,6 +1326,5 @@ public class HardwareRenderer {
     private static native void nSetDisplayDensityDpi(int densityDpi);
 
     private static native void nInitDisplayInfo(int width, int height, float refreshRate,
-            float maxRefreshRate, int wideColorDataspace, long appVsyncOffsetNanos,
-            long presentationDeadlineNanos);
+            int wideColorDataspace, long appVsyncOffsetNanos, long presentationDeadlineNanos);
 }

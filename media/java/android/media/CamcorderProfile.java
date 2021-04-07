@@ -119,9 +119,14 @@ public class CamcorderProfile
      */
     public static final int QUALITY_2K = 12;
 
+    /**
+     * Quality level corresponding to 8K UHD (7680 x 4320) resolution
+     */
+    public static final int QUALITY_8KUHD = 13;
+
     // Start and end of quality list
     private static final int QUALITY_LIST_START = QUALITY_LOW;
-    private static final int QUALITY_LIST_END = QUALITY_2K;
+    private static final int QUALITY_LIST_END = QUALITY_8KUHD;
 
     /**
      * Time lapse quality level corresponding to the lowest available resolution.
@@ -188,10 +193,14 @@ public class CamcorderProfile
      */
     public static final int QUALITY_TIME_LAPSE_2K = 1012;
 
+    /**
+     * Time lapse quality level corresponding to the 8K UHD (7680 x 4320) resolution.
+     */
+    public static final int QUALITY_TIME_LAPSE_8KUHD = 1013;
 
     // Start and end of timelapse quality list
     private static final int QUALITY_TIME_LAPSE_LIST_START = QUALITY_TIME_LAPSE_LOW;
-    private static final int QUALITY_TIME_LAPSE_LIST_END = QUALITY_TIME_LAPSE_2K;
+    private static final int QUALITY_TIME_LAPSE_LIST_END = QUALITY_TIME_LAPSE_8KUHD;
 
     /**
      * High speed ( >= 100fps) quality level corresponding to the lowest available resolution.
@@ -265,23 +274,6 @@ public class CamcorderProfile
     // Start and end of high speed quality list
     private static final int QUALITY_HIGH_SPEED_LIST_START = QUALITY_HIGH_SPEED_LOW;
     private static final int QUALITY_HIGH_SPEED_LIST_END = QUALITY_HIGH_SPEED_4KDCI;
-
-
-    /**
-     * Quality level corresponding to the 8kuhd (7680 x 4320) resolution.
-     * @hide
-     */
-    public static final int QUALITY_8KUHD = 3001;
-
-    /**
-     * Time lapse quality level corresponding to the 8kuhd (7680 x 4320) resolution.
-     * @hide
-     */
-    public static final int QUALITY_TIME_LAPSE_8KUHD = 3002;
-
-    // Start and end of vendor quality list
-    private static final int QUALITY_VENDOR_LIST_START = QUALITY_8KUHD;
-    private static final int QUALITY_VENDOR_LIST_END = QUALITY_TIME_LAPSE_8KUHD;
 
     /**
      * Default recording duration in seconds before the session is terminated.
@@ -472,9 +464,7 @@ public class CamcorderProfile
               (quality >= QUALITY_TIME_LAPSE_LIST_START &&
                quality <= QUALITY_TIME_LAPSE_LIST_END) ||
                (quality >= QUALITY_HIGH_SPEED_LIST_START &&
-               quality <= QUALITY_HIGH_SPEED_LIST_END) ||
-               (quality >= QUALITY_VENDOR_LIST_START &&
-               quality <= QUALITY_VENDOR_LIST_END))) {
+               quality <= QUALITY_HIGH_SPEED_LIST_END))) {
             String errMessage = "Unsupported quality level: " + quality;
             throw new IllegalArgumentException(errMessage);
         }

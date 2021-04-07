@@ -35,7 +35,6 @@ import static com.android.systemui.charging.WirelessChargingLayout.UNKNOWN_BATTE
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_ASLEEP;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_AWAKE;
 import static com.android.systemui.keyguard.WakefulnessLifecycle.WAKEFULNESS_WAKING;
-import static com.android.systemui.statusbar.LightRevealScrimKt.getEnableLightReveal;
 import static com.android.systemui.statusbar.NotificationLockscreenUserManager.PERMISSION_SELF;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT;
 import static com.android.systemui.statusbar.phone.BarTransitions.MODE_LIGHTS_OUT_TRANSPARENT;
@@ -90,7 +89,6 @@ import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
-import android.os.UserManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
@@ -181,6 +179,7 @@ import com.android.systemui.statusbar.AutoHideUiElement;
 import com.android.systemui.statusbar.BackDropView;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CrossFadeHelper;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.GestureRecorder;
 import com.android.systemui.statusbar.KeyboardShortcuts;
 import com.android.systemui.statusbar.KeyguardIndicationController;
@@ -226,7 +225,6 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.statusbar.policy.ExtensionController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.statusbar.policy.KeyguardUserSwitcher;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
@@ -442,6 +440,7 @@ public class StatusBar extends SystemUI implements DemoMode,
     private final KeyguardViewMediator mKeyguardViewMediator;
     protected final NotificationInterruptStateProvider mNotificationInterruptStateProvider;
     private final BrightnessSlider.Factory mBrightnessSliderFactory;
+    private final FeatureFlags mFeatureFlags;
 
     private final List<ExpansionChangedListener> mExpansionChangedListeners;
 
@@ -622,7 +621,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         }
     };
 
-    private KeyguardUserSwitcher mKeyguardUserSwitcher;
     private final UserSwitcherController mUserSwitcherController;
     private final NetworkController mNetworkController;
     private final LifecycleRegistry mLifecycle = new LifecycleRegistry(this);
@@ -765,7 +763,8 @@ public class StatusBar extends SystemUI implements DemoMode,
             Lazy<NotificationShadeDepthController> notificationShadeDepthControllerLazy,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
             NotificationIconAreaController notificationIconAreaController,
-            BrightnessSlider.Factory brightnessSliderFactory) {
+            BrightnessSlider.Factory brightnessSliderFactory,
+            FeatureFlags featureFlags) {
         super(context);
         mNotificationsController = notificationsController;
         mLightBarController = lightBarController;
@@ -843,6 +842,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mDemoModeController = demoModeController;
         mNotificationIconAreaController = notificationIconAreaController;
         mBrightnessSliderFactory = brightnessSliderFactory;
+        mFeatureFlags = featureFlags;
 
         mExpansionChangedListeners = new ArrayList<>();
 
@@ -1143,8 +1143,6 @@ public class StatusBar extends SystemUI implements DemoMode,
             mLockscreenWallpaper = mLockscreenWallpaperLazy.get();
         }
 
-        mKeyguardIndicationController.setIndicationArea(
-                mNotificationShadeWindowView.findViewById(R.id.keyguard_indication_area));
         mNotificationPanelViewController.setKeyguardIndicationController(
                 mKeyguardIndicationController);
 
@@ -1186,9 +1184,11 @@ public class StatusBar extends SystemUI implements DemoMode,
 
         mLightRevealScrim = mNotificationShadeWindowView.findViewById(R.id.light_reveal_scrim);
 
-        if (getEnableLightReveal()) {
+        if (mFeatureFlags.useNewLockscreenAnimations() && mDozeParameters.getAlwaysOn()) {
             mLightRevealScrim.setVisibility(View.VISIBLE);
             mLightRevealScrim.setRevealEffect(LiftReveal.INSTANCE);
+        } else {
+            mLightRevealScrim.setVisibility(View.GONE);
         }
 
         mNotificationPanelViewController.initDependencies(
@@ -1209,9 +1209,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         });
 
         mNotificationPanelViewController.setUserSetupComplete(mUserSetup);
-        if (UserManager.get(mContext).isUserSwitcherEnabled()) {
-            createUserSwitcher();
-        }
 
         // Set up the quick settings tile panel
         final View container = mNotificationShadeWindowView.findViewById(R.id.qs_frame);
@@ -1438,9 +1435,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         // TODO: Bring these out of StatusBar.
         mUserInfoControllerImpl.onDensityOrFontScaleChanged();
         mUserSwitcherController.onDensityOrFontScaleChanged();
-        if (mKeyguardUserSwitcher != null) {
-            mKeyguardUserSwitcher.onDensityOrFontScaleChanged();
-        }
         mNotificationIconAreaController.onDensityOrFontScaleChanged(mContext);
         mHeadsUpManager.onDensityOrFontScaleChanged();
     }
@@ -1472,13 +1466,6 @@ public class StatusBar extends SystemUI implements DemoMode,
         if (mBrightnessMirrorController != null) {
             mBrightnessMirrorController.onUiModeChanged();
         }
-    }
-
-    protected void createUserSwitcher() {
-        mKeyguardUserSwitcher = new KeyguardUserSwitcher(mContext,
-                mNotificationShadeWindowView.findViewById(R.id.keyguard_user_switcher),
-                mNotificationShadeWindowView.findViewById(R.id.keyguard_header),
-                mNotificationPanelViewController);
     }
 
     private void inflateStatusBarWindow() {
@@ -3263,7 +3250,7 @@ public class StatusBar extends SystemUI implements DemoMode,
         mHandler.removeMessages(MSG_LAUNCH_TRANSITION_TIMEOUT);
         if (mUserSwitcherController != null && mUserSwitcherController.useFullscreenUserSwitcher()) {
             mStatusBarStateController.setState(StatusBarState.FULLSCREEN_USER_SWITCHER);
-        } else if (!mPulseExpansionHandler.isWakingToShadeLocked()){
+        } else if (!mPulseExpansionHandler.isWakingToShadeLocked()) {
             mStatusBarStateController.setState(StatusBarState.KEYGUARD);
         }
         updatePanelExpansionForKeyguard();
@@ -3562,13 +3549,13 @@ public class StatusBar extends SystemUI implements DemoMode,
             }
             return true;
         }
+        if (mNotificationPanelViewController.closeUserSwitcherIfOpen()) {
+            return true;
+        }
         if (mState != StatusBarState.KEYGUARD && mState != StatusBarState.SHADE_LOCKED) {
             if (mNotificationPanelViewController.canPanelBeCollapsed()) {
                 mShadeController.animateCollapsePanels();
             }
-            return true;
-        }
-        if (mKeyguardUserSwitcher != null && mKeyguardUserSwitcher.hideIfNotSimple(true)) {
             return true;
         }
         return false;
@@ -3619,27 +3606,8 @@ public class StatusBar extends SystemUI implements DemoMode,
         updateTheme();
         mNavigationBarController.touchAutoDim(mDisplayId);
         Trace.beginSection("StatusBar#updateKeyguardState");
-        if (mState == StatusBarState.KEYGUARD) {
-            mKeyguardIndicationController.setVisible(true);
-            if (mKeyguardUserSwitcher != null) {
-                mKeyguardUserSwitcher.setKeyguard(true,
-                        mStatusBarStateController.fromShadeLocked());
-            }
-            if (mStatusBarView != null) mStatusBarView.removePendingHideExpandedRunnables();
-            if (mAmbientIndicationContainer != null) {
-                mAmbientIndicationContainer.setVisibility(View.VISIBLE);
-            }
-        } else {
-            mKeyguardIndicationController.setVisible(false);
-            if (mKeyguardUserSwitcher != null) {
-                mKeyguardUserSwitcher.setKeyguard(false,
-                        mStatusBarStateController.goingToFullShade() ||
-                                mState == StatusBarState.SHADE_LOCKED ||
-                                mStatusBarStateController.fromShadeLocked());
-            }
-            if (mAmbientIndicationContainer != null) {
-                mAmbientIndicationContainer.setVisibility(View.INVISIBLE);
-            }
+        if (mState == StatusBarState.KEYGUARD && mStatusBarView != null) {
+            mStatusBarView.removePendingHideExpandedRunnables();
         }
         updateDozingState();
         checkBarModes();
@@ -3651,7 +3619,7 @@ public class StatusBar extends SystemUI implements DemoMode,
 
     @Override
     public void onDozeAmountChanged(float linear, float eased) {
-        if (getEnableLightReveal()) {
+        if (mFeatureFlags.useNewLockscreenAnimations()) {
             mLightRevealScrim.setRevealAmount(1f - linear);
         }
     }

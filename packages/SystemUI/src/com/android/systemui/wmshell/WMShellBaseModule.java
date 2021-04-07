@@ -20,7 +20,6 @@ import static android.os.Process.THREAD_PRIORITY_DISPLAY;
 
 import android.animation.AnimationHandler;
 import android.app.ActivityTaskManager;
-import android.app.IActivityManager;
 import android.content.Context;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
@@ -32,6 +31,7 @@ import android.view.WindowManager;
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.systemui.dagger.WMComponent;
 import com.android.systemui.dagger.WMSingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.wm.shell.FullscreenTaskListener;
@@ -45,6 +45,7 @@ import com.android.wm.shell.TaskViewFactory;
 import com.android.wm.shell.TaskViewFactoryController;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.apppairs.AppPairs;
+import com.android.wm.shell.apppairs.AppPairsController;
 import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.common.DisplayController;
@@ -63,6 +64,7 @@ import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
+import com.android.wm.shell.legacysplitscreen.LegacySplitScreenController;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedController;
 import com.android.wm.shell.pip.Pip;
@@ -71,10 +73,10 @@ import com.android.wm.shell.pip.PipSurfaceTransactionHelper;
 import com.android.wm.shell.pip.PipUiEventLogger;
 import com.android.wm.shell.pip.phone.PipAppOpsListener;
 import com.android.wm.shell.pip.phone.PipTouchHandler;
-import com.android.wm.shell.sizecompatui.SizeCompatUI;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.splitscreen.SplitScreenController;
+import com.android.wm.shell.transition.RemoteTransitions;
 import com.android.wm.shell.transition.Transitions;
 
 import java.util.Optional;
@@ -84,8 +86,13 @@ import dagger.Module;
 import dagger.Provides;
 
 /**
- * Provides basic dependencies from {@link com.android.wm.shell}, the dependencies declared here
- * should be shared among different branches of SystemUI.
+ * Provides basic dependencies from {@link com.android.wm.shell}, these dependencies are only
+ * accessible from components within the WM subcomponent (can be explicitly exposed to the
+ * SysUIComponent, see {@link WMComponent}).
+ *
+ * This module only defines *common* dependencies across various SystemUI implementations,
+ * dependencies that are device/form factor SystemUI implementation specific should go into their
+ * respective modules (ie. {@link WMShellModule} for handheld, {@link TvWMShellModule} for tv, etc.)
  */
 @Module
 public abstract class WMShellBaseModule {
@@ -173,14 +180,298 @@ public abstract class WMShellBaseModule {
         }
     }
 
+    //
+    // Internal common - Components used internally by multiple shell features
+    //
+
+    @WMSingleton
+    @Provides
+    static DisplayController provideDisplayController(Context context,
+            IWindowManager wmService, @ShellMainThread ShellExecutor mainExecutor) {
+        return new DisplayController(context, wmService, mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static DragAndDropController provideDragAndDropController(Context context,
+            DisplayController displayController) {
+        return new DragAndDropController(context, displayController);
+    }
+
+    @WMSingleton
+    @Provides
+    static ShellTaskOrganizer provideShellTaskOrganizer(@ShellMainThread ShellExecutor mainExecutor,
+            Context context, SizeCompatUIController sizeCompatUI) {
+        return new ShellTaskOrganizer(mainExecutor, context, sizeCompatUI);
+    }
+
+    @WMSingleton
+    @Provides
+    static SizeCompatUIController provideSizeCompatUIController(Context context,
+            DisplayController displayController, DisplayImeController imeController,
+            SyncTransactionQueue syncQueue) {
+        return new SizeCompatUIController(context, displayController, imeController, syncQueue);
+    }
+
+    @WMSingleton
+    @Provides
+    static SyncTransactionQueue provideSyncTransactionQueue(TransactionPool pool,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new SyncTransactionQueue(pool, mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static SystemWindows provideSystemWindows(DisplayController displayController,
+            IWindowManager wmService) {
+        return new SystemWindows(displayController, wmService);
+    }
+
+    // We currently dedupe multiple messages, so we use the shell main handler directly
+    @WMSingleton
+    @Provides
+    static TaskStackListenerImpl providerTaskStackListenerImpl(
+            @ShellMainThread Handler mainHandler) {
+        return new TaskStackListenerImpl(mainHandler);
+    }
+
+    @WMSingleton
+    @Provides
+    static TransactionPool provideTransactionPool() {
+        return new TransactionPool();
+    }
+
+    @WMSingleton
+    @Provides
+    static WindowManagerShellWrapper provideWindowManagerShellWrapper(
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new WindowManagerShellWrapper(mainExecutor);
+    }
+
+    //
+    // Bubbles
+    //
+
+    @WMSingleton
+    @Provides
+    static Optional<Bubbles> provideBubbles(Optional<BubbleController> bubbleController) {
+        return bubbleController.map((controller) -> controller.asBubbles());
+    }
+
+    // Note: Handler needed for LauncherApps.register
+    @WMSingleton
+    @Provides
+    static Optional<BubbleController> provideBubbleController(Context context,
+            FloatingContentCoordinator floatingContentCoordinator,
+            IStatusBarService statusBarService,
+            WindowManager windowManager,
+            WindowManagerShellWrapper windowManagerShellWrapper,
+            LauncherApps launcherApps,
+            UiEventLogger uiEventLogger,
+            ShellTaskOrganizer organizer,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler) {
+        return Optional.of(BubbleController.create(context, null /* synchronizer */,
+                floatingContentCoordinator, statusBarService, windowManager,
+                windowManagerShellWrapper, launcherApps, uiEventLogger, organizer,
+                mainExecutor, mainHandler));
+    }
+
+    //
+    // Fullscreen
+    //
+
+    @WMSingleton
+    @Provides
+    static FullscreenTaskListener provideFullscreenTaskListener(SyncTransactionQueue syncQueue) {
+        return new FullscreenTaskListener(syncQueue);
+    }
+
+    //
+    // Hide display cutout
+    //
+
+    @WMSingleton
+    @Provides
+    static Optional<HideDisplayCutout> provideHideDisplayCutout(
+            Optional<HideDisplayCutoutController> hideDisplayCutoutController) {
+        return hideDisplayCutoutController.map((controller) -> controller.asHideDisplayCutout());
+    }
+
+    @WMSingleton
+    @Provides
+    static Optional<HideDisplayCutoutController> provideHideDisplayCutoutController(Context context,
+            DisplayController displayController, @ShellMainThread ShellExecutor mainExecutor) {
+        return Optional.ofNullable(
+                HideDisplayCutoutController.create(context, displayController, mainExecutor));
+    }
+
+    //
+    // One handed mode (optional feature)
+    //
+
+    @WMSingleton
+    @Provides
+    static Optional<OneHanded> provideOneHanded(Optional<OneHandedController> oneHandedController) {
+        return oneHandedController.map((controller) -> controller.asOneHanded());
+    }
+
+    // Needs the shell main handler for ContentObserver callbacks
+    @WMSingleton
+    @Provides
+    static Optional<OneHandedController> provideOneHandedController(Context context,
+            DisplayController displayController, TaskStackListenerImpl taskStackListener,
+            UiEventLogger uiEventLogger,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellMainThread Handler mainHandler) {
+        return Optional.ofNullable(OneHandedController.create(context, displayController,
+                taskStackListener, uiEventLogger, mainExecutor, mainHandler));
+    }
+
+    //
+    // Pip (optional feature)
+    //
+
+    @WMSingleton
+    @Provides
+    static FloatingContentCoordinator provideFloatingContentCoordinator() {
+        return new FloatingContentCoordinator();
+    }
+
+    @WMSingleton
+    @Provides
+    static PipAppOpsListener providePipAppOpsListener(Context context,
+            PipTouchHandler pipTouchHandler,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new PipAppOpsListener(context, pipTouchHandler.getMotionHelper(), mainExecutor);
+    }
+
+    // Needs handler for registering broadcast receivers
+    @WMSingleton
+    @Provides
+    static PipMediaController providePipMediaController(Context context,
+            @ShellMainThread Handler mainHandler) {
+        return new PipMediaController(context, mainHandler);
+    }
+
+    @WMSingleton
+    @Provides
+    static PipSurfaceTransactionHelper providePipSurfaceTransactionHelper(Context context) {
+        return new PipSurfaceTransactionHelper(context);
+    }
+
+    @WMSingleton
+    @Provides
+    static PipUiEventLogger providePipUiEventLogger(UiEventLogger uiEventLogger,
+            PackageManager packageManager) {
+        return new PipUiEventLogger(uiEventLogger, packageManager);
+    }
+
+    //
+    // Shell transitions
+    //
+
+    @WMSingleton
+    @Provides
+    static RemoteTransitions provideRemoteTransitions(Transitions transitions) {
+        return Transitions.asRemoteTransitions(transitions);
+    }
+
+    @WMSingleton
+    @Provides
+    static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
+            @ShellMainThread ShellExecutor mainExecutor,
+            @ShellAnimationThread ShellExecutor animExecutor) {
+        return new Transitions(organizer, pool, mainExecutor, animExecutor);
+    }
+
+    //
+    // Split/multiwindow
+    //
+
+    @WMSingleton
+    @Provides
+    static RootTaskDisplayAreaOrganizer provideRootTaskDisplayAreaOrganizer(
+            @ShellMainThread ShellExecutor mainExecutor, Context context) {
+        return new RootTaskDisplayAreaOrganizer(mainExecutor, context);
+    }
+
+    @WMSingleton
+    @Provides
+    static Optional<SplitScreen> provideSplitScreen(
+            Optional<SplitScreenController> splitScreenController) {
+        return splitScreenController.map((controller) -> controller.asSplitScreen());
+    }
+
+    @WMSingleton
+    @Provides
+    static Optional<SplitScreenController> provideSplitScreenController(
+            ShellTaskOrganizer shellTaskOrganizer,
+            SyncTransactionQueue syncQueue, Context context,
+            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        if (ActivityTaskManager.supportsSplitScreenMultiWindow(context)) {
+            return Optional.of(new SplitScreenController(shellTaskOrganizer, syncQueue, context,
+                    rootTaskDisplayAreaOrganizer, mainExecutor));
+        } else {
+            return Optional.empty();
+        }
+    }
+
+    // Legacy split (optional feature)
+
+    @WMSingleton
+    @Provides
+    static Optional<LegacySplitScreen> provideLegacySplitScreen(
+            Optional<LegacySplitScreenController> splitScreenController) {
+        return splitScreenController.map((controller) -> controller.asLegacySplitScreen());
+    }
+
+    @BindsOptionalOf
+    abstract LegacySplitScreenController optionalLegacySplitScreenController();
+
+    // App Pairs (optional feature)
+
+    @WMSingleton
+    @Provides
+    static Optional<AppPairs> provideAppPairs(Optional<AppPairsController> appPairsController) {
+        return appPairsController.map((controller) -> controller.asAppPairs());
+    }
+
+    @BindsOptionalOf
+    abstract AppPairsController optionalAppPairs();
+
+    //
+    // Task view factory
+    //
+
+    @WMSingleton
+    @Provides
+    static Optional<TaskViewFactory> provideTaskViewFactory(
+            TaskViewFactoryController taskViewFactoryController) {
+        return Optional.of(taskViewFactoryController.asTaskViewFactory());
+    }
+
+    @WMSingleton
+    @Provides
+    static TaskViewFactoryController provideTaskViewFactoryController(
+            ShellTaskOrganizer shellTaskOrganizer,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new TaskViewFactoryController(shellTaskOrganizer, mainExecutor);
+    }
+
+    //
+    // Misc
+    //
+
     @WMSingleton
     @Provides
     static ShellInit provideShellInit(DisplayImeController displayImeController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
-            Optional<LegacySplitScreen> legacySplitScreenOptional,
-            Optional<SplitScreen> splitScreenOptional,
-            Optional<AppPairs> appPairsOptional,
+            Optional<LegacySplitScreenController> legacySplitScreenOptional,
+            Optional<SplitScreenController> splitScreenOptional,
+            Optional<AppPairsController> appPairsOptional,
             FullscreenTaskListener fullscreenTaskListener,
             Transitions transitions,
             @ShellMainThread ShellExecutor mainExecutor) {
@@ -203,202 +494,15 @@ public abstract class WMShellBaseModule {
     @Provides
     static Optional<ShellCommandHandler> provideShellCommandHandler(
             ShellTaskOrganizer shellTaskOrganizer,
-            Optional<LegacySplitScreen> legacySplitScreenOptional,
-            Optional<SplitScreen> splitScreenOptional,
+            Optional<LegacySplitScreenController> legacySplitScreenOptional,
+            Optional<SplitScreenController> splitScreenOptional,
             Optional<Pip> pipOptional,
-            Optional<OneHanded> oneHandedOptional,
-            Optional<HideDisplayCutout> hideDisplayCutout,
-            Optional<AppPairs> appPairsOptional,
+            Optional<OneHandedController> oneHandedOptional,
+            Optional<HideDisplayCutoutController> hideDisplayCutout,
+            Optional<AppPairsController> appPairsOptional,
             @ShellMainThread ShellExecutor mainExecutor) {
         return Optional.of(ShellCommandHandlerImpl.create(shellTaskOrganizer,
                 legacySplitScreenOptional, splitScreenOptional, pipOptional, oneHandedOptional,
                 hideDisplayCutout, appPairsOptional, mainExecutor));
-    }
-
-    @WMSingleton
-    @Provides
-    static TransactionPool provideTransactionPool() {
-        return new TransactionPool();
-    }
-
-    @WMSingleton
-    @Provides
-    static DisplayController provideDisplayController(Context context,
-            IWindowManager wmService, @ShellMainThread ShellExecutor mainExecutor) {
-        return new DisplayController(context, wmService, mainExecutor);
-    }
-
-    @WMSingleton
-    @Provides
-    static DragAndDropController provideDragAndDropController(Context context,
-            DisplayController displayController) {
-        return new DragAndDropController(context, displayController);
-    }
-
-    @WMSingleton
-    @Provides
-    static FloatingContentCoordinator provideFloatingContentCoordinator() {
-        return new FloatingContentCoordinator();
-    }
-
-    @WMSingleton
-    @Provides
-    static WindowManagerShellWrapper provideWindowManagerShellWrapper(
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return new WindowManagerShellWrapper(mainExecutor);
-    }
-
-    @WMSingleton
-    @Provides
-    static PipAppOpsListener providePipAppOpsListener(Context context,
-            IActivityManager activityManager,
-            PipTouchHandler pipTouchHandler,
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return new PipAppOpsListener(context, pipTouchHandler.getMotionHelper(), mainExecutor);
-    }
-
-    // Needs handler for registering broadcast receivers
-    @WMSingleton
-    @Provides
-    static PipMediaController providePipMediaController(Context context,
-            @ShellMainThread Handler mainHandler) {
-        return new PipMediaController(context, mainHandler);
-    }
-
-    @WMSingleton
-    @Provides
-    static PipUiEventLogger providePipUiEventLogger(UiEventLogger uiEventLogger,
-            PackageManager packageManager) {
-        return new PipUiEventLogger(uiEventLogger, packageManager);
-    }
-
-    @WMSingleton
-    @Provides
-    static PipSurfaceTransactionHelper providePipSurfaceTransactionHelper(Context context) {
-        return new PipSurfaceTransactionHelper(context);
-    }
-
-    @WMSingleton
-    @Provides
-    static SystemWindows provideSystemWindows(DisplayController displayController,
-            IWindowManager wmService) {
-        return new SystemWindows(displayController, wmService);
-    }
-
-    @WMSingleton
-    @Provides
-    static SyncTransactionQueue provideSyncTransactionQueue(TransactionPool pool,
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return new SyncTransactionQueue(pool, mainExecutor);
-    }
-
-    @WMSingleton
-    @Provides
-    static ShellTaskOrganizer provideShellTaskOrganizer(@ShellMainThread ShellExecutor mainExecutor,
-            Context context, SizeCompatUI sizeCompatUI) {
-        return new ShellTaskOrganizer(mainExecutor, context, sizeCompatUI);
-    }
-
-    @WMSingleton
-    @Provides
-    static RootTaskDisplayAreaOrganizer provideRootTaskDisplayAreaOrganizer(
-            @ShellMainThread ShellExecutor mainExecutor, Context context) {
-        return new RootTaskDisplayAreaOrganizer(mainExecutor, context);
-    }
-
-    // We currently dedupe multiple messages, so we use the shell main handler directly
-    @WMSingleton
-    @Provides
-    static TaskStackListenerImpl providerTaskStackListenerImpl(
-            @ShellMainThread Handler mainHandler) {
-        return new TaskStackListenerImpl(mainHandler);
-    }
-
-    @BindsOptionalOf
-    abstract LegacySplitScreen optionalLegacySplitScreen();
-
-    @WMSingleton
-    @Provides
-    static Optional<SplitScreen> provideSplitScreen(ShellTaskOrganizer shellTaskOrganizer,
-            SyncTransactionQueue syncQueue, Context context,
-            RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer) {
-        if (ActivityTaskManager.supportsSplitScreenMultiWindow(context)) {
-            return Optional.of(new SplitScreenController(shellTaskOrganizer, syncQueue, context,
-                    rootTaskDisplayAreaOrganizer));
-        } else {
-            return Optional.empty();
-        }
-    }
-
-    @BindsOptionalOf
-    abstract AppPairs optionalAppPairs();
-
-    // Note: Handler needed for LauncherApps.register
-    @WMSingleton
-    @Provides
-    static Optional<Bubbles> provideBubbles(Context context,
-            FloatingContentCoordinator floatingContentCoordinator,
-            IStatusBarService statusBarService,
-            WindowManager windowManager,
-            WindowManagerShellWrapper windowManagerShellWrapper,
-            LauncherApps launcherApps,
-            UiEventLogger uiEventLogger,
-            ShellTaskOrganizer organizer,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler) {
-        return Optional.of(BubbleController.create(context, null /* synchronizer */,
-                floatingContentCoordinator, statusBarService, windowManager,
-                windowManagerShellWrapper, launcherApps, uiEventLogger, organizer,
-                mainExecutor, mainHandler));
-    }
-
-    // Needs the shell main handler for ContentObserver callbacks
-    @WMSingleton
-    @Provides
-    static Optional<OneHanded> provideOneHandedController(Context context,
-            DisplayController displayController, TaskStackListenerImpl taskStackListener,
-            UiEventLogger uiEventLogger,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler) {
-        return Optional.ofNullable(OneHandedController.create(context, displayController,
-                taskStackListener, uiEventLogger, mainExecutor, mainHandler));
-    }
-
-    @WMSingleton
-    @Provides
-    static Optional<HideDisplayCutout> provideHideDisplayCutoutController(Context context,
-            DisplayController displayController, @ShellMainThread ShellExecutor mainExecutor) {
-        return Optional.ofNullable(
-                HideDisplayCutoutController.create(context, displayController, mainExecutor));
-    }
-
-    @WMSingleton
-    @Provides
-    static Optional<TaskViewFactory> provideTaskViewFactory(ShellTaskOrganizer shellTaskOrganizer,
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return Optional.of(new TaskViewFactoryController(shellTaskOrganizer, mainExecutor)
-                .getTaskViewFactory());
-    }
-
-    @WMSingleton
-    @Provides
-    static FullscreenTaskListener provideFullscreenTaskListener(SyncTransactionQueue syncQueue) {
-        return new FullscreenTaskListener(syncQueue);
-    }
-
-    @WMSingleton
-    @Provides
-    static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
-            @ShellMainThread ShellExecutor mainExecutor,
-            @ShellAnimationThread ShellExecutor animExecutor) {
-        return new Transitions(organizer, pool, mainExecutor, animExecutor);
-    }
-
-    @WMSingleton
-    @Provides
-    static SizeCompatUI provideSizeCompatUI(Context context, DisplayController displayController,
-            DisplayImeController imeController, @ShellMainThread ShellExecutor mainExecutor) {
-        return SizeCompatUIController.create(context, displayController, imeController,
-                mainExecutor);
     }
 }

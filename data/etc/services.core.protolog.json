@@ -259,6 +259,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1834214907": {
+      "message": "createNonAppWindowAnimations()",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+    },
     "-1824578273": {
       "message": "Reporting new frame to %s: %s",
       "level": "VERBOSE",
@@ -811,6 +817,12 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
     },
+    "-1153814764": {
+      "message": "onAnimationCancelled",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/NonAppWindowAnimationAdapter.java"
+    },
     "-1144293044": {
       "message": "SURFACE SET FREEZE LAYER: %s",
       "level": "INFO",
@@ -894,12 +906,6 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowSurfaceController.java"
-    },
-    "-1088782910": {
-      "message": "Translucent=%s Floating=%s ShowWallpaper=%s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STARTING_WINDOW",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "-1076978367": {
       "message": "thawRotation: mRotation=%d",
@@ -1087,12 +1093,6 @@
       "group": "WM_DEBUG_IME",
       "at": "com\/android\/server\/wm\/ImeInsetsSourceProvider.java"
     },
-    "-856025122": {
-      "message": "SURFACE transparentRegionHint=%s: %s",
-      "level": "INFO",
-      "group": "WM_SHOW_TRANSACTIONS",
-      "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
     "-855366859": {
       "message": "        merging children in from %s: %s",
       "level": "VERBOSE",
@@ -1261,12 +1261,6 @@
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/ActivityTaskSupervisor.java"
     },
-    "-639305784": {
-      "message": "Could not report config changes to the window token client.",
-      "level": "WARN",
-      "group": "WM_ERROR",
-      "at": "com\/android\/server\/wm\/WindowToken.java"
-    },
     "-639217716": {
       "message": "setFocusedApp %s displayId=%d Callers=%s",
       "level": "INFO",
@@ -1416,12 +1410,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_KEEP_SCREEN_ON",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
-    },
-    "-477481651": {
-      "message": "SURFACE DESTROY PENDING: %s. %s",
-      "level": "INFO",
-      "group": "WM_SHOW_SURFACE_ALLOC",
-      "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
     },
     "-463348344": {
       "message": "Removing and adding activity %s to root task at top callers=%s",
@@ -1693,6 +1681,12 @@
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/Task.java"
     },
+    "-124316973": {
+      "message": "Translucent=%s Floating=%s ShowWallpaper=%s Disable=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STARTING_WINDOW",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "-118786523": {
       "message": "Resume failed; resetting state to %s: %s",
       "level": "VERBOSE",
@@ -1902,12 +1896,6 @@
       "level": "INFO",
       "group": "WM_DEBUG_FOCUS_LIGHT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "123161180": {
-      "message": "SEVER CHILDREN",
-      "level": "INFO",
-      "group": "WM_SHOW_TRANSACTIONS",
-      "at": "com\/android\/server\/wm\/WindowSurfaceController.java"
     },
     "140319294": {
       "message": "IME target changed within ActivityRecord",
@@ -2569,12 +2557,6 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
-    "838570988": {
-      "message": "Could not report token removal to the window token client.",
-      "level": "WARN",
-      "group": "WM_ERROR",
-      "at": "com\/android\/server\/wm\/WindowToken.java"
-    },
     "872933199": {
       "message": "Changing focus from %s to %s displayId=%d Callers=%s",
       "level": "DEBUG",
@@ -2850,12 +2832,6 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "1217926207": {
-      "message": "Activity not running, resuming next.",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "1219600119": {
       "message": "addWindow: win=%s Callers=%s",
@@ -3235,6 +3211,12 @@
       "group": "WM_DEBUG_SYNC_ENGINE",
       "at": "com\/android\/server\/wm\/BLASTSyncEngine.java"
     },
+    "1699269281": {
+      "message": "Don't organize or trigger events for untrusted displayId=%d",
+      "level": "WARN",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/DisplayAreaOrganizerController.java"
+    },
     "1720229827": {
       "message": "Creating animation bounds layer",
       "level": "INFO",
@@ -3351,6 +3333,12 @@
     },
     "1837992242": {
       "message": "Executing finish of activity: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
+    },
+    "1847414670": {
+      "message": "Activity not running or entered PiP, resuming next.",
       "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/Task.java"

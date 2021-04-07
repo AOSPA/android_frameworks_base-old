@@ -139,6 +139,8 @@ import android.view.translation.UiTranslationController;
 import android.widget.AdapterView;
 import android.widget.Toast;
 import android.widget.Toolbar;
+import android.window.SplashScreen;
+import android.window.SplashScreenView;
 
 import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
@@ -154,6 +156,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.lang.ref.WeakReference;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -961,6 +964,10 @@ public class Activity extends ContextThemeWrapper
 
     private UiTranslationController mUiTranslationController;
 
+    private SplashScreen mSplashScreen;
+    /** @hide */
+    SplashScreenView mSplashScreenView;
+
     private final WindowControllerCallback mWindowControllerCallback =
             new WindowControllerCallback() {
         /**
@@ -1600,6 +1607,23 @@ public class Activity extends ContextThemeWrapper
         mRestoredFromBundle = savedInstanceState != null;
         mCalled = true;
 
+    }
+
+    /**
+     * Get the interface that activity use to talk to the splash screen.
+     * @see SplashScreen
+     */
+    public final @NonNull SplashScreen getSplashScreen() {
+        return getOrCreateSplashScreen();
+    }
+
+    private SplashScreen getOrCreateSplashScreen() {
+        synchronized (this) {
+            if (mSplashScreen == null) {
+                mSplashScreen = new SplashScreen.SplashScreenImpl(this);
+            }
+            return mSplashScreen;
+        }
     }
 
     /**
@@ -3788,6 +3812,22 @@ public class Activity extends ContextThemeWrapper
         return false;
     }
 
+    private static final class RequestFinishCallback extends IRequestFinishCallback.Stub {
+        private final WeakReference<Activity> mActivityRef;
+
+        RequestFinishCallback(WeakReference<Activity> activityRef) {
+            mActivityRef = activityRef;
+        }
+
+        @Override
+        public void requestFinish() {
+            Activity activity = mActivityRef.get();
+            if (activity != null) {
+                activity.mHandler.post(activity::finishAfterTransition);
+            }
+        }
+    }
+
     /**
      * Called when the activity has detected the user's press of the back
      * key.  The default implementation simply finishes the current activity,
@@ -3811,7 +3851,8 @@ public class Activity extends ContextThemeWrapper
         // Inform activity task manager that the activity received a back press while at the
         // root of the task. This call allows ActivityTaskManager to intercept or move the task
         // to the back.
-        ActivityClient.getInstance().onBackPressedOnTaskRoot(mToken);
+        ActivityClient.getInstance().onBackPressedOnTaskRoot(mToken,
+                new RequestFinishCallback(new WeakReference<>(this)));
 
         // Activity was launched when user tapped a link in the Autofill Save UI - Save UI must
         // be restored now.

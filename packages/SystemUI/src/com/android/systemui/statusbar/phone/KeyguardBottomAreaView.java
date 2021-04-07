@@ -19,6 +19,7 @@ package com.android.systemui.statusbar.phone;
 import static android.view.accessibility.AccessibilityNodeInfo.ACTION_CLICK;
 import static android.view.accessibility.AccessibilityNodeInfo.AccessibilityAction;
 
+import static com.android.systemui.controls.dagger.ControlsComponent.Visibility.AVAILABLE;
 import static com.android.systemui.doze.util.BurnInHelperKt.getBurnInOffset;
 import static com.android.systemui.tuner.LockscreenFragment.LOCKSCREEN_LEFT_BUTTON;
 import static com.android.systemui.tuner.LockscreenFragment.LOCKSCREEN_LEFT_UNLOCK;
@@ -134,8 +135,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private KeyguardAffordanceView mLeftAffordanceView;
     private ImageView mAltLeftButton;
     private ViewGroup mIndicationArea;
-    private TextView mEnterpriseDisclosure;
     private TextView mIndicationText;
+    private TextView mIndicationTextBottom;
     private ViewGroup mPreviewContainer;
     private ViewGroup mOverlayContainer;
 
@@ -186,6 +187,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private ControlsComponent mControlsComponent;
     private int mLockScreenMode;
     private BroadcastDispatcher mBroadcastDispatcher;
+    private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
 
     public KeyguardBottomAreaView(Context context) {
         this(context, null);
@@ -255,9 +257,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mLeftAffordanceView = findViewById(R.id.left_button);
         mAltLeftButton = findViewById(R.id.alt_left_button);
         mIndicationArea = findViewById(R.id.keyguard_indication_area);
-        mEnterpriseDisclosure = findViewById(
-                R.id.keyguard_indication_enterprise_disclosure);
         mIndicationText = findViewById(R.id.keyguard_indication_text);
+        mIndicationTextBottom = findViewById(R.id.keyguard_indication_text_bottom);
         mIndicationBottomMargin = getResources().getDimensionPixelSize(
                 R.dimen.keyguard_indication_margin_bottom);
         mBurnInYOffset = getResources().getDimensionPixelSize(
@@ -300,7 +301,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         filter.addAction(DevicePolicyManager.ACTION_DEVICE_POLICY_MANAGER_STATE_CHANGED);
         getContext().registerReceiverAsUser(mDevicePolicyReceiver,
                 UserHandle.ALL, filter, null, null);
-        Dependency.get(KeyguardUpdateMonitor.class).registerCallback(mUpdateMonitorCallback);
+        mKeyguardUpdateMonitor = Dependency.get(KeyguardUpdateMonitor.class);
+        mKeyguardUpdateMonitor.registerCallback(mUpdateMonitorCallback);
         mKeyguardStateController.addCallback(this);
     }
 
@@ -312,7 +314,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mRightExtension.destroy();
         mLeftExtension.destroy();
         getContext().unregisterReceiver(mDevicePolicyReceiver);
-        Dependency.get(KeyguardUpdateMonitor.class).removeCallback(mUpdateMonitorCallback);
+        mKeyguardUpdateMonitor.removeCallback(mUpdateMonitorCallback);
     }
 
     private void initAccessibility() {
@@ -334,7 +336,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         }
 
         // Respect font size setting.
-        mEnterpriseDisclosure.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+        mIndicationTextBottom.setTextSize(TypedValue.COMPLEX_UNIT_PX,
                 getResources().getDimensionPixelSize(
                         com.android.internal.R.dimen.text_size_small_material));
         mIndicationText.setTextSize(TypedValue.COMPLEX_UNIT_PX,
@@ -415,12 +417,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     private void updateLeftAffordanceIcon() {
-        if (mDozing) {
-            mAltLeftButton.setVisibility(GONE);
-        } else if (mAltLeftButton.getDrawable() != null) {
-            mAltLeftButton.setVisibility(VISIBLE);
-        }
-
         if (!mShowLeftAffordance || mDozing) {
             mLeftAffordanceView.setVisibility(GONE);
             return;
@@ -433,6 +429,14 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             mLeftAffordanceView.setImageDrawable(state.drawable, state.tint);
         }
         mLeftAffordanceView.setContentDescription(state.contentDescription);
+    }
+
+    private void updateControlsVisibility() {
+        if (mDozing || mControlsComponent.getVisibility() != AVAILABLE) {
+            mAltLeftButton.setVisibility(GONE);
+        } else {
+            mAltLeftButton.setVisibility(VISIBLE);
+        }
     }
 
     public boolean isLeftVoiceAssist() {
@@ -774,6 +778,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
         updateCameraVisibility();
         updateLeftAffordanceIcon();
+        updateControlsVisibility();
 
         if (dozing) {
             mOverlayContainer.setVisibility(INVISIBLE);
@@ -897,35 +902,27 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     private void setupControls() {
-        if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL) {
+        boolean inNewLayout = mLockScreenMode != KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
+        boolean settingEnabled = Settings.Global.getInt(mContext.getContentResolver(),
+                "controls_lockscreen", 0) == 1;
+        if (!inNewLayout || !settingEnabled || !mControlsComponent.isEnabled()) {
             mAltLeftButton.setVisibility(View.GONE);
-            mAltLeftButton.setOnClickListener(null);
             return;
         }
 
-        if (Settings.Global.getInt(mContext.getContentResolver(), "controls_lockscreen", 0) == 0) {
-            return;
-        }
-
-        if (mControlsComponent.getControlsListingController().isPresent()) {
-            mControlsComponent.getControlsListingController().get()
-                    .addCallback(list -> {
-                        if (!list.isEmpty()) {
-                            mAltLeftButton.setImageDrawable(list.get(0).loadIcon());
-                            mAltLeftButton.setVisibility(View.VISIBLE);
-                            mAltLeftButton.setOnClickListener((v) -> {
-                                ControlsUiController ui = mControlsComponent
-                                        .getControlsUiController().get();
-                                mControlsDialog = new ControlsDialog(mContext, mBroadcastDispatcher)
-                                        .show(ui);
-                            });
-
-                        } else {
-                            mAltLeftButton.setVisibility(View.GONE);
-                            mAltLeftButton.setOnClickListener(null);
-                        }
-                    });
-        }
+        mControlsComponent.getControlsListingController().get()
+                .addCallback(list -> {
+                    if (!list.isEmpty()) {
+                        mAltLeftButton.setImageDrawable(list.get(0).loadIcon());
+                        mAltLeftButton.setOnClickListener((v) -> {
+                            ControlsUiController ui = mControlsComponent
+                                    .getControlsUiController().get();
+                            mControlsDialog = new ControlsDialog(mContext, mBroadcastDispatcher)
+                                    .show(ui);
+                        });
+                    }
+                    updateControlsVisibility();
+                });
     }
 
     /**

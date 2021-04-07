@@ -16,12 +16,10 @@
 
 package com.android.wm.shell.onehanded;
 
-import androidx.annotation.NonNull;
+import android.content.res.Configuration;
 
 import com.android.wm.shell.common.annotations.ExternalThread;
 import com.android.wm.shell.onehanded.OneHandedGestureHandler.OneHandedGestureEventCallback;
-
-import java.io.PrintWriter;
 
 /**
  * Interface to engage one handed feature.
@@ -54,24 +52,33 @@ public interface OneHanded {
     void stopOneHanded(int uiEvent);
 
     /**
-     * Set navigation 3 button mode enabled or disabled by users.
+     * Sets navigation 3 button mode enabled or disabled by users.
      */
     void setThreeButtonModeEnabled(boolean enabled);
 
     /**
-     * Register callback to be notified after {@link OneHandedDisplayAreaOrganizer}
+     * Sets one handed feature temporary locked in enabled or disabled state, this won't change
+     * settings configuration.
+     *
+     * @param locked locked function in disabled(can not trigger) or enabled state.
+     * @param enabled function in disabled(can not trigger) or enabled state.
+     */
+    void setLockedDisabled(boolean locked, boolean enabled);
+
+    /**
+     * Registers callback to be notified after {@link OneHandedDisplayAreaOrganizer}
      * transition start or finish
      */
     void registerTransitionCallback(OneHandedTransitionCallback callback);
 
     /**
-     * Register callback for one handed gesture, this gesture callbcak will be activated on
+     * Registers callback for one handed gesture, this gesture callback will be activated on
      * 3 button navigation mode only
      */
     void registerGestureCallback(OneHandedGestureEventCallback callback);
 
     /**
-     * Dump one handed status.
+     * Receive onConfigurationChanged() events
      */
-    void dump(@NonNull PrintWriter pw);
+    void onConfigChanged(Configuration newConfig);
 }

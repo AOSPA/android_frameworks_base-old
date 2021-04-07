@@ -719,7 +719,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityWithTask();
         assertTrue(activity.hasSavedState());
 
-        ActivityRecord.activityResumedLocked(activity.appToken);
+        ActivityRecord.activityResumedLocked(activity.appToken, false /* handleSplashScreenExit */);
         assertFalse(activity.hasSavedState());
         assertNull(activity.getSavedState());
     }
@@ -2180,6 +2180,7 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         activity.setOccludesParent(true);
         activity.setVisible(false);
+        activity.mVisibleRequested = false;
         // Can not specify orientation if app isn't visible even though it occludes parent.
         assertEquals(SCREEN_ORIENTATION_UNSET, activity.getOrientation());
         // Can specify orientation if the current orientation candidate is orientation behind.

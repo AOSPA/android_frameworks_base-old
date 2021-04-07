@@ -139,6 +139,7 @@ import com.android.server.integrity.AppIntegrityManagerService;
 import com.android.server.lights.LightsService;
 import com.android.server.location.LocationManagerService;
 import com.android.server.media.MediaRouterService;
+import com.android.server.media.metrics.MediaMetricsManagerService;
 import com.android.server.media.projection.MediaProjectionManagerService;
 import com.android.server.net.NetworkPolicyManagerService;
 import com.android.server.net.NetworkStatsService;
@@ -187,6 +188,7 @@ import com.android.server.telecom.TelecomLoaderService;
 import com.android.server.testharness.TestHarnessModeService;
 import com.android.server.textclassifier.TextClassificationManagerService;
 import com.android.server.textservices.TextServicesManagerService;
+import com.android.server.tracing.TracingServiceProxy;
 import com.android.server.trust.TrustManagerService;
 import com.android.server.tv.TvInputManagerService;
 import com.android.server.tv.TvRemoteService;
@@ -195,6 +197,7 @@ import com.android.server.twilight.TwilightService;
 import com.android.server.uri.UriGrantsManagerService;
 import com.android.server.usage.UsageStatsService;
 import com.android.server.utils.TimingsTraceAndSlog;
+import com.android.server.vibrator.VibratorManagerService;
 import com.android.server.vr.VrManagerService;
 import com.android.server.webkit.WebViewUpdateService;
 import com.android.server.wm.ActivityTaskManagerService;
@@ -255,6 +258,10 @@ public final class SystemServer implements Dumpable {
             "com.android.server.companion.CompanionDeviceManagerService";
     private static final String STATS_COMPANION_APEX_PATH =
             "/apex/com.android.os.statsd/javalib/service-statsd.jar";
+    private static final String SCHEDULING_APEX_PATH =
+            "/apex/com.android.scheduling/javalib/service-scheduling.jar";
+    private static final String REBOOT_READINESS_LIFECYCLE_CLASS =
+            "com.android.server.scheduling.RebootReadinessManagerService$Lifecycle";
     private static final String CONNECTIVITY_SERVICE_APEX_PATH =
             "/apex/com.android.tethering/javalib/service-connectivity.jar";
     private static final String STATS_COMPANION_LIFECYCLE_CLASS =
@@ -323,6 +330,8 @@ public final class SystemServer implements Dumpable {
             "com.android.server.musicrecognition.MusicRecognitionManagerService";
     private static final String SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS =
             "com.android.server.systemcaptions.SystemCaptionsManagerService";
+    private static final String TEXT_TO_SPEECH_MANAGER_SERVICE_CLASS =
+            "com.android.server.texttospeech.TextToSpeechManagerService";
     private static final String TIME_ZONE_RULES_MANAGER_SERVICE_CLASS =
             "com.android.server.timezone.RulesManagerService$Lifecycle";
     private static final String IOT_SERVICE_CLASS =
@@ -528,8 +537,7 @@ public final class SystemServer implements Dumpable {
             String filename = "/data/system/heapdump/fdtrack-" + date + ".hprof";
             Debug.dumpHprofData(filename);
         } catch (IOException ex) {
-            Slog.e("System", "Failed to dump fdtrack hprof");
-            ex.printStackTrace();
+            Slog.e("System", "Failed to dump fdtrack hprof", ex);
         }
     }
 
@@ -1295,11 +1303,11 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("startOtherServices");
 
         final Context context = mSystemContext;
-        VibratorService vibrator = null;
         DynamicSystemService dynamicSystem = null;
         IStorageManager storageManager = null;
         NetworkManagementService networkManagement = null;
         IpSecService ipSecService = null;
+        VpnManagerService vpnManager = null;
         VcnManagementService vcnManagement = null;
         NetworkStatsService networkStats = null;
         NetworkPolicyManagerService networkPolicy = null;
@@ -1422,11 +1430,6 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("StartVibratorManagerService");
             mSystemServiceManager.startService(VibratorManagerService.Lifecycle.class);
-            t.traceEnd();
-
-            t.traceBegin("StartVibratorService");
-            vibrator = new VibratorService(context);
-            ServiceManager.addService("vibrator", vibrator);
             t.traceEnd();
 
             t.traceBegin("StartDynamicSystemService");
@@ -1721,6 +1724,7 @@ public final class SystemServer implements Dumpable {
             startAttentionService(context, t);
             startRotationResolverService(context, t);
             startSystemCaptionsManagerService(context, t);
+            startTextToSpeechManagerService(context, t);
 
             // System Speech Recognition Service
             if (deviceHasConfigString(context,
@@ -1896,6 +1900,15 @@ public final class SystemServer implements Dumpable {
                     ServiceManager.getService(Context.CONNECTIVITY_SERVICE));
             // TODO: Use ConnectivityManager instead of ConnectivityService.
             networkPolicy.bindConnectivityManager(connectivity);
+            t.traceEnd();
+
+            t.traceBegin("StartVpnManagerService");
+            try {
+                vpnManager = VpnManagerService.create(context);
+                ServiceManager.addService(Context.VPN_MANAGEMENT_SERVICE, vpnManager);
+            } catch (Throwable e) {
+                reportWtf("starting VPN Manager Service", e);
+            }
             t.traceEnd();
 
             t.traceBegin("StartVcnManagementService");
@@ -2424,6 +2437,10 @@ public final class SystemServer implements Dumpable {
             t.traceBegin("StartPeopleService");
             mSystemServiceManager.startService(PeopleService.class);
             t.traceEnd();
+
+            t.traceBegin("StartMediaMetricsManager");
+            mSystemServiceManager.startService(MediaMetricsManagerService.class);
+            t.traceEnd();
         }
 
         if (!isWatch) {
@@ -2479,6 +2496,12 @@ public final class SystemServer implements Dumpable {
                 STATS_COMPANION_LIFECYCLE_CLASS, STATS_COMPANION_APEX_PATH);
         t.traceEnd();
 
+        // Reboot Readiness
+        t.traceBegin("StartRebootReadinessManagerService");
+        mSystemServiceManager.startServiceFromJar(
+                REBOOT_READINESS_LIFECYCLE_CLASS, SCHEDULING_APEX_PATH);
+        t.traceEnd();
+
         // Statsd pulled atoms
         t.traceBegin("StartStatsPullAtomService");
         mSystemServiceManager.startService(STATS_PULL_ATOM_SERVICE_CLASS);
@@ -2520,15 +2543,12 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(AppBindingService.Lifecycle.class);
         t.traceEnd();
 
-        // It is now time to start up the app processes...
-
-        t.traceBegin("MakeVibratorServiceReady");
-        try {
-            vibrator.systemReady();
-        } catch (Throwable e) {
-            reportWtf("making Vibrator Service ready", e);
-        }
+        // Perfetto TracingServiceProxy
+        t.traceBegin("startTracingServiceProxy");
+        mSystemServiceManager.startService(TracingServiceProxy.class);
         t.traceEnd();
+
+        // It is now time to start up the app processes...
 
         t.traceBegin("MakeLockSettingsServiceReady");
         if (lockSettings != null) {
@@ -2676,6 +2696,7 @@ public final class SystemServer implements Dumpable {
         final MediaRouterService mediaRouterF = mediaRouter;
         final MmsServiceBroker mmsServiceF = mmsService;
         final IpSecService ipSecServiceF = ipSecService;
+        final VpnManagerService vpnManagerF = vpnManager;
         final VcnManagementService vcnManagementF = vcnManagement;
         final WindowManagerService windowManagerF = wm;
         final ConnectivityManager connectivityF = (ConnectivityManager)
@@ -2788,6 +2809,15 @@ public final class SystemServer implements Dumpable {
                 }
             } catch (Throwable e) {
                 reportWtf("making Connectivity Service ready", e);
+            }
+            t.traceEnd();
+            t.traceBegin("MakeVpnManagerServiceReady");
+            try {
+                if (vpnManagerF != null) {
+                    vpnManagerF.systemReady();
+                }
+            } catch (Throwable e) {
+                reportWtf("making VpnManagerService ready", e);
             }
             t.traceEnd();
             t.traceBegin("MakeVcnManagementServiceReady");
@@ -2944,6 +2974,13 @@ public final class SystemServer implements Dumpable {
 
         t.traceBegin("StartSystemCaptionsManagerService");
         mSystemServiceManager.startService(SYSTEM_CAPTIONS_MANAGER_SERVICE_CLASS);
+        t.traceEnd();
+    }
+
+    private void startTextToSpeechManagerService(@NonNull Context context,
+            @NonNull TimingsTraceAndSlog t) {
+        t.traceBegin("StartTextToSpeechManagerService");
+        mSystemServiceManager.startService(TEXT_TO_SPEECH_MANAGER_SERVICE_CLASS);
         t.traceEnd();
     }
 

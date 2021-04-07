@@ -25,6 +25,8 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_TASK_ORG;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager.RunningTaskInfo;
 import android.content.Context;
 import android.os.Binder;
@@ -38,13 +40,10 @@ import android.window.StartingWindowInfo;
 import android.window.TaskAppearedInfo;
 import android.window.TaskOrganizer;
 
-import androidx.annotation.NonNull;
-import androidx.annotation.Nullable;
-
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.common.ShellExecutor;
-import com.android.wm.shell.sizecompatui.SizeCompatUI;
+import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.startingsurface.StartingSurfaceDrawer;
 
 import java.io.PrintWriter;
@@ -83,6 +82,16 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         default void onTaskInfoChanged(RunningTaskInfo taskInfo) {}
         default void onTaskVanished(RunningTaskInfo taskInfo) {}
         default void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {}
+        /** Whether this task listener supports size compat UI. */
+        default boolean supportSizeCompatUI() {
+            // All TaskListeners should support size compat except PIP.
+            return true;
+        }
+        /** Attaches the a child window surface to the task surface. */
+        default void attachChildSurfaceToTask(int taskId, SurfaceControl.Builder b) {
+            throw new IllegalStateException(
+                    "This task listener doesn't support child surface attachment.");
+        }
         default void dump(@NonNull PrintWriter pw, String prefix) {};
     }
 
@@ -108,26 +117,26 @@ public class ShellTaskOrganizer extends TaskOrganizer {
      * compat.
      */
     @Nullable
-    private final SizeCompatUI mSizeCompatUI;
+    private final SizeCompatUIController mSizeCompatUI;
 
     public ShellTaskOrganizer(ShellExecutor mainExecutor, Context context) {
-        this(null /* taskOrganizerController */, mainExecutor, context, null /* sizeCompatUI */);
+        this(null /* taskOrganizerController */, mainExecutor, context, null /* sizeCompatUI */,
+                new StartingSurfaceDrawer(context, mainExecutor));
     }
 
     public ShellTaskOrganizer(ShellExecutor mainExecutor, Context context, @Nullable
-            SizeCompatUI sizeCompatUI) {
-        this(null /* taskOrganizerController */, mainExecutor, context, sizeCompatUI);
+            SizeCompatUIController sizeCompatUI) {
+        this(null /* taskOrganizerController */, mainExecutor, context, sizeCompatUI,
+                new StartingSurfaceDrawer(context, mainExecutor));
     }
 
     @VisibleForTesting
     ShellTaskOrganizer(ITaskOrganizerController taskOrganizerController, ShellExecutor mainExecutor,
-            Context context, @Nullable SizeCompatUI sizeCompatUI) {
+            Context context, @Nullable SizeCompatUIController sizeCompatUI,
+            StartingSurfaceDrawer startingSurfaceDrawer) {
         super(taskOrganizerController, mainExecutor);
-        // TODO(b/131727939) temporarily live here, the starting surface drawer should be controlled
-        //  by a controller, that class should be create while porting
-        //  ActivityRecord#addStartingWindow to WMShell.
-        mStartingSurfaceDrawer = new StartingSurfaceDrawer(context, mainExecutor);
         mSizeCompatUI = sizeCompatUI;
+        mStartingSurfaceDrawer = startingSurfaceDrawer;
     }
 
     @Override
@@ -254,6 +263,11 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     }
 
     @Override
+    public void copySplashScreenView(int taskId) {
+        mStartingSurfaceDrawer.copySplashScreenView(taskId);
+    }
+
+    @Override
     public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) {
         synchronized (mLock) {
             onTaskAppeared(new TaskAppearedInfo(taskInfo, leash));
@@ -342,8 +356,8 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     }
 
     /**
-     * Notifies {@link SizeCompatUI} about the size compat info changed on the give Task to update
-     * the UI accordingly.
+     * Notifies {@link SizeCompatUIController} about the size compat info changed on the give Task
+     * to update the UI accordingly.
      *
      * @param taskInfo the new Task info
      * @param taskListener listener to handle the Task Surface placement. {@code null} if task is
@@ -354,8 +368,10 @@ public class ShellTaskOrganizer extends TaskOrganizer {
             return;
         }
 
-        // The task is vanished, notify to remove size compat UI on this Task if there is any.
-        if (taskListener == null) {
+        // The task is vanished or doesn't support size compat UI, notify to remove size compat UI
+        // on this Task if there is any.
+        if (taskListener == null || !taskListener.supportSizeCompatUI()
+                || !taskInfo.topActivityInSizeCompat) {
             mSizeCompatUI.onSizeCompatInfoChanged(taskInfo.displayId, taskInfo.taskId,
                     null /* taskConfig */, null /* sizeCompatActivity*/,
                     null /* taskListener */);
@@ -363,10 +379,7 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         }
 
         mSizeCompatUI.onSizeCompatInfoChanged(taskInfo.displayId, taskInfo.taskId,
-                taskInfo.configuration.windowConfiguration.getBounds(),
-                // null if the top activity not in size compat.
-                taskInfo.topActivityInSizeCompat ? taskInfo.topActivityToken : null,
-                taskListener);
+                taskInfo.configuration, taskInfo.topActivityToken, taskListener);
     }
 
     private TaskListener getTaskListener(RunningTaskInfo runningTaskInfo) {

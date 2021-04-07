@@ -16,6 +16,11 @@
 
 package com.android.systemui.dagger;
 
+import android.content.Context;
+
+import com.android.systemui.SystemUIFactory;
+import com.android.systemui.tv.TvWMComponent;
+import com.android.systemui.wmshell.TvWMShellModule;
 import com.android.systemui.wmshell.WMShellModule;
 import com.android.wm.shell.ShellCommandHandler;
 import com.android.wm.shell.ShellInit;
@@ -27,14 +32,20 @@ import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.splitscreen.SplitScreen;
-import com.android.wm.shell.transition.Transitions;
+import com.android.wm.shell.transition.RemoteTransitions;
 
 import java.util.Optional;
 
 import dagger.Subcomponent;
 
 /**
- * Dagger Subcomponent for WindowManager.
+ * Dagger Subcomponent for WindowManager.  This class explicitly describes the interfaces exported
+ * from the WM component into the SysUI component (in
+ * {@link SystemUIFactory#init(Context, boolean)}), and references the specific dependencies
+ * provided by its particular device/form-factor SystemUI implementation.
+ *
+ * ie. {@link WMComponent} includes {@link WMShellModule}
+ *     and {@link TvWMComponent} includes {@link TvWMShellModule}
  */
 @WMSingleton
 @Subcomponent(modules = {WMShellModule.class})
@@ -55,16 +66,12 @@ public interface WMComponent {
         getShellInit().init();
     }
 
-    // Gets the Shell init instance
     @WMSingleton
     ShellInit getShellInit();
 
-    // Gets the Shell dump instance
     @WMSingleton
     Optional<ShellCommandHandler> getShellCommandHandler();
 
-    // TODO(b/162923491): We currently pass the instances through to SysUI, but that may change
-    //                    depending on the threading mechanism we go with
     @WMSingleton
     Optional<OneHanded> getOneHanded();
 
@@ -89,7 +96,6 @@ public interface WMComponent {
     @WMSingleton
     Optional<TaskViewFactory> getTaskViewFactory();
 
-    /** Gets transitions */
     @WMSingleton
-    Transitions getTransitions();
+    RemoteTransitions getTransitions();
 }

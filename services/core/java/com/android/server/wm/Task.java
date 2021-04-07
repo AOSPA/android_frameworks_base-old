@@ -82,6 +82,7 @@ import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_RECENTS_ANIMA
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
 import static com.android.server.wm.ActivityRecord.STARTING_WINDOW_SHOWN;
+import static com.android.server.wm.ActivityRecord.TRANSFER_SPLASH_SCREEN_COPYING;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RECENTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_RESULTS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
@@ -158,6 +159,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Activity;
 import android.app.ActivityManager;
+import android.app.ActivityManager.RecentTaskInfo.PersistedTaskSnapshotData;
 import android.app.ActivityManager.TaskDescription;
 import android.app.ActivityOptions;
 import android.app.ActivityTaskManager;
@@ -293,6 +295,9 @@ class Task extends WindowContainer<WindowContainer> {
     private static final String ATTR_MIN_HEIGHT = "min_height";
     private static final String ATTR_PERSIST_TASK_VERSION = "persist_task_version";
     private static final String ATTR_WINDOW_LAYOUT_AFFINITY = "window_layout_affinity";
+    private static final String ATTR_LAST_SNAPSHOT_TASK_SIZE = "last_snapshot_task_size";
+    private static final String ATTR_LAST_SNAPSHOT_CONTENT_INSETS = "last_snapshot_content_insets";
+    private static final String ATTR_LAST_SNAPSHOT_BUFFER_SIZE = "last_snapshot_buffer_size";
 
     // Set to false to disable the preview that is shown while a new activity
     // is being started.
@@ -540,6 +545,10 @@ class Task extends WindowContainer<WindowContainer> {
     // NOTE: This value needs to be persisted with each task
     private TaskDescription mTaskDescription;
 
+    // Information about the last snapshot that should be persisted with the task to allow SystemUI
+    // to layout without loading all the task snapshots
+    final PersistedTaskSnapshotData mLastTaskSnapshotData;
+
     // If set to true, the task will report that it is not in the floating
     // state regardless of it's root task affiliation. As the floating state drives
     // production of content insets this can be used to preserve them across
@@ -612,8 +621,6 @@ class Task extends WindowContainer<WindowContainer> {
     // that this transaction manipulates because deferUntilFrame acts on individual surfaces.
     SurfaceControl.Transaction mMainWindowSizeChangeTransaction;
     Task mMainWindowSizeChangeTask;
-
-    Rect mPreAnimationBounds = new Rect();
 
     private final AnimatingActivityRegistry mAnimatingActivityRegistry =
             new AnimatingActivityRegistry();
@@ -813,6 +820,16 @@ class Task extends WindowContainer<WindowContainer> {
     private boolean mDeferTaskAppear;
 
     /**
+     * Forces this task to be unorganized. Currently it is used for deferring the control of
+     * organizer when windowing mode is changing from PiP to fullscreen with orientation change.
+     * It is true only during Task#setWindowingMode ~ DisplayRotation#continueRotation.
+     *
+     * TODO(b/179235349): Remove this field by making surface operations from task organizer sync
+     *                    with display rotation.
+     */
+    private boolean mForceNotOrganized;
+
+    /**
      * This task was created by the task organizer which has the following implementations.
      * <ul>
      *     <lis>The task won't be removed when it is empty. Removal has to be an explicit request
@@ -832,13 +849,13 @@ class Task extends WindowContainer<WindowContainer> {
             ComponentName _realActivity, ComponentName _origActivity, boolean _rootWasReset,
             boolean _autoRemoveRecents, boolean _askedCompatMode, int _userId, int _effectiveUid,
             String _lastDescription, long lastTimeMoved, boolean neverRelinquishIdentity,
-            TaskDescription _lastTaskDescription, int taskAffiliation, int prevTaskId,
-            int nextTaskId, int callingUid, String callingPackage,
-            @Nullable String callingFeatureId, int resizeMode, boolean supportsPictureInPicture,
-            boolean _realActivitySuspended, boolean userSetupComplete, int minWidth, int minHeight,
-            ActivityInfo info, IVoiceInteractionSession _voiceSession,
-            IVoiceInteractor _voiceInteractor, boolean _createdByOrganizer,
-            IBinder _launchCookie, boolean _deferTaskAppear) {
+            TaskDescription _lastTaskDescription, PersistedTaskSnapshotData _lastSnapshotData,
+            int taskAffiliation, int prevTaskId, int nextTaskId, int callingUid,
+            String callingPackage, @Nullable String callingFeatureId, int resizeMode,
+            boolean supportsPictureInPicture, boolean _realActivitySuspended,
+            boolean userSetupComplete, int minWidth, int minHeight, ActivityInfo info,
+            IVoiceInteractionSession _voiceSession, IVoiceInteractor _voiceInteractor,
+            boolean _createdByOrganizer, IBinder _launchCookie, boolean _deferTaskAppear) {
         super(atmService.mWindowManager);
 
         mAtmService = atmService;
@@ -848,7 +865,12 @@ class Task extends WindowContainer<WindowContainer> {
         mUserId = _userId;
         mResizeMode = resizeMode;
         mSupportsPictureInPicture = supportsPictureInPicture;
-        mTaskDescription = _lastTaskDescription;
+        mTaskDescription = _lastTaskDescription != null
+                ? _lastTaskDescription
+                : new TaskDescription();
+        mLastTaskSnapshotData = _lastSnapshotData != null
+                ? _lastSnapshotData
+                : new PersistedTaskSnapshotData();
         // Tasks have no set orientation value (including SCREEN_ORIENTATION_UNSPECIFIED).
         setOrientation(SCREEN_ORIENTATION_UNSET);
         mRemoteToken = new RemoteToken(this);
@@ -2249,6 +2271,21 @@ class Task extends WindowContainer<WindowContainer> {
 
         if (pipChanging) {
             mDisplayContent.getPinnedStackController().setPipWindowingModeChanging(true);
+            // If the top activity is using fixed rotation, it should be changing from PiP to
+            // fullscreen with display orientation change. Do not notify fullscreen task organizer
+            // because the restoration of task surface and the transformation of activity surface
+            // need to be done synchronously.
+            final ActivityRecord r = topRunningActivity();
+            if (r != null && mDisplayContent.isFixedRotationLaunchingApp(r)) {
+                mForceNotOrganized = true;
+            }
+        } else if (mForceNotOrganized) {
+            // If the display orientation change is done, let the corresponding task organizer take
+            // back the control of this task.
+            final ActivityRecord r = topRunningActivity();
+            if (r == null || !mDisplayContent.isFixedRotationLaunchingApp(r)) {
+                mForceNotOrganized = false;
+            }
         }
         try {
             // We have 2 reasons why we need to report orientation change here.
@@ -2838,6 +2875,9 @@ class Task extends WindowContainer<WindowContainer> {
         if (windowingMode == WINDOWING_MODE_UNDEFINED) {
             windowingMode = newParentConfig.windowConfiguration.getWindowingMode();
         }
+        // Commit the resolved windowing mode so the canSpecifyOrientation won't get the old
+        // mode that may cause the bounds to be miscalculated, e.g. letterboxed.
+        getConfiguration().windowConfiguration.setWindowingMode(windowingMode);
         Rect outOverrideBounds =
                 getResolvedOverrideConfiguration().windowConfiguration.getBounds();
 
@@ -3845,6 +3885,13 @@ class Task extends WindowContainer<WindowContainer> {
         });
     }
 
+    ActivityRecord getTopWaitSplashScreenActivity() {
+        return getActivity((r) -> {
+            return r.mHandleExitSplashScreen
+                    && r.mTransferringSplashScreenState == TRANSFER_SPLASH_SCREEN_COPYING;
+        });
+    }
+
     boolean isTopActivityFocusable() {
         final ActivityRecord r = topRunningActivity();
         return r != null ? r.isFocusable()
@@ -3874,6 +3921,7 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     void onSnapshotChanged(TaskSnapshot snapshot) {
+        mLastTaskSnapshotData.set(snapshot);
         mAtmService.getTaskChangeNotificationController().notifyTaskSnapshotChanged(
                 mTaskId, snapshot);
     }
@@ -4132,7 +4180,6 @@ class Task extends WindowContainer<WindowContainer> {
     void fillTaskInfo(TaskInfo info, boolean stripExtras) {
         getNumRunningActivities(mReuseActivitiesReport);
         info.userId = isLeafTask() ? mUserId : mCurrentUser;
-        info.stackId = getRootTaskId();
         info.taskId = mTaskId;
         info.displayId = getDisplayId();
         info.isRunning = getTopNonFinishingActivity() != null;
@@ -4231,6 +4278,9 @@ class Task extends WindowContainer<WindowContainer> {
             if (mainWindow != null) {
                 info.mainWindowLayoutParams = mainWindow.getAttrs();
             }
+            // If the developer has persist a different configuration, we need to override it to the
+            // starting window because persisted configuration does not effect to Task.
+            info.taskInfo.configuration.setTo(topActivity.getConfiguration());
         }
         final ActivityRecord topFullscreenActivity = getTopFullscreenActivity();
         if (topFullscreenActivity != null) {
@@ -4536,6 +4586,9 @@ class Task extends WindowContainer<WindowContainer> {
         pw.print(" mSupportsPictureInPicture="); pw.print(mSupportsPictureInPicture);
         pw.print(" isResizeable="); pw.println(isResizeable());
         pw.print(prefix); pw.print("lastActiveTime="); pw.print(lastActiveTime);
+        if (mForceNotOrganized) {
+            pw.print(prefix); pw.println("mForceNotOrganized=true");
+        }
         pw.println(" (inactive for " + (getInactiveDuration() / 1000) + "s)");
     }
 
@@ -4679,6 +4732,19 @@ class Task extends WindowContainer<WindowContainer> {
         out.attributeInt(null, ATTR_MIN_HEIGHT, mMinHeight);
         out.attributeInt(null, ATTR_PERSIST_TASK_VERSION, PERSIST_TASK_VERSION);
 
+        if (mLastTaskSnapshotData.taskSize != null) {
+            out.attribute(null, ATTR_LAST_SNAPSHOT_TASK_SIZE,
+                    mLastTaskSnapshotData.taskSize.flattenToString());
+        }
+        if (mLastTaskSnapshotData.contentInsets != null) {
+            out.attribute(null, ATTR_LAST_SNAPSHOT_CONTENT_INSETS,
+                    mLastTaskSnapshotData.contentInsets.flattenToString());
+        }
+        if (mLastTaskSnapshotData.bufferSize != null) {
+            out.attribute(null, ATTR_LAST_SNAPSHOT_BUFFER_SIZE,
+                    mLastTaskSnapshotData.bufferSize.flattenToString());
+        }
+
         if (affinityIntent != null) {
             out.startTag(null, TAG_AFFINITYINTENT);
             affinityIntent.saveToXml(out);
@@ -4746,6 +4812,7 @@ class Task extends WindowContainer<WindowContainer> {
         int taskId = INVALID_TASK_ID;
         final int outerDepth = in.getDepth();
         TaskDescription taskDescription = new TaskDescription();
+        PersistedTaskSnapshotData lastSnapshotData = new PersistedTaskSnapshotData();
         int taskAffiliation = INVALID_TASK_ID;
         int prevTaskId = INVALID_TASK_ID;
         int nextTaskId = INVALID_TASK_ID;
@@ -4855,6 +4922,15 @@ class Task extends WindowContainer<WindowContainer> {
                 case ATTR_PERSIST_TASK_VERSION:
                     persistTaskVersion = Integer.parseInt(attrValue);
                     break;
+                case ATTR_LAST_SNAPSHOT_TASK_SIZE:
+                    lastSnapshotData.taskSize = Point.unflattenFromString(attrValue);
+                    break;
+                case ATTR_LAST_SNAPSHOT_CONTENT_INSETS:
+                    lastSnapshotData.contentInsets = Rect.unflattenFromString(attrValue);
+                    break;
+                case ATTR_LAST_SNAPSHOT_BUFFER_SIZE:
+                    lastSnapshotData.bufferSize = Point.unflattenFromString(attrValue);
+                    break;
                 default:
                     if (!attrName.startsWith(TaskDescription.ATTR_TASKDESCRIPTION_PREFIX)) {
                         Slog.w(TAG, "Task: Unknown attribute=" + attrName);
@@ -4949,6 +5025,7 @@ class Task extends WindowContainer<WindowContainer> {
                 .setLastTimeMoved(lastTimeOnTop)
                 .setNeverRelinquishIdentity(neverRelinquishIdentity)
                 .setLastTaskDescription(taskDescription)
+                .setLastSnapshotData(lastSnapshotData)
                 .setTaskAffiliation(taskAffiliation)
                 .setPrevAffiliateTaskId(prevTaskId)
                 .setNextAffiliateTaskId(nextTaskId)
@@ -4980,6 +5057,9 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     private boolean canBeOrganized() {
+        if (mForceNotOrganized) {
+            return false;
+        }
         // All root tasks can be organized
         if (isRootTask()) {
             return true;
@@ -5224,7 +5304,8 @@ class Task extends WindowContainer<WindowContainer> {
      */
     void onWindowFocusChanged(boolean hasFocus) {
         updateShadowsRadius(hasFocus, getSyncTransaction());
-        dispatchTaskInfoChangedIfNeeded(false /* force */);
+        // TODO(b/180525887): Un-comment once there is resolution on the bug.
+        // dispatchTaskInfoChangedIfNeeded(false /* force */);
     }
 
     void onPictureInPictureParamsChanged() {
@@ -5782,12 +5863,8 @@ class Task extends WindowContainer<WindowContainer> {
             mTaskSupervisor.acquireLaunchWakelock();
         }
 
-        if (didAutoPip) {
-            // Already entered PIP mode, no need to keep pausing.
-            return true;
-        }
-
-        if (mPausingActivity != null) {
+        // If already entered PIP mode, no need to keep pausing.
+        if (mPausingActivity != null && !didAutoPip) {
             // Have the window manager pause its key dispatching until the new
             // activity has started.  If we're pausing the activity just because
             // the screen is being turned off and the UI is sleeping, don't interrupt
@@ -5810,9 +5887,9 @@ class Task extends WindowContainer<WindowContainer> {
             }
 
         } else {
-            // This activity failed to schedule the
-            // pause, so just treat it as being paused now.
-            ProtoLog.v(WM_DEBUG_STATES, "Activity not running, resuming next.");
+            // This activity either failed to schedule the pause or it entered PIP mode,
+            // so just treat it as being paused now.
+            ProtoLog.v(WM_DEBUG_STATES, "Activity not running or entered PiP, resuming next.");
             if (resuming == null) {
                 mRootWindowContainer.resumeFocusedTasksTopActivities();
             }
@@ -6501,10 +6578,9 @@ class Task extends WindowContainer<WindowContainer> {
                 Slog.i(TAG, "Restarting because process died: " + next);
                 if (!next.hasBeenLaunched) {
                     next.hasBeenLaunched = true;
-                } else  if (SHOW_APP_STARTING_PREVIEW && lastFocusedRootTask != null
+                } else if (SHOW_APP_STARTING_PREVIEW && lastFocusedRootTask != null
                         && lastFocusedRootTask.isTopRootTaskInDisplayArea()) {
-                    next.showStartingWindow(null /* prev */, false /* newTask */,
-                            false /* taskSwitch */);
+                    next.showStartingWindow(false /* taskSwitch */);
                 }
                 mTaskSupervisor.startSpecificActivity(next, true, false);
                 return true;
@@ -6527,8 +6603,7 @@ class Task extends WindowContainer<WindowContainer> {
                 next.hasBeenLaunched = true;
             } else {
                 if (SHOW_APP_STARTING_PREVIEW) {
-                    next.showStartingWindow(null /* prev */, false /* newTask */,
-                            false /* taskSwich */);
+                    next.showStartingWindow(false /* taskSwich */);
                 }
                 if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Restarting: " + next);
             }
@@ -6694,7 +6769,10 @@ class Task extends WindowContainer<WindowContainer> {
                         prev = null;
                     }
                 }
-                r.showStartingWindow(prev, newTask, isTaskSwitch(r, focusedTopActivity));
+                final int splashScreenThemeResId = options != null
+                        ? options.getSplashScreenThemeResId() : 0;
+                r.showStartingWindow(prev, newTask, isTaskSwitch(r, focusedTopActivity),
+                        splashScreenThemeResId);
             }
         } else {
             // If this is the first activity, don't do any fancy animations,
@@ -7894,6 +7972,7 @@ class Task extends WindowContainer<WindowContainer> {
         private long mLastTimeMoved;
         private boolean mNeverRelinquishIdentity;
         private TaskDescription mLastTaskDescription;
+        private PersistedTaskSnapshotData mLastSnapshotData;
         private int mTaskAffiliation;
         private int mPrevAffiliateTaskId = INVALID_TASK_ID;
         private int mNextAffiliateTaskId = INVALID_TASK_ID;
@@ -8094,6 +8173,11 @@ class Task extends WindowContainer<WindowContainer> {
             return this;
         }
 
+        private Builder setLastSnapshotData(PersistedTaskSnapshotData lastSnapshotData) {
+            mLastSnapshotData = lastSnapshotData;
+            return this;
+        }
+
         private Builder setOrigActivity(ComponentName origActivity) {
             mOrigActivity = origActivity;
             return this;
@@ -8207,9 +8291,6 @@ class Task extends WindowContainer<WindowContainer> {
             mCallingPackage = mActivityInfo.packageName;
             mResizeMode = mActivityInfo.resizeMode;
             mSupportsPictureInPicture = mActivityInfo.supportsPictureInPicture();
-            if (mLastTaskDescription == null) {
-                mLastTaskDescription = new TaskDescription();
-            }
 
             final Task task = buildInner();
             task.mHasBeenVisible = mHasBeenVisible;
@@ -8243,9 +8324,9 @@ class Task extends WindowContainer<WindowContainer> {
             return new Task(mAtmService, mTaskId, mIntent, mAffinityIntent, mAffinity,
                     mRootAffinity, mRealActivity, mOrigActivity, mRootWasReset, mAutoRemoveRecents,
                     mAskedCompatMode, mUserId, mEffectiveUid, mLastDescription, mLastTimeMoved,
-                    mNeverRelinquishIdentity, mLastTaskDescription, mTaskAffiliation,
-                    mPrevAffiliateTaskId, mNextAffiliateTaskId, mCallingUid, mCallingPackage,
-                    mCallingFeatureId, mResizeMode, mSupportsPictureInPicture,
+                    mNeverRelinquishIdentity, mLastTaskDescription, mLastSnapshotData,
+                    mTaskAffiliation, mPrevAffiliateTaskId, mNextAffiliateTaskId, mCallingUid,
+                    mCallingPackage, mCallingFeatureId, mResizeMode, mSupportsPictureInPicture,
                     mRealActivitySuspended, mUserSetupComplete, mMinWidth, mMinHeight,
                     mActivityInfo, mVoiceSession, mVoiceInteractor, mCreatedByOrganizer,
                     mLaunchCookie, mDeferTaskAppear);

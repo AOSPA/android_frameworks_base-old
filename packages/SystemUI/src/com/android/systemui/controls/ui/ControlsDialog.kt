@@ -28,11 +28,12 @@ import android.view.WindowManager
 import com.android.systemui.Interpolators
 import com.android.systemui.R
 import com.android.systemui.broadcast.BroadcastDispatcher
+import javax.inject.Inject
 
 /**
  * Show the controls space inside a dialog, as from the lock screen.
  */
-class ControlsDialog(
+class ControlsDialog @Inject constructor(
     thisContext: Context,
     val broadcastDispatcher: BroadcastDispatcher
 ) : Dialog(thisContext, R.style.Theme_SystemUI_Dialog_Control_LockScreen) {
@@ -66,7 +67,7 @@ class ControlsDialog(
 
         val vg = requireViewById<ViewGroup>(com.android.systemui.R.id.global_actions_controls)
         vg.alpha = 0f
-        controller.show(vg, { /* do nothing */ })
+        controller.show(vg, { dismiss() }, false /* startedFromGlobalActions */)
 
         vg.animate()
             .alpha(1f)

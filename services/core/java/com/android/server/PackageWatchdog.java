@@ -259,10 +259,7 @@ public class PackageWatchdog {
             mIsPackagesReady = true;
             mHealthCheckController.setCallbacks(packageName -> onHealthCheckPassed(packageName),
                     packages -> onSupportedPackages(packages),
-                    () -> {
-                            syncRequestsAsync();
-                            mSyncRequired = true;
-                    });
+                    this::onSyncRequestNotified);
             setPropertyChangedListenerLocked();
             updateConfigs();
             registerConnectivityModuleHealthListener();
@@ -537,6 +534,7 @@ public class PackageWatchdog {
         synchronized (mLock) {
             mIsHealthCheckEnabled = enabled;
             mHealthCheckController.setEnabled(enabled);
+            mSyncRequired = true;
             // Prune to update internal state whenever health check is enabled/disabled
             syncState("health check state " + (enabled ? "enabled" : "disabled"));
         }
@@ -788,6 +786,13 @@ public class PackageWatchdog {
         }
     }
 
+    private void onSyncRequestNotified() {
+        synchronized (mLock) {
+            mSyncRequired = true;
+            syncRequestsAsync();
+        }
+    }
+
     @GuardedBy("mLock")
     private Set<String> getPackagesPendingHealthChecksLocked() {
         Set<String> packages = new ArraySet<>();
@@ -902,10 +907,13 @@ public class PackageWatchdog {
                 if (registeredObserver != null) {
                     Iterator<MonitoredPackage> it = failedPackages.iterator();
                     while (it.hasNext()) {
-                        VersionedPackage versionedPkg = it.next().mPackage;
-                        Slog.i(TAG, "Explicit health check failed for package " + versionedPkg);
-                        registeredObserver.execute(versionedPkg,
-                                PackageWatchdog.FAILURE_REASON_EXPLICIT_HEALTH_CHECK, 1);
+                        VersionedPackage versionedPkg = getVersionedPackage(it.next().getName());
+                        if (versionedPkg != null) {
+                            Slog.i(TAG,
+                                    "Explicit health check failed for package " + versionedPkg);
+                            registeredObserver.execute(versionedPkg,
+                                    PackageWatchdog.FAILURE_REASON_EXPLICIT_HEALTH_CHECK, 1);
+                        }
                     }
                 }
             }
@@ -1342,11 +1350,7 @@ public class PackageWatchdog {
 
     MonitoredPackage newMonitoredPackage(String name, long durationMs, long healthCheckDurationMs,
             boolean hasPassedHealthCheck, LongArrayQueue mitigationCalls) {
-        VersionedPackage pkg = getVersionedPackage(name);
-        if (pkg == null) {
-            return null;
-        }
-        return new MonitoredPackage(pkg, durationMs, healthCheckDurationMs,
+        return new MonitoredPackage(name, durationMs, healthCheckDurationMs,
                 hasPassedHealthCheck, mitigationCalls);
     }
 
@@ -1371,7 +1375,7 @@ public class PackageWatchdog {
      * instances of this class.
      */
     class MonitoredPackage {
-        private final VersionedPackage mPackage;
+        private final String mPackageName;
         // Times when package failures happen sorted in ascending order
         @GuardedBy("mLock")
         private final LongArrayQueue mFailureHistory = new LongArrayQueue();
@@ -1399,10 +1403,10 @@ public class PackageWatchdog {
         @GuardedBy("mLock")
         private long mHealthCheckDurationMs = Long.MAX_VALUE;
 
-        MonitoredPackage(VersionedPackage pkg, long durationMs,
+        MonitoredPackage(String packageName, long durationMs,
                 long healthCheckDurationMs, boolean hasPassedHealthCheck,
                 LongArrayQueue mitigationCalls) {
-            mPackage = pkg;
+            mPackageName = packageName;
             mDurationMs = durationMs;
             mHealthCheckDurationMs = healthCheckDurationMs;
             mHasPassedHealthCheck = hasPassedHealthCheck;
@@ -1556,7 +1560,7 @@ public class PackageWatchdog {
 
         /** Returns the monitored package name. */
         private String getName() {
-            return mPackage.getPackageName();
+            return mPackageName;
         }
 
         /**

@@ -236,8 +236,9 @@ public class BiometricManager {
     @RequiresPermission(TEST_BIOMETRIC)
     public BiometricTestSession createTestSession(int sensorId) {
         try {
-            return new BiometricTestSession(mContext,
-                    mService.createTestSession(sensorId, mContext.getOpPackageName()));
+            return new BiometricTestSession(mContext, sensorId,
+                    (context, sensorId1, callback) -> mService
+                            .createTestSession(sensorId1, callback, context.getOpPackageName()));
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -390,7 +391,6 @@ public class BiometricManager {
      * in Keystore land as SIDs, and are used during key generation.
      * @hide
      */
-    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
     public long[] getAuthenticatorIds() {
         if (mService != null) {
             try {

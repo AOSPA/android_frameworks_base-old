@@ -16,9 +16,10 @@
 
 package com.android.server.location.injector;
 
+import com.android.server.location.eventlog.LocationEventLog;
+
 public class TestInjector implements Injector {
 
-    private final LocationEventLog mLocationEventLog;
     private final FakeUserInfoHelper mUserInfoHelper;
     private final FakeAlarmHelper mAlarmHelper;
     private final FakeAppOpsHelper mAppOpsHelper;
@@ -27,20 +28,27 @@ public class TestInjector implements Injector {
     private final FakeAppForegroundHelper mAppForegroundHelper;
     private final FakeLocationPowerSaveModeHelper mLocationPowerSaveModeHelper;
     private final FakeScreenInteractiveHelper mScreenInteractiveHelper;
+    private final FakeDeviceStationaryHelper mDeviceStationaryHelper;
+    private final FakeDeviceIdleHelper mDeviceIdleHelper;
     private final LocationAttributionHelper mLocationAttributionHelper;
     private final FakeEmergencyHelper mEmergencyHelper;
     private final LocationUsageLogger mLocationUsageLogger;
 
     public TestInjector() {
-        mLocationEventLog = new LocationEventLog();
+        this(new LocationEventLog());
+    }
+
+    public TestInjector(LocationEventLog eventLog) {
         mUserInfoHelper = new FakeUserInfoHelper();
         mAlarmHelper = new FakeAlarmHelper();
         mAppOpsHelper = new FakeAppOpsHelper();
         mLocationPermissionsHelper = new FakeLocationPermissionsHelper(mAppOpsHelper);
         mSettingsHelper = new FakeSettingsHelper();
         mAppForegroundHelper = new FakeAppForegroundHelper();
-        mLocationPowerSaveModeHelper = new FakeLocationPowerSaveModeHelper(mLocationEventLog);
+        mLocationPowerSaveModeHelper = new FakeLocationPowerSaveModeHelper(eventLog);
         mScreenInteractiveHelper = new FakeScreenInteractiveHelper();
+        mDeviceStationaryHelper = new FakeDeviceStationaryHelper();
+        mDeviceIdleHelper = new FakeDeviceIdleHelper();
         mLocationAttributionHelper = new LocationAttributionHelper(mAppOpsHelper);
         mEmergencyHelper = new FakeEmergencyHelper();
         mLocationUsageLogger = new LocationUsageLogger();
@@ -87,6 +95,16 @@ public class TestInjector implements Injector {
     }
 
     @Override
+    public FakeDeviceStationaryHelper getDeviceStationaryHelper() {
+        return mDeviceStationaryHelper;
+    }
+
+    @Override
+    public FakeDeviceIdleHelper getDeviceIdleHelper() {
+        return mDeviceIdleHelper;
+    }
+
+    @Override
     public LocationAttributionHelper getLocationAttributionHelper() {
         return mLocationAttributionHelper;
     }
@@ -99,10 +117,5 @@ public class TestInjector implements Injector {
     @Override
     public LocationUsageLogger getLocationUsageLogger() {
         return mLocationUsageLogger;
-    }
-
-    @Override
-    public LocationEventLog getLocationEventLog() {
-        return mLocationEventLog;
     }
 }

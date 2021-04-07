@@ -56,6 +56,8 @@ import android.hardware.hdmi.IHdmiVendorCommandListener;
 import android.hardware.tv.cec.V1_0.OptionKey;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
 import android.media.AudioManager;
+import android.media.session.MediaController;
+import android.media.session.MediaSessionManager;
 import android.media.tv.TvInputManager;
 import android.media.tv.TvInputManager.TvInputCallback;
 import android.net.Uri;
@@ -541,7 +543,7 @@ public class HdmiControlService extends SystemService {
     private void bootCompleted() {
         // on boot, if device is interactive, set HDMI CEC state as powered on as well
         if (mPowerManager.isInteractive() && isPowerStandbyOrTransient()) {
-            onWakeUp(WAKE_UP_BOOT_UP);
+            mPowerStatusController.setPowerStatus(HdmiControlManager.POWER_STATUS_ON);
         }
     }
 
@@ -772,8 +774,14 @@ public class HdmiControlService extends SystemService {
 
     private void initializeCec(int initiatedBy) {
         mAddressAllocated = false;
-        mCecVersion = getHdmiCecConfig().getIntValue(
+        int settingsCecVersion = getHdmiCecConfig().getIntValue(
                 HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION);
+        int supportedCecVersion = mCecController.getVersion();
+
+        // Limit the used CEC version to the highest supported version by HAL and selected
+        // version in settings (but at least v1.4b).
+        mCecVersion = Math.max(HdmiControlManager.HDMI_CEC_VERSION_1_4_B,
+                Math.min(settingsCecVersion, supportedCecVersion));
 
         mCecController.setOption(OptionKey.SYSTEM_CEC_CONTROL, true);
         mCecController.setLanguage(mMenuLanguage);
@@ -2182,6 +2190,7 @@ public class HdmiControlService extends SystemService {
 
             pw.println("mProhibitMode: " + mProhibitMode);
             pw.println("mPowerStatus: " + mPowerStatusController.getPowerStatus());
+            pw.println("mCecVersion: " + mCecVersion);
 
             // System settings
             pw.println("System_settings:");
@@ -3291,6 +3300,16 @@ public class HdmiControlService extends SystemService {
     ActiveSource getLocalActiveSource() {
         synchronized (mLock) {
             return mActiveSource;
+        }
+    }
+
+    @VisibleForTesting
+    void pauseActiveMediaSessions() {
+        MediaSessionManager mediaSessionManager = getContext()
+                .getSystemService(MediaSessionManager.class);
+        List<MediaController> mediaControllers = mediaSessionManager.getActiveSessions(null);
+        for (MediaController mediaController : mediaControllers) {
+            mediaController.getTransportControls().pause();
         }
     }
 

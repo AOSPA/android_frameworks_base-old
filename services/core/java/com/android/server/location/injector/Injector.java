@@ -48,6 +48,12 @@ public interface Injector {
     /** Returns a ScreenInteractiveHelper. */
     ScreenInteractiveHelper getScreenInteractiveHelper();
 
+    /** Returns a DeviceStationaryHelper. */
+    DeviceStationaryHelper getDeviceStationaryHelper();
+
+    /** Returns a DeviceIdleHelper. */
+    DeviceIdleHelper getDeviceIdleHelper();
+
     /** Returns a LocationAttributionHelper. */
     LocationAttributionHelper getLocationAttributionHelper();
 
@@ -56,7 +62,4 @@ public interface Injector {
 
     /** Returns a LocationUsageLogger. */
     LocationUsageLogger getLocationUsageLogger();
-
-    /** Returns a LocationEventLog. */
-    LocationEventLog getLocationEventLog();
 }

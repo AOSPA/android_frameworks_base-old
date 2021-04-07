@@ -37,6 +37,7 @@
 #include <SkSize.h>
 #include <cutils/compiler.h>
 #include <utils/Functor.h>
+#include <utils/Mutex.h>
 
 #include <functional>
 #include <future>
@@ -118,6 +119,7 @@ public:
     void setSwapBehavior(SwapBehavior swapBehavior);
 
     void setSurface(ANativeWindow* window, bool enableTimeout = true);
+    void setSurfaceControl(ASurfaceControl* surfaceControl);
     bool pauseSurface();
     void setStopped(bool stopped);
     bool hasSurface() const { return mNativeSurface.get(); }
@@ -199,10 +201,11 @@ public:
         return mUseForceDark;
     }
 
-    // Must be called before setSurface
-    void setRenderAheadDepth(int renderAhead);
-
     SkISize getNextFrameSize() const;
+
+    // Called when SurfaceStats are available.
+    static void onSurfaceStatsAvailable(void* context, ASurfaceControl* control,
+            ASurfaceControlStats* stats);
 
 private:
     CanvasContext(RenderThread& thread, bool translucent, RenderNode* rootRenderNode,
@@ -217,10 +220,10 @@ private:
 
     bool isSwapChainStuffed();
     bool surfaceRequiresRedraw();
-    void setPresentTime();
     void setupPipelineSurface();
 
     SkRect computeDirtyRect(const Frame& frame, SkRect* dirty);
+    void finishFrame(FrameInfo* frameInfo);
 
     // The same type as Frame.mWidth and Frame.mHeight
     int32_t mLastFrameWidth = 0;
@@ -228,6 +231,9 @@ private:
 
     RenderThread& mRenderThread;
     std::unique_ptr<ReliableSurface> mNativeSurface;
+    // The SurfaceControl reference is passed from ViewRootImpl, can be set to
+    // NULL to remove the reference
+    ASurfaceControl* mSurfaceControl = nullptr;
     // stopped indicates the CanvasContext will reject actual redraw operations,
     // and defer repaint until it is un-stopped
     bool mStopped = false;
@@ -238,9 +244,6 @@ private:
     // painted onto its surface.
     bool mIsDirty = false;
     SwapBehavior mSwapBehavior = SwapBehavior::kSwap_default;
-    bool mFixedRenderAhead = false;
-    uint32_t mRenderAheadDepth = 0;
-    uint32_t mRenderAheadCapacity = 0;
     struct SwapHistory {
         SkRect damage;
         nsecs_t vsyncTime;
@@ -270,7 +273,12 @@ private:
     std::vector<sp<RenderNode>> mRenderNodes;
 
     FrameInfo* mCurrentFrameInfo = nullptr;
-    RingBuffer<std::pair<FrameInfo*, int64_t>, 4> mLast4FrameInfos;
+
+    // List of frames that are awaiting GPU completion reporting
+    RingBuffer<std::pair<FrameInfo*, int64_t>, 4> mLast4FrameInfos
+            GUARDED_BY(mLast4FrameInfosMutex);
+    std::mutex mLast4FrameInfosMutex;
+
     std::string mName;
     JankTracker mJankTracker;
     FrameInfoVisualizer mProfiler;
@@ -285,6 +293,9 @@ private:
     std::unique_ptr<IRenderPipeline> mRenderPipeline;
 
     std::vector<std::function<void(int64_t)>> mFrameCompleteCallbacks;
+
+    // If set to true, we expect that callbacks into onSurfaceStatsAvailable
+    bool mExpectSurfaceStats = false;
 };
 
 } /* namespace renderthread */

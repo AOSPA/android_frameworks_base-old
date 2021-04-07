@@ -28,6 +28,7 @@ import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
 import android.os.SystemBatteryConsumer;
 import android.os.UidBatteryConsumer;
+import android.os.UserBatteryConsumer;
 import android.util.SparseArray;
 
 import androidx.test.InstrumentationRegistry;
@@ -48,6 +49,7 @@ public class BatteryUsageStatsRule implements TestRule {
     };
 
     private BatteryUsageStats mBatteryUsageStats;
+    private boolean mScreenOn;
 
     public BatteryUsageStatsRule() {
         Context context = InstrumentationRegistry.getContext();
@@ -76,6 +78,31 @@ public class BatteryUsageStatsRule implements TestRule {
         return this;
     }
 
+    public BatteryUsageStatsRule setNumCpuClusters(int number) {
+        when(mPowerProfile.getNumCpuClusters()).thenReturn(number);
+        return this;
+    }
+
+    public BatteryUsageStatsRule setNumSpeedStepsInCpuCluster(int cluster, int speeds) {
+        when(mPowerProfile.getNumSpeedStepsInCpuCluster(cluster)).thenReturn(speeds);
+        return this;
+    }
+
+    public BatteryUsageStatsRule setAveragePowerForCpuCluster(int cluster, double value) {
+        when(mPowerProfile.getAveragePowerForCpuCluster(cluster)).thenReturn(value);
+        return this;
+    }
+
+    public BatteryUsageStatsRule setAveragePowerForCpuCore(int cluster, int step, double value) {
+        when(mPowerProfile.getAveragePowerForCpuCore(cluster, step)).thenReturn(value);
+        return this;
+    }
+
+    public BatteryUsageStatsRule startWithScreenOn(boolean screenOn) {
+        mScreenOn = screenOn;
+        return this;
+    }
+
     public void setNetworkStats(NetworkStats networkStats) {
         mBatteryStats.setNetworkStats(networkStats);
     }
@@ -94,6 +121,7 @@ public class BatteryUsageStatsRule implements TestRule {
     private void noteOnBattery() {
         mBatteryStats.setOnBatteryInternal(true);
         mBatteryStats.getOnBatteryTimeBase().setRunning(true, 0, 0);
+        mBatteryStats.getOnBatteryScreenOffTimeBase().setRunning(!mScreenOn, 0, 0);
     }
 
     public PowerProfile getPowerProfile() {
@@ -108,22 +136,35 @@ public class BatteryUsageStatsRule implements TestRule {
         return mBatteryStats.getUidStatsLocked(uid);
     }
 
-    public void setTime(long realtimeUs, long uptimeUs) {
-        mMockClocks.realtime = realtimeUs;
-        mMockClocks.uptime = uptimeUs;
+    public void setTime(long realtimeMs, long uptimeMs) {
+        mMockClocks.realtime = realtimeMs;
+        mMockClocks.uptime = uptimeMs;
     }
 
-    void apply(PowerCalculator calculator) {
-        BatteryUsageStats.Builder builder = new BatteryUsageStats.Builder(0, 0);
+    BatteryUsageStats apply(PowerCalculator... calculators) {
+        return apply(BatteryUsageStatsQuery.DEFAULT, calculators);
+    }
+
+    BatteryUsageStats apply(BatteryUsageStatsQuery query, PowerCalculator... calculators) {
+        final long[] customMeasuredEnergiesMicroJoules =
+                mBatteryStats.getCustomMeasuredEnergiesMicroJoules();
+        final int customMeasuredEnergiesCount = customMeasuredEnergiesMicroJoules != null
+                ? customMeasuredEnergiesMicroJoules.length
+                : 0;
+        BatteryUsageStats.Builder builder = new BatteryUsageStats.Builder(
+                customMeasuredEnergiesCount, 0);
         SparseArray<? extends BatteryStats.Uid> uidStats = mBatteryStats.getUidStats();
         for (int i = 0; i < uidStats.size(); i++) {
             builder.getOrCreateUidBatteryConsumerBuilder(uidStats.valueAt(i));
         }
 
-        calculator.calculate(builder, mBatteryStats, mMockClocks.realtime, mMockClocks.uptime,
-                BatteryUsageStatsQuery.DEFAULT, null);
+        for (PowerCalculator calculator : calculators) {
+            calculator.calculate(builder, mBatteryStats, mMockClocks.realtime, mMockClocks.uptime,
+                    query);
+        }
 
         mBatteryUsageStats = builder.build();
+        return mBatteryUsageStats;
     }
 
     public UidBatteryConsumer getUidBatteryConsumer(int uid) {
@@ -140,6 +181,15 @@ public class BatteryUsageStatsRule implements TestRule {
         for (SystemBatteryConsumer sbc : mBatteryUsageStats.getSystemBatteryConsumers()) {
             if (sbc.getDrainType() == drainType) {
                 return sbc;
+            }
+        }
+        return null;
+    }
+
+    public UserBatteryConsumer getUserBatteryConsumer(int userId) {
+        for (UserBatteryConsumer ubc : mBatteryUsageStats.getUserBatteryConsumers()) {
+            if (ubc.getUserId() == userId) {
+                return ubc;
             }
         }
         return null;

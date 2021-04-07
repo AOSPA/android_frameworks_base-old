@@ -28,8 +28,12 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.text.TextUtils;
 
+import com.android.internal.util.Parcelling;
+import com.android.internal.util.Parcelling.BuiltIn.ForStringSet;
+
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Set;
 
 /**
  * Information you can retrieve about a particular security permission
@@ -278,6 +282,15 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
     @SystemApi
     public static final int PROTECTION_FLAG_ROLE = 0x4000000;
 
+    /**
+     * Additional flag for {@link #protectionLevel}, correspoinding to the {@code knownSigner} value
+     * of {@link android.R.attr#protectionLevel}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int PROTECTION_FLAG_KNOWN_SIGNER = 0x8000000;
+
     /** @hide */
     @IntDef(flag = true, prefix = { "PROTECTION_FLAG_" }, value = {
             PROTECTION_FLAG_PRIVILEGED,
@@ -303,6 +316,7 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
             PROTECTION_FLAG_RETAIL_DEMO,
             PROTECTION_FLAG_RECENTS,
             PROTECTION_FLAG_ROLE,
+            PROTECTION_FLAG_KNOWN_SIGNER,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProtectionFlags {}
@@ -466,6 +480,17 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
      */
     public @Nullable CharSequence nonLocalizedDescription;
 
+    private static ForStringSet sForStringSet = Parcelling.Cache.getOrCreate(ForStringSet.class);
+
+    /**
+     * A {@link Set} of trusted signing certificate digests. If this permission has the {@link
+     * #PROTECTION_FLAG_KNOWN_SIGNER} flag set the permission will be granted to a requesting app
+     * if the app is signed by any of these certificates.
+     *
+     * @hide
+     */
+    public @Nullable Set<String> knownCerts;
+
     /** @hide */
     public static int fixProtectionLevel(int level) {
         if (level == PROTECTION_SIGNATURE_OR_SYSTEM) {
@@ -570,6 +595,9 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
         if ((level & PermissionInfo.PROTECTION_FLAG_ROLE) != 0) {
             protLevel.append("|role");
         }
+        if ((level & PermissionInfo.PROTECTION_FLAG_KNOWN_SIGNER) != 0) {
+            protLevel.append("|knownSigner");
+        }
         return protLevel.toString();
     }
 
@@ -665,6 +693,7 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(descriptionRes);
         dest.writeInt(requestRes);
         TextUtils.writeToParcel(nonLocalizedDescription, dest, parcelableFlags);
+        sForStringSet.parcel(knownCerts, dest, parcelableFlags);
     }
 
     /** @hide */
@@ -730,5 +759,6 @@ public class PermissionInfo extends PackageItemInfo implements Parcelable {
         descriptionRes = source.readInt();
         requestRes = source.readInt();
         nonLocalizedDescription = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(source);
+        knownCerts = sForStringSet.unparcel(source);
     }
 }

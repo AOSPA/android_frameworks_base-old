@@ -115,7 +115,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.ThreadFactory;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -750,7 +749,7 @@ public final class InputMethodManager {
         @Override
         public boolean hasActiveConnection(View view) {
             synchronized (mH) {
-                if (!hasServedByInputMethodLocked(view)) {
+                if (!hasServedByInputMethodLocked(view) || mCurMethod == null) {
                     return false;
                 }
 
@@ -764,6 +763,17 @@ public final class InputMethodManager {
     /** @hide */
     public DelegateImpl getDelegate() {
         return mDelegate;
+    }
+
+    /**
+     * Checks whether the active input connection (if any) is for the given view.
+     *
+     * @hide
+     * @see ImeFocusController#getImmDelegate()#hasActiveInputConnection(View)
+     */
+    @TestApi
+    public boolean hasActiveInputConnection(@Nullable View view) {
+        return mDelegate.hasActiveConnection(view);
     }
 
     private View getServedViewLocked() {
@@ -1080,19 +1090,6 @@ public final class InputMethodManager {
                     == getLooper()) {
                 ((DumpableInputConnection) getInputConnection()).dumpDebug(proto, fieldId);
             }
-        }
-    }
-
-    private static class ImeThreadFactory implements ThreadFactory {
-        private final String mThreadName;
-
-        ImeThreadFactory(String name) {
-            mThreadName = name;
-        }
-
-        @Override
-        public Thread newThread(Runnable r) {
-            return new Thread(r, mThreadName);
         }
     }
 
