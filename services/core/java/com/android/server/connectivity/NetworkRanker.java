@@ -90,7 +90,7 @@ public class NetworkRanker {
         if (USE_POLICY_RANKING) {
             return getBestNetworkByPolicy(candidates, currentSatisfier);
         } else {
-            return getBestNetworkByLegacyInt(candidates);
+            return getBestNetworkByLegacyInt(request, candidates);
         }
     }
 
@@ -238,7 +238,7 @@ public class NetworkRanker {
     // TODO : switch to the policy implementation and remove
     // Almost equivalent to Collections.max(nais), but allows returning null if no network
     // satisfies the request.
-    private NetworkAgentInfo getBestNetworkByLegacyInt(
+    private NetworkAgentInfo getBestNetworkByLegacyInt(@NonNull final NetworkRequest request,
             @NonNull final Collection<NetworkAgentInfo> nais) {
         NetworkAgentInfo bestNetwork = null;
         int bestScore = Integer.MIN_VALUE;
