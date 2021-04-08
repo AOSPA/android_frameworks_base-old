@@ -18,8 +18,12 @@ package com.android.server;
 
 import static android.Manifest.permission.CHANGE_NETWORK_STATE;
 import static android.Manifest.permission.CONNECTIVITY_USE_RESTRICTED_NETWORKS;
+import static android.Manifest.permission.NETWORK_FACTORY;
 import static android.Manifest.permission.NETWORK_SETTINGS;
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
+import static android.content.Intent.ACTION_PACKAGE_ADDED;
+import static android.content.Intent.ACTION_PACKAGE_REMOVED;
+import static android.content.Intent.ACTION_PACKAGE_REPLACED;
 import static android.content.Intent.ACTION_USER_ADDED;
 import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.ACTION_USER_UNLOCKED;
@@ -290,7 +294,6 @@ import com.android.internal.util.test.BroadcastInterceptingContext;
 import com.android.internal.util.test.FakeSettingsProvider;
 import com.android.net.module.util.ArrayTrackRecord;
 import com.android.server.ConnectivityService.ConnectivityDiagnosticsCallbackInfo;
-import com.android.server.connectivity.ConnectivityConstants;
 import com.android.server.connectivity.MockableSystemProperties;
 import com.android.server.connectivity.Nat464Xlat;
 import com.android.server.connectivity.NetworkAgentInfo;
@@ -578,6 +581,7 @@ public class ConnectivityServiceTest {
             final UserManager umMock = createContextAsUser(userHandle, 0 /* flags */)
                     .getSystemService(UserManager.class);
             doReturn(value).when(umMock).isManagedProfile();
+            doReturn(value).when(mUserManager).isManagedProfile(eq(userHandle.getIdentifier()));
         }
 
         @Override
@@ -2782,10 +2786,14 @@ public class ConnectivityServiceTest {
     }
 
     private void grantUsingBackgroundNetworksPermissionForUid(final int uid) throws Exception {
-        final String myPackageName = mContext.getPackageName();
-        when(mPackageManager.getPackageInfo(eq(myPackageName), eq(GET_PERMISSIONS)))
+        grantUsingBackgroundNetworksPermissionForUid(uid, mContext.getPackageName());
+    }
+
+    private void grantUsingBackgroundNetworksPermissionForUid(
+            final int uid, final String packageName) throws Exception {
+        when(mPackageManager.getPackageInfo(eq(packageName), eq(GET_PERMISSIONS)))
                 .thenReturn(buildPackageInfo(true, uid));
-        mService.mPermissionMonitor.onPackageAdded(myPackageName, uid);
+        mService.mPermissionMonitor.onPackageAdded(packageName, uid);
     }
 
     @Test
@@ -3033,8 +3041,9 @@ public class ConnectivityServiceTest {
         }
 
         NetworkCapabilities filter = new NetworkCapabilities();
+        filter.addTransportType(TRANSPORT_CELLULAR);
         filter.addCapability(capability);
-        // Add NOT_VCN_MANAGED capability into filter unconditionally since some request will add
+        // Add NOT_VCN_MANAGED capability into filter unconditionally since some requests will add
         // NOT_VCN_MANAGED automatically but not for NetworkCapabilities,
         // see {@code NetworkCapabilities#deduceNotVcnManagedCapability} for more details.
         filter.addCapability(NET_CAPABILITY_NOT_VCN_MANAGED);
@@ -3063,15 +3072,11 @@ public class ConnectivityServiceTest {
 
         // Now bring in a higher scored network.
         TestNetworkAgentWrapper testAgent = new TestNetworkAgentWrapper(TRANSPORT_CELLULAR);
-        // Rather than create a validated network which complicates things by registering it's
-        // own NetworkRequest during startup, just bump up the score to cancel out the
-        // unvalidated penalty.
-        testAgent.adjustScore(40);
-
-        // When testAgent connects, because of its 50 score (50 for cell + 40 adjustment score
-        // - 40 penalty for not being validated), it will beat the testFactory's offer, so
-        // the request will be removed.
-        testAgent.connect(false);
+        // When testAgent connects, because of its score (50 legacy int / cell transport)
+        // it will beat or equal the testFactory's offer, so the request will be removed.
+        // Note the agent as validated only if the capability is INTERNET, as it's the only case
+        // where it makes sense.
+        testAgent.connect(NET_CAPABILITY_INTERNET == capability /* validated */);
         testAgent.addCapability(capability);
         testFactory.expectRequestRemove();
         testFactory.assertRequestCountEquals(0);
@@ -3085,17 +3090,18 @@ public class ConnectivityServiceTest {
         testFactory.assertRequestCountEquals(0);
         assertFalse(testFactory.getMyStartRequested());
 
-        // Make the test agent weak enough to have the exact same score as the
-        // factory (50 for cell + 40 adjustment -40 validation penalty - 5 adjustment). Make sure
-        // the factory doesn't see the request.
+        // If using legacy scores, make the test agent weak enough to have the exact same score as
+        // the factory (50 for cell - 5 adjustment). Make sure the factory doesn't see the request.
+        // If not using legacy score, this is a no-op and the "same score removes request" behavior
+        // has already been tested above.
         testAgent.adjustScore(-5);
         expectNoRequestChanged(testFactory);
         assertFalse(testFactory.getMyStartRequested());
 
-        // Make the test agent weak enough to see the two requests (the one that was just sent,
-        // and either the default one or the one sent at the top of this test if the default
-        // won't be seen).
-        testAgent.adjustScore(-45);
+        // Make the test agent weak enough that the factory will see the two requests (the one that
+        // was just sent, and either the default one or the one sent at the top of this test if
+        // the default won't be seen).
+        testAgent.setScore(new NetworkScore.Builder().setLegacyInt(2).setExiting(true).build());
         testFactory.expectRequestAdds(2);
         testFactory.assertRequestCountEquals(2);
         assertTrue(testFactory.getMyStartRequested());
@@ -3127,7 +3133,7 @@ public class ConnectivityServiceTest {
         assertTrue(testFactory.getMyStartRequested());
 
         // Adjust the agent score up again. Expect the request to be withdrawn.
-        testAgent.adjustScore(50);
+        testAgent.setScore(new NetworkScore.Builder().setLegacyInt(50).build());
         testFactory.expectRequestRemove();
         testFactory.assertRequestCountEquals(0);
         assertFalse(testFactory.getMyStartRequested());
@@ -3168,22 +3174,35 @@ public class ConnectivityServiceTest {
     @Test
     public void testRegisterIgnoringScore() throws Exception {
         mWiFiNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI);
-        mWiFiNetworkAgent.adjustScore(30); // score = 60 (wifi) + 30 = 90
+        mWiFiNetworkAgent.setScore(new NetworkScore.Builder().setLegacyInt(90).build());
         mWiFiNetworkAgent.connect(true /* validated */);
 
         // Make sure the factory sees the default network
         final NetworkCapabilities filter = new NetworkCapabilities();
+        filter.addTransportType(TRANSPORT_CELLULAR);
         filter.addCapability(NET_CAPABILITY_INTERNET);
         filter.addCapability(NET_CAPABILITY_NOT_VCN_MANAGED);
         final HandlerThread handlerThread = new HandlerThread("testNetworkFactoryRequests");
         handlerThread.start();
         final MockNetworkFactory testFactory = new MockNetworkFactory(handlerThread.getLooper(),
                 mServiceContext, "testFactory", filter, mCsHandlerThread);
-        testFactory.registerIgnoringScore();
-        testFactory.expectRequestAdd();
+        testFactory.register();
 
-        mWiFiNetworkAgent.adjustScore(20); // exceed the maximum score
-        expectNoRequestChanged(testFactory); // still seeing the request
+        final MockNetworkFactory testFactoryAll = new MockNetworkFactory(handlerThread.getLooper(),
+                mServiceContext, "testFactoryAll", filter, mCsHandlerThread);
+        testFactoryAll.registerIgnoringScore();
+
+        // The regular test factory should not see the request, because WiFi is stronger than cell.
+        expectNoRequestChanged(testFactory);
+        // With ignoringScore though the request is seen.
+        testFactoryAll.expectRequestAdd();
+
+        // The legacy int will be ignored anyway, set the only other knob to true
+        mWiFiNetworkAgent.setScore(new NetworkScore.Builder().setLegacyInt(110)
+                .setTransportPrimary(true).build());
+
+        expectNoRequestChanged(testFactory); // still not seeing the request
+        expectNoRequestChanged(testFactoryAll); // still seeing the request
 
         mWiFiNetworkAgent.disconnect();
     }
@@ -6047,7 +6066,8 @@ public class ConnectivityServiceTest {
         // called again, it does. For example, connect Ethernet, but with a low score, such that it
         // does not become the default network.
         mEthernetNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_ETHERNET);
-        mEthernetNetworkAgent.adjustScore(-40);
+        mEthernetNetworkAgent.setScore(
+                new NetworkScore.Builder().setLegacyInt(30).setExiting(true).build());
         mEthernetNetworkAgent.connect(false);
         waitForIdle();
         verify(mStatsManager).notifyNetworkStatus(any(List.class),
@@ -6922,8 +6942,6 @@ public class ConnectivityServiceTest {
         callback.expectAvailableCallbacksUnvalidated(mMockVpn);
         callback.assertNoCallback();
 
-        assertTrue(mMockVpn.getAgent().getScore() > mEthernetNetworkAgent.getScore());
-        assertEquals(ConnectivityConstants.VPN_DEFAULT_SCORE, mMockVpn.getAgent().getScore());
         assertEquals(mMockVpn.getNetwork(), mCm.getActiveNetwork());
 
         NetworkCapabilities nc = mCm.getNetworkCapabilities(mMockVpn.getNetwork());
@@ -8225,12 +8243,12 @@ public class ConnectivityServiceTest {
         assertExtraInfoFromCmPresent(mWiFiNetworkAgent);
 
         b1 = expectConnectivityAction(TYPE_WIFI, DetailedState.DISCONNECTED);
+        b2 = expectConnectivityAction(TYPE_VPN, DetailedState.DISCONNECTED);
         mWiFiNetworkAgent.disconnect();
         callback.expectCallback(CallbackEntry.LOST, mWiFiNetworkAgent);
         systemDefaultCallback.expectCallback(CallbackEntry.LOST, mWiFiNetworkAgent);
         b1.expectBroadcast();
         callback.expectCapabilitiesThat(mMockVpn, nc -> !nc.hasTransport(TRANSPORT_WIFI));
-        b2 = expectConnectivityAction(TYPE_VPN, DetailedState.DISCONNECTED);
         mMockVpn.expectStopVpnRunnerPrivileged();
         callback.expectCallback(CallbackEntry.LOST, mMockVpn);
         b2.expectBroadcast();
@@ -10422,6 +10440,12 @@ public class ConnectivityServiceTest {
                 .thenReturn(applicationInfo);
     }
 
+    private void mockGetApplicationInfoThrowsNameNotFound(@NonNull final String packageName)
+            throws Exception {
+        when(mPackageManager.getApplicationInfo(eq(packageName), anyInt()))
+                .thenThrow(new PackageManager.NameNotFoundException(packageName));
+    }
+
     private void mockHasSystemFeature(@NonNull final String featureName,
             @NonNull final boolean hasFeature) {
         when(mPackageManager.hasSystemFeature(eq(featureName)))
@@ -10878,15 +10902,23 @@ public class ConnectivityServiceTest {
             @NonNull final UidRangeParcel[] uidRanges,
             @NonNull final String testPackageName)
             throws Exception {
-        mockHasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, true);
-
         // These tests work off a single UID therefore using 'start' is valid.
         mockGetApplicationInfo(testPackageName, uidRanges[0].start);
 
+        setOemNetworkPreference(networkPrefToSetup, testPackageName);
+    }
+
+    private void setOemNetworkPreference(final int networkPrefToSetup,
+            @NonNull final String... testPackageNames)
+            throws Exception {
+        mockHasSystemFeature(PackageManager.FEATURE_AUTOMOTIVE, true);
+
         // Build OemNetworkPreferences object
-        final OemNetworkPreferences pref = new OemNetworkPreferences.Builder()
-                .addNetworkPreference(testPackageName, networkPrefToSetup)
-                .build();
+        final OemNetworkPreferences.Builder builder = new OemNetworkPreferences.Builder();
+        for (final String packageName : testPackageNames) {
+            builder.addNetworkPreference(packageName, networkPrefToSetup);
+        }
+        final OemNetworkPreferences pref = builder.build();
 
         // Act on ConnectivityService.setOemNetworkPreference()
         final TestOemListenerCallback oemPrefListener = new TestOemListenerCallback();
@@ -11485,8 +11517,7 @@ public class ConnectivityServiceTest {
         // Arrange PackageManager mocks
         final int secondUserTestPackageUid = UserHandle.getUid(secondUser, TEST_PACKAGE_UID);
         final UidRangeParcel[] uidRangesSingleUser =
-                toUidRangeStableParcels(
-                        uidRangesForUids(TEST_PACKAGE_UID));
+                toUidRangeStableParcels(uidRangesForUids(TEST_PACKAGE_UID));
         final UidRangeParcel[] uidRangesBothUsers =
                 toUidRangeStableParcels(
                         uidRangesForUids(TEST_PACKAGE_UID, secondUserTestPackageUid));
@@ -11528,6 +11559,84 @@ public class ConnectivityServiceTest {
 
         // Test that we correctly add values for the single user and remove for the all users.
         verifySetOemNetworkPreferenceForPreference(uidRangesSingleUser, uidRangesBothUsers,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                false /* shouldDestroyNetwork */);
+    }
+
+    @Test
+    public void testMultilayerForPackageChangesEvaluatesCorrectly()
+            throws Exception {
+        @OemNetworkPreferences.OemNetworkPreference final int networkPref =
+                OEM_NETWORK_PREFERENCE_OEM_PAID;
+        final String packageScheme = "package:";
+
+        // Arrange PackageManager mocks
+        final String packageToInstall = "package.to.install";
+        final int packageToInstallUid = 81387;
+        final UidRangeParcel[] uidRangesSinglePackage =
+                toUidRangeStableParcels(uidRangesForUids(TEST_PACKAGE_UID));
+        mockGetApplicationInfo(TEST_PACKAGE_NAME, TEST_PACKAGE_UID);
+        mockGetApplicationInfoThrowsNameNotFound(packageToInstall);
+        setOemNetworkPreference(networkPref, TEST_PACKAGE_NAME, packageToInstall);
+        grantUsingBackgroundNetworksPermissionForUid(Binder.getCallingUid(), packageToInstall);
+
+        // Verify the starting state. No networks should be connected.
+        verifySetOemNetworkPreferenceForPreference(uidRangesSinglePackage,
+                OEM_PREF_ANY_NET_ID, 0 /* times */,
+                OEM_PREF_ANY_NET_ID, 0 /* times */,
+                false /* shouldDestroyNetwork */);
+
+        // Test that we correctly add the expected values for installed packages.
+        setOemNetworkPreferenceAgentConnected(TRANSPORT_CELLULAR, true);
+        verifySetOemNetworkPreferenceForPreference(uidRangesSinglePackage,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                OEM_PREF_ANY_NET_ID, 0 /* times */,
+                false /* shouldDestroyNetwork */);
+
+        // Set the system to recognize the package to be installed
+        mockGetApplicationInfo(packageToInstall, packageToInstallUid);
+        final UidRangeParcel[] uidRangesAllPackages =
+                toUidRangeStableParcels(uidRangesForUids(TEST_PACKAGE_UID, packageToInstallUid));
+
+        // Send a broadcast indicating a package was installed.
+        final Intent addedIntent = new Intent(ACTION_PACKAGE_ADDED);
+        addedIntent.setData(Uri.parse(packageScheme + packageToInstall));
+        processBroadcast(addedIntent);
+
+        // Test the single package is removed and the combined packages are added.
+        verifySetOemNetworkPreferenceForPreference(uidRangesAllPackages, uidRangesSinglePackage,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                false /* shouldDestroyNetwork */);
+
+        // Set the system to no longer recognize the package to be installed
+        mockGetApplicationInfoThrowsNameNotFound(packageToInstall);
+
+        // Send a broadcast indicating a package was removed.
+        final Intent removedIntent = new Intent(ACTION_PACKAGE_REMOVED);
+        removedIntent.setData(Uri.parse(packageScheme + packageToInstall));
+        processBroadcast(removedIntent);
+
+        // Test the combined packages are removed and the single package is added.
+        verifySetOemNetworkPreferenceForPreference(uidRangesSinglePackage, uidRangesAllPackages,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                mCellNetworkAgent.getNetwork().netId, 1 /* times */,
+                false /* shouldDestroyNetwork */);
+
+        // Set the system to change the installed package's uid
+        final int replacedTestPackageUid = TEST_PACKAGE_UID + 1;
+        mockGetApplicationInfo(TEST_PACKAGE_NAME, replacedTestPackageUid);
+        final UidRangeParcel[] uidRangesReplacedPackage =
+                toUidRangeStableParcels(uidRangesForUids(replacedTestPackageUid));
+
+        // Send a broadcast indicating a package was replaced.
+        final Intent replacedIntent = new Intent(ACTION_PACKAGE_REPLACED);
+        replacedIntent.setData(Uri.parse(packageScheme + TEST_PACKAGE_NAME));
+        processBroadcast(replacedIntent);
+
+        // Test the original uid is removed and is replaced with the new uid.
+        verifySetOemNetworkPreferenceForPreference(uidRangesReplacedPackage, uidRangesSinglePackage,
                 mCellNetworkAgent.getNetwork().netId, 1 /* times */,
                 mCellNetworkAgent.getNetwork().netId, 1 /* times */,
                 false /* shouldDestroyNetwork */);
@@ -11645,14 +11754,14 @@ public class ConnectivityServiceTest {
                 new LinkProperties(), oemPaidNc);
         oemPaidAgent.connect(true);
 
-        // The oemPaidAgent has score 50 (default for cell) so it beats what the oemPaidFactory can
+        // The oemPaidAgent has score 50/cell transport, so it beats what the oemPaidFactory can
         // provide, therefore it loses the request.
         oemPaidFactory.expectRequestRemove();
         oemPaidFactory.assertRequestCountEquals(0);
         expectNoRequestChanged(internetFactory);
         internetFactory.assertRequestCountEquals(0);
 
-        oemPaidAgent.adjustScore(-30);
+        oemPaidAgent.setScore(new NetworkScore.Builder().setLegacyInt(20).setExiting(true).build());
         // Now the that the agent is weak, the oemPaidFactory can beat the existing network for the
         // OEM_PAID request. The internet factory however can't beat a network that has OEM_PAID
         // for the preference request, so it doesn't see the request.
@@ -11682,7 +11791,8 @@ public class ConnectivityServiceTest {
         // Now WiFi connects and it's unmetered, but it's weaker than cell.
         mWiFiNetworkAgent = new TestNetworkAgentWrapper(TRANSPORT_WIFI);
         mWiFiNetworkAgent.addCapability(NET_CAPABILITY_NOT_METERED);
-        mWiFiNetworkAgent.adjustScore(-30); // Not the best Internet network, but unmetered
+        mWiFiNetworkAgent.setScore(new NetworkScore.Builder().setLegacyInt(30).setExiting(true)
+                .build()); // Not the best Internet network, but unmetered
         mWiFiNetworkAgent.connect(true);
 
         // The OEM_PAID preference prefers an unmetered network to an OEM_PAID network, so
@@ -12463,5 +12573,69 @@ public class ConnectivityServiceTest {
                 IllegalArgumentException.class , () ->
                         mCm.setProfileNetworkPreference(testHandle,
                                 PROFILE_NETWORK_PREFERENCE_ENTERPRISE, null, null));
+    }
+
+    @Test
+    public void testSubIdsClearedWithoutNetworkFactoryPermission() throws Exception {
+        mServiceContext.setPermission(NETWORK_FACTORY, PERMISSION_DENIED);
+        final NetworkCapabilities nc = new NetworkCapabilities();
+        nc.setSubIds(Collections.singleton(Process.myUid()));
+
+        final NetworkCapabilities result =
+                mService.networkCapabilitiesRestrictedForCallerPermissions(
+                        nc, Process.myPid(), Process.myUid());
+        assertTrue(result.getSubIds().isEmpty());
+    }
+
+    @Test
+    public void testSubIdsExistWithNetworkFactoryPermission() throws Exception {
+        mServiceContext.setPermission(NETWORK_FACTORY, PERMISSION_GRANTED);
+
+        final Set<Integer> subIds = Collections.singleton(Process.myUid());
+        final NetworkCapabilities nc = new NetworkCapabilities();
+        nc.setSubIds(subIds);
+
+        final NetworkCapabilities result =
+                mService.networkCapabilitiesRestrictedForCallerPermissions(
+                        nc, Process.myPid(), Process.myUid());
+        assertEquals(subIds, result.getSubIds());
+    }
+
+    private NetworkRequest getRequestWithSubIds() {
+        return new NetworkRequest.Builder()
+                .setSubIds(Collections.singleton(Process.myUid()))
+                .build();
+    }
+
+    @Test
+    public void testNetworkRequestWithSubIdsWithNetworkFactoryPermission() throws Exception {
+        mServiceContext.setPermission(NETWORK_FACTORY, PERMISSION_GRANTED);
+        final PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                mContext, 0 /* requestCode */, new Intent("a"), FLAG_IMMUTABLE);
+        final NetworkCallback networkCallback1 = new NetworkCallback();
+        final NetworkCallback networkCallback2 = new NetworkCallback();
+
+        mCm.requestNetwork(getRequestWithSubIds(), networkCallback1);
+        mCm.requestNetwork(getRequestWithSubIds(), pendingIntent);
+        mCm.registerNetworkCallback(getRequestWithSubIds(), networkCallback2);
+
+        mCm.unregisterNetworkCallback(networkCallback1);
+        mCm.releaseNetworkRequest(pendingIntent);
+        mCm.unregisterNetworkCallback(networkCallback2);
+    }
+
+    @Test
+    public void testNetworkRequestWithSubIdsWithoutNetworkFactoryPermission() throws Exception {
+        mServiceContext.setPermission(NETWORK_FACTORY, PERMISSION_DENIED);
+        final PendingIntent pendingIntent = PendingIntent.getBroadcast(
+                mContext, 0 /* requestCode */, new Intent("a"), FLAG_IMMUTABLE);
+
+        final Class<SecurityException> expected = SecurityException.class;
+        assertThrows(
+                expected, () -> mCm.requestNetwork(getRequestWithSubIds(), new NetworkCallback()));
+        assertThrows(expected, () -> mCm.requestNetwork(getRequestWithSubIds(), pendingIntent));
+        assertThrows(
+                expected,
+                () -> mCm.registerNetworkCallback(getRequestWithSubIds(), new NetworkCallback()));
     }
 }

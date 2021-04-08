@@ -3304,6 +3304,20 @@ public class NotificationManagerService extends SystemService {
                     == BUBBLE_PREFERENCE_ALL;
         }
 
+        /**
+         * @return true if this user has bubbles enabled at the feature-level.
+         */
+        @Override
+        public boolean areBubblesEnabled(UserHandle user) {
+            if (UserHandle.getCallingUserId() != user.getIdentifier()) {
+                getContext().enforceCallingPermission(
+                        android.Manifest.permission.INTERACT_ACROSS_USERS,
+                        "areBubblesEnabled for user " + user.getIdentifier());
+            }
+            // TODO: incorporate uid / per-user prefs once settings moves off global table.
+            return mPreferencesHelper.bubblesEnabled();
+        }
+
         @Override
         public int getBubblePreferenceForPackage(String pkg, int uid) {
             enforceSystemOrSystemUIOrSamePackage(pkg,
@@ -3609,6 +3623,7 @@ public class NotificationManagerService extends SystemService {
             cancelAllNotificationsInt(MY_UID, MY_PID, pkg, channelId, 0, 0, true,
                     callingUser, REASON_CHANNEL_REMOVED, null);
             mPreferencesHelper.deleteNotificationChannel(pkg, callingUid, channelId);
+            mHistoryManager.deleteNotificationChannel(pkg, callingUid, channelId);
             mListeners.notifyNotificationChannelChanged(pkg,
                     UserHandle.getUserHandleForUid(callingUid),
                     mPreferencesHelper.getNotificationChannel(pkg, callingUid, channelId, true),
@@ -4321,6 +4336,49 @@ public class NotificationManagerService extends SystemService {
                         throw new SecurityException("Not allowed to unsnooze before deadline");
                     }
                     unsnoozeNotificationInt(key, info, true);
+                }
+            } finally {
+                Binder.restoreCallingIdentity(identity);
+            }
+        }
+
+        /**
+         * Allows an app to set an initial notification listener filter
+         *
+         * @param token The binder for the listener, to check that the caller is allowed
+         */
+        @Override
+        public void migrateNotificationFilter(INotificationListener token, int defaultTypes,
+                List<String> disallowedApps) {
+            final long identity = Binder.clearCallingIdentity();
+            try {
+                synchronized (mNotificationLock) {
+                    final ManagedServiceInfo info = mListeners.checkServiceTokenLocked(token);
+
+                    Pair key = Pair.create(info.component, info.userid);
+
+                    NotificationListenerFilter nlf = mListeners.getNotificationListenerFilter(key);
+                    if (nlf == null) {
+                        nlf = new NotificationListenerFilter();
+                    }
+                    if (nlf.getDisallowedPackages().isEmpty() && disallowedApps != null) {
+                        for (String pkg : disallowedApps) {
+                            // block the current user's version and any work profile versions
+                            for (int userId : mUm.getProfileIds(info.userid, false)) {
+                                try {
+                                    int uid = getUidForPackageAndUser(pkg, UserHandle.of(userId));
+                                    VersionedPackage vp = new VersionedPackage(pkg, uid);
+                                    nlf.addPackage(vp);
+                                } catch (Exception e) {
+                                    // pkg doesn't exist on that user; skip
+                                }
+                            }
+                        }
+                    }
+                    if (nlf.areAllTypesAllowed()) {
+                        nlf.setTypes(defaultTypes);
+                    }
+                    mListeners.setNotificationListenerFilter(key, nlf);
                 }
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -5225,7 +5283,7 @@ public class NotificationManagerService extends SystemService {
         }
 
         private int getUidForPackageAndUser(String pkg, UserHandle user) throws RemoteException {
-            int uid = 0;
+            int uid = INVALID_UID;
             final long identity = Binder.clearCallingIdentity();
             try {
                 uid = mPackageManager.getPackageUid(pkg, 0, user.getIdentifier());
@@ -7062,6 +7120,7 @@ public class NotificationManagerService extends SystemService {
             final PendingIntent pi = PendingIntent.getBroadcast(getContext(),
                     REQUEST_CODE_TIMEOUT,
                     new Intent(ACTION_NOTIFICATION_TIMEOUT)
+                            .setPackage(PackageManagerService.PLATFORM_PACKAGE_NAME)
                             .setData(new Uri.Builder().scheme(SCHEME_TIMEOUT)
                                     .appendPath(record.getKey()).build())
                             .addFlags(Intent.FLAG_RECEIVER_FOREGROUND)

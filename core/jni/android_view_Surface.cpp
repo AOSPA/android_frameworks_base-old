@@ -450,7 +450,7 @@ static jint nativeSetAutoRefreshEnabled(JNIEnv* env, jclass clazz, jlong nativeO
 }
 
 static jint nativeSetFrameRate(JNIEnv* env, jclass clazz, jlong nativeObject, jfloat frameRate,
-                               jint compatibility, jboolean shouldBeSeamless) {
+                               jint compatibility, jint changeFrameRateStrategy) {
     Surface* surface = reinterpret_cast<Surface*>(nativeObject);
     ANativeWindow* anw = static_cast<ANativeWindow*>(surface);
     // Our compatibility is a Surface.FRAME_RATE_COMPATIBILITY_* value, and
@@ -458,7 +458,7 @@ static jint nativeSetFrameRate(JNIEnv* env, jclass clazz, jlong nativeObject, jf
     // ANATIVEWINDOW_FRAME_RATE_COMPATIBILITY_* value. The values are identical
     // though, so no need to explicitly convert.
     return anw->perform(surface, NATIVE_WINDOW_SET_FRAME_RATE, double(frameRate), compatibility,
-                        int(shouldBeSeamless));
+                        int(changeFrameRateStrategy));
 }
 
 // ----------------------------------------------------------------------------
@@ -489,7 +489,7 @@ static const JNINativeMethod gSurfaceMethods[] = {
          (void*)nativeAttachAndQueueBufferWithColorSpace},
         {"nativeSetSharedBufferModeEnabled", "(JZ)I", (void*)nativeSetSharedBufferModeEnabled},
         {"nativeSetAutoRefreshEnabled", "(JZ)I", (void*)nativeSetAutoRefreshEnabled},
-        {"nativeSetFrameRate", "(JFIZ)I", (void*)nativeSetFrameRate},
+        {"nativeSetFrameRate", "(JFII)I", (void*)nativeSetFrameRate},
         {"nativeGetFromBlastBufferQueue", "(JJ)J", (void*)nativeGetFromBlastBufferQueue},
 };
 

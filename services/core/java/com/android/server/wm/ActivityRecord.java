@@ -2895,6 +2895,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
         mAtmService.deferWindowLayout();
         try {
+            final Transition newTransition = (!mAtmService.getTransitionController().isCollecting()
+                    && mAtmService.getTransitionController().getTransitionPlayer() != null)
+                    ? mAtmService.getTransitionController().createTransition(TRANSIT_CLOSE) : null;
             makeFinishingLocked();
             // Make a local reference to its task since this.task could be set to null once this
             // activity is destroyed and detached from task.
@@ -2926,6 +2929,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             final boolean endTask = task.getTopNonFinishingActivity() == null
                     && !task.isClearingToReuseTask();
             final int transit = endTask ? TRANSIT_OLD_TASK_CLOSE : TRANSIT_OLD_ACTIVITY_CLOSE;
+            if (newTransition != null) {
+                mAtmService.getTransitionController().requestStartTransition(newTransition,
+                        endTask ? task : null, null /* remote */);
+            }
             if (isState(RESUMED)) {
                 if (endTask) {
                     mAtmService.getTaskChangeNotificationController().notifyTaskRemovalStarted(
@@ -8622,7 +8629,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 record.mAdapter.mRootTaskBounds, task.getWindowConfiguration(),
                 false /*isNotInRecents*/,
                 record.mThumbnailAdapter != null ? record.mThumbnailAdapter.mCapturedLeash : null,
-                record.mStartBounds, task.getPictureInPictureParams());
+                record.mStartBounds, task.getTaskInfo());
     }
 
     @Override
