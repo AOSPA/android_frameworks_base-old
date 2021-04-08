@@ -387,8 +387,7 @@ public class SpeechRecognizer {
             return;
         }
         try {
-            mService.startListening(recognizerIntent, mListener, mContext.getOpPackageName(),
-                    mContext.getAttributionTag(), android.os.Process.myUid());
+            mService.startListening(recognizerIntent, mListener, mContext.getAttributionSource());
             if (DBG) Log.d(TAG, "service start listening command succeded");
         } catch (final RemoteException e) {
             Log.e(TAG, "startListening() failed", e);
@@ -402,8 +401,7 @@ public class SpeechRecognizer {
             return;
         }
         try {
-            mService.stopListening(mListener, mContext.getOpPackageName(),
-                    mContext.getAttributionTag());
+            mService.stopListening(mListener);
             if (DBG) Log.d(TAG, "service stop listening command succeded");
         } catch (final RemoteException e) {
             Log.e(TAG, "stopListening() failed", e);
@@ -417,11 +415,7 @@ public class SpeechRecognizer {
             return;
         }
         try {
-            mService.cancel(
-                    mListener,
-                    mContext.getOpPackageName(),
-                    mContext.getAttributionTag(),
-                    false /* isShutdown */);
+            mService.cancel(mListener, /*isShutdown*/ false);
             if (DBG) Log.d(TAG, "service cancel command succeded");
         } catch (final RemoteException e) {
             Log.e(TAG, "cancel() failed", e);
@@ -464,8 +458,7 @@ public class SpeechRecognizer {
     public void destroy() {
         if (mService != null) {
             try {
-                mService.cancel(mListener, mContext.getOpPackageName(),
-                        mContext.getAttributionTag(), true /* isShutdown */);
+                mService.cancel(mListener, /*isShutdown*/ true);
             } catch (final RemoteException e) {
                 // Not important
             }

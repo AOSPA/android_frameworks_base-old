@@ -171,7 +171,7 @@ public class ShortcutService extends IShortcutService.Stub {
     static final int DEFAULT_MAX_UPDATES_PER_INTERVAL = 10;
 
     @VisibleForTesting
-    static final int DEFAULT_MAX_SHORTCUTS_PER_ACTIVITY = Integer.MAX_VALUE;
+    static final int DEFAULT_MAX_SHORTCUTS_PER_ACTIVITY = 15;
 
     @VisibleForTesting
     static final int DEFAULT_MAX_ICON_DIMENSION_DP = 96;
@@ -1050,7 +1050,10 @@ public class ShortcutService extends IShortcutService.Stub {
             file.failWrite(os);
         }
 
-        getUserShortcutsLocked(userId).logSharingShortcutStats(mMetricsLogger);
+        final ShortcutUser user = getUserShortcutsLocked(userId);
+        // Close AppSearchSession to flush pending changes.
+        user.forAllPackages(ShortcutPackage::closeAppSearchSession);
+        user.logSharingShortcutStats(mMetricsLogger);
     }
 
     @GuardedBy("mLock")

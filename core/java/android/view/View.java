@@ -107,6 +107,7 @@ import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.LayoutDirection;
 import android.util.Log;
+import android.util.LongSparseArray;
 import android.util.LongSparseLongArray;
 import android.util.Pair;
 import android.util.Pools.SynchronizedPool;
@@ -26804,8 +26805,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             if (permissions != null) {
                 permissions.takeTransient();
             }
-            final ContentInfo payload = new ContentInfo.Builder(
-                    event.getClipData(), SOURCE_DRAG_AND_DROP).build();
+            final ContentInfo payload =
+                    new ContentInfo.Builder(event.getClipData(), SOURCE_DRAG_AND_DROP)
+                            .setDragAndDropPermissions(permissions)
+                            .build();
             ContentInfo remainingPayload = performReceiveContent(payload);
             // Return true unless none of the payload was consumed.
             return remainingPayload != payload;
@@ -30745,6 +30748,30 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Returns a {@link ViewTranslationRequest} list which represents the content to be translated
+     * in the virtual view. This is called if this view returned a virtual view structure
+     * from {@link #onProvideContentCaptureStructure} and the system determined that those virtual
+     * views were relevant for translation.
+     *
+     * <p>The default implementation does nothing.</p>
+     *
+     * @param virtualChildIds the virtual child ids which represents the child views in the virtual
+     * view.
+     * @param supportedFormats the supported translation formats. For now, the only possible value
+     * is the {@link android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
+     * @param requestsCollector a {@link ViewTranslationRequest} collector that will be called
+     * multiple times to collect the information to be translated in the virtual view. One
+     * {@link ViewTranslationRequest} per virtual child. The {@link ViewTranslationRequest} must
+     * contains the {@link AutofillId} corresponding to the virtualChildIds.
+     */
+    @SuppressLint("NullableCollection")
+    public void onCreateTranslationRequests(@NonNull long[] virtualChildIds,
+            @NonNull @DataFormat int[] supportedFormats,
+            @NonNull Consumer<ViewTranslationRequest> requestsCollector) {
+        // no-op
+    }
+
+    /**
      * Returns a {@link ViewTranslationCallback} that is used to display/hide the translated
      * information. If the View supports displaying translated content, it should implement
      * {@link ViewTranslationCallback}.
@@ -30786,13 +30813,29 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Called when the content from {@link View#onCreateTranslationRequest} had been translated by
+     * the TranslationService.
+     *
+     * <p> The default implementation does nothing.</p>
+     *
+     * @param response a {@link ViewTranslationResponse} SparseArray for the request that send by
+     * {@link View#onCreateTranslationRequests} that contains the translated information which can
+     * be shown in the view. The key of SparseArray is
+     * the virtual child ids.
+     */
+    public void onTranslationResponse(@NonNull LongSparseArray<ViewTranslationResponse> response) {
+        // no-op
+    }
+
+    /**
      * Dispatch to collect the {@link ViewTranslationRequest}s for translation purpose by traversing
      * the hierarchy when the app requests ui translation. Typically, this method should only be
      * overridden by subclasses that provide a view hierarchy (such as {@link ViewGroup}). Other
      * classes should override {@link View#onCreateTranslationRequest}. When requested to start the
      * ui translation, the system will call this method to traverse the view hierarchy to call
      * {@link View#onCreateTranslationRequest} to build {@link ViewTranslationRequest}s and create a
-     * {@link android.view.translation.Translator} to translate the requests.
+     * {@link android.view.translation.Translator} to translate the requests. All the
+     * {@link ViewTranslationRequest}s will be added when the traversal is done.
      *
      * <p> The default implementation will call {@link View#onCreateTranslationRequest} to build
      * {@link ViewTranslationRequest} if the view should be translated. </p>
@@ -30812,14 +30855,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             @NonNull List<ViewTranslationRequest> requests) {
         AutofillId autofillId = getAutofillId();
         if (viewIds.containsKey(autofillId)) {
-            ViewTranslationRequest request = null;
             if (viewIds.get(autofillId) == null) {
-                request = onCreateTranslationRequest(supportedFormats);
+                ViewTranslationRequest request = onCreateTranslationRequest(supportedFormats);
                 if (request != null && request.getKeys().size() > 0) {
                     requests.add(request);
                 }
             } else {
-                // TODO: handle virtual view
+                onCreateTranslationRequests(viewIds.get(autofillId), supportedFormats, request -> {
+                    requests.add(request);
+                });
             }
         }
     }
