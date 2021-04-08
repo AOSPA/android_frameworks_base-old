@@ -220,6 +220,7 @@ package android.app {
     method @RequiresPermission("android.permission.MANAGE_APPOPS") public void rebootHistory(long);
     method @RequiresPermission("android.permission.MANAGE_APPOPS") public void reloadNonHistoricalState();
     method @RequiresPermission("android.permission.MANAGE_APPOPS") public void resetHistoryParameters();
+    method @RequiresPermission("android.permission.MANAGE_APPOPS") public void resetPackageOpsNoHistory(@NonNull String);
     method @RequiresPermission("android.permission.MANAGE_APPOPS") public void setHistoryParameters(int, long, int);
     method @RequiresPermission("android.permission.MANAGE_APP_OPS_MODES") public void setMode(int, int, String, int);
     method public static int strOpToOp(@NonNull String);
@@ -250,6 +251,14 @@ package android.app {
     method public void increaseAccessDuration(int, int, @NonNull String, @Nullable String, int, int, long);
     method public void increaseRejectCount(int, int, @NonNull String, @Nullable String, int, int, long);
     method public void offsetBeginAndEndTime(long);
+  }
+
+  public class BroadcastOptions {
+    ctor public BroadcastOptions(@NonNull android.os.Bundle);
+    method public long getTemporaryAppAllowlistDuration();
+    method @Nullable public String getTemporaryAppAllowlistReason();
+    method public int getTemporaryAppAllowlistReasonCode();
+    method public int getTemporaryAppAllowlistType();
   }
 
   public class DownloadManager {
@@ -653,6 +662,11 @@ package android.bluetooth {
 }
 
 package android.content {
+
+  public final class AttributionSource implements android.os.Parcelable {
+    ctor public AttributionSource(int, @Nullable String, @Nullable String);
+    ctor public AttributionSource(int, @Nullable String, @Nullable String, @Nullable android.content.AttributionSource);
+  }
 
   public final class AutofillOptions implements android.os.Parcelable {
     ctor public AutofillOptions(int, boolean);
@@ -1141,7 +1155,7 @@ package android.hardware.display {
 
   public final class DisplayManager {
     method public boolean areUserDisabledHdrTypesAllowed();
-    method @RequiresPermission(android.Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE) public int getRefreshRateSwitchingType();
+    method @NonNull public int[] getUserDisabledHdrTypes();
     method public boolean isMinimalPostProcessingRequested(int);
     method @RequiresPermission(android.Manifest.permission.WRITE_SECURE_SETTINGS) public void setAreUserDisabledHdrTypesAllowed(boolean);
     method @RequiresPermission(android.Manifest.permission.MODIFY_REFRESH_RATE_SWITCHING_TYPE) public void setRefreshRateSwitchingType(int);
@@ -1642,6 +1656,7 @@ package android.os {
     field public static final int FIRST_ISOLATED_UID = 99000; // 0x182b8
     field public static final int LAST_APP_ZYGOTE_ISOLATED_UID = 98999; // 0x182b7
     field public static final int LAST_ISOLATED_UID = 99999; // 0x1869f
+    field public static final int NFC_UID = 1027; // 0x403
     field public static final int NUM_UIDS_PER_APP_ZYGOTE = 100; // 0x64
   }
 
@@ -2597,6 +2612,7 @@ package android.view {
   }
 
   public final class Display {
+    method @NonNull public int[] getReportedHdrTypes();
     method @NonNull public android.graphics.ColorSpace[] getSupportedWideColorGamut();
     method public int getType();
     method public boolean hasAccess(int);
@@ -2857,6 +2873,14 @@ package android.view.contentcapture {
     method public void setTransformation(android.graphics.Matrix);
     method public void setVisibility(int);
     method public void setWebDomain(String);
+  }
+
+}
+
+package android.view.displayhash {
+
+  public final class DisplayHashManager {
+    method @RequiresPermission("android.permission.READ_FRAME_BUFFER") public void setDisplayHashThrottlingEnabled(boolean);
   }
 
 }

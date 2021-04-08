@@ -27,10 +27,8 @@ import android.annotation.Nullable;
 import android.app.job.JobInfo;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.NetworkCallback;
-import android.net.INetworkPolicyListener;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.NetworkPolicyManager;
 import android.net.NetworkRequest;
 import android.os.Handler;
 import android.os.Looper;
@@ -86,7 +84,6 @@ public final class ConnectivityController extends RestrictingController implemen
     private static final long MIN_STATS_UPDATE_INTERVAL_MS = 30_000L;
 
     private final ConnectivityManager mConnManager;
-    private final NetworkPolicyManager mNetPolicyManager;
     private final NetworkPolicyManagerInternal mNetPolicyManagerInternal;
 
     /** List of tracked jobs keyed by source UID. */
@@ -170,8 +167,6 @@ public final class ConnectivityController extends RestrictingController implemen
      */
     private final List<UidStats> mSortedStats = new ArrayList<>();
 
-    private static final int MSG_DATA_SAVER_TOGGLED = 0;
-    private static final int MSG_UID_RULES_CHANGES = 1;
     private static final int MSG_REEVALUATE_JOBS = 2;
 
     private final Handler mHandler;
@@ -181,26 +176,20 @@ public final class ConnectivityController extends RestrictingController implemen
         mHandler = new CcHandler(mContext.getMainLooper());
 
         mConnManager = mContext.getSystemService(ConnectivityManager.class);
-        mNetPolicyManager = mContext.getSystemService(NetworkPolicyManager.class);
         mNetPolicyManagerInternal = LocalServices.getService(NetworkPolicyManagerInternal.class);
 
         // We're interested in all network changes; internally we match these
         // network changes against the active network for each UID with jobs.
         final NetworkRequest request = new NetworkRequest.Builder().clearCapabilities().build();
         mConnManager.registerNetworkCallback(request, mNetworkCallback);
-
-        mNetPolicyManager.registerListener(mNetPolicyListener);
     }
 
     @GuardedBy("mLock")
     @Override
     public void maybeStartTrackingJobLocked(JobStatus jobStatus, JobStatus lastJob) {
         if (jobStatus.hasConnectivityConstraint()) {
-            UidStats uidStats = mUidStats.get(jobStatus.getSourceUid());
-            if (uidStats == null) {
-                uidStats = new UidStats(jobStatus.getSourceUid());
-                mUidStats.append(jobStatus.getSourceUid(), uidStats);
-            }
+            final UidStats uidStats =
+                    getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), false);
             if (wouldBeReadyWithConstraintLocked(jobStatus, JobStatus.CONSTRAINT_CONNECTIVITY)) {
                 uidStats.numReadyWithConnectivity++;
             }
@@ -219,7 +208,8 @@ public final class ConnectivityController extends RestrictingController implemen
     @Override
     public void prepareForExecutionLocked(JobStatus jobStatus) {
         if (jobStatus.hasConnectivityConstraint()) {
-            UidStats uidStats = mUidStats.get(jobStatus.getSourceUid());
+            final UidStats uidStats =
+                    getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
             uidStats.numRunning++;
         }
     }
@@ -233,10 +223,11 @@ public final class ConnectivityController extends RestrictingController implemen
             if (jobs != null) {
                 jobs.remove(jobStatus);
             }
-            UidStats us = mUidStats.get(jobStatus.getSourceUid());
-            us.numReadyWithConnectivity--;
+            final UidStats uidStats =
+                    getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
+            uidStats.numReadyWithConnectivity--;
             if (jobStatus.madeActive != 0) {
-                us.numRunning--;
+                uidStats.numRunning--;
             }
             maybeRevokeStandbyExceptionLocked(jobStatus);
             maybeAdjustRegisteredCallbacksLocked();
@@ -259,6 +250,27 @@ public final class ConnectivityController extends RestrictingController implemen
         if (jobStatus.hasConnectivityConstraint()) {
             updateConstraintsSatisfied(jobStatus);
         }
+    }
+
+    @NonNull
+    private UidStats getUidStats(int uid, String packageName, boolean shouldExist) {
+        UidStats us = mUidStats.get(uid);
+        if (us == null) {
+            if (shouldExist) {
+                // This shouldn't be happening. We create a UidStats object for the app when the
+                // first job is scheduled in maybeStartTrackingJobLocked() and only ever drop the
+                // object if the app is uninstalled or the user is removed. That means that if we
+                // end up in this situation, onAppRemovedLocked() or onUserRemovedLocked() was
+                // called before maybeStopTrackingJobLocked(), which is the reverse order of what
+                // JobSchedulerService does (JSS calls maybeStopTrackingJobLocked() for all jobs
+                // before calling onAppRemovedLocked() or onUserRemovedLocked()).
+                Slog.wtfStack(TAG,
+                        "UidStats was null after job for " + packageName + " was registered");
+            }
+            us = new UidStats(uid);
+            mUidStats.append(uid, us);
+        }
+        return us;
     }
 
     /**
@@ -327,7 +339,8 @@ public final class ConnectivityController extends RestrictingController implemen
             return;
         }
 
-        UidStats uidStats = mUidStats.get(jobStatus.getSourceUid());
+        final UidStats uidStats =
+                getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
 
         if (jobStatus.shouldTreatAsExpeditedJob()) {
             if (!jobStatus.isConstraintSatisfied(JobStatus.CONSTRAINT_CONNECTIVITY)) {
@@ -579,7 +592,8 @@ public final class ConnectivityController extends RestrictingController implemen
         if (mCurrentDefaultNetworkCallbacks.contains(sourceUid)) {
             return;
         }
-        UidStats uidStats = mUidStats.get(sourceUid);
+        final UidStats uidStats =
+                getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
         if (!mSortedStats.contains(uidStats)) {
             mSortedStats.add(uidStats);
         }
@@ -781,22 +795,22 @@ public final class ConnectivityController extends RestrictingController implemen
      * @param filterNetwork only update jobs that would use this
      *                      {@link Network}, or {@code null} to update all tracked jobs.
      */
-    private void updateTrackedJobs(int filterUid, Network filterNetwork) {
-        synchronized (mLock) {
-            boolean changed = false;
-            if (filterUid == -1) {
-                for (int i = mTrackedJobs.size() - 1; i >= 0; i--) {
-                    changed |= updateTrackedJobsLocked(mTrackedJobs.valueAt(i), filterNetwork);
-                }
-            } else {
-                changed = updateTrackedJobsLocked(mTrackedJobs.get(filterUid), filterNetwork);
+    @GuardedBy("mLock")
+    private void updateTrackedJobsLocked(int filterUid, Network filterNetwork) {
+        boolean changed = false;
+        if (filterUid == -1) {
+            for (int i = mTrackedJobs.size() - 1; i >= 0; i--) {
+                changed |= updateTrackedJobsLocked(mTrackedJobs.valueAt(i), filterNetwork);
             }
-            if (changed) {
-                mStateChangedListener.onControllerStateChanged();
-            }
+        } else {
+            changed = updateTrackedJobsLocked(mTrackedJobs.get(filterUid), filterNetwork);
+        }
+        if (changed) {
+            mStateChangedListener.onControllerStateChanged();
         }
     }
 
+    @GuardedBy("mLock")
     private boolean updateTrackedJobsLocked(ArraySet<JobStatus> jobs, Network filterNetwork) {
         if (jobs == null || jobs.size() == 0) {
             return false;
@@ -883,9 +897,9 @@ public final class ConnectivityController extends RestrictingController implemen
             }
             synchronized (mLock) {
                 mAvailableNetworks.put(network, capabilities);
+                updateTrackedJobsLocked(-1, network);
+                maybeAdjustRegisteredCallbacksLocked();
             }
-            updateTrackedJobs(-1, network);
-            maybeAdjustRegisteredCallbacksLocked();
         }
 
         @Override
@@ -901,27 +915,9 @@ public final class ConnectivityController extends RestrictingController implemen
                         callback.mDefaultNetwork = null;
                     }
                 }
+                updateTrackedJobsLocked(-1, network);
+                maybeAdjustRegisteredCallbacksLocked();
             }
-            updateTrackedJobs(-1, network);
-            maybeAdjustRegisteredCallbacksLocked();
-        }
-    };
-
-    private final INetworkPolicyListener mNetPolicyListener = new NetworkPolicyManager.Listener() {
-        @Override
-        public void onRestrictBackgroundChanged(boolean restrictBackground) {
-            if (DEBUG) {
-                Slog.v(TAG, "onRestrictBackgroundChanged: " + restrictBackground);
-            }
-            mHandler.obtainMessage(MSG_DATA_SAVER_TOGGLED).sendToTarget();
-        }
-
-        @Override
-        public void onUidRulesChanged(int uid, int uidRules) {
-            if (DEBUG) {
-                Slog.v(TAG, "onUidRulesChanged: " + uid);
-            }
-            mHandler.obtainMessage(MSG_UID_RULES_CHANGES, uid, 0).sendToTarget();
         }
     };
 
@@ -934,14 +930,8 @@ public final class ConnectivityController extends RestrictingController implemen
         public void handleMessage(Message msg) {
             synchronized (mLock) {
                 switch (msg.what) {
-                    case MSG_DATA_SAVER_TOGGLED:
-                        updateTrackedJobs(-1, null);
-                        break;
-                    case MSG_UID_RULES_CHANGES:
-                        updateTrackedJobs(msg.arg1, null);
-                        break;
                     case MSG_REEVALUATE_JOBS:
-                        updateTrackedJobs(-1, null);
+                        updateTrackedJobsLocked(-1, null);
                         break;
                 }
             }
@@ -981,8 +971,8 @@ public final class ConnectivityController extends RestrictingController implemen
             synchronized (mLock) {
                 mDefaultNetwork = network;
                 mBlocked = blocked;
+                updateTrackedJobsLocked(mUid, network);
             }
-            updateTrackedJobs(mUid, network);
         }
 
         // Network transitions have some complicated behavior that JS doesn't handle very well.
@@ -1025,8 +1015,8 @@ public final class ConnectivityController extends RestrictingController implemen
                 if (Objects.equals(mDefaultNetwork, network)) {
                     mDefaultNetwork = null;
                 }
+                updateTrackedJobsLocked(mUid, network);
             }
-            updateTrackedJobs(mUid, network);
         }
 
         private void dumpLocked(IndentingPrintWriter pw) {

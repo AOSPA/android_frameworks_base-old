@@ -830,13 +830,13 @@
     </string-array>
 
     <!-- Default strength, in percentage, of bright color reduction when activated. -->
-    <integer name="config_reduceBrightColorsStrengthDefault">0</integer>
+    <integer name="config_reduceBrightColorsStrengthDefault">50</integer>
 
     <!-- Minimum strength, in percentage, supported by bright color reduction. -->
-    <integer name="config_reduceBrightColorsStrengthMin">0</integer>
+    <integer name="config_reduceBrightColorsStrengthMin">25</integer>
 
     <!-- Maximum strength, in percentage, supported by bright color reduction. -->
-    <integer name="config_reduceBrightColorsStrengthMax">100</integer>
+    <integer name="config_reduceBrightColorsStrengthMax">90</integer>
 
     <!-- Boolean indicating whether display white balance is supported. -->
     <bool name="config_displayWhiteBalanceAvailable">false</bool>
@@ -3566,10 +3566,6 @@
 
     <!-- True if assistant app should be pinned via Pinner Service -->
     <bool name="config_pinnerAssistantApp">false</bool>
-
-    <!-- List of files pinned by the Pinner Service with the JIT Zygote boot image b/119800099 -->
-    <string-array translatable="false" name="config_jitzygoteBootImagePinnerServiceFiles">
-    </string-array>
 
     <!-- Number of days preloaded file cache should be preserved on a device before it can be
          deleted -->
