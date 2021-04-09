@@ -214,7 +214,10 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
     }
 
     protected void onMediaVisibilityChanged(Boolean visible) {
-        switchTileLayout(true);
+        switchTileLayout();
+        if (getTileLayout() != null) {
+            getTileLayout().setMinRows(visible ? 2 : 3);
+        }
         if (mMediaVisibilityChangedListener != null) {
             mMediaVisibilityChangedListener.accept(visible);
         }
@@ -516,7 +519,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
 
         if (newConfig.orientation != mLastOrientation) {
             mLastOrientation = newConfig.orientation;
-            switchTileLayout(true);
+            switchTileLayout();
         }
     }
 
@@ -569,9 +572,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             if (mHost != null) setTiles(mHost.getTiles());
             newLayout.setListening(mListening);
             if (needsDynamicRowsAndColumns()) {
-                boolean isLandscape = getResources().getConfiguration().orientation
-                            == Configuration.ORIENTATION_LANDSCAPE;
-                newLayout.setMinRows(horizontal ? 2 : (mMediaHost.getVisible() ? 2 : (isLandscape ? 1 : 3)));
+                newLayout.setMinRows(horizontal ? 2 : 1);
                 // Let's use 3 columns to match the current layout
                 newLayout.setMaxColumns(horizontal ? 3 : TileLayout.NO_MAX_COLUMNS);
             }
