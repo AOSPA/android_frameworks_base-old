@@ -45,12 +45,14 @@ import android.view.VelocityTracker;
 import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.R;
 import com.android.systemui.biometrics.HbmTypes.HbmType;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -88,6 +90,8 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
     @NonNull private final StatusBarKeyguardViewManager mKeyguardViewManager;
     @NonNull private final DumpManager mDumpManager;
     @NonNull private final AuthRippleController mAuthRippleController;
+    @NonNull private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @NonNull private final KeyguardViewMediator mKeyguardViewMediator;
     // Currently the UdfpsController supports a single UDFPS sensor. If devices have multiple
     // sensors, this, in addition to a lot of the code here, will be updated.
     @VisibleForTesting final FingerprintSensorPropertiesInternal mSensorProps;
@@ -307,7 +311,9 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
             @NonNull StatusBar statusBar,
             @NonNull StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             @NonNull DumpManager dumpManager,
-            @NonNull AuthRippleController authRippleController) {
+            @NonNull AuthRippleController authRippleController,
+            @NonNull KeyguardUpdateMonitor keyguardUpdateMonitor,
+            @NonNull KeyguardViewMediator keyguardViewMediator) {
         mContext = context;
         mInflater = inflater;
         // The fingerprint manager is queried for UDFPS before this class is constructed, so the
@@ -320,6 +326,8 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
         mKeyguardViewManager = statusBarKeyguardViewManager;
         mDumpManager = dumpManager;
         mAuthRippleController = authRippleController;
+        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mKeyguardViewMediator = keyguardViewMediator;
 
         mSensorProps = findFirstUdfps();
         // At least one UDFPS sensor exists
@@ -327,8 +335,7 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
         mStatusBar.setSensorRect(getSensorLocation());
 
         mCoreLayoutParams = new WindowManager.LayoutParams(
-                // TODO(b/152419866): Use the UDFPS window type when it becomes available.
-                WindowManager.LayoutParams.TYPE_BOOT_PROGRESS,
+                WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG,
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                         | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL
                         | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
@@ -486,7 +493,10 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
                         mStatusBarStateController,
                         mStatusBar,
                         mKeyguardViewManager,
-                        mDumpManager
+                        mKeyguardUpdateMonitor,
+                        mFgExecutor,
+                        mDumpManager,
+                        mKeyguardViewMediator
                 );
             case IUdfpsOverlayController.REASON_AUTH_BP:
                 // note: empty controller, currently shows no visual affordance

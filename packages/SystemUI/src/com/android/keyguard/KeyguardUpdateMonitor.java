@@ -428,6 +428,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     public void onTrustChanged(boolean enabled, int userId, int flags) {
         Assert.isMainThread();
         mUserHasTrust.put(userId, enabled);
+        updateBiometricListeningState();
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -628,6 +629,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
         // Don't send cancel if authentication succeeds
         mFingerprintCancelSignal = null;
+        updateBiometricListeningState();
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -811,6 +813,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         }
         // Don't send cancel if authentication succeeds
         mFaceCancelSignal = null;
+        updateBiometricListeningState();
         for (int i = 0; i < mCallbacks.size(); i++) {
             KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
             if (cb != null) {
@@ -1775,6 +1778,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                         break;
                     case MSG_TIME_FORMAT_UPDATE:
                         handleTimeFormatUpdate((String) msg.obj);
+                        break;
                     case MSG_REQUIRE_NFC_UNLOCK:
                         handleRequireUnlockForNfc();
                         break;
@@ -2110,6 +2114,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     boolean shouldListenForUdfps() {
         return shouldListenForFingerprint()
                 && !mBouncer
+                && !getUserCanSkipBouncer(getCurrentUser())
+                && !isEncryptedOrLockdown(getCurrentUser())
                 && mStrongAuthTracker.hasUserAuthenticatedSinceBoot();
     }
 

@@ -693,7 +693,6 @@
     <protected-broadcast android:name="android.app.action.PROFILE_OWNER_CHANGED" />
     <protected-broadcast android:name="android.app.action.TRANSFER_OWNERSHIP_COMPLETE" />
     <protected-broadcast android:name="android.app.action.AFFILIATED_PROFILE_TRANSFER_OWNERSHIP_COMPLETE" />
-    <protected-broadcast android:name="android.app.action.DATA_SHARING_RESTRICTION_CHANGED" />
     <protected-broadcast android:name="android.app.action.STATSD_STARTED" />
     <protected-broadcast android:name="com.android.server.biometrics.fingerprint.ACTION_LOCKOUT_RESET" />
     <protected-broadcast android:name="com.android.server.biometrics.face.ACTION_LOCKOUT_RESET" />
@@ -1295,7 +1294,7 @@
     <permission android:name="android.permission.EXEMPT_FROM_AUDIO_RECORD_RESTRICTIONS"
                 android:label="@string/permlab_exemptFromAudioRecordRestrictions"
                 android:description="@string/permdesc_exemptFromAudioRecordRestrictions"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|role" />
 
     <!-- Allows a calling app to continue a call which was started in another app.  An example is a
          video calling app that wants to continue a voice call on the user's mobile network.<p>
@@ -1728,7 +1727,7 @@
          such as the geofencing api.
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.LOCATION_HARDWARE"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
     <uses-permission android:name="android.permission.LOCATION_HARDWARE"/>
 
     <!-- @SystemApi Allows an application to use the Context Hub.
@@ -1991,6 +1990,14 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:description="@string/permdesc_bluetooth_connect"
         android:label="@string/permlab_bluetooth_connect"
+        android:protectionLevel="dangerous" />
+
+    <!-- Required to be able to range to devices using uwb.
+         <p>Protection level: dangerous -->
+    <permission android:name="android.permission.UWB_RANGING"
+        android:permissionGroup="android.permission-group.UNDEFINED"
+        android:description="@string/permdesc_uwb_ranging"
+        android:label="@string/permlab_uwb_ranging"
         android:protectionLevel="dangerous" />
 
     <!-- @SystemApi @TestApi Allows an application to suspend other apps, which will prevent the
@@ -2372,7 +2379,7 @@
          Does not include placing calls.
          <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.MODIFY_PHONE_STATE"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- Allows read only access to precise phone state.
          Allows reading of detailed information about phone state for special-use applications
@@ -2501,7 +2508,7 @@
     <!-- @SystemApi Allows an application to control the in-call experience.
          @hide -->
     <permission android:name="android.permission.CONTROL_INCALL_EXPERIENCE"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- Allows an application to receive STK related commands.
          @hide -->
@@ -2797,8 +2804,12 @@
     <permission android:name="android.permission.START_ACTIVITIES_FROM_BACKGROUND"
         android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier" />
 
-    <!-- Allows an application to start foreground services from background, can only be granted to
-         privileged apps or app that is SMS/EMERGENCY/SYSTEM GALLERY roles. -->
+    <!-- Allows an application to start foreground services from the background at any time.
+         <em>This permission is not for use by third-party applications</em>,
+         with the only exception being if the app is the default SMS app.
+         Otherwise, it's only usable by privileged apps, app verifier app, and apps with
+         any of the EMERGENCY or SYSTEM GALLERY roles.
+         -->
     <permission android:name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"
                 android:protectionLevel="signature|privileged|vendorPrivileged|oem|verifier|role"/>
 
@@ -3499,7 +3510,7 @@
     <!-- Allows an application to update device statistics.
     <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.UPDATE_DEVICE_STATS"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- @SystemApi @hide Allows an application to collect application operation statistics.
          Not for use by third party apps. -->
@@ -3859,12 +3870,10 @@
 
     <!-- @SystemApi Allows apps to use ui translation functions.
          <p>Protection level: signature|privileged
-         <p> TODO(b/177703453): Restrict to a specific Role instead of allowing access to any
-         privileged app.
          @hide Not for use by third-party applications.
     -->
     <permission android:name="android.permission.MANAGE_UI_TRANSLATION"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|role" />
 
     <!-- Must be required by a android.service.contentsuggestions.ContentSuggestionsService,
          to ensure that only the system can bind to it.
@@ -4433,7 +4442,7 @@
          {@code USAGE_MEDIA}) or {@code USAGE_GAME}) usages are intended to be captured.
          <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.CAPTURE_AUDIO_OUTPUT"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- @SystemApi Allows an application to capture the audio played by other apps
          that have set an allow capture policy of
@@ -4451,7 +4460,7 @@
          <p>Not for use by third-party applications.</p>
          @hide -->
     <permission android:name="android.permission.CAPTURE_MEDIA_OUTPUT"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- @SystemApi Allows an application to capture the audio played by other apps
         with the {@code USAGE_VOICE_COMMUNICATION} usage.
@@ -4469,13 +4478,13 @@
         <p>Not for use by third-party applications.</p>
         @hide -->
     <permission android:name="android.permission.CAPTURE_VOICE_COMMUNICATION_OUTPUT"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- @SystemApi Allows an application to capture audio for hotword detection.
          <p>Not for use by third-party applications.</p>
          @hide -->
     <permission android:name="android.permission.CAPTURE_AUDIO_HOTWORD"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- Puts an application in the chain of trust for sound trigger
          operations. Being in the chain of trust allows an application to
@@ -4490,7 +4499,7 @@
          <p>Not for use by third-party applications.</p>
          @hide -->
     <permission android:name="android.permission.MODIFY_AUDIO_ROUTING"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- @TestApi Allows an application to query audio related state.
          @hide -->
@@ -4977,7 +4986,7 @@
          User permission is still required before access is granted.
          @hide -->
     <permission android:name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="signature|privileged|role" />
 
     <!-- @SystemApi @TestApi Allows an application to read the current set of notifications, including
          any metadata and intents attached.
@@ -5311,7 +5320,7 @@
          @hide
          @SystemApi -->
     <permission android:name="android.permission.MANAGE_SOUND_TRIGGER"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- Must be required by system/priv apps to run sound trigger recognition sessions while in
          battery saver mode.
@@ -5401,7 +5410,7 @@
     <!-- @SystemApi Allows an application to manage the music recognition service.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_MUSIC_RECOGNITION"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- @SystemApi Allows an application to manage speech recognition service.
      @hide  <p>Not for use by third-party applications.</p> -->
@@ -5416,12 +5425,12 @@
     <!-- @SystemApi Allows an application to manage the app predictions service.
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_APP_PREDICTIONS"
-        android:protectionLevel="signature|appPredictor" />
+        android:protectionLevel="signature|appPredictor|role" />
 
     <!-- @SystemApi Allows an application to manage the search ui service.
      @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.MANAGE_SEARCH_UI"
-        android:protectionLevel="signature" />
+        android:protectionLevel="signature|role" />
 
     <!-- @SystemApi Allows an application to manage the smartspace service.
      @hide  <p>Not for use by third-party applications.</p> -->
@@ -5451,12 +5460,12 @@
     <!-- @SystemApi Allows to access all app shortcuts.
          @hide -->
     <permission android:name="android.permission.ACCESS_SHORTCUTS"
-        android:protectionLevel="signature|appPredictor" />
+        android:protectionLevel="signature|appPredictor|role" />
 
     <!-- @SystemApi Allows unlimited calls to shortcut mutation APIs.
          @hide -->
     <permission android:name="android.permission.UNLIMITED_SHORTCUTS_API_CALLS"
-        android:protectionLevel="signature|appPredictor" />
+        android:protectionLevel="signature|appPredictor|role" />
 
     <!-- @SystemApi Allows an application to read the runtime profiles of other apps.
          @hide <p>Not for use by third-party applications. -->
@@ -5619,7 +5628,6 @@
          @hide  <p>Not for use by third-party applications.</p> -->
     <permission android:name="android.permission.OVERRIDE_COMPAT_CHANGE_CONFIG"
                 android:protectionLevel="signature|privileged" />
-    <uses-permission android:name="android.permission.OVERRIDE_COMPAT_CHANGE_CONFIG"/>
     <!-- @SystemApi Allows an app to override compat change config on release builds.
         Only ChangeIds that are annotated as @Overridable can be overridden on release builds.
         @hide -->

@@ -225,7 +225,7 @@ import java.util.concurrent.CountDownLatch;
  */
 @SuppressWarnings({"EmptyCatchBlock", "PointlessBooleanExpression"})
 public final class ViewRootImpl implements ViewParent,
-        View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks {
+        View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks, ViewRoot {
     private static final String TAG = "ViewRootImpl";
     private static final boolean DBG = false;
     private static final boolean LOCAL_LOGV = false;
@@ -1195,8 +1195,7 @@ public final class ViewRootImpl implements ViewParent,
                             Looper.myLooper());
 
                     if (mAttachInfo.mThreadedRenderer != null) {
-                        InputMetricsListener listener =
-                                new InputMetricsListener(mInputEventReceiver);
+                        InputMetricsListener listener = new InputMetricsListener();
                         mHardwareRendererObserver = new HardwareRendererObserver(
                                 listener, listener.data, mHandler, true /*waitForPresentTime*/);
                         mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
@@ -1392,6 +1391,9 @@ public final class ViewRootImpl implements ViewParent,
                 if (mAttachInfo.mThreadedRenderer != null) {
                     mAttachInfo.mHardwareAccelerated =
                             mAttachInfo.mHardwareAccelerationRequested = true;
+                    if (mHardwareRendererObserver != null) {
+                        mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
+                    }
                 }
             }
         }
@@ -3209,7 +3211,9 @@ public final class ViewRootImpl implements ViewParent,
                 Log.d(mTag, "Relayout called with blastSync");
             }
             reportNextDraw();
-            mNextDrawUseBlastSync = true;
+            if (isHardwareEnabled()) {
+                mNextDrawUseBlastSync = true;
+            }
         }
 
         boolean cancelDraw = mAttachInfo.mTreeObserver.dispatchOnPreDraw() || !isViewVisible;
@@ -8083,6 +8087,9 @@ public final class ViewRootImpl implements ViewParent,
         ThreadedRenderer hardwareRenderer = mAttachInfo.mThreadedRenderer;
 
         if (hardwareRenderer != null) {
+            if (mHardwareRendererObserver != null) {
+                hardwareRenderer.removeObserver(mHardwareRendererObserver);
+            }
             if (mView != null) {
                 hardwareRenderer.destroyHardwareResources(mView);
             }
@@ -8584,17 +8591,11 @@ public final class ViewRootImpl implements ViewParent,
             super.dispose();
         }
     }
-    WindowInputEventReceiver mInputEventReceiver;
+    private WindowInputEventReceiver mInputEventReceiver;
 
     final class InputMetricsListener
             implements HardwareRendererObserver.OnFrameMetricsAvailableListener {
         public long[] data = new long[FrameMetrics.Index.FRAME_STATS_COUNT];
-
-        private InputEventReceiver mReceiver;
-
-        InputMetricsListener(InputEventReceiver receiver) {
-            mReceiver = receiver;
-        }
 
         @Override
         public void onFrameMetricsAvailable(int dropCountSinceLastInvocation) {
@@ -8609,7 +8610,10 @@ public final class ViewRootImpl implements ViewParent,
                 return;
             }
             final long gpuCompletedTime = data[FrameMetrics.Index.GPU_COMPLETED];
-            mReceiver.reportLatencyInfo(inputEventId, gpuCompletedTime, presentTime);
+            if (mInputEventReceiver == null) {
+                return;
+            }
+            mInputEventReceiver.reportTimeline(inputEventId, gpuCompletedTime, presentTime);
         }
     }
     HardwareRendererObserver mHardwareRendererObserver;
@@ -10212,9 +10216,6 @@ public final class ViewRootImpl implements ViewParent,
 
         if (useBLAST() && mBlastBufferQueue != null) {
             mBlastBufferQueue.mergeWithNextTransaction(transaction, frameNumber);
-        } else {
-            transaction.deferTransactionUntil(surfaceControl, surfaceControl, frameNumber);
-            transaction.apply();
         }
     }
 
@@ -10256,5 +10257,22 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             t.apply();
         }
+    }
+
+    @Override
+    @Nullable public SurfaceControl.Transaction buildReparentTransaction(
+        @NonNull SurfaceControl child) {
+        if (mSurfaceControl.isValid()) {
+            return new SurfaceControl.Transaction().reparent(child, mSurfaceControl);
+        }
+        return null;
+    }
+
+    @Override
+    public boolean applyTransactionOnDraw(@NonNull SurfaceControl.Transaction t) {
+        registerRtFrameCallback(frame -> {
+            mergeWithNextTransaction(t, frame);
+        });
+        return true;
     }
 }

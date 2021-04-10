@@ -258,8 +258,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     private final PermissionRegistry mRegistry = new PermissionRegistry();
 
     @NonNull
-    private final AttributionSourceRegistry mAttributionSourceRegistry =
-            new AttributionSourceRegistry();
+    private final AttributionSourceRegistry mAttributionSourceRegistry;
 
     @GuardedBy("mLock")
     @Nullable
@@ -379,6 +378,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         mSystemPermissions = systemConfig.getSystemPermissions();
         mGlobalGids = systemConfig.getGlobalGids();
         mOnPermissionChangeListeners = new OnPermissionChangeListeners(FgThread.get().getLooper());
+        mAttributionSourceRegistry = new AttributionSourceRegistry(context);
 
         // propagate permission configuration
         final ArrayMap<String, SystemConfig.PermissionEntry> permConfig =
@@ -2085,6 +2085,16 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         }
     }
 
+    @Nullable
+    private List<String> getDelegatedShellPermissionsInternal() {
+        synchronized (mLock) {
+            if (mCheckPermissionDelegate == null) {
+                return Collections.EMPTY_LIST;
+            }
+            return mCheckPermissionDelegate.getDelegatedPermissionNames();
+        }
+    }
+
     private void setCheckPermissionDelegateLocked(@Nullable CheckPermissionDelegate delegate) {
         if (delegate != null || mCheckPermissionDelegate != null) {
             PackageManager.invalidatePackageInfoCache();
@@ -3125,6 +3135,10 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
             if (sourcePerms != null) {
                 Permission bp = mRegistry.getPermission(newPerm);
+                if (bp == null) {
+                    throw new IllegalStateException("Unknown new permission in split permission: "
+                            + newPerm);
+                }
                 if (bp.isRuntime()) {
 
                     if (!newPerm.equals(Manifest.permission.ACTIVITY_RECOGNITION)) {
@@ -3140,6 +3154,10 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                                 sourcePermNum++) {
                             final String sourcePerm = sourcePerms.valueAt(sourcePermNum);
                             Permission sourceBp = mRegistry.getPermission(sourcePerm);
+                            if (sourceBp == null) {
+                                throw new IllegalStateException("Unknown source permission in split"
+                                        + " permission: " + sourcePerm);
+                            }
                             if (!sourceBp.isRuntime()) {
                                 inheritsFromInstallPerm = true;
                                 break;
@@ -3954,14 +3972,14 @@ public class PermissionManagerService extends IPermissionManager.Stub {
      * </ol>
      *
      * @param volumeUuid The volume UUID of the packages to be updated
-     * @param sdkVersionChanged whether the current SDK version is different from what it was when
-     *                          this volume was last mounted
+     * @param fingerprintChanged whether the current build fingerprint is different from what it was
+     *                           when this volume was last mounted
      */
-    private void updateAllPermissions(@NonNull String volumeUuid, boolean sdkVersionChanged) {
+    private void updateAllPermissions(@NonNull String volumeUuid, boolean fingerprintChanged) {
         PackageManager.corkPackageInfoCache();  // Prevent invalidation storm
         try {
             final int flags = UPDATE_PERMISSIONS_ALL |
-                    (sdkVersionChanged
+                    (fingerprintChanged
                             ? UPDATE_PERMISSIONS_REPLACE_PKG | UPDATE_PERMISSIONS_REPLACE_ALL
                             : 0);
             updatePermissions(null, null, volumeUuid, flags, mDefaultPermissionCallback);
@@ -4936,8 +4954,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             return PermissionManagerService.this.getAppOpPermissionPackagesInternal(permissionName);
         }
         @Override
-        public void onStorageVolumeMounted(@Nullable String volumeUuid, boolean sdkVersionChanged) {
-            updateAllPermissions(volumeUuid, sdkVersionChanged);
+        public void onStorageVolumeMounted(@Nullable String volumeUuid, boolean fingerprintChanged) {
+            updateAllPermissions(volumeUuid, fingerprintChanged);
         }
         @Override
         public void resetRuntimePermissions(@NonNull AndroidPackage pkg, @UserIdInt int userId) {
@@ -5031,6 +5049,12 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         @Override
         public void stopShellPermissionIdentityDelegation() {
             stopShellPermissionIdentityDelegationInternal();
+        }
+
+        @Override
+        @NonNull
+        public List<String> getDelegatedShellPermissions() {
+            return getDelegatedShellPermissionsInternal();
         }
 
         @Override
@@ -5226,6 +5250,11 @@ public class PermissionManagerService extends IPermissionManager.Stub {
          */
         int checkUidPermission(int uid, @NonNull String permissionName,
                 BiFunction<Integer, String, Integer> superImpl);
+
+        /**
+         * @return list of delegated permissions
+         */
+        List<String> getDelegatedPermissionNames();
     }
 
     private class ShellDelegate implements CheckPermissionDelegate {
@@ -5276,6 +5305,13 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             return superImpl.apply(uid, permissionName);
         }
 
+        @Override
+        public List<String> getDelegatedPermissionNames() {
+            return mDelegatedPermissionNames == null
+                    ? null
+                    : new ArrayList<>(mDelegatedPermissionNames);
+        }
+
         private boolean isDelegatedPermission(@NonNull String permissionName) {
             // null permissions means all permissions are targeted
             return mDelegatedPermissionNames == null
@@ -5285,6 +5321,12 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
     private static final class AttributionSourceRegistry {
         private final Object mLock = new Object();
+
+        private final Context mContext;
+
+        AttributionSourceRegistry(@NonNull Context context) {
+            mContext = context;
+        }
 
         private final WeakHashMap<IBinder, AttributionSource> mAttributions = new WeakHashMap<>();
 
@@ -5313,7 +5355,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             // app passing the source, in which case you must trust the other side;
 
             final int callingUid = Binder.getCallingUid();
-            if (source.getUid() != callingUid) {
+            if (source.getUid() != callingUid && mContext.checkPermission(
+                    Manifest.permission.UPDATE_APP_OPS_STATS, /*pid*/ -1, callingUid)
+                    != PackageManager.PERMISSION_GRANTED) {
                 throw new SecurityException("Cannot register attribution source for uid:"
                         + source.getUid() + " from uid:" + callingUid);
             }
