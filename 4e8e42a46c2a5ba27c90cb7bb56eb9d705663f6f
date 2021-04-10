@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "553b27f4_3fabafa5",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000165
+      },
+      "writtenOn": "2021-04-10T18:54:08Z",
+      "side": 1,
+      "message": "Could we change it this way: https://git.halogenos.org/halogenOS/android_frameworks_base/commit/7872afbff92370b1663a764871af3c7cccd2b003\n\nSo that we don\u0027t have basically the same line twice.",
+      "revId": "4e8e42a46c2a5ba27c90cb7bb56eb9d705663f6f",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
