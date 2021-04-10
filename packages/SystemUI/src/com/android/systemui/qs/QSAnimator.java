@@ -31,6 +31,8 @@ import com.android.systemui.qs.QSPanel.QSTileLayout;
 import com.android.systemui.qs.TouchAnimator.Builder;
 import com.android.systemui.qs.TouchAnimator.Listener;
 import com.android.systemui.qs.dagger.QSScope;
+import com.android.systemui.qs.tileimpl.HeightOverrideable;
+import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.tuner.TunerService.Tunable;
@@ -53,6 +55,9 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     private static final String MOVE_FULL_ROWS = "sysui_qs_move_whole_rows";
 
     public static final float EXPANDED_TILE_DELAY = .86f;
+    private static final long QQS_FADE_IN_DURATION = 200L;
+    // Fade out faster than fade in to finish before QQS hides.
+    private static final long QQS_FADE_OUT_DURATION = 50L;
 
 
     private final ArrayList<View> mAllViews = new ArrayList<>();
@@ -86,7 +91,7 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
     private HeightExpansionAnimator mOtherTilesExpandAnimator;
 
     private boolean mNeedsAnimatorUpdate = false;
-
+    private boolean mToShowing;
     private boolean mOnKeyguard;
 
     private boolean mAllowFancy;
@@ -149,6 +154,18 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
         }
     }
 
+    void startAlphaAnimation(boolean show) {
+        if (show == mToShowing) {
+            return;
+        }
+        mToShowing = show;
+        if (show) {
+            CrossFadeHelper.fadeIn(mQs.getView(), QQS_FADE_IN_DURATION, 0 /* delay */);
+        } else {
+            CrossFadeHelper.fadeOut(mQs.getView(), QQS_FADE_OUT_DURATION, 0 /* delay */,
+                    null /* endRunnable */);
+        }
+    }
 
     /**
      * Sets whether or not the keyguard is currently being shown with a collapsed header.
@@ -590,6 +607,15 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             @Override
             public void onAnimationUpdate(ValueAnimator valueAnimator) {
                 float t = valueAnimator.getAnimatedFraction();
+                final int viewCount = mViews.size();
+                int height = (Integer) valueAnimator.getAnimatedValue();
+                for (int i = 0; i < viewCount; i++) {
+                    View v = mViews.get(i);
+                    v.setBottom(v.getTop() + height);
+                    if (v instanceof HeightOverrideable) {
+                        ((HeightOverrideable) v).setHeightOverride(height);
+                    }
+                }
                 if (t == 0f) {
                     mListener.onAnimationAtStart();
                 } else if (t == 1f) {
@@ -598,12 +624,6 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
                     mListener.onAnimationStarted();
                 }
                 mLastT = t;
-                final int viewCount = mViews.size();
-                int height = (Integer) valueAnimator.getAnimatedValue();
-                for (int i = 0; i < viewCount; i++) {
-                    View v = mViews.get(i);
-                    v.setBottom(v.getTop() + height);
-                }
             }
         };
 
@@ -632,6 +652,9 @@ public class QSAnimator implements Callback, PageListener, Listener, OnLayoutCha
             for (int i = 0; i < viewsCount; i++) {
                 View v = mViews.get(i);
                 v.setBottom(v.getTop() + v.getMeasuredHeight());
+                if (v instanceof HeightOverrideable) {
+                    ((HeightOverrideable) v).resetOverride();
+                }
             }
         }
     }

@@ -1961,6 +1961,7 @@ public final class OomAdjuster {
         }
 
         int capabilityFromFGS = 0; // capability from foreground service.
+        boolean scheduleLikeTopApp = false;
         for (int is = psr.numberOfRunningServices() - 1;
                 is >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
                         || schedGroup == ProcessList.SCHED_GROUP_BACKGROUND
@@ -2072,6 +2073,8 @@ public final class OomAdjuster {
                     int clientAdj = cstate.getCurRawAdj();
                     int clientProcState = cstate.getCurRawProcState();
 
+                    final boolean clientIsSystem = clientProcState < PROCESS_STATE_TOP;
+
                     // pass client's mAllowStartFgs to the app if client is not persistent process.
                     if (cstate.getAllowedStartFgs() != REASON_DENIED
                             && cstate.getMaxAdj() >= ProcessList.FOREGROUND_APP_ADJ) {
@@ -2111,6 +2114,10 @@ public final class OomAdjuster {
                         }
                         String adjType = null;
                         if ((cr.flags&Context.BIND_ALLOW_OOM_MANAGEMENT) != 0) {
+                            // Similar to BIND_WAIVE_PRIORITY, keep it unfrozen.
+                            if (clientAdj < ProcessList.CACHED_APP_MIN_ADJ) {
+                                app.mOptRecord.setShouldNotFreeze(true);
+                            }
                             // Not doing bind OOM management, so treat
                             // this guy more like a started service.
                             if (state.hasShownUi() && !state.getCachedIsHomeProcess()) {
@@ -2267,8 +2274,10 @@ public final class OomAdjuster {
                         }
 
                         if (schedGroup < ProcessList.SCHED_GROUP_TOP_APP
-                                && (cr.flags & Context.BIND_SCHEDULE_LIKE_TOP_APP) != 0) {
+                                && (cr.flags & Context.BIND_SCHEDULE_LIKE_TOP_APP) != 0
+                                && clientIsSystem) {
                             schedGroup = ProcessList.SCHED_GROUP_TOP_APP;
+                            scheduleLikeTopApp = true;
                         }
 
                         if (!trackedProcState) {
@@ -2535,7 +2544,8 @@ public final class OomAdjuster {
         // Put bound foreground services in a special sched group for additional
         // restrictions on screen off
         if (procState >= PROCESS_STATE_BOUND_FOREGROUND_SERVICE
-                && mService.mWakefulness.get() != PowerManagerInternal.WAKEFULNESS_AWAKE) {
+                && mService.mWakefulness.get() != PowerManagerInternal.WAKEFULNESS_AWAKE
+                && !scheduleLikeTopApp) {
             if (schedGroup > ProcessList.SCHED_GROUP_RESTRICTED) {
                 schedGroup = ProcessList.SCHED_GROUP_RESTRICTED;
             }

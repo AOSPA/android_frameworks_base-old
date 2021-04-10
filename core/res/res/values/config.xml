@@ -59,7 +59,6 @@
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_no_calling</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_call_strength</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_sensors_off</xliff:g></item>
     </string-array>
@@ -97,7 +96,6 @@
     <string translatable="false" name="status_bar_camera">camera</string>
     <string translatable="false" name="status_bar_airplane">airplane</string>
     <string translatable="false" name="status_bar_no_calling">no_calling</string>
-    <string translatable="false" name="status_bar_call_strength">call_strength</string>
     <string translatable="false" name="status_bar_sensors_off">sensors_off</string>
     <string translatable="false" name="status_bar_screen_record">screen_record</string>
 
@@ -3945,10 +3943,6 @@
          color supplied by the Notification.Builder if present. -->
     <bool name="config_tintNotificationActionButtons">true</bool>
 
-    <!-- Flag indicating that tinted items (actions, expander, etc) are to be tinted using the
-         theme color, rather than the notification color. -->
-    <bool name="config_tintNotificationsWithTheme">true</bool>
-
     <!-- Show area update info settings in CellBroadcastReceiver and information in SIM status in Settings app -->
     <bool name="config_showAreaUpdateInfoSettings">false</bool>
 
@@ -4453,6 +4447,9 @@
       -->
     </integer-array>
 
+    <!-- Indicates whether device has a power button fingerprint sensor. -->
+    <bool name="config_is_powerbutton_fps" translatable="false" >false</bool>
+
     <!-- Messages that should not be shown to the user during face auth enrollment. This should be
          used to hide messages that may be too chatty or messages that the user can't do much about.
          Entries are defined in android.hardware.biometrics.face@1.0 types.hal -->
@@ -4853,4 +4850,20 @@
     <bool name="config_cecRcProfileSourceMediaContextSensitiveMenuHandled_default">false</bool>
     <bool name="config_cecRcProfileSourceMediaContextSensitiveMenuNotHandled_allowed">true</bool>
     <bool name="config_cecRcProfileSourceMediaContextSensitiveMenuNotHandled_default">true</bool>
+
+    <!-- Whether app hibernation deletes OAT artifact files as part of global hibernation. -->
+    <bool name="config_hibernationDeletesOatArtifactsEnabled">true</bool>
+
+    <!-- On-device intelligent processor for system UI features. -->
+    <string name="config_systemUiIntelligence" translatable="false"></string>
+    <!-- On-device intelligent processor for ambient audio. -->
+    <string name="config_systemAmbientAudioIntelligence" translatable="false"></string>
+    <!-- On-device intelligent processor for audio. -->
+    <string name="config_systemAudioIntelligence" translatable="false"></string>
+    <!-- On-device intelligent processor for notification. -->
+    <string name="config_systemNotificationIntelligence" translatable="false"></string>
+    <!-- On-device intelligent processor for text. -->
+    <string name="config_systemTextIntelligence" translatable="false"></string>
+    <!-- On-device intelligent processor for visual features. -->
+    <string name="config_systemVisualIntelligence" translatable="false"></string>
 </resources>
