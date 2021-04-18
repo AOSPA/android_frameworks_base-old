@@ -26,6 +26,7 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.accessibility.AccessibilityNodeInfo;
 
 import com.android.internal.logging.UiEventLogger;
 import com.android.keyguard.KeyguardConstants;
@@ -94,15 +95,6 @@ public class KeyguardQsUserSwitchController extends ViewController<UserAvatarVie
                             goingToFullShade,
                             oldState);
                 }
-
-                @Override
-                public void onDozeAmountChanged(float linearAmount, float amount) {
-                    if (DEBUG) {
-                        Log.d(TAG, String.format("onDozeAmountChanged: linearAmount=%f amount=%f",
-                                linearAmount, amount));
-                    }
-                    setDarkAmount(amount);
-                }
             };
 
     @Inject
@@ -150,6 +142,16 @@ public class KeyguardQsUserSwitchController extends ViewController<UserAvatarVie
 
             // Tapping anywhere in the view will open QS user panel
             openQsUserPanel();
+        });
+
+        mView.setAccessibilityDelegate(new View.AccessibilityDelegate() {
+            public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
+                super.onInitializeAccessibilityNodeInfo(host, info);
+                info.addAction(new AccessibilityNodeInfo.AccessibilityAction(
+                        AccessibilityNodeInfo.ACTION_CLICK,
+                        mContext.getString(
+                                R.string.accessibility_quick_settings_choose_user_action)));
+            }
         });
 
         updateView(true /* forceUpdate */);
@@ -294,20 +296,6 @@ public class KeyguardQsUserSwitchController extends ViewController<UserAvatarVie
         }
     }
 
-    /**
-     * Set the amount (ratio) that the device has transitioned to doze.
-     *
-     * @param darkAmount Amount of transition to doze: 1f for doze and 0f for awake.
-     */
-    private void setDarkAmount(float darkAmount) {
-        boolean isAwake = darkAmount != 0;
-        if (darkAmount == mDarkAmount) {
-            return;
-        }
-        mDarkAmount = darkAmount;
-        mView.setVisibility(isAwake ? View.VISIBLE : View.GONE);
-    }
-
     private boolean isListAnimating() {
         return mKeyguardVisibilityHelper.isVisibilityAnimating();
     }
@@ -330,6 +318,11 @@ public class KeyguardQsUserSwitchController extends ViewController<UserAvatarVie
         @Override
         public boolean shouldAnimate() {
             return false;
+        }
+
+        @Override
+        public int getDoneText() {
+            return R.string.quick_settings_close_user_panel;
         }
 
         @Override

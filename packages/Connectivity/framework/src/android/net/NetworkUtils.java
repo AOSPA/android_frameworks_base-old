@@ -16,6 +16,8 @@
 
 package android.net;
 
+import static android.net.ConnectivityManager.NETID_UNSET;
+
 import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Build;
 import android.system.ErrnoException;
@@ -27,6 +29,7 @@ import com.android.net.module.util.Inet4AddressUtils;
 import java.io.FileDescriptor;
 import java.math.BigInteger;
 import java.net.Inet4Address;
+import java.net.Inet6Address;
 import java.net.InetAddress;
 import java.net.SocketException;
 import java.net.UnknownHostException;
@@ -39,6 +42,9 @@ import java.util.TreeSet;
  * {@hide}
  */
 public class NetworkUtils {
+    static {
+        System.loadLibrary("framework-connectivity-jni");
+    }
 
     private static final String TAG = "NetworkUtils";
 
@@ -54,6 +60,8 @@ public class NetworkUtils {
      */
     public static native void detachBPFFilter(FileDescriptor fd) throws SocketException;
 
+    private static native boolean bindProcessToNetworkHandle(long netHandle);
+
     /**
      * Binds the current process to the network designated by {@code netId}.  All sockets created
      * in the future (and not explicitly bound via a bound {@link SocketFactory} (see
@@ -62,13 +70,20 @@ public class NetworkUtils {
      * is by design so an application doesn't accidentally use sockets it thinks are still bound to
      * a particular {@code Network}.  Passing NETID_UNSET clears the binding.
      */
-    public native static boolean bindProcessToNetwork(int netId);
+    public static boolean bindProcessToNetwork(int netId) {
+        return bindProcessToNetworkHandle(new Network(netId).getNetworkHandle());
+    }
+
+    private static native long getBoundNetworkHandleForProcess();
 
     /**
      * Return the netId last passed to {@link #bindProcessToNetwork}, or NETID_UNSET if
      * {@link #unbindProcessToNetwork} has been called since {@link #bindProcessToNetwork}.
      */
-    public native static int getBoundNetworkForProcess();
+    public static int getBoundNetworkForProcess() {
+        final long netHandle = getBoundNetworkHandleForProcess();
+        return netHandle == 0L ? NETID_UNSET : Network.fromNetworkHandle(netHandle).getNetId();
+    }
 
     /**
      * Binds host resolutions performed by this process to the network designated by {@code netId}.
@@ -80,33 +95,28 @@ public class NetworkUtils {
     @Deprecated
     public native static boolean bindProcessToNetworkForHostResolution(int netId);
 
+    private static native int bindSocketToNetworkHandle(FileDescriptor fd, long netHandle);
+
     /**
      * Explicitly binds {@code fd} to the network designated by {@code netId}.  This
      * overrides any binding via {@link #bindProcessToNetwork}.
      * @return 0 on success or negative errno on failure.
      */
-    public static native int bindSocketToNetwork(FileDescriptor fd, int netId);
-
-    /**
-     * Protect {@code fd} from VPN connections.  After protecting, data sent through
-     * this socket will go directly to the underlying network, so its traffic will not be
-     * forwarded through the VPN.
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public static native boolean protectFromVpn(FileDescriptor fd);
-
-    /**
-     * Protect {@code socketfd} from VPN connections.  After protecting, data sent through
-     * this socket will go directly to the underlying network, so its traffic will not be
-     * forwarded through the VPN.
-     */
-    public native static boolean protectFromVpn(int socketfd);
+    public static int bindSocketToNetwork(FileDescriptor fd, int netId) {
+        return bindSocketToNetworkHandle(fd, new Network(netId).getNetworkHandle());
+    }
 
     /**
      * Determine if {@code uid} can access network designated by {@code netId}.
      * @return {@code true} if {@code uid} can access network, {@code false} otherwise.
      */
-    public native static boolean queryUserAccess(int uid, int netId);
+    public static boolean queryUserAccess(int uid, int netId) {
+        // TODO (b/183485986): remove this method
+        return false;
+    }
+
+    private static native FileDescriptor resNetworkSend(
+            long netHandle, byte[] msg, int msglen, int flags) throws ErrnoException;
 
     /**
      * DNS resolver series jni method.
@@ -114,8 +124,13 @@ public class NetworkUtils {
      * {@code flags} is an additional config to control actual querying behavior.
      * @return a file descriptor to watch for read events
      */
-    public static native FileDescriptor resNetworkSend(
-            int netId, byte[] msg, int msglen, int flags) throws ErrnoException;
+    public static FileDescriptor resNetworkSend(
+            int netId, byte[] msg, int msglen, int flags) throws ErrnoException {
+        return resNetworkSend(new Network(netId).getNetworkHandle(), msg, msglen, flags);
+    }
+
+    private static native FileDescriptor resNetworkQuery(
+            long netHandle, String dname, int nsClass, int nsType, int flags) throws ErrnoException;
 
     /**
      * DNS resolver series jni method.
@@ -124,8 +139,11 @@ public class NetworkUtils {
      * {@code flags} is an additional config to control actual querying behavior.
      * @return a file descriptor to watch for read events
      */
-    public static native FileDescriptor resNetworkQuery(
-            int netId, String dname, int nsClass, int nsType, int flags) throws ErrnoException;
+    public static FileDescriptor resNetworkQuery(
+            int netId, String dname, int nsClass, int nsType, int flags) throws ErrnoException {
+        return resNetworkQuery(new Network(netId).getNetworkHandle(), dname, nsClass, nsType,
+                flags);
+    }
 
     /**
      * DNS resolver series jni method.
@@ -228,47 +246,7 @@ public class NetworkUtils {
     @Deprecated
     public static InetAddress numericToInetAddress(String addrString)
             throws IllegalArgumentException {
-        return InetAddress.parseNumericAddress(addrString);
-    }
-
-    /**
-     *  Masks a raw IP address byte array with the specified prefix length.
-     */
-    public static void maskRawAddress(byte[] array, int prefixLength) {
-        if (prefixLength < 0 || prefixLength > array.length * 8) {
-            throw new RuntimeException("IP address with " + array.length +
-                    " bytes has invalid prefix length " + prefixLength);
-        }
-
-        int offset = prefixLength / 8;
-        int remainder = prefixLength % 8;
-        byte mask = (byte)(0xFF << (8 - remainder));
-
-        if (offset < array.length) array[offset] = (byte)(array[offset] & mask);
-
-        offset++;
-
-        for (; offset < array.length; offset++) {
-            array[offset] = 0;
-        }
-    }
-
-    /**
-     * Get InetAddress masked with prefixLength.  Will never return null.
-     * @param address the IP address to mask with
-     * @param prefixLength the prefixLength used to mask the IP
-     */
-    public static InetAddress getNetworkPart(InetAddress address, int prefixLength) {
-        byte[] array = address.getAddress();
-        maskRawAddress(array, prefixLength);
-
-        InetAddress netPart = null;
-        try {
-            netPart = InetAddress.getByAddress(array);
-        } catch (UnknownHostException e) {
-            throw new RuntimeException("getNetworkPart error - " + e.toString());
-        }
-        return netPart;
+        return InetAddresses.parseNumericAddress(addrString);
     }
 
     /**
@@ -290,11 +268,52 @@ public class NetworkUtils {
         try {
             String[] pieces = ipAndMaskString.split("/", 2);
             prefixLength = Integer.parseInt(pieces[1]);
-            address = InetAddress.parseNumericAddress(pieces[0]);
+            address = InetAddresses.parseNumericAddress(pieces[0]);
         } catch (NullPointerException e) {            // Null string.
         } catch (ArrayIndexOutOfBoundsException e) {  // No prefix length.
         } catch (NumberFormatException e) {           // Non-numeric prefix.
         } catch (IllegalArgumentException e) {        // Invalid IP address.
+        }
+
+        if (address == null || prefixLength == -1) {
+            throw new IllegalArgumentException("Invalid IP address and mask " + ipAndMaskString);
+        }
+
+        return new Pair<InetAddress, Integer>(address, prefixLength);
+    }
+
+    /**
+     * Utility method to parse strings such as "192.0.2.5/24" or "2001:db8::cafe:d00d/64".
+     * @hide
+     *
+     * @deprecated This method is used only for IpPrefix and LinkAddress. Since Android S, use
+     *             {@link #parseIpAndMask(String)}, if possible.
+     */
+    @Deprecated
+    public static Pair<InetAddress, Integer> legacyParseIpAndMask(String ipAndMaskString) {
+        InetAddress address = null;
+        int prefixLength = -1;
+        try {
+            String[] pieces = ipAndMaskString.split("/", 2);
+            prefixLength = Integer.parseInt(pieces[1]);
+            if (pieces[0] == null || pieces[0].isEmpty()) {
+                final byte[] bytes = new byte[16];
+                bytes[15] = 1;
+                return new Pair<InetAddress, Integer>(Inet6Address.getByAddress(
+                        "ip6-localhost"/* host */, bytes, 0 /* scope_id */), prefixLength);
+            }
+
+            if (pieces[0].startsWith("[")
+                    && pieces[0].endsWith("]")
+                    && pieces[0].indexOf(':') != -1) {
+                pieces[0] = pieces[0].substring(1, pieces[0].length() - 1);
+            }
+            address = InetAddresses.parseNumericAddress(pieces[0]);
+        } catch (NullPointerException e) {            // Null string.
+        } catch (ArrayIndexOutOfBoundsException e) {  // No prefix length.
+        } catch (NumberFormatException e) {           // Non-numeric prefix.
+        } catch (IllegalArgumentException e) {        // Invalid IP address.
+        } catch (UnknownHostException e) {            // IP address length is illegal
         }
 
         if (address == null || prefixLength == -1) {
@@ -336,22 +355,7 @@ public class NetworkUtils {
      */
     @UnsupportedAppUsage
     public static String trimV4AddrZeros(String addr) {
-        if (addr == null) return null;
-        String[] octets = addr.split("\\.");
-        if (octets.length != 4) return addr;
-        StringBuilder builder = new StringBuilder(16);
-        String result = null;
-        for (int i = 0; i < 4; i++) {
-            try {
-                if (octets[i].length() > 3) return addr;
-                builder.append(Integer.parseInt(octets[i]));
-            } catch (NumberFormatException e) {
-                return addr;
-            }
-            if (i < 3) builder.append('.');
-        }
-        result = builder.toString();
-        return result;
+        return Inet4AddressUtils.trimAddressZeros(addr);
     }
 
     /**

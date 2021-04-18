@@ -1332,6 +1332,8 @@ public class AppProfiler {
         // Get a list of Stats that have vsize > 0
         final List<ProcessCpuTracker.Stats> stats = getCpuStats(st -> st.vsize > 0);
         final int statsCount = stats.size();
+        long totalMemtrackGraphics = 0;
+        long totalMemtrackGl = 0;
         for (int i = 0; i < statsCount; i++) {
             ProcessCpuTracker.Stats st = stats.get(i);
             long pss = Debug.getPss(st.pid, swaptrackTmp, memtrackTmp);
@@ -1342,6 +1344,8 @@ public class AppProfiler {
                     mi.pss = pss;
                     mi.swapPss = swaptrackTmp[1];
                     mi.memtrack = memtrackTmp[0];
+                    totalMemtrackGraphics += memtrackTmp[1];
+                    totalMemtrackGl += memtrackTmp[2];
                     memInfos.add(mi);
                 }
             }
@@ -1350,20 +1354,18 @@ public class AppProfiler {
         long totalPss = 0;
         long totalSwapPss = 0;
         long totalMemtrack = 0;
-        long totalMemtrackGraphics = 0;
-        long totalMemtrackGl = 0;
         for (int i = 0, size = memInfos.size(); i < size; i++) {
             ProcessMemInfo mi = memInfos.get(i);
             if (mi.pss == 0) {
                 mi.pss = Debug.getPss(mi.pid, swaptrackTmp, memtrackTmp);
                 mi.swapPss = swaptrackTmp[1];
                 mi.memtrack = memtrackTmp[0];
+                totalMemtrackGraphics += memtrackTmp[1];
+                totalMemtrackGl += memtrackTmp[2];
             }
             totalPss += mi.pss;
             totalSwapPss += mi.swapPss;
             totalMemtrack += mi.memtrack;
-            totalMemtrackGraphics += memtrackTmp[1];
-            totalMemtrackGl += memtrackTmp[2];
         }
         Collections.sort(memInfos, new Comparator<ProcessMemInfo>() {
             @Override public int compare(ProcessMemInfo lhs, ProcessMemInfo rhs) {
@@ -1520,17 +1522,21 @@ public class AppProfiler {
         long kernelUsed = memInfo.getKernelUsedSizeKb();
         final long ionHeap = Debug.getIonHeapsSizeKb();
         final long ionPool = Debug.getIonPoolsSizeKb();
+        final long dmabufMapped = Debug.getDmabufMappedSizeKb();
         if (ionHeap >= 0 && ionPool >= 0) {
+            final long ionUnmapped = ionHeap - dmabufMapped;
             memInfoBuilder.append("       ION: ");
             memInfoBuilder.append(stringifyKBSize(ionHeap + ionPool));
             memInfoBuilder.append("\n");
+            kernelUsed += ionUnmapped;
             // Note: mapped ION memory is not accounted in PSS due to VM_PFNMAP flag being
-            // set on ION VMAs, therefore consider the entire ION heap as used kernel memory
-            kernelUsed += ionHeap;
+            // set on ION VMAs, however it might be included by the memtrack HAL.
+            // Replace memtrack HAL reported Graphics category with mapped dmabufs
+            totalPss -= totalMemtrackGraphics;
+            totalPss += dmabufMapped;
         } else {
             final long totalExportedDmabuf = Debug.getDmabufTotalExportedKb();
             if (totalExportedDmabuf >= 0) {
-                final long dmabufMapped = Debug.getDmabufMappedSizeKb();
                 final long dmabufUnmapped = totalExportedDmabuf - dmabufMapped;
                 memInfoBuilder.append("DMA-BUF: ");
                 memInfoBuilder.append(stringifyKBSize(totalExportedDmabuf));
@@ -1626,7 +1632,7 @@ public class AppProfiler {
         dropBuilder.append(catSw.toString());
         FrameworkStatsLog.write(FrameworkStatsLog.LOW_MEM_REPORTED);
         mService.addErrorToDropBox("lowmem", null, "system_server", null,
-                null, null, tag.toString(), dropBuilder.toString(), null, null);
+                null, null, tag.toString(), dropBuilder.toString(), null, null, null, null);
         synchronized (mService) {
             long now = SystemClock.uptimeMillis();
             if (mLastMemUsageReportTime < now) {

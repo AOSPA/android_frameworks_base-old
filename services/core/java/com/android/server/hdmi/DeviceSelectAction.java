@@ -21,7 +21,6 @@ import android.hardware.hdmi.HdmiDeviceInfo;
 import android.hardware.hdmi.HdmiTvClient;
 import android.hardware.hdmi.IHdmiControlCallback;
 import android.hardware.tv.cec.V1_0.SendMessageResult;
-import android.os.RemoteException;
 import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -63,7 +62,6 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
     static final int STATE_WAIT_FOR_DEVICE_POWER_ON = 3;
 
     private final HdmiDeviceInfo mTarget;
-    private final IHdmiControlCallback mCallback;
     private final HdmiCecMessage mGivePowerStatus;
     private final boolean mIsCec20;
 
@@ -86,8 +84,7 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
     @VisibleForTesting
     DeviceSelectAction(HdmiCecLocalDeviceTv source, HdmiDeviceInfo target,
                        IHdmiControlCallback callback, boolean isCec20) {
-        super(source);
-        mCallback = callback;
+        super(source, callback);
         mTarget = target;
         mGivePowerStatus = HdmiCecMessageBuilder.buildGiveDevicePowerStatus(
                 getSourceAddress(), getTargetAddress());
@@ -100,16 +97,25 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
 
     @Override
     public boolean start() {
-        if (mIsCec20) {
-            sendSetStreamPath();
-        }
-        int targetPowerStatus = localDevice().mService.getHdmiCecNetwork()
-                .getCecDeviceInfo(getTargetAddress()).getDevicePowerStatus();
-        if (!mIsCec20 || targetPowerStatus == HdmiControlManager.POWER_STATUS_UNKNOWN) {
+        // Wake-up on <Set Stream Path> was not mandatory before CEC 2.0.
+        // The message is re-sent at the end of the action for devices that don't support 2.0.
+        sendSetStreamPath();
+
+        if (!mIsCec20) {
             queryDevicePowerStatus();
-        } else if (targetPowerStatus == HdmiControlManager.POWER_STATUS_ON) {
-            invokeCallbackAndFinish(HdmiControlManager.RESULT_SUCCESS);
-            return true;
+        } else {
+            int targetPowerStatus = HdmiControlManager.POWER_STATUS_UNKNOWN;
+            HdmiDeviceInfo targetDevice = localDevice().mService.getHdmiCecNetwork()
+                    .getCecDeviceInfo(getTargetAddress());
+            if (targetDevice != null) {
+                targetPowerStatus = targetDevice.getDevicePowerStatus();
+            }
+            if (targetPowerStatus == HdmiControlManager.POWER_STATUS_UNKNOWN) {
+                queryDevicePowerStatus();
+            } else if (targetPowerStatus == HdmiControlManager.POWER_STATUS_ON) {
+                finishWithCallback(HdmiControlManager.RESULT_SUCCESS);
+                return true;
+            }
         }
         mState = STATE_WAIT_FOR_REPORT_POWER_STATUS;
         addTimer(mState, HdmiConfig.TIMEOUT_MS);
@@ -117,14 +123,17 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
     }
 
     private void queryDevicePowerStatus() {
-        sendCommand(mGivePowerStatus, new SendMessageCallback() {
-            @Override
-            public void onSendCompleted(int error) {
-                if (error != SendMessageResult.SUCCESS) {
-                    invokeCallbackAndFinish(HdmiControlManager.RESULT_COMMUNICATION_FAILED);
-                }
-            }
-        });
+        sendCommand(
+                mGivePowerStatus,
+                new SendMessageCallback() {
+                    @Override
+                    public void onSendCompleted(int error) {
+                        if (error != SendMessageResult.SUCCESS) {
+                            finishWithCallback(HdmiControlManager.RESULT_COMMUNICATION_FAILED);
+                            return;
+                        }
+                    }
+                });
     }
 
     @Override
@@ -189,7 +198,7 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
         switch (mState) {
             case STATE_WAIT_FOR_REPORT_POWER_STATUS:
                 if (tv().isPowerStandbyOrTransient()) {
-                    invokeCallbackAndFinish(HdmiControlManager.RESULT_INCORRECT_MODE);
+                    finishWithCallback(HdmiControlManager.RESULT_INCORRECT_MODE);
                     return;
                 }
                 selectDevice();
@@ -217,7 +226,7 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
         if (!mIsCec20) {
             sendSetStreamPath();
         }
-        invokeCallbackAndFinish(HdmiControlManager.RESULT_SUCCESS);
+        finishWithCallback(HdmiControlManager.RESULT_SUCCESS);
     }
 
     private void sendSetStreamPath() {
@@ -227,16 +236,5 @@ final class DeviceSelectAction extends HdmiCecFeatureAction {
         tv().setActivePath(mTarget.getPhysicalAddress());
         sendCommand(HdmiCecMessageBuilder.buildSetStreamPath(
                 getSourceAddress(), mTarget.getPhysicalAddress()));
-    }
-
-    private void invokeCallbackAndFinish(int result) {
-        if (mCallback != null) {
-            try {
-                mCallback.onComplete(result);
-            } catch (RemoteException e) {
-                Slog.e(TAG, "Callback failed:" + e);
-            }
-        }
-        finish();
     }
 }

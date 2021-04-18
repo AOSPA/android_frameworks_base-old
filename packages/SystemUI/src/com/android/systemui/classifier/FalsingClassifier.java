@@ -21,7 +21,6 @@ import android.view.MotionEvent;
 import com.android.systemui.util.sensors.ProximitySensor;
 
 import java.util.List;
-import java.util.Queue;
 
 /**
  * Base class for rules that determine False touches.
@@ -36,12 +35,20 @@ public abstract class FalsingClassifier {
         mDataProvider.addMotionEventListener(mMotionEventListener);
     }
 
+    protected String getFalsingContext() {
+        return getClass().getSimpleName();
+    }
+
+    protected Result falsed(double confidence, String reason) {
+        return Result.falsed(confidence, getFalsingContext(), reason);
+    }
+
     List<MotionEvent> getRecentMotionEvents() {
         return mDataProvider.getRecentMotionEvents();
     }
 
-    Queue<? extends List<MotionEvent>> getHistoricalEvents() {
-        return mDataProvider.getHistoricalMotionEvents();
+    List<MotionEvent> getPriorMotionEvents() {
+        return mDataProvider.getPriorMotionEvents();
     }
 
     MotionEvent getFirstMotionEvent() {
@@ -88,10 +95,6 @@ public abstract class FalsingClassifier {
         return mDataProvider.getYdpi();
     }
 
-    final @Classifier.InteractionType int getInteractionType() {
-        return mDataProvider.getInteractionType();
-    }
-
     void cleanup() {
         mDataProvider.removeMotionEventListener(mMotionEventListener);
     }
@@ -102,50 +105,42 @@ public abstract class FalsingClassifier {
      * Useful for classifiers that need to see every MotionEvent, but most can probably
      * use {@link #getRecentMotionEvents()} instead, which will return a list of MotionEvents.
      */
-    void onTouchEvent(MotionEvent motionEvent) {};
+    void onTouchEvent(MotionEvent motionEvent) {}
 
     /**
      * Called when a ProximityEvent occurs (change in near/far).
      */
-    void onProximityEvent(ProximitySensor.ThresholdSensorEvent proximityEvent) {};
+    void onProximityEvent(ProximitySensor.ThresholdSensorEvent proximityEvent) {}
 
     /**
      * The phone screen has turned on and we need to begin falsing detection.
      */
-    void onSessionStarted() {};
+    void onSessionStarted() {}
 
     /**
      * The phone screen has turned off and falsing data can be discarded.
      */
-    void onSessionEnded() {};
+    void onSessionEnded() {}
 
     /**
-     * Returns whether a gesture looks like a false touch.
+     * Returns whether a gesture looks like a false touch, taking history into consideration.
      *
-     * See also {@link #classifyGesture(double, double)}.
+     * See {@link HistoryTracker#falseBelief()} and {@link HistoryTracker#falseConfidence()}.
      */
-    Result classifyGesture() {
-        return calculateFalsingResult(0, 0);
-    }
-
-    /**
-     * Returns whether a gesture looks like a false touch, with the option to consider history.
-     *
-     * Unlike the parameter-less version of this method, this method allows the classifier to take
-     * history into account, penalizing or boosting confidence in a gesture based on recent results.
-     *
-     * See also {@link #classifyGesture()}.
-     */
-    Result classifyGesture(double historyPenalty, double historyConfidence) {
-        return calculateFalsingResult(historyPenalty, historyConfidence);
+    Result classifyGesture(
+            @Classifier.InteractionType int interactionType,
+            double historyBelief, double historyConfidence) {
+        return calculateFalsingResult(interactionType, historyBelief, historyConfidence);
     }
 
     /**
      * Calculate a result based on available data.
      *
-     * When passed a historyConfidence of 0, the history penalty should be wholly ignored.
+     * When passed a historyConfidence of 0, the history belief should be wholly ignored.
      */
-    abstract Result calculateFalsingResult(double historyPenalty, double historyConfidence);
+    abstract Result calculateFalsingResult(
+            @Classifier.InteractionType int interactionType,
+            double historyBelief, double historyConfidence);
 
     /** */
     public static void logDebug(String msg) {
@@ -165,17 +160,19 @@ public abstract class FalsingClassifier {
     /**
      * A Falsing result that encapsulates the boolean result along with confidence and a reason.
      */
-    static class Result {
+    public static class Result {
         private final boolean mFalsed;
         private final double mConfidence;
+        private final String mContext;
         private final String mReason;
 
         /**
-         * See {@link #falsed(double, String)} abd {@link #passed(double)}.
+         * See {@link #falsed(double, String, String)} abd {@link #passed(double)}.
          */
-        private Result(boolean falsed, double confidence, String reason) {
+        private Result(boolean falsed, double confidence, String context, String reason) {
             mFalsed = falsed;
             mConfidence = confidence;
+            mContext = context;
             mReason = reason;
         }
 
@@ -188,21 +185,21 @@ public abstract class FalsingClassifier {
         }
 
         public String getReason() {
-            return mReason;
+            return String.format("{context=%s reason=%s}", mContext, mReason);
         }
 
         /**
          * Construct a "falsed" result indicating that a gesture should be treated as accidental.
          */
-        static Result falsed(double confidence, String reason) {
-            return new Result(true, confidence, reason);
+        public static Result falsed(double confidence, String context, String reason) {
+            return new Result(true, confidence, context, reason);
         }
 
         /**
          * Construct a "passed" result indicating that a gesture should be allowed.
          */
-        static Result passed(double confidence) {
-            return new Result(false, confidence, null);
+        public static Result passed(double confidence) {
+            return new Result(false, confidence, null, null);
         }
     }
 }

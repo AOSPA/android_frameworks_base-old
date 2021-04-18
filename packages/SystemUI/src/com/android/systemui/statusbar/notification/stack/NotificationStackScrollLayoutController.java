@@ -223,6 +223,7 @@ public class NotificationStackScrollLayoutController {
             updateShowEmptyShadeView();
             mView.updateCornerRadius();
             mView.updateBgColor();
+            mView.updateDecorViews();
             mView.reinflateViews();
         }
 
@@ -398,7 +399,7 @@ public class NotificationStackScrollLayoutController {
                     if (mView.getDismissAllInProgress()) {
                         return;
                     }
-                    mView.onSwipeEnd(view);
+                    mView.onSwipeEnd();
                     if (view instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) view;
                         if (row.isHeadsUp()) {
@@ -458,7 +459,7 @@ public class NotificationStackScrollLayoutController {
 
                 @Override
                 public void onChildSnappedBack(View animView, float targetLeft) {
-                    mView.onSwipeEnd(animView);
+                    mView.onSwipeEnd();
                     if (animView instanceof ExpandableNotificationRow) {
                         ExpandableNotificationRow row = (ExpandableNotificationRow) animView;
                         if (row.isPinned() && !canChildBeDismissed(row)

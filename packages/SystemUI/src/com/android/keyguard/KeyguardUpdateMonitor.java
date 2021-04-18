@@ -22,7 +22,6 @@ import static android.content.Intent.ACTION_USER_REMOVED;
 import static android.content.Intent.ACTION_USER_STOPPED;
 import static android.content.Intent.ACTION_USER_UNLOCKED;
 import static android.os.BatteryManager.BATTERY_STATUS_UNKNOWN;
-import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
 
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
 import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_DPM_LOCK_NOW;
@@ -67,8 +66,10 @@ import android.os.Handler;
 import android.os.IRemoteCallback;
 import android.os.Looper;
 import android.os.Message;
+import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -76,11 +77,11 @@ import android.provider.Settings;
 import android.service.dreams.DreamService;
 import android.service.dreams.IDreamManager;
 import android.telephony.CarrierConfigManager;
-import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.util.SparseArray;
@@ -107,6 +108,7 @@ import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
+import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.util.Assert;
 import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.keyguard.KeyguardViewMediator;
@@ -242,14 +244,21 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private final boolean mIsPrimaryUser;
     private final boolean mIsAutomotive;
     private final AuthController mAuthController;
+    private final PowerManager mPowerManager;
     private final StatusBarStateController mStatusBarStateController;
     private int mStatusBarState;
+    private boolean mDozing;
     private final StatusBarStateController.StateListener mStatusBarStateControllerListener =
             new StatusBarStateController.StateListener() {
         @Override
         public void onStateChanged(int newState) {
             mStatusBarState = newState;
             updateBiometricListeningState();
+        }
+
+        @Override
+        public void onDozingChanged(boolean dozing) {
+            mDozing = dozing;
         }
     };
 
@@ -291,6 +300,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mDeviceInteractive;
     private boolean mScreenOn;
     private SubscriptionManager mSubscriptionManager;
+    private final TelephonyListenerManager mTelephonyListenerManager;
     private List<SubscriptionInfo> mSubscriptionInfo;
     private TrustManager mTrustManager;
     private UserManager mUserManager;
@@ -306,6 +316,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mLogoutEnabled;
     // cached value to avoid IPCs
     private boolean mIsUdfpsEnrolled;
+    private boolean mKeyguardQsUserSwitchEnabled;
     // If the user long pressed the lock icon, disabling face auth for the current session.
     private boolean mLockIconPressed;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -358,7 +369,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             };
 
     @VisibleForTesting
-    public PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
+    public TelephonyCallback.ActiveDataSubscriptionIdListener mPhoneStateListener =
+            new TelephonyCallback.ActiveDataSubscriptionIdListener() {
         @Override
         public void onActiveDataSubscriptionIdChanged(int subId) {
             mActiveMobileDataSubscription = subId;
@@ -1292,16 +1304,19 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
     private final FingerprintManager.AuthenticationCallback mFingerprintAuthenticationCallback
             = new AuthenticationCallback() {
+        private boolean mIsUdfpsRunningWhileDozing;
 
         @Override
         public void onAuthenticationFailed() {
             handleFingerprintAuthFailed();
+            cancelAodInterrupt();
         }
 
         @Override
         public void onAuthenticationSucceeded(AuthenticationResult result) {
             Trace.beginSection("KeyguardUpdateMonitor#onAuthenticationSucceeded");
             handleFingerprintAuthenticated(result.getUserId(), result.isStrongBiometric());
+            cancelAodInterrupt();
             Trace.endSection();
         }
 
@@ -1313,6 +1328,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         @Override
         public void onAuthenticationError(int errMsgId, CharSequence errString) {
             handleFingerprintError(errMsgId, errString.toString());
+            cancelAodInterrupt();
         }
 
         @Override
@@ -1323,11 +1339,24 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         @Override
         public void onUdfpsPointerDown(int sensorId) {
             Log.d(TAG, "onUdfpsPointerDown, sensorId: " + sensorId);
+
+            if (mDozing) {
+                mIsUdfpsRunningWhileDozing = true;
+            }
         }
 
         @Override
         public void onUdfpsPointerUp(int sensorId) {
             Log.d(TAG, "onUdfpsPointerUp, sensorId: " + sensorId);
+        }
+
+        private void cancelAodInterrupt() {
+            if (mIsUdfpsRunningWhileDozing) {
+                mPowerManager.wakeUp(SystemClock.uptimeMillis(), PowerManager.WAKE_REASON_GESTURE,
+                        "com.android.systemui:AOD_INTERRUPT_END");
+            }
+            mAuthController.onCancelAodInterrupt();
+            mIsUdfpsRunningWhileDozing = false;
         }
     };
 
@@ -1614,9 +1643,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             StatusBarStateController statusBarStateController,
             LockPatternUtils lockPatternUtils,
             AuthController authController,
+            TelephonyListenerManager telephonyListenerManager,
+            PowerManager powerManager,
             FeatureFlags featureFlags) {
         mContext = context;
         mSubscriptionManager = SubscriptionManager.from(context);
+        mTelephonyListenerManager = telephonyListenerManager;
         mDeviceProvisioned = isDeviceProvisionedInSettingsDb();
         mStrongAuthTracker = new StrongAuthTracker(context, this::notifyStrongAuthStateChanged);
         mBackgroundExecutor = backgroundExecutor;
@@ -1625,8 +1657,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mStatusBarStateController = statusBarStateController;
         mStatusBarStateController.addCallback(mStatusBarStateControllerListener);
         mStatusBarState = mStatusBarStateController.getState();
+        mDozing = mStatusBarStateController.isDozing();
         mLockPatternUtils = lockPatternUtils;
         mAuthController = authController;
+        mPowerManager = powerManager;
         dumpManager.registerDumpable(getClass().getName(), this);
 
         mHandler = new Handler(mainLooper) {
@@ -1865,8 +1899,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mTelephonyManager =
                 (TelephonyManager) context.getSystemService(Context.TELEPHONY_SERVICE);
         if (mTelephonyManager != null) {
-            mTelephonyManager.listen(mPhoneStateListener,
-                    LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
+            mTelephonyListenerManager.addActiveDataSubscriptionIdListener(mPhoneStateListener);
             // Set initial sim states values.
             for (int slot = 0; slot < mTelephonyManager.getActiveModemCount(); slot++) {
                 int state = mTelephonyManager.getSimState(slot);
@@ -1917,7 +1950,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             return isFaceAuthEnabledForUser(KeyguardUpdateMonitor.getCurrentUser())
                     && !isUdfpsEnrolled();
         }
-        return true;
+        return !isKeyguardQsUserSwitchEnabled();
     }
 
     /**
@@ -1925,6 +1958,17 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      */
     public boolean isUdfpsEnrolled() {
         return mIsUdfpsEnrolled;
+    }
+
+    /**
+     * @return true if the keyguard qs user switcher shortcut is enabled
+     */
+    public boolean isKeyguardQsUserSwitchEnabled() {
+        return mKeyguardQsUserSwitchEnabled;
+    }
+
+    public void setKeyguardQsUserSwitchEnabled(boolean enabled) {
+        mKeyguardQsUserSwitchEnabled = enabled;
     }
 
     private final UserSwitchObserver mUserSwitchObserver = new UserSwitchObserver() {
@@ -2066,8 +2110,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     boolean shouldListenForUdfps() {
         return shouldListenForFingerprint()
                 && !mBouncer
-                && mStatusBarState != StatusBarState.SHADE_LOCKED
-                && mStatusBarState != StatusBarState.FULLSCREEN_USER_SWITCHER
                 && mStrongAuthTracker.hasUserAuthenticatedSinceBoot();
     }
 
@@ -3185,7 +3227,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         TelephonyManager telephony =
                 (TelephonyManager) mContext.getSystemService(Context.TELEPHONY_SERVICE);
         if (telephony != null) {
-            telephony.listen(mPhoneStateListener, PhoneStateListener.LISTEN_NONE);
+            mTelephonyListenerManager.removeActiveDataSubscriptionIdListener(mPhoneStateListener);
         }
 
         mSubscriptionManager.removeOnSubscriptionsChangedListener(mSubscriptionListener);

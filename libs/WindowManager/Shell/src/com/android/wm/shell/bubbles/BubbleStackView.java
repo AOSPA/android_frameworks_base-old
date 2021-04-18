@@ -41,7 +41,6 @@ import android.graphics.Paint;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.graphics.Region;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
@@ -152,6 +151,7 @@ public class BubbleStackView extends FrameLayout
      * starting a new animation.
      */
     private final ShellExecutor mDelayedAnimationExecutor;
+    private Runnable mDelayedAnimation;
 
     /**
      * Interface to synchronize {@link View} state and the screen.
@@ -912,9 +912,6 @@ public class BubbleStackView extends FrameLayout
                     removeOnLayoutChangeListener(mOrientationChangedListener);
                 };
 
-        // This must be a separate OnDrawListener since it should be called for every draw.
-        getViewTreeObserver().addOnDrawListener(mSystemGestureExcludeUpdater);
-
         final ColorMatrix animatedMatrix = new ColorMatrix();
         final ColorMatrix darkenMatrix = new ColorMatrix();
 
@@ -1049,6 +1046,7 @@ public class BubbleStackView extends FrameLayout
         }
     };
 
+    // TODO: Create ManageMenuView and move setup / animations there
     private void setUpManageMenu() {
         if (mManageMenu != null) {
             removeView(mManageMenu);
@@ -1274,12 +1272,14 @@ public class BubbleStackView extends FrameLayout
     protected void onAttachedToWindow() {
         super.onAttachedToWindow();
         getViewTreeObserver().addOnComputeInternalInsetsListener(this);
+        getViewTreeObserver().addOnDrawListener(mSystemGestureExcludeUpdater);
     }
 
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
         getViewTreeObserver().removeOnPreDrawListener(mViewUpdater);
+        getViewTreeObserver().removeOnDrawListener(mSystemGestureExcludeUpdater);
         getViewTreeObserver().removeOnComputeInternalInsetsListener(this);
         if (mBubbleOverflow != null) {
             mBubbleOverflow.cleanUpExpandedState();
@@ -1539,19 +1539,16 @@ public class BubbleStackView extends FrameLayout
      * Update bubble order and pointer position.
      */
     public void updateBubbleOrder(List<Bubble> bubbles) {
-        if (isExpansionAnimating()) {
-            return;
-        }
         final Runnable reorder = () -> {
             for (int i = 0; i < bubbles.size(); i++) {
                 Bubble bubble = bubbles.get(i);
                 mBubbleContainer.reorderView(bubble.getIconView(), i);
             }
         };
-        if (mIsExpanded) {
+        if (mIsExpanded || isExpansionAnimating()) {
             reorder.run();
             updateBadgesAndZOrder(false /* setBadgeForCollapsedStack */);
-        } else {
+        } else if (!isExpansionAnimating()) {
             List<View> bubbleViews = bubbles.stream()
                     .map(b -> b.getIconView()).collect(Collectors.toList());
             mStackAnimationController.animateReorder(bubbleViews, reorder);
@@ -1689,6 +1686,13 @@ public class BubbleStackView extends FrameLayout
                     FrameworkStatsLog.BUBBLE_UICHANGED__ACTION__STACK_EXPANDED);
         }
         notifyExpansionChanged(mExpandedBubble, mIsExpanded);
+    }
+
+    void setBubbleVisibility(Bubble b, boolean visible) {
+        if (b.getIconView() != null) {
+            b.getIconView().setVisibility(visible ? VISIBLE : GONE);
+        }
+        // TODO(b/181166384): Animate in / out & handle adjusting how the bubbles overlap
     }
 
     /**
@@ -1862,7 +1866,7 @@ public class BubbleStackView extends FrameLayout
             mExpandedBubble.getExpandedView().setAlphaAnimating(true);
         }
 
-        mDelayedAnimationExecutor.executeDelayed(() -> {
+        mDelayedAnimation = () -> {
             mExpandedViewAlphaAnimator.start();
 
             PhysicsAnimator.getInstance(mExpandedViewContainerMatrix).cancel();
@@ -1895,7 +1899,8 @@ public class BubbleStackView extends FrameLayout
                         }
                     })
                     .start();
-        }, startDelay);
+        };
+        mDelayedAnimationExecutor.executeDelayed(mDelayedAnimation, startDelay);
     }
 
     private void animateCollapse() {
@@ -2094,7 +2099,7 @@ public class BubbleStackView extends FrameLayout
      * animating flags for those animations.
      */
     private void cancelDelayedExpandCollapseSwitchAnimations() {
-        mDelayedAnimationExecutor.removeAllCallbacks();
+        mDelayedAnimationExecutor.removeCallbacks(mDelayedAnimation);
 
         mIsExpansionAnimating = false;
         mIsBubbleSwitchAnimating = false;
@@ -2143,50 +2148,6 @@ public class BubbleStackView extends FrameLayout
     }
 
     /**
-     * This method is called by {@link android.app.ActivityView} because the BubbleStackView has a
-     * higher Z-index than the ActivityView (so that dragged-out bubbles are visible over the AV).
-     * ActivityView is asking BubbleStackView to subtract the stack's bounds from the provided
-     * touchable region, so that the ActivityView doesn't consume events meant for the stack. Due to
-     * the special nature of ActivityView, it does not respect the standard
-     * {@link #dispatchTouchEvent} and {@link #onInterceptTouchEvent} methods typically used for
-     * this purpose.
-     *
-     * BubbleStackView is MATCH_PARENT, so that bubbles can be positioned via their translation
-     * properties for performance reasons. This means that the default implementation of this method
-     * subtracts the entirety of the screen from the ActivityView's touchable region, resulting in
-     * it not receiving any touch events. This was previously addressed by returning false in the
-     * stack's {@link View#canReceivePointerEvents()} method, but this precluded the use of any
-     * touch handlers in the stack or its child views.
-     *
-     * To support touch handlers, we're overriding this method to leave the ActivityView's touchable
-     * region alone. The only touchable part of the stack that can ever overlap the AV is a
-     * dragged-out bubble that is animating back into the row of bubbles. It's not worth continually
-     * updating the touchable region to allow users to grab a bubble while it completes its ~50ms
-     * animation back to the bubble row.
-     *
-     * NOTE: Any future additions to the stack that obscure the ActivityView region will need their
-     * bounds subtracted here in order to receive touch events.
-     */
-    @Override
-    public void subtractObscuredTouchableRegion(Region touchableRegion, View view) {
-        // If the notification shade is expanded, or the manage menu is open, or we are showing
-        // manage bubbles user education, we shouldn't let the ActivityView steal any touch events
-        // from any location.
-        if (!mIsExpanded
-                || mShowingManage
-                || (mManageEduView != null
-                    && mManageEduView.getVisibility() == VISIBLE)) {
-            touchableRegion.setEmpty();
-        }
-    }
-
-    /**
-     * If you're here because you're not receiving touch events on a view that is a descendant of
-     * BubbleStackView, and you think BSV is intercepting them - it's not! You need to subtract the
-     * bounds of the view in question in {@link #subtractObscuredTouchableRegion}. The ActivityView
-     * consumes all touch events within its bounds, even for views like the BubbleStackView that are
-     * above it. It ignores typical view touch handling methods like this one and
-     * dispatchTouchEvent.
      */
     @Override
     public boolean onInterceptTouchEvent(MotionEvent ev) {
@@ -2434,7 +2395,7 @@ public class BubbleStackView extends FrameLayout
 
             if (mFlyout.getVisibility() == View.VISIBLE) {
                 mFlyout.animateUpdate(bubble.getFlyoutMessage(), getWidth(),
-                        mStackAnimationController.getStackPosition().y);
+                        mStackAnimationController.getStackPosition(), !bubble.showDot());
             } else {
                 mFlyout.setVisibility(INVISIBLE);
                 mFlyout.setupFlyoutStartingAsDot(bubble.getFlyoutMessage(),
@@ -2536,6 +2497,11 @@ public class BubbleStackView extends FrameLayout
         }
 
         mExpandedBubble.getExpandedView().getManageButtonBoundsOnScreen(mTempRect);
+        if (mExpandedBubble.getExpandedView().getTaskView() != null) {
+            mExpandedBubble.getExpandedView().getTaskView().setObscuredTouchRect(mShowingManage
+                    ? new Rect(0, 0, getWidth(), getHeight())
+                    : null);
+        }
 
         final boolean isLtr =
                 getResources().getConfiguration().getLayoutDirection() == LAYOUT_DIRECTION_LTR;

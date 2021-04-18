@@ -45,17 +45,18 @@ public class AppSearchShortcutInfoTest {
         final Set<String> categorySet = new ArraySet<>();
         categorySet.add(category);
         final Intent shortcutIntent = new Intent(Intent.ACTION_VIEW);
-        final ShortcutInfo shortcut = new AppSearchShortcutInfo.Builder(id)
+        final ShortcutInfo shortcut = new AppSearchShortcutInfo.Builder(/*packageName=*/"", id)
                 .setActivity(activity)
-                .setText(id)
+                .setLongLabel(id)
                 .setIconResName(shortcutIconResName)
                 .setIntent(shortcutIntent)
                 .setPerson(person)
                 .setCategories(categorySet)
                 .setFlags(ShortcutInfo.FLAG_LONG_LIVED)
                 .build()
-                .toShortcutInfo();
+                .toShortcutInfo(0);
 
+        assertThat(shortcut.getUserId()).isEqualTo(0);
         assertThat(shortcut.getId()).isEqualTo(id);
         assertThat(shortcut.getShortLabel()).isEqualTo(id);
         assertThat(shortcut.getIconResName()).isEqualTo(shortcutIconResName);

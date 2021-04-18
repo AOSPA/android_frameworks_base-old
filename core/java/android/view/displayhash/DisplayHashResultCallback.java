@@ -66,12 +66,26 @@ public interface DisplayHashResultCallback {
      */
     int DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN = -4;
 
+    /**
+     * The hash algorithm sent to generate the hash was invalid. This means the value is not one
+     * of the supported values in {@link DisplayHashManager#getSupportedHashAlgorithms()}
+     */
+    int DISPLAY_HASH_ERROR_INVALID_HASH_ALGORITHM = -5;
+
+    /**
+     * The caller requested to generate the hash too frequently. The caller should try again at a
+     * after some time has passed to ensure the system isn't overloaded.
+     */
+    int DISPLAY_HASH_ERROR_TOO_MANY_REQUESTS = -6;
+
     /** @hide */
     @IntDef(prefix = {"DISPLAY_HASH_ERROR_"}, value = {
             DISPLAY_HASH_ERROR_UNKNOWN,
             DISPLAY_HASH_ERROR_INVALID_BOUNDS,
             DISPLAY_HASH_ERROR_MISSING_WINDOW,
-            DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN
+            DISPLAY_HASH_ERROR_NOT_VISIBLE_ON_SCREEN,
+            DISPLAY_HASH_ERROR_INVALID_HASH_ALGORITHM,
+            DISPLAY_HASH_ERROR_TOO_MANY_REQUESTS
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface DisplayHashErrorCode {

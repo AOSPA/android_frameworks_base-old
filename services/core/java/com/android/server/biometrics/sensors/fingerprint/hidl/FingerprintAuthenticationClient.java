@@ -59,11 +59,12 @@ class FingerprintAuthenticationClient extends AuthenticationClient<IBiometricsFi
             int sensorId, boolean isStrongBiometric, int statsClient,
             @NonNull TaskStackListener taskStackListener,
             @NonNull LockoutFrameworkImpl lockoutTracker,
-            @Nullable IUdfpsOverlayController udfpsOverlayController, boolean isKeyguard) {
+            @Nullable IUdfpsOverlayController udfpsOverlayController,
+            boolean allowBackgroundAuthentication) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
                 owner, cookie, requireConfirmation, sensorId, isStrongBiometric,
                 BiometricsProtoEnums.MODALITY_FINGERPRINT, statsClient, taskStackListener,
-                lockoutTracker, isKeyguard);
+                lockoutTracker, allowBackgroundAuthentication);
         mLockoutFrameworkImpl = lockoutTracker;
         mUdfpsOverlayController = udfpsOverlayController;
     }
@@ -120,7 +121,7 @@ class FingerprintAuthenticationClient extends AuthenticationClient<IBiometricsFi
     @Override
     protected void startHalOperation() {
         UdfpsHelper.showUdfpsOverlay(getSensorId(), Utils.getUdfpsAuthReason(this),
-                mUdfpsOverlayController);
+                mUdfpsOverlayController, this);
         try {
             // GroupId was never used. In fact, groupId is always the same as userId.
             getFreshDaemon().authenticate(mOperationId, getTargetUserId());

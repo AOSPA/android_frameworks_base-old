@@ -36,6 +36,7 @@ import com.android.systemui.privacy.logging.PrivacyLogger
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.util.DeviceConfigProxy
 import com.android.systemui.util.concurrency.DelayableExecutor
+import com.android.systemui.util.time.SystemClock
 import java.io.FileDescriptor
 import java.io.PrintWriter
 import java.lang.ref.WeakReference
@@ -50,6 +51,7 @@ class PrivacyItemController @Inject constructor(
     private val deviceConfigProxy: DeviceConfigProxy,
     private val userTracker: UserTracker,
     private val logger: PrivacyLogger,
+    private val systemClock: SystemClock,
     dumpManager: DumpManager
 ) : Dumpable {
 
@@ -68,25 +70,17 @@ class PrivacyItemController @Inject constructor(
             addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE)
         }
         const val TAG = "PrivacyItemController"
-        private const val ALL_INDICATORS =
-                SystemUiDeviceConfigFlags.PROPERTY_PERMISSIONS_HUB_ENABLED
         private const val MIC_CAMERA = SystemUiDeviceConfigFlags.PROPERTY_MIC_CAMERA_ENABLED
         private const val LOCATION = SystemUiDeviceConfigFlags.PROPERTY_LOCATION_INDICATORS_ENABLED
-        private const val DEFAULT_ALL_INDICATORS = false
         private const val DEFAULT_MIC_CAMERA = true
         private const val DEFAULT_LOCATION = false
-        const val TIME_TO_HOLD_INDICATORS = 5000L
+        @VisibleForTesting const val TIME_TO_HOLD_INDICATORS = 5000L
     }
 
     @VisibleForTesting
     internal var privacyList = emptyList<PrivacyItem>()
         @Synchronized get() = field.toList() // Returns a shallow copy of the list
         @Synchronized set
-
-    private fun isAllIndicatorsEnabled(): Boolean {
-        return deviceConfigProxy.getBoolean(DeviceConfig.NAMESPACE_PRIVACY,
-                ALL_INDICATORS, DEFAULT_ALL_INDICATORS)
-    }
 
     private fun isMicCameraEnabled(): Boolean {
         return deviceConfigProxy.getBoolean(DeviceConfig.NAMESPACE_PRIVACY,
@@ -102,8 +96,8 @@ class PrivacyItemController @Inject constructor(
     private var listening = false
     private val callbacks = mutableListOf<WeakReference<Callback>>()
     private val internalUiExecutor = MyExecutor(uiExecutor)
-    private var holdingIndicators = false
-    private var holdIndicatorsCancelled: Runnable? = null
+
+    private var holdingRunnableCanceler: Runnable? = null
 
     private val notifyChanges = Runnable {
         val list = privacyList
@@ -115,39 +109,29 @@ class PrivacyItemController @Inject constructor(
         uiExecutor.execute(notifyChanges)
     }
 
-    private val stopHoldingAndNotifyChanges = Runnable {
-        updatePrivacyList(true)
-        uiExecutor.execute(notifyChanges)
-    }
-
-    var allIndicatorsAvailable = isAllIndicatorsEnabled()
-        private set
     var micCameraAvailable = isMicCameraEnabled()
         private set
     var locationAvailable = isLocationEnabled()
+
+    var allIndicatorsAvailable = micCameraAvailable && locationAvailable
 
     private val devicePropertiesChangedListener =
             object : DeviceConfig.OnPropertiesChangedListener {
         override fun onPropertiesChanged(properties: DeviceConfig.Properties) {
             if (DeviceConfig.NAMESPACE_PRIVACY.equals(properties.getNamespace()) &&
-                    (properties.keyset.contains(ALL_INDICATORS) ||
-                            properties.keyset.contains(MIC_CAMERA) ||
+                    (properties.keyset.contains(MIC_CAMERA) ||
                             properties.keyset.contains(LOCATION))) {
 
                 // Running on the ui executor so can iterate on callbacks
-                if (properties.keyset.contains(ALL_INDICATORS)) {
-                    allIndicatorsAvailable = properties.getBoolean(ALL_INDICATORS,
-                            DEFAULT_ALL_INDICATORS)
-                    callbacks.forEach { it.get()?.onFlagAllChanged(allIndicatorsAvailable) }
-                }
-
                 if (properties.keyset.contains(MIC_CAMERA)) {
                     micCameraAvailable = properties.getBoolean(MIC_CAMERA, DEFAULT_MIC_CAMERA)
+                    allIndicatorsAvailable = micCameraAvailable && locationAvailable
                     callbacks.forEach { it.get()?.onFlagMicCameraChanged(micCameraAvailable) }
                 }
 
                 if (properties.keyset.contains(LOCATION)) {
                     locationAvailable = properties.getBoolean(LOCATION, DEFAULT_LOCATION)
+                    allIndicatorsAvailable = micCameraAvailable && locationAvailable
                     callbacks.forEach { it.get()?.onFlagLocationChanged(locationAvailable) }
                 }
                 internalUiExecutor.updateListeningState()
@@ -163,8 +147,7 @@ class PrivacyItemController @Inject constructor(
             active: Boolean
         ) {
             // Check if we care about this code right now
-            if (!allIndicatorsAvailable &&
-                    (code in OPS_LOCATION && !locationAvailable)) {
+            if (code in OPS_LOCATION && !locationAvailable) {
                 return
             }
             val userId = UserHandle.getUserId(uid)
@@ -202,14 +185,6 @@ class PrivacyItemController @Inject constructor(
         userTracker.addCallback(userTrackerCallback, bgExecutor)
     }
 
-    private fun setHoldTimer() {
-        holdIndicatorsCancelled?.run()
-        holdingIndicators = true
-        holdIndicatorsCancelled = bgExecutor.executeDelayed({
-            stopHoldingAndNotifyChanges.run()
-        }, TIME_TO_HOLD_INDICATORS)
-    }
-
     private fun update(updateUsers: Boolean) {
         bgExecutor.execute {
             if (updateUsers) {
@@ -231,7 +206,7 @@ class PrivacyItemController @Inject constructor(
      */
     private fun setListeningState() {
         val listen = !callbacks.isEmpty() and
-                (allIndicatorsAvailable || micCameraAvailable || locationAvailable)
+                (micCameraAvailable || locationAvailable)
         if (listening == listen) return
         listening = listen
         if (listening) {
@@ -274,14 +249,12 @@ class PrivacyItemController @Inject constructor(
         removeCallback(WeakReference(callback))
     }
 
-    private fun updatePrivacyList(stopHolding: Boolean = false) {
+    private fun updatePrivacyList() {
+        holdingRunnableCanceler?.run()?.also {
+            holdingRunnableCanceler = null
+        }
         if (!listening) {
             privacyList = emptyList()
-            if (holdingIndicators) {
-                holdIndicatorsCancelled?.run()
-                logger.cancelIndicatorsHold()
-                holdingIndicators = false
-            }
             return
         }
         val list = appOpsController.getActiveAppOpsForUser(UserHandle.USER_ALL).filter {
@@ -289,43 +262,36 @@ class PrivacyItemController @Inject constructor(
                     it.code == AppOpsManager.OP_PHONE_CALL_MICROPHONE ||
                     it.code == AppOpsManager.OP_PHONE_CALL_CAMERA
         }.mapNotNull { toPrivacyItem(it) }.distinct()
-        processNewList(list, stopHolding)
+        privacyList = processNewList(list)
     }
 
     /**
-     * The controller will only go from indicators to no indicators (and notify its listeners), if
-     * [TIME_TO_HOLD_INDICATORS] has passed since it received an empty list from [AppOpsController].
+     * Figure out which items have not been around for long enough and put them back in the list.
      *
-     * If holding the last list (in the [TIME_TO_HOLD_INDICATORS] period) and a new non-empty list
-     * is retrieved from [AppOpsController], it will stop holding and notify about the new list.
+     * Also schedule when we should check again to remove expired items. Because we always retrieve
+     * the current list, we have the latest info.
+     *
+     * @param list map of list retrieved from [AppOpsController].
+     * @return a list that may have added items that should be kept for some time.
      */
-    private fun processNewList(list: List<PrivacyItem>, stopHolding: Boolean) {
-        if (list.isNotEmpty()) {
-            // The new elements is not empty, so regardless of whether we are holding or not, we
-            // clear the holding flag and cancel the delayed runnable.
-            if (holdingIndicators) {
-                holdIndicatorsCancelled?.run()
-                logger.cancelIndicatorsHold()
-                holdingIndicators = false
-            }
-            logger.logUpdatedPrivacyItemsList(
-                    list.joinToString(separator = ", ", transform = PrivacyItem::toLog))
-            privacyList = list
-        } else if (holdingIndicators && stopHolding) {
-            // We are holding indicators, received an empty list and were told to stop holding.
-            logger.finishIndicatorsHold()
-            logger.logUpdatedPrivacyItemsList("")
-            holdingIndicators = false
-            privacyList = list
-        } else if (holdingIndicators && !stopHolding) {
-            // Empty list while we are holding. Ignore
-        } else if (!holdingIndicators && privacyList.isNotEmpty()) {
-            // We are not holding, we were showing some indicators but now we should show nothing.
-            // Start holding.
-            logger.startIndicatorsHold(TIME_TO_HOLD_INDICATORS)
-            setHoldTimer()
+    private fun processNewList(list: List<PrivacyItem>): List<PrivacyItem> {
+        logger.logRetrievedPrivacyItemsList(list)
+
+        // Anything earlier than this timestamp can be removed
+        val removeBeforeTime = systemClock.elapsedRealtime() - TIME_TO_HOLD_INDICATORS
+        val mustKeep = privacyList.filter { it.timeStampElapsed > removeBeforeTime && it !in list }
+
+        // There are items we must keep because they haven't been around for enough time.
+        if (mustKeep.isNotEmpty()) {
+            logger.logPrivacyItemsToHold(mustKeep)
+            val earliestTime = mustKeep.minByOrNull { it.timeStampElapsed }!!.timeStampElapsed
+
+            // Update the list again when the earliest item should be removed.
+            val delay = earliestTime - removeBeforeTime
+            logger.logPrivacyItemsUpdateScheduled(delay)
+            holdingRunnableCanceler = bgExecutor.executeDelayed(updateListAndNotifyChanges, delay)
         }
-        // Else. We are not holding, we were not showing anything and the new list is empty. Ignore.
+        return list + mustKeep
     }
 
     private fun toPrivacyItem(appOpItem: AppOpItem): PrivacyItem? {
@@ -338,11 +304,11 @@ class PrivacyItemController @Inject constructor(
             AppOpsManager.OP_RECORD_AUDIO -> PrivacyType.TYPE_MICROPHONE
             else -> return null
         }
-        if (type == PrivacyType.TYPE_LOCATION && (!allIndicatorsAvailable && !locationAvailable)) {
+        if (type == PrivacyType.TYPE_LOCATION && !locationAvailable) {
             return null
         }
         val app = PrivacyApplication(appOpItem.packageName, appOpItem.uid)
-        return PrivacyItem(type, app)
+        return PrivacyItem(type, app, appOpItem.timeStartedElapsed)
     }
 
     interface Callback {

@@ -15,6 +15,7 @@
  */
 package com.android.systemui.screenshot;
 
+import android.annotation.AnyThread;
 import android.graphics.Bitmap;
 import android.graphics.HardwareRenderer;
 import android.graphics.RecordingCanvas;
@@ -26,18 +27,29 @@ import android.util.Log;
 
 import androidx.annotation.UiThread;
 
+import com.android.internal.util.CallbackRegistry;
+import com.android.internal.util.CallbackRegistry.NotifierCallback;
+
 import java.util.ArrayList;
+import java.util.Iterator;
 import java.util.List;
+
+import javax.inject.Inject;
 
 /**
  * Owns a series of partial screen captures (tiles).
  * <p>
  * To display on-screen, use {@link #getDrawable()}.
  */
+@UiThread
 class ImageTileSet {
 
     private static final String TAG = "ImageTileSet";
 
+    private CallbackRegistry<OnBoundsChangedListener, ImageTileSet, Rect> mOnBoundsListeners;
+    private CallbackRegistry<OnContentChangedListener, ImageTileSet, Rect> mContentListeners;
+
+    @Inject
     ImageTileSet(@UiThread Handler handler) {
         mHandler = handler;
     }
@@ -61,18 +73,43 @@ class ImageTileSet {
     private final Rect mBounds = new Rect();
     private final Handler mHandler;
 
-    private OnContentChangedListener mOnContentChangedListener;
-    private OnBoundsChangedListener mOnBoundsChangedListener;
-
-    void setOnBoundsChangedListener(OnBoundsChangedListener listener) {
-        mOnBoundsChangedListener = listener;
+    void addOnBoundsChangedListener(OnBoundsChangedListener listener) {
+        if (mOnBoundsListeners == null) {
+            mOnBoundsListeners = new CallbackRegistry<>(
+                    new NotifierCallback<OnBoundsChangedListener, ImageTileSet, Rect>() {
+                        @Override
+                        public void onNotifyCallback(OnBoundsChangedListener callback,
+                                ImageTileSet sender,
+                                int arg, Rect newBounds) {
+                            callback.onBoundsChanged(newBounds.left, newBounds.top, newBounds.right,
+                                    newBounds.bottom);
+                        }
+                    });
+        }
+        mOnBoundsListeners.add(listener);
     }
 
-    void setOnContentChangedListener(OnContentChangedListener listener) {
-        mOnContentChangedListener = listener;
+    void addOnContentChangedListener(OnContentChangedListener listener) {
+        if (mContentListeners == null) {
+            mContentListeners = new CallbackRegistry<>(
+                    new NotifierCallback<OnContentChangedListener, ImageTileSet, Rect>() {
+                        @Override
+                        public void onNotifyCallback(OnContentChangedListener callback,
+                                ImageTileSet sender,
+                                int arg, Rect newBounds) {
+                            callback.onContentChanged();
+                        }
+                    });
+        }
+        mContentListeners.add(listener);
     }
 
+    @AnyThread
     void addTile(ImageTile tile) {
+        if (!mHandler.getLooper().isCurrentThread()) {
+            mHandler.post(() -> addTile(tile));
+            return;
+        }
         final Rect newBounds = new Rect(mBounds);
         final Rect newRect = tile.getLocation();
         mTiles.add(tile);
@@ -84,27 +121,15 @@ class ImageTileSet {
         notifyContentChanged();
     }
 
-    void notifyContentChanged() {
-        if (mOnContentChangedListener == null) {
-            return;
-        }
-        if (mHandler.getLooper().isCurrentThread()) {
-            mOnContentChangedListener.onContentChanged();
-        } else {
-            mHandler.post(() -> mOnContentChangedListener.onContentChanged());
+    private void notifyContentChanged() {
+        if (mContentListeners != null) {
+            mContentListeners.notifyCallbacks(this, 0, null);
         }
     }
 
-    void notifyBoundsChanged(Rect bounds) {
-        if (mOnBoundsChangedListener == null) {
-            return;
-        }
-        if (mHandler.getLooper().isCurrentThread()) {
-            mOnBoundsChangedListener.onBoundsChanged(
-                    bounds.left, bounds.top, bounds.right, bounds.bottom);
-        } else {
-            mHandler.post(() -> mOnBoundsChangedListener.onBoundsChanged(
-                    bounds.left, bounds.top, bounds.right, bounds.bottom));
+    private void notifyBoundsChanged(Rect bounds) {
+        if (mOnBoundsListeners != null) {
+            mOnBoundsListeners.notifyCallbacks(this, 0, bounds);
         }
     }
 
@@ -181,12 +206,16 @@ class ImageTileSet {
     }
 
     void clear() {
-        if (mBounds.isEmpty()) {
+        if (mTiles.isEmpty()) {
             return;
         }
         mBounds.setEmpty();
-        mTiles.forEach(ImageTile::close);
-        mTiles.clear();
+        Iterator<ImageTile> i = mTiles.iterator();
+        while (i.hasNext()) {
+            ImageTile next = i.next();
+            next.close();
+            i.remove();
+        }
         notifyBoundsChanged(mBounds);
         notifyContentChanged();
     }

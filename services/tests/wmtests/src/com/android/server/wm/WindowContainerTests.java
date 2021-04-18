@@ -54,6 +54,7 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.mockito.Mockito.clearInvocations;
 
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
@@ -810,18 +811,18 @@ public class WindowContainerTests extends WindowTestsBase {
 
     @Test
     public void testOnDisplayChanged() {
-        final Task stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final Task rootTask = createTask(mDisplayContent);
+        final Task task = createTaskInRootTask(rootTask, 0 /* userId */);
         final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
 
         final DisplayContent newDc = createNewDisplay();
-        stack.getDisplayArea().removeRootTask(stack);
-        newDc.getDefaultTaskDisplayArea().addChild(stack, POSITION_TOP);
+        rootTask.getDisplayArea().removeRootTask(rootTask);
+        newDc.getDefaultTaskDisplayArea().addChild(rootTask, POSITION_TOP);
 
-        verify(stack).onDisplayChanged(newDc);
+        verify(rootTask).onDisplayChanged(newDc);
         verify(task).onDisplayChanged(newDc);
         verify(activity).onDisplayChanged(newDc);
-        assertEquals(newDc, stack.mDisplayContent);
+        assertEquals(newDc, rootTask.mDisplayContent);
         assertEquals(newDc, task.mDisplayContent);
         assertEquals(newDc, activity.mDisplayContent);
     }
@@ -853,21 +854,21 @@ public class WindowContainerTests extends WindowTestsBase {
 
     @Test
     public void testTaskCanApplyAnimation() {
-        final Task stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final Task rootTask = createTask(mDisplayContent);
+        final Task task = createTaskInRootTask(rootTask, 0 /* userId */);
         final ActivityRecord activity2 = createActivityRecord(mDisplayContent, task);
         final ActivityRecord activity1 = createActivityRecord(mDisplayContent, task);
         verifyWindowContainerApplyAnimation(task, activity1, activity2);
     }
 
     @Test
-    public void testStackCanApplyAnimation() {
-        final Task stack = createTaskStackOnDisplay(mDisplayContent);
+    public void testRootTaskCanApplyAnimation() {
+        final Task rootTask = createTask(mDisplayContent);
         final ActivityRecord activity2 = createActivityRecord(mDisplayContent,
-                createTaskInStack(stack, 0 /* userId */));
+                createTaskInRootTask(rootTask, 0 /* userId */));
         final ActivityRecord activity1 = createActivityRecord(mDisplayContent,
-                createTaskInStack(stack, 0 /* userId */));
-        verifyWindowContainerApplyAnimation(stack, activity1, activity2);
+                createTaskInRootTask(rootTask, 0 /* userId */));
+        verifyWindowContainerApplyAnimation(rootTask, activity1, activity2);
     }
 
     @Test
@@ -877,21 +878,21 @@ public class WindowContainerTests extends WindowTestsBase {
 
         assertNull(windowContainer.getDisplayArea());
 
-        // ActivityStack > WindowContainer
-        final Task activityStack = createTaskStackOnDisplay(mDisplayContent);
-        activityStack.addChild(windowContainer, 0);
-        activityStack.setParent(null);
+        // Task > WindowContainer
+        final Task task = createTask(mDisplayContent);
+        task.addChild(windowContainer, 0);
+        task.setParent(null);
 
         assertNull(windowContainer.getDisplayArea());
-        assertNull(activityStack.getDisplayArea());
+        assertNull(task.getDisplayArea());
 
-        // TaskDisplayArea > ActivityStack > WindowContainer
+        // TaskDisplayArea > Task > WindowContainer
         final TaskDisplayArea taskDisplayArea = new TaskDisplayArea(
                 mDisplayContent, mWm, "TaskDisplayArea", FEATURE_DEFAULT_TASK_CONTAINER);
-        taskDisplayArea.addChild(activityStack, 0);
+        taskDisplayArea.addChild(task, 0);
 
         assertEquals(taskDisplayArea, windowContainer.getDisplayArea());
-        assertEquals(taskDisplayArea, activityStack.getDisplayArea());
+        assertEquals(taskDisplayArea, task.getDisplayArea());
         assertEquals(taskDisplayArea, taskDisplayArea.getDisplayArea());
 
         // DisplayArea
@@ -984,9 +985,25 @@ public class WindowContainerTests extends WindowTestsBase {
     }
 
     @Test
+    public void testFreezeInsets() {
+        final Task task = createTask(mDisplayContent);
+        final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
+        final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, activity, "win");
+
+        // Set visibility to false, verify the main window of the task will be set the frozen
+        // insets state immediately.
+        activity.setVisibility(false);
+        assertNotNull(win.getFrozenInsetsState());
+
+        // Now make it visible again, verify that the insets are immediately unfrozen.
+        activity.setVisibility(true);
+        assertNull(win.getFrozenInsetsState());
+    }
+
+    @Test
     public void testFreezeInsetsStateWhenAppTransition() {
-        final Task stack = createTaskStackOnDisplay(mDisplayContent);
-        final Task task = createTaskInStack(stack, 0 /* userId */);
+        final Task rootTask = createTask(mDisplayContent);
+        final Task task = createTaskInRootTask(rootTask, 0 /* userId */);
         final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
         final WindowState win = createWindow(null, TYPE_BASE_APPLICATION, activity, "win");
         task.getDisplayContent().prepareAppTransition(TRANSIT_CLOSE);
@@ -996,16 +1013,45 @@ public class WindowContainerTests extends WindowTestsBase {
         sources.add(activity);
 
         // Simulate the task applying the exit transition, verify the main window of the task
-        // will be set the frozen insets state.
+        // will be set the frozen insets state before the animation starts
+        activity.setVisibility(false);
         task.applyAnimation(null, TRANSIT_OLD_TASK_CLOSE, false /* enter */,
                 false /* isVoiceInteraction */, sources);
         verify(win).freezeInsetsState();
 
-        // Simulate the task transition finished, verify the frozen insets state of the window
-        // will be reset.
+        // Simulate the task transition finished.
+        activity.commitVisibility(false, false);
         task.onAnimationFinished(ANIMATION_TYPE_APP_TRANSITION,
                 task.mSurfaceAnimator.getAnimation());
+
+        // Now make it visible again, verify that the insets are immediately unfrozen even before
+        // transition starts.
+        activity.setVisibility(true);
         verify(win).clearFrozenInsetsState();
+    }
+
+    @Test
+    public void testAssignRelativeLayer() {
+        final WindowContainer container = new WindowContainer(mWm);
+        container.mSurfaceControl = mock(SurfaceControl.class);
+        final SurfaceAnimator surfaceAnimator = container.mSurfaceAnimator;
+        final SurfaceControl relativeParent = mock(SurfaceControl.class);
+        final SurfaceControl.Transaction t = mock(SurfaceControl.Transaction.class);
+        spyOn(container);
+        spyOn(surfaceAnimator);
+
+        // Trigger for first relative layer call.
+        container.assignRelativeLayer(t, relativeParent, 1 /* layer */);
+        verify(surfaceAnimator).setRelativeLayer(t, relativeParent, 1 /* layer */);
+
+        // Not trigger for the same relative layer call.
+        clearInvocations(surfaceAnimator);
+        container.assignRelativeLayer(t, relativeParent, 1 /* layer */);
+        verify(surfaceAnimator, never()).setRelativeLayer(t, relativeParent, 1 /* layer */);
+
+        // Trigger for the same relative layer call if forceUpdate=true
+        container.assignRelativeLayer(t, relativeParent, 1 /* layer */, true /* forceUpdate */);
+        verify(surfaceAnimator).setRelativeLayer(t, relativeParent, 1 /* layer */);
     }
 
     /* Used so we can gain access to some protected members of the {@link WindowContainer} class */

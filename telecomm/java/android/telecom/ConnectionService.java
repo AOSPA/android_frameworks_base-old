@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.Service;
 import android.content.ComponentName;
 import android.content.Intent;
@@ -758,19 +759,15 @@ public abstract class ConnectionService extends Service {
         }
 
         @Override
-        public void onCallFilteringCompleted(String callId, boolean isBlocked, boolean isInContacts,
-                CallScreeningService.ParcelableCallResponse callScreeningResponse,
-                boolean isResponseFromSystemDialer,
+        public void onCallFilteringCompleted(String callId,
+                Connection.CallFilteringCompletionInfo completionInfo,
                 Session.Info sessionInfo) {
             Log.startSession(sessionInfo, SESSION_CALL_FILTERING_COMPLETED);
             try {
                 SomeArgs args = SomeArgs.obtain();
                 args.arg1 = callId;
-                args.arg2 = isBlocked;
-                args.arg3 = isInContacts;
-                args.arg4 = callScreeningResponse;
-                args.arg5 = isResponseFromSystemDialer;
-                args.arg6 = Log.createSubsession();
+                args.arg2 = completionInfo;
+                args.arg3 = Log.createSubsession();
                 mHandler.obtainMessage(MSG_ON_CALL_FILTERING_COMPLETED, args).sendToTarget();
             } finally {
                 Log.endSession();
@@ -1441,16 +1438,12 @@ public abstract class ConnectionService extends Service {
                 case MSG_ON_CALL_FILTERING_COMPLETED: {
                     SomeArgs args = (SomeArgs) msg.obj;
                     try {
-                        Log.continueSession((Session) args.arg6,
+                        Log.continueSession((Session) args.arg3,
                                 SESSION_HANDLER + SESSION_CALL_FILTERING_COMPLETED);
                         String callId = (String) args.arg1;
-                        boolean isBlocked = (boolean) args.arg2;
-                        boolean isInContacts = (boolean) args.arg3;
-                        CallScreeningService.ParcelableCallResponse callScreeningResponse =
-                                (CallScreeningService.ParcelableCallResponse) args.arg4;
-                        boolean isResponseFromSystemDialer = (boolean) args.arg5;
-                        onCallFilteringCompleted(callId, isBlocked, isInContacts,
-                                callScreeningResponse, isResponseFromSystemDialer);
+                        Connection.CallFilteringCompletionInfo completionInfo =
+                                (Connection.CallFilteringCompletionInfo) args.arg2;
+                        onCallFilteringCompleted(callId, completionInfo);
                     } finally {
                         args.recycle();
                         Log.endSession();
@@ -1927,6 +1920,7 @@ public abstract class ConnectionService extends Service {
     /** {@inheritDoc} */
     @Override
     public final IBinder onBind(Intent intent) {
+        onBindClient(intent);
         return mBinder;
     }
 
@@ -1937,6 +1931,13 @@ public abstract class ConnectionService extends Service {
         return super.onUnbind(intent);
     }
 
+    /**
+     * Used for testing to let the test suite know when the connection service has been bound.
+     * @hide
+     */
+    @TestApi
+    public void onBindClient(@Nullable Intent intent) {
+    }
 
     /**
      * This can be used by telecom to either create a new outgoing conference call or attach
@@ -2470,16 +2471,12 @@ public abstract class ConnectionService extends Service {
         }
     }
 
-    private void onCallFilteringCompleted(String callId, boolean isBlocked, boolean isInContacts,
-            CallScreeningService.ParcelableCallResponse callScreeningResponse,
-            boolean isResponseFromSystemDialer) {
-        Log.i(this, "onCallFilteringCompleted(%s, %b, %b, %s, %b)", callId,
-                isBlocked, isInContacts, callScreeningResponse, isResponseFromSystemDialer);
+    private void onCallFilteringCompleted(String callId, Connection.CallFilteringCompletionInfo
+            callFilteringCompletionInfo) {
+        Log.i(this, "onCallFilteringCompleted(%s, %s)", callId, callFilteringCompletionInfo);
         Connection connection = findConnectionForAction(callId, "onCallFilteringCompleted");
         if (connection != null) {
-            connection.onCallFilteringCompleted(isBlocked, isInContacts,
-                    callScreeningResponse == null ? null : callScreeningResponse.toCallResponse(),
-                    isResponseFromSystemDialer);
+            connection.onCallFilteringCompleted(callFilteringCompletionInfo);
         }
     }
 
@@ -2601,9 +2598,9 @@ public abstract class ConnectionService extends Service {
      * @return The {@code Connection} object to satisfy this call, or {@code null} to
      *         not handle the call.
      */
-    public final RemoteConnection createRemoteIncomingConnection(
-            PhoneAccountHandle connectionManagerPhoneAccount,
-            ConnectionRequest request) {
+    public final @Nullable RemoteConnection createRemoteIncomingConnection(
+            @NonNull PhoneAccountHandle connectionManagerPhoneAccount,
+            @NonNull ConnectionRequest request) {
         return mRemoteConnectionManager.createRemoteConnection(
                 connectionManagerPhoneAccount, request, true);
     }
@@ -2620,9 +2617,9 @@ public abstract class ConnectionService extends Service {
      * @return The {@code Connection} object to satisfy this call, or {@code null} to
      *         not handle the call.
      */
-    public final RemoteConnection createRemoteOutgoingConnection(
-            PhoneAccountHandle connectionManagerPhoneAccount,
-            ConnectionRequest request) {
+    public final @Nullable RemoteConnection createRemoteOutgoingConnection(
+            @NonNull PhoneAccountHandle connectionManagerPhoneAccount,
+            @NonNull ConnectionRequest request) {
         return mRemoteConnectionManager.createRemoteConnection(
                 connectionManagerPhoneAccount, request, false);
     }
@@ -2862,12 +2859,14 @@ public abstract class ConnectionService extends Service {
      * @param connectionManagerPhoneAccount See description at
      *         {@link #onCreateOutgoingConnection(PhoneAccountHandle, ConnectionRequest)}.
      * @param request Details about the incoming conference call.
-     * @return The {@code Conference} object to satisfy this call, or {@code null} to
-     *         not handle the call.
+     * @return The {@code Conference} object to satisfy this call. If the conference attempt is
+     *         failed, the return value will be a result of an invocation of
+     *         {@link Connection#createFailedConnection(DisconnectCause)}.
+     *         Return {@code null} if the {@link ConnectionService} cannot handle the call.
      */
     public @Nullable Conference onCreateIncomingConference(
-            @Nullable PhoneAccountHandle connectionManagerPhoneAccount,
-            @Nullable ConnectionRequest request) {
+            @NonNull PhoneAccountHandle connectionManagerPhoneAccount,
+            @NonNull ConnectionRequest request) {
         return null;
     }
 
@@ -2970,8 +2969,8 @@ public abstract class ConnectionService extends Service {
      * @param request The outgoing connection request.
      */
     public void onCreateOutgoingConferenceFailed(
-            @Nullable PhoneAccountHandle connectionManagerPhoneAccount,
-            @Nullable ConnectionRequest request) {
+            @NonNull PhoneAccountHandle connectionManagerPhoneAccount,
+            @NonNull ConnectionRequest request) {
     }
 
 
@@ -3035,12 +3034,14 @@ public abstract class ConnectionService extends Service {
      *         a {@code PhoneAccount} registered by this {@code ConnectionService} to use for
      *         making the connection.
      * @param request Details about the outgoing call.
-     * @return The {@code Conference} object to satisfy this call, or the result of an invocation
-     *         of {@link Connection#createFailedConnection(DisconnectCause)} to not handle the call.
+     * @return The {@code Conference} object to satisfy this call. If the conference attempt is
+     *         failed, the return value will be a result of an invocation of
+     *         {@link Connection#createFailedConnection(DisconnectCause)}.
+     *         Return {@code null} if the {@link ConnectionService} cannot handle the call.
      */
     public @Nullable Conference onCreateOutgoingConference(
-            @Nullable PhoneAccountHandle connectionManagerPhoneAccount,
-            @Nullable ConnectionRequest request) {
+            @NonNull PhoneAccountHandle connectionManagerPhoneAccount,
+            @NonNull ConnectionRequest request) {
         return null;
     }
 

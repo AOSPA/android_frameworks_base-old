@@ -19,24 +19,23 @@ package com.android.wm.shell.splitscreen;
 import android.annotation.IntDef;
 import android.app.ActivityManager;
 import android.app.PendingIntent;
+import android.content.Context;
+import android.content.Intent;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.UserHandle;
 
-import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.wm.shell.common.annotations.ExternalThread;
 import com.android.wm.shell.draganddrop.DragAndDropPolicy;
-
-import java.io.PrintWriter;
 
 /**
  * Interface to engage split-screen feature.
  * TODO: Figure out which of these are actually needed outside of the Shell
  */
 @ExternalThread
-public interface SplitScreen extends DragAndDropPolicy.Starter {
+public interface SplitScreen {
     /**
      * Stage position isn't specified normally meaning to use what ever it is currently set to.
      */
@@ -87,37 +86,13 @@ public interface SplitScreen extends DragAndDropPolicy.Starter {
     /** Callback interface for listening to changes in a split-screen stage. */
     interface SplitScreenListener {
         void onStagePositionChanged(@StageType int stage, @StagePosition int position);
-        void onTaskStageChanged(int taskId, @StageType int stage);
+        void onTaskStageChanged(int taskId, @StageType int stage, boolean visible);
     }
 
-    /** @return {@code true} if split-screen is currently visible. */
-    boolean isSplitScreenVisible();
-    /** Moves a task in the side-stage of split-screen. */
-    boolean moveToSideStage(int taskId, @StagePosition int sideStagePosition);
-    /** Moves a task in the side-stage of split-screen. */
-    boolean moveToSideStage(ActivityManager.RunningTaskInfo task,
-            @StagePosition int sideStagePosition);
-    /** Removes a task from the side-stage of split-screen. */
-    boolean removeFromSideStage(int taskId);
-    /** Sets the position of the side-stage. */
-    void setSideStagePosition(@StagePosition int sideStagePosition);
-    /** Hides the side-stage if it is currently visible. */
-    void setSideStageVisibility(boolean visible);
-
-    /** Removes the split-screen stages. */
-    void exitSplitScreen();
-    /** @param exitSplitScreenOnHide if to exit split-screen if both stages are not visible. */
-    void exitSplitScreenOnHide(boolean exitSplitScreenOnHide);
-    /** Gets the stage bounds. */
-    void getStageBounds(Rect outTopOrLeftBounds, Rect outBottomOrRightBounds);
-
-    void registerSplitScreenListener(SplitScreenListener listener);
-    void unregisterSplitScreenListener(SplitScreenListener listener);
-
-    void startTask(int taskId,
-            @StageType int stage, @StagePosition int position, @Nullable Bundle options);
-    void startShortcut(String packageName, String shortcutId, @StageType int stage,
-            @StagePosition int position, @Nullable Bundle options, UserHandle user);
-    void startIntent(PendingIntent intent,
-            @StageType int stage, @StagePosition int position, @Nullable Bundle options);
+    /**
+     * Returns a binder that can be passed to an external process to manipulate SplitScreen.
+     */
+    default ISplitScreen createExternalInterface() {
+        return null;
+    }
 }

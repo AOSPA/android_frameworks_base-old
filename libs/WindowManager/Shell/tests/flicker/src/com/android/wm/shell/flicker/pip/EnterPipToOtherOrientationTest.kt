@@ -16,22 +16,22 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerTestRunner
-import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.FlickerTestParameter
+import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.wm.shell.flicker.helpers.FixedAppHelper
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
-import com.android.wm.shell.flicker.pip.PipTransitionBase.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
-import com.android.wm.shell.flicker.pip.PipTransitionBase.BroadcastActionTrigger.Companion.ORIENTATION_PORTRAIT
+import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
+import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_PORTRAIT
 import com.android.wm.shell.flicker.testapp.Components.PipActivity.ACTION_ENTER_PIP
 import com.android.wm.shell.flicker.testapp.Components.FixedActivity.EXTRA_FIXED_ORIENTATION
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -42,82 +42,100 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
+@Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class EnterPipToOtherOrientationTest(
-    testSpec: FlickerTestRunnerFactory.TestSpec
-) : FlickerTestRunner(testSpec) {
-    companion object : PipTransitionBase(InstrumentationRegistry.getInstrumentation()) {
-        private val testApp = FixedAppHelper(instrumentation)
+    testSpec: FlickerTestParameter
+) : PipTransition(testSpec) {
+    private val testApp = FixedAppHelper(instrumentation)
+    private val startingBounds = WindowUtils.getDisplayBounds(Surface.ROTATION_90)
+    private val endingBounds = WindowUtils.getDisplayBounds(Surface.ROTATION_0)
 
-        @Parameterized.Parameters(name = "{0}")
-        @JvmStatic
-        fun getParams(): Collection<Array<Any>> {
-            return FlickerTestRunnerFactory.getInstance().buildTest(instrumentation,
-                supportedRotations = listOf(Surface.ROTATION_0),
-                repetitions = 5) { configuration ->
-                setupAndTeardown(this, configuration)
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = { configuration ->
+            setupAndTeardown(this, configuration)
 
-                setup {
-                    eachRun {
-                        // Launch a portrait only app on the fullscreen stack
-                        testApp.launchViaIntent(wmHelper, stringExtras = mapOf(
-                            EXTRA_FIXED_ORIENTATION to ORIENTATION_PORTRAIT.toString()))
-                        // Launch the PiP activity fixed as landscape
-                        pipApp.launchViaIntent(wmHelper, stringExtras = mapOf(
-                            EXTRA_FIXED_ORIENTATION to ORIENTATION_LANDSCAPE.toString()))
-                    }
-                }
-                teardown {
-                    eachRun {
-                        pipApp.exit()
-                        testApp.exit()
-                    }
-                }
-                transitions {
-                    // Enter PiP, and assert that the PiP is within bounds now that the device is back
-                    // in portrait
-                    broadcastActionTrigger.doAction(ACTION_ENTER_PIP)
-                    wmHelper.waitPipWindowShown()
-                    wmHelper.waitForAppTransitionIdle()
-                }
-                assertions {
-                    val startingBounds = WindowUtils.getDisplayBounds(Surface.ROTATION_90)
-                    val endingBounds = WindowUtils.getDisplayBounds(Surface.ROTATION_0)
-
-                    presubmit {
-                        windowManagerTrace {
-                            all("pipApp window is always on top") {
-                                showsAppWindowOnTop(pipApp.defaultWindowName)
-                            }
-                            start("pipApp window hides testApp") {
-                                isInvisible(testApp.defaultWindowName)
-                            }
-                            end("testApp windows is shown") {
-                                isVisible(testApp.defaultWindowName)
-                            }
-                            navBarWindowIsAlwaysVisible()
-                            statusBarWindowIsAlwaysVisible()
-                        }
-
-                        layersTrace {
-                            start("pipApp layer hides testApp") {
-                                hasVisibleRegion(pipApp.defaultWindowName, startingBounds)
-                                isInvisible(testApp.defaultWindowName)
-                            }
-                        }
-                    }
-
-                    flaky {
-                        layersTrace {
-                            end("testApp layer covers fullscreen") {
-                                hasVisibleRegion(testApp.defaultWindowName, endingBounds)
-                            }
-                            navBarLayerIsAlwaysVisible(bugId = 140855415)
-                            statusBarLayerIsAlwaysVisible(bugId = 140855415)
-                        }
-                    }
+            setup {
+                eachRun {
+                    // Launch a portrait only app on the fullscreen stack
+                    testApp.launchViaIntent(wmHelper, stringExtras = mapOf(
+                        EXTRA_FIXED_ORIENTATION to ORIENTATION_PORTRAIT.toString()))
+                    // Launch the PiP activity fixed as landscape
+                    pipApp.launchViaIntent(wmHelper, stringExtras = mapOf(
+                        EXTRA_FIXED_ORIENTATION to ORIENTATION_LANDSCAPE.toString()))
                 }
             }
+            teardown {
+                eachRun {
+                    pipApp.exit(wmHelper)
+                    testApp.exit(wmHelper)
+                }
+            }
+            transitions {
+                // Enter PiP, and assert that the PiP is within bounds now that the device is back
+                // in portrait
+                broadcastActionTrigger.doAction(ACTION_ENTER_PIP)
+                wmHelper.waitPipWindowShown()
+                wmHelper.waitForAppTransitionIdle()
+            }
+        }
+
+    @FlakyTest
+    @Test
+    override fun navBarLayerRotatesAndScales() = super.navBarLayerRotatesAndScales()
+
+    @FlakyTest
+    @Test
+    override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+
+    @Presubmit
+    @Test
+    fun pipAppWindowIsAlwaysOnTop() {
+        testSpec.assertWm {
+            showsAppWindowOnTop(pipApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun pipAppHidesTestApp() {
+        testSpec.assertWmStart {
+            isInvisible(testApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun testAppWindowIsVisible() {
+        testSpec.assertWmEnd {
+            isVisible(testApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun pipAppLayerHidesTestApp() {
+        testSpec.assertLayersStart {
+            visibleRegion(pipApp.defaultWindowName).coversExactly(startingBounds)
+            isInvisible(testApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun testAppLayerCoversFullScreen() {
+        testSpec.assertLayersEnd {
+            visibleRegion(testApp.defaultWindowName).coversExactly(endingBounds)
+        }
+    }
+
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): Collection<FlickerTestParameter> {
+            return FlickerTestParameterFactory.getInstance()
+                .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0),
+                    repetitions = 5)
         }
     }
 }

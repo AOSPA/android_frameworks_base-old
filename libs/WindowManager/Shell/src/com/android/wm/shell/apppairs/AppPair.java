@@ -23,6 +23,7 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static com.android.wm.shell.protolog.ShellProtoLogGroup.WM_SHELL_TASK_ORG;
 
 import android.app.ActivityManager;
+import android.app.ActivityTaskManager;
 import android.graphics.Rect;
 import android.view.SurfaceControl;
 import android.window.WindowContainerToken;
@@ -34,6 +35,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.split.SplitLayout;
 
@@ -57,12 +59,14 @@ class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.LayoutChan
     private final AppPairsController mController;
     private final SyncTransactionQueue mSyncQueue;
     private final DisplayController mDisplayController;
+    private final DisplayImeController mDisplayImeController;
     private SplitLayout mSplitLayout;
 
     AppPair(AppPairsController controller) {
         mController = controller;
         mSyncQueue = controller.getSyncTransactionQueue();
         mDisplayController = controller.getDisplayController();
+        mDisplayImeController = controller.getDisplayImeController();
     }
 
     int getRootTaskId() {
@@ -85,7 +89,8 @@ class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.LayoutChan
         ProtoLog.v(WM_SHELL_TASK_ORG, "pair task1=%d task2=%d in AppPair=%s",
                 task1.taskId, task2.taskId, this);
 
-        if (!task1.isResizeable || !task2.isResizeable) {
+        if ((!task1.isResizeable || !task2.isResizeable)
+                && !ActivityTaskManager.supportsNonResizableMultiWindow()) {
             ProtoLog.e(WM_SHELL_TASK_ORG,
                     "Can't pair unresizeable tasks task1.isResizeable=%b task1.isResizeable=%b",
                     task1.isResizeable, task2.isResizeable);
@@ -97,7 +102,7 @@ class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.LayoutChan
         mSplitLayout = new SplitLayout(TAG + "SplitDivider",
                 mDisplayController.getDisplayContext(mRootTaskInfo.displayId),
                 mRootTaskInfo.configuration, this /* layoutChangeListener */,
-                b -> b.setParent(mRootTaskLeash));
+                b -> b.setParent(mRootTaskLeash), mDisplayImeController);
 
         final WindowContainerToken token1 = task1.token;
         final WindowContainerToken token2 = task2.token;

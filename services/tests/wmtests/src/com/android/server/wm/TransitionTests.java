@@ -25,11 +25,14 @@ import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.window.TransitionInfo.FLAG_IS_WALLPAPER;
 import static android.window.TransitionInfo.FLAG_SHOW_WALLPAPER;
+import static android.window.TransitionInfo.isIndependent;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.spy;
 
@@ -66,10 +69,8 @@ public class TransitionTests extends WindowTestsBase {
         ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
         ArraySet<WindowContainer> participants = transition.mParticipants;
 
-        final Task newTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
-        final Task oldTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task newTask = createTask(mDisplayContent);
+        final Task oldTask = createTask(mDisplayContent);
         final ActivityRecord closing = createActivityRecord(oldTask);
         final ActivityRecord opening = createActivityRecord(newTask);
         // Start states.
@@ -125,12 +126,10 @@ public class TransitionTests extends WindowTestsBase {
         ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
         ArraySet<WindowContainer> participants = transition.mParticipants;
 
-        final Task newTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
-        final Task newNestedTask = createTaskInStack(newTask, 0);
-        final Task newNestedTask2 = createTaskInStack(newTask, 0);
-        final Task oldTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task newTask = createTask(mDisplayContent);
+        final Task newNestedTask = createTaskInRootTask(newTask, 0);
+        final Task newNestedTask2 = createTaskInRootTask(newTask, 0);
+        final Task oldTask = createTask(mDisplayContent);
         final ActivityRecord closing = createActivityRecord(oldTask);
         final ActivityRecord opening = createActivityRecord(newNestedTask);
         final ActivityRecord opening2 = createActivityRecord(newNestedTask2);
@@ -176,11 +175,9 @@ public class TransitionTests extends WindowTestsBase {
         final Transition transition = createTestTransition(TRANSIT_OLD_TASK_OPEN);
         ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
         ArraySet<WindowContainer> participants = transition.mParticipants;
-        final Task showTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
-        final Task showNestedTask = createTaskInStack(showTask, 0);
-        final Task showTask2 = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task showTask = createTask(mDisplayContent);
+        final Task showNestedTask = createTaskInRootTask(showTask, 0);
+        final Task showTask2 = createTask(mDisplayContent);
         final DisplayArea tda = showTask.getDisplayArea();
         final ActivityRecord showing = createActivityRecord(showNestedTask);
         final ActivityRecord showing2 = createActivityRecord(showTask2);
@@ -228,12 +225,10 @@ public class TransitionTests extends WindowTestsBase {
     public void testCreateInfo_existenceChange() {
         final Transition transition = createTestTransition(TRANSIT_OLD_TASK_OPEN);
 
-        final Task openTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task openTask = createTask(mDisplayContent);
         final ActivityRecord opening = createActivityRecord(openTask);
         opening.mVisibleRequested = false; // starts invisible
-        final Task closeTask = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task closeTask = createTask(mDisplayContent);
         final ActivityRecord closing = createActivityRecord(closeTask);
         closing.mVisibleRequested = true; // starts visible
 
@@ -265,8 +260,8 @@ public class TransitionTests extends WindowTestsBase {
         final Task[] tasks = new Task[taskCount];
         for (int i = 0; i < taskCount; ++i) {
             // Each add goes on top, so at the end of this, task[9] should be on top
-            tasks[i] = createTaskStackOnDisplay(WINDOWING_MODE_FREEFORM,
-                    ACTIVITY_TYPE_STANDARD, mDisplayContent);
+            tasks[i] = createTask(mDisplayContent,
+                    WINDOWING_MODE_FREEFORM, ACTIVITY_TYPE_STANDARD);
             final ActivityRecord act = createActivityRecord(tasks[i]);
             // alternate so that the transition doesn't get promoted to the display area
             act.mVisibleRequested = (i % 2) == 0; // starts invisible
@@ -302,8 +297,8 @@ public class TransitionTests extends WindowTestsBase {
         final Task[] tasks = new Task[taskCount];
         for (int i = 0; i < taskCount; ++i) {
             // Each add goes on top, so at the end of this, task[9] should be on top
-            tasks[i] = createTaskStackOnDisplay(WINDOWING_MODE_FULLSCREEN,
-                    ACTIVITY_TYPE_STANDARD, mDisplayContent);
+            tasks[i] = createTask(mDisplayContent,
+                    WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD);
             final ActivityRecord act = createActivityRecord(tasks[i]);
             // alternate so that the transition doesn't get promoted to the display area
             act.mVisibleRequested = (i % 2) == 0; // starts invisible
@@ -316,9 +311,9 @@ public class TransitionTests extends WindowTestsBase {
                 mock(IBinder.class), true, mDisplayContent, true /* ownerCanManageAppTokens */));
         final WindowState wallpaperWindow = createWindow(null, TYPE_WALLPAPER, wallpaperWindowToken,
                 "wallpaperWindow");
-        wallpaperWindow.mWallpaperVisible = false;
+        wallpaperWindowToken.setVisibleRequested(false);
         transition.collect(wallpaperWindowToken);
-        wallpaperWindow.mWallpaperVisible = true;
+        wallpaperWindowToken.setVisibleRequested(true);
         wallpaperWindow.mHasSurface = true;
 
         // doesn't matter which order collected since participants is a set
@@ -341,6 +336,74 @@ public class TransitionTests extends WindowTestsBase {
                 info.getChanges().get(info.getChanges().size() - 1).getFlags());
         assertEquals(FLAG_SHOW_WALLPAPER, info.getChange(
                 tasks[showWallpaperTask].mRemoteToken.toWindowContainerToken()).getFlags());
+    }
+
+    @Test
+    public void testIndependent() {
+        final Transition transition = createTestTransition(TRANSIT_OPEN);
+        ArrayMap<WindowContainer, Transition.ChangeInfo> changes = transition.mChanges;
+        ArraySet<WindowContainer> participants = transition.mParticipants;
+        ITaskOrganizer mockOrg = mock(ITaskOrganizer.class);
+
+        final Task openTask = createTask(mDisplayContent);
+        final Task openInOpenTask = createTaskInRootTask(openTask, 0);
+        final ActivityRecord openInOpen = createActivityRecord(openInOpenTask);
+
+        final Task changeTask = createTask(mDisplayContent);
+        final Task changeInChangeTask = createTaskInRootTask(changeTask, 0);
+        final Task openInChangeTask = createTaskInRootTask(changeTask, 0);
+        final ActivityRecord changeInChange = createActivityRecord(changeInChangeTask);
+        final ActivityRecord openInChange = createActivityRecord(openInChangeTask);
+        // set organizer for everything so that they all get added to transition info
+        for (Task t : new Task[]{
+                openTask, openInOpenTask, changeTask, changeInChangeTask, openInChangeTask}) {
+            t.mTaskOrganizer = mockOrg;
+        }
+
+        // Start states.
+        changes.put(openTask, new Transition.ChangeInfo(false /* vis */, true /* exChg */));
+        changes.put(changeTask, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        changes.put(openInOpenTask, new Transition.ChangeInfo(false /* vis */, true /* exChg */));
+        changes.put(openInChangeTask, new Transition.ChangeInfo(false /* vis */, true /* exChg */));
+        changes.put(changeInChangeTask,
+                new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        changes.put(openInOpen, new Transition.ChangeInfo(false /* vis */, true /* exChg */));
+        changes.put(openInChange, new Transition.ChangeInfo(false /* vis */, true /* exChg */));
+        changes.put(changeInChange, new Transition.ChangeInfo(true /* vis */, false /* exChg */));
+        fillChangeMap(changes, openTask);
+        // End states.
+        changeInChange.mVisibleRequested = true;
+        openInOpen.mVisibleRequested = true;
+        openInChange.mVisibleRequested = true;
+
+        int transit = TRANSIT_OLD_TASK_OPEN;
+        int flags = 0;
+
+        // Check full promotion from leaf
+        participants.add(changeInChange);
+        participants.add(openInOpen);
+        participants.add(openInChange);
+        // Explicitly add changeTask (to test independence with parents)
+        participants.add(changeTask);
+        ArraySet<WindowContainer> targets = Transition.calculateTargets(participants, changes);
+        TransitionInfo info = Transition.calculateTransitionInfo(transit, flags, targets, changes);
+        // Root changes should always be considered independent
+        assertTrue(isIndependent(
+                info.getChange(openTask.mRemoteToken.toWindowContainerToken()), info));
+        assertTrue(isIndependent(
+                info.getChange(changeTask.mRemoteToken.toWindowContainerToken()), info));
+
+        // Children of a open/close change are not independent
+        assertFalse(isIndependent(
+                info.getChange(openInOpenTask.mRemoteToken.toWindowContainerToken()), info));
+
+        // Non-root changes are not independent
+        assertFalse(isIndependent(
+                info.getChange(changeInChangeTask.mRemoteToken.toWindowContainerToken()), info));
+
+        // open/close within a change are independent
+        assertTrue(isIndependent(
+                info.getChange(openInChangeTask.mRemoteToken.toWindowContainerToken()), info));
     }
 
     /** Fill the change map with all the parents of top. Change maps are usually fully populated */

@@ -27,14 +27,13 @@
 #include <gui/SurfaceComposerClient.h>
 #include <gui/SurfaceControl.h>
 
-#include <ui/HdrCapabilities.h>
+#include <ui/DynamicDisplayInfo.h>
 
 #include <utils/Timers.h>
 
 using namespace android::hardware::configstore;
 using namespace android::hardware::configstore::V1_0;
 using namespace android;
-using android::hardware::configstore::V1_0::ISurfaceFlingerConfigs;
 
 using Transaction = SurfaceComposerClient::Transaction;
 
@@ -72,14 +71,13 @@ static bool getHdrSupport(const sp<SurfaceControl>& surfaceControl) {
         return false;
     }
 
-    HdrCapabilities hdrCapabilities;
-    status_t err = client->getHdrCapabilities(display, &hdrCapabilities);
-    if (err) {
+    ui::DynamicDisplayInfo info;
+    if (status_t err = client->getDynamicDisplayInfo(display, &info); err != NO_ERROR) {
         ALOGE("unable to get hdr capabilities");
-        return false;
+        return err;
     }
 
-    return !hdrCapabilities.getSupportedHdrTypes().empty();
+    return !info.hdrCapabilities.getSupportedHdrTypes().empty();
 }
 
 static bool isDataSpaceValid(const sp<SurfaceControl>& surfaceControl, ADataSpace dataSpace) {
@@ -442,6 +440,44 @@ void ASurfaceTransaction_setGeometry(ASurfaceTransaction* aSurfaceTransaction,
 
     transaction->setCrop(surfaceControl, static_cast<const Rect&>(source));
     transaction->setFrame(surfaceControl, static_cast<const Rect&>(destination));
+    transaction->setTransform(surfaceControl, transform);
+    bool transformToInverseDisplay = (NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY & transform) ==
+            NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY;
+    transaction->setTransformToDisplayInverse(surfaceControl, transformToInverseDisplay);
+}
+
+void ASurfaceTransaction_setSourceRect(ASurfaceTransaction* aSurfaceTransaction,
+                                       ASurfaceControl* aSurfaceControl, const ARect& source) {
+    CHECK_NOT_NULL(aSurfaceTransaction);
+    CHECK_NOT_NULL(aSurfaceControl);
+    CHECK_VALID_RECT(source);
+
+    sp<SurfaceControl> surfaceControl = ASurfaceControl_to_SurfaceControl(aSurfaceControl);
+    Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
+
+    transaction->setCrop(surfaceControl, static_cast<const Rect&>(source));
+}
+
+void ASurfaceTransaction_setPosition(ASurfaceTransaction* aSurfaceTransaction,
+                                     ASurfaceControl* aSurfaceControl, const ARect& destination) {
+    CHECK_NOT_NULL(aSurfaceTransaction);
+    CHECK_NOT_NULL(aSurfaceControl);
+    CHECK_VALID_RECT(destination);
+
+    sp<SurfaceControl> surfaceControl = ASurfaceControl_to_SurfaceControl(aSurfaceControl);
+    Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
+
+    transaction->setFrame(surfaceControl, static_cast<const Rect&>(destination));
+}
+
+void ASurfaceTransaction_setTransform(ASurfaceTransaction* aSurfaceTransaction,
+                                      ASurfaceControl* aSurfaceControl, int32_t transform) {
+    CHECK_NOT_NULL(aSurfaceTransaction);
+    CHECK_NOT_NULL(aSurfaceControl);
+
+    sp<SurfaceControl> surfaceControl = ASurfaceControl_to_SurfaceControl(aSurfaceControl);
+    Transaction* transaction = ASurfaceTransaction_to_Transaction(aSurfaceTransaction);
+
     transaction->setTransform(surfaceControl, transform);
     bool transformToInverseDisplay = (NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY & transform) ==
             NATIVE_WINDOW_TRANSFORM_INVERSE_DISPLAY;

@@ -67,7 +67,6 @@ public class SnippetTest {
                                         .setPropertyName(propertyKeyString)
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setValuesIndex(0)
                                                         .setExactMatchPosition(29)
                                                         .setExactMatchBytes(3)
                                                         .setWindowPosition(26)
@@ -94,10 +93,10 @@ public class SnippetTest {
             assertThat(match.getPropertyPath()).isEqualTo(propertyKeyString);
             assertThat(match.getFullText()).isEqualTo(propertyValueString);
             assertThat(match.getExactMatch()).isEqualTo(exactMatch);
-            assertThat(match.getExactMatchPosition())
+            assertThat(match.getExactMatchRange())
                     .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 29, /*upper=*/ 32));
             assertThat(match.getFullText()).isEqualTo(propertyValueString);
-            assertThat(match.getSnippetPosition())
+            assertThat(match.getSnippetRange())
                     .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 26, /*upper=*/ 32));
             assertThat(match.getSnippet()).isEqualTo(window);
         }
@@ -174,7 +173,6 @@ public class SnippetTest {
                                         .setPropertyName("sender.name")
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setValuesIndex(0)
                                                         .setExactMatchPosition(0)
                                                         .setExactMatchBytes(4)
                                                         .setWindowPosition(0)
@@ -186,7 +184,6 @@ public class SnippetTest {
                                         .setPropertyName("sender.email")
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setValuesIndex(0)
                                                         .setExactMatchPosition(0)
                                                         .setExactMatchBytes(20)
                                                         .setWindowPosition(0)
@@ -213,20 +210,20 @@ public class SnippetTest {
             SearchResult.MatchInfo match1 = result.getMatches().get(0);
             assertThat(match1.getPropertyPath()).isEqualTo("sender.name");
             assertThat(match1.getFullText()).isEqualTo("Test Name Jr.");
-            assertThat(match1.getExactMatchPosition())
+            assertThat(match1.getExactMatchRange())
                     .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 0, /*upper=*/ 4));
             assertThat(match1.getExactMatch()).isEqualTo("Test");
-            assertThat(match1.getSnippetPosition())
+            assertThat(match1.getSnippetRange())
                     .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 0, /*upper=*/ 9));
             assertThat(match1.getSnippet()).isEqualTo("Test Name");
 
             SearchResult.MatchInfo match2 = result.getMatches().get(1);
             assertThat(match2.getPropertyPath()).isEqualTo("sender.email");
             assertThat(match2.getFullText()).isEqualTo("TestNameJr@gmail.com");
-            assertThat(match2.getExactMatchPosition())
+            assertThat(match2.getExactMatchRange())
                     .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 0, /*upper=*/ 20));
             assertThat(match2.getExactMatch()).isEqualTo("TestNameJr@gmail.com");
-            assertThat(match2.getSnippetPosition())
+            assertThat(match2.getSnippetRange())
                     .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 0, /*upper=*/ 20));
             assertThat(match2.getSnippet()).isEqualTo("TestNameJr@gmail.com");
         }

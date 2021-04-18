@@ -32,6 +32,8 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
+import static java.util.Arrays.asList;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Bundle;
@@ -50,6 +52,7 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.Arrays;
+import java.util.LinkedList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -62,27 +65,32 @@ public class LocationTimeZoneProviderTest {
     private static final long ARBITRARY_ELAPSED_REALTIME_MILLIS = 123456789L;
 
     private TestThreadingDomain mTestThreadingDomain;
-
     private TestProviderListener mProviderListener;
+    private FakeTimeZoneProviderEventPreProcessor mTimeZoneProviderEventPreProcessor;
 
     @Before
     public void setUp() {
         mTestThreadingDomain = new TestThreadingDomain();
         mProviderListener = new TestProviderListener();
+        mTimeZoneProviderEventPreProcessor = new FakeTimeZoneProviderEventPreProcessor();
     }
 
     @Test
     public void lifecycle() {
         String providerName = "arbitrary";
-        TestLocationTimeZoneProvider provider =
-                new TestLocationTimeZoneProvider(mTestThreadingDomain, providerName);
+        RecordingProviderMetricsLogger providerMetricsLogger = new RecordingProviderMetricsLogger();
+        TestLocationTimeZoneProvider provider = new TestLocationTimeZoneProvider(
+                providerMetricsLogger,
+                mTestThreadingDomain,
+                providerName,
+                mTimeZoneProviderEventPreProcessor);
 
         // initialize()
         provider.initialize(mProviderListener);
         provider.assertOnInitializeCalled();
 
-        ProviderState currentState = provider.getCurrentState();
-        assertEquals(PROVIDER_STATE_STOPPED, currentState.stateEnum);
+        ProviderState currentState = assertAndReturnProviderState(
+                provider, providerMetricsLogger, PROVIDER_STATE_STOPPED);
         assertNull(currentState.currentUserConfiguration);
         assertSame(provider, currentState.provider);
         mTestThreadingDomain.assertQueueEmpty();
@@ -96,9 +104,9 @@ public class LocationTimeZoneProviderTest {
 
         provider.assertOnStartCalled(arbitraryInitializationTimeout);
 
-        currentState = provider.getCurrentState();
+        currentState = assertAndReturnProviderState(
+                provider, providerMetricsLogger, PROVIDER_STATE_STARTED_INITIALIZING);
         assertSame(provider, currentState.provider);
-        assertEquals(PROVIDER_STATE_STARTED_INITIALIZING, currentState.stateEnum);
         assertEquals(config, currentState.currentUserConfiguration);
         assertNull(currentState.event);
         // The initialization timeout should be queued.
@@ -120,9 +128,9 @@ public class LocationTimeZoneProviderTest {
         TimeZoneProviderEvent event = TimeZoneProviderEvent.createSuggestionEvent(suggestion);
         provider.simulateProviderEventReceived(event);
 
-        currentState = provider.getCurrentState();
+        currentState = assertAndReturnProviderState(
+                provider, providerMetricsLogger, PROVIDER_STATE_STARTED_CERTAIN);
         assertSame(provider, currentState.provider);
-        assertEquals(PROVIDER_STATE_STARTED_CERTAIN, currentState.stateEnum);
         assertEquals(event, currentState.event);
         assertEquals(config, currentState.currentUserConfiguration);
         mTestThreadingDomain.assertQueueEmpty();
@@ -132,9 +140,9 @@ public class LocationTimeZoneProviderTest {
         event = TimeZoneProviderEvent.createUncertainEvent();
         provider.simulateProviderEventReceived(event);
 
-        currentState = provider.getCurrentState();
+        currentState = assertAndReturnProviderState(
+                provider, providerMetricsLogger, PROVIDER_STATE_STARTED_UNCERTAIN);
         assertSame(provider, currentState.provider);
-        assertEquals(PROVIDER_STATE_STARTED_UNCERTAIN, currentState.stateEnum);
         assertEquals(event, currentState.event);
         assertEquals(config, currentState.currentUserConfiguration);
         mTestThreadingDomain.assertQueueEmpty();
@@ -144,7 +152,8 @@ public class LocationTimeZoneProviderTest {
         provider.stopUpdates();
         provider.assertOnStopUpdatesCalled();
 
-        currentState = provider.getCurrentState();
+        currentState = assertAndReturnProviderState(
+                provider, providerMetricsLogger, PROVIDER_STATE_STOPPED);
         assertSame(provider, currentState.provider);
         assertEquals(PROVIDER_STATE_STOPPED, currentState.stateEnum);
         assertNull(currentState.event);
@@ -162,8 +171,12 @@ public class LocationTimeZoneProviderTest {
     @Test
     public void defaultHandleTestCommandImpl() {
         String providerName = "primary";
-        TestLocationTimeZoneProvider provider =
-                new TestLocationTimeZoneProvider(mTestThreadingDomain, providerName);
+        StubbedProviderMetricsLogger providerMetricsLogger = new StubbedProviderMetricsLogger();
+        TestLocationTimeZoneProvider provider = new TestLocationTimeZoneProvider(
+                providerMetricsLogger,
+                mTestThreadingDomain,
+                providerName,
+                mTimeZoneProviderEventPreProcessor);
 
         TestCommand testCommand = TestCommand.createForTests("test", new Bundle());
         AtomicReference<Bundle> resultReference = new AtomicReference<>();
@@ -179,8 +192,12 @@ public class LocationTimeZoneProviderTest {
     @Test
     public void stateRecording() {
         String providerName = "primary";
-        TestLocationTimeZoneProvider provider =
-                new TestLocationTimeZoneProvider(mTestThreadingDomain, providerName);
+        StubbedProviderMetricsLogger providerMetricsLogger = new StubbedProviderMetricsLogger();
+        TestLocationTimeZoneProvider provider = new TestLocationTimeZoneProvider(
+                providerMetricsLogger,
+                mTestThreadingDomain,
+                providerName,
+                mTimeZoneProviderEventPreProcessor);
         provider.setStateChangeRecordingEnabled(true);
 
         // initialize()
@@ -218,6 +235,36 @@ public class LocationTimeZoneProviderTest {
         provider.assertLatestRecordedState(PROVIDER_STATE_DESTROYED);
     }
 
+    @Test
+    public void entersUncertainState_whenEventHasUnsupportedZones() {
+        String providerName = "primary";
+        StubbedProviderMetricsLogger providerMetricsLogger = new StubbedProviderMetricsLogger();
+        TestLocationTimeZoneProvider provider = new TestLocationTimeZoneProvider(
+                providerMetricsLogger,
+                mTestThreadingDomain,
+                providerName,
+                mTimeZoneProviderEventPreProcessor);
+        provider.setStateChangeRecordingEnabled(true);
+        provider.initialize(mProviderListener);
+        mTimeZoneProviderEventPreProcessor.enterUncertainMode();
+
+        ConfigurationInternal config = USER1_CONFIG_GEO_DETECTION_ENABLED;
+        Duration arbitraryInitializationTimeout = Duration.ofMinutes(5);
+        Duration arbitraryInitializationTimeoutFuzz = Duration.ofMinutes(2);
+        provider.startUpdates(config, arbitraryInitializationTimeout,
+                arbitraryInitializationTimeoutFuzz);
+
+        List<String> invalidTimeZoneIds = asList("Atlantic/Atlantis");
+        TimeZoneProviderSuggestion invalidIdSuggestion = new TimeZoneProviderSuggestion.Builder()
+                .setElapsedRealtimeMillis(ARBITRARY_ELAPSED_REALTIME_MILLIS)
+                .setTimeZoneIds(invalidTimeZoneIds)
+                .build();
+        TimeZoneProviderEvent event =
+                TimeZoneProviderEvent.createSuggestionEvent(invalidIdSuggestion);
+        provider.simulateProviderEventReceived(event);
+        provider.assertLatestRecordedState(PROVIDER_STATE_STARTED_UNCERTAIN);
+    }
+
     /** A test stand-in for the real {@link LocationTimeZoneProviderController}'s listener. */
     private static class TestProviderListener implements ProviderListener {
 
@@ -241,6 +288,20 @@ public class LocationTimeZoneProviderTest {
         }
     }
 
+    /**
+     * Returns the provider's state after asserting that the current state matches what is expected.
+     * This also asserts that the metrics logger was informed of the state change.
+     */
+    private static ProviderState assertAndReturnProviderState(
+            TestLocationTimeZoneProvider provider,
+            RecordingProviderMetricsLogger providerMetricsLogger, int expectedStateEnum) {
+        ProviderState currentState = provider.getCurrentState();
+        assertEquals(expectedStateEnum, currentState.stateEnum);
+        providerMetricsLogger.assertChangeLoggedAndRemove(expectedStateEnum);
+        providerMetricsLogger.assertNoMoreLogEntries();
+        return currentState;
+    }
+
     private static class TestLocationTimeZoneProvider extends LocationTimeZoneProvider {
 
         private boolean mOnInitializeCalled;
@@ -250,9 +311,12 @@ public class LocationTimeZoneProviderTest {
         private boolean mOnStopUpdatesCalled;
 
         /** Creates the instance. */
-        TestLocationTimeZoneProvider(@NonNull ThreadingDomain threadingDomain,
-                @NonNull String providerName) {
-            super(threadingDomain, providerName);
+        TestLocationTimeZoneProvider(@NonNull ProviderMetricsLogger providerMetricsLogger,
+                @NonNull ThreadingDomain threadingDomain,
+                @NonNull String providerName,
+                @NonNull TimeZoneProviderEventPreProcessor timeZoneProviderEventPreProcessor) {
+            super(providerMetricsLogger,
+                    threadingDomain, providerName, timeZoneProviderEventPreProcessor);
         }
 
         @Override
@@ -306,6 +370,37 @@ public class LocationTimeZoneProviderTest {
             List<ProviderState> recordedStates = getRecordedStates();
             assertEquals(expectedStateEnum,
                     recordedStates.get(recordedStates.size() - 1).stateEnum);
+        }
+    }
+
+    private static class StubbedProviderMetricsLogger implements
+            LocationTimeZoneProvider.ProviderMetricsLogger {
+
+        @Override
+        public void onProviderStateChanged(int stateEnum) {
+            // Stubbed
+        }
+    }
+
+    private static class RecordingProviderMetricsLogger implements
+            LocationTimeZoneProvider.ProviderMetricsLogger {
+
+        private LinkedList<Integer> mStates = new LinkedList<>();
+
+        @Override
+        public void onProviderStateChanged(int stateEnum) {
+            mStates.add(stateEnum);
+        }
+
+        public void assertChangeLoggedAndRemove(int expectedLoggedState) {
+            assertEquals("expected loggedState=" + expectedLoggedState
+                    + " but states logged were=" + mStates,
+                    (Integer) expectedLoggedState, mStates.peekFirst());
+            mStates.removeFirst();
+        }
+
+        public void assertNoMoreLogEntries() {
+            assertTrue(mStates.isEmpty());
         }
     }
 }

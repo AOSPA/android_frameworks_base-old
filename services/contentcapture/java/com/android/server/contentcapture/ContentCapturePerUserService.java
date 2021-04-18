@@ -35,6 +35,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManagerInternal;
+import android.app.assist.ActivityId;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.content.ComponentName;
@@ -241,6 +242,7 @@ final class ContentCapturePerUserService
 
     @GuardedBy("mLock")
     public void startSessionLocked(@NonNull IBinder activityToken,
+            @NonNull IBinder shareableActivityToken,
             @NonNull ActivityPresentationInfo activityPresentationInfo, int sessionId, int uid,
             int flags, @NonNull IResultReceiver clientReceiver) {
         if (activityPresentationInfo == null) {
@@ -340,8 +342,8 @@ final class ContentCapturePerUserService
         mRemoteService.ensureBoundLocked();
 
         final ContentCaptureServerSession newSession = new ContentCaptureServerSession(mLock,
-                activityToken, this, componentName, clientReceiver, taskId, displayId, sessionId,
-                uid, flags);
+                activityToken, new ActivityId(taskId, shareableActivityToken), this, componentName,
+                clientReceiver, taskId, displayId, sessionId, uid, flags);
         if (mMaster.verbose) {
             Slog.v(TAG, "startSession(): new session for "
                     + ComponentName.flattenToShortString(componentName) + " and id " + sessionId);
@@ -595,8 +597,14 @@ final class ContentCapturePerUserService
                         ? "null_activities" : activities.size() + " activities") + ")"
                         + " for user " + mUserId);
             }
+
+            ArraySet<String> oldList =
+                    mMaster.mGlobalContentCaptureOptions.getWhitelistedPackages(mUserId);
+
             mMaster.mGlobalContentCaptureOptions.setWhitelist(mUserId, packages, activities);
             writeSetWhitelistEvent(getServiceComponentName(), packages, activities);
+
+            updateContentCaptureOptions(oldList);
 
             // Must disable session that are not the allowlist anymore...
             final int numSessions = mSessions.size();
@@ -668,6 +676,24 @@ final class ContentCapturePerUserService
                 ContentCaptureOptions options, int flushReason) {
             ContentCaptureMetricsLogger.writeSessionFlush(sessionId, getServiceComponentName(), app,
                     flushMetrics, options, flushReason);
+        }
+
+        /** Updates {@link ContentCaptureOptions} for all newly added packages on allowlist. */
+        private void updateContentCaptureOptions(@Nullable ArraySet<String> oldList) {
+            ArraySet<String> adding = mMaster.mGlobalContentCaptureOptions
+                    .getWhitelistedPackages(mUserId);
+
+            if (oldList != null && adding != null) {
+                adding.removeAll(oldList);
+            }
+
+            int N = adding != null ? adding.size() : 0;
+            for (int i = 0; i < N; i++) {
+                String packageName = adding.valueAt(i);
+                ContentCaptureOptions options = mMaster.mGlobalContentCaptureOptions
+                        .getOptions(mUserId, packageName);
+                mMaster.updateOptions(packageName, options);
+            }
         }
     }
 }

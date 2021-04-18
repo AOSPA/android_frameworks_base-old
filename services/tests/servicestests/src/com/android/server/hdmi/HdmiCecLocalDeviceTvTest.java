@@ -81,8 +81,6 @@ public class HdmiCecLocalDeviceTvTest {
         PowerManager powerManager = new PowerManager(context, mIPowerManagerMock,
                 mIThermalServiceMock, new Handler(mMyLooper));
 
-        HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(context);
-
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext()) {
                     @Override
@@ -119,16 +117,12 @@ public class HdmiCecLocalDeviceTvTest {
                     AudioManager getAudioManager() {
                         return mAudioManager;
                     }
-
-                    @Override
-                    protected HdmiCecConfig getHdmiCecConfig() {
-                        return hdmiCecConfig;
-                    }
                 };
 
         mHdmiCecLocalDeviceTv = new HdmiCecLocalDeviceTv(mHdmiControlService);
         mHdmiCecLocalDeviceTv.init();
         mHdmiControlService.setIoLooper(mMyLooper);
+        mHdmiControlService.setHdmiCecConfig(new FakeHdmiCecConfig(context));
         mNativeWrapper = new FakeNativeWrapper();
         mHdmiCecController = HdmiCecController.createWithNativeWrapper(
                 mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
@@ -239,7 +233,7 @@ public class HdmiCecLocalDeviceTvTest {
         mWokenUp = false;
         HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(ADDR_PLAYBACK_1,
                 mTvLogicalAddress);
-        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(textViewOn)).isTrue();
+        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(textViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isTrue();
     }
@@ -253,7 +247,7 @@ public class HdmiCecLocalDeviceTvTest {
         mWokenUp = false;
         HdmiCecMessage imageViewOn = new HdmiCecMessage(ADDR_PLAYBACK_1, mTvLogicalAddress,
                 Constants.MESSAGE_IMAGE_VIEW_ON, HdmiCecMessage.EMPTY_PARAM);
-        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(imageViewOn)).isTrue();
+        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(imageViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isTrue();
     }
@@ -267,7 +261,7 @@ public class HdmiCecLocalDeviceTvTest {
         mWokenUp = false;
         HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(ADDR_PLAYBACK_1,
                 mTvLogicalAddress);
-        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(textViewOn)).isTrue();
+        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(textViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isFalse();
     }
@@ -281,7 +275,7 @@ public class HdmiCecLocalDeviceTvTest {
         mWokenUp = false;
         HdmiCecMessage imageViewOn = new HdmiCecMessage(ADDR_PLAYBACK_1, mTvLogicalAddress,
                 Constants.MESSAGE_IMAGE_VIEW_ON, HdmiCecMessage.EMPTY_PARAM);
-        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(imageViewOn)).isTrue();
+        assertThat(mHdmiCecLocalDeviceTv.dispatchMessage(imageViewOn)).isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isFalse();
     }

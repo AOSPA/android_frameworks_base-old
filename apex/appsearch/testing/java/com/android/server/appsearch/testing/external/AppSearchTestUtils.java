@@ -47,10 +47,7 @@ public class AppSearchTestUtils {
         AppSearchBatchResult<String, GenericDocument> result =
                 checkIsBatchResultSuccess(
                         session.getByUri(
-                                new GetByUriRequest.Builder()
-                                        .setNamespace(namespace)
-                                        .addUris(uris)
-                                        .build()));
+                                new GetByUriRequest.Builder(namespace).addUris(uris).build()));
         assertThat(result.getSuccesses()).hasSize(uris.length);
         assertThat(result.getFailures()).isEmpty();
         List<GenericDocument> list = new ArrayList<>(uris.length);
@@ -76,14 +73,22 @@ public class AppSearchTestUtils {
 
     public static List<GenericDocument> convertSearchResultsToDocuments(
             SearchResultsShim searchResults) throws Exception {
-        List<SearchResult> results = searchResults.getNextPage().get();
-        List<GenericDocument> documents = new ArrayList<>();
-        while (results.size() > 0) {
-            for (SearchResult result : results) {
-                documents.add(result.getDocument());
-            }
-            results = searchResults.getNextPage().get();
+        List<SearchResult> results = retrieveAllSearchResults(searchResults);
+        List<GenericDocument> documents = new ArrayList<>(results.size());
+        for (SearchResult result : results) {
+            documents.add(result.getGenericDocument());
         }
         return documents;
+    }
+
+    public static List<SearchResult> retrieveAllSearchResults(SearchResultsShim searchResults)
+            throws Exception {
+        List<SearchResult> page = searchResults.getNextPage().get();
+        List<SearchResult> results = new ArrayList<>();
+        while (!page.isEmpty()) {
+            results.addAll(page);
+            page = searchResults.getNextPage().get();
+        }
+        return results;
     }
 }

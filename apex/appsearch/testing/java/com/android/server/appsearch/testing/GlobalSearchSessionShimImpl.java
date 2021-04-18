@@ -21,9 +21,11 @@ import android.app.appsearch.AppSearchManager;
 import android.app.appsearch.AppSearchResult;
 import android.app.appsearch.GlobalSearchSession;
 import android.app.appsearch.GlobalSearchSessionShim;
+import android.app.appsearch.ReportSystemUsageRequest;
 import android.app.appsearch.SearchResults;
 import android.app.appsearch.SearchResultsShim;
 import android.app.appsearch.SearchSpec;
+import android.app.appsearch.exceptions.AppSearchException;
 import android.content.Context;
 
 import androidx.test.core.app.ApplicationProvider;
@@ -75,13 +77,28 @@ public class GlobalSearchSessionShimImpl implements GlobalSearchSessionShim {
     @Override
     public SearchResultsShim search(
             @NonNull String queryExpression, @NonNull SearchSpec searchSpec) {
-        SearchResults searchResults =
-                mGlobalSearchSession.search(queryExpression, searchSpec, mExecutor);
+        SearchResults searchResults = mGlobalSearchSession.search(queryExpression, searchSpec);
         return new SearchResultsShimImpl(searchResults, mExecutor);
+    }
+
+    @NonNull
+    @Override
+    public ListenableFuture<Void> reportSystemUsage(@NonNull ReportSystemUsageRequest request) {
+        SettableFuture<AppSearchResult<Void>> future = SettableFuture.create();
+        mGlobalSearchSession.reportSystemUsage(request, mExecutor, future::set);
+        return Futures.transformAsync(future, this::transformResult, mExecutor);
     }
 
     @Override
     public void close() {
         mGlobalSearchSession.close();
+    }
+
+    private <T> ListenableFuture<T> transformResult(
+            @NonNull AppSearchResult<T> result) throws AppSearchException {
+        if (!result.isSuccess()) {
+            throw new AppSearchException(result.getResultCode(), result.getErrorMessage());
+        }
+        return Futures.immediateFuture(result.getResultValue());
     }
 }

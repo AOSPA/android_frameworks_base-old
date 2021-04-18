@@ -17,6 +17,7 @@
 package android.hardware.input;
 
 import android.Manifest;
+import android.annotation.FloatRange;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -30,6 +31,10 @@ import android.compat.annotation.ChangeId;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
 import android.hardware.SensorManager;
+import android.hardware.lights.Light;
+import android.hardware.lights.LightState;
+import android.hardware.lights.LightsManager;
+import android.hardware.lights.LightsRequest;
 import android.os.BlockUntrustedTouchesMode;
 import android.os.Build;
 import android.os.CombinedVibrationEffect;
@@ -216,6 +221,14 @@ public final class InputManager {
      */
     @ChangeId
     public static final long BLOCK_FLAG_SLIPPERY = android.os.IInputConstants.BLOCK_FLAG_SLIPPERY;
+
+    /**
+     * Check whether apps are using MotionEvent.getRawX/Y. This is implementation-specific, and
+     * thus undefined for most 3p app usages.
+     * @hide
+     */
+    @ChangeId
+    public static final long APP_USES_RAW_INPUT_COORDS = 179274888L;
 
     /**
      * Input Event Injection Synchronization Mode: None.
@@ -918,8 +931,11 @@ public final class InputManager {
      * opacity of the windows above the touch-consuming window, per UID. Check documentation of
      * {@link LayoutParams#FLAG_NOT_TOUCHABLE} for more details.
      *
+     * <p>The value returned is between 0 (inclusive) and 1 (inclusive).
+     *
      * @see LayoutParams#FLAG_NOT_TOUCHABLE
      */
+    @FloatRange(from = 0, to = 1)
     public float getMaximumObscuringOpacityForTouch() {
         Context context = ActivityThread.currentApplication();
         return Settings.Global.getFloat(context.getContentResolver(),
@@ -930,11 +946,11 @@ public final class InputManager {
     /**
      * Sets the maximum allowed obscuring opacity by UID to propagate touches.
      *
-     * For certain window types (eg. SAWs), the decision of honoring {@link LayoutParams
+     * <p>For certain window types (eg. SAWs), the decision of honoring {@link LayoutParams
      * #FLAG_NOT_TOUCHABLE} or not depends on the combined obscuring opacity of the windows
      * above the touch-consuming window.
      *
-     * For a certain UID:
+     * <p>For a certain UID:
      * <ul>
      *     <li>If it's the same as the UID of the touch-consuming window, allow it to propagate
      *     the touch.
@@ -945,7 +961,7 @@ public final class InputManager {
      *     touch, allow the UID to propagate the touch.
      * </ul>
      *
-     * This value should be between 0 (inclusive) and 1 (inclusive).
+     * <p>This value should be between 0 (inclusive) and 1 (inclusive).
      *
      * @see #getMaximumObscuringOpacityForTouch()
      *
@@ -953,7 +969,7 @@ public final class InputManager {
      */
     @TestApi
     @RequiresPermission(Manifest.permission.WRITE_SECURE_SETTINGS)
-    public void setMaximumObscuringOpacityForTouch(float opacity) {
+    public void setMaximumObscuringOpacityForTouch(@FloatRange(from = 0, to = 1) float opacity) {
         if (opacity < 0 || opacity > 1) {
             throw new IllegalArgumentException(
                     "Maximum obscuring opacity for touch should be >= 0 and <= 1");
@@ -1409,7 +1425,7 @@ public final class InputManager {
     }
 
     /**
-     * Gets a vibrator service associated with an input device, always create a new instance.
+     * Gets a vibrator service associated with an input device, always creates a new instance.
      * @return The vibrator, never null.
      * @hide
      */
@@ -1418,7 +1434,7 @@ public final class InputManager {
     }
 
     /**
-     * Gets a vibrator manager service associated with an input device, always create a new
+     * Gets a vibrator manager service associated with an input device, always creates a new
      * instance.
      * @return The vibrator manager, never null.
      * @hide
@@ -1486,10 +1502,8 @@ public final class InputManager {
 
     /**
      * Register input device vibrator state listener
-     *
-     * @hide
      */
-    public boolean registerVibratorStateListener(int deviceId, IVibratorStateListener listener) {
+    boolean registerVibratorStateListener(int deviceId, IVibratorStateListener listener) {
         try {
             return mIm.registerVibratorStateListener(deviceId, listener);
         } catch (RemoteException ex) {
@@ -1499,10 +1513,8 @@ public final class InputManager {
 
     /**
      * Unregister input device vibrator state listener
-     *
-     * @hide
      */
-    public boolean unregisterVibratorStateListener(int deviceId, IVibratorStateListener listener) {
+    boolean unregisterVibratorStateListener(int deviceId, IVibratorStateListener listener) {
         try {
             return mIm.unregisterVibratorStateListener(deviceId, listener);
         } catch (RemoteException ex) {
@@ -1511,7 +1523,7 @@ public final class InputManager {
     }
 
     /**
-     * Gets a sensor manager service associated with an input device, always create a new instance.
+     * Gets a sensor manager service associated with an input device, always creates a new instance.
      * @return The sensor manager, never null.
      * @hide
      */
@@ -1530,6 +1542,86 @@ public final class InputManager {
      */
     public InputDeviceBattery getInputDeviceBattery(int deviceId, boolean hasBattery) {
         return new InputDeviceBattery(this, deviceId, hasBattery);
+    }
+
+    /**
+     * Gets a lights manager associated with an input device, always creates a new instance.
+     * @return The lights manager, never null.
+     * @hide
+     */
+    @NonNull
+    public LightsManager getInputDeviceLightsManager(int deviceId) {
+        return new InputDeviceLightsManager(InputManager.this, deviceId);
+    }
+
+    /**
+     * Gets a list of light objects associated with an input device.
+     * @return The list of lights, never null.
+     */
+    @NonNull List<Light> getLights(int deviceId) {
+        try {
+            return mIm.getLights(deviceId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the state of an input device light.
+     * @return the light state
+     */
+    @NonNull LightState getLightState(int deviceId, @NonNull Light light) {
+        try {
+            return mIm.getLightState(deviceId, light.getId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Request to modify the states of multiple lights.
+     *
+     * @param request the settings for lights that should change
+     */
+    void requestLights(int deviceId, @NonNull LightsRequest request, IBinder token) {
+        try {
+            List<Integer> lightIdList = request.getLights();
+            int[] lightIds = new int[lightIdList.size()];
+            for (int i = 0; i < lightIds.length; i++) {
+                lightIds[i] = lightIdList.get(i);
+            }
+            List<LightState> lightStateList = request.getLightStates();
+            mIm.setLightStates(deviceId, lightIds,
+                    lightStateList.toArray(new LightState[lightStateList.size()]),
+                    token);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Open light session for input device manager
+     *
+     * @param token The token for the light session
+     */
+    void openLightSession(int deviceId, String opPkg, @NonNull IBinder token) {
+        try {
+            mIm.openLightSession(deviceId, opPkg, token);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Close light session
+     *
+     */
+    void closeLightSession(int deviceId, @NonNull IBinder token) {
+        try {
+            mIm.closeLightSession(deviceId, token);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**

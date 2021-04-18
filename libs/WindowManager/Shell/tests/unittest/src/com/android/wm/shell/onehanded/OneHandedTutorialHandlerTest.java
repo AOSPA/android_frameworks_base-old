@@ -64,7 +64,8 @@ public class OneHandedTutorialHandlerTest extends OneHandedTestCase {
     Handler mMockShellMainHandler;
     @Mock
     OneHandedUiEventLogger mMockUiEventLogger;
-
+    @Mock
+    OneHandedSettingsUtil mMockSettingsUtil;
 
     @Before
     public void setUp() {
@@ -73,13 +74,14 @@ public class OneHandedTutorialHandlerTest extends OneHandedTestCase {
 
         when(mMockDisplayAreaOrganizer.getDisplayAreaTokenMap()).thenReturn(new ArrayMap<>());
         mOneHandedController = new OneHandedController(
-                getContext(),
+                mContext,
                 mMockDisplayController,
                 mMockBackgroundOrganizer,
                 mMockDisplayAreaOrganizer,
                 mMockTouchHandler,
                 mMockTutorialHandler,
                 mMockGestureHandler,
+                mMockSettingsUtil,
                 mTimeoutHandler,
                 mMockUiEventLogger,
                 mMockOverlayManager,

@@ -404,6 +404,7 @@
     <string name="transcode_user_control" msgid="6176368544817731314">"I-override ang mga default ng pagta-transcode"</string>
     <string name="transcode_enable_all" msgid="2411165920039166710">"I-enable ang pagta-transcode"</string>
     <string name="transcode_default" msgid="3784803084573509491">"Ipagpalagay na sinusuportahan ng mga app ang mga modernong format"</string>
+    <string name="transcode_notification" msgid="5560515979793436168">"Ipakita ang mga notification sa pag-transcode"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"Mga tumatakbong serbisyo"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"Tingnan at kontrolin ang mga kasalukuyang tumatakbong serbisyo"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"Pagpapatupad sa WebView"</string>
@@ -423,7 +424,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"Protanomaly (pula-berde)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"Tritanomaly (asul-dilaw)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"Pagtatama ng kulay"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1284746051652993443">"Nagbibigay-daan sa iyo ang pagtatama ng kulay na maisaayos kung paano ipinapakita ang mga kulay sa iyong device"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"Isaayos kung paano ipinapakita ang mga kulay sa iyong device. Makakatulong ito kapag gusto mong:&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;Makakita ng mas tumpak na mga kulay&lt;/li&gt; &lt;li&gt;&amp;nbsp;Mag-alis ng mga kulay para matulungan kang mag-focus&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"Na-override ng <xliff:g id="TITLE">%1$s</xliff:g>"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"Humigit-kumulang <xliff:g id="TIME_REMAINING">%1$s</xliff:g> ang natitira"</string>
@@ -514,6 +515,7 @@
     <string name="zen_mode_forever" msgid="3339224497605461291">"Hanggang sa i-off mo"</string>
     <string name="time_unit_just_now" msgid="3006134267292728099">"Ngayon lang"</string>
     <string name="media_transfer_this_device_name" msgid="2716555073132169240">"Speaker ng telepono"</string>
+    <string name="media_transfer_this_phone" msgid="7194341457812151531">"Ang teleponong ito"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"Nagkaproblema sa pagkonekta. I-off at pagkatapos ay i-on ang device"</string>
     <string name="media_transfer_wired_device_name" msgid="4447880899964056007">"Wired na audio device"</string>
     <string name="help_label" msgid="3528360748637781274">"Tulong at feedback"</string>

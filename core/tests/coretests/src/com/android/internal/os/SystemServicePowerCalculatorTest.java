@@ -90,7 +90,7 @@ public class SystemServicePowerCalculatorTest {
                 new long[] {10000, 20000, 30000, 40000}
         );
 
-        mMockBatteryStats.readKernelUidCpuFreqTimesLocked(null, true, false);
+        mMockBatteryStats.readKernelUidCpuFreqTimesLocked(null, true, false, null);
 
         int workSourceUid1 = 100;
         int workSourceUid2 = 200;
@@ -153,7 +153,7 @@ public class SystemServicePowerCalculatorTest {
         }
 
         @Override
-        public void readDelta(@Nullable Callback<long[]> cb) {
+        public void readDelta(boolean forcedRead, @Nullable Callback<long[]> cb) {
             if (cb != null) {
                 cb.onUidCpuTime(Process.SYSTEM_UID, mSystemServerCpuTimes);
             }

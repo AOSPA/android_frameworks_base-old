@@ -18,12 +18,12 @@ package android.security;
 
 import android.annotation.NonNull;
 import android.compat.annotation.ChangeId;
-import android.compat.annotation.EnabledAfter;
-import android.os.Build;
+import android.compat.annotation.Disabled;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
 import android.security.keymaster.KeymasterDefs;
+import android.system.keystore2.Domain;
 import android.system.keystore2.IKeystoreService;
 import android.system.keystore2.KeyDescriptor;
 import android.system.keystore2.KeyEntryResponse;
@@ -85,7 +85,7 @@ public class KeyStore2 {
      * successfully conclude an operation.
      */
     @ChangeId
-    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.R)
+    @Disabled // See b/180133780
     static final long KEYSTORE_OPERATION_CREATION_MAY_FAIL = 169897160L;
 
     // Never use mBinder directly, use KeyStore2.getService() instead or better yet
@@ -125,6 +125,8 @@ public class KeyStore2 {
         }
     }
 
+    private static final String KEYSTORE2_SERVICE_NAME =
+            "android.system.keystore2.IKeystoreService/default";
 
     private KeyStore2() {
         mBinder = null;
@@ -137,7 +139,7 @@ public class KeyStore2 {
     private synchronized IKeystoreService getService(boolean retryLookup) {
         if (mBinder == null || retryLookup) {
             mBinder = IKeystoreService.Stub.asInterface(ServiceManager
-                    .getService("android.system.keystore2"));
+                    .getService(KEYSTORE2_SERVICE_NAME));
         }
         return mBinder;
     }
@@ -154,6 +156,50 @@ public class KeyStore2 {
      */
     public KeyDescriptor[] list(int domain, long namespace) throws KeyStoreException {
         return handleRemoteExceptionWithRetry((service) -> service.listEntries(domain, namespace));
+    }
+
+    /**
+     * Grant string prefix as used by the keystore boringssl engine. Must be kept in sync
+     * with system/security/keystore-engine. Note: The prefix here includes the 0x which
+     * std::stringstream used in keystore-engine needs to identify the number as hex represented.
+     * Here we include it in the prefix, because Long#parseUnsignedLong does not understand it
+     * and gets the radix as explicit argument.
+     * @hide
+     */
+    private static final String KEYSTORE_ENGINE_GRANT_ALIAS_PREFIX =
+            "ks2_keystore-engine_grant_id:0x";
+
+    /**
+     * This function turns a grant identifier into a specific string that is understood by the
+     * keystore-engine in system/security/keystore-engine. Is only used by VPN and WI-FI components
+     * to allow certain system components like racoon or vendor components like WPA supplicant
+     * to use keystore keys with boring ssl.
+     *
+     * @param grantId the grant id as returned by {@link #grant} in the {@code nspace} filed of
+     *                the resulting {@code KeyDescriptor}.
+     * @return The grant descriptor string.
+     * @hide
+     */
+    public static String makeKeystoreEngineGrantString(long grantId) {
+        return String.format("%s%016X", KEYSTORE_ENGINE_GRANT_ALIAS_PREFIX, grantId);
+    }
+
+    /**
+     * Convenience function to turn a keystore engine grant string as returned by
+     * {@link #makeKeystoreEngineGrantString(long)} back into a grant KeyDescriptor.
+     *
+     * @param grantString As string returned by {@link #makeKeystoreEngineGrantString(long)}
+     * @return The grant key descriptor.
+     * @hide
+     */
+    public static KeyDescriptor keystoreEngineGrantString2KeyDescriptor(String grantString) {
+        KeyDescriptor key = new KeyDescriptor();
+        key.domain = Domain.GRANT;
+        key.nspace = Long.parseUnsignedLong(
+                grantString.substring(KEYSTORE_ENGINE_GRANT_ALIAS_PREFIX.length()), 16);
+        key.alias = null;
+        key.blob = null;
+        return key;
     }
 
     /**

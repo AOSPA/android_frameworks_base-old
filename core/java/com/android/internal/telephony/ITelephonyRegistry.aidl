@@ -23,6 +23,7 @@ import android.telephony.BarringInfo;
 import android.telephony.CallQuality;
 import android.telephony.CellIdentity;
 import android.telephony.CellInfo;
+import android.telephony.LinkCapacityEstimate;
 import android.telephony.TelephonyDisplayInfo;
 import android.telephony.ims.ImsReasonInfo;
 import android.telephony.PhoneCapability;
@@ -60,7 +61,6 @@ interface ITelephonyRegistry {
     void notifyDataConnectionForSubscriber(
             int phoneId, int subId, in PreciseDataConnectionState preciseState);
     // Uses CellIdentity which is Parcelable here; will convert to CellLocation in client.
-    void notifyCellLocation(in CellIdentity cellLocation);
     void notifyCellLocationForSubscriber(in int subId, in CellIdentity cellLocation);
     @UnsupportedAppUsage
     void notifyCellInfo(in List<CellInfo> cellInfo);
@@ -94,6 +94,8 @@ interface ITelephonyRegistry {
     void notifyBarringInfoChanged(int slotIndex, int subId, in BarringInfo barringInfo);
     void notifyPhysicalChannelConfigForSubscriber(in int subId,
             in List<PhysicalChannelConfig> configs);
-    void notifyDataEnabled(boolean enabled, int reason);
-    void notifyAllowedNetworkTypesChanged(in int phoneId, in int subId, in Map allowedNetworkTypeList);
+    void notifyDataEnabled(in int phoneId, int subId, boolean enabled, int reason);
+    void notifyAllowedNetworkTypesChanged(in int phoneId, in int subId, in int reason, in long allowedNetworkType);
+    void notifyLinkCapacityEstimateChanged(in int phoneId, in int subId,
+            in List<LinkCapacityEstimate> linkCapacityEstimateList);
 }

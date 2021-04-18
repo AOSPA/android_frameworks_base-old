@@ -30,7 +30,6 @@ xsd_config {
     gen_writer: true,
 }
 
-
 xsd_config {
     name: "display-device-config",
     srcs: ["display-device-config/display-device-config.xsd"],
@@ -38,12 +37,11 @@ xsd_config {
     package_name: "com.android.server.display.config",
 }
 
-
 xsd_config {
-    name: "cec-config",
-    srcs: ["cec-config/cec-config.xsd"],
-    api_dir: "cec-config/schema",
-    package_name: "com.android.server.hdmi.cec.config",
+    name: "display-layout-config",
+    srcs: ["display-layout-config/display-layout-config.xsd"],
+    api_dir: "display-layout-config/schema",
+    package_name: "com.android.server.display.config.layout",
 }
 
 xsd_config {

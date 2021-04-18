@@ -41,6 +41,7 @@ import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
 import com.android.server.biometrics.sensors.LockoutCache;
 import com.android.server.biometrics.sensors.LockoutConsumer;
 import com.android.server.biometrics.sensors.LockoutTracker;
+import com.android.server.biometrics.sensors.face.ReEnrollNotificationUtils;
 import com.android.server.biometrics.sensors.face.UsageStats;
 
 import java.util.ArrayList;
@@ -68,11 +69,11 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
             @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
             boolean restricted, String owner, int cookie, boolean requireConfirmation, int sensorId,
             boolean isStrongBiometric, int statsClient, @NonNull UsageStats usageStats,
-            @NonNull LockoutCache lockoutCache, boolean isKeyguard) {
+            @NonNull LockoutCache lockoutCache, boolean allowBackgroundAuthentication) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
                 owner, cookie, requireConfirmation, sensorId, isStrongBiometric,
                 BiometricsProtoEnums.MODALITY_FACE, statsClient, null /* taskStackListener */,
-                lockoutCache, isKeyguard);
+                lockoutCache, allowBackgroundAuthentication);
         mUsageStats = usageStats;
         mLockoutCache = lockoutCache;
         mNotificationManager = context.getSystemService(NotificationManager.class);
@@ -91,7 +92,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     @Override
     protected void startHalOperation() {
         try {
-            mCancellationSignal = getFreshDaemon().authenticate(mSequentialId, mOperationId);
+            mCancellationSignal = getFreshDaemon().authenticate(mOperationId);
         } catch (RemoteException e) {
             Slog.e(TAG, "Remote exception when requesting auth", e);
             onError(BiometricFaceConstants.FACE_ERROR_HW_UNAVAILABLE, 0 /* vendorCode */);
@@ -162,6 +163,9 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
                     // to starting authentication, do not vibrate.
                     vibrateError();
                 }
+                break;
+            case BiometricConstants.BIOMETRIC_ERROR_RE_ENROLL:
+                ReEnrollNotificationUtils.showReEnrollmentNotification(getContext());
                 break;
             default:
                 break;

@@ -26,6 +26,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.media.metrics.LogSessionId;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -45,6 +46,7 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.NioUtils;
 import java.util.LinkedList;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -565,6 +567,12 @@ public class AudioTrack extends PlayerBase
      */
     private int mOffloadPaddingFrames = 0;
 
+    /**
+     * The log session id used for metrics.
+     * {@link LogSessionId#LOG_SESSION_ID_NONE} here means it is not set.
+     */
+    @NonNull private LogSessionId mLogSessionId = LogSessionId.LOG_SESSION_ID_NONE;
+
     //--------------------------------
     // Used exclusively by native code
     //--------------------
@@ -837,6 +845,7 @@ public class AudioTrack extends PlayerBase
         }
 
         baseRegisterPlayer(mSessionId);
+        native_setPlayerIId(mPlayerIId); // mPlayerIId now ready to send to native AudioTrack.
     }
 
     /**
@@ -922,12 +931,21 @@ public class AudioTrack extends PlayerBase
         private final int mSyncId;
 
         /**
+         * A special content id for {@link #TunerConfiguration(int, int)}
+         * indicating audio is delivered
+         * from an {@code AudioTrack} write, not tunneled from the tuner stack.
+         */
+        public static final int CONTENT_ID_NONE = 0;
+
+        /**
          * Constructs a TunerConfiguration instance for use in {@link AudioTrack.Builder}
          *
          * @param contentId selects the audio stream to use.
          *     The contentId may be obtained from
-         *     {@link android.media.tv.tuner.filter.Filter#getId()}.
-         *     This is always a positive number.
+         *     {@link android.media.tv.tuner.filter.Filter#getId()},
+         *     such obtained id is always a positive number.
+         *     If audio is to be delivered through an {@code AudioTrack} write
+         *     then {@code CONTENT_ID_NONE} may be used.
          * @param syncId selects the clock to use for synchronization
          *     of audio with other streams such as video.
          *     The syncId may be obtained from
@@ -936,10 +954,10 @@ public class AudioTrack extends PlayerBase
          */
         @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_ROUTING)
         public TunerConfiguration(
-                @IntRange(from = 1) int contentId, @IntRange(from = 1)int syncId) {
-            if (contentId < 1) {
+                @IntRange(from = 0) int contentId, @IntRange(from = 1)int syncId) {
+            if (contentId < 0) {
                 throw new IllegalArgumentException(
-                        "contentId " + contentId + " must be positive");
+                        "contentId " + contentId + " must be positive or CONTENT_ID_NONE");
             }
             if (syncId < 1) {
                 throw new IllegalArgumentException("syncId " + syncId + " must be positive");
@@ -2067,6 +2085,65 @@ public class AudioTrack extends PlayerBase
      */
     public @IntRange (from = 0) int getBufferCapacityInFrames() {
         return native_get_buffer_capacity_frames();
+    }
+
+    /**
+     * Sets the streaming start threshold for an <code>AudioTrack</code>.
+     * <p> The streaming start threshold is the buffer level that the written audio
+     * data must reach for audio streaming to start after {@link #play()} is called.
+     * <p> For compressed streams, the size of a frame is considered to be exactly one byte.
+     *
+     * @param startThresholdInFrames the desired start threshold.
+     * @return the actual start threshold in frames value. This is
+     *         an integer between 1 to the buffer capacity
+     *         (see {@link #getBufferCapacityInFrames()}),
+     *         and might change if the output sink changes after track creation.
+     * @throws IllegalStateException if the track is not initialized or the
+     *         track transfer mode is not {@link #MODE_STREAM}.
+     * @throws IllegalArgumentException if startThresholdInFrames is not positive.
+     * @see #getStartThresholdInFrames()
+     */
+    public @IntRange(from = 1) int setStartThresholdInFrames(
+            @IntRange (from = 1) int startThresholdInFrames) {
+        if (mState != STATE_INITIALIZED) {
+            throw new IllegalStateException("AudioTrack is not initialized");
+        }
+        if (mDataLoadMode != MODE_STREAM) {
+            throw new IllegalStateException("AudioTrack must be a streaming track");
+        }
+        if (startThresholdInFrames < 1) {
+            throw new IllegalArgumentException("startThresholdInFrames "
+                    + startThresholdInFrames + " must be positive");
+        }
+        return native_setStartThresholdInFrames(startThresholdInFrames);
+    }
+
+    /**
+     * Returns the streaming start threshold of the <code>AudioTrack</code>.
+     * <p> The streaming start threshold is the buffer level that the written audio
+     * data must reach for audio streaming to start after {@link #play()} is called.
+     * When an <code>AudioTrack</code> is created, the streaming start threshold
+     * is the buffer capacity in frames. If the buffer size in frames is reduced
+     * by {@link #setBufferSizeInFrames(int)} to a value smaller than the start threshold
+     * then that value will be used instead for the streaming start threshold.
+     * <p> For compressed streams, the size of a frame is considered to be exactly one byte.
+     *
+     * @return the current start threshold in frames value. This is
+     *         an integer between 1 to the buffer capacity
+     *         (see {@link #getBufferCapacityInFrames()}),
+     *         and might change if the  output sink changes after track creation.
+     * @throws IllegalStateException if the track is not initialized or the
+     *         track is not {@link #MODE_STREAM}.
+     * @see #setStartThresholdInFrames(int)
+     */
+    public @IntRange (from = 1) int getStartThresholdInFrames() {
+        if (mState != STATE_INITIALIZED) {
+            throw new IllegalStateException("AudioTrack is not initialized");
+        }
+        if (mDataLoadMode != MODE_STREAM) {
+            throw new IllegalStateException("AudioTrack must be a streaming track");
+        }
+        return native_getStartThresholdInFrames();
     }
 
     /**
@@ -3520,8 +3597,9 @@ public class AudioTrack extends PlayerBase
                 native_enableDeviceCallback();
                 return true;
             } catch (IllegalStateException e) {
-                // Fail silently as track state could have changed in between start
-                // and enabling routing callback, return false to indicate not enabled
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
+                    Log.d(TAG, "testEnableNativeRoutingCallbacks failed", e);
+                }
             }
         }
         return false;
@@ -3571,7 +3649,7 @@ public class AudioTrack extends PlayerBase
             Handler handler) {
         synchronized (mRoutingChangeListeners) {
             if (listener != null && !mRoutingChangeListeners.containsKey(listener)) {
-                testEnableNativeRoutingCallbacksLocked();
+                mEnableSelfRoutingMonitor = testEnableNativeRoutingCallbacksLocked();
                 mRoutingChangeListeners.put(
                         listener, new NativeRoutingEventHandlerDelegate(this, listener,
                                 handler != null ? handler : new Handler(mInitializationLooper)));
@@ -3967,6 +4045,36 @@ public class AudioTrack extends PlayerBase
         }
     }
 
+    /**
+     * Sets a {@link LogSessionId} instance to this AudioTrack for metrics collection.
+     *
+     * @param logSessionId a {@link LogSessionId} instance which is used to
+     *        identify this object to the metrics service. Proper generated
+     *        Ids must be obtained from the Java metrics service and should
+     *        be considered opaque. Use
+     *        {@link LogSessionId#LOG_SESSION_ID_NONE} to remove the
+     *        logSessionId association.
+     * @throws IllegalStateException if AudioTrack not initialized.
+     *
+     */
+    public void setLogSessionId(@NonNull LogSessionId logSessionId) {
+        Objects.requireNonNull(logSessionId);
+        if (mState == STATE_UNINITIALIZED) {
+            throw new IllegalStateException("track not initialized");
+        }
+        String stringId = logSessionId.getStringId();
+        native_setLogSessionId(stringId);
+        mLogSessionId = logSessionId;
+    }
+
+    /**
+     * Returns the {@link LogSessionId}.
+     */
+    @NonNull
+    public LogSessionId getLogSessionId() {
+        return mLogSessionId;
+    }
+
     //---------------------------------------------------------
     // Inner classes
     //--------------------
@@ -4202,6 +4310,23 @@ public class AudioTrack extends PlayerBase
     private native int native_get_audio_description_mix_level_db(float[] level);
     private native int native_set_dual_mono_mode(int dualMonoMode);
     private native int native_get_dual_mono_mode(int[] dualMonoMode);
+    private native void native_setLogSessionId(@Nullable String logSessionId);
+    private native int native_setStartThresholdInFrames(int startThresholdInFrames);
+    private native int native_getStartThresholdInFrames();
+
+    /**
+     * Sets the audio service Player Interface Id.
+     *
+     * The playerIId does not change over the lifetime of the client
+     * Java AudioTrack and is set automatically on creation.
+     *
+     * This call informs the native AudioTrack for metrics logging purposes.
+     *
+     * @param id the value reported by AudioManager when registering the track.
+     *           A value of -1 indicates invalid - the playerIId was never set.
+     * @throws IllegalStateException if AudioTrack not initialized.
+     */
+    private native void native_setPlayerIId(int playerIId);
 
     //---------------------------------------------------------
     // Utility methods

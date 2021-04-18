@@ -49,10 +49,8 @@ import androidx.slice.widget.SliceContent;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
 import com.android.settingslib.Utils;
-import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.wakelock.KeepAwakeAnimationListener;
 
 import java.io.FileDescriptor;
@@ -85,10 +83,6 @@ public class KeyguardSliceView extends LinearLayout {
      */
     private Runnable mContentChangeListener;
     private boolean mHasHeader;
-    private final int mRowWithHeaderPadding;
-    private final int mRowPadding;
-    private float mRowTextSize;
-    private float mRowWithHeaderTextSize;
     private View.OnClickListener mOnClickListener;
 
     private int mLockScreenMode = KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
@@ -97,9 +91,6 @@ public class KeyguardSliceView extends LinearLayout {
         super(context, attrs);
 
         Resources resources = context.getResources();
-        mRowPadding = resources.getDimensionPixelSize(R.dimen.subtitle_clock_padding);
-        mRowWithHeaderPadding = resources.getDimensionPixelSize(R.dimen.header_subtitle_padding);
-
         mLayoutTransition = new LayoutTransition();
         mLayoutTransition.setStagger(LayoutTransition.CHANGE_APPEARING, DEFAULT_ANIM_DURATION / 2);
         mLayoutTransition.setDuration(LayoutTransition.APPEARING, DEFAULT_ANIM_DURATION);
@@ -120,10 +111,6 @@ public class KeyguardSliceView extends LinearLayout {
         mTextColor = Utils.getColorAttrDefaultColor(mContext, R.attr.wallpaperTextColor);
         mIconSize = (int) mContext.getResources().getDimension(R.dimen.widget_icon_size);
         mIconSizeWithHeader = (int) mContext.getResources().getDimension(R.dimen.header_icon_size);
-        mRowTextSize = mContext.getResources().getDimensionPixelSize(
-                R.dimen.widget_label_font_size);
-        mRowWithHeaderTextSize = mContext.getResources().getDimensionPixelSize(
-                R.dimen.header_row_font_size);
         mTitle.setBreakStrategy(LineBreaker.BREAK_STRATEGY_BALANCED);
     }
 
@@ -204,7 +191,6 @@ public class KeyguardSliceView extends LinearLayout {
         LinearLayout.LayoutParams layoutParams = (LayoutParams) mRow.getLayoutParams();
         layoutParams.gravity = mLockScreenMode !=  KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL
                 ? Gravity.START :  Gravity.CENTER;
-        layoutParams.topMargin = mHasHeader ? mRowWithHeaderPadding : mRowPadding;
         mRow.setLayoutParams(layoutParams);
 
         for (int i = startIndex; i < subItemsCount; i++) {
@@ -230,8 +216,6 @@ public class KeyguardSliceView extends LinearLayout {
             final SliceItem titleItem = rc.getTitleItem();
             button.setText(titleItem == null ? null : titleItem.getText());
             button.setContentDescription(rc.getContentDescription());
-            button.setTextSize(TypedValue.COMPLEX_UNIT_PX,
-                    mHasHeader ? mRowWithHeaderTextSize : mRowTextSize);
 
             Drawable iconDrawable = null;
             SliceItem icon = SliceQuery.find(item.getSlice(),
@@ -313,12 +297,23 @@ public class KeyguardSliceView extends LinearLayout {
     void onDensityOrFontScaleChanged() {
         mIconSize = mContext.getResources().getDimensionPixelSize(R.dimen.widget_icon_size);
         mIconSizeWithHeader = (int) mContext.getResources().getDimension(R.dimen.header_icon_size);
-        mRowTextSize = mContext.getResources().getDimensionPixelSize(
-                R.dimen.widget_label_font_size);
-        mRowWithHeaderTextSize = mContext.getResources().getDimensionPixelSize(
-                R.dimen.header_row_font_size);
+
+        for (int i = 0; i < mRow.getChildCount(); i++) {
+            View child = mRow.getChildAt(i);
+            if (child instanceof KeyguardSliceTextView) {
+                ((KeyguardSliceTextView) child).onDensityOrFontScaleChanged();
+            }
+        }
     }
 
+    void onOverlayChanged() {
+        for (int i = 0; i < mRow.getChildCount(); i++) {
+            View child = mRow.getChildAt(i);
+            if (child instanceof KeyguardSliceTextView) {
+                ((KeyguardSliceTextView) child).onOverlayChanged();
+            }
+        }
+    }
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
         pw.println("KeyguardSliceView:");
         pw.println("  mTitle: " + (mTitle == null ? "null" : mTitle.getVisibility() == VISIBLE));
@@ -423,14 +418,19 @@ public class KeyguardSliceView extends LinearLayout {
             super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
 
+        /**
+         * Set the amount (ratio) that the device has transitioned to doze.
+         *
+         * @param darkAmount Amount of transition to doze: 1f for doze and 0f for awake.
+         */
         public void setDarkAmount(float darkAmount) {
-            boolean isAwake = darkAmount != 0;
-            boolean wasAwake = mDarkAmount != 0;
-            if (isAwake == wasAwake) {
+            boolean isDozing = darkAmount != 0;
+            boolean wasDozing = mDarkAmount != 0;
+            if (isDozing == wasDozing) {
                 return;
             }
             mDarkAmount = darkAmount;
-            setLayoutAnimationListener(isAwake ? null : mKeepAwakeListener);
+            setLayoutAnimationListener(isDozing ? null : mKeepAwakeListener);
         }
 
         @Override
@@ -479,8 +479,7 @@ public class KeyguardSliceView extends LinearLayout {
      * Representation of an item that appears under the clock on main keyguard message.
      */
     @VisibleForTesting
-    static class KeyguardSliceTextView extends TextView implements
-            ConfigurationController.ConfigurationListener {
+    static class KeyguardSliceTextView extends TextView {
         private int mLockScreenMode = KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
 
         @StyleRes
@@ -492,24 +491,10 @@ public class KeyguardSliceView extends LinearLayout {
             setEllipsize(TruncateAt.END);
         }
 
-        @Override
-        protected void onAttachedToWindow() {
-            super.onAttachedToWindow();
-            Dependency.get(ConfigurationController.class).addCallback(this);
-        }
-
-        @Override
-        protected void onDetachedFromWindow() {
-            super.onDetachedFromWindow();
-            Dependency.get(ConfigurationController.class).removeCallback(this);
-        }
-
-        @Override
         public void onDensityOrFontScaleChanged() {
             updatePadding();
         }
 
-        @Override
         public void onOverlayChanged() {
             setTextAppearance(sStyleId);
         }

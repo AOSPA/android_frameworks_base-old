@@ -16,45 +16,71 @@
 
 package com.android.systemui.biometrics;
 
-import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.graphics.Canvas;
 import android.graphics.RectF;
 import android.util.AttributeSet;
-import android.view.View;
-
-import com.android.systemui.doze.DozeReceiver;
-import com.android.systemui.statusbar.phone.StatusBar;
+import android.widget.FrameLayout;
 
 /**
- * Class that coordinates non-HBM animations (such as enroll, keyguard, BiometricPrompt,
- * FingerprintManager).
+ * Base class for views containing UDFPS animations. Note that this is a FrameLayout so that we
+ * can support multiple child views drawing in the same region around the sensor location.
+ *
+ * - hides animation view when pausing auth
+ * - sends illumination events to fingerprint drawable
+ * - sends sensor rect updates to fingerprint drawable
+ * - optionally can override dozeTimeTick to adjust views for burn-in mitigation
  */
-public class UdfpsAnimationView extends View implements DozeReceiver,
-        StatusBar.ExpansionChangedListener {
+abstract class UdfpsAnimationView extends FrameLayout {
 
-    private static final String TAG = "UdfpsAnimationView";
-
-    @NonNull private UdfpsView mParent;
-    @Nullable private UdfpsAnimation mUdfpsAnimation;
-    @NonNull private RectF mSensorRect;
     private int mAlpha;
+    private boolean mPauseAuth;
 
     public UdfpsAnimationView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
-        mSensorRect = new RectF();
     }
 
-    @Override
-    protected void onDraw(Canvas canvas) {
-        super.onDraw(canvas);
+    /**
+     * Fingerprint drawable
+     */
+    abstract UdfpsDrawable getDrawable();
 
-        if (mUdfpsAnimation != null) {
-            final int alpha = mParent.shouldPauseAuth() ? mAlpha : 255;
-            mUdfpsAnimation.setAlpha(alpha);
-            mUdfpsAnimation.draw(canvas);
+    void onSensorRectUpdated(RectF bounds) {
+        getDrawable().onSensorRectUpdated(bounds);
+    }
+
+    void onIlluminationStarting() {
+        getDrawable().setIlluminationShowing(true);
+        getDrawable().invalidateSelf();
+    }
+
+    void onIlluminationStopped() {
+        getDrawable().setIlluminationShowing(false);
+        getDrawable().invalidateSelf();
+    }
+
+    /**
+     * @return true if changed
+     */
+    boolean setPauseAuth(boolean pauseAuth) {
+        if (pauseAuth != mPauseAuth) {
+            mPauseAuth = pauseAuth;
+            updateAlpha();
+            return true;
         }
+        return false;
+    }
+
+    protected void updateAlpha() {
+        getDrawable().setAlpha(calculateAlpha());
+    }
+
+    protected final int calculateAlpha() {
+        return mPauseAuth ? mAlpha : 255;
+    }
+
+    boolean isPauseAuth() {
+        return mPauseAuth;
     }
 
     private int expansionToAlpha(float expansion) {
@@ -69,51 +95,15 @@ public class UdfpsAnimationView extends View implements DozeReceiver,
         return (int) ((1 - percent) * 255);
     }
 
-    void setParent(@NonNull UdfpsView parent) {
-        mParent = parent;
-    }
-
-    void setAnimation(@Nullable UdfpsAnimation animation) {
-        mUdfpsAnimation = animation;
-    }
-
-    void onSensorRectUpdated(@NonNull RectF sensorRect) {
-        mSensorRect = sensorRect;
-        if (mUdfpsAnimation != null) {
-            mUdfpsAnimation.onSensorRectUpdated(mSensorRect);
-        }
-    }
-
-    void updateColor() {
-        if (mUdfpsAnimation != null) {
-            mUdfpsAnimation.updateColor();
-        }
-    }
-
-    @Override
-    public void dozeTimeTick() {
-        if (mUdfpsAnimation instanceof DozeReceiver) {
-            ((DozeReceiver) mUdfpsAnimation).dozeTimeTick();
-        }
-    }
-
-    @Override
     public void onExpansionChanged(float expansion, boolean expanded) {
         mAlpha = expansionToAlpha(expansion);
-        postInvalidate();
+        updateAlpha();
     }
 
-    public int getPaddingX() {
-        if (mUdfpsAnimation == null) {
-            return 0;
-        }
-        return mUdfpsAnimation.getPaddingX();
-    }
-
-    public int getPaddingY() {
-        if (mUdfpsAnimation == null) {
-            return 0;
-        }
-        return mUdfpsAnimation.getPaddingY();
+    /**
+     * @return true if handled
+     */
+    boolean dozeTimeTick() {
+        return false;
     }
 }

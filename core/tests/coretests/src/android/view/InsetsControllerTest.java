@@ -213,7 +213,8 @@ public class InsetsControllerTest {
         mController.onFrameChanged(new Rect(0, 0, 100, 100));
         mController.getState().setDisplayFrame(new Rect(0, 0, 200, 200));
         InsetsSourceControl control =
-                new InsetsSourceControl(ITYPE_STATUS_BAR, mLeash, new Point());
+                new InsetsSourceControl(
+                        ITYPE_STATUS_BAR, mLeash, new Point(), Insets.of(0, 10, 0, 0));
         mController.onControlsChanged(new InsetsSourceControl[] { control });
         WindowInsetsAnimationControlListener controlListener =
                 mock(WindowInsetsAnimationControlListener.class);
@@ -233,9 +234,9 @@ public class InsetsControllerTest {
         InsetsSourceControl ime = controls[2];
 
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
-            mController.getSourceConsumer(ITYPE_IME).onWindowFocusGained();
+            mController.getSourceConsumer(ITYPE_IME).onWindowFocusGained(true);
             // since there is no focused view, forcefully make IME visible.
-            mController.applyImeVisibility(true /* setVisible */);
+            mController.show(Type.ime(), true /* fromIme */);
             mController.show(Type.all());
             // quickly jump to final state by cancelling it.
             mController.cancelExistingAnimations();
@@ -243,7 +244,7 @@ public class InsetsControllerTest {
             assertTrue(mController.getSourceConsumer(statusBar.getType()).isRequestedVisible());
             assertTrue(mController.getSourceConsumer(ime.getType()).isRequestedVisible());
 
-            mController.applyImeVisibility(false /* setVisible */);
+            mController.hide(Type.ime(), true /* fromIme */);
             mController.hide(Type.all());
             mController.cancelExistingAnimations();
             assertFalse(mController.getSourceConsumer(navBar.getType()).isRequestedVisible());
@@ -259,11 +260,11 @@ public class InsetsControllerTest {
         InsetsSourceControl ime = createControl(ITYPE_IME);
         mController.onControlsChanged(new InsetsSourceControl[] { ime });
         InstrumentationRegistry.getInstrumentation().runOnMainSync(() -> {
-            mController.getSourceConsumer(ITYPE_IME).onWindowFocusGained();
-            mController.applyImeVisibility(true);
+            mController.getSourceConsumer(ITYPE_IME).onWindowFocusGained(true);
+            mController.show(Type.ime(), true /* fromIme */);
             mController.cancelExistingAnimations();
             assertTrue(mController.getSourceConsumer(ime.getType()).isRequestedVisible());
-            mController.applyImeVisibility(false);
+            mController.hide(Type.ime(), true /* fromIme */);
             mController.cancelExistingAnimations();
             assertFalse(mController.getSourceConsumer(ime.getType()).isRequestedVisible());
             mController.getSourceConsumer(ITYPE_IME).onWindowFocusLost();
@@ -814,7 +815,7 @@ public class InsetsControllerTest {
         // Simulate binder behavior by copying SurfaceControl. Otherwise, InsetsController will
         // attempt to release mLeash directly.
         SurfaceControl copy = new SurfaceControl(mLeash, "InsetsControllerTest.createControl");
-        return new InsetsSourceControl(type, copy, new Point());
+        return new InsetsSourceControl(type, copy, new Point(), Insets.NONE);
     }
 
     private InsetsSourceControl[] createSingletonControl(@InternalInsetsType int type) {

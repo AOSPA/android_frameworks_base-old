@@ -16,6 +16,7 @@
 
 package com.android.systemui.dagger;
 
+import com.android.keyguard.clock.ClockOptionsProvider;
 import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.Dependency;
 import com.android.systemui.InitController;
@@ -33,7 +34,8 @@ import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.pip.Pip;
 import com.android.wm.shell.splitscreen.SplitScreen;
-import com.android.wm.shell.transition.RemoteTransitions;
+import com.android.wm.shell.startingsurface.StartingSurface;
+import com.android.wm.shell.transition.ShellTransitions;
 
 import java.util.Optional;
 
@@ -86,7 +88,10 @@ public interface SysUIComponent {
         Builder setShellCommandHandler(Optional<ShellCommandHandler> shellDump);
 
         @BindsInstance
-        Builder setTransitions(RemoteTransitions t);
+        Builder setTransitions(ShellTransitions t);
+
+        @BindsInstance
+        Builder setStartingSurface(Optional<StartingSurface> s);
 
         SysUIComponent build();
     }
@@ -146,4 +151,9 @@ public interface SysUIComponent {
      * Member injection into the supplied argument.
      */
     void inject(KeyguardSliceProvider keyguardSliceProvider);
+
+    /**
+     * Member injection into the supplied argument.
+     */
+    void inject(ClockOptionsProvider clockOptionsProvider);
 }

@@ -21,8 +21,10 @@ import static android.hardware.devicestate.DeviceStateManager.INVALID_DEVICE_STA
 import static org.testng.Assert.assertEquals;
 import static org.testng.Assert.assertFalse;
 import static org.testng.Assert.assertNotNull;
+import static org.testng.Assert.assertNull;
 import static org.testng.Assert.assertThrows;
 
+import android.hardware.devicestate.DeviceStateInfo;
 import android.hardware.devicestate.DeviceStateRequest;
 import android.hardware.devicestate.IDeviceStateManagerCallback;
 import android.os.Binder;
@@ -33,10 +35,13 @@ import android.platform.test.annotations.Presubmit;
 import androidx.test.InstrumentationRegistry;
 import androidx.test.runner.AndroidJUnit4;
 
+import junit.framework.Assert;
+
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Optional;
 
@@ -68,16 +73,16 @@ public final class DeviceStateManagerServiceTest {
 
     @Test
     public void baseStateChanged() {
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 DEFAULT_DEVICE_STATE.getIdentifier());
 
         mProvider.setState(OTHER_DEVICE_STATE.getIdentifier());
-        assertEquals(mService.getCommittedState(), OTHER_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), OTHER_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(OTHER_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
     }
@@ -87,23 +92,23 @@ public final class DeviceStateManagerServiceTest {
         mPolicy.blockConfigure();
 
         mProvider.setState(OTHER_DEVICE_STATE.getIdentifier());
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
-        assertEquals(mService.getPendingState().get(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), OTHER_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getPendingState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(OTHER_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
 
         mProvider.setState(DEFAULT_DEVICE_STATE.getIdentifier());
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
-        assertEquals(mService.getPendingState().get(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getPendingState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
 
         mPolicy.resumeConfigure();
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 DEFAULT_DEVICE_STATE.getIdentifier());
     }
@@ -114,9 +119,9 @@ public final class DeviceStateManagerServiceTest {
             mProvider.setState(UNSUPPORTED_DEVICE_STATE.getIdentifier());
         });
 
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 DEFAULT_DEVICE_STATE.getIdentifier());
     }
@@ -127,46 +132,69 @@ public final class DeviceStateManagerServiceTest {
             mProvider.setState(INVALID_DEVICE_STATE);
         });
 
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 DEFAULT_DEVICE_STATE.getIdentifier());
     }
 
     @Test
-    public void supportedStatesChanged() {
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+    public void supportedStatesChanged() throws RemoteException {
+        TestDeviceStateManagerCallback callback = new TestDeviceStateManagerCallback();
+        mService.getBinderService().registerCallback(callback);
+
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
 
         mProvider.notifySupportedDeviceStates(new DeviceState[]{ DEFAULT_DEVICE_STATE });
 
         // The current committed and requests states do not change because the current state remains
         // supported.
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
+
+        assertArrayEquals(callback.getLastNotifiedInfo().supportedStates,
+                new int[] { DEFAULT_DEVICE_STATE.getIdentifier() });
     }
 
     @Test
-    public void supportedStatesChanged_unsupportedBaseState() {
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+    public void supportedStatesChanged_statesRemainSame() throws RemoteException {
+        TestDeviceStateManagerCallback callback = new TestDeviceStateManagerCallback();
+        mService.getBinderService().registerCallback(callback);
+
+        // An initial callback will be triggered on registration, so we clear it here.
+        callback.clearLastNotifiedInfo();
+
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
 
-        mProvider.notifySupportedDeviceStates(new DeviceState[]{ OTHER_DEVICE_STATE });
+        mProvider.notifySupportedDeviceStates(new DeviceState[]{ DEFAULT_DEVICE_STATE,
+                OTHER_DEVICE_STATE });
 
-        // The current requested state is cleared because it is no longer supported.
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
+        // The current committed and requests states do not change because the current state remains
+        // supported.
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState(), Optional.empty());
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
 
-        mProvider.setState(OTHER_DEVICE_STATE.getIdentifier());
+        // The callback wasn't notified about a change in supported states as the states have not
+        // changed.
+        assertNull(callback.getLastNotifiedInfo());
+    }
 
-        assertEquals(mService.getCommittedState(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getPendingState(), Optional.empty());
-        assertEquals(mService.getBaseState().get(), OTHER_DEVICE_STATE);
+    @Test
+    public void getDeviceStateInfo() throws RemoteException {
+        DeviceStateInfo info = mService.getBinderService().getDeviceStateInfo();
+        assertNotNull(info);
+        assertArrayEquals(info.supportedStates,
+                new int[] { DEFAULT_DEVICE_STATE.getIdentifier(),
+                        OTHER_DEVICE_STATE.getIdentifier() });
+        assertEquals(info.baseState, DEFAULT_DEVICE_STATE.getIdentifier());
+        assertEquals(info.currentState, DEFAULT_DEVICE_STATE.getIdentifier());
     }
 
     @Test
@@ -175,25 +203,32 @@ public final class DeviceStateManagerServiceTest {
         mService.getBinderService().registerCallback(callback);
 
         mProvider.setState(OTHER_DEVICE_STATE.getIdentifier());
-        assertNotNull(callback.getLastNotifiedValue());
-        assertEquals(callback.getLastNotifiedValue().intValue(),
+        assertEquals(callback.getLastNotifiedInfo().baseState,
+                OTHER_DEVICE_STATE.getIdentifier());
+        assertEquals(callback.getLastNotifiedInfo().currentState,
                 OTHER_DEVICE_STATE.getIdentifier());
 
         mProvider.setState(DEFAULT_DEVICE_STATE.getIdentifier());
-        assertEquals(callback.getLastNotifiedValue().intValue(),
+        assertEquals(callback.getLastNotifiedInfo().baseState,
+                DEFAULT_DEVICE_STATE.getIdentifier());
+        assertEquals(callback.getLastNotifiedInfo().currentState,
                 DEFAULT_DEVICE_STATE.getIdentifier());
 
         mPolicy.blockConfigure();
         mProvider.setState(OTHER_DEVICE_STATE.getIdentifier());
         // The callback should not have been notified of the state change as the policy is still
         // pending callback.
-        assertEquals(callback.getLastNotifiedValue().intValue(),
+        assertEquals(callback.getLastNotifiedInfo().baseState,
+                DEFAULT_DEVICE_STATE.getIdentifier());
+        assertEquals(callback.getLastNotifiedInfo().currentState,
                 DEFAULT_DEVICE_STATE.getIdentifier());
 
         mPolicy.resumeConfigure();
         // Now that the policy is finished processing the callback should be notified of the state
         // change.
-        assertEquals(callback.getLastNotifiedValue().intValue(),
+        assertEquals(callback.getLastNotifiedInfo().baseState,
+                OTHER_DEVICE_STATE.getIdentifier());
+        assertEquals(callback.getLastNotifiedInfo().currentState,
                 OTHER_DEVICE_STATE.getIdentifier());
     }
 
@@ -201,15 +236,11 @@ public final class DeviceStateManagerServiceTest {
     public void registerCallback_emitsInitialValue() throws RemoteException {
         TestDeviceStateManagerCallback callback = new TestDeviceStateManagerCallback();
         mService.getBinderService().registerCallback(callback);
-        assertNotNull(callback.getLastNotifiedValue());
-        assertEquals(callback.getLastNotifiedValue().intValue(),
+        assertNotNull(callback.getLastNotifiedInfo());
+        assertEquals(callback.getLastNotifiedInfo().baseState,
                 DEFAULT_DEVICE_STATE.getIdentifier());
-    }
-
-    @Test
-    public void getSupportedDeviceStates() throws RemoteException {
-        final int[] expectedStates = new int[] { 0, 1 };
-        assertEquals(mService.getBinderService().getSupportedDeviceStates(), expectedStates);
+        assertEquals(callback.getLastNotifiedInfo().currentState,
+                DEFAULT_DEVICE_STATE.getIdentifier());
     }
 
     @Test
@@ -227,23 +258,114 @@ public final class DeviceStateManagerServiceTest {
         assertEquals(callback.getLastNotifiedStatus(token),
                 TestDeviceStateManagerCallback.STATUS_ACTIVE);
         // Committed state changes as there is a requested override.
-        assertEquals(mService.getCommittedState(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getOverrideState().get(), OTHER_DEVICE_STATE);
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
 
+        assertNotNull(callback.getLastNotifiedInfo());
+        assertEquals(callback.getLastNotifiedInfo().baseState,
+                DEFAULT_DEVICE_STATE.getIdentifier());
+        assertEquals(callback.getLastNotifiedInfo().currentState,
+                OTHER_DEVICE_STATE.getIdentifier());
 
         mService.getBinderService().cancelRequest(token);
 
         assertEquals(callback.getLastNotifiedStatus(token),
                 TestDeviceStateManagerCallback.STATUS_CANCELED);
         // Committed state is set back to the requested state once the override is cleared.
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertFalse(mService.getOverrideState().isPresent());
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 DEFAULT_DEVICE_STATE.getIdentifier());
+
+        assertEquals(callback.getLastNotifiedInfo().baseState,
+                DEFAULT_DEVICE_STATE.getIdentifier());
+        assertEquals(callback.getLastNotifiedInfo().currentState,
+                DEFAULT_DEVICE_STATE.getIdentifier());
+    }
+
+    @Test
+    public void requestState_pendingStateAtRequest() throws RemoteException {
+        TestDeviceStateManagerCallback callback = new TestDeviceStateManagerCallback();
+        mService.getBinderService().registerCallback(callback);
+
+        mPolicy.blockConfigure();
+
+        final IBinder firstRequestToken = new Binder();
+        final IBinder secondRequestToken = new Binder();
+        assertEquals(callback.getLastNotifiedStatus(firstRequestToken),
+                TestDeviceStateManagerCallback.STATUS_UNKNOWN);
+        assertEquals(callback.getLastNotifiedStatus(secondRequestToken),
+                TestDeviceStateManagerCallback.STATUS_UNKNOWN);
+
+        mService.getBinderService().requestState(firstRequestToken,
+                OTHER_DEVICE_STATE.getIdentifier(), 0 /* flags */);
+
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getPendingState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
+                OTHER_DEVICE_STATE.getIdentifier());
+
+        mService.getBinderService().requestState(secondRequestToken,
+                DEFAULT_DEVICE_STATE.getIdentifier(), 0 /* flags */);
+
+        mPolicy.resumeConfigureOnce();
+
+        // First request status is now suspended as there is another pending request.
+        assertEquals(callback.getLastNotifiedStatus(firstRequestToken),
+                TestDeviceStateManagerCallback.STATUS_SUSPENDED);
+        // Second request status still unknown because the service is still awaiting policy
+        // callback.
+        assertEquals(callback.getLastNotifiedStatus(secondRequestToken),
+                TestDeviceStateManagerCallback.STATUS_UNKNOWN);
+
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getPendingState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
+                DEFAULT_DEVICE_STATE.getIdentifier());
+
+        mPolicy.resumeConfigure();
+
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getPendingState(), Optional.empty());
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
+                DEFAULT_DEVICE_STATE.getIdentifier());
+
+        // Now cancel the second request to make the first request active.
+        mService.getBinderService().cancelRequest(secondRequestToken);
+
+        assertEquals(callback.getLastNotifiedStatus(firstRequestToken),
+                TestDeviceStateManagerCallback.STATUS_ACTIVE);
+        assertEquals(callback.getLastNotifiedStatus(secondRequestToken),
+                TestDeviceStateManagerCallback.STATUS_CANCELED);
+
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getPendingState(), Optional.empty());
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
+                OTHER_DEVICE_STATE.getIdentifier());
+    }
+
+    @Test
+    public void requestState_sameAsBaseState() throws RemoteException {
+        TestDeviceStateManagerCallback callback = new TestDeviceStateManagerCallback();
+        mService.getBinderService().registerCallback(callback);
+
+        final IBinder token = new Binder();
+        assertEquals(callback.getLastNotifiedStatus(token),
+                TestDeviceStateManagerCallback.STATUS_UNKNOWN);
+
+        mService.getBinderService().requestState(token, DEFAULT_DEVICE_STATE.getIdentifier(),
+                0 /* flags */);
+
+        assertEquals(callback.getLastNotifiedStatus(token),
+                TestDeviceStateManagerCallback.STATUS_ACTIVE);
     }
 
     @Test
@@ -262,8 +384,8 @@ public final class DeviceStateManagerServiceTest {
                 TestDeviceStateManagerCallback.STATUS_ACTIVE);
 
         // Committed state changes as there is a requested override.
-        assertEquals(mService.getCommittedState(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getOverrideState().get(), OTHER_DEVICE_STATE);
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
@@ -274,8 +396,8 @@ public final class DeviceStateManagerServiceTest {
         assertEquals(callback.getLastNotifiedStatus(token),
                 TestDeviceStateManagerCallback.STATUS_CANCELED);
         // Committed state is set back to the requested state once the override is cleared.
-        assertEquals(mService.getCommittedState(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), OTHER_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(OTHER_DEVICE_STATE));
         assertFalse(mService.getOverrideState().isPresent());
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
@@ -296,8 +418,8 @@ public final class DeviceStateManagerServiceTest {
         assertEquals(callback.getLastNotifiedStatus(token),
                 TestDeviceStateManagerCallback.STATUS_ACTIVE);
         // Committed state changes as there is a requested override.
-        assertEquals(mService.getCommittedState(), OTHER_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(OTHER_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertEquals(mService.getOverrideState().get(), OTHER_DEVICE_STATE);
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 OTHER_DEVICE_STATE.getIdentifier());
@@ -309,8 +431,8 @@ public final class DeviceStateManagerServiceTest {
                 TestDeviceStateManagerCallback.STATUS_CANCELED);
         // Committed state is set back to the requested state as the override state is no longer
         // supported.
-        assertEquals(mService.getCommittedState(), DEFAULT_DEVICE_STATE);
-        assertEquals(mService.getBaseState().get(), DEFAULT_DEVICE_STATE);
+        assertEquals(mService.getCommittedState(), Optional.of(DEFAULT_DEVICE_STATE));
+        assertEquals(mService.getBaseState(), Optional.of(DEFAULT_DEVICE_STATE));
         assertFalse(mService.getOverrideState().isPresent());
         assertEquals(mPolicy.getMostRecentRequestedStateToConfigure(),
                 DEFAULT_DEVICE_STATE.getIdentifier());
@@ -348,6 +470,10 @@ public final class DeviceStateManagerServiceTest {
         });
     }
 
+    private static void assertArrayEquals(int[] expected, int[] actual) {
+        Assert.assertTrue(Arrays.equals(expected, actual));
+    }
+
     private static final class TestDeviceStatePolicy implements DeviceStatePolicy {
         private final DeviceStateProvider mProvider;
         private int mLastDeviceStateRequestedToConfigure = INVALID_DEVICE_STATE;
@@ -369,6 +495,14 @@ public final class DeviceStateManagerServiceTest {
 
         public void resumeConfigure() {
             mConfigureBlocked = false;
+            if (mPendingConfigureCompleteRunnable != null) {
+                Runnable onComplete = mPendingConfigureCompleteRunnable;
+                mPendingConfigureCompleteRunnable = null;
+                onComplete.run();
+            }
+        }
+
+        public void resumeConfigureOnce() {
             if (mPendingConfigureCompleteRunnable != null) {
                 Runnable onComplete = mPendingConfigureCompleteRunnable;
                 mPendingConfigureCompleteRunnable = null;
@@ -429,12 +563,13 @@ public final class DeviceStateManagerServiceTest {
         public static final int STATUS_SUSPENDED = 2;
         public static final int STATUS_CANCELED = 3;
 
-        private Integer mLastNotifiedValue;
+        @Nullable
+        private DeviceStateInfo mLastNotifiedInfo;
         private final HashMap<IBinder, Integer> mLastNotifiedStatus = new HashMap<>();
 
         @Override
-        public void onDeviceStateChanged(int deviceState) {
-            mLastNotifiedValue = deviceState;
+        public void onDeviceStateInfoChanged(DeviceStateInfo info) {
+            mLastNotifiedInfo = info;
         }
 
         @Override
@@ -453,8 +588,12 @@ public final class DeviceStateManagerServiceTest {
         }
 
         @Nullable
-        Integer getLastNotifiedValue() {
-            return mLastNotifiedValue;
+        DeviceStateInfo getLastNotifiedInfo() {
+            return mLastNotifiedInfo;
+        }
+
+        void clearLastNotifiedInfo() {
+            mLastNotifiedInfo = null;
         }
 
         int getLastNotifiedStatus(IBinder requestToken) {

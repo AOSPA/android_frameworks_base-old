@@ -16,12 +16,15 @@
 
 package com.android.systemui.shared.pip;
 
+import static android.graphics.Matrix.MSCALE_X;
+import static android.graphics.Matrix.MSCALE_Y;
+
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
 import android.view.Choreographer;
-import android.view.Surface;
 import android.view.SurfaceControl;
+import android.window.PictureInPictureSurfaceTransaction;
 
 /**
  * TODO(b/171721389): unify this class with
@@ -29,22 +32,32 @@ import android.view.SurfaceControl;
  * source of truth on enabling/disabling and the actual value of corner radius.
  */
 public class PipSurfaceTransactionHelper {
+    /** corner radius is currently disabled. */
+    private final float mCornerRadius = 0f;
+
     private final Matrix mTmpTransform = new Matrix();
     private final float[] mTmpFloat9 = new float[9];
     private final RectF mTmpSourceRectF = new RectF();
     private final RectF mTmpDestinationRectF = new RectF();
     private final Rect mTmpDestinationRect = new Rect();
 
-    public void scale(SurfaceControl.Transaction tx, SurfaceControl leash,
+    public PictureInPictureSurfaceTransaction scale(
+            SurfaceControl.Transaction tx, SurfaceControl leash,
             Rect sourceBounds, Rect destinationBounds) {
         mTmpSourceRectF.set(sourceBounds);
         mTmpDestinationRectF.set(destinationBounds);
         mTmpTransform.setRectToRect(mTmpSourceRectF, mTmpDestinationRectF, Matrix.ScaleToFit.FILL);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
-                .setPosition(leash, mTmpDestinationRectF.left, mTmpDestinationRectF.top);
+                .setPosition(leash, mTmpDestinationRectF.left, mTmpDestinationRectF.top)
+                .setCornerRadius(leash, mCornerRadius);
+        return new PictureInPictureSurfaceTransaction(
+                mTmpDestinationRectF.left, mTmpDestinationRectF.top,
+                mTmpFloat9[MSCALE_X], mTmpFloat9[MSCALE_Y],
+                0 /* rotation*/, mCornerRadius, sourceBounds);
     }
 
-    public void scale(SurfaceControl.Transaction tx, SurfaceControl leash,
+    public PictureInPictureSurfaceTransaction scale(
+            SurfaceControl.Transaction tx, SurfaceControl leash,
             Rect sourceBounds, Rect destinationBounds,
             float degree, float positionX, float positionY) {
         mTmpSourceRectF.set(sourceBounds);
@@ -52,10 +65,16 @@ public class PipSurfaceTransactionHelper {
         mTmpTransform.setRectToRect(mTmpSourceRectF, mTmpDestinationRectF, Matrix.ScaleToFit.FILL);
         mTmpTransform.postRotate(degree, 0, 0);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
-                .setPosition(leash, positionX, positionY);
+                .setPosition(leash, positionX, positionY)
+                .setCornerRadius(leash, mCornerRadius);
+        return new PictureInPictureSurfaceTransaction(
+                positionX, positionY,
+                mTmpFloat9[MSCALE_X], mTmpFloat9[MSCALE_Y],
+                degree, mCornerRadius, sourceBounds);
     }
 
-    public void scaleAndCrop(SurfaceControl.Transaction tx, SurfaceControl leash,
+    public PictureInPictureSurfaceTransaction scaleAndCrop(
+            SurfaceControl.Transaction tx, SurfaceControl leash,
             Rect sourceBounds, Rect destinationBounds, Rect insets) {
         mTmpSourceRectF.set(sourceBounds);
         mTmpDestinationRect.set(sourceBounds);
@@ -70,10 +89,14 @@ public class PipSurfaceTransactionHelper {
         mTmpTransform.setScale(scale, scale);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setWindowCrop(leash, mTmpDestinationRect)
-                .setPosition(leash, left, top);
+                .setPosition(leash, left, top)
+                .setCornerRadius(leash, mCornerRadius);
+        return new PictureInPictureSurfaceTransaction(
+                left, top, scale, scale, 0 /* rotation */, mCornerRadius, mTmpDestinationRect);
     }
 
-    public void scaleAndRotate(SurfaceControl.Transaction tx, SurfaceControl leash,
+    public PictureInPictureSurfaceTransaction scaleAndRotate(
+            SurfaceControl.Transaction tx, SurfaceControl leash,
             Rect sourceBounds, Rect destinationBounds, Rect insets,
             float degree, float positionX, float positionY) {
         mTmpSourceRectF.set(sourceBounds);
@@ -88,35 +111,10 @@ public class PipSurfaceTransactionHelper {
         mTmpTransform.postScale(scale, scale);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setWindowCrop(leash, mTmpDestinationRect)
-                .setPosition(leash, positionX, positionY);
-    }
-
-    public void reset(SurfaceControl.Transaction tx, SurfaceControl leash, Rect destinationBounds,
-            @Surface.Rotation int rotation) {
-        resetScale(tx, leash, destinationBounds);
-        if (rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270) {
-            final int degree = (rotation == Surface.ROTATION_90) ? -90 : 90;
-            mTmpTransform.setRotate(degree, 0, 0);
-            tx.setMatrix(leash, mTmpTransform, mTmpFloat9);
-        }
-        resetCornerRadius(tx, leash);
-        crop(tx, leash, destinationBounds);
-    }
-
-    public void resetScale(SurfaceControl.Transaction tx, SurfaceControl leash,
-            Rect destinationBounds) {
-        tx.setMatrix(leash, Matrix.IDENTITY_MATRIX, mTmpFloat9)
-                .setPosition(leash, destinationBounds.left, destinationBounds.top);
-    }
-
-    public void resetCornerRadius(SurfaceControl.Transaction tx, SurfaceControl leash) {
-        tx.setCornerRadius(leash, 0);
-    }
-
-    public void crop(SurfaceControl.Transaction tx, SurfaceControl leash,
-            Rect destinationBounds) {
-        tx.setWindowCrop(leash, destinationBounds.width(), destinationBounds.height())
-                .setPosition(leash, destinationBounds.left, destinationBounds.top);
+                .setPosition(leash, positionX, positionY)
+                .setCornerRadius(leash, mCornerRadius);
+        return new PictureInPictureSurfaceTransaction(
+                positionX, positionY, scale, scale, degree, mCornerRadius, mTmpDestinationRect);
     }
 
     /** @return {@link SurfaceControl.Transaction} instance with vsync-id */

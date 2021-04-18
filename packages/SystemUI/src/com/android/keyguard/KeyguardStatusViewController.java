@@ -16,6 +16,7 @@
 
 package com.android.keyguard;
 
+import android.os.UserHandle;
 import android.util.Slog;
 import android.view.View;
 
@@ -78,6 +79,8 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     @Override
     public void onInit() {
         mKeyguardClockSwitchController.init();
+        mView.setEnableMarquee(mKeyguardUpdateMonitor.isDeviceInteractive());
+        mView.updateLogoutView(shouldShowLogout());
     }
 
     @Override
@@ -245,6 +248,11 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         }
     }
 
+    private boolean shouldShowLogout() {
+        return mKeyguardUpdateMonitor.isLogoutEnabled()
+                && KeyguardUpdateMonitor.getCurrentUser() != UserHandle.USER_SYSTEM;
+    }
+
     private final ConfigurationController.ConfigurationListener mConfigurationListener =
             new ConfigurationController.ConfigurationListener() {
         @Override
@@ -266,17 +274,11 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             mKeyguardClockSwitchController.updateLockScreenMode(mode);
             mKeyguardSliceViewController.updateLockScreenMode(mode);
             if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
-                // align the top of keyguard_status_area with the top of the clock text instead
-                // of the top of the view
-                mKeyguardSliceViewController.updateTopMargin(
-                        mKeyguardClockSwitchController.getClockTextTopPadding());
                 mView.setCanShowOwnerInfo(false);
-                mView.setCanShowLogout(false);
+                mView.updateLogoutView(false);
             } else {
-                // reset margin
-                mKeyguardSliceViewController.updateTopMargin(0);
                 mView.setCanShowOwnerInfo(true);
-                mView.setCanShowLogout(false);
+                mView.updateLogoutView(false);
             }
             updateAodIcons();
         }
@@ -302,7 +304,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
                 if (DEBUG) Slog.v(TAG, "refresh statusview showing:" + showing);
                 refreshTime();
                 mView.updateOwnerInfo();
-                mView.updateLogoutView();
+                mView.updateLogoutView(shouldShowLogout());
             }
         }
 
@@ -320,12 +322,12 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         public void onUserSwitchComplete(int userId) {
             mKeyguardClockSwitchController.refreshFormat();
             mView.updateOwnerInfo();
-            mView.updateLogoutView();
+            mView.updateLogoutView(shouldShowLogout());
         }
 
         @Override
         public void onLogoutEnabledChanged() {
-            mView.updateLogoutView();
+            mView.updateLogoutView(shouldShowLogout());
         }
     };
 }

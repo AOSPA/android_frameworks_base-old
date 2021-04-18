@@ -67,6 +67,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     private final DumpManager mDumpManager;
     private final FeatureFlags mFeatureFlags;
     protected final ArrayList<TileRecord> mRecords = new ArrayList<>();
+    private boolean mShouldUseSplitNotificationShade;
 
     private int mLastOrientation;
     private String mCachedSpecs = "";
@@ -75,12 +76,14 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
 
     private final QSHost.Callback mQSHostCallback = this::setTiles;
     protected boolean mShowLabels = true;
-    protected boolean mSideLabels;
+    protected boolean mQSLabelFlag;
 
     private final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
             new QSPanel.OnConfigurationChangedListener() {
                 @Override
                 public void onConfigurationChange(Configuration newConfig) {
+                    mShouldUseSplitNotificationShade =
+                            Utils.shouldUseSplitNotificationShade(mFeatureFlags, getResources());
                     if (newConfig.orientation != mLastOrientation) {
                         mLastOrientation = newConfig.orientation;
                         switchTileLayout(false);
@@ -118,11 +121,14 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         mQSLogger = qsLogger;
         mDumpManager = dumpManager;
         mFeatureFlags = featureFlags;
+        mQSLabelFlag = featureFlags.isQSLabelsEnabled();
+        mShouldUseSplitNotificationShade =
+                Utils.shouldUseSplitNotificationShade(mFeatureFlags, getResources());
     }
 
     @Override
     protected void onInit() {
-        mView.initialize(mSideLabels);
+        mView.initialize(mQSLabelFlag);
         mQSLogger.logAllTilesChangeListening(mView.isListening(), mView.getDumpableTag(), "");
     }
 
@@ -197,7 +203,6 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         final TileRecord r = new TileRecord();
         r.tile = tile;
         r.tileView = mHost.createTileView(tile, collapsedView);
-        r.tileView.setShowLabels(mShowLabels);
         mView.addTile(r);
         mRecords.add(r);
         mCachedSpecs = getTilesSpecs();
@@ -223,6 +228,9 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         return mHost.createTile(subPanel);
     }
 
+    boolean areThereTiles() {
+        return !mRecords.isEmpty();
+    }
 
     QSTileView getTileView(QSTile tile) {
         for (QSPanelControllerBase.TileRecord r : mRecords) {
@@ -345,7 +353,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     }
 
     boolean shouldUseHorizontalLayout() {
-        if (Utils.shouldUseSplitNotificationShade(mFeatureFlags, getResources()))  {
+        if (mShouldUseSplitNotificationShade)  {
             return false;
         }
         return mUsingMediaPlayer && mMediaHost.getVisible()

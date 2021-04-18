@@ -18,14 +18,12 @@ package com.android.systemui.statusbar.phone;
 
 import android.app.Fragment;
 import android.content.Context;
-import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.FrameLayout;
 
-import androidx.annotation.DimenRes;
 import androidx.constraintlayout.widget.ConstraintLayout;
 
 import com.android.systemui.R;
@@ -83,22 +81,6 @@ public class NotificationsQuickSettingsContainer extends ConstraintLayout
     }
 
     @Override
-    protected void onConfigurationChanged(Configuration newConfig) {
-        super.onConfigurationChanged(newConfig);
-        reloadWidth(mQsFrame, R.dimen.qs_panel_width);
-        reloadWidth(mStackScroller, R.dimen.notification_panel_width);
-    }
-
-    /**
-     * Loads the given width resource and sets it on the given View.
-     */
-    private void reloadWidth(View view, @DimenRes int width) {
-        LayoutParams params = (LayoutParams) view.getLayoutParams();
-        params.width = getResources().getDimensionPixelSize(width);
-        view.setLayoutParams(params);
-    }
-
-    @Override
     public WindowInsets onApplyWindowInsets(WindowInsets insets) {
         mBottomPadding = insets.getStableInsetBottom();
         setPadding(0, 0, 0, mBottomPadding);
@@ -107,30 +89,22 @@ public class NotificationsQuickSettingsContainer extends ConstraintLayout
 
     @Override
     protected void dispatchDraw(Canvas canvas) {
-        // Invert the order of the scroll view and user switcher such that the notifications receive
-        // touches first but the panel gets drawn above.
         mDrawingOrderedChildren.clear();
         mLayoutDrawingOrder.clear();
         if (mKeyguardStatusBar.getVisibility() == View.VISIBLE) {
             mDrawingOrderedChildren.add(mKeyguardStatusBar);
             mLayoutDrawingOrder.add(mKeyguardStatusBar);
         }
-        if (mStackScroller.getVisibility() == View.VISIBLE) {
-            mDrawingOrderedChildren.add(mStackScroller);
-            mLayoutDrawingOrder.add(mStackScroller);
-        }
         if (mQsFrame.getVisibility() == View.VISIBLE) {
             mDrawingOrderedChildren.add(mQsFrame);
             mLayoutDrawingOrder.add(mQsFrame);
         }
-
-        if (mHasViewsAboveShelf) {
-            // StackScroller needs to be on top
-            mDrawingOrderedChildren.remove(mStackScroller);
+        if (mStackScroller.getVisibility() == View.VISIBLE) {
             mDrawingOrderedChildren.add(mStackScroller);
+            mLayoutDrawingOrder.add(mStackScroller);
         }
 
-        // Let's now find the order that the view has when drawing regulary by sorting
+        // Let's now find the order that the view has when drawing regularly by sorting
         mLayoutDrawingOrder.sort(mIndexComparator);
         super.dispatchDraw(canvas);
     }

@@ -111,6 +111,7 @@ public class Annotation {
     public @interface NetworkType {
     }
 
+    // TODO(b/180542000): remove and replace references with @ApnSetting.ApnType
     @IntDef(flag = true, prefix = {"TYPE_"}, value = {
             ApnSetting.TYPE_DEFAULT,
             ApnSetting.TYPE_MMS,
@@ -124,6 +125,7 @@ public class Annotation {
             ApnSetting.TYPE_EMERGENCY,
             ApnSetting.TYPE_MCX,
             ApnSetting.TYPE_XCAP,
+            // ApnSetting.TYPE_ENTERPRISE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ApnType {
@@ -445,6 +447,9 @@ public class Annotation {
             DataFailCause.VSNCP_RECONNECT_NOT_ALLOWED,
             DataFailCause.IPV6_PREFIX_UNAVAILABLE,
             DataFailCause.HANDOFF_PREFERENCE_CHANGED,
+            DataFailCause.SLICE_REJECTED,
+            DataFailCause.MATCH_ALL_RULE_NOT_ALLOWED,
+            DataFailCause.ALL_MATCHING_RULES_FAILED,
             DataFailCause.OEM_DCFAILCAUSE_1,
             DataFailCause.OEM_DCFAILCAUSE_2,
             DataFailCause.OEM_DCFAILCAUSE_3,

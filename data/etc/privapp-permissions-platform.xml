@@ -68,6 +68,11 @@ applications that come with the platform
         <permission name="android.permission.MANAGE_EXTERNAL_STORAGE"/>
     </privapp-permissions>
 
+    <privapp-permissions package="com.android.imsserviceentitlement">
+        <permission name="android.permission.MODIFY_PHONE_STATE" />
+        <permission name="android.permission.READ_PRIVILEGED_PHONE_STATE" />
+    </privapp-permissions>
+
     <privapp-permissions package="com.android.launcher3">
         <permission name="android.permission.WRITE_SECURE_SETTINGS"/>
     </privapp-permissions>
@@ -251,6 +256,7 @@ applications that come with the platform
         <!-- Permissions required for reading DeviceConfig -->
         <permission name="android.permission.READ_DEVICE_CONFIG" />
         <permission name="android.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND"/>
+        <permission name="android.permission.MODIFY_QUIET_MODE"/>
     </privapp-permissions>
 
     <privapp-permissions package="com.android.providers.telephony">
@@ -406,8 +412,6 @@ applications that come with the platform
         <permission name="android.permission.SET_WALLPAPER" />
         <permission name="android.permission.SET_WALLPAPER_COMPONENT" />
         <permission name="android.permission.REQUEST_NOTIFICATION_ASSISTANT_SERVICE" />
-        <!-- Permissions required for Incremental CTS tests -->
-        <permission name="com.android.permission.USE_INSTALLER_V2"/>
         <permission name="android.permission.LOADER_USAGE_STATS"/>
         <!-- Permission required to test system only camera devices. -->
         <permission name="android.permission.SYSTEM_CAMERA" />
@@ -480,6 +484,17 @@ applications that come with the platform
         <permission name="android.permission.SIGNAL_REBOOT_READINESS" />
         <!-- Permission required for CTS test - PeopleManagerTest -->
         <permission name="android.permission.READ_PEOPLE_DATA" />
+        <!-- Permission required for CTS test - UiTranslationManagerTest -->
+        <permission name="android.permission.MANAGE_UI_TRANSLATION" />
+        <!-- Permission required for CTS test - ClipboardManagerTest -->
+        <permission name="android.permission.SET_CLIP_SOURCE" />
+        <!-- Permission required for CTS test - FontManagerTest -->
+        <permission name="android.permission.UPDATE_FONTS" />
+        <!-- Permission required for hotword detection service CTS tests -->
+        <permission name="android.permission.MANAGE_HOTWORD_DETECTION" />
+        <permission name="android.permission.MANAGE_APP_HIBERNATION"/>
+        <!-- Permission required for CTS test - ResourceObserverNativeTest -->
+        <permission name="android.permission.REGISTER_MEDIA_RESOURCE_OBSERVER" />
     </privapp-permissions>
 
     <privapp-permissions package="com.android.statementservice">

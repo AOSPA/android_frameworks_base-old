@@ -17,7 +17,6 @@
 package android.location;
 
 import android.annotation.FloatRange;
-import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
 import android.os.Parcel;
@@ -39,7 +38,7 @@ public final class CorrelationVector implements Parcelable {
 
     private final double mSamplingWidthMeters;
     private final double mSamplingStartMeters;
-    private final int mFrequencyOffsetMetersPerSecond;
+    private final double mFrequencyOffsetMetersPerSecond;
     @NonNull private final int[] mMagnitude;
 
     /**
@@ -66,8 +65,8 @@ public final class CorrelationVector implements Parcelable {
     /**
      * Returns the frequency offset from reported pseudorange rate for this CorrelationVector.
      */
-    @IntRange(from = 0)
-    public int getFrequencyOffsetMetersPerSecond() {
+    @FloatRange(from = 0.0f)
+    public double getFrequencyOffsetMetersPerSecond() {
         return mFrequencyOffsetMetersPerSecond;
     }
 
@@ -77,6 +76,9 @@ public final class CorrelationVector implements Parcelable {
      * <p>The data are normalized correlation magnitude values from -1 to 1, the reported value must
      * be encoded as signed 16 bit integer where 1 is represented by 32767 and -1 is represented
      * by -32768.
+     *
+     * <p>The values are quantized using a 16bit integer to save on the data size since the array
+     * contains real data and it might grow.
      *
      */
     @NonNull
@@ -88,7 +90,7 @@ public final class CorrelationVector implements Parcelable {
         Preconditions.checkNotNull(builder.mMagnitude, "Magnitude array must not be null");
         Preconditions.checkArgumentPositive(builder.mMagnitude.length,
                 "Magnitude array must have non-zero length");
-        Preconditions.checkArgumentNonNegative(builder.mFrequencyOffsetMetersPerSecond,
+        Preconditions.checkArgument(builder.mFrequencyOffsetMetersPerSecond >= 0.0,
                 "FrequencyOffsetMetersPerSecond must be non-negative (greater than or equal to 0)");
         Preconditions.checkArgument(builder.mSamplingWidthMeters > 0.0,
                 "SamplingWidthMeters must be positive (greater than 0)");
@@ -103,7 +105,7 @@ public final class CorrelationVector implements Parcelable {
     private CorrelationVector(Parcel in) {
         mSamplingWidthMeters = in.readDouble();
         mSamplingStartMeters = in.readDouble();
-        mFrequencyOffsetMetersPerSecond = in.readInt();
+        mFrequencyOffsetMetersPerSecond = in.readDouble();
         mMagnitude = new int[in.readInt()];
         in.readIntArray(mMagnitude);
     }
@@ -144,7 +146,7 @@ public final class CorrelationVector implements Parcelable {
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeDouble(mSamplingWidthMeters);
         dest.writeDouble(mSamplingStartMeters);
-        dest.writeInt(mFrequencyOffsetMetersPerSecond);
+        dest.writeDouble(mFrequencyOffsetMetersPerSecond);
         dest.writeInt(mMagnitude.length);
         dest.writeIntArray(mMagnitude);
     }
@@ -165,7 +167,7 @@ public final class CorrelationVector implements Parcelable {
         return Arrays.equals(mMagnitude, c.getMagnitude())
                 && Double.compare(mSamplingWidthMeters, c.getSamplingWidthMeters()) == 0
                 && Double.compare(mSamplingStartMeters, c.getSamplingStartMeters()) == 0
-                && Integer.compare(mFrequencyOffsetMetersPerSecond,
+                && Double.compare(mFrequencyOffsetMetersPerSecond,
                         c.getFrequencyOffsetMetersPerSecond()) == 0;
     }
 
@@ -182,7 +184,7 @@ public final class CorrelationVector implements Parcelable {
 
         private double mSamplingWidthMeters;
         private double mSamplingStartMeters;
-        private int mFrequencyOffsetMetersPerSecond;
+        private double mFrequencyOffsetMetersPerSecond;
         @NonNull private int[] mMagnitude;
 
         /** Sets the space between correlation samples in meters. */
@@ -203,7 +205,7 @@ public final class CorrelationVector implements Parcelable {
         /** Sets the frequency offset from reported pseudorange rate for this CorrelationVector */
         @NonNull
         public Builder setFrequencyOffsetMetersPerSecond(
-                @IntRange(from = 0) int frequencyOffsetMetersPerSecond) {
+                @FloatRange(from = 0.0f) double frequencyOffsetMetersPerSecond) {
             mFrequencyOffsetMetersPerSecond = frequencyOffsetMetersPerSecond;
             return this;
         }

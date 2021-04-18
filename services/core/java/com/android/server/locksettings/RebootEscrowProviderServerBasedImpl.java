@@ -44,7 +44,7 @@ class RebootEscrowProviderServerBasedImpl implements RebootEscrowProviderInterfa
      * Use the default lifetime of 10 minutes. The lifetime covers the following activities:
      * Server wrap secret -> device reboot -> server unwrap blob.
      */
-    private static final long DEFAULT_SERVER_BLOB_LIFETIME_IN_MILLIS = 600_1000;
+    private static final long DEFAULT_SERVER_BLOB_LIFETIME_IN_MILLIS = 600_000;
 
     private final LockSettingsStorage mStorage;
 
@@ -92,6 +92,11 @@ class RebootEscrowProviderServerBasedImpl implements RebootEscrowProviderInterfa
     RebootEscrowProviderServerBasedImpl(LockSettingsStorage storage, Injector injector) {
         mStorage = storage;
         mInjector = injector;
+    }
+
+    @Override
+    public int getType() {
+        return TYPE_SERVER_BASED;
     }
 
     @Override

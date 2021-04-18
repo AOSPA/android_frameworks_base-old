@@ -27,7 +27,6 @@ import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
-import android.annotation.Nullable;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.os.SystemClock;
@@ -174,6 +173,7 @@ public abstract class PanelViewController {
     private boolean mIgnoreXTouchSlop;
     private boolean mExpandLatencyTracking;
     private final PanelView mView;
+    private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
     protected final Resources mResources;
     protected final KeyguardStateController mKeyguardStateController;
     protected final SysuiStatusBarStateController mStatusBarStateController;
@@ -242,12 +242,14 @@ public abstract class PanelViewController {
             FalsingManager falsingManager, DozeLog dozeLog,
             KeyguardStateController keyguardStateController,
             SysuiStatusBarStateController statusBarStateController, VibratorHelper vibratorHelper,
+            StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             LatencyTracker latencyTracker,
             FlingAnimationUtils.Builder flingAnimationUtilsBuilder,
             StatusBarTouchableRegionManager statusBarTouchableRegionManager,
             AmbientState ambientState) {
         mAmbientState = ambientState;
         mView = view;
+        mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
         mView.addOnAttachStateChangeListener(new View.OnAttachStateChangeListener() {
             @Override
             public void onViewAttachedToWindow(View v) {
@@ -459,7 +461,8 @@ public abstract class PanelViewController {
                 // We need to collapse the panel since we peeked to the small height.
                 mView.postOnAnimation(mPostCollapseRunnable);
             }
-        } else if (!mStatusBar.isBouncerShowing()) {
+        } else if (!mStatusBar.isBouncerShowing()
+                && !mStatusBarKeyguardViewManager.isShowingAlternateAuthOrAnimating()) {
             boolean expands = onEmptySpaceClick(mInitialTouchX);
             onTrackingStopped(expands);
         }
@@ -1261,7 +1264,10 @@ public abstract class PanelViewController {
                     mVelocityTracker.clear();
                     break;
             }
-            return false;
+
+            // Finally, if none of the above cases applies, ensure that touches do not get handled
+            // by the contents of a panel that is not showing (a bit of a hack to avoid b/178277858)
+            return (mView.getVisibility() != View.VISIBLE);
         }
 
         @Override

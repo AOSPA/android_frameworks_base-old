@@ -300,7 +300,7 @@ public class RecordingService extends Service implements MediaRecorder.OnInfoLis
                 .setColorized(true)
                 .setColor(getResources().getColor(R.color.GM2_red_700))
                 .setOngoing(true)
-                .setShowForegroundImmediately(true)
+                .setForegroundServiceBehavior(Notification.FOREGROUND_SERVICE_IMMEDIATE)
                 .setContentIntent(
                         PendingIntent.getService(this, REQUEST_CODE, stopIntent,
                                 PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_IMMUTABLE))
@@ -351,7 +351,8 @@ public class RecordingService extends Service implements MediaRecorder.OnInfoLis
 
         Notification.Builder builder = new Notification.Builder(this, CHANNEL_ID)
                 .setSmallIcon(R.drawable.ic_screenrecord)
-                .setContentTitle(getResources().getString(R.string.screenrecord_save_message))
+                .setContentTitle(getResources().getString(R.string.screenrecord_save_title))
+                .setContentText(getResources().getString(R.string.screenrecord_save_text))
                 .setContentIntent(PendingIntent.getActivity(
                         this,
                         REQUEST_CODE,

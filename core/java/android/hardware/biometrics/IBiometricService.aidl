@@ -74,5 +74,15 @@ interface IBiometricService {
     // land as SIDs, and are used during key generation.
     long[] getAuthenticatorIds(int callingUserId);
 
+    // See documentation in BiometricManager.
+    void resetLockoutTimeBound(IBinder token, String opPackageName, int fromSensorId, int userId,
+            in byte[] hardwareAuthToken);
+
     int getCurrentStrength(int sensorId);
+
+    // Returns a bit field of the modality (or modalities) that are will be used for authentication.
+    int getCurrentModality(String opPackageName, int userId, int callingUserId, int authenticators);
+
+    // Returns a bit field of the authentication modalities that are supported by this device.
+    int getSupportedModalities(int authenticators);
 }

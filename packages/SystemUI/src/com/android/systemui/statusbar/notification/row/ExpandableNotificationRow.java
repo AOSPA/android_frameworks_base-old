@@ -77,6 +77,7 @@ import com.android.systemui.Dependency;
 import com.android.systemui.Interpolators;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingCollector;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginListener;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.MenuItem;
@@ -166,7 +167,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private int mMaxSmallHeightLarge;
     private int mMaxSmallHeightMedia;
     private int mMaxExpandedHeight;
-    private int mMaxCallHeight;
     private int mIncreasedPaddingBetweenElements;
     private int mNotificationLaunchHeight;
     private boolean mMustStayOnScreen;
@@ -216,6 +216,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private NotificationGuts mGuts;
     private NotificationEntry mEntry;
     private String mAppName;
+    private FalsingManager mFalsingManager;
     private FalsingCollector mFalsingCollector;
 
     /**
@@ -331,7 +332,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     private boolean mHeadsupDisappearRunning;
     private View mChildAfterViewWhenDismissed;
     private View mGroupParentWhenDismissed;
-    private boolean mShelfIconVisible;
     private boolean mAboveShelf;
     private OnUserInteractionCallback mOnUserInteractionCallback;
     private NotificationGutsManager mNotificationGutsManager;
@@ -347,6 +347,9 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     private SystemNotificationAsyncTask mSystemNotificationAsyncTask =
             new SystemNotificationAsyncTask();
+
+    private float mTopRoundnessDuringExpandAnimation;
+    private float mBottomRoundnessDuringExpandAnimation;
 
     /**
      * Returns whether the given {@code statusBarNotification} is a system notification.
@@ -568,7 +571,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // The public layouts expand button is always visible
         mPublicLayout.updateExpandButtons(true);
         updateLimits();
-        updateIconVisibilities();
         updateShelfIconColor();
         updateRippleAllowed();
         if (mUpdateBackgroundOnUpdate) {
@@ -654,11 +656,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean beforeN = mEntry.targetSdk < Build.VERSION_CODES.N;
         boolean beforeP = mEntry.targetSdk < Build.VERSION_CODES.P;
         boolean beforeS = mEntry.targetSdk < Build.VERSION_CODES.S;
-        if (Notification.DevFlags.shouldBackportSNotifRules(mContext.getContentResolver())) {
-            // When back-porting S rules, if an app targets P/Q/R then enforce the new S rule on
-            // that notification.  If it's before P though, we still want to enforce legacy rules.
-            beforeS = beforeP;
-        }
         int smallHeight;
 
         View expandedView = layout.getExpandedChild();
@@ -666,7 +663,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 && expandedView.findViewById(com.android.internal.R.id.media_actions) != null;
         boolean isMessagingLayout = contractedView instanceof MessagingLayout;
         boolean isCallLayout = contractedView instanceof CallLayout;
-        boolean showCompactMediaSeekbar = mMediaManager.getShowCompactMediaSeekbar();
 
         if (customView && beforeS && !mIsSummaryWithChildren) {
             if (beforeN) {
@@ -676,12 +672,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             } else {
                 smallHeight = mMaxSmallHeightBeforeS;
             }
-        } else if (isMediaLayout) {
-            // TODO(b/172652345): MediaStyle notifications currently look broken when we enforce
-            //  the standard notification height, so we have to afford them more vertical space to
-            //  make sure we don't crop them terribly.  We actually need to revisit this and give
-            //  them a headerless design, then remove this hack.
-            smallHeight = showCompactMediaSeekbar ? mMaxSmallHeightMedia : mMaxSmallHeightBeforeS;
         } else if (isMessagingLayout) {
             // TODO(b/173204301): MessagingStyle notifications currently look broken when we enforce
             //  the standard notification height, so we have to afford them more vertical space to
@@ -689,7 +679,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             //  them a headerless design, then remove this hack.
             smallHeight = mMaxSmallHeightLarge;
         } else if (isCallLayout) {
-            smallHeight = mMaxCallHeight;
+            smallHeight = mMaxExpandedHeight;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
             smallHeight = mMaxSmallHeightLarge;
         } else {
@@ -883,8 +873,17 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             setDistanceToTopRoundness(NO_ROUNDNESS);
             mNotificationParent.updateBackgroundForGroupState();
         }
-        updateIconVisibilities();
         updateBackgroundClipping();
+    }
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        // Other parts of the system may intercept and handle all the falsing.
+        // Otherwise, if we see motion and follow-on events, try to classify them as a tap.
+        if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) {
+            mFalsingManager.isFalseTap(true, 0.3);
+        }
+        return super.onInterceptTouchEvent(ev);
     }
 
     @Override
@@ -1481,21 +1480,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return getShelfTransformationTarget() != null;
     }
 
-    /**
-     * Set the icons to be visible of this notification.
-     */
-    public void setShelfIconVisible(boolean iconVisible) {
-        if (iconVisible != mShelfIconVisible) {
-            mShelfIconVisible = iconVisible;
-            updateIconVisibilities();
-        }
-    }
-
-    @Override
-    protected void onBelowSpeedBumpChanged() {
-        updateIconVisibilities();
-    }
-
     @Override
     protected void updateContentTransformation() {
         if (mExpandAnimationRunning) {
@@ -1519,18 +1503,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             mChildrenContainer.setAlpha(contentAlpha);
             mChildrenContainer.setTranslationY(translationY);
             // TODO: handle children fade out better
-        }
-    }
-
-    /** Refreshes the visibility of notification icons */
-    public void updateIconVisibilities() {
-        // The shelf icon is never hidden for children in groups
-        boolean visible = !isChildInGroup() && mShelfIconVisible;
-        for (NotificationContentView l : mLayouts) {
-            l.setShelfIconVisible(visible);
-        }
-        if (mChildrenContainer != null) {
-            mChildrenContainer.setShelfIconVisible(visible);
         }
     }
 
@@ -1597,6 +1569,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             OnExpandClickListener onExpandClickListener,
             NotificationMediaManager notificationMediaManager,
             CoordinateOnClickListener onFeedbackClickListener,
+            FalsingManager falsingManager,
             FalsingCollector falsingCollector,
             StatusBarStateController statusBarStateController,
             PeopleNotificationIdentifier peopleNotificationIdentifier,
@@ -1622,6 +1595,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mOnExpandClickListener = onExpandClickListener;
         mMediaManager = notificationMediaManager;
         setOnFeedbackClickListener(onFeedbackClickListener);
+        mFalsingManager = falsingManager;
         mFalsingCollector = falsingCollector;
         mStatusBarStateController = statusBarStateController;
 
@@ -1651,8 +1625,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 R.dimen.notification_min_height_media);
         mMaxExpandedHeight = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_height);
-        mMaxCallHeight = NotificationUtils.getFontScaledHeight(mContext,
-                R.dimen.call_notification_full_height);
         mMaxHeadsUpHeightBeforeN = NotificationUtils.getFontScaledHeight(mContext,
                 R.dimen.notification_max_heads_up_height_legacy);
         mMaxHeadsUpHeightBeforeP = NotificationUtils.getFontScaledHeight(mContext,
@@ -2042,6 +2014,24 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         return false;
     }
 
+    @Override
+    public float getCurrentTopRoundness() {
+        if (mExpandAnimationRunning) {
+            return mTopRoundnessDuringExpandAnimation;
+        }
+
+        return super.getCurrentTopRoundness();
+    }
+
+    @Override
+    public float getCurrentBottomRoundness() {
+        if (mExpandAnimationRunning) {
+            return mBottomRoundnessDuringExpandAnimation;
+        }
+
+        return super.getCurrentBottomRoundness();
+    }
+
     public void applyExpandAnimationParams(ExpandAnimationParameters params) {
         if (params == null) {
             return;
@@ -2052,23 +2042,27 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
                 mNotificationLaunchHeight,
                 zProgress);
         setTranslationZ(translationZ);
-        float extraWidthForClipping = params.getWidth() - getWidth()
-                + MathUtils.lerp(0, mOutlineRadius * 2, params.getProgress());
+        float extraWidthForClipping = params.getWidth() - getWidth();
         setExtraWidthForClipping(extraWidthForClipping);
         int top = params.getTop();
         float interpolation = Interpolators.FAST_OUT_SLOW_IN.getInterpolation(params.getProgress());
         int startClipTopAmount = params.getStartClipTopAmount();
+        int clipTopAmount = (int) MathUtils.lerp(startClipTopAmount, 0, interpolation);
         if (mNotificationParent != null) {
             float parentY = mNotificationParent.getTranslationY();
             top -= parentY;
             mNotificationParent.setTranslationZ(translationZ);
+
+            // When the expanding notification is below its parent, the parent must be clipped
+            // exactly how it was clipped before the animation. When the expanding notification is
+            // on or above its parent (top <= 0), then the parent must be clipped exactly 'top'
+            // pixels to show the expanding notification, while still taking the decreasing
+            // notification clipTopAmount into consideration, so 'top + clipTopAmount'.
             int parentStartClipTopAmount = params.getParentStartClipTopAmount();
-            if (startClipTopAmount != 0) {
-                int clipTopAmount = (int) MathUtils.lerp(parentStartClipTopAmount,
-                        parentStartClipTopAmount - startClipTopAmount,
-                        interpolation);
-                mNotificationParent.setClipTopAmount(clipTopAmount);
-            }
+            int parentClipTopAmount = Math.min(parentStartClipTopAmount,
+                    top + clipTopAmount);
+            mNotificationParent.setClipTopAmount(parentClipTopAmount);
+
             mNotificationParent.setExtraWidthForClipping(extraWidthForClipping);
             float clipBottom = Math.max(params.getBottom(),
                     parentY + mNotificationParent.getActualHeight()
@@ -2077,11 +2071,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             int minimumHeightForClipping = (int) (clipBottom - clipTop);
             mNotificationParent.setMinimumHeightForClipping(minimumHeightForClipping);
         } else if (startClipTopAmount != 0) {
-            int clipTopAmount = (int) MathUtils.lerp(startClipTopAmount, 0, interpolation);
             setClipTopAmount(clipTopAmount);
         }
         setTranslationY(top);
         setActualHeight(params.getHeight());
+
+        mTopRoundnessDuringExpandAnimation = params.getTopCornerRadius() / mOutlineRadius;
+        mBottomRoundnessDuringExpandAnimation = params.getBottomCornerRadius() / mOutlineRadius;
+        invalidateOutline();
 
         mBackgroundNormal.setExpandAnimationParams(params);
     }

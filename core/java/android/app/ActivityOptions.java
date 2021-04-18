@@ -320,6 +320,10 @@ public class ActivityOptions {
     private static final String KEY_OVERRIDE_TASK_TRANSITION =
             "android:activity.overrideTaskTransition";
 
+    /** See {@link #setRemoveWithTaskOrganizer(boolean)}. */
+    private static final String KEY_REMOVE_WITH_TASK_ORGANIZER =
+            "android.activity.removeWithTaskOrganizer";
+
     /**
      * @see #setLaunchCookie
      * @hide
@@ -405,6 +409,7 @@ public class ActivityOptions {
     private IRemoteTransition mRemoteTransition;
     private boolean mOverrideTaskTransition;
     private int mSplashScreenThemeResId;
+    private boolean mRemoveWithTaskOrganizer;
 
     /**
      * Create an ActivityOptions specifying a custom animation to run when
@@ -1155,6 +1160,7 @@ public class ActivityOptions {
                 KEY_REMOTE_TRANSITION));
         mOverrideTaskTransition = opts.getBoolean(KEY_OVERRIDE_TASK_TRANSITION);
         mSplashScreenThemeResId = opts.getInt(KEY_SPLASH_SCREEN_THEME);
+        mRemoveWithTaskOrganizer = opts.getBoolean(KEY_REMOVE_WITH_TASK_ORGANIZER);
     }
 
     /**
@@ -1600,7 +1606,8 @@ public class ActivityOptions {
 
     /**
      * Sets a launch cookie that can be used to track the activity and task that are launch as a
-     * result of this option.
+     * result of this option. If the launched activity is a trampoline that starts another activity
+     * immediately, the cookie will be transferred to the next activity.
      *
      * @hide
      */
@@ -1621,6 +1628,22 @@ public class ActivityOptions {
     /** @hide */
     public boolean getOverrideTaskTransition() {
         return mOverrideTaskTransition;
+    }
+
+    /**
+     * Sets whether to remove the task when TaskOrganizer, which is managing it, is destroyed.
+     * @hide
+     */
+    public void setRemoveWithTaskOrganizer(boolean remove) {
+        mRemoveWithTaskOrganizer = remove;
+    }
+
+    /**
+     * @return whether to remove the task when TaskOrganizer, which is managing it, is destroyed.
+     * @hide
+     */
+    public boolean getRemoveWithTaskOranizer() {
+        return mRemoveWithTaskOrganizer;
     }
 
     /**
@@ -1856,6 +1879,9 @@ public class ActivityOptions {
         }
         if (mSplashScreenThemeResId != 0) {
             b.putInt(KEY_SPLASH_SCREEN_THEME, mSplashScreenThemeResId);
+        }
+        if (mRemoveWithTaskOrganizer) {
+            b.putBoolean(KEY_REMOVE_WITH_TASK_ORGANIZER, mRemoveWithTaskOrganizer);
         }
         return b;
     }

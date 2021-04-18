@@ -29,6 +29,7 @@ import android.content.ComponentName;
 import android.graphics.Rect;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
+import android.hardware.fingerprint.IUdfpsHbmListener;
 import android.os.Bundle;
 import android.view.WindowInsetsController.Appearance;
 import android.view.WindowInsetsController.Behavior;
@@ -464,6 +465,14 @@ public class CommandQueueTest extends SysuiTestCase {
     }
 
     @Test
+    public void testSetUdfpsHbmListener() {
+        final IUdfpsHbmListener listener = mock(IUdfpsHbmListener.class);
+        mCommandQueue.setUdfpsHbmListener(listener);
+        waitForIdleSync();
+        verify(mCallbacks).setUdfpsHbmListener(eq(listener));
+    }
+
+    @Test
     public void testSuppressAmbientDisplay() {
         mCommandQueue.suppressAmbientDisplay(true);
         waitForIdleSync();
@@ -475,5 +484,12 @@ public class CommandQueueTest extends SysuiTestCase {
         mCommandQueue.requestWindowMagnificationConnection(true);
         waitForIdleSync();
         verify(mCallbacks).requestWindowMagnificationConnection(true);
+    }
+
+    @Test
+    public void testSetEnableNavigationBarLumaSampling() {
+        mCommandQueue.setNavigationBarLumaSamplingEnabled(1, true);
+        waitForIdleSync();
+        verify(mCallbacks).setNavigationBarLumaSamplingEnabled(eq(1), eq(true));
     }
 }

@@ -53,7 +53,7 @@ public final class EpsBearerQosSessionAttributes implements Parcelable, QosSessi
      *
      * @return the qci of the session
      */
-    public int getQci() {
+    public int getQosIdentifier() {
         return mQci;
     }
 
@@ -66,7 +66,7 @@ public final class EpsBearerQosSessionAttributes implements Parcelable, QosSessi
      *
      * @return the guaranteed bit rate in kbps
      */
-    public long getGuaranteedUplinkBitRate() {
+    public long getGuaranteedUplinkBitRateKbps() {
         return mGuaranteedUplinkBitRate;
     }
 
@@ -79,7 +79,7 @@ public final class EpsBearerQosSessionAttributes implements Parcelable, QosSessi
      *
      * @return the guaranteed bit rate in kbps
      */
-    public long getGuaranteedDownlinkBitRate() {
+    public long getGuaranteedDownlinkBitRateKbps() {
         return mGuaranteedDownlinkBitRate;
     }
 
@@ -92,7 +92,7 @@ public final class EpsBearerQosSessionAttributes implements Parcelable, QosSessi
      *
      * @return the max uplink bit rate in kbps
      */
-    public long getMaxUplinkBitRate() {
+    public long getMaxUplinkBitRateKbps() {
         return mMaxUplinkBitRate;
     }
 
@@ -105,7 +105,7 @@ public final class EpsBearerQosSessionAttributes implements Parcelable, QosSessi
      *
      * @return the max downlink bit rate in kbps
      */
-    public long getMaxDownlinkBitRate() {
+    public long getMaxDownlinkBitRateKbps() {
         return mMaxDownlinkBitRate;
     }
 
@@ -182,16 +182,6 @@ public final class EpsBearerQosSessionAttributes implements Parcelable, QosSessi
             }
         }
         mRemoteAddresses = Collections.unmodifiableList(remoteAddresses);
-    }
-
-    /**
-     * Creates attributes based off of a parcel
-     * @param in the parcel
-     * @return the attributes
-     */
-    @NonNull
-    public static EpsBearerQosSessionAttributes create(@NonNull final Parcel in) {
-        return new EpsBearerQosSessionAttributes(in);
     }
 
     @Override

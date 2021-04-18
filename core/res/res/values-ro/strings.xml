@@ -206,6 +206,7 @@
     <string name="twilight_service" msgid="8964898045693187224">"Serviciul Twilight"</string>
     <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"Detector de fus orar (fără conexiune)"</string>
     <string name="gnss_time_update_service" msgid="9039489496037616095">"Serviciul de actualizare a orei bazat pe GNSS"</string>
+    <string name="music_recognition_manager_service" msgid="7481956037950276359">"Serviciu de gestionare a recunoașterii de melodii"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"Datele de pe dispozitiv vor fi șterse"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"Aplicația de administrare nu poate fi utilizată. Dispozitivul va fi șters.\n\nDacă aveți întrebări, contactați administratorul organizației dvs."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"Printare dezactivată de <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
@@ -296,6 +297,7 @@
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"Aplicația rulează"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Aplicațiile consumă bateria"</string>
     <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Mărire"</string>
+    <string name="notification_channel_accessibility_security_policy" msgid="3350443906017624270">"Politica de securitate privind accesibilitatea"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> folosește bateria"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> aplicații folosesc bateria"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Atingeți pentru mai multe detalii privind bateria și utilizarea datelor"</string>
@@ -346,6 +348,8 @@
     <string name="permdesc_statusBarService" msgid="6652917399085712557">"Permite aplicației să fie bară de stare."</string>
     <string name="permlab_expandStatusBar" msgid="1184232794782141698">"extindere/restrângere bară de stare"</string>
     <string name="permdesc_expandStatusBar" msgid="7180756900448498536">"Permite aplicației să extindă sau să restrângă bara de stare."</string>
+    <string name="permlab_fullScreenIntent" msgid="4310888199502509104">"să afișeze notificări ca activități pe ecran complet pe un dispozitiv blocat"</string>
+    <string name="permdesc_fullScreenIntent" msgid="1100721419406643997">"Permite aplicației să afișeze notificări ca activități pe ecran complet pe un dispozitiv blocat"</string>
     <string name="permlab_install_shortcut" msgid="7451554307502256221">"instalează comenzi rapide"</string>
     <string name="permdesc_install_shortcut" msgid="4476328467240212503">"Permite unei aplicații să adauge comenzi rapide pe ecranul de pornire, fără intervenția utilizatorului."</string>
     <string name="permlab_uninstall_shortcut" msgid="295263654781900390">"dezinstalează comenzi rapide"</string>
@@ -553,13 +557,19 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"Permite aplicației să vă modifice colecția de fotografii."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"citiți locațiile din colecția media"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"Permite aplicației să citească locațiile din colecția dvs. media."</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"Folosiți sistemele biometrice"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"Folosiți sistemele biometrice sau blocarea ecranului"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"Confirmați-vă identitatea"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"Folosiți sistemele biometrice pentru a continua"</string>
+    <string name="biometric_or_screen_lock_dialog_default_subtitle" msgid="159539678371552009">"Folosiți sistemele biometrice sau blocarea ecranului pentru a continua"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"Hardware biometric indisponibil"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"Autentificarea a fost anulată"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"Nu este recunoscut"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"Autentificarea a fost anulată"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Nu este setat niciun cod PIN, model sau parolă"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"Eroare la autentificare"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"Folosiți blocarea ecranului"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"Introduceți datele de conectare ale dispozitivului pentru a continua"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"S-a detectat parțial amprenta. Încercați din nou."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Amprenta nu a putut fi procesată. Încercați din nou."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Senzorul pentru amprente este murdar. Curățați-l și încercați din nou."</string>
@@ -582,7 +592,10 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"Dispozitivul nu are senzor de amprentă."</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"Senzorul este dezactivat temporar."</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"Degetul <xliff:g id="FINGERID">%d</xliff:g>"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"Folosiți amprenta"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"Folosiți amprenta sau blocarea ecranului"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"Folosiți amprenta pentru a continua"</string>
+    <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Folosiți amprenta sau blocarea ecranului pentru a continua"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Pictograma amprentă"</string>
@@ -609,7 +622,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"Nu se mai poate recunoaște fața. Încercați din nou."</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"Prea asemănător, schimbați poziția."</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"Întoarceți capul mai puțin."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"Întoarceți capul mai puțin."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"Înclinați capul mai puțin."</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"Întoarceți capul mai puțin."</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"Eliminați orice vă ascunde chipul."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"Curățați partea de sus a ecranului, inclusiv bara neagră"</string>
@@ -627,6 +640,10 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"Deblocarea facială nu este acceptată pe dispozitiv."</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"Senzorul este dezactivat temporar."</string>
     <string name="face_name_template" msgid="3877037340223318119">"Chip <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"Folosiți deblocarea facială"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Folosiți blocarea ecranului sau blocarea facială"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"Folosiți deblocarea facială pentru a continua"</string>
+    <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Folosiți-vă chipul sau blocarea ecranului pentru a continua"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"Pictograma chip"</string>
@@ -688,10 +705,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Permite aplicației să citească și să scrie configurația Nu deranja."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"porniți folosirea permisiunii de vizualizare"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Permite proprietarului să pornească folosirea permisiunii pentru o aplicație. Nu ar trebui să fie necesară pentru aplicațiile obișnuite."</string>
-    <!-- no translation found for permlab_highSamplingRateSensors (3941068435726317070) -->
-    <skip />
-    <!-- no translation found for permdesc_highSamplingRateSensors (8430061978931155995) -->
-    <skip />
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"să acceseze date de la senzori la o rată de eșantionare mare"</string>
+    <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"Permite aplicației să colecteze date de la senzori la o rată de eșantionare de peste 200 Hz"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"Să seteze reguli pentru parolă"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"Stabiliți lungimea și tipul de caractere permise pentru parolele și codurile PIN de blocare a ecranului."</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"Să monitorizeze încercările de deblocare a ecranului"</string>
@@ -992,6 +1007,8 @@
     <string name="open_permission_deny" msgid="5136793905306987251">"Nu aveți permisiunea de a deschide această pagină."</string>
     <string name="text_copied" msgid="2531420577879738860">"Text copiat în clipboard."</string>
     <string name="copied" msgid="4675902854553014676">"Copiat"</string>
+    <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> a inserat date din <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g>"</string>
+    <string name="pasted_from_clipboard" msgid="6295556725844421812">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> a inserat date din clipboard"</string>
     <string name="more_item_label" msgid="7419249600215749115">"Mai multe"</string>
     <string name="prepend_shortcut_label" msgid="1743716737502867951">"Meniu+"</string>
     <string name="menu_meta_shortcut_label" msgid="1623390163674762478">"Meta+"</string>
@@ -1382,11 +1399,14 @@
     <string name="alert_windows_notification_turn_off_action" msgid="7805857234839123780">"Dezactivați"</string>
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"Se verifică <xliff:g id="NAME">%s</xliff:g>…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"Se examinează conținutul curent"</string>
+    <string name="ext_media_checking_notification_message" product="tv" msgid="7986154434946021415">"Se analizează spațiul de stocare media"</string>
     <string name="ext_media_new_notification_title" msgid="3517407571407687677">"<xliff:g id="NAME">%s</xliff:g> nou"</string>
     <string name="ext_media_new_notification_title" product="automotive" msgid="9085349544984742727">"<xliff:g id="NAME">%s</xliff:g> nu funcționează"</string>
     <string name="ext_media_new_notification_message" msgid="6095403121990786986">"Atingeți pentru a configura"</string>
+    <string name="ext_media_new_notification_message" product="tv" msgid="216863352100263668">"Selectați pentru a configura"</string>
     <string name="ext_media_new_notification_message" product="automotive" msgid="5140127881613227162">"Poate fi nevoie să reformatați dispozitivul. Atingeți pentru a-l scoate."</string>
     <string name="ext_media_ready_notification_message" msgid="777258143284919261">"Pentru a transfera fotografii și fișiere media"</string>
+    <string name="ext_media_ready_notification_message" product="tv" msgid="8847134811163165935">"Răsfoiți fișierele media"</string>
     <string name="ext_media_unmountable_notification_title" msgid="4895444667278979910">"Problemă cu <xliff:g id="NAME">%s</xliff:g>"</string>
     <string name="ext_media_unmountable_notification_title" product="automotive" msgid="3142723758949023280">"<xliff:g id="NAME">%s</xliff:g> nu funcționează"</string>
     <string name="ext_media_unmountable_notification_message" msgid="3256290114063126205">"Atingeți pentru a remedia"</string>
@@ -1395,7 +1415,7 @@
     <string name="ext_media_unsupported_notification_title" msgid="4358280700537030333">"<xliff:g id="NAME">%s</xliff:g> necompatibil"</string>
     <string name="ext_media_unsupported_notification_title" product="automotive" msgid="6004193172658722381">"<xliff:g id="NAME">%s</xliff:g> nu funcționează"</string>
     <string name="ext_media_unsupported_notification_message" msgid="917738524888367560">"Dispozitivul nu este compatibil cu acest <xliff:g id="NAME">%s</xliff:g>. Atingeți pentru configurare într-un format compatibil."</string>
-    <string name="ext_media_unsupported_notification_message" product="tv" msgid="7744945987775645685">"Dispozitivul nu este compatibil cu acest <xliff:g id="NAME">%s</xliff:g>. Selectați pentru configurare într-un format compatibil."</string>
+    <string name="ext_media_unsupported_notification_message" product="tv" msgid="1595482802187036532">"Selectați pentru a configura <xliff:g id="NAME">%s</xliff:g> într-un format acceptat."</string>
     <string name="ext_media_unsupported_notification_message" product="automotive" msgid="3412494732736336330">"Poate fi nevoie să reformatați dispozitivul"</string>
     <string name="ext_media_badremoval_notification_title" msgid="4114625551266196872">"<xliff:g id="NAME">%s</xliff:g> scos pe neașteptate"</string>
     <string name="ext_media_badremoval_notification_message" msgid="1986514704499809244">"Deconectați din setări dispozitivele media înainte de a le îndepărta, pentru a evita pierderea conținutului"</string>
@@ -1691,7 +1711,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Utilizați comanda rapidă"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Inversarea culorilor"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Corecția culorii"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"Reduceți luminozitatea"</string>
+    <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Luminozitate redusă suplimentar"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"S-au apăsat lung tastele de volum. S-a activat <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"S-au apăsat lung tastele de volum. S-a dezactivat <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"Apăsați ambele butoane de volum timp de trei secunde pentru a folosi <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
@@ -1904,8 +1924,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"Solicitarea SS a fost schimbată cu un apel video"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"Solicitarea SS a fost schimbată cu o solicitare USSD"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"Schimbat cu o solicitare SS nouă"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"Alertă privind phishingul"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"Profil de serviciu"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"Notificat"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"Confirmat"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"Extindeți"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"Restrângeți"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"extindeți/restrângeți"</string>
@@ -1978,6 +2000,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"Știri și reviste"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"Hărți și navigare"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"Productivitate"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"Accesibilitate"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"Stocare pe dispozitiv"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"Remedierea erorilor prin USB"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"oră"</string>
@@ -2109,6 +2132,7 @@
     <string name="accessibility_system_action_on_screen_a11y_shortcut_label" msgid="8488701469459210309">"Comandă rapidă de accesibilitate de pe ecran"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_chooser_label" msgid="1057878690209817886">"Selector de comenzi rapide de accesibilitate de pe ecran"</string>
     <string name="accessibility_system_action_hardware_a11y_shortcut_label" msgid="5764644187715255107">"Comandă rapidă de accesibilitate"</string>
+    <string name="accessibility_system_action_dismiss_notification_shade" msgid="8931637495533770352">"Închideți fereastra de notificări"</string>
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"Bară cu legenda pentru <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> a fost adăugat la grupul RESTRICȚIONATE"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
@@ -2246,12 +2270,16 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"Nou: lupă fereastră"</string>
-    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"Acum puteți mări o parte sau tot ecranul"</string>
+    <string name="window_magnification_prompt_title" msgid="4657040468055863672">"Măriți o parte a ecranului"</string>
+    <string name="window_magnification_prompt_content" msgid="3549230303326142349">"Acum puteți să măriți tot ecranul sau o anumită zonă ori să comutați între cele două opțiuni."</string>
     <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"Activați din Setări"</string>
     <string name="dismiss_action" msgid="1728820550388704784">"Respingeți"</string>
     <string name="sensor_privacy_start_use_mic_notification_content" msgid="8063355861118105607">"Pentru a continua, &lt;b&gt;‎‏‎‎‏‏‎<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; necesită acces la microfonul dispozitivului."</string>
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"Pentru a continua, &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; necesită acces la camera dispozitivului."</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"Activați"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"Confidențialitatea privind senzorii"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"Pictograma aplicației"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"Imaginea de branding a aplicației"</string>
+    <string name="view_and_control_notification_title" msgid="4300765399209912240">"Verificați setările pentru acces"</string>
+    <string name="view_and_control_notification_content" msgid="8003766498562604034">"<xliff:g id="SERVICE_NAME">%s</xliff:g> poată să vadă și să vă controleze ecranul. Atingeți pentru a examina."</string>
 </resources>

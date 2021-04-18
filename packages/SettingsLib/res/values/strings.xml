@@ -66,8 +66,12 @@
     <string name="wifi_security_eap" translatable="false">WPA/WPA2/WPA3-Enterprise</string>
     <!-- Do not translate.  Concise terminology for wifi with WPA 802.1x EAP security -->
     <string name="wifi_security_eap_wpa" translatable="false">WPA-Enterprise</string>
+    <!-- Do not translate.  Concise terminology for wifi with 802.1x EAP security -->
+    <string name="wifi_security_eap_wpa_wpa2" translatable="false">WPA/WPA2-Enterprise</string>
     <!-- Do not translate.  Concise terminology for wifi with WPA2/WPA3 802.1x EAP security -->
     <string name="wifi_security_eap_wpa2_wpa3" translatable="false">WPA2/WPA3-Enterprise</string>
+    <!-- Do not translate.  Concise terminology for wifi with WPA3 802.1x EAP security -->
+    <string name="wifi_security_eap_wpa3" translatable="false">WPA3-Enterprise</string>
     <!-- Do not translate.  Concise terminology for Passpoint network -->
     <string name="wifi_security_passpoint" translatable="false">Passpoint</string>
     <!-- Do not translate.  Concise terminology for DPP network -->
@@ -1030,6 +1034,9 @@
     <!-- Settings item title to select the default behavior for transcoding if an encodig is not supported by an app. [CHAR LIMIT=85] -->
     <string name="transcode_default">Assume apps support modern formats</string>
 
+    <!-- Settings item title to select whether to show transcoding notifications. [CHAR LIMIT=85] -->
+    <string name="transcode_notification">Show transcoding notifications</string>
+
     <!-- Services settings screen, setting option name for the user to go to the screen to view running services -->
     <string name="runningservices_settings_title">Running services</string>
     <!-- Services settings screen, setting option summary for the user to go to the screen to view running services  -->
@@ -1079,7 +1086,14 @@
     <!-- Title for the accessibility preference to configure display color space correction. [CHAR LIMIT=NONE] -->
     <string name="accessibility_display_daltonizer_preference_title">Color correction</string>
     <!-- Subtitle for the accessibility preference to configure display color space correction. [CHAR LIMIT=NONE] -->
-    <string name="accessibility_display_daltonizer_preference_subtitle"><![CDATA[Color correction allows you to adjust how colors are displayed on your device]]></string>
+    <string name="accessibility_display_daltonizer_preference_subtitle">
+        <![CDATA[
+        Adjust how colors display on your device. This can be helpful when you want to:<br/><br/>
+        <ol>
+            <li>&nbsp;See colors more accurately</li>
+            <li>&nbsp;Remove colors to help you focus</li>
+        </ol>
+        ]]></string>
     <!-- Summary shown for color space correction preference when its value is overridden by another preference [CHAR LIMIT=35] -->
     <string name="daltonizer_type_overridden">Overridden by <xliff:g id="title" example="Simulate color space">%1$s</xliff:g></string>
 
@@ -1281,6 +1295,22 @@
     <!-- Button label for generic OK action [CHAR LIMIT=20] -->
     <string name="okay">OK</string>
 
+    <!-- Label for the settings activity for controlling apps that can schedule alarms [CHAR LIMIT=30] -->
+    <string name="alarms_and_reminders_label">Alarms and reminders</string>
+    <!-- Label for the switch to toggler the permission for scheduling alarms [CHAR LIMIT=50] -->
+    <string name="alarms_and_reminders_switch_title">Allow to set alarms or reminders</string>
+    <!-- Title for the setting screen for controlling apps that can schedule alarms [CHAR LIMIT=30] -->
+    <string name="alarms_and_reminders_title">Alarms and reminders</string>
+    <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
+    <string name="alarms_and_reminders_footer_title">
+        Allow this app to schedule alarms or other timing based events.
+        This will allow the app to wake up and run even when you are not using the device.
+        Note that revoking this permission may cause the app to malfunction, specifically any alarms
+        that the app has scheduled will no longer work.
+    </string>
+    <!-- Keywords for setting screen for controlling apps that can schedule alarms [CHAR LIMIT=100] -->
+    <string name="keywords_alarms_and_reminders">schedule, alarm, reminder, event</string>
+
     <!--  Do not disturb: Label for button in enable zen dialog that will turn on zen mode. [CHAR LIMIT=30] -->
     <string name="zen_mode_enable_dialog_turn_on">Turn on</string>
     <!-- Do not disturb: Title for the Do not Disturb dialog to turn on Do not disturb. [CHAR LIMIT=50]-->
@@ -1315,6 +1345,8 @@
 
     <!-- Name of the phone device. [CHAR LIMIT=30] -->
     <string name="media_transfer_this_device_name">Phone speaker</string>
+    <!-- Name of the phone device with an active remote session. [CHAR LIMIT=30] -->
+    <string name="media_transfer_this_phone">This phone</string>
 
     <!-- Warning message to tell user is have problem during profile connect, it need to turn off device and back on. [CHAR_LIMIT=NONE] -->
     <string name="profile_connect_timeout_subtext">Problem connecting. Turn device off &amp; back on</string>
@@ -1474,7 +1506,7 @@
     <string name="data_connection_5g_plus" translatable="false">5G+</string>
 
     <!-- Content description of the data connection type Carrier WiFi. [CHAR LIMIT=NONE] -->
-    <string name="data_connection_carrier_wifi">CWF</string>
+    <string name="data_connection_carrier_wifi">W+</string>
 
     <!-- Content description of the cell data being disabled. [CHAR LIMIT=NONE] -->
     <string name="cell_data_off_content_description">Mobile data off</string>

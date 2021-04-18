@@ -16,8 +16,11 @@
 
 package android.os;
 
+import static android.annotation.SystemApi.Client.MODULE_LIBRARIES;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.system.ErrnoException;
@@ -108,6 +111,7 @@ public class Process {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @SystemApi(client = MODULE_LIBRARIES)
     public static final int VPN_UID = 1016;
 
     /**
@@ -127,6 +131,7 @@ public class Process {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @TestApi
     public static final int NFC_UID = 1027;
 
     /**
@@ -207,6 +212,12 @@ public class Process {
     public static final int SE_UID = 1068;
 
     /**
+     * Defines the UID/GID for the iorapd.
+     * @hide
+     */
+    public static final int IORAPD_UID = 1071;
+
+    /**
      * Defines the UID/GID for the NetworkStack app.
      * @hide
      */
@@ -217,6 +228,12 @@ public class Process {
      * @hide
      */
     public static final int FSVERITY_CERT_UID = 1075;
+
+    /**
+     * GID that gives access to USB OTG (unreliable) volumes on /mnt/media_rw/<vol name>
+     * @hide
+     */
+    public static final int EXTERNAL_STORAGE_GID = 1077;
 
     /**
      * GID that gives write access to app-private data directories on external
@@ -389,6 +406,12 @@ public class Process {
      * {@link java.lang.Thread} class.
      */
     public static final int THREAD_PRIORITY_VIDEO = -10;
+
+    /**
+     * Priority we boost main thread and RT of top app to.
+     * @hide
+     */
+    public static final int THREAD_PRIORITY_TOP_APP_BOOST = -10;
 
     /**
      * Standard priority of audio threads.  Applications can not normally

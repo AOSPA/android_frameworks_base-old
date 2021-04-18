@@ -39,13 +39,17 @@ public class FeatureFlagUtils {
     public static final String FFLAG_OVERRIDE_PREFIX = FFLAG_PREFIX + "override.";
     public static final String PERSIST_PREFIX = "persist." + FFLAG_OVERRIDE_PREFIX;
     public static final String HEARING_AID_SETTINGS = "settings_bluetooth_hearing_aid";
-    public static final String SCREENRECORD_LONG_PRESS = "settings_screenrecord_long_press";
     public static final String SETTINGS_WIFITRACKER2 = "settings_wifitracker2";
     /** @hide */
     public static final String SETTINGS_DO_NOT_RESTORE_PRESERVED =
             "settings_do_not_restore_preserved";
     /** @hide */
     public static final String SETTINGS_PROVIDER_MODEL = "settings_provider_model";
+    /** @hide */
+    public static final String SETTINGS_USE_NEW_BACKUP_ELIGIBILITY_RULES
+            = "settings_use_new_backup_eligibility_rules";
+    /** @hide */
+    public static final String SETTINGS_ENABLE_SECURITY_HUB = "settings_enable_security_hub";
 
     private static final Map<String, String> DEFAULT_FLAGS;
 
@@ -54,7 +58,6 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put("settings_audio_switcher", "true");
         DEFAULT_FLAGS.put("settings_systemui_theme", "true");
         DEFAULT_FLAGS.put(HEARING_AID_SETTINGS, "false");
-        DEFAULT_FLAGS.put(SCREENRECORD_LONG_PRESS, "false");
         DEFAULT_FLAGS.put("settings_wifi_details_datausage_header", "false");
         DEFAULT_FLAGS.put("settings_skip_direction_mutable", "true");
         DEFAULT_FLAGS.put(SETTINGS_WIFITRACKER2, "true");
@@ -65,9 +68,11 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put(SETTINGS_DO_NOT_RESTORE_PRESERVED, "true");
 
         DEFAULT_FLAGS.put("settings_tether_all_in_one", "false");
-        DEFAULT_FLAGS.put("settings_silky_home", "false");
+        DEFAULT_FLAGS.put("settings_silky_home", "true");
         DEFAULT_FLAGS.put("settings_contextual_home", "false");
         DEFAULT_FLAGS.put(SETTINGS_PROVIDER_MODEL, "false");
+        DEFAULT_FLAGS.put(SETTINGS_USE_NEW_BACKUP_ELIGIBILITY_RULES, "true");
+        DEFAULT_FLAGS.put(SETTINGS_ENABLE_SECURITY_HUB, "false");
     }
 
     private static final Set<String> PERSISTENT_FLAGS;

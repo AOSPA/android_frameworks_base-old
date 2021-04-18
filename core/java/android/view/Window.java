@@ -1716,13 +1716,22 @@ public abstract class Window {
      * For the blur region to be visible, the window has to be translucent. See
      * {@link android.R.styleable#Window_windowIsTranslucent}.
      *
-     * Note the difference with {@link android.view.WindowManager.LayoutParams#blurBehindRadius},
+     * Note the difference with {@link WindowManager.LayoutParams#setBlurBehindRadius},
      * which blurs the whole screen behind the window. Background blur blurs the screen behind
      * only within the bounds of the window.
+     *
+     * Some devices might not support cross-window blur due to GPU limitations. It can also be
+     * disabled at runtime, e.g. during battery saving mode, when multimedia tunneling is used or
+     * when minimal post processing is requested. In such situations, no blur will be computed or
+     * drawn, resulting in a transparent window background. To avoid this, the app might want to
+     * change its theme to one that does not use blurs. To listen for cross-window blur
+     * enabled/disabled events, use {@link WindowManager#addCrossWindowBlurEnabledListener}.
      *
      * @param blurRadius The blur radius to use for window background blur in pixels
      *
      * @see android.R.styleable#Window_windowBackgroundBlurRadius
+     * @see WindowManager.LayoutParams#setBlurBehindRadius
+     * @see WindowManager#addCrossWindowBlurEnabledListener
      */
     public void setBackgroundBlurRadius(int blurRadius) {}
 
@@ -2610,10 +2619,10 @@ public abstract class Window {
     /**
      * System request to begin scroll capture.
      *
-     * @param callbacks to receive responses
+     * @param listener to receive the response
      * @hide
      */
-    public void requestScrollCapture(IScrollCaptureCallbacks callbacks) {
+    public void requestScrollCapture(IScrollCaptureResponseListener listener) {
     }
 
     /**
@@ -2621,7 +2630,6 @@ public abstract class Window {
      * callback with the root view of the window.
      *
      * @param callback the callback to add
-     * @hide
      */
     public void registerScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
     }
@@ -2630,7 +2638,6 @@ public abstract class Window {
      * Unregisters a {@link ScrollCaptureCallback} previously registered with this window.
      *
      * @param callback the callback to remove
-     * @hide
      */
     public void unregisterScrollCaptureCallback(@NonNull ScrollCaptureCallback callback) {
     }

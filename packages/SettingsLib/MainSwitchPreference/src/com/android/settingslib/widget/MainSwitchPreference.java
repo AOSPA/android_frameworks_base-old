@@ -18,14 +18,11 @@ package com.android.settingslib.widget;
 
 import android.content.Context;
 import android.content.res.TypedArray;
-import android.text.TextUtils;
 import android.util.AttributeSet;
 
 import androidx.core.content.res.TypedArrayUtils;
 import androidx.preference.PreferenceViewHolder;
 import androidx.preference.TwoStatePreference;
-
-import com.android.settingslib.RestrictedLockUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -40,9 +37,7 @@ public class MainSwitchPreference extends TwoStatePreference {
     private final List<OnMainSwitchChangeListener> mSwitchChangeListeners = new ArrayList<>();
 
     private MainSwitchBar mMainSwitchBar;
-    private String mTitle;
-
-    private RestrictedLockUtils.EnforcedAdmin mEnforcedAdmin;
+    private CharSequence mTitle;
 
     public MainSwitchPreference(Context context) {
         super(context);
@@ -81,24 +76,28 @@ public class MainSwitchPreference extends TwoStatePreference {
         setLayoutResource(R.layout.main_switch_layout);
 
         if (attrs != null) {
-            TypedArray a = context.obtainStyledAttributes(attrs,
+            final TypedArray a = context.obtainStyledAttributes(attrs,
                     androidx.preference.R.styleable.Preference, 0 /*defStyleAttr*/,
                     0 /*defStyleRes*/);
             final CharSequence title = TypedArrayUtils.getText(a,
                     androidx.preference.R.styleable.Preference_title,
                     androidx.preference.R.styleable.Preference_android_title);
-            if (!TextUtils.isEmpty(title)) {
-                setTitle(title.toString());
-            }
+            setTitle(title);
             a.recycle();
         }
     }
 
-    /**
-     * Set the preference title text
-     */
-    public void setTitle(String text) {
-        mTitle = text;
+    @Override
+    public void setChecked(boolean checked) {
+        super.setChecked(checked);
+        if (mMainSwitchBar != null) {
+            mMainSwitchBar.setChecked(checked);
+        }
+    }
+
+    @Override
+    public void setTitle(CharSequence title) {
+        mTitle = title;
         if (mMainSwitchBar != null) {
             mMainSwitchBar.setTitle(mTitle);
         }
@@ -112,7 +111,6 @@ public class MainSwitchPreference extends TwoStatePreference {
         if (mMainSwitchBar != null) {
             mMainSwitchBar.setChecked(checked);
             mMainSwitchBar.setTitle(mTitle);
-            mMainSwitchBar.setDisabledByAdmin(mEnforcedAdmin);
             mMainSwitchBar.show();
         }
     }
@@ -136,18 +134,6 @@ public class MainSwitchPreference extends TwoStatePreference {
             mSwitchChangeListeners.remove(listener);
         } else {
             mMainSwitchBar.removeOnSwitchChangeListener(listener);
-        }
-    }
-
-    /**
-     * If admin is not null, disables the text and switch but keeps the view clickable.
-     * Otherwise, calls setEnabled which will enables the entire view including
-     * the text and switch.
-     */
-    public void setDisabledByAdmin(RestrictedLockUtils.EnforcedAdmin admin) {
-        mEnforcedAdmin = admin;
-        if (mMainSwitchBar != null) {
-            mMainSwitchBar.setDisabledByAdmin(mEnforcedAdmin);
         }
     }
 

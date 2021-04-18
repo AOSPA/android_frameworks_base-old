@@ -376,6 +376,7 @@ jint MediaErrorToJavaError(status_t err) {
         STATUS_CASE(ERROR_DRM_PROVISIONING_CERTIFICATE);
         STATUS_CASE(ERROR_DRM_PROVISIONING_CONFIG);
         STATUS_CASE(ERROR_DRM_PROVISIONING_PARSE);
+        STATUS_CASE(ERROR_DRM_PROVISIONING_REQUEST_REJECTED);
         STATUS_CASE(ERROR_DRM_PROVISIONING_RETRY);
         STATUS_CASE(ERROR_DRM_RESOURCE_CONTENTION);
         STATUS_CASE(ERROR_DRM_SECURE_STOP_RELEASE);
@@ -424,7 +425,7 @@ static bool isSessionException(status_t err) {
 static bool throwExceptionAsNecessary(
         JNIEnv *env, const sp<IDrm> &drm, status_t err, const char *msg = NULL) {
     std::string msgStr;
-    if (drm != NULL) {
+    if (drm != NULL && err != OK) {
         msgStr = DrmUtils::GetExceptionMessage(err, msg, drm);
         msg = msgStr.c_str();
     }
@@ -445,8 +446,7 @@ static bool throwExceptionAsNecessary(
         jniThrowException(env, "android/media/DeniedByServerException", msg);
         return true;
     } else if (err == DEAD_OBJECT) {
-        jniThrowException(env, "android/media/MediaDrmResetException",
-                "mediaserver died");
+        jniThrowException(env, "android/media/MediaDrmResetException", msg);
         return true;
     } else if (isSessionException(err)) {
         throwSessionException(env, msg, err);
@@ -967,10 +967,12 @@ static void android_media_MediaDrm_native_setup(
     status_t err = drm->initCheck();
 
     if (err != OK) {
+        auto logs(DrmUtils::gLogBuf.getLogs());
+        auto msg(DrmUtils::GetExceptionMessage(err, "Failed to instantiate drm object", logs));
         jniThrowException(
                 env,
                 "android/media/UnsupportedSchemeException",
-                "Failed to instantiate drm object.");
+                msg.c_str());
         return;
     }
 

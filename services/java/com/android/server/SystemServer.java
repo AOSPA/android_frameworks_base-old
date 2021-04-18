@@ -53,7 +53,6 @@ import android.graphics.Typeface;
 import android.hardware.display.DisplayManagerInternal;
 import android.net.ConnectivityManager;
 import android.net.ConnectivityModuleConnector;
-import android.net.IConnectivityManager;
 import android.net.NetworkStackClient;
 import android.os.BaseBundle;
 import android.os.Binder;
@@ -105,7 +104,6 @@ import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.appbinding.AppBindingService;
-import com.android.server.apphibernation.AppHibernationService;
 import com.android.server.attention.AttentionManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.biometrics.AuthService;
@@ -119,6 +117,7 @@ import com.android.server.camera.CameraServiceProxy;
 import com.android.server.clipboard.ClipboardService;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.compat.PlatformCompatNative;
+import com.android.server.connectivity.PacProxyService;
 import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.coverage.CoverageService;
 import com.android.server.devicepolicy.DevicePolicyManagerService;
@@ -164,6 +163,7 @@ import com.android.server.pm.ShortcutService;
 import com.android.server.pm.UserManagerService;
 import com.android.server.pm.dex.SystemServerDexLoadReporter;
 import com.android.server.pm.verify.domain.DomainVerificationService;
+import com.android.server.policy.AppOpsPolicy;
 import com.android.server.policy.PermissionPolicyService;
 import com.android.server.policy.PhoneWindowManager;
 import com.android.server.policy.role.RoleServicePlatformHelperImpl;
@@ -393,8 +393,6 @@ public final class SystemServer implements Dumpable {
 
     private static final String UNCRYPT_PACKAGE_FILE = "/cache/recovery/uncrypt_file";
     private static final String BLOCK_MAP_FILE = "/cache/recovery/block.map";
-
-    private static final String GSI_RUNNING_PROP = "ro.gsid.image_running";
 
     // maximum number of binder threads used for system_server
     // will be higher than the system default
@@ -1311,7 +1309,6 @@ public final class SystemServer implements Dumpable {
         VcnManagementService vcnManagement = null;
         NetworkStatsService networkStats = null;
         NetworkPolicyManagerService networkPolicy = null;
-        IConnectivityManager connectivity = null;
         NsdService serviceDiscovery = null;
         WindowManagerService wm = null;
         SerialService serial = null;
@@ -1321,6 +1318,7 @@ public final class SystemServer implements Dumpable {
         ConsumerIrService consumerIr = null;
         MmsServiceBroker mmsService = null;
         HardwarePropertiesManagerService hardwarePropertiesService = null;
+        PacProxyService pacProxyService = null;
         Object wigigP2pService = null;
         Object wigigService = null;
 
@@ -1333,7 +1331,7 @@ public final class SystemServer implements Dumpable {
                 false);
         boolean enableLeftyService = SystemProperties.getBoolean("config.enable_lefty", false);
 
-        boolean isEmulator = SystemProperties.get("ro.kernel.qemu").equals("1");
+        boolean isEmulator = SystemProperties.get("ro.boot.qemu").equals("1");
         boolean enableWigig = SystemProperties.getBoolean("persist.vendor.wigig.enable", false);
 
         boolean isWatch = context.getPackageManager().hasSystemFeature(
@@ -1671,8 +1669,7 @@ public final class SystemServer implements Dumpable {
             t.traceEnd();
 
             final boolean hasPdb = !SystemProperties.get(PERSISTENT_DATA_BLOCK_PROP).equals("");
-            final boolean hasGsi = SystemProperties.getInt(GSI_RUNNING_PROP, 0) > 0;
-            if (hasPdb && !hasGsi) {
+            if (hasPdb) {
                 t.traceBegin("StartPersistentDataBlock");
                 mSystemServiceManager.startService(PersistentDataBlockService.class);
                 t.traceEnd();
@@ -1727,14 +1724,9 @@ public final class SystemServer implements Dumpable {
             startTextToSpeechManagerService(context, t);
 
             // System Speech Recognition Service
-            if (deviceHasConfigString(context,
-                    R.string.config_defaultOnDeviceSpeechRecognitionService)) {
-                t.traceBegin("StartSpeechRecognitionManagerService");
-                mSystemServiceManager.startService(SPEECH_RECOGNITION_MANAGER_SERVICE_CLASS);
-                t.traceEnd();
-            } else {
-                Slog.d(TAG, "System speech recognition is not defined by OEM");
-            }
+            t.traceBegin("StartSpeechRecognitionManagerService");
+            mSystemServiceManager.startService(SPEECH_RECOGNITION_MANAGER_SERVICE_CLASS);
+            t.traceEnd();
 
             // App prediction manager service
             if (deviceHasConfigString(context, R.string.config_defaultAppPredictionService)) {
@@ -1794,7 +1786,7 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("StartIpSecService");
             try {
-                ipSecService = IpSecService.create(context, networkManagement);
+                ipSecService = IpSecService.create(context);
                 ServiceManager.addService(Context.IPSEC_SERVICE, ipSecService);
             } catch (Throwable e) {
                 reportWtf("starting IpSec Service", e);
@@ -1890,16 +1882,22 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
             }
 
+            t.traceBegin("StartPacProxyService");
+            try {
+                pacProxyService = new PacProxyService(context);
+                ServiceManager.addService(Context.PAC_PROXY_SERVICE, pacProxyService);
+            } catch (Throwable e) {
+                reportWtf("starting PacProxyService", e);
+            }
+            t.traceEnd();
+
             t.traceBegin("StartConnectivityService");
             // This has to be called after NetworkManagementService, NetworkStatsService
             // and NetworkPolicyManager because ConnectivityService needs to take these
             // services to initialize.
             mSystemServiceManager.startServiceFromJar(CONNECTIVITY_SERVICE_INITIALIZER_CLASS,
                     CONNECTIVITY_SERVICE_APEX_PATH);
-            connectivity = IConnectivityManager.Stub.asInterface(
-                    ServiceManager.getService(Context.CONNECTIVITY_SERVICE));
-            // TODO: Use ConnectivityManager instead of ConnectivityService.
-            networkPolicy.bindConnectivityManager(connectivity);
+            networkPolicy.bindConnectivityManager();
             t.traceEnd();
 
             t.traceBegin("StartVpnManagerService");
@@ -2187,11 +2185,9 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(VOICE_RECOGNITION_MANAGER_SERVICE_CLASS);
             t.traceEnd();
 
-            if (AppHibernationService.isAppHibernationEnabled()) {
-                t.traceBegin("StartAppHibernationService");
-                mSystemServiceManager.startService(APP_HIBERNATION_SERVICE_CLASS);
-                t.traceEnd();
-            }
+            t.traceBegin("StartAppHibernationService");
+            mSystemServiceManager.startService(APP_HIBERNATION_SERVICE_CLASS);
+            t.traceEnd();
 
             if (GestureLauncherService.isGestureLauncherEnabled(context.getResources())) {
                 t.traceBegin("StartGestureLauncher");
@@ -2717,6 +2713,14 @@ public final class SystemServer implements Dumpable {
                 mActivityManagerService.startObservingNativeCrashes();
             } catch (Throwable e) {
                 reportWtf("observing native crashes", e);
+            }
+            t.traceEnd();
+
+            t.traceBegin("RegisterAppOpsPolicy");
+            try {
+                mActivityManagerService.setAppOpsPolicy(new AppOpsPolicy());
+            } catch (Throwable e) {
+                reportWtf("registering app ops policy", e);
             }
             t.traceEnd();
 

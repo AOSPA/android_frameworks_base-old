@@ -104,9 +104,10 @@ public class WMShellModule {
     @Provides
     static AppPairsController provideAppPairs(ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue, DisplayController displayController,
-            @ShellMainThread ShellExecutor mainExecutor) {
+            @ShellMainThread ShellExecutor mainExecutor,
+            DisplayImeController displayImeController) {
         return new AppPairsController(shellTaskOrganizer, syncQueue, displayController,
-                mainExecutor);
+                mainExecutor, displayImeController);
     }
 
     //
@@ -171,6 +172,7 @@ public class WMShellModule {
     @WMSingleton
     @Provides
     static PipTaskOrganizer providePipTaskOrganizer(Context context,
+            SyncTransactionQueue syncTransactionQueue,
             PipBoundsState pipBoundsState,
             PipBoundsAlgorithm pipBoundsAlgorithm,
             PhonePipMenuController menuPhoneController,
@@ -181,7 +183,8 @@ public class WMShellModule {
             DisplayController displayController,
             PipUiEventLogger pipUiEventLogger, ShellTaskOrganizer shellTaskOrganizer,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new PipTaskOrganizer(context, pipBoundsState, pipBoundsAlgorithm,
+        return new PipTaskOrganizer(context,
+                syncTransactionQueue, pipBoundsState, pipBoundsAlgorithm,
                 menuPhoneController, pipAnimationController, pipSurfaceTransactionHelper,
                 pipTransitionController, splitScreenOptional, displayController, pipUiEventLogger,
                 shellTaskOrganizer, mainExecutor);

@@ -98,6 +98,8 @@ final class ActivityManagerConstants extends ContentObserver {
             "process_crash_count_reset_interval";
     static final String KEY_PROCESS_CRASH_COUNT_LIMIT = "process_crash_count_limit";
     static final String KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION = "boot_time_temp_allowlist_duration";
+    static final String KEY_FG_TO_BG_FGS_GRACE_DURATION = "fg_to_bg_fgs_grace_duration";
+    static final String KEY_FGS_START_FOREGROUND_TIMEOUT = "fgs_start_foreground_timeout";
 
     private static int DEFAULT_MAX_CACHED_PROCESSES = 32;
     private static final long DEFAULT_BACKGROUND_SETTLE_TIME = 60*1000;
@@ -136,7 +138,8 @@ final class ActivityManagerConstants extends ContentObserver {
     private static final int DEFAULT_PROCESS_CRASH_COUNT_RESET_INTERVAL = 12 * 60 * 60 * 1000;
     private static final int DEFAULT_PROCESS_CRASH_COUNT_LIMIT = 12;
     private static final int DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION = 10 * 1000;
-
+    private static final long DEFAULT_FG_TO_BG_FGS_GRACE_DURATION = 5 * 1000;
+    private static final int DEFAULT_FGS_START_FOREGROUND_TIMEOUT_MS = 10 * 1000;
 
     // Flag stored in the DeviceConfig API.
     /**
@@ -170,6 +173,13 @@ final class ActivityManagerConstants extends ContentObserver {
      */
     private static final String KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED =
             "default_fgs_starts_restriction_enabled";
+
+    /**
+     * Default value for mFgsStartRestrictionCheckCallerTargetSdk if not explicitly set in
+     * Settings.Global.
+     */
+    private static final String KEY_DEFAULT_FGS_STARTS_RESTRICTION_CHECK_CALLER_TARGET_SDK =
+            "default_fgs_starts_restriction_check_caller_target_sdk";
 
     /**
      * Whether FGS notification display is deferred following the transition into
@@ -371,6 +381,13 @@ final class ActivityManagerConstants extends ContentObserver {
     // at all.
     volatile boolean mFlagFgsStartRestrictionEnabled = true;
 
+    /**
+     * Indicates whether the foreground service background start restriction is enabled for
+     * caller app that is targeting S+.
+     * This is in addition to check of {@link #mFlagFgsStartRestrictionEnabled} flag.
+     */
+    volatile boolean mFgsStartRestrictionCheckCallerTargetSdk = true;
+
     // Whether we defer FGS notifications a few seconds following their transition to
     // the foreground state.  Applies only to S+ apps; enabled by default.
     volatile boolean mFlagFgsNotificationDeferralEnabled = true;
@@ -390,6 +407,18 @@ final class ActivityManagerConstants extends ContentObserver {
      * milliseconds.
      */
     volatile long mBootTimeTempAllowlistDuration = DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION;
+
+    /**
+     * The grace period in milliseconds to allow a process to start FGS from background after
+     * switching from foreground to background; currently it's only applicable to its activities.
+     */
+    volatile long mFgToBgFgsGraceDuration = DEFAULT_FG_TO_BG_FGS_GRACE_DURATION;
+
+    /**
+     * When service started from background, before the timeout it can be promoted to FGS by calling
+     * Service.startForeground().
+     */
+    volatile long mFgsStartForegroundTimeoutMs = DEFAULT_FGS_START_FOREGROUND_TIMEOUT_MS;
 
     private final ActivityManagerService mService;
     private ContentResolver mResolver;
@@ -551,6 +580,9 @@ final class ActivityManagerConstants extends ContentObserver {
                             case KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED:
                                 updateFgsStartsRestriction();
                                 break;
+                            case KEY_DEFAULT_FGS_STARTS_RESTRICTION_CHECK_CALLER_TARGET_SDK:
+                                updateFgsStartsRestrictionCheckCallerTargetSdk();
+                                break;
                             case KEY_DEFERRED_FGS_NOTIFICATIONS_ENABLED:
                                 updateFgsNotificationDeferralEnable();
                                 break;
@@ -586,6 +618,12 @@ final class ActivityManagerConstants extends ContentObserver {
                                 break;
                             case KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION:
                                 updateBootTimeTempAllowListDuration();
+                                break;
+                            case KEY_FG_TO_BG_FGS_GRACE_DURATION:
+                                updateFgToBgFgsGraceDuration();
+                                break;
+                            case KEY_FGS_START_FOREGROUND_TIMEOUT:
+                                updateFgsStartForegroundTimeout();
                                 break;
                             default:
                                 break;
@@ -864,6 +902,13 @@ final class ActivityManagerConstants extends ContentObserver {
                 /*defaultValue*/ true);
     }
 
+    private void updateFgsStartsRestrictionCheckCallerTargetSdk() {
+        mFgsStartRestrictionCheckCallerTargetSdk = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_DEFAULT_FGS_STARTS_RESTRICTION_CHECK_CALLER_TARGET_SDK,
+                /*defaultValue*/ true);
+    }
+
     private void updateFgsNotificationDeferralEnable() {
         mFlagFgsNotificationDeferralEnabled = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
@@ -905,6 +950,20 @@ final class ActivityManagerConstants extends ContentObserver {
                 DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
                 KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION,
                 DEFAULT_BOOT_TIME_TEMP_ALLOWLIST_DURATION);
+    }
+
+    private void updateFgToBgFgsGraceDuration() {
+        mFgToBgFgsGraceDuration = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_FG_TO_BG_FGS_GRACE_DURATION,
+                DEFAULT_FG_TO_BG_FGS_GRACE_DURATION);
+    }
+
+    private void updateFgsStartForegroundTimeout() {
+        mFgsStartForegroundTimeoutMs = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+                KEY_FGS_START_FOREGROUND_TIMEOUT,
+                DEFAULT_FGS_START_FOREGROUND_TIMEOUT_MS);
     }
 
     private void updateImperceptibleKillExemptions() {
@@ -1108,6 +1167,18 @@ final class ActivityManagerConstants extends ContentObserver {
         pw.println(MAX_PHANTOM_PROCESSES);
         pw.print("  "); pw.print(KEY_BOOT_TIME_TEMP_ALLOWLIST_DURATION); pw.print("=");
         pw.println(mBootTimeTempAllowlistDuration);
+        pw.print("  "); pw.print(KEY_FG_TO_BG_FGS_GRACE_DURATION); pw.print("=");
+        pw.println(mFgToBgFgsGraceDuration);
+        pw.print("  "); pw.print(KEY_FGS_START_FOREGROUND_TIMEOUT); pw.print("=");
+        pw.println(mFgsStartForegroundTimeoutMs);
+        pw.print("  "); pw.print(KEY_DEFAULT_BACKGROUND_ACTIVITY_STARTS_ENABLED); pw.print("=");
+        pw.println(mFlagBackgroundActivityStartsEnabled);
+        pw.print("  "); pw.print(KEY_DEFAULT_BACKGROUND_FGS_STARTS_RESTRICTION_ENABLED);
+        pw.print("="); pw.println(mFlagBackgroundFgsStartRestrictionEnabled);
+        pw.print("  "); pw.print(KEY_DEFAULT_FGS_STARTS_RESTRICTION_ENABLED); pw.print("=");
+        pw.println(mFlagFgsStartRestrictionEnabled);
+        pw.print("  "); pw.print(KEY_DEFAULT_FGS_STARTS_RESTRICTION_CHECK_CALLER_TARGET_SDK);
+        pw.print("="); pw.println(mFgsStartRestrictionCheckCallerTargetSdk);
 
         pw.println();
         if (mOverrideMaxCachedProcesses >= 0) {

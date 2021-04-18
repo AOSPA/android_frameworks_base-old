@@ -27,6 +27,9 @@ import static android.view.InsetsState.ITYPE_IME;
 import static android.view.InsetsState.ITYPE_INVALID;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
+import static android.view.WindowInsets.Type.displayCutout;
+import static android.view.WindowInsets.Type.mandatorySystemGestures;
+import static android.view.WindowInsets.Type.systemGestures;
 import static android.view.WindowManager.LayoutParams.TYPE_INPUT_METHOD;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
@@ -121,7 +124,8 @@ class InsetsStateController {
                 ? provider.getSource().getType() : ITYPE_INVALID;
         return getInsetsForTarget(type, target.getWindowingMode(), target.isAlwaysOnTop(),
                 target.getFrozenInsetsState() != null ? target.getFrozenInsetsState() :
-                target.mAboveInsetsState);
+                        (target.mAttrs.receiveInsetsIgnoringZOrder ? mState :
+                         target.mAboveInsetsState));
     }
 
     InsetsState getInsetsForWindowMetrics(@NonNull WindowManager.LayoutParams attrs) {
@@ -244,6 +248,16 @@ class InsetsStateController {
         return result;
     }
 
+    public void addProvidersToTransition() {
+        for (int i = mProviders.size() - 1; i >= 0; --i) {
+            final InsetsSourceProvider p = mProviders.valueAt(i);
+            if (p == null) continue;
+            final WindowContainer wc = p.mWin;
+            if (wc == null) continue;
+            mDisplayContent.mAtmService.getTransitionController().collect(wc);
+        }
+    }
+
     /**
      * @return The provider of a specific type.
      */
@@ -291,6 +305,76 @@ class InsetsStateController {
         }
         winInsetsChanged.clear();
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+    }
+
+    /**
+     * Updates {@link WindowState#mAboveInsetsState} for all windows in the display while the
+     * z-order of a window is changed.
+     *
+     * @param win The window whose z-order has changed.
+     * @param notifyInsetsChange {@code true} if the clients should be notified about the change.
+     */
+    void updateAboveInsetsState(WindowState win, boolean notifyInsetsChange) {
+        if (win == null || win.getDisplayContent() != mDisplayContent) {
+            return;
+        }
+        final boolean[] aboveWin = { true };
+        final InsetsState aboveInsetsState = new InsetsState();
+        aboveInsetsState.set(mState,
+                displayCutout() | systemGestures() | mandatorySystemGestures());
+        final SparseArray<InsetsSource> winProvidedSources = win.mProvidedInsetsSources;
+        final ArrayList<WindowState> insetsChangedWindows = new ArrayList<>();
+        mDisplayContent.forAllWindows(w -> {
+            if (aboveWin[0]) {
+                if (w == win) {
+                    aboveWin[0] = false;
+                    if (!win.mAboveInsetsState.equals(aboveInsetsState)) {
+                        win.mAboveInsetsState.set(aboveInsetsState);
+                        insetsChangedWindows.add(win);
+                    }
+                    return winProvidedSources.size() == 0;
+                } else {
+                    final SparseArray<InsetsSource> providedSources = w.mProvidedInsetsSources;
+                    for (int i = providedSources.size() - 1; i >= 0; i--) {
+                        aboveInsetsState.addSource(providedSources.valueAt(i));
+                    }
+                    if (winProvidedSources.size() == 0) {
+                        return false;
+                    }
+                    boolean changed = false;
+                    for (int i = winProvidedSources.size() - 1; i >= 0; i--) {
+                        changed |= w.mAboveInsetsState.removeSource(winProvidedSources.keyAt(i));
+                    }
+                    if (changed) {
+                        insetsChangedWindows.add(w);
+                    }
+                }
+            } else {
+                for (int i = winProvidedSources.size() - 1; i >= 0; i--) {
+                    w.mAboveInsetsState.addSource(winProvidedSources.valueAt(i));
+                }
+                insetsChangedWindows.add(w);
+            }
+            return false;
+        }, true /* traverseTopToBottom */);
+        if (notifyInsetsChange) {
+            for (int i = insetsChangedWindows.size() - 1; i >= 0; i--) {
+                mDispatchInsetsChanged.accept(insetsChangedWindows.get(i));
+            }
+        }
+    }
+
+    void onDisplayInfoUpdated(boolean notifyInsetsChange) {
+        final ArrayList<WindowState> insetsChangedWindows = new ArrayList<>();
+        mDisplayContent.forAllWindows(w -> {
+            w.mAboveInsetsState.set(mState, displayCutout());
+            insetsChangedWindows.add(w);
+        }, true /* traverseTopToBottom */);
+        if (notifyInsetsChange) {
+            for (int i = insetsChangedWindows.size() - 1; i >= 0; i--) {
+                mDispatchInsetsChanged.accept(insetsChangedWindows.get(i));
+            }
+        }
     }
 
     void onInsetsModified(InsetsControlTarget caller) {

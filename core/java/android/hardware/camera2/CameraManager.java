@@ -32,6 +32,7 @@ import android.hardware.camera2.impl.CameraDeviceImpl;
 import android.hardware.camera2.impl.CameraMetadataNative;
 import android.hardware.camera2.params.ExtensionSessionConfiguration;
 import android.hardware.camera2.params.SessionConfiguration;
+import android.hardware.camera2.params.StreamConfiguration;
 import android.hardware.camera2.utils.CameraIdAndSessionConfiguration;
 import android.hardware.camera2.utils.ConcurrentCameraIdCombination;
 import android.hardware.display.DisplayManager;
@@ -54,6 +55,7 @@ import android.view.Display;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -375,6 +377,47 @@ public final class CameraManager {
     }
 
     /**
+     * Get all physical cameras' multi-resolution stream configuration map
+     *
+     * <p>For a logical multi-camera, query the map between physical camera id and
+     * the physical camera's multi-resolution stream configuration. This map is in turn
+     * combined to form the logical camera's multi-resolution stream configuration map.</p>
+     */
+    private Map<String, StreamConfiguration[]> getPhysicalCameraMultiResolutionConfigs(
+            CameraMetadataNative info, ICameraService cameraService)
+            throws CameraAccessException {
+        HashMap<String, StreamConfiguration[]> multiResolutionStreamConfigurations =
+                new HashMap<String, StreamConfiguration[]>();
+
+        // Query the characteristics of all physical sub-cameras, and combine the multi-resolution
+        // stream configurations. Note that framework derived formats such as HEIC and DEPTH_JPEG
+        // aren't supported as multi-resolution input or output formats.
+        Set<String> physicalCameraIds = info.getPhysicalCameraIds();
+        try {
+            for (String physicalCameraId : physicalCameraIds) {
+                CameraMetadataNative physicalCameraInfo =
+                        cameraService.getCameraCharacteristics(physicalCameraId);
+                StreamConfiguration[] configs = physicalCameraInfo.get(
+                        CameraCharacteristics.
+                                SCALER_PHYSICAL_CAMERA_MULTI_RESOLUTION_STREAM_CONFIGURATIONS);
+                if (configs != null) {
+                    multiResolutionStreamConfigurations.put(physicalCameraId, configs);
+                }
+            }
+
+            // TODO: If this is an ultra high resolution sensor camera, combine the multi-resolution
+            // stream combination from "info" as well.
+        } catch (RemoteException e) {
+            ServiceSpecificException sse = new ServiceSpecificException(
+                    ICameraService.ERROR_DISCONNECTED,
+                    "Camera service is currently unavailable");
+            throwAsPublicException(sse);
+        }
+
+        return multiResolutionStreamConfigurations;
+    }
+
+    /**
      * <p>Query the capabilities of a camera device. These capabilities are
      * immutable for a given camera.</p>
      *
@@ -421,12 +464,19 @@ public final class CameraManager {
                 } catch (NumberFormatException e) {
                     Log.v(TAG, "Failed to parse camera Id " + cameraId + " to integer");
                 }
+
                 boolean hasConcurrentStreams =
                         CameraManagerGlobal.get().cameraIdHasConcurrentStreamsLocked(cameraId);
                 info.setHasMandatoryConcurrentStreams(hasConcurrentStreams);
                 info.setDisplaySize(displaySize);
-                characteristics = new CameraCharacteristics(info);
 
+                Map<String, StreamConfiguration[]> multiResolutionSizeMap =
+                        getPhysicalCameraMultiResolutionConfigs(info, cameraService);
+                if (multiResolutionSizeMap.size() > 0) {
+                    info.setMultiResolutionStreamConfigurationMap(multiResolutionSizeMap);
+                }
+
+                characteristics = new CameraCharacteristics(info);
             } catch (ServiceSpecificException e) {
                 throwAsPublicException(e);
             } catch (RemoteException e) {
@@ -460,6 +510,18 @@ public final class CameraManager {
         return new CameraExtensionCharacteristics(mContext, cameraId, chars);
     }
 
+    private Map<String, CameraCharacteristics> getPhysicalIdToCharsMap(
+            CameraCharacteristics chars) throws CameraAccessException {
+        HashMap<String, CameraCharacteristics> physicalIdsToChars =
+                new HashMap<String, CameraCharacteristics>();
+        Set<String> physicalCameraIds = chars.getPhysicalCameraIds();
+        for (String physicalCameraId : physicalCameraIds) {
+            CameraCharacteristics physicalChars = getCameraCharacteristics(physicalCameraId);
+            physicalIdsToChars.put(physicalCameraId, physicalChars);
+        }
+        return physicalIdsToChars;
+    }
+
     /**
      * Helper for opening a connection to a camera with the given ID.
      *
@@ -488,17 +550,18 @@ public final class CameraManager {
             throws CameraAccessException {
         CameraCharacteristics characteristics = getCameraCharacteristics(cameraId);
         CameraDevice device = null;
-
+        Map<String, CameraCharacteristics> physicalIdsToChars =
+                getPhysicalIdToCharsMap(characteristics);
         synchronized (mLock) {
 
             ICameraDeviceUser cameraUser = null;
-
             android.hardware.camera2.impl.CameraDeviceImpl deviceImpl =
                     new android.hardware.camera2.impl.CameraDeviceImpl(
                         cameraId,
                         callback,
                         executor,
                         characteristics,
+                        physicalIdsToChars,
                         mContext.getApplicationInfo().targetSdkVersion,
                         mContext);
 
@@ -2067,7 +2130,9 @@ public final class CameraManager {
                 // Tell listeners that the cameras and torch modes are unavailable and schedule a
                 // reconnection to camera service. When camera service is reconnected, the camera
                 // and torch statuses will be updated.
-                for (int i = 0; i < mDeviceStatus.size(); i++) {
+                // Iterate from the end to the beginning befcause onStatusChangedLocked removes
+                // entries from the ArrayMap.
+                for (int i = mDeviceStatus.size() - 1; i >= 0; i--) {
                     String cameraId = mDeviceStatus.keyAt(i);
                     onStatusChangedLocked(ICameraServiceListener.STATUS_NOT_PRESENT, cameraId);
                 }

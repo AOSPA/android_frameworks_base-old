@@ -82,6 +82,9 @@ public class ParsedActivity extends ParsedMainComponent {
     @Nullable
     ActivityInfo.WindowLayout windowLayout;
 
+    @Nullable
+    String[] attributionTags;
+
     public ParsedActivity(ParsedActivity other) {
         super(other);
         this.theme = other.theme;
@@ -107,6 +110,7 @@ public class ParsedActivity extends ParsedMainComponent {
         this.rotationAnimation = other.rotationAnimation;
         this.colorMode = other.colorMode;
         this.windowLayout = other.windowLayout;
+        this.attributionTags = other.attributionTags;
     }
 
     /**
@@ -155,6 +159,7 @@ public class ParsedActivity extends ParsedMainComponent {
         alias.nonLocalizedLabel = target.nonLocalizedLabel;
         alias.launchMode = target.launchMode;
         alias.lockTaskLaunchMode = target.lockTaskLaunchMode;
+        alias.documentLaunchMode = target.documentLaunchMode;
         alias.descriptionRes = target.descriptionRes;
         alias.screenOrientation = target.screenOrientation;
         alias.taskAffinity = target.taskAffinity;
@@ -171,6 +176,7 @@ public class ParsedActivity extends ParsedMainComponent {
         alias.requestedVrComponent = target.requestedVrComponent;
         alias.directBootAware = target.directBootAware;
         alias.setProcessName(target.getProcessName());
+        alias.attributionTags = target.attributionTags;
         return alias;
 
         // Not all attributes from the target ParsedActivity are copied to the alias.
@@ -179,7 +185,6 @@ public class ParsedActivity extends ParsedMainComponent {
 //        alias.exported = target.exported;
 //        alias.permission = target.permission;
 //        alias.splitName = target.splitName;
-//        alias.documentLaunchMode = target.documentLaunchMode;
 //        alias.persistableMode = target.persistableMode;
 //        alias.rotationAnimation = target.rotationAnimation;
 //        alias.colorMode = target.colorMode;
@@ -299,6 +304,7 @@ public class ParsedActivity extends ParsedMainComponent {
         } else {
             dest.writeBoolean(false);
         }
+        dest.writeString8Array(this.attributionTags);
     }
 
     public ParsedActivity() {
@@ -332,6 +338,7 @@ public class ParsedActivity extends ParsedMainComponent {
         if (in.readBoolean()) {
             windowLayout = new ActivityInfo.WindowLayout(in);
         }
+        this.attributionTags = in.createString8Array();
     }
 
     public static final Parcelable.Creator<ParsedActivity> CREATOR = new Creator<ParsedActivity>() {
@@ -444,5 +451,10 @@ public class ParsedActivity extends ParsedMainComponent {
     @Nullable
     public ActivityInfo.WindowLayout getWindowLayout() {
         return windowLayout;
+    }
+
+    @Nullable
+    public String[] getAttributionTags() {
+        return attributionTags;
     }
 }

@@ -39,6 +39,7 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
+import com.android.wm.shell.common.DisplayImeController;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.split.SplitLayout;
 
@@ -79,10 +80,12 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
     private DisplayAreaInfo mDisplayAreaInfo;
     private final Context mContext;
     private final List<SplitScreen.SplitScreenListener> mListeners = new ArrayList<>();
+    private final DisplayImeController mDisplayImeController;
     private boolean mExitSplitScreenOnHide = true;
 
     StageCoordinator(Context context, int displayId, SyncTransactionQueue syncQueue,
-            RootTaskDisplayAreaOrganizer rootTDAOrganizer, ShellTaskOrganizer taskOrganizer) {
+            RootTaskDisplayAreaOrganizer rootTDAOrganizer, ShellTaskOrganizer taskOrganizer,
+            DisplayImeController displayImeController) {
         mContext = context;
         mDisplayId = displayId;
         mSyncQueue = syncQueue;
@@ -90,13 +93,14 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
         mTaskOrganizer = taskOrganizer;
         mMainStage = new MainStage(mTaskOrganizer, mDisplayId, mMainStageListener, mSyncQueue);
         mSideStage = new SideStage(mTaskOrganizer, mDisplayId, mSideStageListener, mSyncQueue);
+        mDisplayImeController = displayImeController;
         mRootTDAOrganizer.registerListener(displayId, this);
     }
 
     @VisibleForTesting
     StageCoordinator(Context context, int displayId, SyncTransactionQueue syncQueue,
             RootTaskDisplayAreaOrganizer rootTDAOrganizer, ShellTaskOrganizer taskOrganizer,
-            MainStage mainStage, SideStage sideStage) {
+            MainStage mainStage, SideStage sideStage, DisplayImeController displayImeController) {
         mContext = context;
         mDisplayId = displayId;
         mSyncQueue = syncQueue;
@@ -104,6 +108,7 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
         mTaskOrganizer = taskOrganizer;
         mMainStage = mainStage;
         mSideStage = sideStage;
+        mDisplayImeController = displayImeController;
         mRootTDAOrganizer.registerListener(displayId, this);
     }
 
@@ -220,7 +225,7 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
     }
 
     private void onStageChildTaskStatusChanged(
-            StageListenerImpl stageListener, int taskId, boolean present) {
+            StageListenerImpl stageListener, int taskId, boolean present, boolean visible) {
 
         int stage;
         if (present) {
@@ -231,7 +236,7 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
         }
 
         for (int i = mListeners.size() - 1; i >= 0; --i) {
-            mListeners.get(i).onTaskStageChanged(taskId, stage);
+            mListeners.get(i).onTaskStageChanged(taskId, stage, visible);
         }
     }
 
@@ -357,8 +362,9 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
 
     @Override
     public void onSnappedToDismiss(boolean bottomOrRight) {
-        final boolean mainStageToTop = bottomOrRight
-                && mSideStagePosition == STAGE_POSITION_BOTTOM_OR_RIGHT;
+        final boolean mainStageToTop =
+                bottomOrRight ? mSideStagePosition == STAGE_POSITION_BOTTOM_OR_RIGHT
+                        : mSideStagePosition == STAGE_POSITION_TOP_OR_LEFT;
         exitSplitScreen(mainStageToTop ? mMainStage : mSideStage);
     }
 
@@ -420,7 +426,8 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
         if (mSplitLayout == null) {
             mSplitLayout = new SplitLayout(TAG + "SplitDivider", mContext,
                     mDisplayAreaInfo.configuration, this,
-                    b -> mRootTDAOrganizer.attachToDisplayArea(mDisplayId, b));
+                    b -> mRootTDAOrganizer.attachToDisplayArea(mDisplayId, b),
+                    mDisplayImeController);
         }
     }
 
@@ -488,8 +495,8 @@ class StageCoordinator implements SplitLayout.LayoutChangeListener,
         }
 
         @Override
-        public void onChildTaskStatusChanged(int taskId, boolean present) {
-            StageCoordinator.this.onStageChildTaskStatusChanged(this, taskId, present);
+        public void onChildTaskStatusChanged(int taskId, boolean present, boolean visible) {
+            StageCoordinator.this.onStageChildTaskStatusChanged(this, taskId, present, visible);
         }
 
         @Override

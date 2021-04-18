@@ -16,24 +16,18 @@
 
 package com.android.systemui.wmshell;
 
-import static android.os.Process.THREAD_PRIORITY_DISPLAY;
-
-import android.animation.AnimationHandler;
 import android.app.ActivityTaskManager;
 import android.content.Context;
 import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.os.Handler;
-import android.os.HandlerThread;
 import android.view.IWindowManager;
 import android.view.WindowManager;
 
-import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.dagger.WMComponent;
 import com.android.systemui.dagger.WMSingleton;
-import com.android.systemui.dagger.qualifiers.Main;
 import com.android.wm.shell.FullscreenTaskListener;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellCommandHandler;
@@ -50,16 +44,16 @@ import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
+import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.FloatingContentCoordinator;
-import com.android.wm.shell.common.HandlerExecutor;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.SystemWindows;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 import com.android.wm.shell.common.TransactionPool;
-import com.android.wm.shell.common.annotations.ChoreographerSfVsync;
 import com.android.wm.shell.common.annotations.ShellAnimationThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
+import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
@@ -76,7 +70,9 @@ import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.splitscreen.SplitScreen;
 import com.android.wm.shell.splitscreen.SplitScreenController;
-import com.android.wm.shell.transition.RemoteTransitions;
+import com.android.wm.shell.startingsurface.StartingSurface;
+import com.android.wm.shell.startingsurface.StartingWindowController;
+import com.android.wm.shell.transition.ShellTransitions;
 import com.android.wm.shell.transition.Transitions;
 
 import java.util.Optional;
@@ -94,91 +90,8 @@ import dagger.Provides;
  * dependencies that are device/form factor SystemUI implementation specific should go into their
  * respective modules (ie. {@link WMShellModule} for handheld, {@link TvWMShellModule} for tv, etc.)
  */
-@Module
+@Module(includes = WMShellConcurrencyModule.class)
 public abstract class WMShellBaseModule {
-
-    private static final boolean ENABLE_SHELL_MAIN_THREAD = false;
-
-    //
-    // Shell Concurrency - Components used for managing threading in the Shell and SysUI
-    //
-
-    /**
-     * Provide a SysUI main-thread Executor.
-     */
-    @WMSingleton
-    @Provides
-    @Main
-    public static ShellExecutor provideSysUIMainExecutor(@Main Handler sysuiMainHandler) {
-        return new HandlerExecutor(sysuiMainHandler);
-    }
-
-    /**
-     * Shell main-thread Handler, don't use this unless really necessary (ie. need to dedupe
-     * multiple types of messages, etc.)
-     */
-    @WMSingleton
-    @Provides
-    @ShellMainThread
-    public static Handler provideShellMainHandler(@Main Handler sysuiMainHandler) {
-        if (ENABLE_SHELL_MAIN_THREAD) {
-             HandlerThread mainThread = new HandlerThread("wmshell.main");
-             mainThread.start();
-             return mainThread.getThreadHandler();
-        }
-        return sysuiMainHandler;
-    }
-
-    /**
-     * Provide a Shell main-thread Executor.
-     */
-    @WMSingleton
-    @Provides
-    @ShellMainThread
-    public static ShellExecutor provideShellMainExecutor(@ShellMainThread Handler mainHandler,
-            @Main ShellExecutor sysuiMainExecutor) {
-        if (ENABLE_SHELL_MAIN_THREAD) {
-            return new HandlerExecutor(mainHandler);
-        }
-        return sysuiMainExecutor;
-    }
-
-    /**
-     * Provide a Shell animation-thread Executor.
-     */
-    @WMSingleton
-    @Provides
-    @ShellAnimationThread
-    public static ShellExecutor provideShellAnimationExecutor() {
-         HandlerThread shellAnimationThread = new HandlerThread("wmshell.anim",
-                 THREAD_PRIORITY_DISPLAY);
-         shellAnimationThread.start();
-         return new HandlerExecutor(shellAnimationThread.getThreadHandler());
-    }
-
-    /**
-     * Provide a Shell main-thread AnimationHandler.  The AnimationHandler can be set on
-     * {@link android.animation.ValueAnimator}s and will ensure that the animation will run on
-     * the Shell main-thread with the SF vsync.
-     */
-    @WMSingleton
-    @Provides
-    @ChoreographerSfVsync
-    public static AnimationHandler provideShellMainExecutorSfVsyncAnimationHandler(
-            @ShellMainThread ShellExecutor mainExecutor) {
-        try {
-            AnimationHandler handler = new AnimationHandler();
-            mainExecutor.executeBlocking(() -> {
-                // This is called on the animation thread since it calls
-                // Choreographer.getSfInstance() which returns a thread-local Choreographer instance
-                // that uses the SF vsync
-                handler.setProvider(new SfVsyncFrameCallbackProvider());
-            });
-            return handler;
-        } catch (InterruptedException e) {
-            throw new RuntimeException("Failed to initialize SfVsync animation handler in 1s", e);
-        }
-    }
 
     //
     // Internal common - Components used internally by multiple shell features
@@ -189,6 +102,12 @@ public abstract class WMShellBaseModule {
     static DisplayController provideDisplayController(Context context,
             IWindowManager wmService, @ShellMainThread ShellExecutor mainExecutor) {
         return new DisplayController(context, wmService, mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static DisplayLayout provideDisplayLayout() {
+        return new DisplayLayout();
     }
 
     @WMSingleton
@@ -320,12 +239,14 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Optional<OneHandedController> provideOneHandedController(Context context,
-            DisplayController displayController, TaskStackListenerImpl taskStackListener,
+            WindowManager windowManager, DisplayController displayController,
+            DisplayLayout displayLayout, TaskStackListenerImpl taskStackListener,
             UiEventLogger uiEventLogger,
             @ShellMainThread ShellExecutor mainExecutor,
             @ShellMainThread Handler mainHandler) {
-        return Optional.ofNullable(OneHandedController.create(context, displayController,
-                taskStackListener, uiEventLogger, mainExecutor, mainHandler));
+        return Optional.ofNullable(OneHandedController.create(context, windowManager,
+                displayController, displayLayout, taskStackListener, uiEventLogger, mainExecutor,
+                mainHandler));
     }
 
     //
@@ -367,22 +288,25 @@ public abstract class WMShellBaseModule {
         return new PipUiEventLogger(uiEventLogger, packageManager);
     }
 
+    @BindsOptionalOf
+    abstract PipTouchHandler optionalPipTouchHandler();
+
     //
     // Shell transitions
     //
 
     @WMSingleton
     @Provides
-    static RemoteTransitions provideRemoteTransitions(Transitions transitions) {
-        return Transitions.asRemoteTransitions(transitions);
+    static ShellTransitions provideRemoteTransitions(Transitions transitions) {
+        return transitions.asRemoteTransitions();
     }
 
     @WMSingleton
     @Provides
     static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
-            @ShellMainThread ShellExecutor mainExecutor,
+            Context context, @ShellMainThread ShellExecutor mainExecutor,
             @ShellAnimationThread ShellExecutor animExecutor) {
-        return new Transitions(organizer, pool, mainExecutor, animExecutor);
+        return new Transitions(organizer, pool, context, mainExecutor, animExecutor);
     }
 
     //
@@ -409,10 +333,11 @@ public abstract class WMShellBaseModule {
             ShellTaskOrganizer shellTaskOrganizer,
             SyncTransactionQueue syncQueue, Context context,
             RootTaskDisplayAreaOrganizer rootTaskDisplayAreaOrganizer,
-            @ShellMainThread ShellExecutor mainExecutor) {
+            @ShellMainThread ShellExecutor mainExecutor,
+            DisplayImeController displayImeController) {
         if (ActivityTaskManager.supportsSplitScreenMultiWindow(context)) {
             return Optional.of(new SplitScreenController(shellTaskOrganizer, syncQueue, context,
-                    rootTaskDisplayAreaOrganizer, mainExecutor));
+                    rootTaskDisplayAreaOrganizer, mainExecutor, displayImeController));
         } else {
             return Optional.empty();
         }
@@ -441,6 +366,22 @@ public abstract class WMShellBaseModule {
     @BindsOptionalOf
     abstract AppPairsController optionalAppPairs();
 
+    // Starting window
+
+    @WMSingleton
+    @Provides
+    static Optional<StartingSurface> provideStartingSurface(
+            StartingWindowController startingWindowController) {
+        return Optional.of(startingWindowController.asStartingSurface());
+    }
+
+    @WMSingleton
+    @Provides
+    static StartingWindowController provideStartingWindowController(Context context,
+            @ShellSplashscreenThread ShellExecutor executor, TransactionPool pool) {
+        return new StartingWindowController(context, executor, pool);
+    }
+
     //
     // Task view factory
     //
@@ -466,23 +407,33 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static ShellInit provideShellInit(DisplayImeController displayImeController,
+    static ShellInit provideShellInit(ShellInitImpl impl) {
+        return impl.asShellInit();
+    }
+
+    @WMSingleton
+    @Provides
+    static ShellInitImpl provideShellInitImpl(DisplayImeController displayImeController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
             Optional<LegacySplitScreenController> legacySplitScreenOptional,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<AppPairsController> appPairsOptional,
+            Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
             Transitions transitions,
+            StartingWindowController startingWindow,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return ShellInitImpl.create(displayImeController,
+        return new ShellInitImpl(displayImeController,
                 dragAndDropController,
                 shellTaskOrganizer,
                 legacySplitScreenOptional,
                 splitScreenOptional,
                 appPairsOptional,
+                pipTouchHandlerOptional,
                 fullscreenTaskListener,
                 transitions,
+                startingWindow,
                 mainExecutor);
     }
 
@@ -492,7 +443,13 @@ public abstract class WMShellBaseModule {
      */
     @WMSingleton
     @Provides
-    static Optional<ShellCommandHandler> provideShellCommandHandler(
+    static Optional<ShellCommandHandler> provideShellCommandHandler(ShellCommandHandlerImpl impl) {
+        return Optional.of(impl.asShellCommandHandler());
+    }
+
+    @WMSingleton
+    @Provides
+    static ShellCommandHandlerImpl provideShellCommandHandlerImpl(
             ShellTaskOrganizer shellTaskOrganizer,
             Optional<LegacySplitScreenController> legacySplitScreenOptional,
             Optional<SplitScreenController> splitScreenOptional,
@@ -501,8 +458,8 @@ public abstract class WMShellBaseModule {
             Optional<HideDisplayCutoutController> hideDisplayCutout,
             Optional<AppPairsController> appPairsOptional,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return Optional.of(ShellCommandHandlerImpl.create(shellTaskOrganizer,
+        return new ShellCommandHandlerImpl(shellTaskOrganizer,
                 legacySplitScreenOptional, splitScreenOptional, pipOptional, oneHandedOptional,
-                hideDisplayCutout, appPairsOptional, mainExecutor));
+                hideDisplayCutout, appPairsOptional, mainExecutor);
     }
 }

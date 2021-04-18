@@ -31,7 +31,6 @@ import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
-import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.DeviceConfig;
@@ -79,6 +78,8 @@ public class DisplayModeDirector {
     // Special ID used to indicate that given vote is to be applied globally, rather than to a
     // specific display.
     private static final int GLOBAL_ID = -1;
+
+    private static final int INVALID_DISPLAY_MODE_ID = -1;
 
     // The tolerance within which we consider something approximately equals.
     private static final float FLOAT_TOLERANCE = 0.01f;
@@ -262,6 +263,8 @@ public class DisplayModeDirector {
                 highestConsideredPriority = Vote.PRIORITY_APP_REQUEST_SIZE;
             }
 
+            // We try to find a range of priorities which define a non-empty set of allowed display
+            // modes. Each time we fail we increase the lowest priority.
             while (lowestConsideredPriority <= highestConsideredPriority) {
                 summarizeVotes(
                         votes, lowestConsideredPriority, highestConsideredPriority, primarySummary);
@@ -322,12 +325,37 @@ public class DisplayModeDirector {
                                 appRequestSummary.maxRefreshRate));
             }
 
-            // If the application requests a given mode with preferredModeId function, it will be
-            // stored as baseModeId.
-            int baseModeId = defaultMode.getModeId();
-            if (availableModes.length > 0) {
+            int baseModeId = INVALID_DISPLAY_MODE_ID;
+
+            // Select the default mode if available. This is important because SurfaceFlinger
+            // can do only seamless switches by default. Some devices (e.g. TV) don't support
+            // seamless switching so the mode we select here won't be changed.
+            for (int availableMode : availableModes) {
+                if (availableMode == defaultMode.getModeId()) {
+                    baseModeId = defaultMode.getModeId();
+                    break;
+                }
+            }
+
+            // If the application requests a display mode by setting
+            // LayoutParams.preferredDisplayModeId, it will be the only available mode and it'll
+            // be stored as baseModeId.
+            if (baseModeId == INVALID_DISPLAY_MODE_ID && availableModes.length > 0) {
                 baseModeId = availableModes[0];
             }
+
+            if (baseModeId == INVALID_DISPLAY_MODE_ID) {
+                Slog.w(TAG, "Can't find a set of allowed modes which satisfies the votes. Falling"
+                        + " back to the default mode. Display = " + displayId + ", votes = " + votes
+                        + ", supported modes = " + Arrays.toString(modes));
+
+                float fps = defaultMode.getRefreshRate();
+                return new DesiredDisplayModeSpecs(defaultMode.getModeId(),
+                        /*allowGroupSwitching */ false,
+                        new RefreshRateRange(fps, fps),
+                        new RefreshRateRange(fps, fps));
+            }
+
             if (mModeSwitchingType == DisplayManager.SWITCHING_TYPE_NONE) {
                 Display.Mode baseMode = null;
                 for (Display.Mode mode : modes) {
@@ -351,6 +379,7 @@ public class DisplayModeDirector {
 
             boolean allowGroupSwitching =
                     mModeSwitchingType == DisplayManager.SWITCHING_TYPE_ACROSS_AND_WITHIN_GROUPS;
+
             return new DesiredDisplayModeSpecs(baseModeId,
                     allowGroupSwitching,
                     new RefreshRateRange(

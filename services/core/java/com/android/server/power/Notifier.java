@@ -119,6 +119,7 @@ public class Notifier {
     private final AppOpsManager mAppOps;
     private final SuspendBlocker mSuspendBlocker;
     private final WindowManagerPolicy mPolicy;
+    private final FaceDownDetector mFaceDownDetector;
     private final ActivityManagerInternal mActivityManagerInternal;
     private final InputManagerInternal mInputManagerInternal;
     private final InputMethodManagerInternal mInputMethodManagerInternal;
@@ -165,12 +166,14 @@ public class Notifier {
     private boolean mUserActivityPending;
 
     public Notifier(Looper looper, Context context, IBatteryStats batteryStats,
-            SuspendBlocker suspendBlocker, WindowManagerPolicy policy) {
+            SuspendBlocker suspendBlocker, WindowManagerPolicy policy,
+            FaceDownDetector faceDownDetector) {
         mContext = context;
         mBatteryStats = batteryStats;
         mAppOps = mContext.getSystemService(AppOpsManager.class);
         mSuspendBlocker = suspendBlocker;
         mPolicy = policy;
+        mFaceDownDetector = faceDownDetector;
         mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mInputMethodManagerInternal = LocalServices.getService(InputMethodManagerInternal.class);
@@ -546,6 +549,7 @@ public class Notifier {
             if (!mUserActivityPending) {
                 mUserActivityPending = true;
                 Message msg = mHandler.obtainMessage(MSG_USER_ACTIVITY);
+                msg.arg1 = event;
                 msg.setAsynchronous(true);
                 mHandler.sendMessage(msg);
             }
@@ -644,7 +648,7 @@ public class Notifier {
         mSuspendBlocker.release();
     }
 
-    private void sendUserActivity() {
+    private void sendUserActivity(int event) {
         synchronized (mLock) {
             if (!mUserActivityPending) {
                 return;
@@ -654,6 +658,7 @@ public class Notifier {
         TelephonyManager tm = mContext.getSystemService(TelephonyManager.class);
         tm.notifyUserActivity();
         mPolicy.userActivity();
+        mFaceDownDetector.userActivity(event);
     }
 
     void postEnhancedDischargePredictionBroadcast(long delayMs) {
@@ -829,7 +834,7 @@ public class Notifier {
         public void handleMessage(Message msg) {
             switch (msg.what) {
                 case MSG_USER_ACTIVITY:
-                    sendUserActivity();
+                    sendUserActivity(msg.arg1);
                     break;
                 case MSG_BROADCAST:
                     sendNextBroadcast();

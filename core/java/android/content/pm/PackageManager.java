@@ -3511,8 +3511,57 @@ public abstract class PackageManager {
     public static final String FEATURE_VR_HEADTRACKING = "android.hardware.vr.headtracking";
 
     /**
-     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
-     * The device has a StrongBox hardware-backed Keystore.
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the device implements
+     * the Android Keystore backed by an isolated execution environment. The version indicates
+     * which features are implemented in the isolated execution environment:
+     * <ul>
+     * <li>100: Hardware support for ECDH (see {@link javax.crypto.KeyAgreement}) and support
+     * for app-generated attestation keys (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setAttestKeyAlias(String)}).
+     * <li>41: Hardware enforcement of device-unlocked keys (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setUnlockedDeviceRequired(boolean)}).
+     * <li>40: Support for wrapped key import (see {@link
+     * android.security.keystore.WrappedKeyEntry}), optional support for ID attestation (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setDevicePropertiesAttestationIncluded(boolean)}),
+     * attestation (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setAttestationChallenge(byte[])}),
+     * AES, HMAC, ECDSA and RSA support where the secret or private key never leaves secure
+     * hardware, and support for requiring user authentication before a key can be used.
+     * </ul>
+     * This feature version is guaranteed to be set for all devices launching with Android 12 and
+     * may be set on devices launching with an earlier version. If the feature version is set, it
+     * will at least have the value 40. If it's not set the device may have a version of
+     * hardware-backed keystore but it may not support all features listed above.
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_HARDWARE_KEYSTORE = "android.hardware.hardware_keystore";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures}, {@link #hasSystemFeature(String)}, and
+     * {@link #hasSystemFeature(String, int)}: If this feature is supported, the device implements
+     * the Android Keystore backed by a dedicated secure processor referred to as
+     * <a href="https://source.android.com/security/best-practices/hardware#strongbox-keymaster">
+     * StrongBox</a>. If this feature has a version, the version number indicates which features are
+     * implemented in StrongBox:
+     * <ul>
+     * <li>100: Hardware support for ECDH (see {@link javax.crypto.KeyAgreement}) and support
+     * for app-generated attestation keys (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setAttestKeyAlias(String)}).
+     * <li>41: Hardware enforcement of device-unlocked keys (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setUnlockedDeviceRequired(boolean)}).
+     * <li>40: Support for wrapped key import (see {@link
+     * android.security.keystore.WrappedKeyEntry}), optional support for ID attestation (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setDevicePropertiesAttestationIncluded(boolean)}),
+     * attestation (see {@link
+     * android.security.keystore.KeyGenParameterSpec.Builder#setAttestationChallenge(byte[])}),
+     * AES, HMAC, ECDSA and RSA support where the secret or private key never leaves secure
+     * hardware, and support for requiring user authentication before a key can be used.
+     * </ul>
+     * If a device has StrongBox, this feature version number is guaranteed to be set for all
+     * devices launching with Android 12 and may be set on devices launching with an earlier
+     * version. If the feature version is set, it will at least have the value 40. If it's not
+     * set the device may have StrongBox but it may not support all features listed above.
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_STRONGBOX_KEYSTORE =
@@ -3584,30 +3633,18 @@ public abstract class PackageManager {
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
      * the requisite kernel support to support incremental delivery aka Incremental FileSystem.
      *
-     * @see IncrementalManager#isFeatureEnabled
-     * @hide
-     *
-     * @deprecated Use {@link #FEATURE_INCREMENTAL_DELIVERY_VERSION} instead.
-     */
-    @Deprecated
-    @SystemApi
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_INCREMENTAL_DELIVERY =
-            "android.software.incremental_delivery";
-
-    /**
-     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * feature not present - IncFs is not present on the device.
      * 1 - IncFs v1, core features, no PerUid support. Optional in R.
      * 2 - IncFs v2, PerUid support, fs-verity support. Required in S.
      *
-     * @see IncrementalManager#isFeatureEnabled and IncrementalManager#isV2()
+     * @see IncrementalManager#isFeatureEnabled
+     * @see IncrementalManager#getVersion()
      * @hide
      */
     @SystemApi
     @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_INCREMENTAL_DELIVERY_VERSION =
-            "android.software.incremental_delivery_version";
+    public static final String FEATURE_INCREMENTAL_DELIVERY =
+            "android.software.incremental_delivery";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
@@ -3623,11 +3660,26 @@ public abstract class PackageManager {
     /**
      * Feature for {@link #getSystemAvailableFeatures} and
      * {@link #hasSystemFeature}: The device supports a enabling/disabling sensor privacy for
-     * camera. When sensory privacy for the camera is enabled no camera data is send to clients,
+     * microphone. When sensory privacy for the microphone is enabled no microphone data is sent to
+     * clients, e.g. all audio data is silent.
+     *
+     * @hide
+     */
+    @SystemApi
+    @TestApi
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_MICROPHONE_TOGGLE = "android.hardware.microphone.toggle";
+
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and
+     * {@link #hasSystemFeature}: The device supports a enabling/disabling sensor privacy for
+     * camera. When sensory privacy for the camera is enabled no camera data is sent to clients,
      * e.g. the view finder in a camera app would appear blank.
      *
      * @hide
      */
+    @SystemApi
+    @TestApi
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_CAMERA_TOGGLE = "android.hardware.camera.toggle";
 
@@ -3639,17 +3691,6 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_APP_ENUMERATION = "android.software.app_enumeration";
-
-    /**
-     * Feature for {@link android.view.WindowManager.LayoutParams.backgroundBlurRedius} and
-     * {@link android.graphics.drawable.BackgroundBlurDrawable}: the device supports cross-layer
-     * blurring.
-     *
-     * @hide
-     */
-    @SystemApi
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_CROSS_LAYER_BLUR = "android.software.cross_layer_blur";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
@@ -4060,16 +4101,6 @@ public abstract class PackageManager {
     public static final int FLAG_PERMISSION_AUTO_REVOKED = 1 << 17;
 
     /**
-     * Permission flag: The permission is restricted but the app is exempt
-     * from the restriction and is allowed to hold this permission in its
-     * full form and the exemption is provided by the held roles.
-     *
-     * @hide
-     */
-    @SystemApi
-    public static final int FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT =  1 << 18;
-
-    /**
      * Permission flag: This location permission is selected as the level of granularity of
      * location accuracy.
      * Example: If this flag is set for ACCESS_FINE_LOCATION, FINE location is the selected location
@@ -4098,8 +4129,7 @@ public abstract class PackageManager {
     public static final int FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT =
             FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT
                     | FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT
-                    | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT
-                    | FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
+                    | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
 
     /**
      * Mask for all permission flags.
@@ -4184,20 +4214,11 @@ public abstract class PackageManager {
      */
     public static final int FLAG_PERMISSION_WHITELIST_UPGRADE = 1 << 2;
 
-    /**
-     * Permission allowlist flag: permissions exempted by the system
-     * when being granted a role.
-     * Permissions can also be exempted by the installer, the system, or on
-     * upgrade.
-     */
-    public static final int FLAG_PERMISSION_ALLOWLIST_ROLE = 1 << 3;
-
     /** @hide */
     @IntDef(flag = true, prefix = {"FLAG_PERMISSION_WHITELIST_"}, value = {
             FLAG_PERMISSION_WHITELIST_SYSTEM,
             FLAG_PERMISSION_WHITELIST_INSTALLER,
-            FLAG_PERMISSION_WHITELIST_UPGRADE,
-            FLAG_PERMISSION_ALLOWLIST_ROLE
+            FLAG_PERMISSION_WHITELIST_UPGRADE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface PermissionWhitelistFlags {}
@@ -5229,10 +5250,6 @@ public abstract class PackageManager {
      * This list corresponds to the {@link #FLAG_PERMISSION_WHITELIST_INSTALLER} flag.
      * Can be accessed by pre-installed holders of a dedicated permission or the
      * installer on record.
-     *
-     * <li>one for cases where the system exempts the permission when granting a role.
-     * This list corresponds to the {@link #FLAG_PERMISSION_ALLOWLIST_ROLE} flag. Can
-     * be accessed by pre-installed holders of a dedicated permission.
      * </ol>
      *
      * <p>
@@ -5251,7 +5268,6 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
-     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to access a whitelist that you have no access to.
      */
@@ -5291,10 +5307,6 @@ public abstract class PackageManager {
      * This list corresponds to the {@link #FLAG_PERMISSION_WHITELIST_INSTALLER} flag.
      * Can be modified by pre-installed holders of a dedicated permission or the installer
      * on record.
-     *
-     * <li>one for cases where the system exempts the permission when permission when
-     * granting a role. This list corresponds to the {@link #FLAG_PERMISSION_ALLOWLIST_ROLE}
-     * flag. Can be modified by pre-installed holders of a dedicated permission.
      * </ol>
      *
      * <p>You need to specify the whitelists for which to set the whitelisted permissions
@@ -5318,7 +5330,6 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
-     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
@@ -5388,7 +5399,6 @@ public abstract class PackageManager {
      * @see #FLAG_PERMISSION_WHITELIST_SYSTEM
      * @see #FLAG_PERMISSION_WHITELIST_UPGRADE
      * @see #FLAG_PERMISSION_WHITELIST_INSTALLER
-     * @see #FLAG_PERMISSION_ALLOWLIST_ROLE
      *
      * @throws SecurityException if you try to modify a whitelist that you have no access to.
      */
@@ -7056,7 +7066,7 @@ public abstract class PackageManager {
      * domain to an application, use
      * {@link DomainVerificationManager#setDomainVerificationUserSelection(UUID, Set, boolean)},
      * passing in all of the domains returned inside
-     * {@link DomainVerificationManager#getDomainVerificationUserSelection(String)}.
+     * {@link DomainVerificationManager#getDomainVerificationUserState(String)}.
      *
      * @hide
      */

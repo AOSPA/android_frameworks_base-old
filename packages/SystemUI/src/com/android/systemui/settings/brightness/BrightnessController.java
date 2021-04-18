@@ -72,8 +72,6 @@ public class BrightnessController implements ToggleSlider.Listener {
     private static final Uri BRIGHTNESS_FOR_VR_FLOAT_URI =
             Settings.System.getUriFor(Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT);
 
-    private final float mMinimumBacklight;
-    private final float mMaximumBacklight;
     private final float mDefaultBacklight;
     private final float mMinimumBacklightForVr;
     private final float mMaximumBacklightForVr;
@@ -243,15 +241,7 @@ public class BrightnessController implements ToggleSlider.Listener {
         public void run() {
             final float valFloat;
             final boolean inVrMode = mIsVrModeEnabled;
-            if (inVrMode) {
-                valFloat = Settings.System.getFloatForUser(mContext.getContentResolver(),
-                        Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT, mDefaultBacklightForVr,
-                        UserHandle.USER_CURRENT);
-            } else {
-                valFloat = Settings.System.getFloatForUser(mContext.getContentResolver(),
-                        Settings.System.SCREEN_BRIGHTNESS_FLOAT, mDefaultBacklight,
-                        UserHandle.USER_CURRENT);
-            }
+            valFloat = mDisplayManager.getBrightness(mDisplayId);
             // Value is passed as intbits, since this is what the message takes.
             final int valueAsIntBits = Float.floatToIntBits(valFloat);
             mHandler.obtainMessage(MSG_UPDATE_SLIDER, valueAsIntBits,
@@ -314,10 +304,6 @@ public class BrightnessController implements ToggleSlider.Listener {
 
         mDisplayId = mContext.getDisplayId();
         PowerManager pm = context.getSystemService(PowerManager.class);
-        mMinimumBacklight = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM);
-        mMaximumBacklight = pm.getBrightnessConstraint(
-                PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MAXIMUM);
         mDefaultBacklight = mContext.getDisplay().getBrightnessDefault();
         mMinimumBacklightForVr = pm.getBrightnessConstraint(
                 PowerManager.BRIGHTNESS_CONSTRAINT_TYPE_MINIMUM_VR);
@@ -370,14 +356,12 @@ public class BrightnessController implements ToggleSlider.Listener {
             metric = MetricsEvent.ACTION_BRIGHTNESS_FOR_VR;
             minBacklight = mMinimumBacklightForVr;
             maxBacklight = mMaximumBacklightForVr;
-            settingToChange = Settings.System.SCREEN_BRIGHTNESS_FOR_VR_FLOAT;
         } else {
             metric = mAutomatic
                     ? MetricsEvent.ACTION_BRIGHTNESS_AUTO
                     : MetricsEvent.ACTION_BRIGHTNESS;
-            minBacklight = mMinimumBacklight;
-            maxBacklight = mMaximumBacklight;
-            settingToChange = Settings.System.SCREEN_BRIGHTNESS_FLOAT;
+            minBacklight = PowerManager.BRIGHTNESS_MIN;
+            maxBacklight = PowerManager.BRIGHTNESS_MAX;
         }
         final float valFloat = MathUtils.min(convertGammaToLinearFloat(value,
                 minBacklight, maxBacklight),
@@ -392,8 +376,7 @@ public class BrightnessController implements ToggleSlider.Listener {
         if (!tracking) {
             AsyncTask.execute(new Runnable() {
                     public void run() {
-                        Settings.System.putFloatForUser(mContext.getContentResolver(),
-                                settingToChange, valFloat, UserHandle.USER_CURRENT);
+                        mDisplayManager.setBrightness(mDisplayId, valFloat);
                     }
                 });
         }
@@ -439,8 +422,8 @@ public class BrightnessController implements ToggleSlider.Listener {
             min = mMinimumBacklightForVr;
             max = mMaximumBacklightForVr;
         } else {
-            min = mMinimumBacklight;
-            max = mMaximumBacklight;
+            min = PowerManager.BRIGHTNESS_MIN;
+            max = PowerManager.BRIGHTNESS_MAX;
         }
         // convertGammaToLinearFloat returns 0-1
         if (BrightnessSynchronizer.floatEquals(brightnessValue,

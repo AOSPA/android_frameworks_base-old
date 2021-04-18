@@ -74,6 +74,7 @@ extern int register_android_opengl_jni_GLES32(JNIEnv* env);
 extern int register_android_hardware_Camera(JNIEnv *env);
 extern int register_android_hardware_camera2_CameraMetadata(JNIEnv *env);
 extern int register_android_hardware_camera2_DngCreator(JNIEnv *env);
+extern int register_android_hardware_camera2_impl_CameraExtensionJpegProcessor(JNIEnv* env);
 extern int register_android_hardware_camera2_utils_SurfaceUtils(JNIEnv* env);
 extern int register_android_hardware_display_DisplayManagerGlobal(JNIEnv* env);
 extern int register_android_hardware_HardwareBuffer(JNIEnv *env);
@@ -96,6 +97,7 @@ extern int register_android_media_AudioVolumeGroupChangeHandler(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
 extern int register_android_media_midi(JNIEnv *env);
+extern int register_android_media_permission_Identity(JNIEnv* env);
 
 namespace android {
 extern int register_android_util_SeempLog(JNIEnv* env);
@@ -120,6 +122,7 @@ extern int register_android_view_InputApplicationHandle(JNIEnv* env);
 extern int register_android_view_InputWindowHandle(JNIEnv* env);
 extern int register_android_view_Surface(JNIEnv* env);
 extern int register_android_view_SurfaceControl(JNIEnv* env);
+extern int register_android_view_SurfaceControlFpsListener(JNIEnv* env);
 extern int register_android_view_SurfaceSession(JNIEnv* env);
 extern int register_android_view_CompositionSamplingListener(JNIEnv* env);
 extern int register_android_view_TextureView(JNIEnv* env);
@@ -154,7 +157,6 @@ extern int register_android_os_SharedMemory(JNIEnv* env);
 extern int register_android_service_DataLoaderService(JNIEnv* env);
 extern int register_android_os_incremental_IncrementalManager(JNIEnv* env);
 extern int register_android_net_LocalSocketImpl(JNIEnv* env);
-extern int register_android_net_NetworkUtils(JNIEnv* env);
 extern int register_android_text_AndroidCharacter(JNIEnv *env);
 extern int register_android_text_Hyphenator(JNIEnv *env);
 extern int register_android_opengl_classes(JNIEnv *env);
@@ -197,7 +199,9 @@ extern int register_com_android_internal_os_KernelCpuUidBpfMapReader(JNIEnv *env
 extern int register_com_android_internal_os_KernelSingleProcessCpuThreadReader(JNIEnv* env);
 extern int register_com_android_internal_os_KernelSingleUidTimeReader(JNIEnv *env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
+extern int register_com_android_internal_os_ZygoteCommandBuffer(JNIEnv *env);
 extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
+extern int register_com_android_internal_security_VerityUtils(JNIEnv* env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
 extern int register_com_android_internal_app_ActivityTrigger(JNIEnv *env);
 
@@ -634,6 +638,12 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     char saveResolvedClassesDelayMsOptsBuf[
             sizeof("-Xps-save-resolved-classes-delay-ms:")-1 + PROPERTY_VALUE_MAX];
     char madviseRandomOptsBuf[sizeof("-XX:MadviseRandomAccess:")-1 + PROPERTY_VALUE_MAX];
+    char madviseWillNeedFileSizeVdex[
+            sizeof("-XMadviseWillNeedVdexFileSize:")-1 + PROPERTY_VALUE_MAX];
+    char madviseWillNeedFileSizeOdex[
+            sizeof("-XMadviseWillNeedOdexFileSize:")-1 + PROPERTY_VALUE_MAX];
+    char madviseWillNeedFileSizeArt[
+            sizeof("-XMadviseWillNeedArtFileSize:")-1 + PROPERTY_VALUE_MAX];
     char gctypeOptsBuf[sizeof("-Xgc:")-1 + PROPERTY_VALUE_MAX];
     char backgroundgcOptsBuf[sizeof("-XX:BackgroundGC=")-1 + PROPERTY_VALUE_MAX];
     char heaptargetutilizationOptsBuf[sizeof("-XX:HeapTargetUtilization=")-1 + PROPERTY_VALUE_MAX];
@@ -840,6 +850,22 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
      * Madvise related options.
      */
     parseRuntimeOption("dalvik.vm.madvise-random", madviseRandomOptsBuf, "-XX:MadviseRandomAccess:");
+
+    /*
+     * Use default platform configuration as limits for madvising,
+     * when no properties are specified.
+     */
+    parseRuntimeOption("dalvik.vm.madvise.vdexfile.size",
+                       madviseWillNeedFileSizeVdex,
+                       "-XMadviseWillNeedVdexFileSize:");
+
+    parseRuntimeOption("dalvik.vm.madvise.odexfile.size",
+                       madviseWillNeedFileSizeOdex,
+                       "-XMadviseWillNeedOdexFileSize:");
+
+    parseRuntimeOption("dalvik.vm.madvise.artfile.size",
+                       madviseWillNeedFileSizeArt,
+                       "-XMadviseWillNeedArtFileSize:");
 
     /*
      * Profile related options.
@@ -1490,6 +1516,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_view_InputWindowHandle),
         REG_JNI(register_android_view_Surface),
         REG_JNI(register_android_view_SurfaceControl),
+        REG_JNI(register_android_view_SurfaceControlFpsListener),
         REG_JNI(register_android_view_SurfaceSession),
         REG_JNI(register_android_view_CompositionSamplingListener),
         REG_JNI(register_android_view_TextureView),
@@ -1523,7 +1550,6 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_os_Trace),
         REG_JNI(register_android_os_UEventObserver),
         REG_JNI(register_android_net_LocalSocketImpl),
-        REG_JNI(register_android_net_NetworkUtils),
         REG_JNI(register_android_os_MemoryFile),
         REG_JNI(register_android_os_SharedMemory),
         REG_JNI(register_android_os_incremental_IncrementalManager),
@@ -1531,11 +1557,14 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_com_android_internal_net_NetworkUtilsInternal),
         REG_JNI(register_com_android_internal_os_ClassLoaderFactory),
         REG_JNI(register_com_android_internal_os_Zygote),
+        REG_JNI(register_com_android_internal_os_ZygoteCommandBuffer),
         REG_JNI(register_com_android_internal_os_ZygoteInit),
+        REG_JNI(register_com_android_internal_security_VerityUtils),
         REG_JNI(register_com_android_internal_util_VirtualRefBasePtr),
         REG_JNI(register_android_hardware_Camera),
         REG_JNI(register_android_hardware_camera2_CameraMetadata),
         REG_JNI(register_android_hardware_camera2_DngCreator),
+        REG_JNI(register_android_hardware_camera2_impl_CameraExtensionJpegProcessor),
         REG_JNI(register_android_hardware_camera2_utils_SurfaceUtils),
         REG_JNI(register_android_hardware_display_DisplayManagerGlobal),
         REG_JNI(register_android_hardware_HardwareBuffer),
@@ -1559,6 +1588,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_media_RemoteDisplay),
         REG_JNI(register_android_media_ToneGenerator),
         REG_JNI(register_android_media_midi),
+        REG_JNI(register_android_media_permission_Identity),
 
         REG_JNI(register_android_opengl_classes),
         REG_JNI(register_android_server_NetworkManagementSocketTagger),

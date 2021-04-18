@@ -16,20 +16,15 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerTestRunner
-import com.android.server.wm.flicker.FlickerTestRunnerFactory
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.noUncoveredRegions
-import com.android.server.wm.flicker.startRotation
+import com.android.server.wm.flicker.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.FlickerTestParameter
+import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -40,58 +35,50 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
+@Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class EnterPipTest(
-    testSpec: FlickerTestRunnerFactory.TestSpec
-) : FlickerTestRunner(testSpec) {
-    companion object : PipTransitionBase(InstrumentationRegistry.getInstrumentation()) {
+class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = buildTransition(eachRun = true, stringExtras = emptyMap()) {
+            transitions {
+                pipApp.clickEnterPipButton()
+                pipApp.expandPipWindow(wmHelper)
+            }
+        }
+
+    @Presubmit
+    @Test
+    fun pipAppWindowAlwaysVisible() {
+        testSpec.assertWm {
+            this.showsAppWindow(pipApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun pipLayerBecomesVisible() {
+        testSpec.assertLayers {
+            this.isVisible(pipApp.launcherName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun pipWindowBecomesVisible() {
+        testSpec.assertWm {
+            invoke("pipWindowIsNotVisible") { !it.wmState.hasPipWindow() }
+                .then()
+                .invoke("pipWindowIsVisible") { it.wmState.hasPipWindow() }
+        }
+    }
+
+    companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
-        fun getParams(): List<Array<Any>> {
-            val testSpec = getTransition(eachRun = true,
-                stringExtras = emptyMap()) { configuration ->
-                transitions {
-                    pipApp.clickEnterPipButton()
-                    pipApp.expandPipWindow(wmHelper)
-                }
-                assertions {
-                    presubmit {
-                        windowManagerTrace {
-                            navBarWindowIsAlwaysVisible()
-                            statusBarWindowIsAlwaysVisible()
-
-                            all("pipWindowBecomesVisible") {
-                                this.showsAppWindow(pipApp.defaultWindowName)
-                            }
-                        }
-
-                        layersTrace {
-                            statusBarLayerIsAlwaysVisible()
-                            statusBarLayerRotatesScales(configuration.startRotation,
-                                Surface.ROTATION_0)
-                        }
-
-                        layersTrace {
-                            all("pipLayerBecomesVisible") {
-                                this.showsLayer(pipApp.launcherName)
-                            }
-                        }
-                    }
-
-                    flaky {
-                        layersTrace {
-                            navBarLayerIsAlwaysVisible(bugId = 140855415)
-                            noUncoveredRegions(configuration.startRotation, Surface.ROTATION_0)
-                            navBarLayerRotatesAndScales(configuration.startRotation,
-                                Surface.ROTATION_0, bugId = 140855415)
-                        }
-                    }
-                }
-            }
-
-            return FlickerTestRunnerFactory.getInstance().buildTest(instrumentation,
-                testSpec, supportedRotations = listOf(Surface.ROTATION_0),
-                repetitions = 5)
+        fun getParams(): List<FlickerTestParameter> {
+            return FlickerTestParameterFactory.getInstance()
+                .getConfigNonRotationTests(supportedRotations = listOf(Surface.ROTATION_0),
+                    repetitions = 5)
         }
     }
 }

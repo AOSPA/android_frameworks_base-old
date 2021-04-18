@@ -41,7 +41,6 @@ import android.os.UserHandle;
 import android.os.ZygoteProcess;
 import android.os.storage.StorageManager;
 import android.provider.DeviceConfig;
-import android.security.keystore.AndroidKeyStoreProvider;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
@@ -65,6 +64,7 @@ import dalvik.system.ZygoteHooks;
 import libcore.io.IoUtils;
 
 import java.io.BufferedReader;
+import java.io.EOFException;
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.FileNotFoundException;
@@ -73,7 +73,6 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.security.Provider;
 import java.security.Security;
-import java.util.Optional;
 
 /**
  * Startup class for the zygote process.
@@ -183,11 +182,6 @@ public class ZygoteInit {
         System.loadLibrary("android");
         System.loadLibrary("compiler_rt");
         System.loadLibrary("jnigraphics");
-        try {
-            System.loadLibrary("sfplugin_ccodec");
-        } catch (Error | RuntimeException e) {
-            // tolerate missing sfplugin_ccodec which is only present on Codec 2 devices
-        }
 
         try {
             System.loadLibrary("qti_performance");
@@ -231,17 +225,7 @@ public class ZygoteInit {
         // AndroidKeyStoreProvider.install() manipulates the list of JCA providers to insert
         // preferred providers. Note this is not done via security.properties as the JCA providers
         // are not on the classpath in the case of, for example, raw dalvikvm runtimes.
-        // TODO b/171305684 This code is used to conditionally enable the installation of the
-        //      Keystore 2.0 provider to enable teams adjusting to Keystore 2.0 at their own
-        //      pace. This code will be removed when all calling code was adjusted to
-        //      Keystore 2.0.
-        Optional<Boolean> keystore2_enabled =
-                android.sysprop.Keystore2Properties.keystore2_enabled();
-        if (keystore2_enabled.isPresent() && keystore2_enabled.get()) {
-            android.security.keystore2.AndroidKeyStoreProvider.install();
-        } else {
-            AndroidKeyStoreProvider.install();
-        }
+        android.security.keystore2.AndroidKeyStoreProvider.install();
         Log.i(TAG, "Installed AndroidKeyStoreProvider in "
                 + (SystemClock.uptimeMillis() - startTime) + "ms.");
         Trace.traceEnd(Trace.TRACE_TAG_DALVIK);
@@ -655,8 +639,6 @@ public class ZygoteInit {
      */
     private static void performSystemServerDexOpt(String classPath) {
         final String[] classPathElements = classPath.split(":");
-        final IInstalld installd = IInstalld.Stub
-                .asInterface(ServiceManager.getService("installd"));
         final String instructionSet = VMRuntime.getRuntime().vmInstructionSet();
 
         String classPathForElement = "";
@@ -693,6 +675,10 @@ public class ZygoteInit {
                 final String uuid = StorageManager.UUID_PRIVATE_INTERNAL;
                 final String seInfo = null;
                 final int targetSdkVersion = 0;  // SystemServer targets the system's SDK version
+                // Wait for installd to be made available
+                IInstalld installd = IInstalld.Stub.asInterface(
+                        ServiceManager.waitForService("installd"));
+
                 try {
                     installd.dexopt(classPathElement, Process.SYSTEM_UID, packageName,
                             instructionSet, dexoptNeeded, outputPath, dexFlags, systemServerFilter,
@@ -787,7 +773,13 @@ public class ZygoteInit {
         int pid;
 
         try {
-            parsedArgs = new ZygoteArguments(args);
+            ZygoteCommandBuffer commandBuffer = new ZygoteCommandBuffer(args);
+            try {
+                parsedArgs = ZygoteArguments.getInstance(commandBuffer);
+            } catch (EOFException e) {
+                throw new AssertionError("Unexpected argument error for forking system server", e);
+            }
+            commandBuffer.close();
             Zygote.applyDebuggerSystemProperty(parsedArgs);
             Zygote.applyInvokeWithSystemProperty(parsedArgs);
 
@@ -866,7 +858,7 @@ public class ZygoteInit {
      * into new processes are required to either set the priority to the default value or terminate
      * before executing any non-system code.  The native side of this occurs in SpecializeCommon,
      * while the Java Language priority is changed in ZygoteInit.handleSystemServerProcess,
-     * ZygoteConnection.handleChildProc, and Zygote.usapMain.
+     * ZygoteConnection.handleChildProc, and Zygote.childMain.
      *
      * @param argv  Command line arguments used to specify the Zygote's configuration.
      */

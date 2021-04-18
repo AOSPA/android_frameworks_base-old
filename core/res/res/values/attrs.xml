@@ -1125,6 +1125,15 @@
              to framework controls (via colorControlActivated). -->
         <attr name="colorAccent" format="color" />
 
+        <!-- Light accent color used on Material NEXT buttons. @hide -->
+        <attr name="colorAccentPrimary" format="color" />
+
+        <!-- Secondary accent color used on Material NEXT buttons. @hide -->
+        <attr name="colorAccentSecondary" format="color" />
+
+        <!-- Tertiary accent color used on Material NEXT buttons. @hide -->
+        <attr name="colorAccentTertiary" format="color" />
+
         <!-- The color applied to framework controls in their normal state. -->
         <attr name="colorControlNormal" format="color" />
 
@@ -2194,6 +2203,7 @@
              Note that even if no splashscreen content is set on the theme, the system may still
              show a splash screen using the other attributes on the theme, like the
              {@link android.R.attr#windowBackground}.
+             {@deprecated Use windowSplashscreenAnimatedIcon instead.}
              -->
         <attr name="windowSplashscreenContent" format="reference" />
 
@@ -2279,6 +2289,10 @@
         <!-- Place an drawable image in the bottom of the starting window, it can be used to
              represent the branding of the application. -->
         <attr name="windowSplashScreenBrandingImage" format="reference"/>
+        <!-- Set a background behind the splash screen icon. This is useful if there is not enough
+             contrast between the window background and the icon. Note the shape would also be
+             masking like an icon. -->
+        <attr name="windowSplashScreenIconBackgroundColor" format="color"/>
     </declare-styleable>
 
     <!-- The set of attributes that describe a AlertDialog's theme. -->
@@ -3564,6 +3578,13 @@
         <attr name="__removed2" format="boolean" />
         <!-- Specifies whether the IME supports showing inline suggestions. -->
         <attr name="supportsInlineSuggestions" format="boolean" />
+        <attr name="suppressesSpellChecker" format="boolean" />
+        <!-- Specifies whether the IME wants to be shown in the Input Method picker. Defaults to
+             true. Set this to false if the IME is intended to be accessed programmatically.
+             <p>
+             Note: This functions as a hint to the system, which may choose to ignore this
+             preference in certain situations or in future releases.-->
+        <attr name="showInInputMethodPicker" format="boolean" />
     </declare-styleable>
 
     <!-- This is the subtype of InputMethod. Subtype can describe locales (for example, en_US and
@@ -3853,6 +3874,15 @@
         <!-- Attribute whether the accessibility service wants to be able to take screenshot. -->
         <attr name="canTakeScreenshot" format="boolean" />
 
+        <!-- Attribute indicating whether the accessibility service is used to assist users with
+             disabilities. This criteria might be defined by the installer. The default is false.
+             <p>
+             Note: If this flag is false, system will show a notification after a duration to
+             inform the user about the privacy implications of the service.
+             </p>
+        -->
+        <attr name="isAccessibilityTool" format="boolean" />
+
         <!-- Animated image of the accessibility service purpose or behavior, to help users
              understand how the service can help them.-->
         <attr name="animatedImageDrawable" format="reference"/>
@@ -4117,6 +4147,94 @@
              user's time zone. Please refer to {@link java.util.TimeZone} for more
              information about time zone ids. -->
         <attr name="timeZone" format="string"/>
+        <!-- Tint to apply to the dial graphic. -->
+        <attr name="dialTint" format="color" />
+        <!-- Blending mode used to apply the dial graphic tint. -->
+        <attr name="dialTintMode">
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            <enum name="src_over" value="3" />
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            <enum name="src_in" value="5" />
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            <enum name="src_atop" value="9" />
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
+            <enum name="multiply" value="14" />
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            <enum name="screen" value="15" />
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
+            <enum name="add" value="16" />
+        </attr>
+        <!-- Tint to apply to the hour hand graphic. -->
+        <attr name="hand_hourTint" format="color" />
+        <!-- Blending mode used to apply the hour hand graphic tint. -->
+        <attr name="hand_hourTintMode">
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            <enum name="src_over" value="3" />
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            <enum name="src_in" value="5" />
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            <enum name="src_atop" value="9" />
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
+            <enum name="multiply" value="14" />
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            <enum name="screen" value="15" />
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
+            <enum name="add" value="16" />
+        </attr>
+        <!-- Tint to apply to the minute hand graphic. -->
+        <attr name="hand_minuteTint" format="color" />
+        <!-- Blending mode used to apply the minute hand graphic tint. -->
+        <attr name="hand_minuteTintMode">
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            <enum name="src_over" value="3" />
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            <enum name="src_in" value="5" />
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            <enum name="src_atop" value="9" />
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
+            <enum name="multiply" value="14" />
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            <enum name="screen" value="15" />
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
+            <enum name="add" value="16" />
+        </attr>
+        <!-- Tint to apply to the second hand graphic. -->
+        <attr name="hand_secondTint" format="color" />
+        <!-- Blending mode used to apply the second hand graphic tint. -->
+        <attr name="hand_secondTintMode">
+            <!-- The tint is drawn on top of the drawable.
+                 [Sa + (1 - Sa)*Da, Rc = Sc + (1 - Sa)*Dc] -->
+            <enum name="src_over" value="3" />
+            <!-- The tint is masked by the alpha channel of the drawable. The drawable’s
+                 color channels are thrown out. [Sa * Da, Sc * Da] -->
+            <enum name="src_in" value="5" />
+            <!-- The tint is drawn above the drawable, but with the drawable’s alpha
+                 channel masking the result. [Da, Sc * Da + (1 - Sa) * Dc] -->
+            <enum name="src_atop" value="9" />
+            <!-- Multiplies the color and alpha channels of the drawable with those of
+                 the tint. [Sa * Da, Sc * Dc] -->
+            <enum name="multiply" value="14" />
+            <!-- [Sa + Da - Sa * Da, Sc + Dc - Sc * Dc] -->
+            <enum name="screen" value="15" />
+            <!-- Combines the tint and drawable color and alpha channels, clamping the
+                 result to valid color values. Saturate(S + D) -->
+            <enum name="add" value="16" />
+        </attr>
     </declare-styleable>
     <declare-styleable name="Button">
     </declare-styleable>
@@ -5958,6 +6076,8 @@
         <attr name="color" />
         <!-- Alpha multiplier applied to the base color. -->
         <attr name="alpha" />
+        <!-- Perceptual luminance applied to the base color. From 0 to 100. -->
+        <attr name="lStar" format="float" />
     </declare-styleable>
 
     <!-- Drawable used to render according to the animation scale. Esp. when it is 0 due to battery
@@ -8066,7 +8186,7 @@
             <flag name="hide_from_picker" value="0x2" />
               <!-- The widget provides a default configuration. The host may decide not to launch
                    the provided configuration activity. -->
-           <flag name="configuration_optional" value="0x3" />
+           <flag name="configuration_optional" value="0x4" />
         </attr>
         <!-- A resource identifier for a string containing a short description of the widget. -->
         <attr name="description" />
@@ -8336,6 +8456,9 @@
         <!-- Fully qualified class name of an activity that allows the user to modify
              the settings for this service. -->
         <attr name="settingsActivity" />
+        <!-- Fully qualified class name of an activity that allows the user to view any passwords
+             saved by this service. -->
+        <attr name="passwordsActivity" format="string" />
 
         <!-- Specifies whether the AutofillService supports inline suggestions-->
         <attr name="supportsInlineSuggestions" format="boolean" />
@@ -8542,6 +8665,9 @@
          Described here are the attributes that can be included in that tag. -->
     <declare-styleable name="RecognitionService">
         <attr name="settingsActivity" />
+        <!-- Flag indicating whether a recognition service can be selected as default. The default
+             value of this flag is true. -->
+        <attr name="selectableAsDefault" format="boolean" />
     </declare-styleable>
 
     <!-- Use <code>voice-interaction-service</code> as the root tag of the XML resource that
@@ -9417,4 +9543,12 @@
 
     <attr name="iconfactoryIconSize" format="dimension"/>
     <attr name="iconfactoryBadgeSize" format="dimension"/>
+    <!-- Perceptual luminance of a color, in accessibility friendly color space. From 0 to 100. -->
+    <attr name="lStar" format="float"/>
+
+    <declare-styleable name="DisplayHasherService">
+        <!-- The throttle duration for display hash requests
+             @hide @SystemApi -->
+        <attr name="throttleDurationMillis" format="integer" />
+    </declare-styleable>
 </resources>

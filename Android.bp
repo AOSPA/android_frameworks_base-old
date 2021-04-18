@@ -344,8 +344,8 @@ filegroup {
 genrule {
     name: "statslog-telephony-common-java-gen",
     tools: ["stats-log-api-gen"],
-    cmd: "$(location stats-log-api-gen) --java $(out) --module telephony_common"
-        + " --javaPackage com.android.internal.telephony --javaClass TelephonyCommonStatsLog",
+    cmd: "$(location stats-log-api-gen) --java $(out) --module telephony_common" +
+        " --javaPackage com.android.internal.telephony --javaClass TelephonyCommonStatsLog",
     out: ["com/android/internal/telephony/TelephonyCommonStatsLog.java"],
 }
 
@@ -371,7 +371,6 @@ filegroup {
     srcs: [
         // Java/AIDL sources under frameworks/base
         ":framework-blobstore-sources",
-        ":framework-connectivity-sources", // framework-connectivity is not yet a module
         ":framework-core-sources",
         ":framework-drm-sources",
         ":framework-graphics-nonupdatable-sources",
@@ -402,6 +401,13 @@ filegroup {
         ":platform-compat-native-aidl",
 
         // AIDL sources from external directories
+        ":android.hardware.security.keymint-V1-java-source",
+        ":android.hardware.security.secureclock-V1-java-source",
+        ":android.security.apc-java-source",
+        ":android.security.authorization-java-source",
+        ":android.security.maintenance-java-source",
+        ":android.security.vpnprofilestore-java-source",
+        ":android.system.keystore2-V1-java-source",
         ":credstore_aidl",
         ":dumpstate_aidl",
         ":framework_native_aidl",
@@ -418,10 +424,12 @@ filegroup {
         ":libbluetooth-binder-aidl",
         ":libcamera_client_aidl",
         ":libcamera_client_framework_aidl",
+        ":packagemanager_aidl",
         ":libupdate_engine_aidl",
         ":resourcemanager_aidl",
         ":storaged_aidl",
         ":vold_aidl",
+        ":deviceproductinfoconstants_aidl",
 
         // For the generated R.java and Manifest.java
         ":framework-res{.aapt.srcjar}",
@@ -437,6 +445,7 @@ filegroup {
     name: "framework-updatable-sources",
     srcs: [
         ":framework-appsearch-sources",
+        ":framework-connectivity-sources",
         ":framework-graphics-srcs",
         ":framework-mediaprovider-sources",
         ":framework-permission-sources",
@@ -457,6 +466,7 @@ java_library {
     static_libs: [
         "android.net.ipsec.ike.stubs.module_lib",
         "framework-appsearch.stubs.module_lib",
+        "framework-connectivity.stubs.module_lib",
         "framework-graphics.stubs.module_lib",
         "framework-media.stubs.module_lib",
         "framework-mediaprovider.stubs.module_lib",
@@ -479,6 +489,7 @@ java_library {
         "android.net.ipsec.ike.impl",
         "framework-minus-apex",
         "framework-appsearch.impl",
+        "framework-connectivity.impl",
         "framework-graphics.impl",
         "framework-mediaprovider.impl",
         "framework-permission.impl",
@@ -496,15 +507,6 @@ java_library {
         // DO NOT ADD ANY MORE ENTRIES TO THIS LIST
         "//external/robolectric-shadows:__subpackages__",
         "//frameworks/layoutlib:__subpackages__",
-    ],
-}
-
-filegroup {
-    name: "framework-all-sources",
-    srcs: [
-        ":framework-mime-sources",
-        ":framework-non-updatable-sources",
-        ":framework-updatable-sources",
     ],
 }
 
@@ -580,12 +582,8 @@ java_library {
         "android.hardware.vibrator-V1.1-java",
         "android.hardware.vibrator-V1.2-java",
         "android.hardware.vibrator-V1.3-java",
-        "android.security.apc-java",
-        "android.security.authorization-java",
-        "android.security.usermanager-java",
-        "android.system.keystore2-V1-java",
+        "android.hardware.vibrator-V2-java",
         "android.system.suspend.control.internal-java",
-        "cameraprotosnano",
         "devicepolicyprotosnano",
 
         "com.android.sysprop.apex",
@@ -667,7 +665,11 @@ java_defaults {
     exclude_srcs: ["core/java/android/content/pm/AndroidTestBaseUpdater.java"],
     aidl: {
         generate_get_transaction_name: true,
-        local_include_dirs: ["media/aidl"],
+        local_include_dirs: [
+            "media/aidl",
+            // TODO: move to include_dirs when migrated to packages/modules
+            "packages/Connectivity/framework/aidl-export",
+        ],
         include_dirs: ["frameworks/av/aidl"],
     },
     dxflags: [
@@ -683,11 +685,9 @@ java_defaults {
     ],
     required: [
         "framework-platform-compat-config",
-        // TODO: remove gps_debug, cec_config.xml and protolog.conf.json when the build system propagates "required" properly.
+        // TODO: remove gps_debug and protolog.conf.json when the build system propagates "required" properly.
         "gps_debug.conf",
-        "cec_config.xml",
         "icu4j-platform-compat-config",
-        "libcore-platform-compat-config",
         "protolog.conf.json.gz",
         "services-platform-compat-config",
         "documents-ui-compat-config",
@@ -760,6 +760,7 @@ java_library {
     static_libs: [
         "app-compat-annotations",
         "framework-minus-apex",
+        "framework-connectivity.impl", // TODO(b/182859030): should be removed
         "framework-appsearch.impl", // TODO(b/146218515): should be removed
         "framework-updatable-stubs-module_libs_api",
     ],
@@ -768,8 +769,8 @@ java_library {
 }
 
 platform_compat_config {
-   name: "framework-platform-compat-config",
-   src: ":framework-minus-apex",
+    name: "framework-platform-compat-config",
+    src: ":framework-minus-apex",
 }
 
 // A temporary build target that is conditionally included on the bootclasspath if
@@ -790,7 +791,7 @@ genrule {
     name: "statslog-framework-java-gen",
     tools: ["stats-log-api-gen"],
     cmd: "$(location stats-log-api-gen) --java $(out) --module framework" +
-         " --javaPackage com.android.internal.util --javaClass FrameworkStatsLog --worksource",
+        " --javaPackage com.android.internal.util --javaClass FrameworkStatsLog --worksource",
     out: ["com/android/internal/util/FrameworkStatsLog.java"],
 }
 
@@ -871,10 +872,14 @@ filegroup {
     srcs: [
         "core/java/android/annotation/AnyThread.java",
         "core/java/android/annotation/AppIdInt.java",
-        "core/java/android/annotation/CallSuper.java",
+        "core/java/android/annotation/BytesLong.java",
         "core/java/android/annotation/CallbackExecutor.java",
+        "core/java/android/annotation/CallSuper.java",
         "core/java/android/annotation/CheckResult.java",
         "core/java/android/annotation/CurrentTimeMillisLong.java",
+        "core/java/android/annotation/CurrentTimeSecondsLong.java",
+        "core/java/android/annotation/DrawableRes.java",
+        "core/java/android/annotation/DurationMillisLong.java",
         "core/java/android/annotation/Hide.java",
         "core/java/android/annotation/IntDef.java",
         "core/java/android/annotation/IntRange.java",
@@ -885,21 +890,20 @@ filegroup {
         "core/java/android/annotation/RequiresPermission.java",
         "core/java/android/annotation/SdkConstant.java",
         "core/java/android/annotation/StringDef.java",
-        "core/java/android/annotation/SuppressLint.java",
         "core/java/android/annotation/SystemApi.java",
         "core/java/android/annotation/SystemService.java",
         "core/java/android/annotation/TestApi.java",
         "core/java/android/annotation/UserIdInt.java",
         "core/java/android/annotation/WorkerThread.java",
         "core/java/com/android/internal/annotations/GuardedBy.java",
-        "core/java/com/android/internal/annotations/VisibleForTesting.java",
         "core/java/com/android/internal/annotations/Immutable.java",
+        "core/java/com/android/internal/annotations/VisibleForTesting.java",
     ],
 }
 
 java_library {
     name: "framework-annotations-lib",
-    srcs: [ ":framework-annotations" ],
+    srcs: [":framework-annotations"],
     sdk_version: "core_current",
 }
 
@@ -907,7 +911,6 @@ filegroup {
     name: "framework-ike-shared-srcs",
     visibility: ["//packages/modules/IPsec"],
     srcs: [
-        "core/java/android/annotation/StringDef.java",
         "core/java/android/net/annotations/PolicyDirection.java",
         "core/java/com/android/internal/util/HexDump.java",
         "core/java/com/android/internal/util/IState.java",
@@ -934,7 +937,6 @@ filegroup {
         "core/java/com/android/internal/util/RingBufferIndices.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
-        "core/java/com/android/internal/util/TrafficStatsConstants.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
         "core/java/com/android/internal/util/TokenBucket.java",
     ],
@@ -948,18 +950,20 @@ filegroup {
     ],
 }
 
-// keep these files in sync with the package/Tethering/jarjar-rules.txt for the tethering module.
+// keep these files in sync with the package/Tethering/jarjar-rules.txt and
+// package/Connectivity/jarjar-rules.txt for the tethering module and connectivity module.
 filegroup {
-    name: "framework-tethering-shared-srcs",
+    name: "framework-connectivity-shared-srcs",
     srcs: [
         "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
+        // This should be android.util.IndentingPrintWriter, but it's not available in all branches.
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
         "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/MessageUtils.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
-        "core/java/com/android/internal/util/TrafficStatsConstants.java",
+        "core/java/com/android/internal/util/WakeupMessage.java",
     ],
 }
 
@@ -1177,7 +1181,6 @@ cc_library {
     },
 }
 
-
 // This is the full proto version of libplatformprotos. It may only
 // be used by test code that is not shipped on the device.
 cc_library {
@@ -1243,66 +1246,70 @@ filegroup {
     path: "core/java",
 }
 
-aidl_interface {
-    name: "libincremental_aidl",
-    unstable: true,
+cc_defaults {
+    name: "incremental_default",
+    cflags: [
+        "-Wall",
+        "-Wextra",
+        "-Wextra-semi",
+        "-Werror",
+        "-Wzero-as-null-pointer-constant",
+        "-DANDROID_BASE_UNIQUE_FD_DISABLE_IMPLICIT_CONVERSION",
+    ],
+    shared_libs: [
+        "libbinder",
+        "libutils",
+    ],
+    aidl: {
+        include_dirs: [
+            "frameworks/native/aidl/binder",
+        ],
+        export_aidl_headers: true,
+    },
+}
+
+cc_library {
+    name: "libincremental_aidl-cpp",
     srcs: [
         ":incremental_aidl",
     ],
-    backend: {
-        java: {
-            sdk_version: "28",
-        },
-        cpp: {
-            enabled: true,
-        },
-        ndk: {
-            enabled: true,
-        },
-    },
+    defaults: ["incremental_default"],
 }
 
-aidl_interface {
-    name: "libdataloader_aidl",
-    unstable: true,
+cc_library {
+    name: "libdataloader_aidl-cpp",
     srcs: [
         ":dataloader_aidl",
     ],
-    imports: [
-        "libincremental_aidl",
+    defaults: ["incremental_default"],
+    shared_libs: [
+        "libincremental_aidl-cpp",
     ],
-    backend: {
-        java: {
-            sdk_version: "28",
-        },
-        cpp: {
-            enabled: true,
-        },
-        ndk: {
-            enabled: false,
-        },
-    },
 }
 
-aidl_interface {
-    name: "libincremental_manager_aidl",
-    unstable: true,
+cc_library {
+    name: "libincremental_manager_aidl-cpp",
     srcs: [
         ":incremental_manager_aidl",
     ],
-    imports: [
-        "libincremental_aidl",
-        "libdataloader_aidl",
+    defaults: ["incremental_default"],
+    shared_libs: [
+        "libincremental_aidl-cpp",
+        "libdataloader_aidl-cpp",
+    ],
+}
+
+// Build Rust bindings for PermissionController. Needed by keystore2.
+aidl_interface {
+    name: "android.os.permissions_aidl",
+    unstable: true,
+    local_include_dir: "core/java",
+    srcs: [
+        "core/java/android/os/IPermissionController.aidl",
     ],
     backend: {
-        java: {
-            sdk_version: "28",
-        },
-        cpp: {
+        rust: {
             enabled: true,
-        },
-        ndk: {
-            enabled: false,
         },
     },
 }
@@ -1333,7 +1340,7 @@ java_library {
         "core/java/android/os/RemoteException.java",
         "core/java/android/util/AndroidException.java",
     ],
-    libs: [ "unsupportedappusage" ],
+    libs: ["unsupportedappusage"],
 
     dxflags: ["--core-library"],
     installable: false,
@@ -1375,36 +1382,6 @@ python_binary_host {
     libs: [
         "fontTools",
     ],
-}
-
-filegroup {
-    name: "framework-media-annotation-srcs",
-    srcs: [
-        ":framework-annotations",
-        "core/java/android/annotation/CallbackExecutor.java",
-        "core/java/android/annotation/CallSuper.java",
-        "core/java/android/annotation/DrawableRes.java",
-        "core/java/android/annotation/LongDef.java",
-        "core/java/android/annotation/StringDef.java",
-    ],
-}
-
-filegroup {
-    name: "framework-mediaprovider-annotation-sources",
-    srcs: [
-        ":framework-annotations",
-        "core/java/android/annotation/BytesLong.java",
-        "core/java/android/annotation/CurrentTimeSecondsLong.java",
-        "core/java/android/annotation/DurationMillisLong.java",
-    ],
-}
-
-// Creates an index of AIDL methods; used for adding UnsupportedAppUsage
-// annotations to private apis
-aidl_mapping {
-    name: "framework-aidl-mappings",
-    srcs: [":framework-all-sources"],
-    output: "framework-aidl-mappings.txt",
 }
 
 // Avoid including Parcelable classes as we don't want to have two copies of
@@ -1474,6 +1451,7 @@ java_library {
     ],
     libs: [
         "framework-annotations-lib",
+        "framework-connectivity.stubs.module_lib",
         "unsupportedappusage",
     ],
     visibility: [
@@ -1521,6 +1499,19 @@ metalava_framework_docs_args = "--manifest $(location core/res/AndroidManifest.x
     "--api-lint-ignore-prefix junit. " +
     "--api-lint-ignore-prefix org. "
 
+filegroup {
+    name: "framework-non-updatable-stub-sources",
+    srcs: [
+        ":framework-mime-sources", // mimemap builds separately but has no separate droidstubs.
+        ":framework-non-updatable-sources",
+        ":opt-telephony-srcs",
+        ":opt-net-voip-srcs",
+        "core/java/**/*.logtags",
+        "**/package.html",
+    ],
+    visibility: ["//visibility:private"],
+}
+
 build = [
     "StubLibraries.bp",
     "ApiDocs.bp",
@@ -1551,4 +1542,5 @@ java_library {
         ":protolog-common-src",
     ],
 }
+
 // protolog end

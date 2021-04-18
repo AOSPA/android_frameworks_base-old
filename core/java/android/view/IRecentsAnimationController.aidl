@@ -20,6 +20,7 @@ import android.app.ActivityManager;
 import android.view.IRemoteAnimationFinishedCallback;
 import android.graphics.GraphicBuffer;
 import android.graphics.Rect;
+import android.window.PictureInPictureSurfaceTransaction;
 import android.window.TaskSnapshot;
 
 /**
@@ -43,8 +44,10 @@ interface IRecentsAnimationController {
      * accordingly. This should be called before `finish`
      * @param taskId for which the leash should be updated
      * @param destinationBounds bounds of the final PiP window
+     * @param finishTransaction leash operations for the final transform.
      */
-     void setFinishTaskBounds(int taskId, in Rect destinationBounds);
+     void setFinishTaskBounds(int taskId, in Rect destinationBounds,
+             in PictureInPictureSurfaceTransaction finishTransaction);
 
     /**
      * Notifies to the system that the animation into Recents should end, and all leashes associated
@@ -142,7 +145,13 @@ interface IRecentsAnimationController {
      *
      * The system reparents the leash of navigation bar to the app when the recents animation starts
      * and Launcher should call this method to let system restore the navigation bar to its
-     * original position when the quick switch gesture is finished.
+     * original position when the quick switch gesture is finished and will run the fade-in
+     * animation If {@param moveHomeToTop} is {@code true}. Otherwise, restore the navigtation bar
+     * without animation.
+     *
+     * @param moveHomeToTop if {@code true}, the home activity should be moved to the top.
+     *                      Otherwise, the home activity is hidden and the user is returned to the
+     *                      app.
      */
-    void detachNavigationBarFromApp();
+    void detachNavigationBarFromApp(boolean moveHomeToTop);
 }

@@ -16,33 +16,19 @@
 
 package com.android.server.wm.flicker.launch
 
-import android.view.Surface
+import android.platform.test.annotations.Postsubmit
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerTestRunnerFactory
-import com.android.server.wm.flicker.FlickerTestRunner
-import com.android.server.wm.flicker.endRotation
-import com.android.server.wm.flicker.focusChanges
-import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
-import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEntry
+import com.android.server.wm.flicker.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.FlickerTestParameter
+import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.helpers.reopenAppFromOverview
-import com.android.server.wm.flicker.helpers.buildTestTag
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.noUncoveredRegions
-import com.android.server.wm.flicker.repetitions
 import com.android.server.wm.flicker.startRotation
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.server.wm.flicker.wallpaperWindowBecomesInvisible
-import com.android.server.wm.flicker.appLayerReplacesWallpaperLayer
-import com.android.server.wm.flicker.helpers.SimpleAppHelper
-import com.android.server.wm.flicker.helpers.isRotated
+import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -53,97 +39,71 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
+@Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class OpenAppFromOverviewTest(
-    testSpec: FlickerTestRunnerFactory.TestSpec
-) : FlickerTestRunner(testSpec) {
+class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) : OpenAppTransition(testSpec) {
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = {
+            super.transition(this, it)
+            setup {
+                test {
+                    testApp.launchViaIntent(wmHelper)
+                }
+                eachRun {
+                    device.pressHome()
+                    wmHelper.waitForAppTransitionIdle()
+                    device.pressRecentApps()
+                    wmHelper.waitForAppTransitionIdle()
+                    this.setRotation(testSpec.config.startRotation)
+                }
+            }
+            transitions {
+                device.reopenAppFromOverview(wmHelper)
+                wmHelper.waitForFullScreenApp(testApp.component)
+            }
+        }
+
+    @Postsubmit
+    @Test
+    override fun appWindowReplacesLauncherAsTopWindow() =
+        super.appWindowReplacesLauncherAsTopWindow()
+
+    @Postsubmit
+    @Test
+    override fun wallpaperWindowBecomesInvisible() {
+        testSpec.wallpaperWindowBecomesInvisible()
+    }
+
+    @FlakyTest
+    @Test
+    override fun navBarLayerRotatesAndScales() {
+        super.navBarLayerRotatesAndScales()
+    }
+
+    @FlakyTest
+    @Test
+    override fun statusBarLayerRotatesScales() {
+        super.statusBarLayerRotatesScales()
+    }
+
+    @FlakyTest
+    @Test
+    override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
+        super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    }
+
+    @FlakyTest
+    @Test
+    override fun focusChanges() {
+        super.focusChanges()
+    }
+
     companion object {
         @Parameterized.Parameters(name = "{0}")
         @JvmStatic
-        fun getParams(): List<Array<Any>> {
-            val instrumentation = InstrumentationRegistry.getInstrumentation()
-            val testApp = SimpleAppHelper(instrumentation)
-            return FlickerTestRunnerFactory.getInstance()
-                .buildTest(instrumentation, repetitions = 5) { configuration ->
-                    withTestName { buildTestTag(configuration) }
-                    repeat { configuration.repetitions }
-                    setup {
-                        test {
-                            device.wakeUpAndGoToHomeScreen()
-                            testApp.launchViaIntent(wmHelper)
-                        }
-                        eachRun {
-                            device.pressHome()
-                            wmHelper.waitForAppTransitionIdle()
-                            device.pressRecentApps()
-                            wmHelper.waitForAppTransitionIdle()
-                            this.setRotation(configuration.startRotation)
-                        }
-                    }
-                    transitions {
-                        device.reopenAppFromOverview()
-                        wmHelper.waitForFullScreenApp(testApp.component)
-                    }
-                    teardown {
-                        test {
-                            testApp.exit()
-                        }
-                    }
-                    assertions {
-                        val isRotated = configuration.startRotation.isRotated()
-
-                        presubmit {
-                            windowManagerTrace {
-                                navBarWindowIsAlwaysVisible()
-                                statusBarWindowIsAlwaysVisible()
-                                appWindowReplacesLauncherAsTopWindow(testApp)
-                                wallpaperWindowBecomesInvisible()
-                            }
-
-                            layersTrace {
-                                appLayerReplacesWallpaperLayer(testApp.`package`)
-
-                                if (!isRotated) {
-                                    navBarLayerRotatesAndScales(Surface.ROTATION_0,
-                                        configuration.endRotation)
-                                    statusBarLayerRotatesScales(Surface.ROTATION_0,
-                                        configuration.endRotation)
-                                } else {
-                                    statusBarLayerIsAlwaysVisible()
-                                    navBarLayerIsAlwaysVisible()
-                                }
-                            }
-
-                            eventLog {
-                                focusChanges("NexusLauncherActivity", testApp.`package`)
-                            }
-                        }
-
-                        postsubmit {
-                            windowManagerTrace {
-                                visibleWindowsShownMoreThanOneConsecutiveEntry()
-                            }
-                        }
-
-                        flaky {
-                            layersTrace {
-                                visibleLayersShownMoreThanOneConsecutiveEntry()
-                                noUncoveredRegions(Surface.ROTATION_0, configuration.endRotation,
-                                    bugId = 141361128)
-
-                                if (isRotated) {
-                                    navBarLayerRotatesAndScales(Surface.ROTATION_0,
-                                        configuration.endRotation)
-                                    statusBarLayerRotatesScales(Surface.ROTATION_0,
-                                        configuration.endRotation)
-                                } else {
-                                    statusBarLayerIsAlwaysVisible()
-                                    navBarLayerIsAlwaysVisible()
-                                }
-                            }
-                        }
-                    }
-                }
+        fun getParams(): Collection<FlickerTestParameter> {
+            return FlickerTestParameterFactory.getInstance()
+                .getConfigNonRotationTests(repetitions = 5)
         }
     }
 }

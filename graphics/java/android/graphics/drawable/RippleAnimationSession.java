@@ -26,9 +26,10 @@ import android.graphics.CanvasProperty;
 import android.graphics.Paint;
 import android.graphics.RecordingCanvas;
 import android.graphics.animation.RenderNodeAnimator;
-import android.util.ArraySet;
-import android.view.animation.DecelerateInterpolator;
+import android.view.animation.AnimationUtils;
+import android.view.animation.Interpolator;
 import android.view.animation.LinearInterpolator;
+import android.view.animation.PathInterpolator;
 
 import java.util.function.Consumer;
 
@@ -36,32 +37,35 @@ import java.util.function.Consumer;
  * @hide
  */
 public final class RippleAnimationSession {
-    private static final int ENTER_ANIM_DURATION = 350;
-    private static final int EXIT_ANIM_OFFSET = ENTER_ANIM_DURATION;
-    private static final int EXIT_ANIM_DURATION = 350;
+    private static final String TAG = "RippleAnimationSession";
+    private static final int ENTER_ANIM_DURATION = 450;
+    private static final int EXIT_ANIM_DURATION = 300;
     private static final TimeInterpolator LINEAR_INTERPOLATOR = new LinearInterpolator();
-    // Matches R.interpolator.fast_out_slow_in but as we have no context we can't just import that
-    private static final TimeInterpolator DECELERATE_INTERPOLATOR = new DecelerateInterpolator();
-
+    private static final Interpolator FAST_OUT_LINEAR_IN =
+            new PathInterpolator(0.4f, 0f, 1f, 1f);
     private Consumer<RippleAnimationSession> mOnSessionEnd;
-    private AnimationProperties<Float, Paint> mProperties;
+    private final AnimationProperties<Float, Paint> mProperties;
     private AnimationProperties<CanvasProperty<Float>, CanvasProperty<Paint>> mCanvasProperties;
     private Runnable mOnUpdate;
     private long mStartTime;
     private boolean mForceSoftware;
-    private ArraySet<Animator> mActiveAnimations = new ArraySet(3);
+    private final ValueAnimator mSparkle = ValueAnimator.ofFloat(0, 1);
 
     RippleAnimationSession(@NonNull AnimationProperties<Float, Paint> properties,
             boolean forceSoftware) {
         mProperties = properties;
         mForceSoftware = forceSoftware;
-    }
 
-    void end() {
-        for (Animator anim: mActiveAnimations) {
-            if (anim != null) anim.end();
-        }
-        mActiveAnimations.clear();
+        mSparkle.addUpdateListener(anim -> {
+            final long now = AnimationUtils.currentAnimationTimeMillis();
+            final long elapsed = now - mStartTime - ENTER_ANIM_DURATION;
+            final float phase = (float) elapsed / 800;
+            mProperties.getShader().setNoisePhase(phase);
+            notifyUpdate();
+        });
+        mSparkle.setDuration(ENTER_ANIM_DURATION);
+        mSparkle.setInterpolator(LINEAR_INTERPOLATOR);
+        mSparkle.setRepeatCount(ValueAnimator.INFINITE);
     }
 
     @NonNull RippleAnimationSession enter(Canvas canvas) {
@@ -70,7 +74,7 @@ public final class RippleAnimationSession {
         } else {
             enterSoftware();
         }
-        mStartTime = System.nanoTime();
+        mStartTime = AnimationUtils.currentAnimationTimeMillis();
         return this;
     }
 
@@ -81,7 +85,7 @@ public final class RippleAnimationSession {
     }
 
     private void onAnimationEnd(Animator anim) {
-        mActiveAnimations.remove(anim);
+        notifyUpdate();
     }
 
     @NonNull RippleAnimationSession setOnSessionEnd(
@@ -92,7 +96,6 @@ public final class RippleAnimationSession {
 
     RippleAnimationSession setOnAnimationUpdated(@Nullable Runnable run) {
         mOnUpdate = run;
-        mProperties.setOnChange(mOnUpdate);
         return this;
     }
 
@@ -112,24 +115,22 @@ public final class RippleAnimationSession {
             @Override
             public void onAnimationEnd(Animator animation) {
                 super.onAnimationEnd(animation);
+                mSparkle.end();
                 Consumer<RippleAnimationSession> onEnd = mOnSessionEnd;
                 if (onEnd != null) onEnd.accept(RippleAnimationSession.this);
             }
         });
         expand.setInterpolator(LINEAR_INTERPOLATOR);
         expand.start();
-        mActiveAnimations.add(expand);
     }
 
     private long computeDelay() {
-        long currentTime = System.nanoTime();
-        long timePassed =  (currentTime - mStartTime) / 1_000_000;
-        long difference = EXIT_ANIM_OFFSET;
-        return Math.max(difference - timePassed, 0);
+        final long timePassed =  AnimationUtils.currentAnimationTimeMillis() - mStartTime;
+        return Math.max((long) ENTER_ANIM_DURATION - timePassed, 0);
     }
+
     private void notifyUpdate() {
-        Runnable onUpdate = mOnUpdate;
-        if (onUpdate != null) onUpdate.run();
+        if (mOnUpdate != null) mOnUpdate.run();
     }
 
     RippleAnimationSession setForceSoftwareAnimation(boolean forceSw) {
@@ -148,30 +149,36 @@ public final class RippleAnimationSession {
             @Override
             public void onAnimationEnd(Animator animation) {
                 super.onAnimationEnd(animation);
+                mSparkle.end();
                 Consumer<RippleAnimationSession> onEnd = mOnSessionEnd;
                 if (onEnd != null) onEnd.accept(RippleAnimationSession.this);
             }
         });
         exit.setTarget(canvas);
-        exit.setInterpolator(DECELERATE_INTERPOLATOR);
+        exit.setInterpolator(LINEAR_INTERPOLATOR);
 
         long delay = computeDelay();
         exit.setStartDelay(delay);
         exit.start();
-        mActiveAnimations.add(exit);
     }
 
-    private void enterHardware(RecordingCanvas can) {
+    private void enterHardware(RecordingCanvas canvas) {
         AnimationProperties<CanvasProperty<Float>, CanvasProperty<Paint>>
                 props = getCanvasProperties();
         RenderNodeAnimator expand =
                 new RenderNodeAnimator(props.getProgress(), .5f);
-        expand.setTarget(can);
+        expand.setTarget(canvas);
+        startAnimation(expand);
+    }
+
+    private void startAnimation(Animator expand) {
         expand.setDuration(ENTER_ANIM_DURATION);
         expand.addListener(new AnimatorListener(this));
-        expand.setInterpolator(LINEAR_INTERPOLATOR);
+        expand.setInterpolator(FAST_OUT_LINEAR_IN);
         expand.start();
-        mActiveAnimations.add(expand);
+        if (!mSparkle.isRunning()) {
+            mSparkle.start();
+        }
     }
 
     private void enterSoftware() {
@@ -180,17 +187,15 @@ public final class RippleAnimationSession {
             notifyUpdate();
             mProperties.getShader().setProgress((Float) expand.getAnimatedValue());
         });
-        expand.addListener(new AnimatorListener(this));
-        expand.setInterpolator(LINEAR_INTERPOLATOR);
-        expand.start();
-        mActiveAnimations.add(expand);
+        startAnimation(expand);
     }
 
     @NonNull AnimationProperties<Float, Paint> getProperties() {
         return mProperties;
     }
 
-    @NonNull AnimationProperties getCanvasProperties() {
+    @NonNull
+    AnimationProperties<CanvasProperty<Float>, CanvasProperty<Paint>> getCanvasProperties() {
         if (mCanvasProperties == null) {
             mCanvasProperties = new AnimationProperties<>(
                     CanvasProperty.createFloat(mProperties.getX()),
@@ -209,6 +214,7 @@ public final class RippleAnimationSession {
         AnimatorListener(RippleAnimationSession session) {
             mSession = session;
         }
+
         @Override
         public void onAnimationStart(Animator animation) {
 
@@ -231,21 +237,12 @@ public final class RippleAnimationSession {
     }
 
     static class AnimationProperties<FloatType, PaintType> {
-        private final FloatType mY;
-        private FloatType mProgress;
-        private FloatType mMaxRadius;
+        private final FloatType mProgress;
+        private final FloatType mMaxRadius;
         private final PaintType mPaint;
-        private final FloatType mX;
         private final RippleShader mShader;
-        private Runnable mOnChange;
-
-        private void onChange() {
-            if (mOnChange != null) mOnChange.run();
-        }
-
-        private void setOnChange(Runnable onChange) {
-            mOnChange = onChange;
-        }
+        private FloatType mX;
+        private FloatType mY;
 
         AnimationProperties(FloatType x, FloatType y, FloatType maxRadius,
                 PaintType paint, FloatType progress, RippleShader shader) {
@@ -259,6 +256,11 @@ public final class RippleAnimationSession {
 
         FloatType getProgress() {
             return mProgress;
+        }
+
+        void setOrigin(FloatType x, FloatType y) {
+            mX = x;
+            mY = y;
         }
 
         FloatType getX() {

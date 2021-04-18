@@ -25,6 +25,7 @@ import static android.view.InsetsController.ANIMATION_TYPE_SHOW;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.SyncRtSurfaceTransactionApplier.applyParams;
+import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_FORCE_SHOW_STATUS_BAR;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION;
 
@@ -458,10 +459,8 @@ class InsetsPolicy {
         InsetsPolicyAnimationControlCallbacks mControlCallbacks;
 
         InsetsPolicyAnimationControlListener(boolean show, Runnable finishCallback, int types) {
-
-            super(show, false /* hasCallbacks */, types, false /* disable */,
-                    (int) (mDisplayContent.getDisplayMetrics().density * FLOATING_IME_BOTTOM_INSET
-                            + 0.5f));
+            super(show, false /* hasCallbacks */, types, BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE,
+                    false /* disable */, 0 /* floatingImeBottomInsets */);
             mFinishCallback = finishCallback;
             mControlCallbacks = new InsetsPolicyAnimationControlCallbacks(this);
         }
@@ -492,9 +491,12 @@ class InsetsPolicy {
                 mAnimatingShown = show;
 
                 final InsetsState state = getInsetsForWindow(mFocusedWin);
+
+                // We are about to playing the default animation. Passing a null frame indicates
+                // the controlled types should be animated regardless of the frame.
                 mAnimationControl = new InsetsAnimationControlImpl(controls,
-                        state.getDisplayFrame(), state, mListener, typesReady, this,
-                        mListener.getDurationMs(), InsetsController.SYSTEM_BARS_INTERPOLATOR,
+                        null /* frame */, state, mListener, typesReady, this,
+                        mListener.getDurationMs(), getInsetsInterpolator(),
                         show ? ANIMATION_TYPE_SHOW : ANIMATION_TYPE_HIDE, null /* translator */);
                 SurfaceAnimationThread.getHandler().post(
                         () -> mListener.onReady(mAnimationControl, typesReady));

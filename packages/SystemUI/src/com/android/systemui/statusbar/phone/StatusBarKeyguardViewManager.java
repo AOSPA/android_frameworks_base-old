@@ -38,6 +38,7 @@ import android.view.ViewRootImpl;
 import android.view.WindowManagerGlobal;
 import android.widget.FrameLayout;
 
+import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.util.LatencyTracker;
@@ -76,7 +77,7 @@ import javax.inject.Inject;
  * Manages creating, showing, hiding and resetting the keyguard within the status bar. Calls back
  * via {@link ViewMediatorCallback} to poke the wake lock and report that the keyguard is done,
  * which is in turn, reported to this class by the current
- * {@link com.android.keyguard.KeyguardViewBase}.
+ * {@link com.android.keyguard.KeyguardViewController}.
  */
 @SysUISingleton
 public class StatusBarKeyguardViewManager implements RemoteInputController.Callback,
@@ -199,6 +200,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private final DockManager mDockManager;
     private final KeyguardUpdateMonitor mKeyguardUpdateManager;
     private KeyguardBypassController mBypassController;
+    @Nullable private AlternateAuthInterceptor mAlternateAuthInterceptor;
 
     private final KeyguardUpdateMonitorCallback mUpdateMonitorCallback =
             new KeyguardUpdateMonitorCallback() {
@@ -269,6 +271,10 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         });
 
         registerListeners();
+    }
+
+    public void setAlternateAuthInterceptor(@Nullable AlternateAuthInterceptor authInterceptor) {
+        mAlternateAuthInterceptor = authInterceptor;
     }
 
     private void registerListeners() {
@@ -434,11 +440,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (mShowing) {
             // If we were showing the bouncer and then aborting, we need to also clear out any
             // potential actions unless we actually unlocked.
-            mAfterKeyguardGoneAction = null;
-            if (mKeyguardGoneCancelAction != null) {
-                mKeyguardGoneCancelAction.run();
-                mKeyguardGoneCancelAction = null;
-            }
+            cancelPostAuthActions();
         }
         mBouncer.hide(destroyView);
         cancelPendingWakeupAction();
@@ -471,6 +473,15 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             if (mDozing && !isWakeAndUnlocking()) {
                 mPendingWakeupAction = new DismissWithActionRequest(
                         r, cancelAction, afterKeyguardGone, message);
+                return;
+            }
+
+            if (mAlternateAuthInterceptor != null) {
+                mAfterKeyguardGoneAction = r;
+                mKeyguardGoneCancelAction = cancelAction;
+                if (mAlternateAuthInterceptor.showAlternativeAuthMethod()) {
+                    mStatusBar.updateScrimController();
+                }
                 return;
             }
 
@@ -508,8 +519,18 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             } else {
                 showBouncerOrKeyguard(hideBouncerWhenShowing);
             }
+            resetAlternateAuth();
             mKeyguardUpdateManager.sendKeyguardReset();
             updateStates();
+        }
+    }
+
+    /**
+     * Stop showing any alternate auth methods
+     */
+    public void resetAlternateAuth() {
+        if (mAlternateAuthInterceptor != null && mAlternateAuthInterceptor.resetForceShow()) {
+            mStatusBar.updateScrimController();
         }
     }
 
@@ -739,8 +760,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     public void onThemeChanged() {
+        boolean wasShowing = mBouncer.isShowing();
+        boolean wasScrimmed = mBouncer.isScrimmed();
+
         hideBouncer(true /* destroyView */);
         mBouncer.prepare();
+
+        if (wasShowing) showBouncer(wasScrimmed);
     }
 
     public void onKeyguardFadedAway() {
@@ -827,6 +853,20 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     public boolean isFullscreenBouncer() {
         return mBouncer.isFullscreenBouncer();
+    }
+
+    /**
+     * Clear out any potential actions that were saved to run when the device is unlocked
+     */
+    public void cancelPostAuthActions() {
+        if (bouncerIsOrWillBeShowing()) {
+            return; // allow bouncer to trigger saved actions
+        }
+        mAfterKeyguardGoneAction = null;
+        if (mKeyguardGoneCancelAction != null) {
+            mKeyguardGoneCancelAction.run();
+            mKeyguardGoneCancelAction = null;
+        }
     }
 
     private long getNavBarShowDelay() {
@@ -1045,6 +1085,17 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 || mBouncer.isFullscreenBouncer();
     }
 
+    /**
+     * Apply keyguard configuration from the currently active resources. This can be called when the
+     * device configuration changes, to re-apply some resources that are qualified on the device
+     * configuration.
+     */
+    public void updateResources() {
+        if (mBouncer != null) {
+            mBouncer.updateResources();
+        }
+    }
+
     public void dump(PrintWriter pw) {
         pw.println("StatusBarKeyguardViewManager:");
         pw.println("  mShowing: " + mShowing);
@@ -1058,6 +1109,11 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (mBouncer != null) {
             mBouncer.dump(pw);
         }
+
+        if (mAlternateAuthInterceptor != null) {
+            pw.println("AltAuthInterceptor: ");
+            mAlternateAuthInterceptor.dump(pw);
+        }
     }
 
     @Override
@@ -1070,8 +1126,28 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         setDozing(isDozing);
     }
 
+    /**
+     * Set whether qs is currently expanded
+     */
+    public void setQsExpanded(boolean expanded) {
+        if (mAlternateAuthInterceptor != null) {
+            mAlternateAuthInterceptor.setQsExpanded(expanded);
+        }
+    }
+
     public KeyguardBouncer getBouncer() {
         return mBouncer;
+    }
+
+    public boolean isShowingAlternateAuth() {
+        return mAlternateAuthInterceptor != null
+                && mAlternateAuthInterceptor.isShowingAlternateAuth();
+    }
+
+    public boolean isShowingAlternateAuthOrAnimating() {
+        return mAlternateAuthInterceptor != null
+                && (mAlternateAuthInterceptor.isShowingAlternateAuth()
+                || mAlternateAuthInterceptor.isAnimating());
     }
 
     private static class DismissWithActionRequest {
@@ -1087,5 +1163,42 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             this.afterKeyguardGone = afterKeyguardGone;
             this.message = message;
         }
+    }
+
+    /**
+     * Delegate used to send show/reset events to an alternate authentication method instead of the
+     * bouncer.
+     */
+    public interface AlternateAuthInterceptor {
+        /**
+         * @return whether alternative auth method was newly shown
+         */
+        boolean showAlternativeAuthMethod();
+
+        /**
+         * reset the state to the default (only keyguard showing, no auth methods showing)
+         * @return whether alternative auth method was newly hidden
+         */
+        boolean resetForceShow();
+
+        /**
+         * @return true if alternative auth method is showing
+         */
+        boolean isShowingAlternateAuth();
+
+        /**
+         * print information for the alternate auth interceptor registered
+         */
+        void dump(PrintWriter pw);
+
+        /**
+         * @return true if the new auth method is currently animating in or out.
+         */
+        boolean isAnimating();
+
+        /**
+         * Set whether qs is currently expanded
+         */
+        void setQsExpanded(boolean expanded);
     }
 }

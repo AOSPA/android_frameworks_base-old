@@ -17,7 +17,6 @@
 package android.uwb;
 
 import android.os.PersistableBundle;
-import android.uwb.AngleOfArrivalSupport;
 import android.uwb.IUwbAdapterStateCallbacks;
 import android.uwb.IUwbRangingCallbacks;
 import android.uwb.SessionHandle;
@@ -47,69 +46,11 @@ interface IUwbAdapter {
   void unregisterAdapterStateCallbacks(in IUwbAdapterStateCallbacks callbacks);
 
   /**
-   * Returns true if ranging is supported, false otherwise
-   */
-  boolean isRangingSupported();
-
-  /**
-   * Get the angle of arrival supported by this device
-   *
-   * @return the angle of arrival type supported
-   */
-  AngleOfArrivalSupport getAngleOfArrivalSupport();
-
-  /**
-   * Generates a list of the supported 802.15.4z channels
-   *
-   * The list must be prioritized in the order of preferred channel usage.
-   *
-   * The list must only contain channels that are permitted to be used in the
-   * device's current location.
-   *
-   * @return an array of support channels on the device for the current location.
-   */
-  int[] getSupportedChannels();
-
-  /**
-   * Generates a list of the supported 802.15.4z preamble codes
-   *
-   * The list must be prioritized in the order of preferred preamble usage.
-   *
-   * The list must only contain preambles that are permitted to be used in the
-   * device's current location.
-   *
-   * @return an array of supported preambles on the device for the current
-   *         location.
-   */
-  int[] getSupportedPreambleCodes();
-
-  /**
    * Get the accuracy of the ranging timestamps
    *
    * @return accuracy of the ranging timestamps in nanoseconds
    */
   long getTimestampResolutionNanos();
-
-  /**
-   * Get the supported number of simultaneous ranging sessions
-   *
-   * @return the supported number of simultaneous ranging sessions
-   */
-  int getMaxSimultaneousSessions();
-
-  /**
-   * Get the maximum number of remote devices per session when local device is initiator
-   *
-   * @return the maximum number of remote devices supported in a single session
-   */
-  int getMaxRemoteDevicesPerInitiatorSession();
-
-  /**
-   * Get the maximum number of remote devices per session when local device is responder
-   *
-   * @return the maximum number of remote devices supported in a single session
-   */
-  int getMaxRemoteDevicesPerResponderSession();
 
   /**
    * Provides the capabilities and features of the device
@@ -120,9 +61,6 @@ interface IUwbAdapter {
 
   /**
    * Request to open a new ranging session
-   *
-   * This function must return before calling any functions in
-   * IUwbAdapterCallbacks.
    *
    * This function does not start the ranging session, but all necessary
    * components must be initialized and ready to start a new ranging
@@ -136,12 +74,16 @@ interface IUwbAdapter {
    * RANGING_SESSION_OPEN_THRESHOLD_MS milliseconds of #openRanging being called
    * if the ranging session fails to be opened.
    *
+   * If the provided sessionHandle is already open for the calling client, then
+   * #onRangingOpenFailed must be called and the new session must not be opened.
+   *
+   * @param sessionHandle the session handle to open ranging for
    * @param rangingCallbacks the callbacks used to deliver ranging information
    * @param parameters the configuration to use for ranging
-   * @return a SessionHandle used to identify this ranging request
    */
-  SessionHandle openRanging(in IUwbRangingCallbacks rangingCallbacks,
-                            in PersistableBundle parameters);
+  void openRanging(in SessionHandle sessionHandle,
+                   in IUwbRangingCallbacks rangingCallbacks,
+                   in PersistableBundle parameters);
 
   /**
    * Request to start ranging

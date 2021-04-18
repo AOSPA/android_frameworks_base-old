@@ -19,6 +19,7 @@ package com.android.server.appwidget;
 import static android.content.Context.KEYGUARD_SERVICE;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
+import static android.content.res.Resources.ID_NULL;
 
 import static com.android.server.pm.PackageManagerService.PLATFORM_PACKAGE_NAME;
 
@@ -137,7 +138,6 @@ import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Iterator;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -181,9 +181,6 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             }
 
             switch (action) {
-                case Intent.ACTION_CONFIGURATION_CHANGED:
-                    onConfigurationChanged();
-                    break;
                 case Intent.ACTION_MANAGED_PROFILE_AVAILABLE:
                 case Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE:
                     synchronized (mLock) {
@@ -243,8 +240,6 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
     private Handler mSaveStateHandler;
     private Handler mCallbackHandler;
 
-    private Locale mLocale;
-
     private final SparseIntArray mNextAppWidgetIds = new SparseIntArray();
 
     private boolean mSafeMode;
@@ -290,13 +285,6 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
     }
 
     private void registerBroadcastReceiver() {
-        // Register for configuration changes so we can update the names
-        // of the widgets when the locale changes.
-        IntentFilter configFilter = new IntentFilter();
-        configFilter.addAction(Intent.ACTION_CONFIGURATION_CHANGED);
-        mContext.registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL,
-                configFilter, null, null);
-
         // Register for broadcasts about package install, etc., so we can
         // update the provider list.
         IntentFilter packageFilter = new IntentFilter();
@@ -336,62 +324,6 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
 
     public void setSafeMode(boolean safeMode) {
         mSafeMode = safeMode;
-    }
-
-    private void onConfigurationChanged() {
-        if (DEBUG) {
-            Slog.i(TAG, "onConfigurationChanged()");
-        }
-
-        Locale revised = Locale.getDefault();
-        if (revised == null || mLocale == null || !revised.equals(mLocale)) {
-            mLocale = revised;
-
-            synchronized (mLock) {
-                SparseIntArray changedGroups = null;
-
-                // Note: updateProvidersForPackageLocked() may remove providers, so we must copy the
-                // list of installed providers and skip providers that we don't need to update.
-                // Also note that remove the provider does not clear the Provider component data.
-                ArrayList<Provider> installedProviders = new ArrayList<>(mProviders);
-                HashSet<ProviderId> removedProviders = new HashSet<>();
-
-                int N = installedProviders.size();
-                for (int i = N - 1; i >= 0; i--) {
-                    Provider provider = installedProviders.get(i);
-
-                    final int userId = provider.getUserId();
-                    if (!mUserManager.isUserUnlockingOrUnlocked(userId) ||
-                            isProfileWithLockedParent(userId)) {
-                        continue;
-                    }
-                    ensureGroupStateLoadedLocked(userId);
-
-                    if (!removedProviders.contains(provider.id)) {
-                        final boolean changed = updateProvidersForPackageLocked(
-                                provider.id.componentName.getPackageName(),
-                                provider.getUserId(), removedProviders);
-
-                        if (changed) {
-                            if (changedGroups == null) {
-                                changedGroups = new SparseIntArray();
-                            }
-                            final int groupId = mSecurityPolicy.getGroupParent(
-                                    provider.getUserId());
-                            changedGroups.put(groupId, groupId);
-                        }
-                    }
-                }
-
-                if (changedGroups != null) {
-                    final int groupCount = changedGroups.size();
-                    for (int i = 0; i < groupCount; i++) {
-                        final int groupId = changedGroups.get(i);
-                        saveGroupStateAsync(groupId);
-                    }
-                }
-            }
-        }
     }
 
     private void onPackageBroadcastReceived(Intent intent, int userId) {
@@ -2647,9 +2579,9 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             info.updatePeriodMillis = sa.getInt(
                     com.android.internal.R.styleable.AppWidgetProviderInfo_updatePeriodMillis, 0);
             info.initialLayout = sa.getResourceId(
-                    com.android.internal.R.styleable.AppWidgetProviderInfo_initialLayout, 0);
+                    com.android.internal.R.styleable.AppWidgetProviderInfo_initialLayout, ID_NULL);
             info.initialKeyguardLayout = sa.getResourceId(com.android.internal.R.styleable.
-                    AppWidgetProviderInfo_initialKeyguardLayout, 0);
+                    AppWidgetProviderInfo_initialKeyguardLayout, ID_NULL);
 
             String className = sa
                     .getString(com.android.internal.R.styleable.AppWidgetProviderInfo_configure);
@@ -2660,11 +2592,12 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
             info.label = activityInfo.loadLabel(pm).toString();
             info.icon = activityInfo.getIconResource();
             info.previewImage = sa.getResourceId(
-                    com.android.internal.R.styleable.AppWidgetProviderInfo_previewImage, 0);
+                    com.android.internal.R.styleable.AppWidgetProviderInfo_previewImage, ID_NULL);
             info.previewLayout = sa.getResourceId(
-                    com.android.internal.R.styleable.AppWidgetProviderInfo_previewLayout, 0);
+                    com.android.internal.R.styleable.AppWidgetProviderInfo_previewLayout, ID_NULL);
             info.autoAdvanceViewId = sa.getResourceId(
-                    com.android.internal.R.styleable.AppWidgetProviderInfo_autoAdvanceViewId, -1);
+                    com.android.internal.R.styleable.AppWidgetProviderInfo_autoAdvanceViewId,
+                    View.NO_ID);
             info.resizeMode = sa.getInt(
                     com.android.internal.R.styleable.AppWidgetProviderInfo_resizeMode,
                     AppWidgetProviderInfo.RESIZE_NONE);
@@ -2673,9 +2606,8 @@ class AppWidgetServiceImpl extends IAppWidgetService.Stub implements WidgetBacku
                     AppWidgetProviderInfo.WIDGET_CATEGORY_HOME_SCREEN);
             info.widgetFeatures = sa.getInt(
                     com.android.internal.R.styleable.AppWidgetProviderInfo_widgetFeatures, 0);
-            info.descriptionResource = sa.getResourceId(
-                    com.android.internal.R.styleable.AppWidgetProviderInfo_description,
-                    Resources.ID_NULL);
+            info.descriptionRes = sa.getResourceId(
+                    com.android.internal.R.styleable.AppWidgetProviderInfo_description, ID_NULL);
             sa.recycle();
             return info;
         } catch (IOException | PackageManager.NameNotFoundException | XmlPullParserException e) {

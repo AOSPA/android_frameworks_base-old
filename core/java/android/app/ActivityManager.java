@@ -31,6 +31,7 @@ import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.annotation.TestApi;
+import android.annotation.UserIdInt;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -511,6 +512,7 @@ public class ActivityManager {
     /** @hide Process is hosting the current top activities.  Note that this covers
      * all activities that are visible to the user. */
     @UnsupportedAppUsage
+    @TestApi
     public static final int PROCESS_STATE_TOP = ProcessStateEnum.TOP;
 
     /** @hide Process is bound to a TOP app. */
@@ -518,6 +520,7 @@ public class ActivityManager {
 
     /** @hide Process is hosting a foreground service. */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @TestApi
     public static final int PROCESS_STATE_FOREGROUND_SERVICE = ProcessStateEnum.FOREGROUND_SERVICE;
 
     /** @hide Process is hosting a foreground service due to a system binding. */
@@ -616,11 +619,16 @@ public class ActivityManager {
     @TestApi
     public static final int PROCESS_CAPABILITY_FOREGROUND_MICROPHONE = 1 << 2;
 
+    /** @hide Process can access network despite any power saving resrictions */
+    @TestApi
+    public static final int PROCESS_CAPABILITY_NETWORK = 1 << 3;
+
     /** @hide all capabilities, the ORing of all flags in {@link ProcessCapability}*/
     @TestApi
     public static final int PROCESS_CAPABILITY_ALL = PROCESS_CAPABILITY_FOREGROUND_LOCATION
             | PROCESS_CAPABILITY_FOREGROUND_CAMERA
-            | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE;
+            | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
+            | PROCESS_CAPABILITY_NETWORK;
     /**
      * All explicit capabilities. These are capabilities that need to be specified from manifest
      * file.
@@ -646,6 +654,15 @@ public class ActivityManager {
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0 ? 'L' : '-');
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
         pw.print((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
+        pw.print((caps & PROCESS_CAPABILITY_NETWORK) != 0 ? 'N' : '-');
+    }
+
+    /** @hide */
+    public static void printCapabilitiesSummary(StringBuilder sb, @ProcessCapability int caps) {
+        sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_LOCATION) != 0 ? 'L' : '-');
+        sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_CAMERA) != 0 ? 'C' : '-');
+        sb.append((caps & PROCESS_CAPABILITY_FOREGROUND_MICROPHONE) != 0 ? 'M' : '-');
+        sb.append((caps & PROCESS_CAPABILITY_NETWORK) != 0 ? 'N' : '-');
     }
 
     /**
@@ -656,11 +673,19 @@ public class ActivityManager {
         printCapabilitiesSummary(pw, caps);
         final int remain = caps & ~(PROCESS_CAPABILITY_FOREGROUND_LOCATION
                 | PROCESS_CAPABILITY_FOREGROUND_CAMERA
-                | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE);
+                | PROCESS_CAPABILITY_FOREGROUND_MICROPHONE
+                | PROCESS_CAPABILITY_NETWORK);
         if (remain != 0) {
             pw.print('+');
             pw.print(remain);
         }
+    }
+
+    /** @hide */
+    public static String getCapabilitiesSummary(@ProcessCapability int caps) {
+        final StringBuilder sb = new StringBuilder();
+        printCapabilitiesSummary(sb, caps);
+        return sb.toString();
     }
 
     // NOTE: If PROCESS_STATEs are added, then new fields must be added
@@ -876,7 +901,6 @@ public class ActivityManager {
      *
      * @hide
      */
-    @TestApi
     @ChangeId
     public static final long DROP_CLOSE_SYSTEM_DIALOGS = 174664120L;
 
@@ -3411,6 +3435,36 @@ public class ActivityManager {
     }
 
     /**
+     * Returns the process state of this uid.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    public int getUidProcessState(int uid) {
+        try {
+            return getService().getUidProcessState(uid, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Returns the process capability of this uid.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(Manifest.permission.PACKAGE_USAGE_STATS)
+    public @ProcessCapability int getUidProcessCapabilities(int uid) {
+        try {
+            return getService().getUidProcessCapabilities(uid, mContext.getOpPackageName());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Return the importance of a given package name, based on the processes that are
      * currently running.  The return value is one of the importance constants defined
      * in {@link RunningAppProcessInfo}, giving you the highest importance of all the
@@ -3994,7 +4048,8 @@ public class ActivityManager {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.MANAGE_USERS)
+    @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_USERS,
+            android.Manifest.permission.CREATE_USERS})
     public boolean switchUser(@NonNull UserHandle user) {
         if (user == null) {
             throw new IllegalArgumentException("UserHandle cannot be null.");
@@ -4087,6 +4142,25 @@ public class ActivityManager {
             } catch (RemoteException e) {
                 e.rethrowFromSystemServer();
             }
+        }
+    }
+
+    /**
+     * Stops the given {@code userId}.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    public boolean stopUser(@UserIdInt int userId, boolean force) {
+        if (userId == UserHandle.USER_SYSTEM) {
+            return false;
+        }
+        try {
+            return USER_OP_SUCCESS == getService().stopUser(
+                    userId, force, /* callback= */ null);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
         }
     }
 
@@ -4485,6 +4559,80 @@ public class ActivityManager {
         }
     }
 
+    /** @hide */
+    public static String procStateToString(int procState) {
+        final String procStateStr;
+        switch (procState) {
+            case ActivityManager.PROCESS_STATE_PERSISTENT:
+                procStateStr = "PER ";
+                break;
+            case ActivityManager.PROCESS_STATE_PERSISTENT_UI:
+                procStateStr = "PERU";
+                break;
+            case ActivityManager.PROCESS_STATE_TOP:
+                procStateStr = "TOP ";
+                break;
+            case ActivityManager.PROCESS_STATE_BOUND_TOP:
+                procStateStr = "BTOP";
+                break;
+            case ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE:
+                procStateStr = "FGS ";
+                break;
+            case ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE:
+                procStateStr = "BFGS";
+                break;
+            case ActivityManager.PROCESS_STATE_IMPORTANT_FOREGROUND:
+                procStateStr = "IMPF";
+                break;
+            case ActivityManager.PROCESS_STATE_IMPORTANT_BACKGROUND:
+                procStateStr = "IMPB";
+                break;
+            case ActivityManager.PROCESS_STATE_TRANSIENT_BACKGROUND:
+                procStateStr = "TRNB";
+                break;
+            case ActivityManager.PROCESS_STATE_BACKUP:
+                procStateStr = "BKUP";
+                break;
+            case ActivityManager.PROCESS_STATE_SERVICE:
+                procStateStr = "SVC ";
+                break;
+            case ActivityManager.PROCESS_STATE_RECEIVER:
+                procStateStr = "RCVR";
+                break;
+            case ActivityManager.PROCESS_STATE_TOP_SLEEPING:
+                procStateStr = "TPSL";
+                break;
+            case ActivityManager.PROCESS_STATE_HEAVY_WEIGHT:
+                procStateStr = "HVY ";
+                break;
+            case ActivityManager.PROCESS_STATE_HOME:
+                procStateStr = "HOME";
+                break;
+            case ActivityManager.PROCESS_STATE_LAST_ACTIVITY:
+                procStateStr = "LAST";
+                break;
+            case ActivityManager.PROCESS_STATE_CACHED_ACTIVITY:
+                procStateStr = "CAC ";
+                break;
+            case ActivityManager.PROCESS_STATE_CACHED_ACTIVITY_CLIENT:
+                procStateStr = "CACC";
+                break;
+            case ActivityManager.PROCESS_STATE_CACHED_RECENT:
+                procStateStr = "CRE ";
+                break;
+            case ActivityManager.PROCESS_STATE_CACHED_EMPTY:
+                procStateStr = "CEM ";
+                break;
+            case ActivityManager.PROCESS_STATE_NONEXISTENT:
+                procStateStr = "NONE";
+                break;
+            default:
+                procStateStr = "??";
+                break;
+        }
+        return procStateStr;
+    }
+
     /**
      * The AppTask allows you to manage your own application's tasks.
      * See {@link android.app.ActivityManager#getAppTasks()}
@@ -4680,5 +4828,87 @@ public class ActivityManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Blocks until all broadcast queues become idle.
+     *
+     * @hide
+     */
+    @TestApi
+    @RequiresPermission(android.Manifest.permission.DUMP)
+    public void waitForBroadcastIdle() {
+        try {
+            getService().waitForBroadcastIdle();
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * A subset of immutable pending intent information suitable for caching on the client side.
+     *
+     * @hide
+     */
+    public static final class PendingIntentInfo implements Parcelable {
+
+        private final String mCreatorPackage;
+        private final int mCreatorUid;
+        private final boolean mImmutable;
+        private final int mIntentSenderType;
+
+        public PendingIntentInfo(String creatorPackage, int creatorUid, boolean immutable,
+                int intentSenderType) {
+            mCreatorPackage = creatorPackage;
+            mCreatorUid = creatorUid;
+            mImmutable = immutable;
+            mIntentSenderType = intentSenderType;
+        }
+
+        public String getCreatorPackage() {
+            return mCreatorPackage;
+        }
+
+        public int getCreatorUid() {
+            return mCreatorUid;
+        }
+
+        public boolean isImmutable() {
+            return mImmutable;
+        }
+
+        public int getIntentSenderType() {
+            return mIntentSenderType;
+        }
+
+        @Override
+        public int describeContents() {
+            return 0;
+        }
+
+        @Override
+        public void writeToParcel(@NonNull Parcel parcel, int flags) {
+            parcel.writeString(mCreatorPackage);
+            parcel.writeInt(mCreatorUid);
+            parcel.writeBoolean(mImmutable);
+            parcel.writeInt(mIntentSenderType);
+        }
+
+        public static final @NonNull Creator<PendingIntentInfo> CREATOR =
+                new Creator<PendingIntentInfo>() {
+                    @Override
+                    public PendingIntentInfo createFromParcel(Parcel in) {
+                        return new PendingIntentInfo(
+                                /* creatorPackage= */ in.readString(),
+                                /* creatorUid= */ in.readInt(),
+                                /* immutable= */ in.readBoolean(),
+                                /* intentSenderType= */ in.readInt());
+                    }
+
+                    @Override
+                    public PendingIntentInfo[] newArray(int size) {
+                        return new PendingIntentInfo[size];
+                    }
+                };
     }
 }

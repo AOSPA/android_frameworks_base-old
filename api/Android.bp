@@ -40,6 +40,7 @@ genrule {
         ":art.module.public.api{.public.api.txt}",
         ":conscrypt.module.public.api{.public.api.txt}",
         ":framework-appsearch{.public.api.txt}",
+        ":framework-connectivity{.public.api.txt}",
         ":framework-graphics{.public.api.txt}",
         ":framework-media{.public.api.txt}",
         ":framework-mediaprovider{.public.api.txt}",
@@ -95,6 +96,7 @@ genrule {
         ":art.module.public.api{.public.stubs.source}",
         ":conscrypt.module.public.api{.public.stubs.source}",
         ":framework-appsearch{.public.stubs.source}",
+        ":framework-connectivity{.public.stubs.source}",
         ":framework-graphics{.public.stubs.source}",
         ":framework-media{.public.stubs.source}",
         ":framework-mediaprovider{.public.stubs.source}",
@@ -120,6 +122,7 @@ genrule {
         ":art.module.public.api{.public.removed-api.txt}",
         ":conscrypt.module.public.api{.public.removed-api.txt}",
         ":framework-appsearch{.public.removed-api.txt}",
+        ":framework-connectivity{.public.removed-api.txt}",
         ":framework-graphics{.public.removed-api.txt}",
         ":framework-media{.public.removed-api.txt}",
         ":framework-mediaprovider{.public.removed-api.txt}",
@@ -155,6 +158,7 @@ genrule {
     srcs: [
         ":android.net.ipsec.ike{.system.api.txt}",
         ":framework-appsearch{.system.api.txt}",
+        ":framework-connectivity{.system.api.txt}",
         ":framework-graphics{.system.api.txt}",
         ":framework-media{.system.api.txt}",
         ":framework-mediaprovider{.system.api.txt}",
@@ -208,6 +212,7 @@ genrule {
     srcs: [
         ":android.net.ipsec.ike{.system.removed-api.txt}",
         ":framework-appsearch{.system.removed-api.txt}",
+        ":framework-connectivity{.system.removed-api.txt}",
         ":framework-graphics{.system.removed-api.txt}",
         ":framework-media{.system.removed-api.txt}",
         ":framework-mediaprovider{.system.removed-api.txt}",
@@ -243,6 +248,7 @@ genrule {
     srcs: [
         ":android.net.ipsec.ike{.module-lib.api.txt}",
         ":framework-appsearch{.module-lib.api.txt}",
+        ":framework-connectivity{.module-lib.api.txt}",
         ":framework-graphics{.module-lib.api.txt}",
         ":framework-media{.module-lib.api.txt}",
         ":framework-mediaprovider{.module-lib.api.txt}",
@@ -298,6 +304,7 @@ genrule {
     srcs: [
         ":android.net.ipsec.ike{.module-lib.removed-api.txt}",
         ":framework-appsearch{.module-lib.removed-api.txt}",
+        ":framework-connectivity{.module-lib.removed-api.txt}",
         ":framework-graphics{.module-lib.removed-api.txt}",
         ":framework-media{.module-lib.removed-api.txt}",
         ":framework-mediaprovider{.module-lib.removed-api.txt}",
@@ -339,4 +346,52 @@ genrule {
     tools: ["metalava"],
     out: ["combined-removed-dex.txt"],
     cmd: "$(location gen_combined_removed_dex.sh) $(location metalava) $(genDir) $(in) > $(out)",
+}
+
+genrule {
+    name: "services-system-server-current.txt",
+    srcs: [
+        ":service-media-s{.system-server.api.txt}",
+        ":service-permission{.system-server.api.txt}",
+        ":non-updatable-system-server-current.txt",
+    ],
+    out: ["system-server-current.txt"],
+    tools: ["metalava"],
+    cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "system-server-current.txt",
+        },
+        {
+            targets: ["sdk", "win_sdk"],
+            dir: "apistubs/android/system-server/api",
+            dest: "merge-android.txt",
+        },
+    ],
+}
+
+genrule {
+    name: "services-system-server-removed.txt",
+    srcs: [
+        ":service-media-s{.system-server.removed-api.txt}",
+        ":service-permission{.system-server.removed-api.txt}",
+        ":non-updatable-system-server-removed.txt",
+    ],
+    out: ["system-server-removed.txt"],
+    tools: ["metalava"],
+    cmd: "$(location metalava) --no-banner --format=v2 $(in) --api $(out)",
+    dists: [
+        {
+            targets: ["droidcore"],
+            dir: "api",
+            dest: "system-server-removed.txt",
+        },
+        {
+            targets: ["sdk", "win_sdk"],
+            dir: "apistubs/android/system-server/api",
+            dest: "merge-removed.txt",
+        },
+    ],
 }

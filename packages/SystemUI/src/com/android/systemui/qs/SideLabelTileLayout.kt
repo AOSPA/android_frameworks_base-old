@@ -20,21 +20,48 @@ import android.content.Context
 import android.util.AttributeSet
 import com.android.systemui.R
 
-open class SideLabelTileLayout(context: Context, attrs: AttributeSet) : TileLayout(context, attrs) {
+open class SideLabelTileLayout(
+    context: Context,
+    attrs: AttributeSet?
+) : TileLayout(context, attrs) {
 
     override fun updateResources(): Boolean {
         return super.updateResources().also {
-            mResourceColumns = 2
-            mMaxAllowedRows = 4
-            mCellMarginHorizontal = (mCellMarginHorizontal * 1.2).toInt()
-            mCellMarginVertical = mCellMarginHorizontal
-            mMaxCellHeight = context.resources.getDimensionPixelSize(R.dimen.qs_quick_tile_size)
+            mMaxAllowedRows = context.resources.getInteger(R.integer.quick_settings_max_rows)
         }
     }
 
-    override fun setShowLabels(show: Boolean) { }
-
     override fun isFull(): Boolean {
         return mRecords.size >= maxTiles()
+    }
+
+    override fun useSidePadding(): Boolean {
+        return false
+    }
+
+    /**
+     * Return the position from the top of the layout of the tile with this index.
+     *
+     * This will return a position even for indices that go beyond [maxTiles], continuing the rows
+     * beyond that.
+     */
+    fun getPhantomTopPosition(index: Int): Int {
+        val row = index / mColumns
+        return getRowTop(row)
+    }
+
+    override fun updateMaxRows(allowedHeight: Int, tilesCount: Int): Boolean {
+        val previousRows = mRows
+        mRows = mMaxAllowedRows
+        // We want at most mMaxAllowedRows, but it could be that we don't have enough tiles to fit
+        // that many rows. In that case, we want
+        // `tilesCount = (mRows - 1) * mColumns + X`
+        // where X is some remainder between 1 and `mColumns - 1`
+        // Adding `mColumns - 1` will guarantee that the final value F will satisfy
+        // `mRows * mColumns <= F < (mRows + 1) * mColumns
+        if (mRows > (tilesCount + mColumns - 1) / mColumns) {
+            mRows = (tilesCount + mColumns - 1) / mColumns
+        }
+        return previousRows != mRows
     }
 }

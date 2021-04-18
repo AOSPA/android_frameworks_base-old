@@ -16,7 +16,6 @@
 package com.android.systemui.theme;
 
 import static com.android.systemui.theme.ThemeOverlayApplier.OVERLAY_CATEGORY_ACCENT_COLOR;
-import static com.android.systemui.theme.ThemeOverlayApplier.OVERLAY_CATEGORY_NEUTRAL_PALETTE;
 import static com.android.systemui.theme.ThemeOverlayApplier.OVERLAY_CATEGORY_SYSTEM_PALETTE;
 
 import android.annotation.Nullable;
@@ -43,7 +42,6 @@ import android.util.Log;
 
 import androidx.annotation.NonNull;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dumpable;
 import com.android.systemui.SystemUI;
 import com.android.systemui.broadcast.BroadcastDispatcher;
@@ -55,14 +53,13 @@ import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.settings.SecureSettings;
 
-import com.google.android.collect.Sets;
-
 import org.json.JSONException;
 import org.json.JSONObject;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.Collection;
+import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 import java.util.concurrent.Executor;
@@ -84,15 +81,8 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     protected static final String TAG = "ThemeOverlayController";
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
-    protected static final int PRIMARY = 0;
-    protected static final int SECONDARY = 1;
-    protected static final int NEUTRAL = 1;
-
-    // If lock screen wallpaper colors should also be considered when selecting the theme.
-    // Doing this has performance impact, given that overlays would need to be swapped when
-    // the device unlocks.
-    @VisibleForTesting
-    static final boolean USE_LOCK_SCREEN_WALLPAPER = false;
+    protected static final int NEUTRAL = 0;
+    protected static final int ACCENT = 1;
 
     private final ThemeOverlayApplier mThemeManager;
     private final UserManager mUserManager;
@@ -104,7 +94,6 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     private final WallpaperManager mWallpaperManager;
     private final KeyguardStateController mKeyguardStateController;
     private final boolean mIsMonetEnabled;
-    private WallpaperColors mLockColors;
     private WallpaperColors mSystemColors;
     // If fabricated overlays were already created for the current theme.
     private boolean mNeedsOverlayCreation;
@@ -112,12 +101,12 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     protected int mMainWallpaperColor = Color.TRANSPARENT;
     // Accent color extracted from wallpaper, NOT the color used on the overlay
     protected int mWallpaperAccentColor = Color.TRANSPARENT;
-    // System colors overlay
-    private FabricatedOverlay mPrimaryOverlay;
     // Accent colors overlay
     private FabricatedOverlay mSecondaryOverlay;
     // Neutral system colors overlay
     private FabricatedOverlay mNeutralOverlay;
+    // If wallpaper color event will be accepted and change the UI colors.
+    private boolean mAcceptColorEvents = true;
 
     @Inject
     public ThemeOverlayController(Context context, BroadcastDispatcher broadcastDispatcher,
@@ -147,13 +136,20 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_USER_SWITCHED);
         filter.addAction(Intent.ACTION_MANAGED_PROFILE_ADDED);
+        filter.addAction(Intent.ACTION_WALLPAPER_CHANGED);
         mBroadcastDispatcher.registerReceiver(new BroadcastReceiver() {
             @Override
             public void onReceive(Context context, Intent intent) {
-                if (DEBUG) Log.d(TAG, "Updating overlays for user switch / profile added.");
-                updateThemeOverlays();
+                if (Intent.ACTION_USER_SWITCHED.equals(intent.getAction())
+                        || Intent.ACTION_MANAGED_PROFILE_ADDED.equals(intent.getAction())) {
+                    if (DEBUG) Log.d(TAG, "Updating overlays for user switch / profile added.");
+                    reevaluateSystemTheme(true /* forceReload */);
+                } else if (Intent.ACTION_WALLPAPER_CHANGED.equals(intent.getAction())) {
+                    mAcceptColorEvents = true;
+                    Log.i(TAG, "Allowing color events again");
+                }
             }
-        }, filter, mBgExecutor, UserHandle.ALL);
+        }, filter, mMainExecutor, UserHandle.ALL);
         mSecureSettings.registerContentObserverForUser(
                 Settings.Secure.getUriFor(Settings.Secure.THEME_CUSTOMIZATION_OVERLAY_PACKAGES),
                 false,
@@ -163,7 +159,7 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
                             int userId) {
                         if (DEBUG) Log.d(TAG, "Overlay changed for user: " + userId);
                         if (ActivityManager.getCurrentUser() == userId) {
-                            updateThemeOverlays();
+                            reevaluateSystemTheme(true /* forceReload */);
                         }
                     }
                 },
@@ -171,64 +167,46 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
 
         // Upon boot, make sure we have the most up to date colors
         mBgExecutor.execute(() -> {
-            WallpaperColors lockColors = mWallpaperManager.getWallpaperColors(
-                    WallpaperManager.FLAG_LOCK);
             WallpaperColors systemColor = mWallpaperManager.getWallpaperColors(
                     WallpaperManager.FLAG_SYSTEM);
             mMainExecutor.execute(() -> {
-                if (USE_LOCK_SCREEN_WALLPAPER) {
-                    mLockColors = lockColors;
-                }
                 mSystemColors = systemColor;
-                reevaluateSystemTheme();
+                reevaluateSystemTheme(false /* forceReload */);
             });
         });
-        if (USE_LOCK_SCREEN_WALLPAPER) {
-            mKeyguardStateController.addCallback(new KeyguardStateController.Callback() {
-                @Override
-                public void onKeyguardShowingChanged() {
-                    if (mLockColors == null) {
-                        return;
-                    }
-                    // It's possible that the user has a lock screen wallpaper. On this case we'll
-                    // end up with different colors after unlocking.
-                    reevaluateSystemTheme();
-                }
-            });
-        }
         mWallpaperManager.addOnColorsChangedListener((wallpaperColors, which) -> {
-            if (USE_LOCK_SCREEN_WALLPAPER && (which & WallpaperManager.FLAG_LOCK) != 0) {
-                mLockColors = wallpaperColors;
-                if (DEBUG) {
-                    Log.d(TAG, "got new lock colors: " + wallpaperColors + " where: " + which);
-                }
+            if (!mAcceptColorEvents) {
+                Log.i(TAG, "Wallpaper color event rejected: " + wallpaperColors);
+                return;
             }
+            if (wallpaperColors != null && mAcceptColorEvents) {
+                mAcceptColorEvents = false;
+            }
+
             if ((which & WallpaperManager.FLAG_SYSTEM) != 0) {
                 mSystemColors = wallpaperColors;
                 if (DEBUG) {
                     Log.d(TAG, "got new lock colors: " + wallpaperColors + " where: " + which);
                 }
             }
-            reevaluateSystemTheme();
+            reevaluateSystemTheme(false /* forceReload */);
         }, null, UserHandle.USER_ALL);
     }
 
-    private void reevaluateSystemTheme() {
-        WallpaperColors currentColors =
-                mKeyguardStateController.isShowing() && mLockColors != null
-                        ? mLockColors : mSystemColors;
-
+    private void reevaluateSystemTheme(boolean forceReload) {
+        final WallpaperColors currentColors = mSystemColors;
         final int mainColor;
         final int accentCandidate;
         if (currentColors == null) {
             mainColor = Color.TRANSPARENT;
             accentCandidate = Color.TRANSPARENT;
         } else {
-            mainColor = getDominantColor(currentColors);
+            mainColor = getNeutralColor(currentColors);
             accentCandidate = getAccentColor(currentColors);
         }
 
-        if (mMainWallpaperColor == mainColor && mWallpaperAccentColor == accentCandidate) {
+        if (mMainWallpaperColor == mainColor && mWallpaperAccentColor == accentCandidate
+                && !forceReload) {
             return;
         }
 
@@ -236,13 +214,12 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         mWallpaperAccentColor = accentCandidate;
 
         if (mIsMonetEnabled) {
-            mPrimaryOverlay = getOverlay(mMainWallpaperColor, PRIMARY);
-            mSecondaryOverlay = getOverlay(mWallpaperAccentColor, SECONDARY);
+            mSecondaryOverlay = getOverlay(mWallpaperAccentColor, ACCENT);
             mNeutralOverlay = getOverlay(mMainWallpaperColor, NEUTRAL);
             mNeedsOverlayCreation = true;
             if (DEBUG) {
-                Log.d(TAG, "fetched overlays. primary: " + mPrimaryOverlay + " secondary: "
-                        + mSecondaryOverlay + " neutral: " + mNeutralOverlay);
+                Log.d(TAG, "fetched overlays. accent: " + mSecondaryOverlay
+                        + " neutral: " + mNeutralOverlay);
             }
         }
 
@@ -252,7 +229,7 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
     /**
      * Return the main theme color from a given {@link WallpaperColors} instance.
      */
-    protected int getDominantColor(@NonNull WallpaperColors wallpaperColors) {
+    protected int getNeutralColor(@NonNull WallpaperColors wallpaperColors) {
         return wallpaperColors.getPrimaryColor().toArgb();
     }
 
@@ -301,13 +278,21 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         if (mIsMonetEnabled && systemPalette != null && systemPalette.getPackageName() != null) {
             try {
                 int color = Integer.parseInt(systemPalette.getPackageName().toLowerCase(), 16);
-                mPrimaryOverlay = getOverlay(color, PRIMARY);
-                // Neutral palette is always derived from primary color.
                 mNeutralOverlay = getOverlay(color, NEUTRAL);
                 mNeedsOverlayCreation = true;
                 categoryToPackage.remove(OVERLAY_CATEGORY_SYSTEM_PALETTE);
             } catch (NumberFormatException e) {
                 Log.w(TAG, "Invalid color definition: " + systemPalette.getPackageName());
+            }
+        } else if (!mIsMonetEnabled && systemPalette != null) {
+            try {
+                // It's possible that we flipped the flag off and still have a @ColorInt in the
+                // setting. We need to sanitize the input, otherwise the overlay transaction will
+                // fail.
+                Integer.parseInt(systemPalette.getPackageName().toLowerCase(), 16);
+                categoryToPackage.remove(OVERLAY_CATEGORY_SYSTEM_PALETTE);
+            } catch (NumberFormatException e) {
+                // This is a package name. All good, let's continue
             }
         }
 
@@ -316,20 +301,26 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         if (mIsMonetEnabled && accentPalette != null && accentPalette.getPackageName() != null) {
             try {
                 int color = Integer.parseInt(accentPalette.getPackageName().toLowerCase(), 16);
-                mSecondaryOverlay = getOverlay(color, SECONDARY);
+                mSecondaryOverlay = getOverlay(color, ACCENT);
                 mNeedsOverlayCreation = true;
                 categoryToPackage.remove(OVERLAY_CATEGORY_ACCENT_COLOR);
             } catch (NumberFormatException e) {
                 Log.w(TAG, "Invalid color definition: " + accentPalette.getPackageName());
+            }
+        } else if (!mIsMonetEnabled && accentPalette != null) {
+            try {
+                Integer.parseInt(accentPalette.getPackageName().toLowerCase(), 16);
+                categoryToPackage.remove(OVERLAY_CATEGORY_ACCENT_COLOR);
+            } catch (NumberFormatException e) {
+                // This is a package name. All good, let's continue
             }
         }
 
         // Compatibility with legacy themes, where full packages were defined, instead of just
         // colors.
         if (!categoryToPackage.containsKey(OVERLAY_CATEGORY_SYSTEM_PALETTE)
-                && mPrimaryOverlay != null) {
-            categoryToPackage.put(OVERLAY_CATEGORY_SYSTEM_PALETTE, mPrimaryOverlay.getIdentifier());
-            categoryToPackage.put(OVERLAY_CATEGORY_NEUTRAL_PALETTE,
+                && mNeutralOverlay != null) {
+            categoryToPackage.put(OVERLAY_CATEGORY_SYSTEM_PALETTE,
                     mNeutralOverlay.getIdentifier());
         }
         if (!categoryToPackage.containsKey(OVERLAY_CATEGORY_ACCENT_COLOR)
@@ -337,10 +328,10 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
             categoryToPackage.put(OVERLAY_CATEGORY_ACCENT_COLOR, mSecondaryOverlay.getIdentifier());
         }
 
-        Set<UserHandle> userHandles = Sets.newHashSet(UserHandle.of(currentUser));
+        Set<UserHandle> managedProfiles = new HashSet<>();
         for (UserInfo userInfo : mUserManager.getEnabledProfiles(currentUser)) {
             if (userInfo.isManagedProfile()) {
-                userHandles.add(userInfo.getUserHandle());
+                managedProfiles.add(userInfo.getUserHandle());
             }
         }
         if (DEBUG) {
@@ -351,24 +342,23 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         if (mNeedsOverlayCreation) {
             mNeedsOverlayCreation = false;
             mThemeManager.applyCurrentUserOverlays(categoryToPackage, new FabricatedOverlay[] {
-                    mPrimaryOverlay, mSecondaryOverlay, mNeutralOverlay
-            }, userHandles);
+                    mSecondaryOverlay, mNeutralOverlay
+            }, currentUser, managedProfiles);
         } else {
-            mThemeManager.applyCurrentUserOverlays(categoryToPackage, null, userHandles);
+            mThemeManager.applyCurrentUserOverlays(categoryToPackage, null, currentUser,
+                    managedProfiles);
         }
     }
 
     @Override
     public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
-        pw.println("USE_LOCK_SCREEN_WALLPAPER=" + USE_LOCK_SCREEN_WALLPAPER);
-        pw.println("mLockColors=" + mLockColors);
         pw.println("mSystemColors=" + mSystemColors);
         pw.println("mMainWallpaperColor=" + Integer.toHexString(mMainWallpaperColor));
         pw.println("mWallpaperAccentColor=" + Integer.toHexString(mWallpaperAccentColor));
-        pw.println("mPrimaryOverlay=" + mPrimaryOverlay);
         pw.println("mSecondaryOverlay=" + mSecondaryOverlay);
         pw.println("mNeutralOverlay=" + mNeutralOverlay);
         pw.println("mIsMonetEnabled=" + mIsMonetEnabled);
         pw.println("mNeedsOverlayCreation=" + mNeedsOverlayCreation);
+        pw.println("mAcceptColorEvents=" + mAcceptColorEvents);
     }
 }

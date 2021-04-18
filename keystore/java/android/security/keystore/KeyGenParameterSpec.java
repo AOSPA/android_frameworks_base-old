@@ -279,14 +279,16 @@ import javax.security.auth.x500.X500Principal;
  * }
  */
 public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAuthArgs {
-    private static final X500Principal DEFAULT_CERT_SUBJECT =
+    private static final X500Principal DEFAULT_ATTESTATION_CERT_SUBJECT =
             new X500Principal("CN=Android Keystore Key");
+    private static final X500Principal DEFAULT_SELF_SIGNED_CERT_SUBJECT =
+            new X500Principal("CN=Fake");
     private static final BigInteger DEFAULT_CERT_SERIAL_NUMBER = new BigInteger("1");
     private static final Date DEFAULT_CERT_NOT_BEFORE = new Date(0L); // Jan 1 1970
     private static final Date DEFAULT_CERT_NOT_AFTER = new Date(2461449600000L); // Jan 1 2048
 
     private final String mKeystoreAlias;
-    private final int mNamespace;
+    private final @KeyProperties.Namespace int mNamespace;
     private final int mKeySize;
     private final AlgorithmParameterSpec mSpec;
     private final X500Principal mCertificateSubject;
@@ -329,7 +331,7 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
      */
     public KeyGenParameterSpec(
             String keyStoreAlias,
-            int namespace,
+            @KeyProperties.Namespace int namespace,
             int keySize,
             AlgorithmParameterSpec spec,
             X500Principal certificateSubject,
@@ -366,7 +368,11 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
         }
 
         if (certificateSubject == null) {
-            certificateSubject = DEFAULT_CERT_SUBJECT;
+            if (attestationChallenge == null) {
+                certificateSubject = DEFAULT_SELF_SIGNED_CERT_SUBJECT;
+            } else {
+                certificateSubject = DEFAULT_ATTESTATION_CERT_SUBJECT;
+            }
         }
         if (certificateNotBefore == null) {
             certificateNotBefore = DEFAULT_CERT_NOT_BEFORE;
@@ -461,12 +467,12 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
      *
      * @return The numeric namespace as configured in the keystore2_key_contexts files of Android's
      *         SEPolicy.
-     *         TODO b/171806779 link to public Keystore 2.0 documentation.
-     *              See bug for more details for now.
+     *         See <a href="https://source.android.com/security/keystore#access-control">
+     *             Keystore 2.0 access control</a>
      * @hide
      */
     @SystemApi
-    public int getNamespace() {
+    public @KeyProperties.Namespace int getNamespace() {
         return mNamespace;
     }
 
@@ -890,7 +896,7 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
         private final String mKeystoreAlias;
         private @KeyProperties.PurposeEnum int mPurposes;
 
-        private int mNamespace = KeyProperties.NAMESPACE_APPLICATION;
+        private @KeyProperties.Namespace int mNamespace = KeyProperties.NAMESPACE_APPLICATION;
         private int mKeySize = -1;
         private AlgorithmParameterSpec mSpec;
         private X500Principal mCertificateSubject;
@@ -1036,16 +1042,16 @@ public final class KeyGenParameterSpec implements AlgorithmParameterSpec, UserAu
          * keys between system and vendor components, e.g., WIFI settings and WPA supplicant.
          *
          * @param namespace Numeric SELinux namespace as configured in keystore2_key_contexts
-         *                  of Android's SEPolicy.
-         *                  TODO b/171806779 link to public Keystore 2.0 documentation.
-         *                       See bug for more details for now.
+         *         of Android's SEPolicy.
+         *         See <a href="https://source.android.com/security/keystore#access-control">
+         *             Keystore 2.0 access control</a>
          * @return this Builder object.
          *
          * @hide
          */
         @SystemApi
         @NonNull
-        public Builder setNamespace(int namespace) {
+        public Builder setNamespace(@KeyProperties.Namespace int namespace) {
             mNamespace = namespace;
             return this;
         }

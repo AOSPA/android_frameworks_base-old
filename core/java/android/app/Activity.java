@@ -642,7 +642,7 @@ import java.util.function.Consumer;
  *     protected void onCreate(Bundle savedInstanceState) {
  *         super.onCreate(savedInstanceState);
  *
- *         SharedPreferences mPrefs = getSharedPreferences();
+ *         mPrefs = getSharedPreferences(getLocalClassName(), MODE_PRIVATE);
  *         mCurViewMode = mPrefs.getInt("view_mode", DAY_VIEW_MODE);
  *     }
  *
@@ -803,6 +803,7 @@ public class Activity extends ContextThemeWrapper
     @UnsupportedAppUsage
     private IBinder mToken;
     private IBinder mAssistToken;
+    private IBinder mShareableActivityToken;
     @UnsupportedAppUsage
     private int mIdent;
     @UnsupportedAppUsage
@@ -1210,7 +1211,7 @@ public class Activity extends ContextThemeWrapper
                     if (window != null) {
                         cm.updateWindowAttributes(window.getAttributes());
                     }
-                    cm.onActivityCreated(mToken, getComponentName());
+                    cm.onActivityCreated(mToken, mShareableActivityToken, getComponentName());
                     break;
                 case CONTENT_CAPTURE_RESUME:
                     cm.onActivityResumed();
@@ -1623,6 +1624,18 @@ public class Activity extends ContextThemeWrapper
                 mSplashScreen = new SplashScreen.SplashScreenImpl(this);
             }
             return mSplashScreen;
+        }
+    }
+
+    /**
+     * Clear the splash screen view if exist.
+     * @hide
+     */
+    public void detachSplashScreenView() {
+        synchronized (this) {
+            if (mSplashScreenView != null) {
+                mSplashScreenView = null;
+            }
         }
     }
 
@@ -5233,13 +5246,40 @@ public class Activity extends ContextThemeWrapper
         if (requestCode < 0) {
             throw new IllegalArgumentException("requestCode should be >= 0");
         }
+
         if (mHasCurrentPermissionsRequest) {
             Log.w(TAG, "Can request only one set of permissions at a time");
             // Dispatch the callback with empty arrays which means a cancellation.
             onRequestPermissionsResult(requestCode, new String[0], new int[0]);
             return;
         }
-        Intent intent = getPackageManager().buildRequestPermissionsIntent(permissions);
+
+        List<String> filteredPermissions = null;
+
+        if (!getAttributionSource().getRenouncedPermissions().isEmpty()) {
+            final int permissionCount = permissions.length;
+            for (int i = 0; i < permissionCount; i++) {
+                if (getAttributionSource().getRenouncedPermissions().contains(permissions[i])) {
+                    if (filteredPermissions == null) {
+                        filteredPermissions = new ArrayList<>(i);
+                        for (int j = 0; j < i; j++) {
+                            filteredPermissions.add(permissions[i]);
+                        }
+                    }
+                } else if (filteredPermissions != null) {
+                    filteredPermissions.add(permissions[i]);
+                }
+            }
+        }
+
+        final Intent intent;
+        if (filteredPermissions == null) {
+            intent = getPackageManager().buildRequestPermissionsIntent(permissions);
+        } else {
+            intent = getPackageManager().buildRequestPermissionsIntent(
+                    filteredPermissions.toArray(new String[0]));
+        }
+
         startActivityForResult(REQUEST_PERMISSIONS_WHO_PREFIX, intent, requestCode, null);
         mHasCurrentPermissionsRequest = true;
     }
@@ -7118,6 +7158,9 @@ public class Activity extends ContextThemeWrapper
                 case "--contentcapture":
                     dumpContentCaptureManager(prefix, writer);
                     return;
+                case "--translation":
+                    dumpUiTranslation(prefix, writer);
+                    return;
             }
         }
         writer.print(prefix); writer.print("Local Activity ");
@@ -7158,6 +7201,7 @@ public class Activity extends ContextThemeWrapper
 
         dumpAutofillManager(prefix, writer);
         dumpContentCaptureManager(prefix, writer);
+        dumpUiTranslation(prefix, writer);
 
         ResourcesManager.getInstance().dump(prefix, writer);
     }
@@ -7179,6 +7223,14 @@ public class Activity extends ContextThemeWrapper
             cm.dump(prefix, writer);
         } else {
             writer.print(prefix); writer.println("No ContentCaptureManager");
+        }
+    }
+
+    void dumpUiTranslation(String prefix, PrintWriter writer) {
+        if (mUiTranslationController != null) {
+            mUiTranslationController.dump(prefix, writer);
+        } else {
+            writer.print(prefix); writer.println("No UiTranslationController");
         }
     }
 
@@ -7838,7 +7890,8 @@ public class Activity extends ContextThemeWrapper
             CharSequence title, Activity parent, String id,
             NonConfigurationInstances lastNonConfigurationInstances,
             Configuration config, String referrer, IVoiceInteractor voiceInteractor,
-            Window window, ActivityConfigCallback activityConfigCallback, IBinder assistToken) {
+            Window window, ActivityConfigCallback activityConfigCallback, IBinder assistToken,
+            IBinder shareableActivityToken) {
         attachBaseContext(context);
 
         mFragments.attachHost(null /*parent*/);
@@ -7860,6 +7913,7 @@ public class Activity extends ContextThemeWrapper
         mInstrumentation = instr;
         mToken = token;
         mAssistToken = assistToken;
+        mShareableActivityToken = shareableActivityToken;
         mIdent = ident;
         mApplication = application;
         mIntent = intent;
@@ -7915,6 +7969,11 @@ public class Activity extends ContextThemeWrapper
     /** @hide */
     public final IBinder getAssistToken() {
         return mParent != null ? mParent.getAssistToken() : mAssistToken;
+    }
+
+    /** @hide */
+    public final IBinder getShareableActivityToken() {
+        return mParent != null ? mParent.getShareableActivityToken() : mShareableActivityToken;
     }
 
     /** @hide */

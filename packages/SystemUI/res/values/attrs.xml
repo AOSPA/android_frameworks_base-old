@@ -124,6 +124,7 @@
     <attr name="darkIconTheme" format="reference" />
     <attr name="wallpaperTextColor" format="reference|color" />
     <attr name="wallpaperTextColorSecondary" format="reference|color" />
+    <attr name="wallpaperTextColorAccent" format="reference|color" />
     <attr name="backgroundProtectedStyle" format="reference" />
 
     <declare-styleable name="SmartReplyView">
@@ -170,7 +171,6 @@
 
     <declare-styleable name="AlphaTintDrawableWrapper">
         <attr name="android:tint" />
-        <attr name="android:drawable" />
         <attr name="android:alpha" />
     </declare-styleable>
 
@@ -190,10 +190,6 @@
         <attr name="scrimColor" />
         <attr name="borderThickness" format="dimension" />
         <attr name="borderColor" format="color" />
-    </declare-styleable>
-
-    <declare-styleable name="RoundedCornerProgressDrawable">
-        <attr name="android:drawable" />
     </declare-styleable>
 </resources>
 

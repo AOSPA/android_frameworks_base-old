@@ -21,6 +21,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -28,7 +29,9 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 /**
  * Contains the User Capability Exchange capabilities corresponding to a contact's URI.
@@ -109,7 +112,6 @@ public final class RcsContactUceCapability implements Parcelable {
     /**
      * Builder to help construct {@link RcsContactUceCapability} instances when capabilities were
      * queried through SIP OPTIONS.
-     * @hide
      */
     public static final class OptionsBuilder {
 
@@ -150,7 +152,7 @@ public final class RcsContactUceCapability implements Parcelable {
          * @param tags the list of the supported feature tags
          * @return this OptionBuilder
          */
-        public @NonNull OptionsBuilder addFeatureTags(@NonNull List<String> tags) {
+        public @NonNull OptionsBuilder addFeatureTags(@NonNull Set<String> tags) {
             mCapabilities.mFeatureTags.addAll(tags);
             return this;
         }
@@ -219,7 +221,7 @@ public final class RcsContactUceCapability implements Parcelable {
     private @CapabilityMechanism int mCapabilityMechanism;
     private @RequestResult int mRequestResult;
 
-    private final List<String> mFeatureTags = new ArrayList<>();
+    private final Set<String> mFeatureTags = new HashSet<>();
     private final List<RcsContactPresenceTuple> mPresenceTuples = new ArrayList<>();
 
     private RcsContactUceCapability(@NonNull Uri contactUri, @CapabilityMechanism int mechanism,
@@ -234,7 +236,9 @@ public final class RcsContactUceCapability implements Parcelable {
         mCapabilityMechanism = in.readInt();
         mSourceType = in.readInt();
         mRequestResult = in.readInt();
-        in.readStringList(mFeatureTags);
+        List<String> featureTagList = new ArrayList<>();
+        in.readStringList(featureTagList);
+        mFeatureTags.addAll(featureTagList);
         in.readParcelableList(mPresenceTuples, RcsContactPresenceTuple.class.getClassLoader());
     }
 
@@ -244,7 +248,7 @@ public final class RcsContactUceCapability implements Parcelable {
         out.writeInt(mCapabilityMechanism);
         out.writeInt(mSourceType);
         out.writeInt(mRequestResult);
-        out.writeStringList(mFeatureTags);
+        out.writeStringList(new ArrayList<>(mFeatureTags));
         out.writeParcelableList(mPresenceTuples, flags);
     }
 
@@ -284,7 +288,20 @@ public final class RcsContactUceCapability implements Parcelable {
         if (mCapabilityMechanism != CAPABILITY_MECHANISM_OPTIONS) {
             return Collections.emptyList();
         }
-        return Collections.unmodifiableList(mFeatureTags);
+        return Collections.unmodifiableList(new ArrayList<>(mFeatureTags));
+    }
+
+    /**
+     * @return The feature tags present in the OPTIONS response from the network.
+     * <p>
+     * Note: this is only populated if {@link #getCapabilityMechanism} is
+     * {@link RcsContactUceCapability#CAPABILITY_MECHANISM_OPTIONS}
+     */
+    public @NonNull Set<String> getFeatureTags() {
+        if (mCapabilityMechanism != CAPABILITY_MECHANISM_OPTIONS) {
+            return Collections.emptySet();
+        }
+        return Collections.unmodifiableSet(mFeatureTags);
     }
 
     /**
@@ -339,9 +356,45 @@ public final class RcsContactUceCapability implements Parcelable {
     }
 
     /**
+     * Retrieve the contact URI requested by the applications.
      * @return the URI representing the contact associated with the capabilities.
      */
     public @NonNull Uri getContactUri() {
         return mContactUri;
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder builder = new StringBuilder("RcsContactUceCapability");
+        if (mCapabilityMechanism == CAPABILITY_MECHANISM_PRESENCE) {
+            builder.append("(presence) {");
+        } else if (mCapabilityMechanism == CAPABILITY_MECHANISM_OPTIONS) {
+            builder.append("(options) {");
+        } else {
+            builder.append("(?) {");
+        }
+        if (Build.IS_ENG) {
+            builder.append("uri=");
+            builder.append(mContactUri);
+        } else {
+            builder.append("uri (isNull)=");
+            builder.append(mContactUri != null ? "XXX" : "null");
+        }
+        builder.append(", sourceType=");
+        builder.append(mSourceType);
+        builder.append(", requestResult=");
+        builder.append(mRequestResult);
+
+        if (mCapabilityMechanism == CAPABILITY_MECHANISM_PRESENCE) {
+            builder.append(", presenceTuples={");
+            builder.append(mPresenceTuples);
+            builder.append("}");
+        } else if (mCapabilityMechanism == CAPABILITY_MECHANISM_OPTIONS) {
+            builder.append(", featureTags={");
+            builder.append(mFeatureTags);
+            builder.append("}");
+        }
+
+        return builder.toString();
     }
 }

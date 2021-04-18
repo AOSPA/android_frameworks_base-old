@@ -40,7 +40,6 @@ import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.ComponentInfo;
 import android.content.pm.IntentFilterVerificationInfo;
-import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.pm.PackageUserState;
@@ -72,6 +71,7 @@ import android.os.SystemClock;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
+import android.os.incremental.IncrementalManager;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
 import android.service.pm.PackageServiceDumpProto;
@@ -353,7 +353,7 @@ public final class Settings implements Watchable, Snappable {
     private static final String ATTR_DATABASE_VERSION = "databaseVersion";
     private static final String ATTR_VALUE = "value";
 
-    private final Object mLock;
+    private final PackageManagerTracedLock mLock;
 
     private final RuntimePermissionPersistence mRuntimePermissionsPersistence;
 
@@ -525,7 +525,7 @@ public final class Settings implements Watchable, Snappable {
 
     @VisibleForTesting(visibility = VisibleForTesting.Visibility.PRIVATE)
     public Settings(Map<String, PackageSetting> pkgSettings) {
-        mLock = new Object();
+        mLock = new PackageManagerTracedLock();
         mPackages.putAll(pkgSettings);
         mAppIds = new WatchedArrayList<>();
         mOtherAppIds = new WatchedSparseArray<>();
@@ -562,7 +562,7 @@ public final class Settings implements Watchable, Snappable {
     Settings(File dataDir, RuntimePermissionsPersistence runtimePermissionsPersistence,
             LegacyPermissionDataProvider permissionDataProvider,
             @NonNull DomainVerificationManagerInternal domainVerificationManager,
-            @NonNull Object lock)  {
+            @NonNull PackageManagerTracedLock lock)  {
         mLock = lock;
         mAppIds = new WatchedArrayList<>();
         mOtherAppIds = new WatchedSparseArray<>();
@@ -1028,6 +1028,9 @@ public final class Settings implements Watchable, Snappable {
                 pkgSetting.legacyNativeLibraryPathString = legacyNativeLibraryPath;
             }
             pkgSetting.setPath(codePath);
+            if (IncrementalManager.isIncrementalPath(codePath.getAbsolutePath())) {
+                pkgSetting.incrementalStates = new IncrementalStates();
+            }
         }
         // If what we are scanning is a system (and possibly privileged) package,
         // then make it so, regardless of whether it was previously installed only
@@ -4877,7 +4880,7 @@ public final class Settings implements Watchable, Snappable {
         }
     }
 
-    void dumpPermissionsLPr(PrintWriter pw, String packageName, ArraySet<String> permissionNames,
+    void dumpPermissions(PrintWriter pw, String packageName, ArraySet<String> permissionNames,
             DumpState dumpState) {
         LegacyPermissionSettings.dumpPermissions(pw, packageName, permissionNames,
                 mPermissionDataProvider.getLegacyPermissions(),

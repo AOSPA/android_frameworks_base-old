@@ -551,9 +551,6 @@ class SettingsProtoDumpUtil {
                 Settings.Global.DEVELOPMENT_FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS,
                 GlobalSettingsProto.Development.FORCE_DESKTOP_MODE_ON_EXTERNAL_DISPLAYS);
         dumpSetting(s, p,
-                Settings.Global.DEVELOPMENT_ENABLE_SIZECOMPAT_FREEFORM,
-                GlobalSettingsProto.Development.ENABLE_SIZECOMPAT_FREEFORM);
-        dumpSetting(s, p,
                 Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW,
                 GlobalSettingsProto.Development.ENABLE_NON_RESIZABLE_MULTI_WINDOW);
         p.end(developmentToken);
@@ -1887,6 +1884,12 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.ASSIST_GESTURE_SETUP_COMPLETE,
                 SecureSettingsProto.Assist.GESTURE_SETUP_COMPLETE);
+        dumpSetting(s, p,
+                Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED,
+                SecureSettingsProto.Assist.TOUCH_GESTURE_ENABLED);
+        dumpSetting(s, p,
+                Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED,
+                SecureSettingsProto.Assist.LONG_PRESS_HOME_ENABLED);
         p.end(assistToken);
 
         final long assistHandlesToken = p.start(SecureSettingsProto.ASSIST_HANDLES);
@@ -1996,6 +1999,13 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.CARRIER_APPS_HANDLED,
                 SecureSettingsProto.CARRIER_APPS_HANDLED);
+
+        final long clipboardToken = p.start(SecureSettingsProto.CLIPBOARD);
+        dumpSetting(s, p,
+                Settings.Secure.CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS,
+                SecureSettingsProto.Clipboard.SHOW_ACCESS_NOTIFICATIONS);
+        p.end(clipboardToken);
+
         dumpSetting(s, p,
                 Settings.Secure.CMAS_ADDITIONAL_BROADCAST_PKG,
                 SecureSettingsProto.CMAS_ADDITIONAL_BROADCAST_PKG);
@@ -2149,6 +2159,9 @@ class SettingsProtoDumpUtil {
         dumpSetting(s, p,
                 Settings.Secure.SHOW_IME_WITH_HARD_KEYBOARD,
                 SecureSettingsProto.InputMethods.SHOW_IME_WITH_HARD_KEYBOARD);
+        dumpSetting(s, p,
+                Settings.Secure.DEFAULT_VOICE_INPUT_METHOD,
+                SecureSettingsProto.InputMethods.DEFAULT_VOICE_INPUT_METHOD);
         p.end(inputMethodsToken);
 
         dumpSetting(s, p,

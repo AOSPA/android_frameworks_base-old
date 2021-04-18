@@ -27,9 +27,10 @@ import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.telephony.data.EpsBearerQosSessionAttributes;
+import android.telephony.data.NrQosSessionAttributes;
 import android.util.Log;
 
-import com.android.internal.util.CollectionUtils;
+import com.android.net.module.util.CollectionUtils;
 import com.android.server.ConnectivityService;
 
 import java.util.ArrayList;
@@ -156,12 +157,13 @@ public class QosCallbackTracker {
 
     private void handleUnregisterCallback(@NonNull final IBinder binder,
             final boolean sendToNetworkAgent) {
-        final QosCallbackAgentConnection agentConnection =
-                CollectionUtils.find(mConnections, c -> c.getBinder().equals(binder));
-        if (agentConnection == null) {
-            logw("handleUnregisterCallback: agentConnection is null");
+        final int connIndex =
+                CollectionUtils.indexOf(mConnections, c -> c.getBinder().equals(binder));
+        if (connIndex < 0) {
+            logw("handleUnregisterCallback: no matching agentConnection");
             return;
         }
+        final QosCallbackAgentConnection agentConnection = mConnections.get(connIndex);
 
         if (DBG) {
             log("handleUnregisterCallback: unregister "
@@ -178,17 +180,31 @@ public class QosCallbackTracker {
     }
 
     /**
-     * Called when the NetworkAgent sends the qos session available event
+     * Called when the NetworkAgent sends the qos session available event for EPS
      *
      * @param qosCallbackId the callback id that the qos session is now available to
      * @param session the qos session that is now available
      * @param attributes the qos attributes that are now available on the qos session
      */
-    public void sendEventQosSessionAvailable(final int qosCallbackId,
+    public void sendEventEpsQosSessionAvailable(final int qosCallbackId,
             final QosSession session,
             final EpsBearerQosSessionAttributes attributes) {
-        runOnAgentConnection(qosCallbackId, "sendEventQosSessionAvailable: ",
-                ac -> ac.sendEventQosSessionAvailable(session, attributes));
+        runOnAgentConnection(qosCallbackId, "sendEventEpsQosSessionAvailable: ",
+                ac -> ac.sendEventEpsQosSessionAvailable(session, attributes));
+    }
+
+    /**
+     * Called when the NetworkAgent sends the qos session available event for NR
+     *
+     * @param qosCallbackId the callback id that the qos session is now available to
+     * @param session the qos session that is now available
+     * @param attributes the qos attributes that are now available on the qos session
+     */
+    public void sendEventNrQosSessionAvailable(final int qosCallbackId,
+            final QosSession session,
+            final NrQosSessionAttributes attributes) {
+        runOnAgentConnection(qosCallbackId, "sendEventNrQosSessionAvailable: ",
+                ac -> ac.sendEventNrQosSessionAvailable(session, attributes));
     }
 
     /**
@@ -226,10 +242,10 @@ public class QosCallbackTracker {
      * @param network the network that was released
      */
     public void handleNetworkReleased(@Nullable final Network network) {
-        final List<QosCallbackAgentConnection> connections =
-                CollectionUtils.filter(mConnections, ac -> ac.getNetwork().equals(network));
-
-        for (final QosCallbackAgentConnection agentConnection : connections) {
+        // Iterate in reverse order as agent connections will be removed when unregistering
+        for (int i = mConnections.size() - 1; i >= 0; i--) {
+            final QosCallbackAgentConnection agentConnection = mConnections.get(i);
+            if (!agentConnection.getNetwork().equals(network)) continue;
             agentConnection.sendEventQosCallbackError(
                     QosCallbackException.EX_TYPE_FILTER_NETWORK_RELEASED);
 
@@ -247,15 +263,14 @@ public class QosCallbackTracker {
             @NonNull final String logPrefix,
             @NonNull final AgentConnectionAction action) {
         mConnectivityServiceHandler.post(() -> {
-            final QosCallbackAgentConnection ac =
-                    CollectionUtils.find(mConnections,
+            final int acIndex = CollectionUtils.indexOf(mConnections,
                             c -> c.getAgentCallbackId() == qosCallbackId);
-            if (ac == null) {
+            if (acIndex == -1) {
                 loge(logPrefix + ": " + qosCallbackId + " missing callback id");
                 return;
             }
 
-            action.execute(ac);
+            action.execute(mConnections.get(acIndex));
         });
     }
 

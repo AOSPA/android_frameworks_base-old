@@ -162,10 +162,10 @@ public abstract class ActivityTaskManagerInternal {
             IVoiceInteractor mInteractor);
 
     /**
-     * Returns the top activity from each of the currently visible root tasks. The first entry
-     * will be the focused activity.
+     * Returns the top activity from each of the currently visible root tasks, and the related task
+     * id. The first entry will be the focused activity.
      */
-    public abstract List<IBinder> getTopVisibleActivities();
+    public abstract List<ActivityAssistInfo> getTopVisibleActivities();
 
     /**
      * Returns whether {@code uid} has any resumed activity.
@@ -348,13 +348,16 @@ public abstract class ActivityTaskManagerInternal {
     public final class ActivityTokens {
         private final @NonNull IBinder mActivityToken;
         private final @NonNull IBinder mAssistToken;
+        private final @NonNull IBinder mShareableActivityToken;
         private final @NonNull IApplicationThread mAppThread;
 
         public ActivityTokens(@NonNull IBinder activityToken,
-                @NonNull IBinder assistToken, @NonNull IApplicationThread appThread) {
+                @NonNull IBinder assistToken, @NonNull IApplicationThread appThread,
+                @NonNull IBinder shareableActivityToken) {
             mActivityToken = activityToken;
             mAssistToken = assistToken;
             mAppThread = appThread;
+            mShareableActivityToken = shareableActivityToken;
         }
 
         /**
@@ -369,6 +372,13 @@ public abstract class ActivityTaskManagerInternal {
          */
         public @NonNull IBinder getAssistToken() {
             return mAssistToken;
+        }
+
+        /**
+         * @return The sharable activity token..
+         */
+        public @NonNull IBinder getShareableActivityToken() {
+            return mShareableActivityToken;
         }
 
         /**
@@ -596,4 +606,10 @@ public abstract class ActivityTaskManagerInternal {
          */
         void commit() throws RemoteException;
     }
+
+    /**
+     * A utility method to check AppOps and PackageManager for SYSTEM_ALERT_WINDOW permission.
+     */
+    public abstract boolean hasSystemAlertWindowPermission(int callingUid, int callingPid,
+            String callingPackage);
 }

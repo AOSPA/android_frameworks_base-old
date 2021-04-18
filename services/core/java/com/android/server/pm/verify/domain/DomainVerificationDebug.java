@@ -21,7 +21,6 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.Signature;
-import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.pm.verify.domain.DomainVerificationState;
 import android.os.UserHandle;
 import android.util.ArrayMap;
@@ -33,9 +32,9 @@ import android.util.SparseArray;
 import com.android.internal.util.CollectionUtils;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.verify.domain.models.DomainVerificationInternalUserState;
 import com.android.server.pm.verify.domain.models.DomainVerificationPkgState;
 import com.android.server.pm.verify.domain.models.DomainVerificationStateMap;
-import com.android.server.pm.verify.domain.models.DomainVerificationUserState;
 
 import java.util.Arrays;
 import java.util.function.Function;
@@ -107,7 +106,7 @@ public class DomainVerificationDebug {
         reusedMap.clear();
         reusedMap.putAll(pkgState.getStateMap());
 
-        ArraySet<String> declaredDomains = mCollector.collectAutoVerifyDomains(pkg);
+        ArraySet<String> declaredDomains = mCollector.collectValidAutoVerifyDomains(pkg);
         int declaredSize = declaredDomains.size();
         for (int declaredIndex = 0; declaredIndex < declaredSize; declaredIndex++) {
             String domain = declaredDomains.valueAt(declaredIndex);
@@ -132,6 +131,17 @@ public class DomainVerificationDebug {
             }
 
             writer.increaseIndent();
+            final ArraySet<String> invalidDomains = mCollector.collectInvalidAutoVerifyDomains(pkg);
+            if (!invalidDomains.isEmpty()) {
+                writer.println("Invalid autoVerify domains:");
+                writer.increaseIndent();
+                int size = invalidDomains.size();
+                for (int index = 0; index < size; index++) {
+                    writer.println(invalidDomains.valueAt(index));
+                }
+                writer.decreaseIndent();
+            }
+
             writer.println("Domain verification state:");
             writer.increaseIndent();
             int stateSize = reusedMap.size();
@@ -140,7 +150,7 @@ public class DomainVerificationDebug {
                 Integer state = reusedMap.valueAt(stateIndex);
                 writer.print(domain);
                 writer.print(": ");
-                writer.println(DomainVerificationManager.stateToDebugString(state));
+                writer.println(DomainVerificationState.stateToDebugString(state));
             }
             writer.decreaseIndent();
             writer.decreaseIndent();
@@ -158,8 +168,8 @@ public class DomainVerificationDebug {
         }
 
         ArraySet<String> allWebDomains = mCollector.collectAllWebDomains(pkg);
-        SparseArray<DomainVerificationUserState> userStates =
-                pkgState.getUserSelectionStates();
+        SparseArray<DomainVerificationInternalUserState> userStates =
+                pkgState.getUserStates();
         if (userId == UserHandle.USER_ALL) {
             int size = userStates.size();
             if (size == 0) {
@@ -167,13 +177,13 @@ public class DomainVerificationDebug {
                         wasHeaderPrinted);
             } else {
                 for (int index = 0; index < size; index++) {
-                    DomainVerificationUserState userState = userStates.valueAt(index);
+                    DomainVerificationInternalUserState userState = userStates.valueAt(index);
                     printState(writer, pkgState, userState.getUserId(), userState, reusedSet,
                             allWebDomains, wasHeaderPrinted);
                 }
             }
         } else {
-            DomainVerificationUserState userState = userStates.get(userId);
+            DomainVerificationInternalUserState userState = userStates.get(userId);
             printState(writer, pkgState, userId, userState, reusedSet, allWebDomains,
                     wasHeaderPrinted);
         }
@@ -181,8 +191,9 @@ public class DomainVerificationDebug {
 
     boolean printState(@NonNull IndentingPrintWriter writer,
             @NonNull DomainVerificationPkgState pkgState, @UserIdInt int userId,
-            @Nullable DomainVerificationUserState userState, @NonNull ArraySet<String> reusedSet,
-            @NonNull ArraySet<String> allWebDomains, boolean wasHeaderPrinted) {
+            @Nullable DomainVerificationInternalUserState userState,
+            @NonNull ArraySet<String> reusedSet, @NonNull ArraySet<String> allWebDomains,
+            boolean wasHeaderPrinted) {
         reusedSet.clear();
         reusedSet.addAll(allWebDomains);
         if (userState != null) {

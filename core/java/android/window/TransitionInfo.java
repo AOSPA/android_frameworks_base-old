@@ -16,6 +16,7 @@
 
 package android.window;
 
+import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_NONE;
@@ -31,6 +32,7 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Parcel;
 import android.os.Parcelable;
+import android.view.Surface;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 
@@ -73,6 +75,9 @@ public final class TransitionInfo implements Parcelable {
     // TODO: remove when starting-window is moved to Task
     /** The container is the recipient of a transferred starting-window */
     public static final int FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT = 1 << 3;
+
+    /** The first unused bit. This can be used by remotes to attach custom flags to this change. */
+    public static final int FLAG_FIRST_CUSTOM = 1 << 4;
 
     /** @hide */
     @IntDef(prefix = { "FLAG_" }, value = {
@@ -246,6 +251,34 @@ public final class TransitionInfo implements Parcelable {
         return sb.toString();
     }
 
+    /**
+     * Indication that `change` is independent of parents (ie. it has a different type of
+     * transition vs. "going along for the ride")
+     */
+    public static boolean isIndependent(@NonNull TransitionInfo.Change change,
+            @NonNull TransitionInfo info) {
+        // If the change has no parent (it is root), then it is independent
+        if (change.getParent() == null) return true;
+
+        // non-visibility changes will just be folded into the parent change, so they aren't
+        // independent either.
+        if (change.getMode() == TRANSIT_CHANGE) return false;
+
+        TransitionInfo.Change parentChg = info.getChange(change.getParent());
+        while (parentChg != null) {
+            // If the parent is a visibility change, it will include the results of all child
+            // changes into itself, so none of its children can be independent.
+            if (parentChg.getMode() != TRANSIT_CHANGE) return false;
+
+            // If there are no more parents left, then all the parents, so far, have not been
+            // visibility changes which means this change is indpendent.
+            if (parentChg.getParent() == null) return true;
+
+            parentChg = info.getChange(parentChg.getParent());
+        }
+        return false;
+    }
+
     /** Represents the change a WindowContainer undergoes during a transition */
     public static final class Change implements Parcelable {
         private final WindowContainerToken mContainer;
@@ -257,6 +290,8 @@ public final class TransitionInfo implements Parcelable {
         private final Rect mEndAbsBounds = new Rect();
         private final Point mEndRelOffset = new Point();
         private ActivityManager.RunningTaskInfo mTaskInfo = null;
+        private int mStartRotation = ROTATION_UNDEFINED;
+        private int mEndRotation = ROTATION_UNDEFINED;
 
         public Change(@Nullable WindowContainerToken container, @NonNull SurfaceControl leash) {
             mContainer = container;
@@ -274,6 +309,8 @@ public final class TransitionInfo implements Parcelable {
             mEndAbsBounds.readFromParcel(in);
             mEndRelOffset.readFromParcel(in);
             mTaskInfo = in.readTypedObject(ActivityManager.RunningTaskInfo.CREATOR);
+            mStartRotation = in.readInt();
+            mEndRotation = in.readInt();
         }
 
         /** Sets the parent of this change's container. The parent must be a participant or null. */
@@ -310,8 +347,14 @@ public final class TransitionInfo implements Parcelable {
          * Sets the taskinfo of this container if this is a task. WARNING: this takes the
          * reference, so don't modify it afterwards.
          */
-        public void setTaskInfo(ActivityManager.RunningTaskInfo taskInfo) {
+        public void setTaskInfo(@Nullable ActivityManager.RunningTaskInfo taskInfo) {
             mTaskInfo = taskInfo;
+        }
+
+        /** Sets the start and end rotation of this container. */
+        public void setRotation(@Surface.Rotation int start, @Surface.Rotation int end) {
+            mStartRotation = start;
+            mEndRotation = end;
         }
 
         /** @return the container that is changing. May be null if non-remotable (eg. activity) */
@@ -377,8 +420,16 @@ public final class TransitionInfo implements Parcelable {
             return mTaskInfo;
         }
 
-        @Override
+        public int getStartRotation() {
+            return mStartRotation;
+        }
+
+        public int getEndRotation() {
+            return mEndRotation;
+        }
+
         /** @hide */
+        @Override
         public void writeToParcel(@NonNull Parcel dest, int flags) {
             dest.writeTypedObject(mContainer, flags);
             dest.writeTypedObject(mParent, flags);
@@ -389,6 +440,8 @@ public final class TransitionInfo implements Parcelable {
             mEndAbsBounds.writeToParcel(dest, flags);
             mEndRelOffset.writeToParcel(dest, flags);
             dest.writeTypedObject(mTaskInfo, flags);
+            dest.writeInt(mStartRotation);
+            dest.writeInt(mEndRotation);
         }
 
         @NonNull
@@ -405,8 +458,8 @@ public final class TransitionInfo implements Parcelable {
                     }
                 };
 
-        @Override
         /** @hide */
+        @Override
         public int describeContents() {
             return 0;
         }
@@ -415,7 +468,8 @@ public final class TransitionInfo implements Parcelable {
         public String toString() {
             return "{" + mContainer + "(" + mParent + ") leash=" + mLeash
                     + " m=" + modeToString(mMode) + " f=" + flagsToString(mFlags) + " sb="
-                    + mStartAbsBounds + " eb=" + mEndAbsBounds + " eo=" + mEndRelOffset + "}";
+                    + mStartAbsBounds + " eb=" + mEndAbsBounds + " eo=" + mEndRelOffset + " r="
+                    + mStartRotation + "->" + mEndRotation + "}";
         }
     }
 }

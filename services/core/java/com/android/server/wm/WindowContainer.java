@@ -29,6 +29,7 @@ import static android.content.res.Configuration.ORIENTATION_UNDEFINED;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.os.UserHandle.USER_NULL;
 import static android.view.SurfaceControl.Transaction;
+import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS_ANIM;
@@ -389,12 +390,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             mParent.onChildAdded(this);
         }
         if (!mReparenting) {
+            onSyncReparent(oldParent, mParent);
             if (mParent != null && mParent.mDisplayContent != null
                     && mDisplayContent != mParent.mDisplayContent) {
                 onDisplayChanged(mParent.mDisplayContent);
             }
             onParentChanged(mParent, oldParent);
-            onSyncReparent(oldParent, mParent);
         }
     }
 
@@ -460,8 +461,7 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
      * This is used to revoke control of the SurfaceControl from a client process that was
      * previously organizing this WindowContainer.
      */
-    void migrateToNewSurfaceControl() {
-        SurfaceControl.Transaction t = getPendingTransaction();
+    void migrateToNewSurfaceControl(SurfaceControl.Transaction t) {
         t.remove(mSurfaceControl);
         // Clear the last position so the new SurfaceControl will get correct position
         mLastSurfacePosition.set(0, 0);
@@ -2241,13 +2241,18 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
-    void assignRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer) {
+    void assignRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer,
+            boolean forceUpdate) {
         final boolean changed = layer != mLastLayer || mLastRelativeToLayer != relativeTo;
-        if (mSurfaceControl != null && changed) {
+        if (mSurfaceControl != null && (changed || forceUpdate)) {
             setRelativeLayer(t, relativeTo, layer);
             mLastLayer = layer;
             mLastRelativeToLayer = relativeTo;
         }
+    }
+
+    void assignRelativeLayer(Transaction t, SurfaceControl relativeTo, int layer) {
+        assignRelativeLayer(t, relativeTo, layer, false /* forceUpdate */);
     }
 
     protected void setLayer(Transaction t, int layer) {
@@ -2684,14 +2689,6 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
             @Nullable ArrayList<WindowContainer> sources) {
         final Task task = asTask();
         if (task != null && !enter && !task.isHomeOrRecentsRootTask()) {
-            if (AppTransition.isClosingTransitOld(transit)) {
-                // Freezes the insets state when the window is in app exiting transition, to
-                // ensure the exiting window won't receive unexpected insets changes from the
-                // next window.
-                task.forAllWindows(w -> {
-                    w.freezeInsetsState();
-                }, true /* traverseTopToBottom */);
-            }
             mDisplayContent.showImeScreenshot();
         }
         final Pair<AnimationAdapter, AnimationAdapter> adapters = getAnimationAdapter(lp,
@@ -3068,6 +3065,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /** Cheap way of doing cast and instanceof. */
+    WallpaperWindowToken asWallpaperToken() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
     DisplayArea asDisplayArea() {
         return null;
     }
@@ -3079,6 +3081,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
 
     /** Cheap way of doing cast and instanceof. */
     TaskDisplayArea asTaskDisplayArea() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
+    DisplayContent asDisplayContent() {
         return null;
     }
 
@@ -3306,5 +3313,12 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void unregisterWindowContainerListener(WindowContainerListener listener) {
         mListeners.remove(listener);
         unregisterConfigurationChangeListener(listener);
+    }
+
+    /**
+     * Returns the {@link WindowManager.LayoutParams.WindowType}.
+     */
+    @WindowManager.LayoutParams.WindowType int getWindowType() {
+        return INVALID_WINDOW_TYPE;
     }
 }

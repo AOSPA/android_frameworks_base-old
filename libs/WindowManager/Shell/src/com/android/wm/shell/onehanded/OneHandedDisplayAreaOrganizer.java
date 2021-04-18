@@ -16,13 +16,10 @@
 
 package com.android.wm.shell.onehanded;
 
-import static android.view.Display.DEFAULT_DISPLAY;
-
 import static com.android.wm.shell.onehanded.OneHandedAnimationController.TRANSITION_DIRECTION_EXIT;
 import static com.android.wm.shell.onehanded.OneHandedAnimationController.TRANSITION_DIRECTION_TRIGGER;
 
 import android.content.Context;
-import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.SystemProperties;
 import android.util.ArrayMap;
@@ -38,7 +35,7 @@ import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
 import com.android.wm.shell.R;
-import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.ShellExecutor;
 
 import java.io.PrintWriter;
@@ -60,6 +57,8 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
     private static final String ONE_HANDED_MODE_TRANSLATE_ANIMATION_DURATION =
             "persist.debug.one_handed_translate_animation_duration";
 
+    private DisplayLayout mDisplayLayout = new DisplayLayout();
+
     private final Rect mLastVisualDisplayBounds = new Rect();
     private final Rect mDefaultDisplayBounds = new Rect();
 
@@ -67,7 +66,6 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
     private int mEnterExitAnimationDurationMs;
 
     private ArrayMap<WindowContainerToken, SurfaceControl> mDisplayAreaTokenMap = new ArrayMap();
-    private DisplayController mDisplayController;
     private OneHandedAnimationController mAnimationController;
     private OneHandedSurfaceTransactionHelper.SurfaceControlTransactionFactory
             mSurfaceControlTransactionFactory;
@@ -110,15 +108,15 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
      * Constructor of OneHandedDisplayAreaOrganizer
      */
     public OneHandedDisplayAreaOrganizer(Context context,
-            DisplayController displayController,
+            DisplayLayout displayLayout,
             OneHandedAnimationController animationController,
             OneHandedTutorialHandler tutorialHandler,
             OneHandedBackgroundPanelOrganizer oneHandedBackgroundGradientOrganizer,
             ShellExecutor mainExecutor) {
         super(mainExecutor);
+        mDisplayLayout.set(displayLayout);
+        updateDisplayBounds();
         mAnimationController = animationController;
-        mDisplayController = displayController;
-        mLastVisualDisplayBounds.set(getDisplayBounds());
         final int animationDurationConfig = context.getResources().getInteger(
                 R.integer.config_one_handed_translate_animation_duration);
         mEnterExitAnimationDurationMs =
@@ -148,7 +146,7 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
             final DisplayAreaAppearedInfo info = displayAreaInfos.get(i);
             onDisplayAreaAppeared(info.getDisplayAreaInfo(), info.getLeash());
         }
-        mDefaultDisplayBounds.set(getDisplayBounds());
+        updateDisplayBounds();
         return displayAreaInfos;
     }
 
@@ -159,25 +157,21 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
     }
 
     /**
-     * Handler for display rotation changes by below policy which
-     * handles 90 degree display rotation changes {@link Surface.Rotation}.
+     * Handler for display rotation changes by {@link DisplayLayout}
      *
-     * @param fromRotation starting rotation of the display.
-     * @param toRotation   target rotation of the display (after rotating).
-     * @param wct          A task transaction {@link WindowContainerTransaction} from
-     *                     {@link DisplayChangeController} to populate.
+     * @param context       Any context
+     * @param toRotation    target rotation of the display (after rotating).
+     * @param wct           A task transaction {@link WindowContainerTransaction} from
+     *                      {@link DisplayChangeController} to populate.
      */
-    public void onRotateDisplay(int fromRotation, int toRotation, WindowContainerTransaction wct) {
-        // Stop one handed without animation and reset cropped size immediately
-        final Rect newBounds = new Rect(mDefaultDisplayBounds);
-        final boolean isOrientationDiff = Math.abs(fromRotation - toRotation) % 2 == 1;
-
-        if (isOrientationDiff) {
-            resetWindowsOffset(wct);
-            mDefaultDisplayBounds.set(newBounds);
-            mLastVisualDisplayBounds.set(newBounds);
-            finishOffset(0, TRANSITION_DIRECTION_EXIT);
+    public void onRotateDisplay(Context context, int toRotation, WindowContainerTransaction wct) {
+        if (mDisplayLayout.rotation() == toRotation) {
+            return;
         }
+        mDisplayLayout.rotateTo(context.getResources(), toRotation);
+        resetWindowsOffset(wct);
+        updateDisplayBounds();
+        finishOffset(0, TRANSITION_DIRECTION_EXIT);
     }
 
     /**
@@ -189,9 +183,7 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
                 mDefaultDisplayBounds.top + yOffset,
                 mDefaultDisplayBounds.right,
                 mDefaultDisplayBounds.bottom + yOffset);
-        final Rect fromBounds = getLastVisualDisplayBounds() != null
-                ? getLastVisualDisplayBounds()
-                : mDefaultDisplayBounds;
+        final Rect fromBounds = getLastVisualDisplayBounds();
         final int direction = yOffset > 0
                 ? TRANSITION_DIRECTION_TRIGGER
                 : TRANSITION_DIRECTION_EXIT;
@@ -202,6 +194,7 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
                     animateWindows(token, leash, fromBounds, toBounds, direction,
                             mEnterExitAnimationDurationMs);
                     wct.setBounds(token, toBounds);
+                    wct.setAppBounds(token, toBounds);
                 });
         applyTransaction(wct);
     }
@@ -216,7 +209,8 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
         applyTransaction(wct);
     }
 
-    private void resetWindowsOffset(WindowContainerTransaction wct) {
+    @VisibleForTesting
+    void resetWindowsOffset(WindowContainerTransaction wct) {
         final SurfaceControl.Transaction tx =
                 mSurfaceControlTransactionFactory.getTransaction();
         mDisplayAreaTokenMap.forEach(
@@ -231,6 +225,7 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
                     // DisplayRotationController will applyTransaction() after finish rotating
                     if (wct != null) {
                         wct.setBounds(token, null/* reset */);
+                        wct.setAppBounds(token, null/* reset */);
                     }
                 });
         tx.apply();
@@ -288,18 +283,29 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
         return mLastVisualDisplayBounds;
     }
 
+    @VisibleForTesting
     @Nullable
-    private Rect getDisplayBounds() {
-        Point realSize = new Point(0, 0);
-        if (mDisplayController != null && mDisplayController.getDisplay(DEFAULT_DISPLAY) != null) {
-            mDisplayController.getDisplay(DEFAULT_DISPLAY).getRealSize(realSize);
-        }
-        return new Rect(0, 0, realSize.x, realSize.y);
+    Rect getLastDisplayBounds() {
+        return mLastVisualDisplayBounds;
+    }
+
+    public DisplayLayout getDisplayLayout() {
+        return mDisplayLayout;
+    }
+
+    @VisibleForTesting
+    void setDisplayLayout(@NonNull DisplayLayout displayLayout) {
+        mDisplayLayout.set(displayLayout);
     }
 
     @VisibleForTesting
     ArrayMap<WindowContainerToken, SurfaceControl> getDisplayAreaTokenMap() {
         return mDisplayAreaTokenMap;
+    }
+
+    void updateDisplayBounds() {
+        mDefaultDisplayBounds.set(0, 0, mDisplayLayout.width(), mDisplayLayout.height());
+        mLastVisualDisplayBounds.set(mDefaultDisplayBounds);
     }
 
     /**
@@ -314,13 +320,13 @@ public class OneHandedDisplayAreaOrganizer extends DisplayAreaOrganizer {
         pw.println(TAG + "states: ");
         pw.print(innerPrefix + "mIsInOneHanded=");
         pw.println(mIsInOneHanded);
+        pw.print(innerPrefix + "mDisplayLayout.rotation()=");
+        pw.println(mDisplayLayout.rotation());
         pw.print(innerPrefix + "mDisplayAreaTokenMap=");
         pw.println(mDisplayAreaTokenMap);
         pw.print(innerPrefix + "mDefaultDisplayBounds=");
         pw.println(mDefaultDisplayBounds);
         pw.print(innerPrefix + "mLastVisualDisplayBounds=");
         pw.println(mLastVisualDisplayBounds);
-        pw.print(innerPrefix + "getDisplayBounds()=");
-        pw.println(getDisplayBounds());
     }
 }

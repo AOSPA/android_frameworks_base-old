@@ -35,14 +35,14 @@ import android.os.ParcelFileDescriptor;
 import android.view.DisplayCutout;
 import android.view.IApplicationToken;
 import android.view.IAppTransitionAnimationSpecsFuture;
-import android.view.IDockedStackListener;
+import android.view.ICrossWindowBlurEnabledListener;
 import android.view.IDisplayWindowInsetsController;
 import android.view.IDisplayWindowListener;
 import android.view.IDisplayFoldListener;
 import android.view.IDisplayWindowRotationController;
 import android.view.IOnKeyguardExitResult;
-import android.view.IPinnedStackListener;
-import android.view.IScrollCaptureCallbacks;
+import android.view.IPinnedTaskListener;
+import android.view.IScrollCaptureResponseListener;
 import android.view.RemoteAnimationAdapter;
 import android.view.IRotationWatcher;
 import android.view.ISystemGestureExclusionListener;
@@ -446,12 +446,12 @@ interface IWindowManager
      * Sets the region the user can touch the divider. This region will be excluded from the region
      * which is used to cause a focus switch when dispatching touch.
      */
-    void setDockedStackDividerTouchRegion(in Rect touchableRegion);
+    void setDockedTaskDividerTouchRegion(in Rect touchableRegion);
 
     /**
-     * Registers a listener that will be called when the pinned stack state changes.
+     * Registers a listener that will be called when the pinned task state changes.
      */
-    void registerPinnedStackListener(int displayId, IPinnedStackListener listener);
+    void registerPinnedTaskListener(int displayId, IPinnedTaskListener listener);
 
     /**
      * Requests Keyboard Shortcuts from the displayed window.
@@ -731,7 +731,7 @@ interface IWindowManager
     void showGlobalActions();
 
     /**
-     * Sets layer tracing flags for SurfaceFlingerTrace. 
+     * Sets layer tracing flags for SurfaceFlingerTrace.
      *
      * @param flags see definition in SurfaceTracing.cpp
      */
@@ -744,10 +744,10 @@ interface IWindowManager
      * @param behindClient token for a window, used to filter the search to windows behind it, or
      *                     {@code null} to accept a window at any zOrder
      * @param taskId specifies the id of a task the result must belong to, or -1 to ignore task ids
-     * @param callbacks the object to receive replies
+     * @param listener the object to receive the response
      */
     void requestScrollCapture(int displayId, IBinder behindClient, int taskId,
-            IScrollCaptureCallbacks callbacks);
+            IScrollCaptureResponseListener listener);
 
     /**
      * Holds the WM lock for the specified amount of milliseconds.
@@ -777,11 +777,20 @@ interface IWindowManager
     VerifiedDisplayHash verifyDisplayHash(in DisplayHash displayHash);
 
     /**
-     * Registers a listener for a {@link android.app.WindowContext} to handle configuration changes
-     * from the server side.
+     * Call to enable or disable the throttling when generating a display hash. This should only be
+     * used for testing. Throttling is enabled by default.
+     *
+     * Must be called from a process that has {@link android.Manifest.permission#READ_FRAME_BUFFER}
+     * permission.
+     */
+     void setDisplayHashThrottlingEnabled(boolean enable);
+
+    /**
+     * Registers a listener for a {@link android.window.WindowContext} to handle configuration
+     * changes from the server side.
      * <p>
      * Note that this API should be invoked after calling
-     * {@link android.app.WindowTokenClient#attachContext(WindowContext)}
+     * {@link android.window.WindowTokenClient#attachContext(Context)}
      * </p>
      *
      * @param clientToken the window context's token
@@ -800,4 +809,22 @@ interface IWindowManager
      * @param clientToken the window context's token
      */
     void unregisterWindowContextListener(IBinder clientToken);
+
+    /**
+     * Registers a listener, which is to be called whenever cross-window blur is enabled/disabled.
+     *
+     * @param listener the listener to be registered
+     * @return true if cross-window blur is currently enabled; false otherwise
+     */
+    boolean registerCrossWindowBlurEnabledListener(ICrossWindowBlurEnabledListener listener);
+
+    /**
+     * Unregisters a listener which was registered with
+     * {@link #registerCrossWindowBlurEnabledListener()}.
+     *
+     * @param listener the listener to be unregistered
+     */
+    void unregisterCrossWindowBlurEnabledListener(ICrossWindowBlurEnabledListener listener);
+
+    void setForceCrossWindowBlurDisabled(boolean disable);
 }

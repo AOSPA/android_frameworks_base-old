@@ -25,7 +25,6 @@ import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
-import android.os.UserHandle;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
@@ -44,6 +43,7 @@ import com.android.internal.logging.UiEventLogger;
 import com.android.internal.statusbar.RegisterStatusBarResult;
 import com.android.settingslib.applications.InterestingConfigChanges;
 import com.android.systemui.Dumpable;
+import com.android.systemui.accessibility.AccessibilityButtonModeObserver;
 import com.android.systemui.accessibility.SystemActions;
 import com.android.systemui.assist.AssistHandleViewController;
 import com.android.systemui.assist.AssistManager;
@@ -54,7 +54,6 @@ import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
-import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.CommandQueue.Callbacks;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -93,6 +92,7 @@ public class NavigationBarController implements Callbacks,
     private final MetricsLogger mMetricsLogger;
     private final OverviewProxyService mOverviewProxyService;
     private final NavigationModeController mNavigationModeController;
+    private final AccessibilityButtonModeObserver mAccessibilityButtonModeObserver;
     private final StatusBarStateController mStatusBarStateController;
     private final SysUiState mSysUiFlagsContainer;
     private final BroadcastDispatcher mBroadcastDispatcher;
@@ -116,7 +116,7 @@ public class NavigationBarController implements Callbacks,
     // Tracks config changes that will actually recreate the nav bar
     private final InterestingConfigChanges mConfigChanges = new InterestingConfigChanges(
             ActivityInfo.CONFIG_FONT_SCALE | ActivityInfo.CONFIG_LOCALE
-                    | ActivityInfo.CONFIG_SCREEN_LAYOUT | ActivityInfo.CONFIG_ASSETS_PATHS
+                    | ActivityInfo.CONFIG_SCREEN_LAYOUT
                     | ActivityInfo.CONFIG_UI_MODE);
 
     @Inject
@@ -129,6 +129,7 @@ public class NavigationBarController implements Callbacks,
             MetricsLogger metricsLogger,
             OverviewProxyService overviewProxyService,
             NavigationModeController navigationModeController,
+            AccessibilityButtonModeObserver accessibilityButtonModeObserver,
             StatusBarStateController statusBarStateController,
             SysUiState sysUiFlagsContainer,
             BroadcastDispatcher broadcastDispatcher,
@@ -153,6 +154,7 @@ public class NavigationBarController implements Callbacks,
         mMetricsLogger = metricsLogger;
         mOverviewProxyService = overviewProxyService;
         mNavigationModeController = navigationModeController;
+        mAccessibilityButtonModeObserver = accessibilityButtonModeObserver;
         mStatusBarStateController = statusBarStateController;
         mSysUiFlagsContainer = sysUiFlagsContainer;
         mBroadcastDispatcher = broadcastDispatcher;
@@ -171,6 +173,7 @@ public class NavigationBarController implements Callbacks,
         configurationController.addCallback(this);
         mConfigChanges.applyNewConfig(mContext.getResources());
         mNavBarOverlayController = navBarOverlayController;
+        mNavigationModeController.addListener(this);
     }
 
     @Override
@@ -181,24 +184,25 @@ public class NavigationBarController implements Callbacks,
             }
         } else {
             for (int i = 0; i < mNavigationBars.size(); i++) {
-                mNavigationBars.get(i).onConfigurationChanged(newConfig);
+                mNavigationBars.valueAt(i).onConfigurationChanged(newConfig);
             }
         }
     }
 
     @Override
     public void onNavigationModeChanged(int mode) {
-        // Workaround for b/132825155, for secondary users, we currently don't receive configuration
-        // changes on overlay package change since SystemUI runs for the system user. In this case,
-        // trigger a new configuration change to ensure that the nav bar is updated in the same way.
-        int userId = ActivityManagerWrapper.getInstance().getCurrentUserId();
-        if (userId != UserHandle.USER_SYSTEM) {
-            mHandler.post(() -> {
-                for (int i = 0; i < mNavigationBars.size(); i++) {
-                    recreateNavigationBar(mNavigationBars.keyAt(i));
+        mHandler.post(() -> {
+            for (int i = 0; i < mNavigationBars.size(); i++) {
+                NavigationBar navBar = mNavigationBars.valueAt(i);
+                if (navBar == null) {
+                    continue;
                 }
-            });
-        }
+                NavigationBarView view = (NavigationBarView) navBar.getView();
+                if (view != null) {
+                    view.updateStates();
+                }
+            }
+        });
     }
 
     @Override
@@ -210,6 +214,14 @@ public class NavigationBarController implements Callbacks,
     public void onDisplayReady(int displayId) {
         Display display = mDisplayManager.getDisplay(displayId);
         createNavigationBar(display, null /* savedState */, null /* result */);
+    }
+
+    @Override
+    public void setNavigationBarLumaSamplingEnabled(int displayId, boolean enable) {
+        final NavigationBarView navigationBarView = getNavigationBarView(displayId);
+        if (navigationBarView != null) {
+            navigationBarView.setNavigationBarLumaSamplingEnabled(enable);
+        }
     }
 
     /**
@@ -281,6 +293,7 @@ public class NavigationBarController implements Callbacks,
                 mMetricsLogger,
                 mOverviewProxyService,
                 mNavigationModeController,
+                mAccessibilityButtonModeObserver,
                 mStatusBarStateController,
                 mSysUiFlagsContainer,
                 mBroadcastDispatcher,
@@ -316,7 +329,7 @@ public class NavigationBarController implements Callbacks,
         });
     }
 
-    private void removeNavigationBar(int displayId) {
+    void removeNavigationBar(int displayId) {
         NavigationBar navBar = mNavigationBars.get(displayId);
         if (navBar != null) {
             navBar.setAutoHideController(/* autoHideController */ null);
@@ -399,7 +412,7 @@ public class NavigationBarController implements Callbacks,
             if (i > 0) {
                 pw.println();
             }
-            mNavigationBars.get(i).dump(pw);
+            mNavigationBars.valueAt(i).dump(pw);
         }
     }
 }

@@ -81,7 +81,9 @@ import static android.view.WindowLayoutParamsProto.X;
 import static android.view.WindowLayoutParamsProto.Y;
 
 import android.Manifest.permission;
+import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -120,6 +122,8 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * The interface that apps use to talk to the window manager.
@@ -611,6 +615,10 @@ public interface WindowManager extends ViewManager {
      * For example, for activities in multi-window mode, the metrics returned are based on the
      * current bounds that the user has selected for the {@link android.app.Activity Activity}'s
      * task.
+     * <p>
+     * In most scenarios, {@link #getCurrentWindowMetrics()} rather than
+     * {@link #getMaximumWindowMetrics()} is the correct API to use, since it ensures values reflect
+     * window size when the app is not fullscreen.
      *
      * @see #getMaximumWindowMetrics()
      * @see WindowMetrics
@@ -622,26 +630,27 @@ public interface WindowManager extends ViewManager {
     /**
      * Returns the largest {@link WindowMetrics} an app may expect in the current system state.
      * <p>
-     * The metrics describe the size of the largest potential area the window might occupy with
-     * {@link LayoutParams#MATCH_PARENT MATCH_PARENT} width and height, and the {@link WindowInsets}
-     * such a window would have.
-     * <p>
      * The value of this is based on the largest <b>potential</b> windowing state of the system.
      *
      * For example, for activities in multi-window mode, the metrics returned are based on the
      * what the bounds would be if the user expanded the {@link android.app.Activity Activity}'s
      * task to cover the entire screen.
-     *
+     * <p>
+     * The metrics describe the size of the largest potential area the window might occupy with
+     * {@link LayoutParams#MATCH_PARENT MATCH_PARENT} width and height, and the {@link WindowInsets}
+     * such a window would have.
+     * <p>
      * Note that this might still be smaller than the size of the physical display if certain areas
      * of the display are not available to windows created in this {@link Context}.
-     * <p>
+     *
      * For example, given that there's a device which have a multi-task mode to limit activities
      * to a half screen. In this case, {@link #getMaximumWindowMetrics()} reports the bounds of
-     * the half screen which the activity is located, while {@link Display#getRealSize(Point)} still
-     * reports the bounds of the whole physical display.
-     *
-     * Despite this, {@link #getMaximumWindowMetrics()} and {@link Display#getRealSize(Point)}
-     * reports the same bounds in general.
+     * the half screen which the activity is located.
+     * <p>
+     * <b>Generally {@link #getCurrentWindowMetrics()} is the correct API to use</b> for choosing
+     * UI layouts. {@link #getMaximumWindowMetrics()} are only appropriate when the application
+     * needs to know the largest possible size it can occupy if the user expands/maximizes it on the
+     * screen.
      *
      * @see #getCurrentWindowMetrics()
      * @see WindowMetrics
@@ -806,6 +815,105 @@ public interface WindowManager extends ViewManager {
     @TestApi
     default @DisplayImePolicy int getDisplayImePolicy(int displayId) {
         return DISPLAY_IME_POLICY_FALLBACK_DISPLAY;
+    }
+
+    /**
+     * Returns whether cross-window blur is currently enabled. This affects both window blur behind
+     * (see {@link LayoutParams#setBlurBehindRadius}) and window background blur (see
+     * {@link Window#setBackgroundBlurRadius}).
+     *
+     * Cross-window blur might not be supported by some devices due to GPU limitations. It can also
+     * be disabled at runtime, e.g. during battery saving mode, when multimedia tunneling is used or
+     * when minimal post processing is requested. In such situations, no blur will be computed or
+     * drawn, so the blur target area will not be blurred. To handle this, the app might want to
+     * change its theme to one that does not use blurs. To listen for cross-window blur
+     * enabled/disabled events, use {@link #addCrossWindowBlurEnabledListener}.
+     *
+     * @see #addCrossWindowBlurEnabledListener
+     * @see LayoutParams#setBlurBehindRadius
+     * @see Window#setBackgroundBlurRadius
+     */
+    default boolean isCrossWindowBlurEnabled() {
+        return false;
+    }
+
+    /**
+     * Adds a listener, which will be called when cross-window blurs are enabled/disabled at
+     * runtime. This affects both window blur behind (see {@link LayoutParams#setBlurBehindRadius})
+     * and window background blur (see {@link Window#setBackgroundBlurRadius}).
+     *
+     * Cross-window blur might not be supported by some devices due to GPU limitations. It can also
+     * be disabled at runtime, e.g. during battery saving mode, when multimedia tunneling is used or
+     * when minimal post processing is requested. In such situations, no blur will be computed or
+     * drawn, so the blur target area will not be blurred. To handle this, the app might want to
+     * change its theme to one that does not use blurs.
+     *
+     * The listener will be called on the main thread.
+     *
+     * If the listener is added successfully, it will be called immediately with the current
+     * cross-window blur enabled state.
+     *
+     *
+     * @param listener the listener to be added. It will be called back with a boolean parameter,
+     *                 which is true if cross-window blur is enabled and false if it is disabled
+     *
+     * @see #removeCrossWindowBlurEnabledListener
+     * @see #isCrossWindowBlurEnabled
+     * @see LayoutParams#setBlurBehindRadius
+     * @see Window#setBackgroundBlurRadius
+     */
+    default void addCrossWindowBlurEnabledListener(@NonNull Consumer<Boolean> listener) {
+    }
+
+    /**
+     * Adds a listener, which will be called when cross-window blurs are enabled/disabled at
+     * runtime. This affects both window blur behind (see {@link LayoutParams#setBlurBehindRadius})
+     * and window background blur (see {@link Window#setBackgroundBlurRadius}).
+     *
+     * Cross-window blur might not be supported by some devices due to GPU limitations. It can also
+     * be disabled at runtime, e.g. during battery saving mode, when multimedia tunneling is used or
+     * when minimal post processing is requested. In such situations, no blur will be computed or
+     * drawn, so the blur target area will not be blurred. To handle this, the app might want to
+     * change its theme to one that does not use blurs.
+     *
+     * If the listener is added successfully, it will be called immediately with the current
+     * cross-window blur enabled state.
+     *
+     * @param executor {@link Executor} to handle the listener callback
+     * @param listener the listener to be added. It will be called back with a boolean parameter,
+     *                 which is true if cross-window blur is enabled and false if it is disabled
+     *
+     * @see #removeCrossWindowBlurEnabledListener
+     * @see #isCrossWindowBlurEnabled
+     * @see LayoutParams#setBlurBehindRadius
+     * @see Window#setBackgroundBlurRadius
+     */
+    default void addCrossWindowBlurEnabledListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> listener) {
+    }
+
+    /**
+     * Removes a listener, previously added with {@link #addCrossWindowBlurEnabledListener}
+     *
+     * @param listener the listener to be removed
+     *
+     * @see #addCrossWindowBlurEnabledListener
+     */
+    default void removeCrossWindowBlurEnabledListener(@NonNull Consumer<Boolean> listener) {
+    }
+
+    /**
+     * Disables cross-window blurs device-wide. This includes window blur behind
+     * (see {@link LayoutParams#setBlurBehindRadius}) and window background blur
+     * (see {@link Window#setBackgroundBlurRadius}).
+     *
+     * @param disable specifies whether to disable the blur. Note that calling this
+     *                with 'disable=false' will not enable blurs if there is something
+     *                else disabling blurs.
+     * @hide
+     */
+    @TestApi
+    default void setForceCrossWindowBlurDisabled(boolean disable) {
     }
 
     public static class LayoutParams extends ViewGroup.LayoutParams implements Parcelable {
@@ -2110,26 +2218,6 @@ public interface WindowManager extends ViewManager {
         public int flags;
 
         /**
-         * If the window has requested hardware acceleration, but this is not
-         * allowed in the process it is in, then still render it as if it is
-         * hardware accelerated.  This is used for the starting preview windows
-         * in the system process, which don't need to have the overhead of
-         * hardware acceleration (they are just a static rendering), but should
-         * be rendered as such to match the actual window of the app even if it
-         * is hardware accelerated.
-         * Even if the window isn't hardware accelerated, still do its rendering
-         * as if it was.
-         * Like {@link #FLAG_HARDWARE_ACCELERATED} except for trusted system windows
-         * that need hardware acceleration (e.g. LockScreen), where hardware acceleration
-         * is generally disabled. This flag must be specified in addition to
-         * {@link #FLAG_HARDWARE_ACCELERATED} to enable hardware acceleration for system
-         * windows.
-         *
-         * @hide
-         */
-        public static final int PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED = 0x00000001;
-
-        /**
          * In the system process, we globally do not use hardware acceleration
          * because there are many threads doing UI there and they conflict.
          * If certain parts of the UI that really do want to use hardware
@@ -2355,7 +2443,6 @@ public interface WindowManager extends ViewManager {
          * @hide
          */
         @IntDef(flag = true, prefix="PRIVATE_FLAG_", value = {
-                PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
                 PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
                 PRIVATE_FLAG_WANTS_OFFSET_NOTIFICATIONS,
                 SYSTEM_FLAG_SHOW_FOR_ALL_USERS,
@@ -2390,10 +2477,6 @@ public interface WindowManager extends ViewManager {
          */
         @UnsupportedAppUsage
         @ViewDebug.ExportedProperty(flagMapping = {
-                @ViewDebug.FlagToString(
-                        mask = PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
-                        equals = PRIVATE_FLAG_FAKE_HARDWARE_ACCELERATED,
-                        name = "FAKE_HARDWARE_ACCELERATED"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
                         equals = PRIVATE_FLAG_FORCE_HARDWARE_ACCELERATED,
@@ -2722,6 +2805,15 @@ public interface WindowManager extends ViewManager {
         public boolean hasManualSurfaceInsets;
 
         /**
+         * Whether we should use global insets state when report insets to the window. When set to
+         * {@code true}, all the insets will be reported to the window regardless of the z-order.
+         * Otherwise, only the insets above the given window will be reported.
+         *
+         * @hide
+         */
+        public boolean receiveInsetsIgnoringZOrder;
+
+        /**
          * Whether the previous surface insets should be used vs. what is currently set. When set
          * to {@code true}, the view root will ignore surfaces insets in this object and use what
          * it currently has.
@@ -2850,7 +2942,7 @@ public interface WindowManager extends ViewManager {
         public IBinder token = null;
 
         /**
-         * The token of {@link android.app.WindowContext}. It is usually a
+         * The token of {@link android.window.WindowContext}. It is usually a
          * {@link android.app.WindowTokenClient} and is used for associating the params with an
          * existing node in the WindowManager hierarchy and getting the corresponding
          * {@link Configuration} and {@link android.content.res.Resources} values with updates
@@ -3238,9 +3330,9 @@ public interface WindowManager extends ViewManager {
          * The blur behind radius range starts at 0, which means no blur, and increases until 150
          * for the densest blur.
          *
-         * @see #FLAG_BLUR_BEHIND
+         * @see #setBlurBehindRadius
          */
-        public int blurBehindRadius = 0;
+        private int mBlurBehindRadius = 0;
 
         /**
          * The color mode requested by this window. The target display may
@@ -3366,7 +3458,7 @@ public interface WindowManager extends ViewManager {
         /**
          * Specifies that the window should be considered a trusted system overlay. Trusted system
          * overlays are ignored when considering whether windows are obscured during input
-         * dispatch. Requires the {@link android.Manifest.permission.INTERNAL_SYSTEM_WINDOW}
+         * dispatch. Requires the {@link android.Manifest.permission#INTERNAL_SYSTEM_WINDOW}
          * permission.
          *
          * {@see android.view.MotionEvent#FLAG_WINDOW_IS_OBSCURED}
@@ -3398,7 +3490,7 @@ public interface WindowManager extends ViewManager {
          * @see LayoutParams#setSystemApplicationOverlay(boolean)
          *
          * <p>Note: the owner of the window must hold
-         * {@link android.Manifest.permission.SYSTEM_APPLICATION_OVERLAY} for this to have any
+         * {@link android.Manifest.permission#SYSTEM_APPLICATION_OVERLAY} for this to have any
          * effect.
          * @hide
          */
@@ -3534,6 +3626,50 @@ public interface WindowManager extends ViewManager {
             return mColorMode;
         }
 
+        /**
+         * Blurs the screen behind the window. The effect is similar to that of {@link #dimAmount},
+         * but instead of dimmed, the content behind the window will be blurred (or combined with
+         * the dim amount, if such is specified).
+         *
+         * The density of the blur is set by the blur radius. The radius defines the size
+         * of the neighbouring area, from which pixels will be averaged to form the final
+         * color for each pixel. The operation approximates a Gaussian blur.
+         * A radius of 0 means no blur. The higher the radius, the denser the blur.
+         *
+         * Note the difference with {@link android.view.Window#setBackgroundBlurRadius},
+         * which blurs only within the bounds of the window. Blur behind blurs the whole screen
+         * behind the window.
+         *
+         * Requires {@link #FLAG_BLUR_BEHIND} to be set.
+         *
+         * Cross-window blur might not be supported by some devices due to GPU limitations. It can
+         * also be disabled at runtime, e.g. during battery saving mode, when multimedia tunneling
+         * is used or when minimal post processing is requested. In such situations, no blur will
+         * be computed or drawn, resulting in there being no depth separation between the window
+         * and the content behind it. To avoid this, the app might want to use more
+         * {@link #dimAmount} on its window. To listen for cross-window blur enabled/disabled
+         * events, use {@link #addCrossWindowBlurEnabledListener}.
+         *
+         * @param blurBehindRadius The blur radius to use for blur behind in pixels
+         *
+         * @see #FLAG_BLUR_BEHIND
+         * @see #getBlurBehindRadius
+         * @see WindowManager#addCrossWindowBlurEnabledListener
+         * @see Window#setBackgroundBlurRadius
+         */
+        public void setBlurBehindRadius(@IntRange(from = 0) int blurBehindRadius) {
+            mBlurBehindRadius = blurBehindRadius;
+        }
+
+        /**
+         * Returns the blur behind radius of the window.
+         *
+         * @see #setBlurBehindRadius
+         */
+        public int getBlurBehindRadius() {
+            return mBlurBehindRadius;
+        }
+
         /** @hide */
         @SystemApi
         public final void setUserActivityTimeout(long timeout) {
@@ -3610,15 +3746,16 @@ public interface WindowManager extends ViewManager {
             out.writeInt(preferredDisplayModeId);
             out.writeInt(systemUiVisibility);
             out.writeInt(subtreeSystemUiVisibility);
-            out.writeInt(hasSystemUiListeners ? 1 : 0);
+            out.writeBoolean(hasSystemUiListeners);
             out.writeInt(inputFeatures);
             out.writeLong(userActivityTimeout);
             out.writeInt(surfaceInsets.left);
             out.writeInt(surfaceInsets.top);
             out.writeInt(surfaceInsets.right);
             out.writeInt(surfaceInsets.bottom);
-            out.writeInt(hasManualSurfaceInsets ? 1 : 0);
-            out.writeInt(preservePreviousSurfaceInsets ? 1 : 0);
+            out.writeBoolean(hasManualSurfaceInsets);
+            out.writeBoolean(receiveInsetsIgnoringZOrder);
+            out.writeBoolean(preservePreviousSurfaceInsets);
             out.writeLong(accessibilityIdOfAnchor);
             TextUtils.writeToParcel(accessibilityTitle, out, parcelableFlags);
             out.writeInt(mColorMode);
@@ -3629,7 +3766,7 @@ public interface WindowManager extends ViewManager {
             out.writeInt(mFitInsetsSides);
             out.writeBoolean(mFitInsetsIgnoringVisibility);
             out.writeBoolean(preferMinimalPostProcessing);
-            out.writeInt(blurBehindRadius);
+            out.writeInt(mBlurBehindRadius);
             if (providesInsetsTypes != null) {
                 out.writeInt(providesInsetsTypes.length);
                 out.writeIntArray(providesInsetsTypes);
@@ -3679,15 +3816,16 @@ public interface WindowManager extends ViewManager {
             preferredDisplayModeId = in.readInt();
             systemUiVisibility = in.readInt();
             subtreeSystemUiVisibility = in.readInt();
-            hasSystemUiListeners = in.readInt() != 0;
+            hasSystemUiListeners = in.readBoolean();
             inputFeatures = in.readInt();
             userActivityTimeout = in.readLong();
             surfaceInsets.left = in.readInt();
             surfaceInsets.top = in.readInt();
             surfaceInsets.right = in.readInt();
             surfaceInsets.bottom = in.readInt();
-            hasManualSurfaceInsets = in.readInt() != 0;
-            preservePreviousSurfaceInsets = in.readInt() != 0;
+            hasManualSurfaceInsets = in.readBoolean();
+            receiveInsetsIgnoringZOrder = in.readBoolean();
+            preservePreviousSurfaceInsets = in.readBoolean();
             accessibilityIdOfAnchor = in.readLong();
             accessibilityTitle = TextUtils.CHAR_SEQUENCE_CREATOR.createFromParcel(in);
             mColorMode = in.readInt();
@@ -3698,7 +3836,7 @@ public interface WindowManager extends ViewManager {
             mFitInsetsSides = in.readInt();
             mFitInsetsIgnoringVisibility = in.readBoolean();
             preferMinimalPostProcessing = in.readBoolean();
-            blurBehindRadius = in.readInt();
+            mBlurBehindRadius = in.readInt();
             int insetsTypesLength = in.readInt();
             if (insetsTypesLength > 0) {
                 providesInsetsTypes = new int[insetsTypesLength];
@@ -3752,7 +3890,7 @@ public interface WindowManager extends ViewManager {
         /** {@hide} */
         public static final int MINIMAL_POST_PROCESSING_PREFERENCE_CHANGED = 1 << 28;
         /** {@hide} */
-        public static final int BACKGROUND_BLUR_RADIUS_CHANGED = 1 << 29;
+        public static final int BLUR_BEHIND_RADIUS_CHANGED = 1 << 29;
 
         // internal buffer to backup/restore parameters under compatibility mode.
         private int[] mCompatibilityParamsBackup = null;
@@ -3916,6 +4054,11 @@ public interface WindowManager extends ViewManager {
                 changes |= SURFACE_INSETS_CHANGED;
             }
 
+            if (receiveInsetsIgnoringZOrder != o.receiveInsetsIgnoringZOrder) {
+                receiveInsetsIgnoringZOrder = o.receiveInsetsIgnoringZOrder;
+                changes |= SURFACE_INSETS_CHANGED;
+            }
+
             if (preservePreviousSurfaceInsets != o.preservePreviousSurfaceInsets) {
                 preservePreviousSurfaceInsets = o.preservePreviousSurfaceInsets;
                 changes |= SURFACE_INSETS_CHANGED;
@@ -3943,9 +4086,9 @@ public interface WindowManager extends ViewManager {
                 changes |= MINIMAL_POST_PROCESSING_PREFERENCE_CHANGED;
             }
 
-            if (blurBehindRadius != o.blurBehindRadius) {
-                blurBehindRadius = o.blurBehindRadius;
-                changes |= BACKGROUND_BLUR_RADIUS_CHANGED;
+            if (mBlurBehindRadius != o.mBlurBehindRadius) {
+                mBlurBehindRadius = o.mBlurBehindRadius;
+                changes |= BLUR_BEHIND_RADIUS_CHANGED;
             }
 
             // This can't change, it's only set at window creation time.
@@ -4104,6 +4247,9 @@ public interface WindowManager extends ViewManager {
                     sb.append(" (!preservePreviousSurfaceInsets)");
                 }
             }
+            if (receiveInsetsIgnoringZOrder) {
+                sb.append(" receive insets ignoring z-order");
+            }
             if (mColorMode != COLOR_MODE_DEFAULT) {
                 sb.append(" colorMode=").append(ActivityInfo.colorModeToString(mColorMode));
             }
@@ -4111,9 +4257,9 @@ public interface WindowManager extends ViewManager {
                 sb.append(" preferMinimalPostProcessing=");
                 sb.append(preferMinimalPostProcessing);
             }
-            if (blurBehindRadius != 0) {
+            if (mBlurBehindRadius != 0) {
                 sb.append(" blurBehindRadius=");
-                sb.append(blurBehindRadius);
+                sb.append(mBlurBehindRadius);
             }
             sb.append(System.lineSeparator());
             sb.append(prefix).append("  fl=").append(

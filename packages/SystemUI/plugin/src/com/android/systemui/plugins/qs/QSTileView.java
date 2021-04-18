@@ -51,5 +51,7 @@ public abstract class QSTileView extends LinearLayout {
 
     public abstract int getDetailY();
 
-    public void setShowLabels(boolean show) {}
+    public View getLabelContainer() {
+        return null;
+    }
 }

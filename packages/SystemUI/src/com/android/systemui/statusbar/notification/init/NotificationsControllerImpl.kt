@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.notification.init
 
+import android.content.Context
 import android.service.notification.StatusBarNotification
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.people.widget.PeopleSpaceWidgetManager
@@ -58,6 +59,7 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class NotificationsControllerImpl @Inject constructor(
+    private val context: Context,
     private val featureFlags: FeatureFlags,
     private val notificationListener: NotificationListener,
     private val entryManager: NotificationEntryManager,
@@ -129,9 +131,7 @@ class NotificationsControllerImpl @Inject constructor(
             entryManager.attach(notificationListener)
         }
 
-        if (featureFlags.isPeopleTileEnabled) {
-            peopleSpaceWidgetManager.attach(notificationListener)
-        }
+        peopleSpaceWidgetManager.attach(notificationListener)
     }
 
     override fun dump(

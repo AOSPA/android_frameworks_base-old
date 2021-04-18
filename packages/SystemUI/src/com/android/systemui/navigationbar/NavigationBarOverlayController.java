@@ -41,6 +41,10 @@ public class NavigationBarOverlayController {
         return mContext;
     }
 
+    public boolean isNavigationBarOverlayEnabled() {
+        return false;
+    }
+
     /**
      * Initialize the controller with visibility change callback and light/dark icon color.
      */

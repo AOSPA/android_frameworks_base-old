@@ -148,7 +148,15 @@ public final class MediaRouter2Manager {
 
     /**
      * Starts scanning remote routes.
-     * @see #stopScan(String)
+     * <p>
+     * Route discovery can happen even when the {@link #startScan()} is not called.
+     * This is because the scanning could be started before by other apps.
+     * Therefore, calling this method after calling {@link #stopScan()} does not necessarily mean
+     * that the routes found before are removed and added again.
+     * <p>
+     * Use {@link Callback} to get the route related events.
+     * <p>
+     * @see #stopScan()
      */
     public void startScan() {
         Client client = getOrCreateClient();
@@ -163,7 +171,16 @@ public final class MediaRouter2Manager {
 
     /**
      * Stops scanning remote routes to reduce resource consumption.
-     * @see #startScan(String)
+     * <p>
+     * Route discovery can be continued even after this method is called.
+     * This is because the scanning is only turned off when all the apps stop scanning.
+     * Therefore, calling this method does not necessarily mean the routes are removed.
+     * Also, for the same reason it does not mean that {@link Callback#onRoutesAdded(List)}
+     * is not called afterwards.
+     * <p>
+     * Use {@link Callback} to get the route related events.
+     *
+     * @see #startScan()
      */
     public void stopScan() {
         Client client = getOrCreateClient();
@@ -234,6 +251,50 @@ public final class MediaRouter2Manager {
             }
         }
         return routes;
+    }
+
+    /**
+     * Returns the preferred features of the specified package name.
+     */
+    @NonNull
+    public List<String> getPreferredFeatures(@NonNull String packageName) {
+        Objects.requireNonNull(packageName, "packageName must not be null");
+
+        List<String> preferredFeatures = mPreferredFeaturesMap.get(packageName);
+        if (preferredFeatures == null) {
+            preferredFeatures = Collections.emptyList();
+        }
+        return preferredFeatures;
+    }
+
+    /**
+     * Returns a list of routes which are related to the given package name in the given route list.
+     */
+    @NonNull
+    public List<MediaRoute2Info> filterRoutesForPackage(@NonNull List<MediaRoute2Info> routes,
+            @NonNull String packageName) {
+        Objects.requireNonNull(routes, "routes must not be null");
+        Objects.requireNonNull(packageName, "packageName must not be null");
+
+        List<RoutingSessionInfo> sessions = getRoutingSessions(packageName);
+        RoutingSessionInfo sessionInfo = sessions.get(sessions.size() - 1);
+
+        List<MediaRoute2Info> result = new ArrayList<>();
+        List<String> preferredFeatures = mPreferredFeaturesMap.get(packageName);
+        if (preferredFeatures == null) {
+            preferredFeatures = Collections.emptyList();
+        }
+
+        synchronized (mRoutesLock) {
+            for (MediaRoute2Info route : routes) {
+                if (route.hasAnyFeatures(preferredFeatures)
+                        || sessionInfo.getSelectedRoutes().contains(route.getId())
+                        || sessionInfo.getTransferableRoutes().contains(route.getId())) {
+                    result.add(route);
+                }
+            }
+        }
+        return result;
     }
 
     /**
@@ -758,8 +819,8 @@ public final class MediaRouter2Manager {
      * Requests releasing a session.
      * <p>
      * If a session is released, any operation on the session will be ignored.
-     * {@link Callback#onTransferred(RoutingSessionInfo, RoutingSessionInfo)} with {@code null}
-     * session will be called when the session is released.
+     * {@link Callback#onSessionReleased(RoutingSessionInfo)} will be called
+     * when the session is released.
      * </p>
      *
      * @see Callback#onTransferred(RoutingSessionInfo, RoutingSessionInfo)
@@ -915,10 +976,10 @@ public final class MediaRouter2Manager {
          * Called when media is transferred.
          *
          * @param oldSession the previous session
-         * @param newSession the new session or {@code null} if the session is released.
+         * @param newSession the new session
          */
         default void onTransferred(@NonNull RoutingSessionInfo oldSession,
-                @Nullable RoutingSessionInfo newSession) { }
+                @NonNull RoutingSessionInfo newSession) { }
 
         /**
          * Called when {@link #transfer(RoutingSessionInfo, MediaRoute2Info)} fails.

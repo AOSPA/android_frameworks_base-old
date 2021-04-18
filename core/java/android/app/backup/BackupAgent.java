@@ -403,7 +403,7 @@ public abstract class BackupAgent extends ContextWrapper {
     public void onFullBackup(FullBackupDataOutput data) throws IOException {
         FullBackup.BackupScheme backupScheme = FullBackup.getBackupScheme(this,
                 mOperationType);
-        if (!isDeviceToDeviceMigration() && !backupScheme.isFullBackupContentEnabled()) {
+        if (!backupScheme.isFullBackupEnabled(data.getTransportFlags())) {
             return;
         }
 
@@ -564,10 +564,6 @@ public abstract class BackupAgent extends ContextWrapper {
     @VisibleForTesting
     public IncludeExcludeRules getIncludeExcludeRules(FullBackup.BackupScheme backupScheme)
             throws IOException, XmlPullParserException {
-        if (isDeviceToDeviceMigration()) {
-            return IncludeExcludeRules.emptyRules();
-        }
-
         Map<String, Set<PathWithRequiredFlags>> manifestIncludeMap;
         ArraySet<PathWithRequiredFlags> manifestExcludeSet;
 
@@ -915,7 +911,7 @@ public abstract class BackupAgent extends ContextWrapper {
         }
 
         FullBackup.BackupScheme bs = FullBackup.getBackupScheme(this, mOperationType);
-        if (!bs.isFullBackupContentEnabled()) {
+        if (!bs.isFullRestoreEnabled()) {
             if (Log.isLoggable(FullBackup.TAG_XML_PARSER, Log.VERBOSE)) {
                 Log.v(FullBackup.TAG_XML_PARSER,
                         "onRestoreFile \"" + destination.getCanonicalPath()

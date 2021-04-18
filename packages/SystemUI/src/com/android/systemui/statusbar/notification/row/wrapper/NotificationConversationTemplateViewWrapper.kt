@@ -132,20 +132,6 @@ class NotificationConversationTemplateViewWrapper constructor(
         )
     }
 
-    override fun setShelfIconVisible(visible: Boolean) {
-        if (conversationLayout.isImportantConversation) {
-            if (conversationIconView.visibility != View.GONE) {
-                conversationIconView.isForceHidden = visible
-                // We don't want the small icon to be hidden by the extended wrapper, as force
-                // hiding the conversationIcon will already do that via its listener.
-                return
-            }
-        } else {
-            conversationIconView.isForceHidden = false
-        }
-        super.setShelfIconVisible(visible)
-    }
-
     override fun getShelfTransformationTarget(): View? =
             if (conversationLayout.isImportantConversation)
                 if (conversationIconView.visibility != View.GONE)
@@ -161,8 +147,11 @@ class NotificationConversationTemplateViewWrapper constructor(
     override fun setRemoteInputVisible(visible: Boolean) =
             conversationLayout.showHistoricMessages(visible)
 
-    override fun updateExpandability(expandable: Boolean, onClickListener: View.OnClickListener?) =
-            conversationLayout.updateExpandability(expandable, onClickListener)
+    override fun updateExpandability(
+        expandable: Boolean,
+        onClickListener: View.OnClickListener,
+        requestLayout: Boolean
+    ) = conversationLayout.updateExpandability(expandable, onClickListener)
 
     override fun disallowSingleClick(x: Float, y: Float): Boolean {
         val isOnExpandButton = expandBtnContainer.visibility == View.VISIBLE &&

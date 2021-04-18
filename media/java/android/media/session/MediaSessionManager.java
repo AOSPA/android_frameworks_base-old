@@ -25,15 +25,16 @@ import android.annotation.SystemApi;
 import android.annotation.SystemService;
 import android.content.ComponentName;
 import android.content.Context;
-import android.content.pm.ParceledListSlice;
 import android.media.AudioManager;
 import android.media.IRemoteSessionCallback;
+import android.media.MediaCommunicationManager;
 import android.media.MediaFrameworkPlatformInitializer;
 import android.media.MediaSession2;
 import android.media.Session2Token;
 import android.media.VolumeProvider;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.HandlerExecutor;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.os.UserHandle;
@@ -83,6 +84,7 @@ public final class MediaSessionManager {
     public static final int RESULT_MEDIA_KEY_HANDLED = 1;
 
     private final ISessionManager mService;
+    private final MediaCommunicationManager mCommunicationManager;
     private final OnMediaKeyEventDispatchedListenerStub mOnMediaKeyEventDispatchedListenerStub =
             new OnMediaKeyEventDispatchedListenerStub();
     private final OnMediaKeyEventSessionChangedListenerStub
@@ -127,6 +129,8 @@ public final class MediaSessionManager {
                 .getMediaServiceManager()
                 .getMediaSessionServiceRegisterer()
                 .get());
+        mCommunicationManager = (MediaCommunicationManager) context
+                .getSystemService(Context.MEDIA_COMMUNICATION_SERVICE);
     }
 
     /**
@@ -163,17 +167,11 @@ public final class MediaSessionManager {
      * {@link MediaSession2.Builder} instead.
      *
      * @param token newly created session2 token
+     * @deprecated Don't use this method. A new media session is notified automatically.
      */
+    @Deprecated
     public void notifySession2Created(@NonNull Session2Token token) {
-        Objects.requireNonNull(token, "token shouldn't be null");
-        if (token.getType() != Session2Token.TYPE_SESSION) {
-            throw new IllegalArgumentException("token's type should be TYPE_SESSION");
-        }
-        try {
-            mService.notifySession2Created(token);
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-        }
+        // Does nothing
     }
 
     /**
@@ -194,6 +192,44 @@ public final class MediaSessionManager {
     public @NonNull List<MediaController> getActiveSessions(
             @Nullable ComponentName notificationListener) {
         return getActiveSessionsForUser(notificationListener, UserHandle.myUserId());
+    }
+
+    /**
+     * Gets the media key event session, which would receive a media key event unless specified.
+     * @return The media key event session, which would receive key events by default, unless
+     *          the caller has specified the target. Can be {@code null}.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
+    @Nullable
+    public MediaSession.Token getMediaKeyEventSession() {
+        try {
+            return mService.getMediaKeyEventSession();
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to get media key event session", ex);
+        }
+        return null;
+    }
+
+    /**
+     * Gets the package name of the media key event session.
+     * @return The package name of the media key event session or the last session's media button
+     *          receiver if the media key event session is {@code null}.
+     * @see #getMediaKeyEventSession()
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(value = android.Manifest.permission.MEDIA_CONTENT_CONTROL)
+    @NonNull
+    public String getMediaKeyEventSessionPackageName() {
+        try {
+            String packageName = mService.getMediaKeyEventSessionPackageName();
+            return (packageName != null) ? packageName : "";
+        } catch (RemoteException ex) {
+            Log.e(TAG, "Failed to get media key event session", ex);
+        }
+        return "";
     }
 
     /**
@@ -254,37 +290,7 @@ public final class MediaSessionManager {
      */
     @NonNull
     public List<Session2Token> getSession2Tokens() {
-        return getSession2Tokens(UserHandle.myUserId());
-    }
-
-    /**
-     * Gets a list of {@link Session2Token} with type {@link Session2Token#TYPE_SESSION} for the
-     * given user.
-     * <p>
-     * The calling application needs to hold the
-     * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permission in order to
-     * retrieve session tokens for user ids that do not belong to current process.
-     *
-     * @param userHandle The user handle to fetch sessions for.
-     * @return A list of {@link Session2Token}
-     * @hide
-     */
-    @NonNull
-    @SuppressLint("UserHandle")
-    public List<Session2Token> getSession2Tokens(@NonNull UserHandle userHandle) {
-        Objects.requireNonNull(userHandle, "userHandle shouldn't be null");
-        return getSession2Tokens(userHandle.getIdentifier());
-
-    }
-
-    private List<Session2Token> getSession2Tokens(int userId) {
-        try {
-            ParceledListSlice slice = mService.getSession2Tokens(userId);
-            return slice == null ? new ArrayList<>() : slice.getList();
-        } catch (RemoteException e) {
-            Log.e(TAG, "Failed to get session tokens", e);
-        }
-        return new ArrayList<>();
+        return mCommunicationManager.getSession2Tokens();
     }
 
     /**
@@ -321,7 +327,7 @@ public final class MediaSessionManager {
             @NonNull OnActiveSessionsChangedListener sessionListener,
             @Nullable ComponentName notificationListener, @Nullable Handler handler) {
         addOnActiveSessionsChangedListener(sessionListener, notificationListener,
-                UserHandle.myUserId(), handler);
+                UserHandle.myUserId(), handler == null ? null : new HandlerExecutor(handler));
     }
 
     /**
@@ -337,38 +343,40 @@ public final class MediaSessionManager {
      * {@link android.Manifest.permission#INTERACT_ACROSS_USERS_FULL} permission in order to
      * add listeners for user ids that do not belong to current process.
      *
-     * @param sessionListener The listener to add.
      * @param notificationListener The enabled notification listener component. May be null.
      * @param userHandle The user handle to listen for changes on.
-     * @param handler The handler to post updates on.
+     * @param executor The executor on which the listener should be invoked
+     * @param sessionListener The listener to add.
      * @hide
      */
-    @SuppressLint({"ExecutorRegistration", "SamShouldBeLast", "UserHandle"})
+    @SuppressLint("UserHandle")
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public void addOnActiveSessionsChangedListener(
-            @NonNull OnActiveSessionsChangedListener sessionListener,
-            @Nullable ComponentName notificationListener, @NonNull UserHandle userHandle,
-            @Nullable Handler handler) {
+            @Nullable ComponentName notificationListener,
+            @NonNull UserHandle userHandle, @NonNull Executor executor,
+            @NonNull OnActiveSessionsChangedListener sessionListener) {
         Objects.requireNonNull(userHandle, "userHandle shouldn't be null");
+        Objects.requireNonNull(executor, "executor shouldn't be null");
         addOnActiveSessionsChangedListener(sessionListener, notificationListener,
-                userHandle.getIdentifier(), handler);
+                userHandle.getIdentifier(), executor);
     }
 
     private void addOnActiveSessionsChangedListener(
             @NonNull OnActiveSessionsChangedListener sessionListener,
             @Nullable ComponentName notificationListener, int userId,
-            @Nullable Handler handler) {
+            @Nullable Executor executor) {
         Objects.requireNonNull(sessionListener, "sessionListener shouldn't be null");
-        if (handler == null) {
-            handler = new Handler();
+        if (executor == null) {
+            executor = new HandlerExecutor(new Handler());
         }
+
         synchronized (mLock) {
             if (mListeners.get(sessionListener) != null) {
                 Log.w(TAG, "Attempted to add session listener twice, ignoring.");
                 return;
             }
             SessionsChangedWrapper wrapper = new SessionsChangedWrapper(mContext, sessionListener,
-                    handler);
+                    executor);
             try {
                 mService.addSessionsListener(wrapper.mStub, notificationListener, userId);
                 mListeners.put(sessionListener, wrapper);
@@ -412,7 +420,8 @@ public final class MediaSessionManager {
      */
     public void addOnSession2TokensChangedListener(
             @NonNull OnSession2TokensChangedListener listener) {
-        addOnSession2TokensChangedListener(UserHandle.myUserId(), listener, new Handler());
+        addOnSession2TokensChangedListener(UserHandle.myUserId(), listener,
+                new HandlerExecutor(new Handler()));
     }
 
     /**
@@ -428,7 +437,9 @@ public final class MediaSessionManager {
      */
     public void addOnSession2TokensChangedListener(
             @NonNull OnSession2TokensChangedListener listener, @NonNull Handler handler) {
-        addOnSession2TokensChangedListener(UserHandle.myUserId(), listener, handler);
+        Objects.requireNonNull(handler, "handler shouldn't be null");
+        addOnSession2TokensChangedListener(UserHandle.myUserId(), listener,
+                new HandlerExecutor(handler));
     }
 
     /**
@@ -445,20 +456,19 @@ public final class MediaSessionManager {
      *
      * @param userHandle The userHandle to listen for changes on
      * @param listener The listener to add
-     * @param handler The handler to call listener on. If {@code null}, calling thread's looper will
-     *                be used.
+     * @param executor The executor on which the listener should be invoked
      * @hide
      */
     @SuppressLint("UserHandle")
     public void addOnSession2TokensChangedListener(@NonNull UserHandle userHandle,
-            @NonNull OnSession2TokensChangedListener listener, @NonNull Handler handler) {
+            @NonNull OnSession2TokensChangedListener listener, @NonNull Executor executor) {
         Objects.requireNonNull(userHandle, "userHandle shouldn't be null");
-        addOnSession2TokensChangedListener(userHandle.getIdentifier(), listener, handler);
+        Objects.requireNonNull(executor, "executor shouldn't be null");
+        addOnSession2TokensChangedListener(userHandle.getIdentifier(), listener, executor);
     }
 
     private void addOnSession2TokensChangedListener(int userId,
-            OnSession2TokensChangedListener listener, Handler handler) {
-        Objects.requireNonNull(handler, "handler shouldn't be null");
+            OnSession2TokensChangedListener listener, Executor executor) {
         Objects.requireNonNull(listener, "listener shouldn't be null");
         synchronized (mLock) {
             if (mSession2TokensListeners.get(listener) != null) {
@@ -466,7 +476,7 @@ public final class MediaSessionManager {
                 return;
             }
             Session2TokensChangedWrapper wrapper =
-                    new Session2TokensChangedWrapper(listener, handler);
+                    new Session2TokensChangedWrapper(listener, executor);
             try {
                 mService.addSession2TokensListener(wrapper.getStub(), userId);
                 mSession2TokensListeners.put(listener, wrapper);
@@ -529,8 +539,7 @@ public final class MediaSessionManager {
         }
         if (shouldRegisterCallback) {
             try {
-                mService.registerRemoteSessionCallback(
-                        mRemoteSessionCallbackStub);
+                mService.registerRemoteSessionCallback(mRemoteSessionCallbackStub);
             } catch (RemoteException e) {
                 Log.e(TAG, "Failed to register remote volume controller callback", e);
             }
@@ -564,17 +573,6 @@ public final class MediaSessionManager {
         } catch (RemoteException e) {
             Log.e(TAG, "Failed to unregister remote volume controller callback", e);
         }
-    }
-
-    /**
-     * Sends a media key event. The receiver will be selected automatically.
-     *
-     * @param keyEvent the key event to send
-     * @hide
-     */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
-    public void dispatchMediaKeyEvent(@NonNull KeyEvent keyEvent) {
-        dispatchMediaKeyEventInternal(keyEvent, /*asSystemService=*/false, /*needWakeLock=*/false);
     }
 
     /**
@@ -847,7 +845,7 @@ public final class MediaSessionManager {
     /**
      * Add a {@link OnMediaKeyEventDispatchedListener}.
      *
-     * @param executor The executor on which the callback should be invoked
+     * @param executor The executor on which the listener should be invoked
      * @param listener A {@link OnMediaKeyEventDispatchedListener}.
      * @hide
      */
@@ -896,9 +894,9 @@ public final class MediaSessionManager {
     }
 
     /**
-     * Add a {@link OnMediaKeyEventDispatchedListener}.
+     * Add a {@link OnMediaKeyEventSessionChangedListener}.
      *
-     * @param executor The executor on which the callback should be invoked
+     * @param executor The executor on which the listener should be invoked
      * @param listener A {@link OnMediaKeyEventSessionChangedListener}.
      * @hide
      */
@@ -1257,62 +1255,61 @@ public final class MediaSessionManager {
     private static final class SessionsChangedWrapper {
         private Context mContext;
         private OnActiveSessionsChangedListener mListener;
-        private Handler mHandler;
+        private Executor mExecutor;
 
         public SessionsChangedWrapper(Context context, OnActiveSessionsChangedListener listener,
-                Handler handler) {
+                Executor executor) {
             mContext = context;
             mListener = listener;
-            mHandler = handler;
+            mExecutor = executor;
         }
 
         private final IActiveSessionsListener.Stub mStub = new IActiveSessionsListener.Stub() {
             @Override
             public void onActiveSessionsChanged(final List<MediaSession.Token> tokens) {
-                final Handler handler = mHandler;
-                if (handler != null) {
-                    handler.post(new Runnable() {
-                        @Override
-                        public void run() {
-                            final Context context = mContext;
-                            if (context != null) {
-                                ArrayList<MediaController> controllers = new ArrayList<>();
-                                int size = tokens.size();
-                                for (int i = 0; i < size; i++) {
-                                    controllers.add(new MediaController(context, tokens.get(i)));
-                                }
-                                final OnActiveSessionsChangedListener listener = mListener;
-                                if (listener != null) {
-                                    listener.onActiveSessionsChanged(controllers);
-                                }
-                            }
-                        }
-                    });
+                if (mExecutor != null) {
+                    final Executor executor = mExecutor;
+                    executor.execute(() -> callOnActiveSessionsChangedListener(tokens));
                 }
             }
         };
 
+        private void callOnActiveSessionsChangedListener(final List<MediaSession.Token> tokens) {
+            final Context context = mContext;
+            if (context != null) {
+                ArrayList<MediaController> controllers = new ArrayList<>();
+                int size = tokens.size();
+                for (int i = 0; i < size; i++) {
+                    controllers.add(new MediaController(context, tokens.get(i)));
+                }
+                final OnActiveSessionsChangedListener listener = mListener;
+                if (listener != null) {
+                    listener.onActiveSessionsChanged(controllers);
+                }
+            }
+        }
+
         private void release() {
             mListener = null;
             mContext = null;
-            mHandler = null;
+            mExecutor = null;
         }
     }
 
     private static final class Session2TokensChangedWrapper {
         private final OnSession2TokensChangedListener mListener;
-        private final Handler mHandler;
+        private final Executor mExecutor;
         private final ISession2TokensListener.Stub mStub =
                 new ISession2TokensListener.Stub() {
                     @Override
                     public void onSession2TokensChanged(final List<Session2Token> tokens) {
-                        mHandler.post(() -> mListener.onSession2TokensChanged(tokens));
+                        mExecutor.execute(() -> mListener.onSession2TokensChanged(tokens));
                     }
                 };
 
-        Session2TokensChangedWrapper(OnSession2TokensChangedListener listener, Handler handler) {
+        Session2TokensChangedWrapper(OnSession2TokensChangedListener listener, Executor executor) {
             mListener = listener;
-            mHandler = (handler == null) ? new Handler() : new Handler(handler.getLooper());
+            mExecutor = executor;
         }
 
         public ISession2TokensListener.Stub getStub() {

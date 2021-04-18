@@ -16,29 +16,16 @@
 
 package com.android.server.wm.flicker.rotation
 
-import android.os.Bundle
+import android.platform.test.annotations.Presubmit
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerTestRunner
-import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.FlickerTestParameter
+import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.endRotation
-import com.android.server.wm.flicker.focusDoesNotChange
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
-import com.android.server.wm.flicker.helpers.StandardAppHelper
-import com.android.server.wm.flicker.helpers.WindowUtils
-import com.android.server.wm.flicker.helpers.buildTestTag
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerRotatesAndScales
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.noUncoveredRegions
-import com.android.server.wm.flicker.startRotation
-import com.android.server.wm.flicker.visibleLayersShownMoreThanOneConsecutiveEntry
-import com.android.server.wm.flicker.visibleWindowsShownMoreThanOneConsecutiveEntry
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -49,78 +36,48 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
+@Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class ChangeAppRotationTest(
-    testSpec: FlickerTestRunnerFactory.TestSpec
-) : FlickerTestRunner(testSpec) {
-    companion object : RotationTransition(InstrumentationRegistry.getInstrumentation()) {
-        override val testApp: StandardAppHelper
-            get() = SimpleAppHelper(instrumentation)
-
-        override fun getAppLaunchParams(configuration: Bundle): Map<String, String> = emptyMap()
-
-        private const val SCREENSHOT_LAYER = "RotationLayer"
-
-        @Parameterized.Parameters(name = "{0}1}")
-        @JvmStatic
-        fun getParams(): Collection<Array<Any>> {
-            val testSpec: FlickerBuilder.(Bundle) -> Unit = { configuration ->
-                withTestName { buildTestTag(configuration) }
-                assertions {
-                    presubmit {
-                        windowManagerTrace {
-                            navBarWindowIsAlwaysVisible()
-                            statusBarWindowIsAlwaysVisible()
-                            visibleWindowsShownMoreThanOneConsecutiveEntry()
-                        }
-
-                        layersTrace {
-                            noUncoveredRegions(configuration.startRotation,
-                                configuration.endRotation, allStates = false)
-
-                            all("screenshotLayerBecomesInvisible") {
-                                this.showsLayer(testApp.getPackage())
-                                    .then()
-                                    .showsLayer(SCREENSHOT_LAYER)
-                                    .then()
-                                    .showsLayer(testApp.getPackage())
-                            }
-                        }
-                    }
-
-                    flaky {
-                        layersTrace {
-                            navBarLayerIsAlwaysVisible(bugId = 140855415)
-                            statusBarLayerIsAlwaysVisible(bugId = 140855415)
-                            navBarLayerRotatesAndScales(configuration.startRotation,
-                                configuration.endRotation, bugId = 140855415)
-                            statusBarLayerRotatesScales(configuration.startRotation,
-                                configuration.endRotation, bugId = 140855415)
-                            visibleLayersShownMoreThanOneConsecutiveEntry(bugId = 140855415)
-
-                            val startingPos = WindowUtils.getDisplayBounds(
-                                configuration.startRotation)
-                            val endingPos = WindowUtils.getDisplayBounds(
-                                configuration.endRotation)
-
-                            start("appLayerRotates_StartingPos", bugId = 140855415) {
-                                this.hasVisibleRegion(testApp.getPackage(), startingPos)
-                            }
-
-                            end("appLayerRotates_EndingPos", bugId = 140855415) {
-                                this.hasVisibleRegion(testApp.getPackage(), endingPos)
-                            }
-                        }
-
-                        eventLog {
-                            focusDoesNotChange(bugId = 151179149)
-                        }
-                    }
+    testSpec: FlickerTestParameter
+) : RotationTransition(testSpec) {
+    override val testApp = SimpleAppHelper(instrumentation)
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = {
+            super.transition(this, it)
+            setup {
+                test {
+                    testApp.launchViaIntent(wmHelper)
                 }
             }
+        }
 
-            return FlickerTestRunnerFactory.getInstance()
-                .buildRotationTest(instrumentation, transition, testSpec, repetitions = 5)
+    @FlakyTest(bugId = 151179149)
+    @Test
+    override fun focusDoesNotChange() {
+        super.focusDoesNotChange()
+    }
+
+    @Presubmit
+    @Test
+    fun screenshotLayerBecomesInvisible() {
+        testSpec.assertLayers {
+            this.isVisible(testApp.getPackage())
+                .then()
+                .isVisible(SCREENSHOT_LAYER)
+                .then()
+                .isVisible(testApp.getPackage())
+        }
+    }
+
+    companion object {
+        private const val SCREENSHOT_LAYER = "RotationLayer"
+
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): Collection<FlickerTestParameter> {
+            return FlickerTestParameterFactory.getInstance()
+                .getConfigRotationTests(repetitions = 5)
         }
     }
 }

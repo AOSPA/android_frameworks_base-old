@@ -16,10 +16,10 @@
 
 package com.android.server.timezonedetector;
 
-import static android.app.time.TimeZoneCapabilities.CAPABILITY_NOT_ALLOWED;
-import static android.app.time.TimeZoneCapabilities.CAPABILITY_NOT_APPLICABLE;
-import static android.app.time.TimeZoneCapabilities.CAPABILITY_NOT_SUPPORTED;
-import static android.app.time.TimeZoneCapabilities.CAPABILITY_POSSESSED;
+import static android.app.time.Capabilities.CAPABILITY_NOT_ALLOWED;
+import static android.app.time.Capabilities.CAPABILITY_NOT_APPLICABLE;
+import static android.app.time.Capabilities.CAPABILITY_NOT_SUPPORTED;
+import static android.app.time.Capabilities.CAPABILITY_POSSESSED;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -46,8 +46,8 @@ public class ConfigurationInternalTest {
     public void test_unrestricted() {
         ConfigurationInternal baseConfig = new ConfigurationInternal.Builder(ARBITRARY_USER_ID)
                 .setUserConfigAllowed(true)
-                .setAutoDetectionSupported(true)
-                .setGeoDetectionSupported(true)
+                .setTelephonyDetectionFeatureSupported(true)
+                .setGeoDetectionFeatureSupported(true)
                 .setAutoDetectionEnabled(true)
                 .setLocationEnabled(true)
                 .setGeoDetectionEnabled(true)
@@ -108,8 +108,8 @@ public class ConfigurationInternalTest {
     public void test_restricted() {
         ConfigurationInternal baseConfig = new ConfigurationInternal.Builder(ARBITRARY_USER_ID)
                 .setUserConfigAllowed(false)
-                .setAutoDetectionSupported(true)
-                .setGeoDetectionSupported(true)
+                .setTelephonyDetectionFeatureSupported(true)
+                .setGeoDetectionFeatureSupported(true)
                 .setAutoDetectionEnabled(true)
                 .setLocationEnabled(true)
                 .setGeoDetectionEnabled(true)
@@ -170,8 +170,8 @@ public class ConfigurationInternalTest {
     public void test_autoDetectNotSupported() {
         ConfigurationInternal baseConfig = new ConfigurationInternal.Builder(ARBITRARY_USER_ID)
                 .setUserConfigAllowed(true)
-                .setAutoDetectionSupported(false)
-                .setGeoDetectionSupported(false)
+                .setTelephonyDetectionFeatureSupported(false)
+                .setGeoDetectionFeatureSupported(false)
                 .setAutoDetectionEnabled(true)
                 .setLocationEnabled(true)
                 .setGeoDetectionEnabled(true)
@@ -232,8 +232,8 @@ public class ConfigurationInternalTest {
     public void test_geoDetectNotSupported() {
         ConfigurationInternal baseConfig = new ConfigurationInternal.Builder(ARBITRARY_USER_ID)
                 .setUserConfigAllowed(true)
-                .setAutoDetectionSupported(true)
-                .setGeoDetectionSupported(false)
+                .setTelephonyDetectionFeatureSupported(true)
+                .setGeoDetectionFeatureSupported(false)
                 .setAutoDetectionEnabled(true)
                 .setLocationEnabled(true)
                 .setGeoDetectionEnabled(true)

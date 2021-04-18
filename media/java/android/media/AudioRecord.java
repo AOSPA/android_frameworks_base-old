@@ -16,6 +16,8 @@
 
 package android.media;
 
+import static android.media.permission.PermissionUtil.myIdentity;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.FloatRange;
 import android.annotation.IntDef;
@@ -26,9 +28,12 @@ import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.Context;
 import android.media.MediaRecorder.Source;
 import android.media.audiopolicy.AudioMix;
 import android.media.audiopolicy.AudioPolicy;
+import android.media.metrics.LogSessionId;
+import android.media.permission.Identity;
 import android.media.projection.MediaProjection;
 import android.os.Binder;
 import android.os.Build;
@@ -54,6 +59,7 @@ import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Iterator;
 import java.util.List;
+import java.util.Objects;
 import java.util.concurrent.Executor;
 
 /**
@@ -275,6 +281,12 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
     private AudioAttributes mAudioAttributes;
     private boolean mIsSubmixFullVolume = false;
 
+    /**
+     * The log session id used for metrics.
+     * {@link LogSessionId#LOG_SESSION_ID_NONE} here means it is not set.
+     */
+    @NonNull private LogSessionId mLogSessionId = LogSessionId.LOG_SESSION_ID_NONE;
+
     //---------------------------------------------------------
     // Constructor, Finalize
     //--------------------
@@ -346,6 +358,32 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
     @RequiresPermission(android.Manifest.permission.RECORD_AUDIO)
     public AudioRecord(AudioAttributes attributes, AudioFormat format, int bufferSizeInBytes,
             int sessionId) throws IllegalArgumentException {
+        this(attributes, format, bufferSizeInBytes, sessionId, ActivityThread.currentApplication());
+    }
+
+    /**
+     * @hide
+     * Class constructor with {@link AudioAttributes} and {@link AudioFormat}.
+     * @param attributes a non-null {@link AudioAttributes} instance. Use
+     *     {@link AudioAttributes.Builder#setCapturePreset(int)} for configuring the audio
+     *     source for this instance.
+     * @param format a non-null {@link AudioFormat} instance describing the format of the data
+     *     that will be recorded through this AudioRecord. See {@link AudioFormat.Builder} for
+     *     configuring the audio format parameters such as encoding, channel mask and sample rate.
+     * @param bufferSizeInBytes the total size (in bytes) of the buffer where audio data is written
+     *   to during the recording. New audio data can be read from this buffer in smaller chunks
+     *   than this size. See {@link #getMinBufferSize(int, int, int)} to determine the minimum
+     *   required buffer size for the successful creation of an AudioRecord instance. Using values
+     *   smaller than getMinBufferSize() will result in an initialization failure.
+     * @param sessionId ID of audio session the AudioRecord must be attached to, or
+     *   {@link AudioManager#AUDIO_SESSION_ID_GENERATE} if the session isn't known at construction
+     *   time. See also {@link AudioManager#generateAudioSessionId()} to obtain a session ID before
+     *   construction.
+     * @param context An optional context to pull an attribution tag from.
+     * @throws IllegalArgumentException
+     */
+    private AudioRecord(AudioAttributes attributes, AudioFormat format, int bufferSizeInBytes,
+            int sessionId, @Nullable Context context) throws IllegalArgumentException {
         mRecordingState = RECORDSTATE_STOPPED;
 
         if (attributes == null) {
@@ -408,15 +446,21 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
 
         audioBuffSizeCheck(bufferSizeInBytes);
 
+        Identity identity = myIdentity(context);
+        if (identity.packageName == null) {
+            // Command line utility
+            identity.packageName = "uid:" + Binder.getCallingUid();
+        }
+
         int[] sampleRate = new int[] {mSampleRate};
         int[] session = new int[1];
         session[0] = sessionId;
         //TODO: update native initialization when information about hardware init failure
         //      due to capture device already open is available.
-        int initResult = native_setup( new WeakReference<AudioRecord>(this),
+        int initResult = native_setup(new WeakReference<AudioRecord>(this),
                 mAudioAttributes, sampleRate, mChannelMask, mChannelIndexMask,
                 mAudioFormat, mNativeBufferSizeInBytes,
-                session, getCurrentOpPackageName(), 0 /*nativeRecordInJavaObj*/);
+                session, identity, 0 /*nativeRecordInJavaObj*/);
         if (initResult != SUCCESS) {
             loge("Error code "+initResult+" when initializing native AudioRecord object.");
             return; // with mState == STATE_UNINITIALIZED
@@ -426,15 +470,6 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
         mSessionId = session[0];
 
         mState = STATE_INITIALIZED;
-    }
-
-    private String getCurrentOpPackageName() {
-        String opPackageName = ActivityThread.currentOpPackageName();
-        if (opPackageName != null) {
-            return opPackageName;
-        }
-        // Command line utility
-        return "uid:" + Binder.getCallingUid();
     }
 
     /**
@@ -486,7 +521,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
                     0 /*mAudioFormat*/,
                     0 /*mNativeBufferSizeInBytes*/,
                     session,
-                    ActivityThread.currentOpPackageName(),
+                    myIdentity(null),
                     nativeRecordInJavaObj);
             if (initResult != SUCCESS) {
                 loge("Error code "+initResult+" when initializing native AudioRecord object.");
@@ -542,6 +577,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
         private AudioPlaybackCaptureConfiguration mAudioPlaybackCaptureConfiguration;
         private AudioAttributes mAttributes;
         private AudioFormat mFormat;
+        private Context mContext;
         private int mBufferSizeInBytes;
         private int mSessionId = AudioManager.AUDIO_SESSION_ID_GENERATE;
         private int mPrivacySensitive = PRIVACY_SENSITIVE_DEFAULT;
@@ -573,6 +609,20 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
             mAttributes = new AudioAttributes.Builder()
                     .setInternalCapturePreset(source)
                     .build();
+            return this;
+        }
+
+        /**
+         * Sets the context the record belongs to. This context will be used to pull information,
+         * such as attribution tags, which will be associated with the AudioRecord. However, the
+         * context itself will not be retained by the AudioRecord.
+         * @param context a non-null {@link Context} instance
+         * @return the same Builder instance.
+         */
+        public @NonNull Builder setContext(@NonNull Context context) {
+            Objects.requireNonNull(context);
+            // keep reference, we only copy the data when building
+            mContext = context;
             return this;
         }
 
@@ -787,7 +837,7 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
                             * mFormat.getBytesPerSample(mFormat.getEncoding());
                 }
                 final AudioRecord record = new AudioRecord(
-                        mAttributes, mFormat, mBufferSizeInBytes, mSessionId);
+                        mAttributes, mFormat, mBufferSizeInBytes, mSessionId, mContext);
                 if (record.getState() == STATE_UNINITIALIZED) {
                     // release is not necessary
                     throw new UnsupportedOperationException("Cannot create AudioRecord");
@@ -1924,6 +1974,35 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
         return native_set_preferred_microphone_field_dimension(zoom) == AudioSystem.SUCCESS;
     }
 
+    /**
+     * Sets a {@link LogSessionId} instance to this AudioRecord for metrics collection.
+     *
+     * @param logSessionId a {@link LogSessionId} instance which is used to
+     *        identify this object to the metrics service. Proper generated
+     *        Ids must be obtained from the Java metrics service and should
+     *        be considered opaque. Use
+     *        {@link LogSessionId#LOG_SESSION_ID_NONE} to remove the
+     *        logSessionId association.
+     * @throws IllegalStateException if AudioRecord not initialized.
+     */
+    public void setLogSessionId(@NonNull LogSessionId logSessionId) {
+        Objects.requireNonNull(logSessionId);
+        if (mState == STATE_UNINITIALIZED) {
+            throw new IllegalStateException("AudioRecord not initialized");
+        }
+        String stringId = logSessionId.getStringId();
+        native_setLogSessionId(stringId);
+        mLogSessionId = logSessionId;
+    }
+
+    /**
+     * Returns the {@link LogSessionId}.
+     */
+    @NonNull
+    public LogSessionId getLogSessionId() {
+        return mLogSessionId;
+    }
+
     //---------------------------------------------------------
     // Interface definitions
     //--------------------
@@ -2021,15 +2100,32 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
     // Native methods called from the Java side
     //--------------------
 
-    @UnsupportedAppUsage
-    private native final int native_setup(Object audiorecord_this,
+    /**
+     * @deprecated Use native_setup that takes an Identity object
+     * @return
+     */
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R,
+            publicAlternatives = "{@code AudioRecord.Builder}")
+    @Deprecated
+    private int native_setup(Object audiorecordThis,
             Object /*AudioAttributes*/ attributes,
             int[] sampleRate, int channelMask, int channelIndexMask, int audioFormat,
             int buffSizeInBytes, int[] sessionId, String opPackageName,
-            long nativeRecordInJavaObj);
+            long nativeRecordInJavaObj) {
+        Identity identity = myIdentity(null);
+        identity.packageName = opPackageName;
+
+        return native_setup(audiorecordThis, attributes, sampleRate, channelMask, channelIndexMask,
+                audioFormat, buffSizeInBytes, sessionId, identity, nativeRecordInJavaObj);
+    }
+
+    private native int native_setup(Object audiorecordThis,
+            Object /*AudioAttributes*/ attributes,
+            int[] sampleRate, int channelMask, int channelIndexMask, int audioFormat,
+            int buffSizeInBytes, int[] sessionId, Identity identity, long nativeRecordInJavaObj);
 
     // TODO remove: implementation calls directly into implementation of native_release()
-    private native final void native_finalize();
+    private native void native_finalize();
 
     /**
      * @hide
@@ -2082,6 +2178,8 @@ public class AudioRecord implements AudioRouting, MicrophoneDirection,
 
     private native int native_set_preferred_microphone_direction(int direction);
     private native int native_set_preferred_microphone_field_dimension(float zoom);
+
+    private native void native_setLogSessionId(@Nullable String logSessionId);
 
     //---------------------------------------------------------
     // Utility methods

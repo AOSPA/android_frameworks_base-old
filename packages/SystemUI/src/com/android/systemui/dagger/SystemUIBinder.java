@@ -27,8 +27,8 @@ import com.android.systemui.globalactions.GlobalActionsComponent;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.keyguard.dagger.KeyguardModule;
 import com.android.systemui.media.systemsounds.HomeSoundEffectController;
-import com.android.systemui.people.widget.PeopleSpaceWidgetEnabler;
 import com.android.systemui.power.PowerUI;
+import com.android.systemui.privacy.television.TvOngoingPrivacyChip;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.recents.RecentsModule;
 import com.android.systemui.shortcut.ShortcutKeyDispatcher;
@@ -155,6 +155,12 @@ public abstract class SystemUIBinder {
     @ClassKey(TvNotificationPanel.class)
     public abstract SystemUI bindsTvNotificationPanel(TvNotificationPanel sysui);
 
+    /** Inject into TvOngoingPrivacyChip. */
+    @Binds
+    @IntoMap
+    @ClassKey(TvOngoingPrivacyChip.class)
+    public abstract SystemUI bindsTvOngoingPrivacyChip(TvOngoingPrivacyChip sysui);
+
     /** Inject into VolumeUI. */
     @Binds
     @IntoMap
@@ -178,10 +184,4 @@ public abstract class SystemUIBinder {
     @IntoMap
     @ClassKey(HomeSoundEffectController.class)
     public abstract SystemUI bindHomeSoundEffectController(HomeSoundEffectController sysui);
-
-    /** Inject into PeopleSpaceWidgetEnabler. */
-    @Binds
-    @IntoMap
-    @ClassKey(PeopleSpaceWidgetEnabler.class)
-    public abstract SystemUI bindPeopleSpaceWidgetEnabler(PeopleSpaceWidgetEnabler sysui);
 }

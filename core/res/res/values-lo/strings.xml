@@ -204,6 +204,7 @@
     <string name="twilight_service" msgid="8964898045693187224">"ບໍລິການ Twilight"</string>
     <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"ຕົວກວດຫາເຂດເວລາ (ບໍ່ມີການເຊື່ອມຕໍ່)"</string>
     <string name="gnss_time_update_service" msgid="9039489496037616095">"ບໍລິການອັບເດດເວລາ GNSS"</string>
+    <string name="music_recognition_manager_service" msgid="7481956037950276359">"ບໍລິການຕົວຈັດການການຈຳແນກເພງ"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"ອຸ​ປະ​ກອນ​ຂອງ​ທ່ານ​ຈະ​ຖືກ​ລຶບ"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"ບໍ່ສາມາດໃຊ້ແອັບຜູ້ເບິ່ງແຍງລະບົບໄດ້. ອຸປະກອນຂອງທ່ານຈະຖືກລຶບຂໍ້ມູນໃນຕອນນີ້.\n\nຫາກທ່ານມີຄຳຖາມ, ໃຫ້ຕິດຕໍ່ຜູ້ເບິ່ງແຍງລະບົບອົງກອນຂອງທ່ານ."</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"ການພິມຖືກປິດໄວ້ໂດຍ <xliff:g id="OWNER_APP">%s</xliff:g>."</string>
@@ -293,6 +294,7 @@
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"ແອັບກຳລັງເຮັດວຽກ"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"ແອັບທີ່ກຳລັງໃຊ້ແບັດເຕີຣີ"</string>
     <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"ການຂະຫຍາຍ"</string>
+    <string name="notification_channel_accessibility_security_policy" msgid="3350443906017624270">"ນະໂຍບາຍຄວາມປອດໄພການຊ່ວຍເຂົ້າເຖິງ"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> ກຳລັງໃຊ້ແບັດເຕີຣີຢູ່"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> ແອັບກຳລັງໃຊ້ແບັດເຕີຣີຢູ່"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"ແຕະເພື່ອເບິ່ງລາຍລະອຽດການນຳໃຊ້ແບັດເຕີຣີ ແລະ ອິນເຕີເນັດ"</string>
@@ -343,6 +345,8 @@
     <string name="permdesc_statusBarService" msgid="6652917399085712557">"ອະນຸຍາດໃຫ້ແອັບຯເປັນແຖບສະຖານະ."</string>
     <string name="permlab_expandStatusBar" msgid="1184232794782141698">"ຫຍໍ້/ຂະຫຍາຍ ແຖບສະຖານະ"</string>
     <string name="permdesc_expandStatusBar" msgid="7180756900448498536">"ອະນຸຍາດໃຫ້ແອັບຯ ຂະຫຍາຍ ຫຼືຫຍໍ້ແຖບສະຖານະ."</string>
+    <string name="permlab_fullScreenIntent" msgid="4310888199502509104">"ສະແດງການແຈ້ງເຕືອນເປັນການເຄື່ອນໄຫວແບບເຕັມຈໍຢູ່ອຸປະກອນທີ່ລັອກໄວ້"</string>
+    <string name="permdesc_fullScreenIntent" msgid="1100721419406643997">"ອະນຸຍາດໃຫ້ແອັບສະແດງການແຈ້ງເຕືອນເປັນການເຄື່ອນໄຫວແບບເຕັມຈໍຢູ່ອຸປະກອນທີ່ລັອກໄວ້"</string>
     <string name="permlab_install_shortcut" msgid="7451554307502256221">"ຕິດຕັ້ງທາງລັດ"</string>
     <string name="permdesc_install_shortcut" msgid="4476328467240212503">"ອະນຸຍາດໃຫ້ແອັບພລິເຄຊັນເພີ່ມທາງລັດໄດ້ ໂດຍບໍ່ຕ້ອງຮັບການຢືນຢັນຈາກຜູ່ໃຊ້."</string>
     <string name="permlab_uninstall_shortcut" msgid="295263654781900390">"ຖອນທາງລັດ"</string>
@@ -550,13 +554,19 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"ອະນຸຍາດໃຫ້ແອັບແກ້ໄຂຄໍເລັກຊັນຮູບຂອງທ່ານ."</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"ອ່ານສະຖານທີ່ຈາກຄໍເລັກຊັນມີເດຍຂອງທ່ານ"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"ອະນຸຍາດໃຫ້ແອັບອ່ານສະຖານທີ່ຈາກຄໍເລັກຊັນມີເດຍຂອງທ່ານ."</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"ໃຊ້ລະບົບຊີວະມິຕິ"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"ໃຊ້ລະບົບຊີວະມິຕິ ຫຼື ການລັອກໜ້າຈໍ"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"ຢັ້ງຢືນວ່າແມ່ນທ່ານ"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"ໃຊ້ລະບົບຊີວະມິຕິຂອງທ່ານເພື່ອດຳເນີນການຕໍ່"</string>
+    <string name="biometric_or_screen_lock_dialog_default_subtitle" msgid="159539678371552009">"ໃຊ້ລະບົບຊີວະມິຕິ ຫຼື ການລັອກໜ້າຈໍຂອງທ່ານເພື່ອດຳເນີນການຕໍ່"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"ຮາດແວຊີວະມິຕິບໍ່ສາມາດໃຊ້ໄດ້"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"ຍົກເລີກການຮັບຮອງຄວາມຖືກຕ້ອງແລ້ວ"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"ບໍ່ຮັບຮູ້"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"ຍົກເລີກການຮັບຮອງຄວາມຖືກຕ້ອງແລ້ວ"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"ບໍ່ໄດ້ຕັ້ງ PIN, ຮູບແບບປົດລັອກ ຫຼື ລະຫັດຜ່ານ"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"ເກີດຄວາມຜິດພາດໃນການພິສູດຢືນຢັນ"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"ໃຊ້ການລັອກໜ້າຈໍ"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"ລະບຸຂໍ້ມູນການເຂົ້າສູ່ລະບົບອຸປະກອນຂອງທ່ານເພື່ອດຳເນີນການຕໍ່"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"ກວດ​ພົບ​ລາຍ​ນີ້ວ​ມື​ບາງ​ສ່ວນ​ແລ້ວ. ກະ​ລຸ​ນາ​ລອງ​ໃໝ່​ອີກ."</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"ບໍ່​ສາ​ມາດ​ດຳ​ເນີນ​ການ​ລາຍ​ນີ້ວ​ມື​ໄດ້. ກະ​ລຸ​ນາ​ລອງ​ໃໝ່​ອີກ."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"ເຊັນ​ເຊີ​ລາຍ​ນີ້ວ​ມື​ເປື້ອນ. ກະ​ລຸ​ນາ​ທຳ​ຄວາມ​ສະ​ອາດ ແລະ​ລອງ​ໃໝ່​ອີກ."</string>
@@ -579,7 +589,10 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"ອຸປະກອນນີ້ບໍ່ມີເຊັນເຊີລາຍນິ້ວມື."</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"ປິດການເຮັດວຽກຂອງເຊັນເຊີໄວ້ຊົ່ວຄາວແລ້ວ."</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"ນີ້ວ​ມື <xliff:g id="FINGERID">%d</xliff:g>"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"ໃຊ້ລາຍນິ້ວມື"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"ໃຊ້ລາຍນິ້ວມື ຫຼື ການລັອກໜ້າຈໍ"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"ໃຊ້​ລາຍ​ນີ້ວ​ມື​ຂອງ​ທ່ານ​ເພື່ອ​ສືບ​ຕໍ່"</string>
+    <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"ໃຊ້ລາຍນິ້ວມື ຫຼື ການລັອກໜ້າຈໍຂອງທ່ານເພື່ອດຳເນີນການຕໍ່"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"ໄອຄອນລາຍນິ້ວມື"</string>
@@ -606,7 +619,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"ບໍ່ສາມາດຈຳແນກໃບໜ້າໄດ້ອີກຕໍ່ໄປ. ກະລຸນາລອງໃໝ່."</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"ຄ້າຍກັນເກີນໄປ, ກະລຸນາປ່ຽນທ່າຂອງທ່ານ."</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"ອຽງຫົວຂອງທ່ານໜ້ອຍໜຶ່ງ."</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"ອຽງຫົວຂອງທ່ານໜ້ອຍໜຶ່ງ."</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"ປັບມຸມໜ້າຂອງທ່ານໃຫ້ຕັ້ງຊື່."</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"ອຽງຫົວຂອງທ່ານໜ້ອຍໜຶ່ງ."</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"ນຳສິ່ງທີ່ກີດຂວາງໃບໜ້າທ່ານອອກ."</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"ທຳຄວາມສະອາດສ່ວນເທິງສຸດຂອງໜ້າຈໍທ່ານ, ຮວມທັງແຖບດຳນຳ"</string>
@@ -624,6 +637,10 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"ບໍ່ຮອງຮັບການປົດລັອກດ້ວຍໜ້າຢູ່ອຸປະກອນນີ້."</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"ປິດການເຮັດວຽກຂອງເຊັນເຊີໄວ້ຊົ່ວຄາວແລ້ວ."</string>
     <string name="face_name_template" msgid="3877037340223318119">"ໃບໜ້າ <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"ໃຊ້ການປົດລັອກດ້ວຍໜ້າ"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"ໃຊ້ໃບໜ້າ ຫຼື ການລັອກໜ້າຈໍ"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"ໃຊ້ການປົດລັອກດ້ວຍໜ້າເພື່ອດຳເນີນການຕໍ່"</string>
+    <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"ໃຊ້ໃບໜ້າ ຫຼື ການລັອກໜ້າຈໍຂອງທ່ານເພື່ອດຳເນີນການຕໍ່"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"ໄອຄອນໃບໜ້າ"</string>
@@ -987,6 +1004,8 @@
     <string name="open_permission_deny" msgid="5136793905306987251">"ທ່ານບໍ່ໄດ້ຮັບອະນຸຍາດໃຫ້ເປີດໜ້ານີ້."</string>
     <string name="text_copied" msgid="2531420577879738860">"ສຳເນົາຂໍ້ຄວາມໃສ່ຄລິບບອດແລ້ວ."</string>
     <string name="copied" msgid="4675902854553014676">"ສຳເນົາແລ້ວ"</string>
+    <string name="pasted_from_app" msgid="5627698450808256545">"ວາງ <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> ຈາກ <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g> ແລ້ວ"</string>
+    <string name="pasted_from_clipboard" msgid="6295556725844421812">"ວາງ <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> ຈາກຄລິບບອດແລ້ວ"</string>
     <string name="more_item_label" msgid="7419249600215749115">"ເພີ່ມເຕີມ"</string>
     <string name="prepend_shortcut_label" msgid="1743716737502867951">"ເມນູ+"</string>
     <string name="menu_meta_shortcut_label" msgid="1623390163674762478">"Meta+"</string>
@@ -1360,11 +1379,14 @@
     <string name="alert_windows_notification_turn_off_action" msgid="7805857234839123780">"ປິດ"</string>
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"ກຳລັງກວດສອບ <xliff:g id="NAME">%s</xliff:g>…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"ກຳລັງຕໍ່ອາຍຸເນື້ອຫາປັດຈຸບັນ"</string>
+    <string name="ext_media_checking_notification_message" product="tv" msgid="7986154434946021415">"ກຳລັງວິເຄາະບ່ອນຈັດເກັບຂໍ້ມູນມີເດຍ"</string>
     <string name="ext_media_new_notification_title" msgid="3517407571407687677">"<xliff:g id="NAME">%s</xliff:g> ໃໝ່"</string>
     <string name="ext_media_new_notification_title" product="automotive" msgid="9085349544984742727">"<xliff:g id="NAME">%s</xliff:g> ບໍ່ເຮັດວຽກ"</string>
     <string name="ext_media_new_notification_message" msgid="6095403121990786986">"ແຕະເພື່ອຕັ້ງຄ່າ"</string>
+    <string name="ext_media_new_notification_message" product="tv" msgid="216863352100263668">"ເລືອກເພື່ອຕັ້ງຄ່າ"</string>
     <string name="ext_media_new_notification_message" product="automotive" msgid="5140127881613227162">"ທ່ານຈະຕ້ອງຟໍແມັດອຸປະກອນຄືນໃໝ່. ແຕະເພື່ອຖອດອອກ."</string>
     <string name="ext_media_ready_notification_message" msgid="777258143284919261">"ສຳ​ລັບ​ການ​ໂອນ​ຮູບຖ່າຍ ແລະ​ມີ​ເດຍ"</string>
+    <string name="ext_media_ready_notification_message" product="tv" msgid="8847134811163165935">"ເລືອກໄຟລ໌ມີເດຍ"</string>
     <string name="ext_media_unmountable_notification_title" msgid="4895444667278979910">"ເກີດບັນຫາກັບ <xliff:g id="NAME">%s</xliff:g>"</string>
     <string name="ext_media_unmountable_notification_title" product="automotive" msgid="3142723758949023280">"<xliff:g id="NAME">%s</xliff:g> ບໍ່ເຮັດວຽກ"</string>
     <string name="ext_media_unmountable_notification_message" msgid="3256290114063126205">"ແຕະເພື່ອແກ້ໄຂ"</string>
@@ -1373,7 +1395,7 @@
     <string name="ext_media_unsupported_notification_title" msgid="4358280700537030333">"ບໍ່​ຮອງ​ຮັບ <xliff:g id="NAME">%s</xliff:g>"</string>
     <string name="ext_media_unsupported_notification_title" product="automotive" msgid="6004193172658722381">"<xliff:g id="NAME">%s</xliff:g> ບໍ່ເຮັດວຽກ"</string>
     <string name="ext_media_unsupported_notification_message" msgid="917738524888367560">"ອຸປະກອນນີ້ບໍ່ຮອງຮັບ <xliff:g id="NAME">%s</xliff:g> ນີ້. ແຕະເພື່ອຕັ້ງຄ່າໃນຮູບແບບທີ່ຮອງຮັບ."</string>
-    <string name="ext_media_unsupported_notification_message" product="tv" msgid="7744945987775645685">"ອຸປະກອນນີ້ບໍ່ຮອງຮັບ <xliff:g id="NAME">%s</xliff:g> ນີ້. ແຕະເພື່ອຕັ້ງຄ່າໃນຮູບແບບທີ່ຮອງຮັບ."</string>
+    <string name="ext_media_unsupported_notification_message" product="tv" msgid="1595482802187036532">"ເລືອກເພື່ອຕັ້ງຄ່າ <xliff:g id="NAME">%s</xliff:g> ໃນຮູບແບບທີ່ຮອງຮັບ."</string>
     <string name="ext_media_unsupported_notification_message" product="automotive" msgid="3412494732736336330">"ທ່ານຈະຕ້ອງຟໍແມັດອຸປະກອນຄືນໃໝ່"</string>
     <string name="ext_media_badremoval_notification_title" msgid="4114625551266196872">"<xliff:g id="NAME">%s</xliff:g> ຖືກ​ຖອດ​ອອກ​ໄປ​ແບບ​ບໍ່​ຄາດ​ຄິດ"</string>
     <string name="ext_media_badremoval_notification_message" msgid="1986514704499809244">"ກະລຸນາດີດມີເດຍອອກກ່ອນການຖອດເພື່ອຫຼີກເວັ້ນການສູນເສຍຂໍ້ມູນ"</string>
@@ -1667,7 +1689,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"ໃຊ້ປຸ່ມລັດ"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"ການປີ້ນສີ"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"ການແກ້ໄຂຄ່າສີ"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"ຫຼຸດຄວາມສະຫວ່າງ"</string>
+    <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"ຫຼຸດແສງເປັນພິເສດ"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"ກົດປຸ່ມລະດັບສຽງຄ້າງໄວ້. ເປີດໃຊ້ <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ແລ້ວ."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"ກົດປຸ່ມລະດັບສຽງຄ້າງໄວ້. ປິດ <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ໄວ້ແລ້ວ."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"ກົດປຸ່ມສຽງທັງສອງພ້ອມກັນຄ້າງໄວ້ສາມວິນາທີເພື່ອໃຊ້ <xliff:g id="SERVICE_NAME">%1$s</xliff:g>"</string>
@@ -1679,7 +1701,7 @@
     <string name="accessibility_gesture_3finger_instructional_text" msgid="3425123684990193765">"ເພື່ອສະຫຼັບລະຫວ່າງຄຸນສົມບັດຕ່າງໆ, ໃຫ້ປັດຂຶ້ນດ້ວຍສາມນິ້ວຄ້າງໄວ້."</string>
     <string name="accessibility_magnification_chooser_text" msgid="1502075582164931596">"ການຂະຫຍາຍ"</string>
     <string name="user_switched" msgid="7249833311585228097">"ຜູ່ໃຊ້ປັດຈຸບັນ <xliff:g id="NAME">%1$s</xliff:g> ."</string>
-    <string name="user_switching_message" msgid="1912993630661332336">"ກຳ​ລັງ​ສະ​ລັບ​​ໄປ​ຫາ <xliff:g id="NAME">%1$s</xliff:g>…"</string>
+    <string name="user_switching_message" msgid="1912993630661332336">"ກຳລັງສະຫຼັບໄປຫາ<xliff:g id="NAME">%1$s</xliff:g>…"</string>
     <string name="user_logging_out_message" msgid="7216437629179710359">"ກຳລັງອອກຈາກລະບົບ <xliff:g id="NAME">%1$s</xliff:g>…"</string>
     <string name="owner_name" msgid="8713560351570795743">"ເຈົ້າຂອງ"</string>
     <string name="error_message_title" msgid="4082495589294631966">"ຜິດພາດ"</string>
@@ -1871,8 +1893,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"ປ່ຽນການຮ້ອງຂໍ SS ເປັນການໂທວິດີໂອແລ້ວ"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"ປ່ຽນຄຳຂໍ SS ເປັນຄຳຂໍ USSD ແລ້ວ"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"ປ່ຽນຄຳຂໍ SS ໃໝ່ແລ້ວ"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"ການແຈ້ງເຕືອນການຫຼອກເອົາຂໍ້ມູນ"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"​ໂປຣ​ໄຟລ໌​ບ່ອນ​ເຮັດ​ວຽກ"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"ເຕືອນແລ້ວ"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"ຢັ້ງຢືນແລ້ວ"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"ຂະຫຍາຍ"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"ຫຍໍ້ເຂົ້າ"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"ປິດ/ເປີດ ການຂະຫຍາຍ"</string>
@@ -1944,6 +1968,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"News &amp; Magazines"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"Maps &amp; Navigation"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"ຜະລິດຕະພາບ"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"ການຊ່ວຍເຂົ້າເຖິງ"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"ບ່ອນຈັດເກັບຂໍ້ມູນອຸປະກອນ"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"ການດີບັກຜ່ານ USB"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"ຊົ່ວໂມງ"</string>
@@ -2073,6 +2098,7 @@
     <string name="accessibility_system_action_on_screen_a11y_shortcut_label" msgid="8488701469459210309">"ທາງລັດການຊ່ວຍເຂົ້າເຖິງຢູ່ໜ້າຈໍ"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_chooser_label" msgid="1057878690209817886">"ຕົວເລືອກທາງລັດການຊ່ວຍເຂົ້າເຖິງຢູ່ໜ້າຈໍ"</string>
     <string name="accessibility_system_action_hardware_a11y_shortcut_label" msgid="5764644187715255107">"ທາງລັດການຊ່ວຍເຂົ້າເຖິງ"</string>
+    <string name="accessibility_system_action_dismiss_notification_shade" msgid="8931637495533770352">"ປິດເງົາການແຈ້ງເຕືອນໄວ້"</string>
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"ແຖບຄຳບັນຍາຍຂອງ <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> ຖືກວາງໄວ້ໃນກະຕ່າ \"ຈຳກັດ\" ແລ້ວ"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
@@ -2210,12 +2236,16 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"ໃໝ່: ຕົວຂະຫຍາຍໜ້າຈໍ"</string>
-    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"ຕອນນີ້ທ່ານສາມາດຂະຫຍາຍບາງສ່ວນ ຫຼື ທັງໝົດຂອງໜ້າຈໍໄດ້"</string>
+    <string name="window_magnification_prompt_title" msgid="4657040468055863672">"ຂະຫຍາຍບາງສ່ວນຂອງໜ້າຈໍທ່ານ"</string>
+    <string name="window_magnification_prompt_content" msgid="3549230303326142349">"ຕອນນີ້ທ່ານສາມາດຂະຫຍາຍເນື້ອຫາແບບເຕັມຈໍຂອງທ່ານ, ພື້ນທີ່ສະເພາະ ຫຼື ສະຫຼັບລະຫວ່າງຕົວເລືອກທັງສອງໄດ້ແລ້ວ."</string>
     <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"ເປີດໃຊ້ໃນການຕັ້ງຄ່າ"</string>
     <string name="dismiss_action" msgid="1728820550388704784">"ປິດໄວ້"</string>
     <string name="sensor_privacy_start_use_mic_notification_content" msgid="8063355861118105607">"ເພື່ອດຳເນີນການຕໍ່, &lt;b&gt;‎‏‎‎‏‏‎<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; ຕ້ອງການສິດເຂົ້າເຖິງໄມໂຄຣໂຟນອຸປະກອນທ່ານ."</string>
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"ເພື່ອດຳເນີນການຕໍ່, &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; ຕ້ອງການສິດເຂົ້າເຖິງກ້ອງຖ່າຍຮູບຂອງອຸປະກອນທ່ານ."</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"ເປີດໃຊ້"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"ຄວາມເປັນສ່ວນຕົວເຊັນເຊີ"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"ໄອຄອນແອັບພລິເຄຊັນ"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"ຮູບແບຣນແອັບພລິເຄຊັນ"</string>
+    <string name="view_and_control_notification_title" msgid="4300765399209912240">"ກວດສອບການຕັ້ງຄ່າການເຂົ້າເຖິງ"</string>
+    <string name="view_and_control_notification_content" msgid="8003766498562604034">"<xliff:g id="SERVICE_NAME">%s</xliff:g> ສາມາດເບິ່ງ ແລະ ຄວບຄຸມໜ້າຈໍຂອງທ່ານໄດ້. ແຕະເພື່ອກວດສອບ."</string>
 </resources>

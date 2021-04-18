@@ -17,8 +17,8 @@
 package com.android.server.wm;
 
 import static android.Manifest.permission.READ_FRAME_BUFFER;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_CHILDREN_TASKS_REPARENT;
+import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_LAUNCH_TASK;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REORDER;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_REPARENT;
 import static android.window.WindowContainerTransaction.HierarchyOp.HIERARCHY_OP_TYPE_SET_ADJACENT_ROOTS;
@@ -39,6 +39,7 @@ import android.content.res.Configuration;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
@@ -192,6 +193,15 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     if (type < 0) {
                         throw new IllegalArgumentException("Can't create transition with no type");
                     }
+                    if (mTransitionController.getTransitionPlayer() == null) {
+                        Slog.w(TAG, "Using shell transitions API for legacy transitions.");
+                        if (t == null) {
+                            throw new IllegalArgumentException("Can't use legacy transitions in"
+                                    + " compatibility mode with no WCT.");
+                        }
+                        applyTransaction(t, -1 /* syncId */, null);
+                        return null;
+                    }
                     transition = mTransitionController.createTransition(type);
                 }
                 transition.start();
@@ -247,6 +257,21 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Apply window transaction, syncId=%d", syncId);
         mService.deferWindowLayout();
         try {
+            if (transition != null) {
+                // First check if we have a display rotation transition and if so, update it.
+                final DisplayContent dc = DisplayRotation.getDisplayFromTransition(transition);
+                if (dc != null && transition.mChanges.get(dc).mRotation != dc.getRotation()) {
+                    // Go through all tasks and collect them before the rotation
+                    // TODO(shell-transitions): move collect() to onConfigurationChange once
+                    //       wallpaper handling is synchronized.
+                    dc.forAllTasks(task -> {
+                        if (task.isVisible()) transition.collect(task);
+                    });
+                    dc.getInsetsStateController().addProvidersToTransition();
+                    dc.sendNewConfiguration();
+                    effects |= TRANSACT_EFFECTS_LIFECYCLE;
+                }
+            }
             ArraySet<WindowContainer> haveConfigChanges = new ArraySet<>();
             Iterator<Map.Entry<IBinder, WindowContainerTransaction.Change>> entries =
                     t.getChanges().entrySet().iterator();
@@ -332,6 +357,15 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                                 }
                             }
                             effects |= sanitizeAndApplyHierarchyOp(wc, hop);
+                            break;
+                        case HIERARCHY_OP_TYPE_LAUNCH_TASK:
+                            Bundle launchOpts = hop.getLaunchOptions();
+                            int taskId = launchOpts.getInt(
+                                    WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
+                            launchOpts.remove(
+                                    WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
+                            mService.startActivityFromRecents(taskId, launchOpts);
+                            break;
                     }
                 }
             }
@@ -426,8 +460,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
 
         if (windowingMode > -1) {
-            if (mService.isInLockTaskMode() && windowingMode != WINDOWING_MODE_FULLSCREEN) {
-                throw new UnsupportedOperationException("Not supported to set non-fullscreen"
+            if (mService.isInLockTaskMode()
+                    && WindowConfiguration.inMultiWindowMode(windowingMode)) {
+                throw new UnsupportedOperationException("Not supported to set multi-window"
                         + " windowing mode during locked task mode.");
             }
             container.setWindowingMode(windowingMode);

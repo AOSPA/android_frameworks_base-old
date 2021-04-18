@@ -22,15 +22,22 @@ import static com.android.server.am.ActivityManagerService.MY_PID;
 import static com.android.server.am.ProcessRecord.TAG;
 
 import android.app.ActivityManager;
+import android.app.AnrController;
 import android.app.ApplicationErrorReport;
 import android.app.ApplicationExitInfo;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IncrementalStatesInfo;
 import android.content.pm.PackageManagerInternal;
+import android.os.IBinder;
 import android.os.Message;
 import android.os.Process;
+import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.incremental.IIncrementalService;
+import android.os.incremental.IncrementalManager;
+import android.os.incremental.IncrementalMetrics;
 import android.provider.Settings;
 import android.util.EventLog;
 import android.util.Slog;
@@ -294,14 +301,28 @@ class ProcessErrorStateRecord {
         }
 
         // Check if package is still being loaded
-        boolean isPackageLoading = false;
+        float loadingProgress = 1;
+        IncrementalMetrics incrementalMetrics = null;
         final PackageManagerInternal packageManagerInternal = mService.getPackageManagerInternal();
         if (aInfo != null && aInfo.packageName != null) {
             IncrementalStatesInfo incrementalStatesInfo =
                     packageManagerInternal.getIncrementalStatesInfo(
                             aInfo.packageName, mApp.uid, mApp.userId);
             if (incrementalStatesInfo != null) {
-                isPackageLoading = incrementalStatesInfo.isLoading();
+                loadingProgress = incrementalStatesInfo.getProgress();
+            }
+            final String codePath = aInfo.getCodePath();
+            if (IncrementalManager.isIncrementalPath(codePath)) {
+                // Report in the main log that the incremental package is still loading
+                Slog.e(TAG, "App crashed on incremental package " + aInfo.packageName
+                        + " which is " + ((int) (loadingProgress * 100)) + "% loaded.");
+                final IBinder incrementalService = ServiceManager.getService(
+                        Context.INCREMENTAL_SERVICE);
+                if (incrementalService != null) {
+                    final IncrementalManager incrementalManager = new IncrementalManager(
+                            IIncrementalService.Stub.asInterface(incrementalService));
+                    incrementalMetrics = incrementalManager.getMetrics(codePath);
+                }
             }
         }
 
@@ -322,11 +343,25 @@ class ProcessErrorStateRecord {
             info.append("Parent: ").append(parentShortComponentName).append("\n");
         }
 
-        if (isPackageLoading) {
-            // Report in the main log that the package is still loading
-            final float loadingProgress = packageManagerInternal.getIncrementalStatesInfo(
-                    aInfo.packageName, mApp.uid, mApp.userId).getProgress();
+        if (incrementalMetrics != null) {
+            // Report in the main log about the incremental package
             info.append("Package is ").append((int) (loadingProgress * 100)).append("% loaded.\n");
+        }
+
+        // Retrieve controller with max ANR delay from AnrControllers
+        // Note that we retrieve the controller before dumping stacks because dumping stacks can
+        // take a few seconds, after which the cause of the ANR delay might have completed and
+        // there might no longer be a valid ANR controller to cancel the dialog in that case
+        AnrController anrController = mService.mActivityTaskManager.getAnrController(aInfo);
+        long anrDialogDelayMs = 0;
+        if (anrController != null) {
+            String packageName = aInfo.packageName;
+            int uid = aInfo.uid;
+            anrDialogDelayMs = anrController.getAnrDelayMillis(packageName, uid);
+            // Might execute an async binder call to a system app to show an interim
+            // ANR progress UI
+            anrController.onAnrDelayStarted(packageName, uid);
+            Slog.i(TAG, "ANR delay of " + anrDialogDelayMs + "ms started for " + packageName);
         }
 
         StringBuilder report = new StringBuilder();
@@ -394,12 +429,15 @@ class ProcessErrorStateRecord {
                         ? FrameworkStatsLog.ANROCCURRED__FOREGROUND_STATE__FOREGROUND
                         : FrameworkStatsLog.ANROCCURRED__FOREGROUND_STATE__BACKGROUND,
                 mApp.getProcessClassEnum(),
-                (mApp.info != null) ? mApp.info.packageName : "", isPackageLoading);
+                (mApp.info != null) ? mApp.info.packageName : "",
+                incrementalMetrics != null /* isIncremental */, loadingProgress,
+                incrementalMetrics != null ? incrementalMetrics.getMillisSinceOldestPendingRead()
+                        : -1);
         final ProcessRecord parentPr = parentProcess != null
                 ? (ProcessRecord) parentProcess.mOwner : null;
         mService.addErrorToDropBox("anr", mApp, mApp.processName, activityShortComponentName,
                 parentShortComponentName, parentPr, annotation, report.toString(), tracesFile,
-                null);
+                null, new Float(loadingProgress), incrementalMetrics);
 
         if (mApp.getWindowProcessController().appNotResponding(info.toString(),
                 () -> {
@@ -413,14 +451,6 @@ class ProcessErrorStateRecord {
                     }
                 })) {
             return;
-        }
-
-        // Retrieve max ANR delay from AnrControllers without the mService lock since the
-        // controllers might in turn call into apps
-        long anrDialogDelayMs = mService.mActivityTaskManager.getMaxAnrDelayMillis(aInfo);
-        if (aInfo != null && aInfo.packageName != null && anrDialogDelayMs > 0) {
-            Slog.i(TAG, "Delaying ANR dialog for " + aInfo.packageName + " for " + anrDialogDelayMs
-                    + "ms");
         }
 
         synchronized (mService) {
@@ -439,6 +469,7 @@ class ProcessErrorStateRecord {
                 // Set the app's notResponding state, and look up the errorReportReceiver
                 makeAppNotRespondingLSP(activityShortComponentName,
                         annotation != null ? "ANR " + annotation : "ANR", info.toString());
+                mDialogController.setAnrController(anrController);
             }
 
             // Notify package manager service to possibly update package state

@@ -1724,8 +1724,10 @@ public class AudioSystem
     public static native int getMicrophones(ArrayList<MicrophoneInfo> microphonesInfo);
 
     /** @hide */
-    public static native int getSurroundFormats(Map<Integer, Boolean> surroundFormats,
-                                                boolean reported);
+    public static native int getSurroundFormats(Map<Integer, Boolean> surroundFormats);
+
+    /** @hide */
+    public static native int getReportedSurroundFormats(ArrayList<Integer> surroundFormats);
 
     /**
      * @hide

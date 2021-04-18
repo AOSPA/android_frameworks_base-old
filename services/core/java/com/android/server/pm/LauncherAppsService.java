@@ -18,6 +18,7 @@ package com.android.server.pm;
 
 import static android.app.ActivityOptions.KEY_SPLASH_SCREEN_THEME;
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
+import static android.app.PendingIntent.FLAG_MUTABLE;
 import static android.content.Intent.FLAG_ACTIVITY_MULTIPLE_TASK;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
 import static android.content.pm.LauncherApps.FLAG_CACHE_BUBBLE_SHORTCUTS;
@@ -70,6 +71,7 @@ import android.os.Bundle;
 import android.os.Handler;
 import android.os.IInterface;
 import android.os.ParcelFileDescriptor;
+import android.os.Process;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -114,6 +116,7 @@ public class LauncherAppsService extends SystemService {
     @Override
     public void onStart() {
         publishBinderService(Context.LAUNCHER_APPS_SERVICE, mLauncherAppsImpl);
+        mLauncherAppsImpl.registerLoadingProgressForIncrementalApps();
     }
 
     static class BroadcastCookie {
@@ -646,6 +649,43 @@ public class LauncherAppsService extends SystemService {
             }
         }
 
+        /**
+         * Returns the intents for a specific shortcut.
+         */
+        @Nullable
+        @Override
+        public PendingIntent getShortcutIntent(@NonNull final String callingPackage,
+                @NonNull final String packageName, @NonNull final String shortcutId,
+                @Nullable final Bundle opts, @NonNull final UserHandle user)
+                throws RemoteException {
+            Objects.requireNonNull(callingPackage);
+            Objects.requireNonNull(packageName);
+            Objects.requireNonNull(shortcutId);
+            Objects.requireNonNull(user);
+
+            ensureShortcutPermission(callingPackage);
+            if (!canAccessProfile(user.getIdentifier(), "Cannot get shortcuts")) {
+                return null;
+            }
+
+            final Intent[] intents = mShortcutServiceInternal.createShortcutIntents(
+                    getCallingUserId(), callingPackage, packageName, shortcutId,
+                    user.getIdentifier(), injectBinderCallingPid(), injectBinderCallingUid());
+            if (intents == null || intents.length == 0) {
+                return null;
+            }
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                return injectCreatePendingIntent(mContext.createPackageContextAsUser(packageName,
+                        0, user), 0 /* requestCode */, intents, FLAG_MUTABLE, opts, user);
+            } catch (PackageManager.NameNotFoundException e) {
+                Slog.e(TAG, "Cannot create pending intent from shortcut " + shortcutId, e);
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+            return null;
+        }
+
         @Override
         public boolean isPackageEnabled(String callingPackage, String packageName, UserHandle user)
                 throws RemoteException {
@@ -752,6 +792,13 @@ public class LauncherAppsService extends SystemService {
         boolean injectHasInteractAcrossUsersFullPermission(int callingPid, int callingUid) {
             return mContext.checkPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL,
                     callingPid, callingUid) == PackageManager.PERMISSION_GRANTED;
+        }
+
+        @VisibleForTesting
+        PendingIntent injectCreatePendingIntent(Context context, int requestCode,
+                @NonNull Intent[] intents, int flags, Bundle options, UserHandle user) {
+            return PendingIntent.getActivitiesAsUser(context, requestCode, intents, flags, options,
+                    user);
         }
 
         @Override
@@ -1182,6 +1229,30 @@ public class LauncherAppsService extends SystemService {
         @VisibleForTesting
         void postToPackageMonitorHandler(Runnable r) {
             mCallbackHandler.post(r);
+        }
+
+        /**
+         * Check all installed apps and if a package is installed via Incremental and not fully
+         * loaded, register loading progress listener.
+         */
+        void registerLoadingProgressForIncrementalApps() {
+            final PackageManagerInternal pmInt =
+                    LocalServices.getService(PackageManagerInternal.class);
+            final List<UserHandle> users = mUm.getUserProfiles();
+            if (users == null) {
+                return;
+            }
+            for (UserHandle user : users) {
+                pmInt.forEachInstalledPackage(pkg -> {
+                    final String packageName = pkg.getPackageName();
+                    if (pmInt.getIncrementalStatesInfo(packageName, Process.myUid(),
+                            user.getIdentifier()).isLoading()) {
+                        pmInt.registerInstalledLoadingProgressCallback(packageName,
+                                new PackageLoadingProgressCallback(packageName, user),
+                                user.getIdentifier());
+                    }
+                }, user.getIdentifier());
+            }
         }
 
         public static class ShortcutChangeHandler implements LauncherApps.ShortcutChangeCallback {

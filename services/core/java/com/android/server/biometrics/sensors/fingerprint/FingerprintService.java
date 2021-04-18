@@ -49,6 +49,7 @@ import android.hardware.biometrics.fingerprint.SensorProps;
 import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
+import android.hardware.fingerprint.FingerprintServiceReceiver;
 import android.hardware.fingerprint.IFingerprintClientActiveCallback;
 import android.hardware.fingerprint.IFingerprintService;
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
@@ -145,12 +146,7 @@ public class FingerprintService extends SystemService implements BiometricServic
                 Utils.checkPermission(getContext(), TEST_BIOMETRIC);
             }
 
-            final List<FingerprintSensorPropertiesInternal> properties =
-                    FingerprintService.this.getSensorProperties();
-
-            Slog.d(TAG, "Retrieved sensor properties for: " + opPackageName
-                    + ", sensors: " + properties.size());
-            return properties;
+            return FingerprintService.this.getSensorProperties();
         }
 
         @Override
@@ -315,7 +311,8 @@ public class FingerprintService extends SystemService implements BiometricServic
                                     Slog.e(TAG, "Remote exception in negative button onClick()", e);
                                 }
                             })
-                    .setSensorId(props.sensorId)
+                    .setAllowedSensorIds(new ArrayList<>(
+                            Collections.singletonList(props.sensorId)))
                     .build();
 
             final BiometricPrompt.AuthenticationCallback promptCallback =
@@ -402,7 +399,7 @@ public class FingerprintService extends SystemService implements BiometricServic
         @Override // Binder call
         public void prepareForAuthentication(int sensorId, IBinder token, long operationId,
                 int userId, IBiometricSensorReceiver sensorReceiver, String opPackageName,
-                int cookie) {
+                int cookie, boolean allowBackgroundAuthentication) {
             Utils.checkPermission(getContext(), MANAGE_BIOMETRIC);
 
             final ServiceProvider provider = getProviderForSensor(sensorId);
@@ -414,7 +411,7 @@ public class FingerprintService extends SystemService implements BiometricServic
             final boolean restricted = true; // BiometricPrompt is always restricted
             provider.scheduleAuthenticate(sensorId, token, operationId, userId, cookie,
                     new ClientMonitorCallbackConverter(sensorReceiver), opPackageName, restricted,
-                    BiometricsProtoEnums.CLIENT_BIOMETRIC_PROMPT, false /* isKeyguard */);
+                    BiometricsProtoEnums.CLIENT_BIOMETRIC_PROMPT, allowBackgroundAuthentication);
         }
 
         @Override // Binder call
@@ -504,15 +501,34 @@ public class FingerprintService extends SystemService implements BiometricServic
         @Override // Binder call
         public void removeAll(final IBinder token, final int userId,
                 final IFingerprintServiceReceiver receiver, final String opPackageName) {
-            Utils.checkPermission(getContext(), MANAGE_FINGERPRINT);
+            Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
 
-            final Pair<Integer, ServiceProvider> provider = getSingleProvider();
-            if (provider == null) {
-                Slog.w(TAG, "Null provider for removeAll");
-                return;
+            final FingerprintServiceReceiver internalReceiver = new FingerprintServiceReceiver() {
+                int sensorsFinishedRemoving = 0;
+                final int numSensors = getSensorPropertiesInternal(
+                        getContext().getOpPackageName()).size();
+                @Override
+                public void onRemoved(Fingerprint fp, int remaining) throws RemoteException {
+                    if (remaining == 0) {
+                        sensorsFinishedRemoving++;
+                        Slog.d(TAG, "sensorsFinishedRemoving: " + sensorsFinishedRemoving
+                                + ", numSensors: " + numSensors);
+                        if (sensorsFinishedRemoving == numSensors) {
+                            receiver.onRemoved(null, 0 /* remaining */);
+                        }
+                    }
+                }
+            };
+
+            // This effectively iterates through all sensors, but has to do so by finding all
+            // sensors under each provider.
+            for (ServiceProvider provider : mServiceProviders) {
+                List<FingerprintSensorPropertiesInternal> props = provider.getSensorProperties();
+                for (FingerprintSensorPropertiesInternal prop : props) {
+                    provider.scheduleRemoveAll(prop.sensorId, token, internalReceiver, userId,
+                            opPackageName);
+                }
             }
-            provider.second.scheduleRemoveAll(provider.first, token, receiver, userId,
-                    opPackageName);
         }
 
         @Override // Binder call

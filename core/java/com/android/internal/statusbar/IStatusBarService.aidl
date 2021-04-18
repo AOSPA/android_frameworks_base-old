@@ -21,6 +21,7 @@ import android.content.ComponentName;
 import android.graphics.Rect;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
+import android.hardware.fingerprint.IUdfpsHbmListener;
 import android.net.Uri;
 import android.os.Bundle;
 import android.os.UserHandle;
@@ -67,7 +68,7 @@ interface IStatusBarService
     void onNotificationError(String pkg, String tag, int id,
             int uid, int initialPid, String message, int userId);
     void onClearAllNotifications(int userId);
-    void onNotificationClear(String pkg, String tag, int id, int userId, String key,
+    void onNotificationClear(String pkg, int userId, String key,
             int dismissalSurface, int dismissalSentiment, in NotificationVisibility nv);
     void onNotificationVisibilityChanged( in NotificationVisibility[] newlyVisibleKeys,
             in NotificationVisibility[] noLongerVisibleKeys);
@@ -79,7 +80,7 @@ interface IStatusBarService
             in int notificationLocation, boolean modifiedBeforeSending);
     void onNotificationSettingsViewed(String key);
     void onNotificationBubbleChanged(String key, boolean isBubble, int flags);
-    void onBubbleNotificationSuppressionChanged(String key, boolean isSuppressed);
+    void onBubbleNotificationSuppressionChanged(String key, boolean isNotifSuppressed, boolean isBubbleSuppressed);
     void hideCurrentInputMethodForBubbles();
     void grantInlineReplyUriPermission(String key, in Uri uri, in UserHandle user, String packageName);
     void clearInlineReplyUriPermissions(String key);
@@ -119,6 +120,11 @@ interface IStatusBarService
     void onBiometricError(int modality, int error, int vendorCode);
     // Used to hide the authentication dialog, e.g. when the application cancels authentication
     void hideAuthenticationDialog();
+
+    /**
+     * Sets an instance of IUdfpsHbmListener for UdfpsController.
+     */
+    void setUdfpsHbmListener(in IUdfpsHbmListener listener);
 
     /**
      * Show a warning that the device is about to go to sleep due to user inactivity.

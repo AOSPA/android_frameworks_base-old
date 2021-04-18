@@ -211,7 +211,7 @@
     <string name="enable_adb_wireless_summary" msgid="7344391423657093011">"Wi-Fi ሲገናኝ የማረም ሁነታ"</string>
     <string name="adb_wireless_error" msgid="721958772149779856">"ስህተት"</string>
     <string name="adb_wireless_settings" msgid="2295017847215680229">"ገመድ-አልባ debugging"</string>
-    <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"የሚገኙ መሣሪያዎችን ለመመልከትና ለመጠቀም ገመድ-አልባ debuggingን ያብሩ"</string>
+    <string name="adb_wireless_list_empty_off" msgid="1713707973837255490">"የሚገኙ መሣሪያዎችን ለመመልከትና ለመጠቀም ገመድ-አልባ ማረምን ያብሩ"</string>
     <string name="adb_pair_method_qrcode_title" msgid="6982904096137468634">"የQR ኮድን በመጠቀም መሣሪያን ያጣምሩ"</string>
     <string name="adb_pair_method_qrcode_summary" msgid="7130694277228970888">"የQR ኮድ መቃኛን በመጠቀም አዲስ መሣሪያዎችን ያጣምሩ"</string>
     <string name="adb_pair_method_code_title" msgid="1122590300445142904">"የማጣመሪያ ኮድን በመጠቀም መሣሪያን ያጣምሩ"</string>
@@ -303,7 +303,7 @@
     <string name="adb_warning_title" msgid="7708653449506485728">"የUSB ማረሚያ ይፈቀድ?"</string>
     <string name="adb_warning_message" msgid="8145270656419669221">"የUSB አድስ ለግንባታ አላማ ብቻ የታሰበ ነው። ከኮምፒዩተርህ ወደ መሳሪያህ ውሂብ ለመገልበጥ፣ መሣሪያህ ላይ ያለ ማሳወቂያ መተግበሪያዎችን መጫን፣ እና ማስታወሻ ውሂብ ማንበብ ለመጠቀም ይቻላል።"</string>
     <string name="adbwifi_warning_title" msgid="727104571653031865">"ገመድ-አልባ debugging ይፈቀድ?"</string>
-    <string name="adbwifi_warning_message" msgid="8005936574322702388">"ገመድ-አልባ debugging ለግንባታ አላማዎች ብቻ የታሰበ ነው። ውሂብን ከኮምፒዩተርዎ ወደ መሳሪያዎ ለመቅዳት፣ መሣሪያዎ ላይ ያለማሳወቂያ መተግበሪያዎችን ለመጫን እና የምዝግብ ማስታወሻ ውሂብን ለማንበብ ይጠቀሙበት።"</string>
+    <string name="adbwifi_warning_message" msgid="8005936574322702388">"ገመድ-አልባ ማረም ለግንባታ አላማዎች ብቻ የታሰበ ነው። ውሂብን ከኮምፒዩተርዎ ወደ መሳሪያዎ ለመቅዳት፣ መሣሪያዎ ላይ ያለማሳወቂያ መተግበሪያዎችን ለመጫን እና የምዝግብ ማስታወሻ ውሂብን ለማንበብ ይጠቀሙበት።"</string>
     <string name="adb_keys_warning_message" msgid="2968555274488101220">"የዩ ኤስ ቢ ማረም መዳረሻ ከዚህ ቀደም ፍቃድ ከሰጧቸው ኮምፒውተሮች ላይ ይሻሩ?"</string>
     <string name="dev_settings_warning_title" msgid="8251234890169074553">"የግንባታ ቅንብሮችን ፍቀድ?"</string>
     <string name="dev_settings_warning_message" msgid="37741686486073668">"እነዚህ ቅንብሮች  የታሰቡት ለግንባታ አጠቃቀም ብቻ ናቸው። መሳሪያህን እና በሱ ላይ ያሉትን መተግበሪያዎች እንዲበለሹ ወይም በትክክል እንዳይሰሩ ሊያደርጉ ይችላሉ።"</string>
@@ -404,6 +404,7 @@
     <string name="transcode_user_control" msgid="6176368544817731314">"የትራንስኮዲንግ ነባሪዎችን ሻር"</string>
     <string name="transcode_enable_all" msgid="2411165920039166710">"ትራንስኮዲንግን ያንቁ"</string>
     <string name="transcode_default" msgid="3784803084573509491">"መተግበሪያዎች ዘመናዊ ቅርጸቶችን እንደሚደግፉ አድርገው ይቁጠሩ"</string>
+    <string name="transcode_notification" msgid="5560515979793436168">"ትራንስኮዲንግ ማሳወቂያዎችን አሳይ"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"አሂድ አገልግሎቶች"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"በአሁኑጊዜ እየሄዱ ያሉ አገልግሎቶችን ተቆጣጠር እና እይ"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"የWebView ትግበራ"</string>
@@ -423,7 +424,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"ፕሮታኖማሊ (ቀይ-አረንጓዴ)"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"ትራይታኖማሊ (ሰማያዊ-ቢጫ)"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"የቀለም ማስተካከያ"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1284746051652993443">"ቀለም ማስተካከያ ቀለሞች በመሣሪያዎ ላይ እንዴት እንደሚታዩ እንዲያስተካክሉ ያስችሉዎታል"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"ቀለሞች በመሣሪያዎ ላይ እንዴት እንደሚታዩ ያስተካክሉ። የሚከተሉትን ለማድረግ በሚፈልጉበት ጊዜ ይህ ጠቃሚ ሊሆን ይችላል፦&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;ቀለሞችን የበለጠ ትክክለኛ በሆነ መልኩ ለመመልከት&lt;/li&gt; &lt;li&gt;&amp;nbsp;ትኩረት ለማድረግ እንዲረዳዎ ቀለሞችን ለማስወገድ&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"በ<xliff:g id="TITLE">%1$s</xliff:g> ተሽሯል"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"<xliff:g id="TIME_REMAINING">%1$s</xliff:g> ገደማ ቀርቷል"</string>
@@ -514,6 +515,7 @@
     <string name="zen_mode_forever" msgid="3339224497605461291">"እስኪያጠፉት ድረስ"</string>
     <string name="time_unit_just_now" msgid="3006134267292728099">"ልክ አሁን"</string>
     <string name="media_transfer_this_device_name" msgid="2716555073132169240">"የስልክ ድምጽ ማጉያ"</string>
+    <string name="media_transfer_this_phone" msgid="7194341457812151531">"ይህ ስልክ"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"መገናኘት ላይ ችግር። መሳሪያውን ያጥፉት እና እንደገና ያብሩት"</string>
     <string name="media_transfer_wired_device_name" msgid="4447880899964056007">"ባለገመድ የኦዲዮ መሣሪያ"</string>
     <string name="help_label" msgid="3528360748637781274">"እገዛ እና ግብረመልስ"</string>

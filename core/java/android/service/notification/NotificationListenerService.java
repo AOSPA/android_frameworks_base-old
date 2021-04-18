@@ -85,6 +85,10 @@ import java.util.Objects;
  *               android:name="android.service.notification.default_filter_types"
  *               android:value="1,2">
  *           &lt;/meta-data>
+ *     &lt;meta-data
+ *               android:name="android.service.notification.disabled_filter_types"
+ *               android:value="2">
+ *           &lt;/meta-data>
  * &lt;/service></pre>
  *
  * <p>The service should wait for the {@link #onListenerConnected()} event
@@ -121,6 +125,19 @@ public abstract class NotificationListenerService extends Service {
      */
     public static final String META_DATA_DEFAULT_FILTER_TYPES
             = "android.service.notification.default_filter_types";
+
+    /**
+     * The name of the {@code meta-data} tag containing a comma separated list of default
+     * integer notification types that this listener never wants to receive. See
+     * {@link #FLAG_FILTER_TYPE_ONGOING},
+     * {@link #FLAG_FILTER_TYPE_CONVERSATIONS}, {@link #FLAG_FILTER_TYPE_ALERTING),
+     * and {@link #FLAG_FILTER_TYPE_SILENT}.
+     * <p>Types provided in this list will appear as 'off' and 'disabled' in the user interface,
+     * so users don't enable a type that the listener will never bridge to their paired devices.</p>
+     *
+     */
+    public static final String META_DATA_DISABLED_FILTER_TYPES
+            = "android.service.notification.disabled_filter_types";
 
     /**
      * {@link #getCurrentInterruptionFilter() Interruption filter} constant -
@@ -234,6 +251,10 @@ public abstract class NotificationListenerService extends Service {
     public static final int REASON_SNOOZED = 18;
     /** Notification was canceled due to timeout */
     public static final int REASON_TIMEOUT = 19;
+    /** Notification was canceled due to the backing channel being deleted */
+    public static final int REASON_CHANNEL_REMOVED = 20;
+    /** Notification was canceled due to the app's storage being cleared */
+    public static final int REASON_CLEAR_DATA = 21;
 
     /**
      * @hide
@@ -1769,7 +1790,8 @@ public abstract class NotificationListenerService extends Service {
          * {@link NotificationListenerService.Ranking#VISIBILITY_NO_OVERRIDE} if
          * no such preference has been expressed.
          */
-        public int getLockscreenVisibilityOverride() {
+        public @Notification.NotificationVisibilityOverride
+        int getLockscreenVisibilityOverride() {
             return mVisibilityOverride;
         }
 

@@ -666,14 +666,9 @@ public class BiometricService extends SystemService {
                 throw new SecurityException("Invalid authenticator configuration");
             }
 
-            final PromptInfo promptInfo = new PromptInfo();
-            promptInfo.setAuthenticators(authenticators);
-
             try {
-                PreAuthInfo preAuthInfo = PreAuthInfo.create(mTrustManager,
-                        mDevicePolicyManager, mSettingObserver, mSensors, userId, promptInfo,
-                        opPackageName,
-                        false /* checkDevicePolicyManager */);
+                final PreAuthInfo preAuthInfo =
+                        createPreAuthInfo(opPackageName, userId, authenticators);
                 return preAuthInfo.getCanAuthenticateResult();
             } catch (RemoteException e) {
                 Slog.e(TAG, "Remote exception", e);
@@ -759,7 +754,7 @@ public class BiometricService extends SystemService {
             }
         }
 
-        @Override
+        @Override // Binder call
         public void invalidateAuthenticatorIds(int userId, int fromSensorId,
                 IInvalidationCallback callback) {
             checkInternalPermission();
@@ -771,15 +766,18 @@ public class BiometricService extends SystemService {
         public long[] getAuthenticatorIds(int callingUserId) {
             checkInternalPermission();
 
-            final List<Long> ids = new ArrayList<>();
+            final List<Long> authenticatorIds = new ArrayList<>();
             for (BiometricSensor sensor : mSensors) {
                 try {
-                    final long id = sensor.impl.getAuthenticatorId(callingUserId);
-                    if (Utils.isAtLeastStrength(sensor.getCurrentStrength(),
-                            Authenticators.BIOMETRIC_STRONG) && id != 0) {
-                        ids.add(id);
+                    final boolean hasEnrollments = sensor.impl.hasEnrolledTemplates(callingUserId,
+                            getContext().getOpPackageName());
+                    final long authenticatorId = sensor.impl.getAuthenticatorId(callingUserId);
+                    if (hasEnrollments && Utils.isAtLeastStrength(sensor.getCurrentStrength(),
+                            Authenticators.BIOMETRIC_STRONG)) {
+                        authenticatorIds.add(authenticatorId);
                     } else {
-                        Slog.d(TAG, "Sensor " + sensor + ", sensorId " + id
+                        Slog.d(TAG, "Sensor " + sensor + ", sensorId " + sensor.id
+                                + ", hasEnrollments: " + hasEnrollments
                                 + " cannot participate in Keystore operations");
                     }
                 } catch (RemoteException e) {
@@ -787,11 +785,50 @@ public class BiometricService extends SystemService {
                 }
             }
 
-            long[] result = new long[ids.size()];
-            for (int i = 0; i < ids.size(); i++) {
-                result[i] = ids.get(i);
+            long[] result = new long[authenticatorIds.size()];
+            for (int i = 0; i < authenticatorIds.size(); i++) {
+                result[i] = authenticatorIds.get(i);
             }
             return result;
+        }
+
+        @Override // Binder call
+        public void resetLockoutTimeBound(IBinder token, String opPackageName, int fromSensorId,
+                int userId, byte[] hardwareAuthToken) {
+            checkInternalPermission();
+
+            // Check originating strength
+            if (!Utils.isAtLeastStrength(getSensorForId(fromSensorId).getCurrentStrength(),
+                    Authenticators.BIOMETRIC_STRONG)) {
+                Slog.w(TAG, "Sensor: " + fromSensorId + " is does not meet the required strength to"
+                        + " request resetLockout");
+                return;
+            }
+
+            // Request resetLockout for applicable sensors
+            for (BiometricSensor sensor : mSensors) {
+                if (sensor.id == fromSensorId) {
+                    continue;
+                }
+                try {
+                    final SensorPropertiesInternal props = sensor.impl
+                            .getSensorProperties(getContext().getOpPackageName());
+                    final boolean supportsChallengelessHat =
+                            props.resetLockoutRequiresHardwareAuthToken
+                            && !props.resetLockoutRequiresChallenge;
+                    final boolean doesNotRequireHat = !props.resetLockoutRequiresHardwareAuthToken;
+
+                    if (supportsChallengelessHat || doesNotRequireHat) {
+                        Slog.d(TAG, "resetLockout from: " + fromSensorId
+                                + ", for: " + sensor.id
+                                + ", userId: " + userId);
+                        sensor.impl.resetLockout(token, opPackageName, userId,
+                                hardwareAuthToken);
+                    }
+                } catch (RemoteException e) {
+                    Slog.e(TAG, "Remote exception", e);
+                }
+            }
         }
 
         @Override // Binder call
@@ -805,6 +842,64 @@ public class BiometricService extends SystemService {
             }
             Slog.e(TAG, "Unknown sensorId: " + sensorId);
             return Authenticators.EMPTY_SET;
+        }
+
+        @Override // Binder call
+        public int getCurrentModality(
+                String opPackageName,
+                int userId,
+                int callingUserId,
+                @Authenticators.Types int authenticators) {
+
+            checkInternalPermission();
+
+            Slog.d(TAG, "getCurrentModality: User=" + userId
+                    + ", Caller=" + callingUserId
+                    + ", Authenticators=" + authenticators);
+
+            if (!Utils.isValidAuthenticatorConfig(authenticators)) {
+                throw new SecurityException("Invalid authenticator configuration");
+            }
+
+            try {
+                final PreAuthInfo preAuthInfo =
+                        createPreAuthInfo(opPackageName, userId, authenticators);
+                return preAuthInfo.getPreAuthenticateStatus().first;
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Remote exception", e);
+                return BiometricAuthenticator.TYPE_NONE;
+            }
+        }
+
+        @Override // Binder call
+        public int getSupportedModalities(@Authenticators.Types int authenticators) {
+            checkInternalPermission();
+
+            Slog.d(TAG, "getSupportedModalities: Authenticators=" + authenticators);
+
+            if (!Utils.isValidAuthenticatorConfig(authenticators)) {
+                throw new SecurityException("Invalid authenticator configuration");
+            }
+
+            @BiometricAuthenticator.Modality int modality =
+                    Utils.isCredentialRequested(authenticators)
+                            ? BiometricAuthenticator.TYPE_CREDENTIAL
+                            : BiometricAuthenticator.TYPE_NONE;
+
+            if (Utils.isBiometricRequested(authenticators)) {
+                @Authenticators.Types final int requestedStrength =
+                        Utils.getPublicBiometricStrength(authenticators);
+
+                // Add modalities of all biometric sensors that meet the authenticator requirements.
+                for (final BiometricSensor sensor : mSensors) {
+                    @Authenticators.Types final int sensorStrength = sensor.getCurrentStrength();
+                    if (Utils.isAtLeastStrength(sensorStrength, requestedStrength)) {
+                        modality |= sensor.modality;
+                    }
+                }
+            }
+
+            return modality;
         }
 
         @Override
@@ -843,6 +938,19 @@ public class BiometricService extends SystemService {
     private void checkInternalPermission() {
         getContext().enforceCallingOrSelfPermission(USE_BIOMETRIC_INTERNAL,
                 "Must have USE_BIOMETRIC_INTERNAL permission");
+    }
+
+    @NonNull
+    private PreAuthInfo createPreAuthInfo(
+            @NonNull String opPackageName,
+            int userId,
+            @Authenticators.Types int authenticators) throws RemoteException {
+
+        final PromptInfo promptInfo = new PromptInfo();
+        promptInfo.setAuthenticators(authenticators);
+
+        return PreAuthInfo.create(mTrustManager, mDevicePolicyManager, mSettingObserver, mSensors,
+                userId, promptInfo, opPackageName, false /* checkDevicePolicyManager */);
     }
 
     /**
@@ -1226,6 +1334,16 @@ public class BiometricService extends SystemService {
             Slog.d(TAG, "handleCancelAuthentication: AuthSession finished");
             mCurrentAuthSession = null;
         }
+    }
+
+    @Nullable
+    private BiometricSensor getSensorForId(int sensorId) {
+        for (BiometricSensor sensor : mSensors) {
+            if (sensor.id == sensorId) {
+                return sensor;
+            }
+        }
+        return null;
     }
 
     private void dumpInternal(PrintWriter pw) {

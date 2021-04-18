@@ -69,7 +69,6 @@ public abstract class PackageManagerInternal {
             PACKAGE_BROWSER,
             PACKAGE_SYSTEM_TEXT_CLASSIFIER,
             PACKAGE_PERMISSION_CONTROLLER,
-            PACKAGE_WELLBEING,
             PACKAGE_DOCUMENTER,
             PACKAGE_CONFIGURATOR,
             PACKAGE_INCIDENT_REPORT_APPROVER,
@@ -1142,4 +1141,9 @@ public abstract class PackageManagerInternal {
      */
     public abstract boolean isPackageFrozen(
             @NonNull String packageName, int callingUid, int userId);
+
+    /**
+     * Deletes the OAT artifacts of a package.
+     */
+    public abstract void deleteOatArtifactsOfPackage(String packageName);
 }

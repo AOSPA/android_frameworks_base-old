@@ -194,29 +194,35 @@ public class UnderlyingNetworkTrackerTest {
     }
 
     private NetworkRequest getWifiRequest() {
-        return getExpectedRequestBase()
+        return getExpectedRequestBase(true)
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
                 .build();
     }
 
     private NetworkRequest getCellRequestForSubId(int subId) {
-        return getExpectedRequestBase()
+        return getExpectedRequestBase(false)
                 .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
                 .setNetworkSpecifier(new TelephonyNetworkSpecifier(subId))
                 .build();
     }
 
     private NetworkRequest getRouteSelectionRequest() {
-        return getExpectedRequestBase().build();
+        return getExpectedRequestBase(true).build();
     }
 
-    private NetworkRequest.Builder getExpectedRequestBase() {
-        return new NetworkRequest.Builder()
-                .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
-                .removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
-                .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
-                .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED)
-                .addUnwantedCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
+    private NetworkRequest.Builder getExpectedRequestBase(boolean requireVcnManaged) {
+        final NetworkRequest.Builder builder =
+                new NetworkRequest.Builder()
+                        .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
+                        .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
+
+        if (requireVcnManaged) {
+            builder.addUnwantedCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
+        }
+
+        return builder;
     }
 
     @Test
@@ -322,7 +328,7 @@ public class UnderlyingNetworkTrackerTest {
     public void testRecordTrackerCallbackNotifiedForNetworkSuspended() {
         RouteSelectionCallback cb = verifyRegistrationOnAvailableAndGetCallback();
 
-        cb.onNetworkSuspended(mNetwork);
+        cb.onCapabilitiesChanged(mNetwork, SUSPENDED_NETWORK_CAPABILITIES);
 
         UnderlyingNetworkRecord expectedRecord =
                 new UnderlyingNetworkRecord(
@@ -330,7 +336,11 @@ public class UnderlyingNetworkTrackerTest {
                         SUSPENDED_NETWORK_CAPABILITIES,
                         INITIAL_LINK_PROPERTIES,
                         false /* isBlocked */);
-        verify(mNetworkTrackerCb).onSelectedUnderlyingNetworkChanged(eq(expectedRecord));
+        verify(mNetworkTrackerCb, times(1)).onSelectedUnderlyingNetworkChanged(eq(expectedRecord));
+        // onSelectedUnderlyingNetworkChanged() won't be fired twice if network capabilities doesn't
+        // change.
+        cb.onCapabilitiesChanged(mNetwork, SUSPENDED_NETWORK_CAPABILITIES);
+        verify(mNetworkTrackerCb, times(1)).onSelectedUnderlyingNetworkChanged(eq(expectedRecord));
     }
 
     @Test
@@ -338,7 +348,7 @@ public class UnderlyingNetworkTrackerTest {
         RouteSelectionCallback cb =
                 verifyRegistrationOnAvailableAndGetCallback(SUSPENDED_NETWORK_CAPABILITIES);
 
-        cb.onNetworkResumed(mNetwork);
+        cb.onCapabilitiesChanged(mNetwork, INITIAL_NETWORK_CAPABILITIES);
 
         UnderlyingNetworkRecord expectedRecord =
                 new UnderlyingNetworkRecord(
@@ -346,7 +356,11 @@ public class UnderlyingNetworkTrackerTest {
                         INITIAL_NETWORK_CAPABILITIES,
                         INITIAL_LINK_PROPERTIES,
                         false /* isBlocked */);
-        verify(mNetworkTrackerCb).onSelectedUnderlyingNetworkChanged(eq(expectedRecord));
+        verify(mNetworkTrackerCb, times(1)).onSelectedUnderlyingNetworkChanged(eq(expectedRecord));
+        // onSelectedUnderlyingNetworkChanged() won't be fired twice if network capabilities doesn't
+        // change.
+        cb.onCapabilitiesChanged(mNetwork, INITIAL_NETWORK_CAPABILITIES);
+        verify(mNetworkTrackerCb, times(1)).onSelectedUnderlyingNetworkChanged(eq(expectedRecord));
     }
 
     @Test

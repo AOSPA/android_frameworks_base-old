@@ -83,7 +83,6 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
-import com.android.server.location.eventlog.LocationEventLog;
 import com.android.server.location.injector.FakeUserInfoHelper;
 import com.android.server.location.injector.TestInjector;
 
@@ -123,9 +122,10 @@ public class LocationProviderManagerTest {
             .setPowerUsage(POWER_USAGE_HIGH)
             .setAccuracy(ProviderProperties.ACCURACY_FINE)
             .build();
+    private static final CallerIdentity PROVIDER_IDENTITY = CallerIdentity.forTest(CURRENT_USER, 1,
+            "mypackage", "attribution");
     private static final CallerIdentity IDENTITY = CallerIdentity.forTest(CURRENT_USER, 1,
-            "mypackage",
-            "attribution");
+            "mypackage", "attribution", "listener");
     private static final WorkSource WORK_SOURCE = new WorkSource(IDENTITY.getUid());
 
     private Random mRandom;
@@ -160,19 +160,17 @@ public class LocationProviderManagerTest {
         doReturn(mPowerManager).when(mContext).getSystemService(PowerManager.class);
         doReturn(mWakeLock).when(mPowerManager).newWakeLock(anyInt(), anyString());
 
-        LocationEventLog eventLog = new LocationEventLog();
-
-        mInjector = new TestInjector(eventLog);
+        mInjector = new TestInjector();
         mInjector.getUserInfoHelper().startUser(OTHER_USER);
 
-        mPassive = new PassiveLocationProviderManager(mContext, mInjector, eventLog);
+        mPassive = new PassiveLocationProviderManager(mContext, mInjector);
         mPassive.startManager();
         mPassive.setRealProvider(new PassiveLocationProvider(mContext));
 
-        mProvider = new TestProvider(PROPERTIES, IDENTITY);
+        mProvider = new TestProvider(PROPERTIES, PROVIDER_IDENTITY);
         mProvider.setProviderAllowed(true);
 
-        mManager = new LocationProviderManager(mContext, mInjector, eventLog, NAME, mPassive);
+        mManager = new LocationProviderManager(mContext, mInjector, NAME, mPassive);
         mManager.startManager();
         mManager.setRealProvider(mProvider);
     }
@@ -351,7 +349,8 @@ public class LocationProviderManagerTest {
 
     @Test
     public void testGetLastLocation_ClearOnMockRemoval() {
-        MockLocationProvider mockProvider = new MockLocationProvider(PROPERTIES, IDENTITY);
+        MockLocationProvider mockProvider = new MockLocationProvider(PROPERTIES, PROVIDER_IDENTITY,
+                Collections.emptySet());
         mockProvider.setAllowed(true);
         mManager.setMockProvider(mockProvider);
 
@@ -441,7 +440,7 @@ public class LocationProviderManagerTest {
     @Test
     public void testRegisterListener_SameProcess() throws Exception {
         CallerIdentity identity = CallerIdentity.forTest(CURRENT_USER, Process.myPid(), "mypackage",
-                "attribution");
+                "attribution", "listener");
 
         ILocationListener listener = createMockLocationListener();
         mManager.registerLocationRequest(
@@ -477,7 +476,7 @@ public class LocationProviderManagerTest {
     @Test
     public void testRegisterListener_Unregister_SameProcess() throws Exception {
         CallerIdentity identity = CallerIdentity.forTest(CURRENT_USER, Process.myPid(), "mypackage",
-                "attribution");
+                "attribution", "listener");
 
         ILocationListener listener = createMockLocationListener();
         mManager.registerLocationRequest(
@@ -604,7 +603,7 @@ public class LocationProviderManagerTest {
     @Test
     public void testRegisterListener_Wakelock() throws Exception {
         CallerIdentity identity = CallerIdentity.forTest(CURRENT_USER, Process.myPid(), "mypackage",
-                "attribution");
+                "attribution", "listener");
 
         ILocationListener listener = createMockLocationListener();
         mManager.registerLocationRequest(
@@ -1047,7 +1046,7 @@ public class LocationProviderManagerTest {
         private final ArrayList<Runnable> mFlushCallbacks = new ArrayList<>();
 
         TestProvider(ProviderProperties properties, CallerIdentity identity) {
-            super(DIRECT_EXECUTOR, identity, properties);
+            super(DIRECT_EXECUTOR, identity, properties, Collections.emptySet());
         }
 
         public void setProviderAllowed(boolean allowed) {

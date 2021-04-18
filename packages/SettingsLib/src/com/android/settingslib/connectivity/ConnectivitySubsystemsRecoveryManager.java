@@ -27,7 +27,7 @@ import android.net.wifi.WifiManager.SubsystemRestartTrackingCallback;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.provider.Settings;
-import android.telephony.PhoneStateListener;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
@@ -72,7 +72,10 @@ public class ConnectivitySubsystemsRecoveryManager {
             checkIfAllSubsystemsRestartsAreDone();
         }
     };
-    private final PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
+    private final MobileTelephonyCallback mTelephonyCallback = new MobileTelephonyCallback();
+
+    private class MobileTelephonyCallback extends TelephonyCallback implements
+            TelephonyCallback.RadioPowerStateListener {
         @Override
         public void onRadioPowerStateChanged(int state) {
             if (!mTelephonyRestartInProgress || mCurrentRecoveryCallback == null) {
@@ -85,7 +88,7 @@ public class ConnectivitySubsystemsRecoveryManager {
                 checkIfAllSubsystemsRestartsAreDone();
             }
         }
-    };
+    }
 
     public ConnectivitySubsystemsRecoveryManager(@NonNull Context context,
             @NonNull Handler handler) {
@@ -201,12 +204,12 @@ public class ConnectivitySubsystemsRecoveryManager {
     }
 
     private void startTrackingTelephonyRestart() {
-        mTelephonyManager.registerPhoneStateListener(new HandlerExecutor(mHandler),
-                mPhoneStateListener);
+        mTelephonyManager.registerTelephonyCallback(new HandlerExecutor(mHandler),
+                mTelephonyCallback);
     }
 
     private void stopTrackingTelephonyRestart() {
-        mTelephonyManager.unregisterPhoneStateListener(mPhoneStateListener);
+        mTelephonyManager.unregisterTelephonyCallback(mTelephonyCallback);
     }
 
     private void checkIfAllSubsystemsRestartsAreDone() {
@@ -247,6 +250,7 @@ public class ConnectivitySubsystemsRecoveryManager {
      * @param callback Callbacks triggered when recovery status changes.
      */
     public void triggerSubsystemRestart(String reason, @NonNull RecoveryStatusCallback callback) {
+        // TODO: b/183530649 : clean-up or make use of the `reason` argument
         mHandler.post(() -> {
             boolean someSubsystemRestarted = false;
 
@@ -261,7 +265,7 @@ public class ConnectivitySubsystemsRecoveryManager {
             }
 
             if (isWifiEnabled()) {
-                mWifiManager.restartWifiSubsystem(reason);
+                mWifiManager.restartWifiSubsystem();
                 mWifiRestartInProgress = true;
                 someSubsystemRestarted = true;
                 startTrackingWifiRestart();

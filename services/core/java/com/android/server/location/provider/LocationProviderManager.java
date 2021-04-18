@@ -29,12 +29,15 @@ import static android.os.PowerManager.LOCATION_MODE_ALL_DISABLED_WHEN_SCREEN_OFF
 import static android.os.PowerManager.LOCATION_MODE_FOREGROUND_ONLY;
 import static android.os.PowerManager.LOCATION_MODE_GPS_DISABLED_WHEN_SCREEN_OFF;
 import static android.os.PowerManager.LOCATION_MODE_THROTTLE_REQUESTS_WHEN_SCREEN_OFF;
+import static android.os.PowerWhitelistManager.REASON_LOCATION_PROVIDER;
+import static android.os.PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
 
 import static com.android.server.location.LocationManagerService.D;
 import static com.android.server.location.LocationManagerService.TAG;
 import static com.android.server.location.LocationPermissions.PERMISSION_COARSE;
 import static com.android.server.location.LocationPermissions.PERMISSION_FINE;
 import static com.android.server.location.LocationPermissions.PERMISSION_NONE;
+import static com.android.server.location.eventlog.LocationEventLog.EVENT_LOG;
 
 import static java.lang.Math.max;
 import static java.lang.Math.min;
@@ -52,6 +55,8 @@ import android.location.LastLocationRequest;
 import android.location.Location;
 import android.location.LocationManager;
 import android.location.LocationManagerInternal;
+import android.location.LocationManagerInternal.LocationTagInfo;
+import android.location.LocationManagerInternal.OnProviderLocationTagsChangeListener;
 import android.location.LocationManagerInternal.ProviderEnabledListener;
 import android.location.LocationRequest;
 import android.location.LocationResult;
@@ -85,11 +90,11 @@ import android.util.TimeUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
+import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.location.LocationPermissions;
 import com.android.server.location.LocationPermissions.PermissionLevel;
-import com.android.server.location.eventlog.LocationEventLog;
 import com.android.server.location.fudger.LocationFudger;
 import com.android.server.location.injector.AlarmHelper;
 import com.android.server.location.injector.AppForegroundHelper;
@@ -117,6 +122,7 @@ import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Predicate;
@@ -223,7 +229,10 @@ public class LocationProviderManager extends
             BroadcastOptions options = BroadcastOptions.makeBasic();
             options.setDontSendToRestrictedApps(true);
             // allows apps to start a fg service in response to a location PI
-            options.setTemporaryAppWhitelistDuration(TEMPORARY_APP_ALLOWLIST_DURATION_MS);
+            options.setTemporaryAppAllowlist(TEMPORARY_APP_ALLOWLIST_DURATION_MS,
+                    TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED,
+                    REASON_LOCATION_PROVIDER,
+                    "");
 
             Intent intent = new Intent().putExtra(KEY_LOCATION_CHANGED,
                     locationResult.getLastLocation());
@@ -304,6 +313,7 @@ public class LocationProviderManager extends
                 LocationTransport transport, @PermissionLevel int permissionLevel) {
             super(Objects.requireNonNull(request), identity, transport);
 
+            Preconditions.checkArgument(identity.getListenerId() != null);
             Preconditions.checkArgument(permissionLevel > PERMISSION_NONE);
             Preconditions.checkArgument(!request.getWorkSource().isEmpty());
 
@@ -323,7 +333,7 @@ public class LocationProviderManager extends
                         + getRequest());
             }
 
-            mEventLog.logProviderClientRegistered(mName, getIdentity(), super.getRequest());
+            EVENT_LOG.logProviderClientRegistered(mName, getIdentity(), super.getRequest());
 
             // initialization order is important as there are ordering dependencies
             mPermitted = mLocationPermissionsHelper.hasLocationPermissions(mPermissionLevel,
@@ -335,7 +345,7 @@ public class LocationProviderManager extends
             onProviderListenerRegister();
 
             if (mForeground) {
-                mEventLog.logProviderClientForeground(mName, getIdentity());
+                EVENT_LOG.logProviderClientForeground(mName, getIdentity());
             }
         }
 
@@ -348,7 +358,7 @@ public class LocationProviderManager extends
 
             onProviderListenerUnregister();
 
-            mEventLog.logProviderClientUnregistered(mName, getIdentity());
+            EVENT_LOG.logProviderClientUnregistered(mName, getIdentity());
 
             if (D) {
                 Log.d(TAG, mName + " provider removed registration from " + getIdentity());
@@ -373,7 +383,7 @@ public class LocationProviderManager extends
                 Preconditions.checkState(Thread.holdsLock(mLock));
             }
 
-            mEventLog.logProviderClientActive(mName, getIdentity());
+            EVENT_LOG.logProviderClientActive(mName, getIdentity());
 
             if (!getRequest().isHiddenFromAppOps()) {
                 mLocationAttributionHelper.reportLocationStart(getIdentity(), getName(), getKey());
@@ -396,7 +406,7 @@ public class LocationProviderManager extends
 
             onProviderListenerInactive();
 
-            mEventLog.logProviderClientInactive(mName, getIdentity());
+            EVENT_LOG.logProviderClientInactive(mName, getIdentity());
         }
 
         /**
@@ -533,9 +543,9 @@ public class LocationProviderManager extends
                 mForeground = foreground;
 
                 if (mForeground) {
-                    mEventLog.logProviderClientForeground(mName, getIdentity());
+                    EVENT_LOG.logProviderClientForeground(mName, getIdentity());
                 } else {
-                    mEventLog.logProviderClientBackground(mName, getIdentity());
+                    EVENT_LOG.logProviderClientBackground(mName, getIdentity());
                 }
 
                 // note that onProviderLocationRequestChanged() is always called
@@ -644,7 +654,7 @@ public class LocationProviderManager extends
     protected abstract class LocationRegistration extends Registration implements
             OnAlarmListener, ProviderEnabledListener {
 
-        private final PowerManager.WakeLock mWakeLock;
+        final PowerManager.WakeLock mWakeLock;
 
         private volatile ProviderTransport mProviderTransport;
         private int mNumLocationsDelivered = 0;
@@ -869,7 +879,7 @@ public class LocationProviderManager extends
 
                     listener.deliverOnLocationChanged(deliverLocationResult,
                             mUseWakeLock ? mWakeLock::release : null);
-                    mEventLog.logProviderDeliveredLocations(mName, locationResult.size(),
+                    EVENT_LOG.logProviderDeliveredLocations(mName, locationResult.size(),
                             getIdentity());
                 }
 
@@ -1168,7 +1178,7 @@ public class LocationProviderManager extends
 
                     // we currently don't hold a wakelock for getCurrentLocation deliveries
                     listener.deliverOnLocationChanged(deliverLocationResult, null);
-                    mEventLog.logProviderDeliveredLocations(mName,
+                    EVENT_LOG.logProviderDeliveredLocations(mName,
                             locationResult != null ? locationResult.size() : 0, getIdentity());
                 }
 
@@ -1237,7 +1247,6 @@ public class LocationProviderManager extends
 
     private final CopyOnWriteArrayList<IProviderRequestListener> mProviderRequestListeners;
 
-    protected final LocationEventLog mEventLog;
     protected final LocationManagerInternal mLocationManagerInternal;
     protected final SettingsHelper mSettingsHelper;
     protected final UserInfoHelper mUserHelper;
@@ -1287,7 +1296,10 @@ public class LocationProviderManager extends
     @GuardedBy("mLock")
     private @Nullable OnAlarmListener mDelayedRegister;
 
-    public LocationProviderManager(Context context, Injector injector, LocationEventLog eventLog,
+    @GuardedBy("mLock")
+    private @Nullable OnProviderLocationTagsChangeListener mOnLocationTagsChangeListener;
+
+    public LocationProviderManager(Context context, Injector injector,
             String name, @Nullable PassiveLocationProviderManager passiveManager) {
         mContext = context;
         mName = Objects.requireNonNull(name);
@@ -1299,7 +1311,6 @@ public class LocationProviderManager extends
         mEnabledListeners = new ArrayList<>();
         mProviderRequestListeners = new CopyOnWriteArrayList<>();
 
-        mEventLog = eventLog;
         mLocationManagerInternal = Objects.requireNonNull(
                 LocalServices.getService(LocationManagerInternal.class));
         mSettingsHelper = injector.getSettingsHelper();
@@ -1447,11 +1458,24 @@ public class LocationProviderManager extends
         }
     }
 
+    /**
+     * Registers a listener for the location tags of the provider.
+     *
+     * @param listener The listener
+     */
+    public void setOnProviderLocationTagsChangeListener(
+            @Nullable OnProviderLocationTagsChangeListener listener) {
+        Preconditions.checkArgument(mOnLocationTagsChangeListener == null || listener == null);
+        synchronized (mLock) {
+            mOnLocationTagsChangeListener = listener;
+        }
+    }
+
     public void setMockProvider(@Nullable MockLocationProvider provider) {
         synchronized (mLock) {
             Preconditions.checkState(mState != STATE_STOPPED);
 
-            mEventLog.logProviderMocked(mName, provider != null);
+            EVENT_LOG.logProviderMocked(mName, provider != null);
 
             final long identity = Binder.clearCallingIdentity();
             try {
@@ -1828,6 +1852,7 @@ public class LocationProviderManager extends
                 LocationStatsEnums.USAGE_STARTED,
                 LocationStatsEnums.API_REQUEST_LOCATION_UPDATES,
                 registration.getIdentity().getPackageName(),
+                registration.getIdentity().getAttributionTag(),
                 mName,
                 registration.getRequest(),
                 key instanceof PendingIntent,
@@ -1856,6 +1881,7 @@ public class LocationProviderManager extends
                 LocationStatsEnums.USAGE_ENDED,
                 LocationStatsEnums.API_REQUEST_LOCATION_UPDATES,
                 registration.getIdentity().getPackageName(),
+                registration.getIdentity().getAttributionTag(),
                 mName,
                 registration.getRequest(),
                 key instanceof PendingIntent,
@@ -1938,8 +1964,8 @@ public class LocationProviderManager extends
     }
 
     @GuardedBy("mLock")
-    private void setProviderRequest(ProviderRequest request) {
-        mEventLog.logProviderUpdateRequest(mName, request);
+    void setProviderRequest(ProviderRequest request) {
+        EVENT_LOG.logProviderUpdateRequest(mName, request);
         mProvider.getController().setRequest(request);
 
         FgThread.getHandler().post(() -> {
@@ -2243,6 +2269,27 @@ public class LocationProviderManager extends
         if (oldState.allowed != newState.allowed) {
             onEnabledChanged(UserHandle.USER_ALL);
         }
+
+        if (mOnLocationTagsChangeListener != null) {
+            if (!oldState.extraAttributionTags.equals(newState.extraAttributionTags)) {
+                if (oldState.identity != null) {
+                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                            OnProviderLocationTagsChangeListener::onLocationTagsChanged,
+                            mOnLocationTagsChangeListener, new LocationTagInfo(
+                                    oldState.identity.getUid(), oldState.identity.getPackageName(),
+                                    Collections.emptySet())
+                            ));
+                }
+                if (newState.identity != null) {
+                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                            OnProviderLocationTagsChangeListener::onLocationTagsChanged,
+                            mOnLocationTagsChangeListener, new LocationTagInfo(
+                                    newState.identity.getUid(), newState.identity.getPackageName(),
+                                    newState.extraAttributionTags)
+                            ));
+                }
+            }
+        }
     }
 
     @GuardedBy("mLock")
@@ -2275,7 +2322,7 @@ public class LocationProviderManager extends
             }
 
             // don't log location received for passive provider because it's spammy
-            mEventLog.logProviderReceivedLocations(mName, filtered.size());
+            EVENT_LOG.logProviderReceivedLocations(mName, filtered.size());
         } else {
             // passive provider should get already filtered results as input
             filtered = locationResult;
@@ -2375,7 +2422,7 @@ public class LocationProviderManager extends
             if (D) {
                 Log.d(TAG, "[u" + userId + "] " + mName + " provider enabled = " + enabled);
             }
-            mEventLog.logProviderEnabled(mName, userId, enabled);
+            EVENT_LOG.logProviderEnabled(mName, userId, enabled);
         }
 
         // clear last locations if we become disabled
@@ -2415,7 +2462,7 @@ public class LocationProviderManager extends
         updateRegistrations(registration -> registration.getIdentity().getUserId() == userId);
     }
 
-    private @Nullable Location getPermittedLocation(@Nullable Location fineLocation,
+    @Nullable Location getPermittedLocation(@Nullable Location fineLocation,
             @PermissionLevel int permissionLevel) {
         switch (permissionLevel) {
             case PERMISSION_FINE:
@@ -2428,7 +2475,7 @@ public class LocationProviderManager extends
         }
     }
 
-    private @Nullable LocationResult getPermittedLocationResult(
+    @Nullable LocationResult getPermittedLocationResult(
             @Nullable LocationResult fineLocationResult, @PermissionLevel int permissionLevel) {
         switch (permissionLevel) {
             case PERMISSION_FINE:
@@ -2488,6 +2535,8 @@ public class LocationProviderManager extends
         private @Nullable Location mCoarseLocation;
         private @Nullable Location mFineBypassLocation;
         private @Nullable Location mCoarseBypassLocation;
+
+        LastLocation() {}
 
         public void clearMock() {
             if (mFineLocation != null && mFineLocation.isFromMockProvider()) {

@@ -16,12 +16,16 @@
 
 package android.app;
 
+import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.os.Build;
 import android.os.Bundle;
-import android.os.PowerWhitelistManager;
-import android.os.PowerWhitelistManager.TempAllowListType;
+import android.os.PowerExemptionManager;
+import android.os.PowerExemptionManager.ReasonCode;
+import android.os.PowerExemptionManager.TempAllowListType;
 
 /**
  * Helper class for building an options Bundle that can be used with
@@ -31,8 +35,10 @@ import android.os.PowerWhitelistManager.TempAllowListType;
  */
 @SystemApi
 public class BroadcastOptions {
-    private long mTemporaryAppWhitelistDuration;
-    private @TempAllowListType int mTemporaryAppWhitelistType;
+    private long mTemporaryAppAllowlistDuration;
+    private @TempAllowListType int mTemporaryAppAllowlistType;
+    private @ReasonCode int mTemporaryAppAllowlistReasonCode;
+    private @Nullable String mTemporaryAppAllowlistReason;
     private int mMinManifestReceiverApiLevel = 0;
     private int mMaxManifestReceiverApiLevel = Build.VERSION_CODES.CUR_DEVELOPMENT;
     private boolean mDontSendToRestrictedApps = false;
@@ -42,52 +48,59 @@ public class BroadcastOptions {
      * How long to temporarily put an app on the power allowlist when executing this broadcast
      * to it.
      */
-    static final String KEY_TEMPORARY_APP_WHITELIST_DURATION
-            = "android:broadcast.temporaryAppWhitelistDuration";
+    private static final String KEY_TEMPORARY_APP_ALLOWLIST_DURATION
+            = "android:broadcast.temporaryAppAllowlistDuration";
 
-    static final String KEY_TEMPORARY_APP_WHITELIST_TYPE
-            = "android:broadcast.temporaryAppWhitelistType";
+    private static final String KEY_TEMPORARY_APP_ALLOWLIST_TYPE
+            = "android:broadcast.temporaryAppAllowlistType";
+
+    private static final String KEY_TEMPORARY_APP_ALLOWLIST_REASON_CODE =
+            "android:broadcast.temporaryAppAllowlistReasonCode";
+
+    private static final String KEY_TEMPORARY_APP_ALLOWLIST_REASON =
+            "android:broadcast.temporaryAppAllowlistReason";
 
     /**
      * Corresponds to {@link #setMinManifestReceiverApiLevel}.
      */
-    static final String KEY_MIN_MANIFEST_RECEIVER_API_LEVEL
+    private static final String KEY_MIN_MANIFEST_RECEIVER_API_LEVEL
             = "android:broadcast.minManifestReceiverApiLevel";
 
     /**
      * Corresponds to {@link #setMaxManifestReceiverApiLevel}.
      */
-    static final String KEY_MAX_MANIFEST_RECEIVER_API_LEVEL
+    private static final String KEY_MAX_MANIFEST_RECEIVER_API_LEVEL
             = "android:broadcast.maxManifestReceiverApiLevel";
 
     /**
      * Corresponds to {@link #setDontSendToRestrictedApps}.
      */
-    static final String KEY_DONT_SEND_TO_RESTRICTED_APPS =
+    private static final String KEY_DONT_SEND_TO_RESTRICTED_APPS =
             "android:broadcast.dontSendToRestrictedApps";
 
     /**
      * Corresponds to {@link #setBackgroundActivityStartsAllowed}.
      */
-    static final String KEY_ALLOW_BACKGROUND_ACTIVITY_STARTS =
+    private static final String KEY_ALLOW_BACKGROUND_ACTIVITY_STARTS =
             "android:broadcast.allowBackgroundActivityStarts";
 
     /**
      * @hide
-     * @deprecated Use {@link android.os.PowerWhitelistManager#
-     * TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED} instead.
+     * @deprecated Use {@link android.os.PowerExemptionManager#
+     * TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED} instead.
      */
     @Deprecated
     public static final int TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_ALLOWED =
-            PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
+            PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
+
     /**
      * @hide
-     * @deprecated Use {@link android.os.PowerWhitelistManager#
-     * TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED} instead.
+     * @deprecated Use {@link android.os.PowerExemptionManager#
+     * TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED} instead.
      */
     @Deprecated
     public static final int TEMPORARY_WHITELIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED =
-            PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED;
+            PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED;
 
     public static BroadcastOptions makeBasic() {
         BroadcastOptions opts = new BroadcastOptions();
@@ -95,12 +108,22 @@ public class BroadcastOptions {
     }
 
     private BroadcastOptions() {
+        resetTemporaryAppAllowlist();
     }
 
     /** @hide */
-    public BroadcastOptions(Bundle opts) {
-        mTemporaryAppWhitelistDuration = opts.getLong(KEY_TEMPORARY_APP_WHITELIST_DURATION);
-        mTemporaryAppWhitelistType = opts.getInt(KEY_TEMPORARY_APP_WHITELIST_TYPE);
+    @TestApi
+    public BroadcastOptions(@NonNull Bundle opts) {
+        // Match the logic in toBundle().
+        if (opts.containsKey(KEY_TEMPORARY_APP_ALLOWLIST_DURATION)) {
+            mTemporaryAppAllowlistDuration = opts.getLong(KEY_TEMPORARY_APP_ALLOWLIST_DURATION);
+            mTemporaryAppAllowlistType = opts.getInt(KEY_TEMPORARY_APP_ALLOWLIST_TYPE);
+            mTemporaryAppAllowlistReasonCode = opts.getInt(KEY_TEMPORARY_APP_ALLOWLIST_REASON_CODE,
+                    PowerExemptionManager.REASON_UNKNOWN);
+            mTemporaryAppAllowlistReason = opts.getString(KEY_TEMPORARY_APP_ALLOWLIST_REASON);
+        } else {
+            resetTemporaryAppAllowlist();
+        }
         mMinManifestReceiverApiLevel = opts.getInt(KEY_MIN_MANIFEST_RECEIVER_API_LEVEL, 0);
         mMaxManifestReceiverApiLevel = opts.getInt(KEY_MAX_MANIFEST_RECEIVER_API_LEVEL,
                 Build.VERSION_CODES.CUR_DEVELOPMENT);
@@ -113,45 +136,94 @@ public class BroadcastOptions {
      * Set a duration for which the system should temporary place an application on the
      * power allowlist when this broadcast is being delivered to it.
      * @param duration The duration in milliseconds; 0 means to not place on allowlist.
+     * @deprecated use {@link #setTemporaryAppAllowlist(long, int, int,  String)} instead.
      */
+    @Deprecated
     @RequiresPermission(anyOf = {android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST,
             android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND,
             android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND})
     public void setTemporaryAppWhitelistDuration(long duration) {
-        mTemporaryAppWhitelistDuration = duration;
-        mTemporaryAppWhitelistType =
-                PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
+        setTemporaryAppAllowlist(duration,
+                PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED,
+                PowerExemptionManager.REASON_UNKNOWN, null);
     }
 
     /**
      * Set a duration for which the system should temporary place an application on the
      * power allowlist when this broadcast is being delivered to it, specify the temp allowlist
      * type.
-     * @param type one of {@link TempAllowListType}
-     * @param duration the duration in milliseconds; 0 means to not place on allowlist.
+     * @param duration the duration in milliseconds.
+     *                 0 means to not place on allowlist, and clears previous call to this method.
+     * @param type one of {@link TempAllowListType}.
+     *             {@link PowerExemptionManager#TEMPORARY_ALLOW_LIST_TYPE_NONE} means
+     *             to not place on allowlist, and clears previous call to this method.
+     * @param reasonCode one of {@link ReasonCode}, use
+     *                  {@link PowerExemptionManager#REASON_UNKNOWN} if not sure.
+     * @param reason A human-readable reason explaining why the app is temp allowlisted. Only
+     *               used for logging purposes. Could be null or empty string.
      */
     @RequiresPermission(anyOf = {android.Manifest.permission.CHANGE_DEVICE_IDLE_TEMP_WHITELIST,
             android.Manifest.permission.START_ACTIVITIES_FROM_BACKGROUND,
             android.Manifest.permission.START_FOREGROUND_SERVICES_FROM_BACKGROUND})
-    public void setTemporaryAppWhitelistDuration(@TempAllowListType int type, long duration) {
-        mTemporaryAppWhitelistDuration = duration;
-        mTemporaryAppWhitelistType = type;
+    public void setTemporaryAppAllowlist(long duration, @TempAllowListType int type,
+            @ReasonCode int reasonCode, @Nullable String reason) {
+        mTemporaryAppAllowlistDuration = duration;
+        mTemporaryAppAllowlistType = type;
+        mTemporaryAppAllowlistReasonCode = reasonCode;
+        mTemporaryAppAllowlistReason = reason;
+
+        if (!isTemporaryAppAllowlistSet()) {
+            resetTemporaryAppAllowlist();
+        }
+    }
+
+    private boolean isTemporaryAppAllowlistSet() {
+        return mTemporaryAppAllowlistDuration > 0
+                && mTemporaryAppAllowlistType
+                    != PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_NONE;
+    }
+
+    private void resetTemporaryAppAllowlist() {
+        mTemporaryAppAllowlistDuration = 0;
+        mTemporaryAppAllowlistType = PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_NONE;
+        mTemporaryAppAllowlistReasonCode = PowerExemptionManager.REASON_UNKNOWN;
+        mTemporaryAppAllowlistReason = null;
     }
 
     /**
-     * Return {@link #setTemporaryAppWhitelistDuration}.
+     * Return {@link #setTemporaryAppAllowlist}.
      * @hide
      */
-    public long getTemporaryAppWhitelistDuration() {
-        return mTemporaryAppWhitelistDuration;
+    @TestApi
+    public long getTemporaryAppAllowlistDuration() {
+        return mTemporaryAppAllowlistDuration;
     }
 
     /**
-     * Return {@link #mTemporaryAppWhitelistType}.
+     * Return {@link #mTemporaryAppAllowlistType}.
      * @hide
      */
-    public @TempAllowListType int getTemporaryAppWhitelistType() {
-        return mTemporaryAppWhitelistType;
+    @TestApi
+    public @TempAllowListType int getTemporaryAppAllowlistType() {
+        return mTemporaryAppAllowlistType;
+    }
+
+    /**
+     * Return {@link #mTemporaryAppAllowlistReasonCode}.
+     * @hide
+     */
+    @TestApi
+    public @ReasonCode int getTemporaryAppAllowlistReasonCode() {
+        return mTemporaryAppAllowlistReasonCode;
+    }
+
+    /**
+     * Return {@link #mTemporaryAppAllowlistReason}.
+     * @hide
+     */
+    @TestApi
+    public @Nullable String getTemporaryAppAllowlistReason() {
+        return mTemporaryAppAllowlistReason;
     }
 
     /**
@@ -236,11 +308,11 @@ public class BroadcastOptions {
      */
     public Bundle toBundle() {
         Bundle b = new Bundle();
-        if (mTemporaryAppWhitelistDuration > 0) {
-            b.putLong(KEY_TEMPORARY_APP_WHITELIST_DURATION, mTemporaryAppWhitelistDuration);
-        }
-        if (mTemporaryAppWhitelistType != 0) {
-            b.putInt(KEY_TEMPORARY_APP_WHITELIST_TYPE, mTemporaryAppWhitelistType);
+        if (isTemporaryAppAllowlistSet()) {
+            b.putLong(KEY_TEMPORARY_APP_ALLOWLIST_DURATION, mTemporaryAppAllowlistDuration);
+            b.putInt(KEY_TEMPORARY_APP_ALLOWLIST_TYPE, mTemporaryAppAllowlistType);
+            b.putInt(KEY_TEMPORARY_APP_ALLOWLIST_REASON_CODE, mTemporaryAppAllowlistReasonCode);
+            b.putString(KEY_TEMPORARY_APP_ALLOWLIST_REASON, mTemporaryAppAllowlistReason);
         }
         if (mMinManifestReceiverApiLevel != 0) {
             b.putInt(KEY_MIN_MANIFEST_RECEIVER_API_LEVEL, mMinManifestReceiverApiLevel);

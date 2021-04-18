@@ -34,8 +34,10 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.sensors.ProximitySensor;
 import com.android.systemui.util.sensors.ThresholdSensor;
+import com.android.systemui.util.time.FakeSystemClock;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -56,18 +58,24 @@ public class FalsingCollectorImplTest extends SysuiTestCase {
     @Mock
     private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @Mock
+    private HistoryTracker mHistoryTracker;
+    @Mock
     private ProximitySensor mProximitySensor;
     @Mock
     private SysuiStatusBarStateController mStatusBarStateController;
+    @Mock
+    private KeyguardStateController mKeyguardStateController;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
         when(mStatusBarStateController.getState()).thenReturn(StatusBarState.KEYGUARD);
+        when(mKeyguardStateController.isShowing()).thenReturn(true);
 
         mFalsingCollector = new FalsingCollectorImpl(mFalsingDataProvider, mFalsingManager,
-                mKeyguardUpdateMonitor, mProximitySensor, mStatusBarStateController);
+                mKeyguardUpdateMonitor, mHistoryTracker, mProximitySensor,
+                mStatusBarStateController, mKeyguardStateController, new FakeSystemClock());
     }
 
     @Test
@@ -152,6 +160,22 @@ public class FalsingCollectorImplTest extends SysuiTestCase {
 
         mFalsingCollector.avoidGesture();
         // Up event would flush, but we were told to avoid.
+        mFalsingCollector.onTouchEvent(up);
+        verify(mFalsingDataProvider, never()).onMotionEvent(any(MotionEvent.class));
+    }
+
+    @Test
+    public void testAvoidUnlocked() {
+        MotionEvent down = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
+        MotionEvent up = MotionEvent.obtain(0, 0, MotionEvent.ACTION_UP, 0, 0, 0);
+
+        when(mKeyguardStateController.isShowing()).thenReturn(false);
+
+        // Nothing passed initially
+        mFalsingCollector.onTouchEvent(down);
+        verify(mFalsingDataProvider, never()).onMotionEvent(any(MotionEvent.class));
+
+        // Up event would normally flush the up event.
         mFalsingCollector.onTouchEvent(up);
         verify(mFalsingDataProvider, never()).onMotionEvent(any(MotionEvent.class));
     }

@@ -62,24 +62,14 @@ public final class ReportUsageRequest {
 
     /** Builder for {@link ReportUsageRequest} objects. */
     public static final class Builder {
-        private String mNamespace = GenericDocument.DEFAULT_NAMESPACE;
+        private final String mNamespace;
         private String mUri;
         private Long mUsageTimeMillis;
         private boolean mBuilt = false;
 
-        /**
-         * Sets which namespace the document being used belongs to.
-         *
-         * <p>If this is not set, it defaults to {@link GenericDocument#DEFAULT_NAMESPACE}.
-         *
-         * @throws IllegalStateException if the builder has already been used
-         */
-        @NonNull
-        public ReportUsageRequest.Builder setNamespace(@NonNull String namespace) {
-            Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(namespace);
-            mNamespace = namespace;
-            return this;
+        /** Creates a {@link ReportUsageRequest.Builder} instance. */
+        public Builder(@NonNull String namespace) {
+            mNamespace = Preconditions.checkNotNull(namespace);
         }
 
         /**

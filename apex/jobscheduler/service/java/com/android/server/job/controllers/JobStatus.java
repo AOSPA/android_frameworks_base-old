@@ -24,11 +24,13 @@ import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 
 import android.app.AppGlobals;
 import android.app.job.JobInfo;
+import android.app.job.JobParameters;
 import android.app.job.JobWorkItem;
 import android.content.ClipData;
 import android.content.ComponentName;
 import android.content.pm.ServiceInfo;
 import android.net.Network;
+import android.net.NetworkRequest;
 import android.net.Uri;
 import android.os.RemoteException;
 import android.os.UserHandle;
@@ -37,6 +39,7 @@ import android.text.format.DateFormat;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
 import android.util.Pair;
+import android.util.Range;
 import android.util.Slog;
 import android.util.TimeUtils;
 import android.util.proto.ProtoOutputStream;
@@ -54,6 +57,7 @@ import com.android.server.job.JobStatusShortInfoProto;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.function.Predicate;
 
 /**
@@ -73,6 +77,8 @@ public final class JobStatus {
     private static final String TAG = "JobScheduler.JobStatus";
     static final boolean DEBUG = JobSchedulerService.DEBUG;
 
+    private static final int NUM_CONSTRAINT_CHANGE_HISTORY = 10;
+
     public static final long NO_LATEST_RUNTIME = Long.MAX_VALUE;
     public static final long NO_EARLIEST_RUNTIME = 0L;
 
@@ -89,6 +95,12 @@ public final class JobStatus {
     static final int CONSTRAINT_WITHIN_EXPEDITED_QUOTA = 1 << 23;    // Implicit constraint
     static final int CONSTRAINT_BACKGROUND_NOT_RESTRICTED = 1 << 22; // Implicit constraint
 
+    // The following set of dynamic constraints are for specific use cases (as explained in their
+    // relative naming and comments). Right now, they apply different constraints, which is fine,
+    // but if in the future, we have overlapping dynamic constraint sets, removing one constraint
+    // set may accidentally remove a constraint applied by another dynamic set.
+    // TODO: properly handle overlapping dynamic constraint sets
+
     /**
      * The additional set of dynamic constraints that must be met if the job's effective bucket is
      * {@link JobSchedulerService#RESTRICTED_INDEX}. Connectivity can be ignored if the job doesn't
@@ -99,6 +111,13 @@ public final class JobStatus {
                     | CONSTRAINT_CHARGING
                     | CONSTRAINT_CONNECTIVITY
                     | CONSTRAINT_IDLE;
+
+    /**
+     * The additional set of dynamic constraints that must be met if this is an expedited job that
+     * had a long enough run while the device was Dozing or in battery saver.
+     */
+    private static final int DYNAMIC_EXPEDITED_DEFERRAL_CONSTRAINTS =
+            CONSTRAINT_DEVICE_NOT_DOZING | CONSTRAINT_BACKGROUND_NOT_RESTRICTED;
 
     /**
      * Standard media URIs that contain the media files that might be important to the user.
@@ -123,13 +142,14 @@ public final class JobStatus {
      * (Atom #21)
      * * CONSTRAINT_BACKGROUND_NOT_RESTRICTED can be inferred with BatterySaverModeStateChanged
      * (Atom #20)
+     * * CONSTRAINT_STORAGE_NOT_LOW can be inferred with LowStorageStateChanged (Atom #130)
      */
     private static final int STATSD_CONSTRAINTS_TO_LOG = CONSTRAINT_CONTENT_TRIGGER
             | CONSTRAINT_DEADLINE
             | CONSTRAINT_IDLE
-            | CONSTRAINT_STORAGE_NOT_LOW
             | CONSTRAINT_TIMING_DELAY
-            | CONSTRAINT_WITHIN_QUOTA;
+            | CONSTRAINT_WITHIN_QUOTA
+            | CONSTRAINT_WITHIN_EXPEDITED_QUOTA;
 
     // TODO(b/129954980)
     private static final boolean STATS_LOG_ENABLED = false;
@@ -309,6 +329,12 @@ public final class JobStatus {
     /** The evaluated priority of the job when it started running. */
     public int lastEvaluatedPriority;
 
+    /**
+     * Whether or not this particular JobStatus instance was treated as an EJ when it started
+     * running. This isn't copied over when a job is rescheduled.
+     */
+    public boolean startedAsExpeditedJob = false;
+
     // If non-null, this is work that has been enqueued for the job.
     public ArrayList<JobWorkItem> pendingWork;
 
@@ -338,6 +364,9 @@ public final class JobStatus {
      */
     private long mLastFailedRunTime;
 
+    /** Whether or not the app is background restricted by the user (FAS). */
+    private boolean mIsUserBgRestricted;
+
     /**
      * Transient: when a job is inflated from disk before we have a reliable RTC clock time,
      * we retain the canonical (delay, deadline) scheduling tuple read out of the persistent
@@ -349,6 +378,10 @@ public final class JobStatus {
      * 'first' is the earliest/delay time, and 'second' is the latest/deadline time.
      */
     private Pair<Long, Long> mPersistedUtcTimes;
+
+    private int mConstraintChangeHistoryIndex = 0;
+    private final long[] mConstraintUpdatedTimesElapsed = new long[NUM_CONSTRAINT_CHANGE_HISTORY];
+    private final int[] mConstraintStatusHistory = new int[NUM_CONSTRAINT_CHANGE_HISTORY];
 
     /**
      * For use only by ContentObserverController: state it is maintaining about content URIs
@@ -390,6 +423,9 @@ public final class JobStatus {
     /** The job's dynamic requirements have been satisfied. */
     private boolean mReadyDynamicSatisfied;
 
+    /** The reason a job most recently went from ready to not ready. */
+    private int mReasonReadyToUnready = JobParameters.STOP_REASON_UNDEFINED;
+
     /** Provide a handle to the service that this job will be run on. */
     public int getServiceToken() {
         return callingUid;
@@ -420,7 +456,8 @@ public final class JobStatus {
     private JobStatus(JobInfo job, int callingUid, String sourcePackageName,
             int sourceUserId, int standbyBucket, String tag, int numFailures,
             long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
-            long lastSuccessfulRunTime, long lastFailedRunTime, int internalFlags) {
+            long lastSuccessfulRunTime, long lastFailedRunTime, int internalFlags,
+            int dynamicConstraints) {
         this.job = job;
         this.callingUid = callingUid;
         this.standbyBucket = standbyBucket;
@@ -481,6 +518,7 @@ public final class JobStatus {
         }
         this.requiredConstraints = requiredConstraints;
         mRequiredConstraintsOfInterest = requiredConstraints & CONSTRAINTS_OF_INTEREST;
+        addDynamicConstraints(dynamicConstraints);
         mReadyNotDozing = canRunInDoze();
         if (standbyBucket == RESTRICTED_INDEX) {
             addDynamicConstraints(DYNAMIC_RESTRICTED_CONSTRAINTS);
@@ -499,8 +537,15 @@ public final class JobStatus {
             // Later, when we check if a given network satisfies the required
             // network, we need to know the UID that is requesting it, so push
             // our source UID into place.
-            job.getRequiredNetwork().networkCapabilities.setSingleUid(this.sourceUid);
+            final JobInfo.Builder builder = new JobInfo.Builder(job);
+            final NetworkRequest.Builder requestBuilder =
+                    new NetworkRequest.Builder(job.getRequiredNetwork());
+            requestBuilder.setUids(
+                    Collections.singleton(new Range<Integer>(this.sourceUid, this.sourceUid)));
+            builder.setRequiredNetwork(requestBuilder.build());
+            job = builder.build();
         }
+
         final JobSchedulerInternal jsi = LocalServices.getService(JobSchedulerInternal.class);
         mHasMediaBackupExemption = !job.hasLateConstraint() && exemptedMediaUrisOnly
                 && requiresNetwork && this.sourcePackageName.equals(jsi.getMediaBackupPackage());
@@ -515,7 +560,7 @@ public final class JobStatus {
                 jobStatus.getSourceTag(), jobStatus.getNumFailures(),
                 jobStatus.getEarliestRunTime(), jobStatus.getLatestRunTimeElapsed(),
                 jobStatus.getLastSuccessfulRunTime(), jobStatus.getLastFailedRunTime(),
-                jobStatus.getInternalFlags());
+                jobStatus.getInternalFlags(), jobStatus.mDynamicConstraints);
         mPersistedUtcTimes = jobStatus.mPersistedUtcTimes;
         if (jobStatus.mPersistedUtcTimes != null) {
             if (DEBUG) {
@@ -537,12 +582,12 @@ public final class JobStatus {
             long earliestRunTimeElapsedMillis, long latestRunTimeElapsedMillis,
             long lastSuccessfulRunTime, long lastFailedRunTime,
             Pair<Long, Long> persistedExecutionTimesUTC,
-            int innerFlags) {
+            int innerFlags, int dynamicConstraints) {
         this(job, callingUid, sourcePkgName, sourceUserId,
                 standbyBucket,
                 sourceTag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
-                lastSuccessfulRunTime, lastFailedRunTime, innerFlags);
+                lastSuccessfulRunTime, lastFailedRunTime, innerFlags, dynamicConstraints);
 
         // Only during initial inflation do we record the UTC-timebase execution bounds
         // read from the persistent store.  If we ever have to recreate the JobStatus on
@@ -566,7 +611,8 @@ public final class JobStatus {
                 rescheduling.getStandbyBucket(),
                 rescheduling.getSourceTag(), backoffAttempt, newEarliestRuntimeElapsedMillis,
                 newLatestRuntimeElapsedMillis,
-                lastSuccessfulRunTime, lastFailedRunTime, rescheduling.getInternalFlags());
+                lastSuccessfulRunTime, lastFailedRunTime, rescheduling.getInternalFlags(),
+                rescheduling.mDynamicConstraints);
     }
 
     /**
@@ -603,7 +649,7 @@ public final class JobStatus {
                 standbyBucket, tag, 0,
                 earliestRunTimeElapsedMillis, latestRunTimeElapsedMillis,
                 0 /* lastSuccessfulRunTime */, 0 /* lastFailedRunTime */,
-                /*innerFlags=*/ 0);
+                /*innerFlags=*/ 0, /* dynamicConstraints */ 0);
     }
 
     public void enqueueWorkLocked(JobWorkItem work) {
@@ -1020,6 +1066,11 @@ public final class JobStatus {
         mOriginalLatestRunTimeElapsedMillis = latestRunTimeElapsed;
     }
 
+    @JobParameters.StopReason
+    public int getStopReason() {
+        return mReasonReadyToUnready;
+    }
+
     /**
      * Return the fractional position of "now" within the "run time" window of
      * this job.
@@ -1077,41 +1128,45 @@ public final class JobStatus {
      * in Doze.
      */
     public boolean canRunInDoze() {
-        return (getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0 || shouldTreatAsExpeditedJob();
+        return (getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0
+                || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
+                && (mDynamicConstraints & CONSTRAINT_DEVICE_NOT_DOZING) == 0);
     }
 
     boolean canRunInBatterySaver() {
         return (getInternalFlags() & INTERNAL_FLAG_HAS_FOREGROUND_EXEMPTION) != 0
-                || shouldTreatAsExpeditedJob();
+                || ((shouldTreatAsExpeditedJob() || startedAsExpeditedJob)
+                && (mDynamicConstraints & CONSTRAINT_BACKGROUND_NOT_RESTRICTED) == 0);
     }
 
     boolean shouldIgnoreNetworkBlocking() {
-        return (getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0 || shouldTreatAsExpeditedJob();
+        return (getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0
+                || (shouldTreatAsExpeditedJob() || startedAsExpeditedJob);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setChargingConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_CHARGING, state);
+    boolean setChargingConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_CHARGING, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setBatteryNotLowConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_BATTERY_NOT_LOW, state);
+    boolean setBatteryNotLowConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_BATTERY_NOT_LOW, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setStorageNotLowConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_STORAGE_NOT_LOW, state);
+    boolean setStorageNotLowConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_STORAGE_NOT_LOW, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setTimingDelayConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_TIMING_DELAY, state);
+    boolean setTimingDelayConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_TIMING_DELAY, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setDeadlineConstraintSatisfied(boolean state) {
-        if (setConstraintSatisfied(CONSTRAINT_DEADLINE, state)) {
+    boolean setDeadlineConstraintSatisfied(final long nowElapsed, boolean state) {
+        if (setConstraintSatisfied(CONSTRAINT_DEADLINE, nowElapsed, state)) {
             // The constraint was changed. Update the ready flag.
             mReadyDeadlineSatisfied = !job.isPeriodic() && hasDeadlineConstraint() && state;
             return true;
@@ -1120,24 +1175,25 @@ public final class JobStatus {
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setIdleConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_IDLE, state);
+    boolean setIdleConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_IDLE, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setConnectivityConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_CONNECTIVITY, state);
+    boolean setConnectivityConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_CONNECTIVITY, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setContentTriggerConstraintSatisfied(boolean state) {
-        return setConstraintSatisfied(CONSTRAINT_CONTENT_TRIGGER, state);
+    boolean setContentTriggerConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_CONTENT_TRIGGER, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setDeviceNotDozingConstraintSatisfied(boolean state, boolean whitelisted) {
+    boolean setDeviceNotDozingConstraintSatisfied(final long nowElapsed,
+            boolean state, boolean whitelisted) {
         dozeWhitelisted = whitelisted;
-        if (setConstraintSatisfied(CONSTRAINT_DEVICE_NOT_DOZING, state)) {
+        if (setConstraintSatisfied(CONSTRAINT_DEVICE_NOT_DOZING, nowElapsed, state)) {
             // The constraint was changed. Update the ready flag.
             mReadyNotDozing = state || canRunInDoze();
             return true;
@@ -1146,8 +1202,10 @@ public final class JobStatus {
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setBackgroundNotRestrictedConstraintSatisfied(boolean state) {
-        if (setConstraintSatisfied(CONSTRAINT_BACKGROUND_NOT_RESTRICTED, state)) {
+    boolean setBackgroundNotRestrictedConstraintSatisfied(final long nowElapsed, boolean state,
+            boolean isUserBgRestricted) {
+        mIsUserBgRestricted = isUserBgRestricted;
+        if (setConstraintSatisfied(CONSTRAINT_BACKGROUND_NOT_RESTRICTED, nowElapsed, state)) {
             // The constraint was changed. Update the ready flag.
             mReadyNotRestrictedInBg = state;
             return true;
@@ -1156,8 +1214,8 @@ public final class JobStatus {
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setQuotaConstraintSatisfied(boolean state) {
-        if (setConstraintSatisfied(CONSTRAINT_WITHIN_QUOTA, state)) {
+    boolean setQuotaConstraintSatisfied(final long nowElapsed, boolean state) {
+        if (setConstraintSatisfied(CONSTRAINT_WITHIN_QUOTA, nowElapsed, state)) {
             // The constraint was changed. Update the ready flag.
             mReadyWithinQuota = state;
             return true;
@@ -1166,8 +1224,8 @@ public final class JobStatus {
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setExpeditedJobQuotaConstraintSatisfied(boolean state) {
-        if (setConstraintSatisfied(CONSTRAINT_WITHIN_EXPEDITED_QUOTA, state)) {
+    boolean setExpeditedJobQuotaConstraintSatisfied(final long nowElapsed, boolean state) {
+        if (setConstraintSatisfied(CONSTRAINT_WITHIN_EXPEDITED_QUOTA, nowElapsed, state)) {
             // The constraint was changed. Update the ready flag.
             mReadyWithinExpeditedQuota = state;
             // DeviceIdleJobsController currently only tracks jobs with the WILL_BE_FOREGROUND flag.
@@ -1190,7 +1248,7 @@ public final class JobStatus {
     }
 
     /** @return true if the constraint was changed, false otherwise. */
-    boolean setConstraintSatisfied(int constraint, boolean state) {
+    boolean setConstraintSatisfied(int constraint, final long nowElapsed, boolean state) {
         boolean old = (satisfiedConstraints&constraint) != 0;
         if (old == state) {
             return false;
@@ -1200,6 +1258,7 @@ public final class JobStatus {
                     "Constraint " + constraint + " is " + (!state ? "NOT " : "") + "satisfied for "
                             + toShortString());
         }
+        final boolean wasReady = !state && isReady();
         satisfiedConstraints = (satisfiedConstraints&~constraint) | (state ? constraint : 0);
         mSatisfiedConstraintsOfInterest = satisfiedConstraints & CONSTRAINTS_OF_INTEREST;
         mReadyDynamicSatisfied = mDynamicConstraints != 0
@@ -1212,7 +1271,85 @@ public final class JobStatus {
                             : FrameworkStatsLog
                                     .SCHEDULED_JOB_CONSTRAINT_CHANGED__STATE__UNSATISFIED);
         }
+
+        mConstraintUpdatedTimesElapsed[mConstraintChangeHistoryIndex] = nowElapsed;
+        mConstraintStatusHistory[mConstraintChangeHistoryIndex] = satisfiedConstraints;
+        mConstraintChangeHistoryIndex =
+                (mConstraintChangeHistoryIndex + 1) % NUM_CONSTRAINT_CHANGE_HISTORY;
+
+        // Can't use isReady() directly since "cache booleans" haven't updated yet.
+        final boolean isReady = readinessStatusWithConstraint(constraint, state);
+        if (wasReady && !isReady) {
+            mReasonReadyToUnready = constraintToStopReason(constraint);
+        } else if (!wasReady && isReady) {
+            mReasonReadyToUnready = JobParameters.STOP_REASON_UNDEFINED;
+        }
+
         return true;
+    }
+
+    @JobParameters.StopReason
+    private int constraintToStopReason(int constraint) {
+        switch (constraint) {
+            case CONSTRAINT_BATTERY_NOT_LOW:
+                if ((requiredConstraints & constraint) != 0) {
+                    // The developer requested this constraint, so it makes sense to return the
+                    // explicit constraint reason.
+                    return JobParameters.STOP_REASON_CONSTRAINT_BATTERY_NOT_LOW;
+                }
+                // Hard-coding right now since the current dynamic constraint sets don't overlap
+                // TODO: return based on active dynamic constraint sets when they start overlapping
+                return JobParameters.STOP_REASON_APP_STANDBY;
+            case CONSTRAINT_CHARGING:
+                if ((requiredConstraints & constraint) != 0) {
+                    // The developer requested this constraint, so it makes sense to return the
+                    // explicit constraint reason.
+                    return JobParameters.STOP_REASON_CONSTRAINT_CHARGING;
+                }
+                // Hard-coding right now since the current dynamic constraint sets don't overlap
+                // TODO: return based on active dynamic constraint sets when they start overlapping
+                return JobParameters.STOP_REASON_APP_STANDBY;
+            case CONSTRAINT_CONNECTIVITY:
+                return JobParameters.STOP_REASON_CONSTRAINT_CONNECTIVITY;
+            case CONSTRAINT_IDLE:
+                if ((requiredConstraints & constraint) != 0) {
+                    // The developer requested this constraint, so it makes sense to return the
+                    // explicit constraint reason.
+                    return JobParameters.STOP_REASON_CONSTRAINT_DEVICE_IDLE;
+                }
+                // Hard-coding right now since the current dynamic constraint sets don't overlap
+                // TODO: return based on active dynamic constraint sets when they start overlapping
+                return JobParameters.STOP_REASON_APP_STANDBY;
+            case CONSTRAINT_STORAGE_NOT_LOW:
+                return JobParameters.STOP_REASON_CONSTRAINT_STORAGE_NOT_LOW;
+
+            case CONSTRAINT_BACKGROUND_NOT_RESTRICTED:
+                // The BACKGROUND_NOT_RESTRICTED constraint could be dissatisfied either because
+                // the app is background restricted, or because we're restricting background work
+                // in battery saver. Assume that background restriction is the reason apps that
+                // are background restricted have their jobs stopped, and battery saver otherwise.
+                // This has the benefit of being consistent for background restricted apps
+                // (they'll always get BACKGROUND_RESTRICTION) as the reason, regardless of
+                // battery saver state.
+                if (mIsUserBgRestricted) {
+                    return JobParameters.STOP_REASON_BACKGROUND_RESTRICTION;
+                }
+                return JobParameters.STOP_REASON_DEVICE_STATE;
+            case CONSTRAINT_DEVICE_NOT_DOZING:
+                return JobParameters.STOP_REASON_DEVICE_STATE;
+
+            case CONSTRAINT_WITHIN_QUOTA:
+            case CONSTRAINT_WITHIN_EXPEDITED_QUOTA:
+                return JobParameters.STOP_REASON_QUOTA;
+
+            // These should never be stop reasons since they can never go from true to false.
+            case CONSTRAINT_CONTENT_TRIGGER:
+            case CONSTRAINT_DEADLINE:
+            case CONSTRAINT_TIMING_DELAY:
+            default:
+                Slog.wtf(TAG, "Unsupported constraint (" + constraint + ") --stop reason mapping");
+                return JobParameters.STOP_REASON_UNDEFINED;
+        }
     }
 
     boolean isConstraintSatisfied(int constraint) {
@@ -1229,6 +1366,14 @@ public final class JobStatus {
 
     void setTrackingController(int which) {
         trackingControllers |= which;
+    }
+
+    /**
+     * Add additional constraints to prevent this job from running when doze or battery saver are
+     * active.
+     */
+    public void disallowRunInBatterySaverAndDoze() {
+        addDynamicConstraints(DYNAMIC_EXPEDITED_DEFERRAL_CONSTRAINTS);
     }
 
     /**
@@ -1290,33 +1435,42 @@ public final class JobStatus {
      * granted, based on its requirements.
      */
     boolean wouldBeReadyWithConstraint(int constraint) {
+        return readinessStatusWithConstraint(constraint, true);
+    }
+
+    private boolean readinessStatusWithConstraint(int constraint, boolean value) {
         boolean oldValue = false;
         int satisfied = mSatisfiedConstraintsOfInterest;
         switch (constraint) {
             case CONSTRAINT_BACKGROUND_NOT_RESTRICTED:
                 oldValue = mReadyNotRestrictedInBg;
-                mReadyNotRestrictedInBg = true;
+                mReadyNotRestrictedInBg = value;
                 break;
             case CONSTRAINT_DEADLINE:
                 oldValue = mReadyDeadlineSatisfied;
-                mReadyDeadlineSatisfied = true;
+                mReadyDeadlineSatisfied = value;
                 break;
             case CONSTRAINT_DEVICE_NOT_DOZING:
                 oldValue = mReadyNotDozing;
-                mReadyNotDozing = true;
+                mReadyNotDozing = value;
                 break;
             case CONSTRAINT_WITHIN_QUOTA:
                 oldValue = mReadyWithinQuota;
-                mReadyWithinQuota = true;
+                mReadyWithinQuota = value;
                 break;
             case CONSTRAINT_WITHIN_EXPEDITED_QUOTA:
                 oldValue = mReadyWithinExpeditedQuota;
-                mReadyWithinExpeditedQuota = true;
+                mReadyWithinExpeditedQuota = value;
                 break;
             default:
-                satisfied |= constraint;
+                if (value) {
+                    satisfied |= constraint;
+                } else {
+                    satisfied &= ~constraint;
+                }
                 mReadyDynamicSatisfied = mDynamicConstraints != 0
                         && mDynamicConstraints == (satisfied & mDynamicConstraints);
+
                 break;
         }
 
@@ -1700,7 +1854,7 @@ public final class JobStatus {
     }
 
     // Dumpsys infrastructure
-    public void dump(IndentingPrintWriter pw,  boolean full, long elapsedRealtimeMillis) {
+    public void dump(IndentingPrintWriter pw,  boolean full, long nowElapsed) {
         UserHandle.formatUid(pw, callingUid);
         pw.print(" tag="); pw.println(tag);
 
@@ -1830,6 +1984,22 @@ public final class JobStatus {
             dumpConstraints(pw,
                     ((requiredConstraints | CONSTRAINT_WITHIN_QUOTA) & ~satisfiedConstraints));
             pw.println();
+
+            pw.println("Constraint history:");
+            pw.increaseIndent();
+            for (int h = 0; h < NUM_CONSTRAINT_CHANGE_HISTORY; ++h) {
+                final int idx = (h + mConstraintChangeHistoryIndex) % NUM_CONSTRAINT_CHANGE_HISTORY;
+                if (mConstraintUpdatedTimesElapsed[idx] == 0) {
+                    continue;
+                }
+                TimeUtils.formatDuration(mConstraintUpdatedTimesElapsed[idx], nowElapsed, pw);
+                // dumpConstraints prepends with a space, so no need to add a space after the =
+                pw.print(" =");
+                dumpConstraints(pw, mConstraintStatusHistory[idx]);
+                pw.println();
+            }
+            pw.decreaseIndent();
+
             if (dozeWhitelisted) {
                 pw.println("Doze whitelisted: true");
             }
@@ -1870,7 +2040,10 @@ public final class JobStatus {
         pw.println(serviceInfo != null);
         if ((getFlags() & JobInfo.FLAG_EXPEDITED) != 0) {
             pw.print("readyWithinExpeditedQuota: ");
-            pw.println(mReadyWithinExpeditedQuota);
+            pw.print(mReadyWithinExpeditedQuota);
+            pw.print(" (started as EJ: ");
+            pw.print(startedAsExpeditedJob);
+            pw.println(")");
         }
         pw.decreaseIndent();
 
@@ -1910,26 +2083,25 @@ public final class JobStatus {
         pw.increaseIndent();
         if (whenStandbyDeferred != 0) {
             pw.print("Deferred since: ");
-            TimeUtils.formatDuration(whenStandbyDeferred, elapsedRealtimeMillis, pw);
+            TimeUtils.formatDuration(whenStandbyDeferred, nowElapsed, pw);
             pw.println();
         }
         if (mFirstForceBatchedTimeElapsed != 0) {
             pw.print("Time since first force batch attempt: ");
-            TimeUtils.formatDuration(mFirstForceBatchedTimeElapsed, elapsedRealtimeMillis, pw);
+            TimeUtils.formatDuration(mFirstForceBatchedTimeElapsed, nowElapsed, pw);
             pw.println();
         }
         pw.decreaseIndent();
 
         pw.print("Enqueue time: ");
-        TimeUtils.formatDuration(enqueueTime, elapsedRealtimeMillis, pw);
+        TimeUtils.formatDuration(enqueueTime, nowElapsed, pw);
         pw.println();
         pw.print("Run time: earliest=");
-        formatRunTime(pw, earliestRunTimeElapsedMillis, NO_EARLIEST_RUNTIME, elapsedRealtimeMillis);
+        formatRunTime(pw, earliestRunTimeElapsedMillis, NO_EARLIEST_RUNTIME, nowElapsed);
         pw.print(", latest=");
-        formatRunTime(pw, latestRunTimeElapsedMillis, NO_LATEST_RUNTIME, elapsedRealtimeMillis);
+        formatRunTime(pw, latestRunTimeElapsedMillis, NO_LATEST_RUNTIME, nowElapsed);
         pw.print(", original latest=");
-        formatRunTime(pw, mOriginalLatestRunTimeElapsedMillis,
-                NO_LATEST_RUNTIME, elapsedRealtimeMillis);
+        formatRunTime(pw, mOriginalLatestRunTimeElapsedMillis, NO_LATEST_RUNTIME, nowElapsed);
         pw.println();
         if (numFailures != 0) {
             pw.print("Num failures: "); pw.println(numFailures);
@@ -2009,9 +2181,6 @@ public final class JobStatus {
             }
             if (uriPerms != null) {
                 uriPerms.dump(proto, JobStatusDumpProto.JobInfo.GRANTED_URI_PERMISSIONS);
-            }
-            if (job.getRequiredNetwork() != null) {
-                job.getRequiredNetwork().dumpDebug(proto, JobStatusDumpProto.JobInfo.REQUIRED_NETWORK);
             }
             if (mTotalNetworkDownloadBytes != JobInfo.NETWORK_BYTES_UNKNOWN) {
                 proto.write(JobStatusDumpProto.JobInfo.TOTAL_NETWORK_DOWNLOAD_BYTES,
@@ -2099,10 +2268,6 @@ public final class JobStatus {
                 Uri u = changedUris.valueAt(i);
                 proto.write(JobStatusDumpProto.CHANGED_URIS, u.toString());
             }
-        }
-
-        if (network != null) {
-            network.dumpDebug(proto, JobStatusDumpProto.NETWORK);
         }
 
         if (pendingWork != null) {

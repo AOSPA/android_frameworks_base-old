@@ -244,6 +244,8 @@ interface IActivityTaskManager {
     boolean requestAutofillData(in IAssistDataReceiver receiver, in Bundle receiverExtras,
             in IBinder activityToken, int flags);
     boolean isAssistDataAllowedOnCurrentActivity();
+    boolean requestAssistDataForTask(in IAssistDataReceiver receiver, int taskId,
+            in String callingPackageName);
 
     /**
      * Notify the system that the keyguard is going away.
@@ -288,6 +290,13 @@ interface IActivityTaskManager {
      */
     void setSplitScreenResizing(boolean resizing);
     boolean supportsLocalVoiceInteraction();
+
+    /**
+     * Whether to allow non-resizable apps to be shown in multi-window. The app will be letterboxed
+     * if the request orientation is not met, and will be shown in size-compat mode if the container
+     * size has changed.
+     */
+    boolean supportsNonResizableMultiWindow();
 
     // Get device configuration
     ConfigurationInfo getDeviceConfigurationInfo();

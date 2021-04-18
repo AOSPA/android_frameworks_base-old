@@ -18,13 +18,15 @@ package com.android.server.connectivity;
 
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OFF;
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME;
+import static android.net.ConnectivitySettingsManager.PRIVATE_DNS_DEFAULT_MODE;
+import static android.net.ConnectivitySettingsManager.PRIVATE_DNS_MODE;
+import static android.net.ConnectivitySettingsManager.PRIVATE_DNS_SPECIFIER;
 import static android.net.NetworkCapabilities.MAX_TRANSPORT;
 import static android.net.NetworkCapabilities.MIN_TRANSPORT;
 import static android.net.NetworkCapabilities.TRANSPORT_VPN;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
-import static android.provider.Settings.Global.PRIVATE_DNS_DEFAULT_MODE;
-import static android.provider.Settings.Global.PRIVATE_DNS_MODE;
-import static android.provider.Settings.Global.PRIVATE_DNS_SPECIFIER;
+import static android.net.resolv.aidl.IDnsResolverUnsolicitedEventListener.VALIDATION_RESULT_FAILURE;
+import static android.net.resolv.aidl.IDnsResolverUnsolicitedEventListener.VALIDATION_RESULT_SUCCESS;
 
 import static com.android.testutils.MiscAsserts.assertContainsExactly;
 import static com.android.testutils.MiscAsserts.assertContainsStringsExactly;
@@ -164,7 +166,8 @@ public class DnsManagerTest {
         mDnsManager.flushVmDnsCache();
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID_ALTERNATE,
-                InetAddress.parseNumericAddress("4.4.4.4"), "", true));
+                        InetAddress.parseNumericAddress("4.4.4.4"), "",
+                        VALIDATION_RESULT_SUCCESS));
         LinkProperties fixedLp = new LinkProperties(lp);
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, fixedLp);
         assertFalse(fixedLp.isPrivateDnsActive());
@@ -204,7 +207,8 @@ public class DnsManagerTest {
         // Validate one.
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("6.6.6.6"), "strictmode.com", true));
+                        InetAddress.parseNumericAddress("6.6.6.6"), "strictmode.com",
+                        VALIDATION_RESULT_SUCCESS));
         fixedLp = new LinkProperties(lp);
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, fixedLp);
         assertEquals(Arrays.asList(InetAddress.parseNumericAddress("6.6.6.6")),
@@ -212,7 +216,8 @@ public class DnsManagerTest {
         // Validate the 2nd one.
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("2001:db8:66:66::1"), "strictmode.com", true));
+                        InetAddress.parseNumericAddress("2001:db8:66:66::1"), "strictmode.com",
+                        VALIDATION_RESULT_SUCCESS));
         fixedLp = new LinkProperties(lp);
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, fixedLp);
         assertEquals(Arrays.asList(
@@ -232,7 +237,8 @@ public class DnsManagerTest {
         mDnsManager.flushVmDnsCache();
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("3.3.3.3"), "", true));
+                        InetAddress.parseNumericAddress("3.3.3.3"), "",
+                        VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -245,7 +251,8 @@ public class DnsManagerTest {
         mDnsManager.flushVmDnsCache();
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID_UNTRACKED,
-                InetAddress.parseNumericAddress("3.3.3.3"), "", true));
+                        InetAddress.parseNumericAddress("3.3.3.3"), "",
+                        VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -253,7 +260,8 @@ public class DnsManagerTest {
         // Validation event has untracked ipAddress
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("4.4.4.4"), "", true));
+                        InetAddress.parseNumericAddress("4.4.4.4"), "",
+                        VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -261,8 +269,8 @@ public class DnsManagerTest {
         // Validation event has untracked hostname
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("3.3.3.3"), "hostname",
-                true));
+                        InetAddress.parseNumericAddress("3.3.3.3"), "hostname",
+                        VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -270,7 +278,8 @@ public class DnsManagerTest {
         // Validation event failed
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("3.3.3.3"), "", false));
+                        InetAddress.parseNumericAddress("3.3.3.3"), "",
+                        VALIDATION_RESULT_FAILURE));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -279,7 +288,7 @@ public class DnsManagerTest {
         mDnsManager.removeNetwork(new Network(TEST_NETID));
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("3.3.3.3"), "", true));
+                        InetAddress.parseNumericAddress("3.3.3.3"), "", VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -293,7 +302,8 @@ public class DnsManagerTest {
         mDnsManager.flushVmDnsCache();
         mDnsManager.updatePrivateDnsValidation(
                 new DnsManager.PrivateDnsValidationUpdate(TEST_NETID,
-                InetAddress.parseNumericAddress("3.3.3.3"), "", true));
+                        InetAddress.parseNumericAddress("3.3.3.3"), "",
+                        VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         assertFalse(lp.isPrivateDnsActive());
         assertNull(lp.getPrivateDnsServerName());
@@ -302,14 +312,14 @@ public class DnsManagerTest {
     @Test
     public void testOverrideDefaultMode() throws Exception {
         // Hard-coded default is opportunistic mode.
-        final PrivateDnsConfig cfgAuto = DnsManager.getPrivateDnsConfig(mContentResolver);
+        final PrivateDnsConfig cfgAuto = DnsManager.getPrivateDnsConfig(mCtx);
         assertTrue(cfgAuto.useTls);
         assertEquals("", cfgAuto.hostname);
         assertEquals(new InetAddress[0], cfgAuto.ips);
 
         // Pretend a gservices push sets the default to "off".
         Settings.Global.putString(mContentResolver, PRIVATE_DNS_DEFAULT_MODE, "off");
-        final PrivateDnsConfig cfgOff = DnsManager.getPrivateDnsConfig(mContentResolver);
+        final PrivateDnsConfig cfgOff = DnsManager.getPrivateDnsConfig(mCtx);
         assertFalse(cfgOff.useTls);
         assertEquals("", cfgOff.hostname);
         assertEquals(new InetAddress[0], cfgOff.ips);
@@ -318,7 +328,7 @@ public class DnsManagerTest {
         Settings.Global.putString(
                 mContentResolver, PRIVATE_DNS_MODE, PRIVATE_DNS_MODE_PROVIDER_HOSTNAME);
         Settings.Global.putString(mContentResolver, PRIVATE_DNS_SPECIFIER, "strictmode.com");
-        final PrivateDnsConfig cfgStrict = DnsManager.getPrivateDnsConfig(mContentResolver);
+        final PrivateDnsConfig cfgStrict = DnsManager.getPrivateDnsConfig(mCtx);
         assertTrue(cfgStrict.useTls);
         assertEquals("strictmode.com", cfgStrict.hostname);
         assertEquals(new InetAddress[0], cfgStrict.ips);
@@ -398,7 +408,8 @@ public class DnsManagerTest {
         mDnsManager.updatePrivateDns(network, mDnsManager.getPrivateDnsConfig());
         mDnsManager.noteDnsServersForNetwork(TEST_NETID, lp);
         mDnsManager.updatePrivateDnsValidation(
-                new DnsManager.PrivateDnsValidationUpdate(TEST_NETID, dnsAddr, "", true));
+                new DnsManager.PrivateDnsValidationUpdate(TEST_NETID, dnsAddr, "",
+                        VALIDATION_RESULT_SUCCESS));
         mDnsManager.updatePrivateDnsStatus(TEST_NETID, lp);
         privateDnsCfg = mDnsManager.getPrivateDnsConfig(network);
         assertTrue(privateDnsCfg.useTls);

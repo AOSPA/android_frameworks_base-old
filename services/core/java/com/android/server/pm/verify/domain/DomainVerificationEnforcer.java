@@ -70,11 +70,8 @@ public class DomainVerificationEnforcer {
                 break;
             default:
                 if (!proxy.isCallerVerifier(callingUid)) {
-                    mContext.enforcePermission(
-                            android.Manifest.permission.UPDATE_DOMAIN_VERIFICATION_USER_SELECTION,
-                            Binder.getCallingPid(), callingUid,
-                            "Caller " + callingUid
-                                    + " is not allowed to query domain verification state");
+                    throw new SecurityException(
+                            "Caller is not allowed to query domain verification state");
                 }
 
                 mContext.enforcePermission(android.Manifest.permission.QUERY_ALL_PACKAGES,
@@ -132,6 +129,27 @@ public class DomainVerificationEnforcer {
     /**
      * Enforced when mutating user selection state inside an exposed API method.
      */
+    public boolean assertApprovedUserStateQuerent(int callingUid, @UserIdInt int callingUserId,
+            @NonNull String packageName, @UserIdInt int targetUserId) throws SecurityException {
+        if (callingUserId != targetUserId) {
+            mContext.enforcePermission(
+                    Manifest.permission.INTERACT_ACROSS_USERS,
+                    Binder.getCallingPid(), callingUid,
+                    "Caller is not allowed to edit other users");
+        }
+
+        if (!mCallback.doesUserExist(callingUserId)) {
+            throw new SecurityException("User " + callingUserId + " does not exist");
+        } else if (!mCallback.doesUserExist(targetUserId)) {
+            throw new SecurityException("User " + targetUserId + " does not exist");
+        }
+
+        return !mCallback.filterAppAccess(packageName, callingUid, targetUserId);
+    }
+
+    /**
+     * Enforced when mutating user selection state inside an exposed API method.
+     */
     public boolean assertApprovedUserSelector(int callingUid, @UserIdInt int callingUserId,
             @Nullable String packageName, @UserIdInt int targetUserId) throws SecurityException {
         if (callingUserId != targetUserId) {
@@ -145,6 +163,12 @@ public class DomainVerificationEnforcer {
                 android.Manifest.permission.UPDATE_DOMAIN_VERIFICATION_USER_SELECTION,
                 Binder.getCallingPid(), callingUid,
                 "Caller is not allowed to edit user selections");
+
+        if (!mCallback.doesUserExist(callingUserId)) {
+            throw new SecurityException("User " + callingUserId + " does not exist");
+        } else if (!mCallback.doesUserExist(targetUserId)) {
+            throw new SecurityException("User " + targetUserId + " does not exist");
+        }
 
         if (packageName == null) {
             return true;
@@ -169,6 +193,12 @@ public class DomainVerificationEnforcer {
             }
         }
 
+        if (!mCallback.doesUserExist(callingUserId)) {
+            throw new SecurityException("User " + callingUserId + " does not exist");
+        } else if (!mCallback.doesUserExist(targetUserId)) {
+            throw new SecurityException("User " + targetUserId + " does not exist");
+        }
+
         return !mCallback.filterAppAccess(packageName, callingUid, targetUserId);
     }
 
@@ -182,7 +212,42 @@ public class DomainVerificationEnforcer {
                     "Caller is not allowed to edit other users");
         }
 
+        if (!mCallback.doesUserExist(callingUserId)) {
+            throw new SecurityException("User " + callingUserId + " does not exist");
+        } else if (!mCallback.doesUserExist(targetUserId)) {
+            throw new SecurityException("User " + targetUserId + " does not exist");
+        }
+
         return !mCallback.filterAppAccess(packageName, callingUid, targetUserId);
+    }
+
+    /**
+     * Querying for the owners of a domain. Because this API cannot filter the returned list of
+     * packages, enforces {@link android.Manifest.permission.QUERY_ALL_PACKAGES}, but also enforces
+     * {@link android.Manifest.permission.INTERACT_ACROSS_USERS} because each user has a different
+     * state.
+     */
+    public void assertOwnerQuerent(int callingUid, @UserIdInt int callingUserId,
+            @UserIdInt int targetUserId) {
+        final int callingPid = Binder.getCallingPid();
+        if (callingUserId != targetUserId) {
+            mContext.enforcePermission(android.Manifest.permission.INTERACT_ACROSS_USERS,
+                    callingPid, callingUid, "Caller is not allowed to query other users");
+        }
+
+        mContext.enforcePermission(android.Manifest.permission.QUERY_ALL_PACKAGES,
+                callingPid, callingUid, "Caller " + callingUid + " does not hold "
+                        + android.Manifest.permission.QUERY_ALL_PACKAGES);
+
+        mContext.enforcePermission(
+                android.Manifest.permission.UPDATE_DOMAIN_VERIFICATION_USER_SELECTION,
+                callingPid, callingUid, "Caller is not allowed to query user selections");
+
+        if (!mCallback.doesUserExist(callingUserId)) {
+            throw new SecurityException("User " + callingUserId + " does not exist");
+        } else if (!mCallback.doesUserExist(targetUserId)) {
+            throw new SecurityException("User " + targetUserId + " does not exist");
+        }
     }
 
     public interface Callback {
@@ -191,5 +256,7 @@ public class DomainVerificationEnforcer {
          * if the package was not installed
          */
         boolean filterAppAccess(@NonNull String packageName, int callingUid, @UserIdInt int userId);
+
+        boolean doesUserExist(@UserIdInt int userId);
     }
 }

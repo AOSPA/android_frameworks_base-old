@@ -41,6 +41,7 @@ import com.android.server.biometrics.sensors.BiometricUtils;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
 import com.android.server.biometrics.sensors.EnrollClient;
 import com.android.server.biometrics.sensors.face.FaceUtils;
+import com.android.server.biometrics.sensors.face.ReEnrollNotificationUtils;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -82,6 +83,13 @@ public class FaceEnrollClient extends EnrollClient<ISession> {
             mPreviewSurface = null;
             Slog.e(TAG, "Failed to dup previewSurface", e);
         }
+    }
+
+    @Override
+    public void start(@NonNull Callback callback) {
+        super.start(callback);
+
+        ReEnrollNotificationUtils.cancelNotification(getContext());
     }
 
     @Override
@@ -152,7 +160,7 @@ public class FaceEnrollClient extends EnrollClient<ISession> {
                 features = new byte[0];
             }
 
-            mCancellationSignal = getFreshDaemon().enroll(mSequentialId,
+            mCancellationSignal = getFreshDaemon().enroll(
                     HardwareAuthTokenUtils.toHardwareAuthToken(mHardwareAuthToken),
                     EnrollmentType.DEFAULT, features, mPreviewSurface);
         } catch (RemoteException e) {

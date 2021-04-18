@@ -71,6 +71,7 @@ import android.provider.Settings;
 import android.service.dreams.DreamManagerInternal;
 import android.test.mock.MockContentResolver;
 import android.view.Display;
+import android.view.DisplayInfo;
 
 import androidx.test.InstrumentationRegistry;
 
@@ -98,9 +99,11 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.ArgumentMatcher;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
+import org.mockito.stubbing.Answer;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * Tests for {@link com.android.server.power.PowerManagerService}.
@@ -211,7 +214,8 @@ public class PowerManagerServiceTest {
         mService = new PowerManagerService(mContextSpy, new Injector() {
             @Override
             Notifier createNotifier(Looper looper, Context context, IBatteryStats batteryStats,
-                    SuspendBlocker suspendBlocker, WindowManagerPolicy policy) {
+                    SuspendBlocker suspendBlocker, WindowManagerPolicy policy,
+                    FaceDownDetector faceDownDetector) {
                 return mNotifierMock;
             }
 
@@ -401,30 +405,33 @@ public class PowerManagerServiceTest {
     @Test
     public void testGetDesiredScreenPolicy_WithVR() throws Exception {
         createService();
+        mService.systemReady(null);
         // Brighten up the screen
-        mService.setWakefulnessLocked(WAKEFULNESS_AWAKE, PowerManager.WAKE_REASON_UNKNOWN, 0);
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_AWAKE, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_BRIGHT);
 
         // Move to VR
         mService.setVrModeEnabled(true);
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_VR);
 
         // Then take a nap
-        mService.setWakefulnessLocked(WAKEFULNESS_ASLEEP, PowerManager.GO_TO_SLEEP_REASON_TIMEOUT,
-                0);
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_ASLEEP, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_OFF);
 
         // Wake up to VR
-        mService.setWakefulnessLocked(WAKEFULNESS_AWAKE, PowerManager.WAKE_REASON_UNKNOWN, 0);
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_AWAKE, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_VR);
 
         // And back to normal
         mService.setVrModeEnabled(false);
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_BRIGHT);
     }
 
@@ -460,21 +467,21 @@ public class PowerManagerServiceTest {
         // First, ensure that a normal full wake lock does not cause a wakeup
         int flags = PowerManager.FULL_WAKE_LOCK;
         mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
-                null /* workSource */, null /* historyTag */);
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
         assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
         mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
 
         // Ensure that the flag does *NOT* work with a partial wake lock.
         flags = PowerManager.PARTIAL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP;
         mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
-                null /* workSource */, null /* historyTag */);
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
         assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
         mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
 
         // Verify that flag forces a wakeup when paired to a FULL_WAKE_LOCK
         flags = PowerManager.FULL_WAKE_LOCK | PowerManager.ACQUIRE_CAUSES_WAKEUP;
         mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
-                null /* workSource */, null /* historyTag */);
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
         assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
         mService.getBinderServiceInstance().releaseWakeLock(token, 0 /* flags */);
     }
@@ -588,6 +595,8 @@ public class PowerManagerServiceTest {
     public void testWasDeviceIdleFor_true() {
         int interval = 1000;
         createService();
+        mService.systemReady(null);
+        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
         mService.onUserActivity();
         advanceTime(interval + 1 /* just a little more */);
         assertThat(mService.wasDeviceIdleForInternal(interval)).isTrue();
@@ -597,6 +606,8 @@ public class PowerManagerServiceTest {
     public void testWasDeviceIdleFor_false() {
         int interval = 1000;
         createService();
+        mService.systemReady(null);
+        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
         mService.onUserActivity();
         assertThat(mService.wasDeviceIdleForInternal(interval)).isFalse();
     }
@@ -658,7 +669,7 @@ public class PowerManagerServiceTest {
 
         // Create a wakelock
         mService.getBinderServiceInstance().acquireWakeLock(new Binder(), flags, tag, pkg,
-                null /* workSource */, null /* historyTag */);
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
         assertThat(wakelockMap.get(tag)).isEqualTo(flags);  // Verify wakelock is active.
 
         // Confirm that the wakelocks have been disabled when the forceSuspend is in flight.
@@ -675,8 +686,9 @@ public class PowerManagerServiceTest {
     }
 
     @Test
-    public void testForceSuspend_forceSuspendFailurePropogated() {
+    public void testForceSuspend_forceSuspendFailurePropagated() throws Exception {
         createService();
+        startSystem();
         when(mNativeWrapperMock.nativeForceSuspend()).thenReturn(false);
         assertThat(mService.getBinderServiceInstance().forceSuspend()).isFalse();
     }
@@ -715,7 +727,7 @@ public class PowerManagerServiceTest {
         // Take a nap and verify we no longer hold the blocker
         int flags = PowerManager.DOZE_WAKE_LOCK;
         mService.getBinderServiceInstance().acquireWakeLock(token, flags, tag, packageName,
-                null /* workSource */, null /* historyTag */);
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
         when(mDreamManagerInternalMock.isDreaming()).thenReturn(true);
         mService.getBinderServiceInstance().goToSleep(mClock.now(),
                 PowerManager.GO_TO_SLEEP_REASON_APPLICATION, 0);
@@ -750,6 +762,9 @@ public class PowerManagerServiceTest {
 
     @Test
     public void testInattentiveSleep_userActivityDismissesWarning() throws Exception {
+        final DisplayInfo info = new DisplayInfo();
+        info.displayGroupId = Display.DEFAULT_DISPLAY_GROUP;
+        when(mDisplayManagerInternalMock.getDisplayInfo(Display.DEFAULT_DISPLAY)).thenReturn(info);
         setMinimumScreenOffTimeoutConfig(5);
         setAttentiveWarningDuration(1900);
         setAttentiveTimeout(2000);
@@ -757,7 +772,7 @@ public class PowerManagerServiceTest {
         createService();
         startSystem();
 
-        mService.getBinderServiceInstance().userActivity(mClock.now(),
+        mService.getBinderServiceInstance().userActivity(Display.DEFAULT_DISPLAY, mClock.now(),
                 PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
         verify(mInattentiveSleepWarningControllerMock, never()).show();
 
@@ -766,7 +781,7 @@ public class PowerManagerServiceTest {
         verify(mInattentiveSleepWarningControllerMock, never()).dismiss(anyBoolean());
         when(mInattentiveSleepWarningControllerMock.isShown()).thenReturn(true);
 
-        mService.getBinderServiceInstance().userActivity(mClock.now(),
+        mService.getBinderServiceInstance().userActivity(Display.DEFAULT_DISPLAY, mClock.now(),
                 PowerManager.USER_ACTIVITY_EVENT_TOUCH, 0);
         verify(mInattentiveSleepWarningControllerMock, times(1)).dismiss(true);
     }
@@ -820,10 +835,91 @@ public class PowerManagerServiceTest {
 
         mService.getBinderServiceInstance().acquireWakeLock(token,
                 PowerManager.SCREEN_BRIGHT_WAKE_LOCK, tag, pkg,
-                null /* workSource */, null /* historyTag */);
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
 
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
         advanceTime(60);
         assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+    }
+
+    @Test
+    public void testWakeLock_affectsProperDisplayGroup() throws Exception {
+        final int nonDefaultDisplayGroupId = Display.DEFAULT_DISPLAY_GROUP + 1;
+        final AtomicReference<DisplayManagerInternal.DisplayGroupListener> listener =
+                new AtomicReference<>();
+        doAnswer((Answer<Void>) invocation -> {
+            listener.set(invocation.getArgument(0));
+            return null;
+        }).when(mDisplayManagerInternalMock).registerDisplayGroupListener(any());
+        final DisplayInfo info = new DisplayInfo();
+        info.displayGroupId = Display.DEFAULT_DISPLAY_GROUP;
+        when(mDisplayManagerInternalMock.getDisplayInfo(Display.DEFAULT_DISPLAY)).thenReturn(info);
+
+        final String pkg = mContextSpy.getOpPackageName();
+        final Binder token = new Binder();
+        final String tag = "testWakeLock_affectsProperDisplayGroup";
+
+        setMinimumScreenOffTimeoutConfig(5);
+        createService();
+        startSystem();
+        listener.get().onDisplayGroupAdded(nonDefaultDisplayGroupId);
+
+        mService.getBinderServiceInstance().acquireWakeLock(token,
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK, tag, pkg,
+                null /* workSource */, null /* historyTag */, Display.DEFAULT_DISPLAY);
+
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP)).isEqualTo(
+                WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(nonDefaultDisplayGroupId)).isEqualTo(
+                WAKEFULNESS_AWAKE);
+
+        advanceTime(15000);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP)).isEqualTo(
+                WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(nonDefaultDisplayGroupId)).isEqualTo(
+                WAKEFULNESS_DOZING);
+    }
+
+    @Test
+    public void testInvalidDisplayGroupWakeLock_affectsAllDisplayGroups() throws Exception {
+        final int nonDefaultDisplayGroupId = Display.DEFAULT_DISPLAY_GROUP + 1;
+        final AtomicReference<DisplayManagerInternal.DisplayGroupListener> listener =
+                new AtomicReference<>();
+        doAnswer((Answer<Void>) invocation -> {
+            listener.set(invocation.getArgument(0));
+            return null;
+        }).when(mDisplayManagerInternalMock).registerDisplayGroupListener(any());
+        final DisplayInfo info = new DisplayInfo();
+        info.displayGroupId = Display.DEFAULT_DISPLAY_GROUP;
+        when(mDisplayManagerInternalMock.getDisplayInfo(Display.DEFAULT_DISPLAY)).thenReturn(info);
+
+        final String pkg = mContextSpy.getOpPackageName();
+        final Binder token = new Binder();
+        final String tag = "testInvalidDisplayGroupWakeLock_affectsAllDisplayGroups";
+
+        setMinimumScreenOffTimeoutConfig(5);
+        createService();
+        startSystem();
+        listener.get().onDisplayGroupAdded(nonDefaultDisplayGroupId);
+
+        mService.getBinderServiceInstance().acquireWakeLock(token,
+                PowerManager.SCREEN_BRIGHT_WAKE_LOCK, tag, pkg,
+                null /* workSource */, null /* historyTag */, Display.INVALID_DISPLAY);
+
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP)).isEqualTo(
+                WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(nonDefaultDisplayGroupId)).isEqualTo(
+                WAKEFULNESS_AWAKE);
+
+        advanceTime(15000);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP)).isEqualTo(
+                WAKEFULNESS_AWAKE);
+        assertThat(mService.getWakefulnessLocked(nonDefaultDisplayGroupId)).isEqualTo(
+                WAKEFULNESS_AWAKE);
     }
 
     @Test
@@ -840,7 +936,7 @@ public class PowerManagerServiceTest {
         createService();
         startSystem();
 
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_BRIGHT);
     }
 
@@ -859,11 +955,8 @@ public class PowerManagerServiceTest {
     public void testQuiescentBoot_DesiredScreenPolicyShouldBeOff() throws Exception {
         when(mSystemPropertiesMock.get(eq(SYSTEM_PROPERTY_QUIESCENT), any())).thenReturn("1");
         createService();
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
-                DisplayPowerRequest.POLICY_OFF);
-
         startSystem();
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_OFF);
     }
 
@@ -873,7 +966,7 @@ public class PowerManagerServiceTest {
         createService();
         startSystem();
         forceAwake();
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY)).isEqualTo(
                 DisplayPowerRequest.POLICY_BRIGHT);
     }
 
@@ -889,7 +982,7 @@ public class PowerManagerServiceTest {
 
         mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
         assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
-        assertThat(mService.getDesiredScreenPolicyLocked()).isEqualTo(
+        assertThat(mService.getDesiredScreenPolicyLocked(Display.DEFAULT_DISPLAY_GROUP)).isEqualTo(
                 DisplayPowerRequest.POLICY_BRIGHT);
     }
 
@@ -1160,6 +1253,87 @@ public class PowerManagerServiceTest {
         // Native call for interactive returns false.
         assertFalse(
                 mService.getBinderServiceInstance().setPowerModeChecked(Mode.INTERACTIVE, false));
+    }
+
+    @Test
+    public void testMultiDisplay_wakefulnessUpdates() throws Exception {
+        final int nonDefaultDisplayGroupId = Display.DEFAULT_DISPLAY_GROUP + 1;
+        final AtomicReference<DisplayManagerInternal.DisplayGroupListener> listener =
+                new AtomicReference<>();
+        doAnswer((Answer<Void>) invocation -> {
+            listener.set(invocation.getArgument(0));
+            return null;
+        }).when(mDisplayManagerInternalMock).registerDisplayGroupListener(any());
+
+        createService();
+        startSystem();
+        listener.get().onDisplayGroupAdded(nonDefaultDisplayGroupId);
+
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_ASLEEP, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+
+        mService.setWakefulnessLocked(nonDefaultDisplayGroupId, WAKEFULNESS_ASLEEP, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_AWAKE, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+    }
+
+    @Test
+    public void testMultiDisplay_addDisplayGroup_preservesWakefulness() throws Exception {
+        final int nonDefaultDisplayGroupId = Display.DEFAULT_DISPLAY_GROUP + 1;
+        final AtomicReference<DisplayManagerInternal.DisplayGroupListener> listener =
+                new AtomicReference<>();
+        doAnswer((Answer<Void>) invocation -> {
+            listener.set(invocation.getArgument(0));
+            return null;
+        }).when(mDisplayManagerInternalMock).registerDisplayGroupListener(any());
+
+        createService();
+        startSystem();
+
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_ASLEEP, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+
+        listener.get().onDisplayGroupAdded(nonDefaultDisplayGroupId);
+
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+    }
+
+    @Test
+    public void testMultiDisplay_removeDisplayGroup_updatesWakefulness() throws Exception {
+        final int nonDefaultDisplayGroupId = Display.DEFAULT_DISPLAY_GROUP + 1;
+        final AtomicReference<DisplayManagerInternal.DisplayGroupListener> listener =
+                new AtomicReference<>();
+        doAnswer((Answer<Void>) invocation -> {
+            listener.set(invocation.getArgument(0));
+            return null;
+        }).when(mDisplayManagerInternalMock).registerDisplayGroupListener(any());
+
+        createService();
+        startSystem();
+        listener.get().onDisplayGroupAdded(nonDefaultDisplayGroupId);
+
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_ASLEEP, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
+
+        listener.get().onDisplayGroupRemoved(nonDefaultDisplayGroupId);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_ASLEEP);
+
+        mService.setWakefulnessLocked(Display.DEFAULT_DISPLAY_GROUP, WAKEFULNESS_AWAKE, 0, 0, 0, 0,
+                null, null);
+        assertThat(mService.getWakefulnessLocked()).isEqualTo(WAKEFULNESS_AWAKE);
     }
 
     @Test

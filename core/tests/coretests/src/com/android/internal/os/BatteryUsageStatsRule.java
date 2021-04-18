@@ -33,10 +33,14 @@ import android.util.SparseArray;
 
 import androidx.test.InstrumentationRegistry;
 
+import com.android.internal.power.MeasuredEnergyStats;
+
 import org.junit.rules.TestRule;
 import org.junit.runner.Description;
 import org.junit.runners.model.Statement;
 import org.mockito.stubbing.Answer;
+
+import java.util.Arrays;
 
 public class BatteryUsageStatsRule implements TestRule {
     private final PowerProfile mPowerProfile;
@@ -98,6 +102,16 @@ public class BatteryUsageStatsRule implements TestRule {
         return this;
     }
 
+    /** Call only after setting the power profile information. */
+    public BatteryUsageStatsRule initMeasuredEnergyStatsLocked(int numCustom) {
+        final boolean[] supportedStandardBuckets =
+                new boolean[MeasuredEnergyStats.NUMBER_STANDARD_POWER_BUCKETS];
+        Arrays.fill(supportedStandardBuckets, true);
+        mBatteryStats.initMeasuredEnergyStatsLocked(supportedStandardBuckets, numCustom);
+        mBatteryStats.informThatAllExternalStatsAreFlushed();
+        return this;
+    }
+
     public BatteryUsageStatsRule startWithScreenOn(boolean screenOn) {
         mScreenOn = screenOn;
         return this;
@@ -147,7 +161,7 @@ public class BatteryUsageStatsRule implements TestRule {
 
     BatteryUsageStats apply(BatteryUsageStatsQuery query, PowerCalculator... calculators) {
         final long[] customMeasuredEnergiesMicroJoules =
-                mBatteryStats.getCustomMeasuredEnergiesMicroJoules();
+                mBatteryStats.getCustomConsumerMeasuredBatteryConsumptionUC();
         final int customMeasuredEnergiesCount = customMeasuredEnergiesMicroJoules != null
                 ? customMeasuredEnergiesMicroJoules.length
                 : 0;

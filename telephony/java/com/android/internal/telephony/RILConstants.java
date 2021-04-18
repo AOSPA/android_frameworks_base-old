@@ -524,6 +524,7 @@ public interface RILConstants {
     int RIL_REQUEST_SET_DATA_THROTTLING = 221;
     int RIL_REQUEST_SET_ALLOWED_NETWORK_TYPES_BITMAP = 222;
     int RIL_REQUEST_GET_ALLOWED_NETWORK_TYPES_BITMAP = 223;
+    int RIL_REQUEST_GET_SLICING_CONFIG = 224;
 
     /* RIL Request to get newly supported radio
        capabilities include 5G SA*/

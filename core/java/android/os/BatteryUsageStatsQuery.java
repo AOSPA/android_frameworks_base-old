@@ -40,6 +40,7 @@ public final class BatteryUsageStatsQuery implements Parcelable {
      */
     @IntDef(flag = true, prefix = { "FLAG_BATTERY_USAGE_STATS_" }, value = {
             FLAG_BATTERY_USAGE_STATS_POWER_PROFILE_MODEL,
+            FLAG_BATTERY_USAGE_STATS_INCLUDE_HISTORY,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface BatteryUsageStatsFlags {}
@@ -53,14 +54,24 @@ public final class BatteryUsageStatsQuery implements Parcelable {
      */
     public static final int FLAG_BATTERY_USAGE_STATS_POWER_PROFILE_MODEL = 1;
 
+    /**
+     * Indicates that battery history should be included in the BatteryUsageStats.
+     * @hide
+     */
+    public static final int FLAG_BATTERY_USAGE_STATS_INCLUDE_HISTORY = 2;
+
+    private static final long DEFAULT_MAX_STATS_AGE_MS = 5 * 60 * 1000;
+
     private final int mFlags;
     @NonNull
     private final int[] mUserIds;
+    private final long mMaxStatsAgeMs;
 
     private BatteryUsageStatsQuery(@NonNull Builder builder) {
         mFlags = builder.mFlags;
         mUserIds = builder.mUserIds != null ? builder.mUserIds.toArray()
                 : new int[]{UserHandle.USER_ALL};
+        mMaxStatsAgeMs = builder.mMaxStatsAgeMs;
     }
 
     @BatteryUsageStatsFlags
@@ -87,10 +98,19 @@ public final class BatteryUsageStatsQuery implements Parcelable {
         return (mFlags & FLAG_BATTERY_USAGE_STATS_POWER_PROFILE_MODEL) != 0;
     }
 
+    /**
+     * Returns the client's tolerance for stale battery stats. The data is allowed to be up to
+     * this many milliseconds out-of-date.
+     */
+    public long getMaxStatsAge() {
+        return mMaxStatsAgeMs;
+    }
+
     private BatteryUsageStatsQuery(Parcel in) {
         mFlags = in.readInt();
         mUserIds = new int[in.readInt()];
         in.readIntArray(mUserIds);
+        mMaxStatsAgeMs = in.readLong();
     }
 
     @Override
@@ -98,6 +118,7 @@ public final class BatteryUsageStatsQuery implements Parcelable {
         dest.writeInt(mFlags);
         dest.writeInt(mUserIds.length);
         dest.writeIntArray(mUserIds);
+        dest.writeLong(mMaxStatsAgeMs);
     }
 
     @Override
@@ -125,6 +146,7 @@ public final class BatteryUsageStatsQuery implements Parcelable {
     public static final class Builder {
         private int mFlags;
         private IntArray mUserIds;
+        private long mMaxStatsAgeMs = DEFAULT_MAX_STATS_AGE_MS;
 
         /**
          * Builds a read-only BatteryUsageStatsQuery object.
@@ -146,10 +168,10 @@ public final class BatteryUsageStatsQuery implements Parcelable {
         }
 
         /**
-         * Sets flags to modify the behavior of {@link BatteryStatsManager#getBatteryUsageStats}.
+         * Requests that battery history be included in the BatteryUsageStats.
          */
-        public Builder setFlags(@BatteryUsageStatsFlags int flags) {
-            mFlags = flags;
+        public Builder includeBatteryHistory() {
+            mFlags |= BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_HISTORY;
             return this;
         }
 
@@ -161,6 +183,15 @@ public final class BatteryUsageStatsQuery implements Parcelable {
          */
         public Builder powerProfileModeledOnly() {
             mFlags |= BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_POWER_PROFILE_MODEL;
+            return this;
+        }
+
+        /**
+         * Set the client's tolerance for stale battery stats. The data may be up to
+         * this many milliseconds out-of-date.
+         */
+        public Builder setMaxStatsAgeMs(long maxStatsAgeMs) {
+            mMaxStatsAgeMs = maxStatsAgeMs;
             return this;
         }
     }

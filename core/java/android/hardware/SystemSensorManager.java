@@ -65,7 +65,7 @@ public class SystemSensorManager extends SensorManager {
     private static final int CAPPED_SAMPLING_RATE_LEVEL = SensorDirectChannel.RATE_NORMAL;
 
     private static final String HIGH_SAMPLING_RATE_SENSORS_PERMISSION =
-                                        "android.permisison.HIGH_SAMPLING_RATE_SENSORS";
+                                        "android.permission.HIGH_SAMPLING_RATE_SENSORS";
     /**
      * For apps targeting S and above, a SecurityException is thrown when they do not have
      * HIGH_SAMPLING_RATE_SENSORS permission, run in debug mode, and request sampling rates that
@@ -669,7 +669,7 @@ public class SystemSensorManager extends SensorManager {
     private abstract static class BaseEventQueue {
         private static native long nativeInitBaseEventQueue(long nativeManager,
                 WeakReference<BaseEventQueue> eventQWeak, MessageQueue msgQ,
-                String packageName, int mode, String opPackageName);
+                String packageName, int mode, String opPackageName, String attributionTag);
         private static native int nativeEnableSensor(long eventQ, int handle, int rateUs,
                 int maxBatchReportLatencyUs);
         private static native int nativeDisableSensor(long eventQ, int handle);
@@ -691,7 +691,8 @@ public class SystemSensorManager extends SensorManager {
             if (packageName == null) packageName = "";
             mNativeSensorEventQueue = nativeInitBaseEventQueue(manager.mNativeInstance,
                     new WeakReference<>(this), looper.getQueue(),
-                    packageName, mode, manager.mContext.getOpPackageName());
+                    packageName, mode, manager.mContext.getOpPackageName(),
+                    manager.mContext.getAttributionTag());
             mCloseGuard.open("dispose");
             mManager = manager;
         }

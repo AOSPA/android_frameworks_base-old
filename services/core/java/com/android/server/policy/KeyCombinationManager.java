@@ -18,11 +18,13 @@ package com.android.server.policy;
 import static android.view.KeyEvent.KEYCODE_POWER;
 
 import android.os.SystemClock;
+import android.util.Log;
 import android.util.SparseLongArray;
 import android.view.KeyEvent;
 
 import com.android.internal.util.ToBooleanFunction;
 
+import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.function.Consumer;
 
@@ -89,8 +91,8 @@ public class KeyCombinationManager {
 
         @Override
         public String toString() {
-            return "KeyCode1 = " + KeyEvent.keyCodeToString(mKeyCode1)
-                    + ", KeyCode2 = " +  KeyEvent.keyCodeToString(mKeyCode2);
+            return KeyEvent.keyCodeToString(mKeyCode1) + " + "
+                    + KeyEvent.keyCodeToString(mKeyCode2);
         }
     }
 
@@ -102,9 +104,11 @@ public class KeyCombinationManager {
     }
 
     /**
-     * Check if the key event could be triggered by combine key rule before dispatching to a window.
+     * Check if the key event could be intercepted by combination key rule before it is dispatched
+     * to a window.
+     * Return true if any active rule could be triggered by the key event, otherwise false.
      */
-    void interceptKey(KeyEvent event, boolean interactive) {
+    boolean interceptKey(KeyEvent event, boolean interactive) {
         final boolean down = event.getAction() == KeyEvent.ACTION_DOWN;
         final int keyCode = event.getKeyCode();
         final int count = mActiveRules.size();
@@ -117,9 +121,9 @@ public class KeyCombinationManager {
                     // exceed time from first key down.
                     forAllRules(mActiveRules, (rule)-> rule.cancel());
                     mActiveRules.clear();
-                    return;
+                    return false;
                 } else if (count == 0) { // has some key down but no active rule exist.
-                    return;
+                    return false;
                 }
             }
 
@@ -127,7 +131,7 @@ public class KeyCombinationManager {
                 mDownTimes.put(keyCode, eventTime);
             } else {
                 // ignore old key, maybe a repeat key.
-                return;
+                return false;
             }
 
             if (mDownTimes.size() == 1) {
@@ -141,7 +145,7 @@ public class KeyCombinationManager {
             } else {
                 // Ignore if rule already triggered.
                 if (mTriggeredRule != null) {
-                    return;
+                    return true;
                 }
 
                 // check if second key can trigger rule, or remove the non-match rule.
@@ -149,6 +153,7 @@ public class KeyCombinationManager {
                     if (!rule.shouldInterceptKeys(mDownTimes)) {
                         return false;
                     }
+                    Log.v(TAG, "Performing combination rule : " + rule);
                     rule.execute();
                     mTriggeredRule = rule;
                     return true;
@@ -156,6 +161,7 @@ public class KeyCombinationManager {
                 mActiveRules.clear();
                 if (mTriggeredRule != null) {
                     mActiveRules.add(mTriggeredRule);
+                    return true;
                 }
             }
         } else {
@@ -168,6 +174,7 @@ public class KeyCombinationManager {
                 }
             }
         }
+        return false;
     }
 
     /**
@@ -225,5 +232,12 @@ public class KeyCombinationManager {
             }
         }
         return false;
+    }
+
+    void dump(String prefix, PrintWriter pw) {
+        pw.println(prefix + "KeyCombination rules:");
+        forAllRules(mRules, (rule)-> {
+            pw.println(prefix + "  " + rule);
+        });
     }
 }

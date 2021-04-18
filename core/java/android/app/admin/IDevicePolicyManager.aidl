@@ -132,6 +132,12 @@ interface IDevicePolicyManager {
     void setScreenCaptureDisabled(in ComponentName who, boolean disabled, boolean parent);
     boolean getScreenCaptureDisabled(in ComponentName who, int userHandle, boolean parent);
 
+    void setNearbyNotificationStreamingPolicy(int policy);
+    int getNearbyNotificationStreamingPolicy();
+
+    void setNearbyAppStreamingPolicy(int policy);
+    int getNearbyAppStreamingPolicy();
+
     void setKeyguardDisabledFeatures(in ComponentName who, int which, boolean parent);
     int getKeyguardDisabledFeatures(in ComponentName who, int userHandle, boolean parent);
 
@@ -177,6 +183,7 @@ interface IDevicePolicyManager {
 
     String[] setPackagesSuspended(in ComponentName admin, in String callerPackage, in String[] packageNames, boolean suspended);
     boolean isPackageSuspended(in ComponentName admin, in String callerPackage, String packageName);
+    List<String> listPolicyExemptApps();
 
     boolean installCaCert(in ComponentName admin, String callerPackage, in byte[] certBuffer);
     void uninstallCaCerts(in ComponentName admin, String callerPackage, in String[] aliases);
@@ -267,8 +274,8 @@ interface IDevicePolicyManager {
     void setSecondaryLockscreenEnabled(in ComponentName who, boolean enabled);
     boolean isSecondaryLockscreenEnabled(in UserHandle userHandle);
 
-    void setNetworkSlicingEnabled(in boolean enabled);
-    boolean isNetworkSlicingEnabled(int userHandle);
+    void setEnterpriseNetworkPreferenceEnabled(in boolean enabled);
+    boolean isEnterpriseNetworkPreferenceEnabled(int userHandle);
 
     void setLockTaskPackages(in ComponentName who, in String[] packages);
     String[] getLockTaskPackages(in ComponentName who);
@@ -385,10 +392,10 @@ interface IDevicePolicyManager {
     List<String> getAffiliationIds(in ComponentName admin);
     boolean isAffiliatedUser();
 
-    void setSecurityLoggingEnabled(in ComponentName admin, boolean enabled);
-    boolean isSecurityLoggingEnabled(in ComponentName admin);
-    ParceledListSlice retrieveSecurityLogs(in ComponentName admin);
-    ParceledListSlice retrievePreRebootSecurityLogs(in ComponentName admin);
+    void setSecurityLoggingEnabled(in ComponentName admin, String packageName, boolean enabled);
+    boolean isSecurityLoggingEnabled(in ComponentName admin, String packageName);
+    ParceledListSlice retrieveSecurityLogs(in ComponentName admin, String packageName);
+    ParceledListSlice retrievePreRebootSecurityLogs(in ComponentName admin, String packageName);
     long forceNetworkLogs();
     long forceSecurityLogs();
 
@@ -479,6 +486,8 @@ interface IDevicePolicyManager {
 
     boolean setKeyGrantForApp(in ComponentName admin, String callerPackage, String alias, String packageName, boolean hasGrant);
     List<String> getKeyPairGrants(in String callerPackage, in String alias);
+    boolean setKeyGrantToWifiAuth(String callerPackage, String alias, boolean hasGrant);
+    boolean isKeyPairGrantedToWifiAuth(String callerPackage, String alias);
 
     void setUserControlDisabledPackages(in ComponentName admin, in List<String> packages);
 
@@ -492,6 +501,10 @@ interface IDevicePolicyManager {
 
     long getManagedProfileMaximumTimeOff(in ComponentName admin);
     void setManagedProfileMaximumTimeOff(in ComponentName admin, long timeoutMs);
+
+    void acknowledgeDeviceCompliant();
+    boolean isComplianceAcknowledgementRequired();
+
     boolean canProfileOwnerResetPasswordWhenLocked(int userId);
 
     void setNextOperationSafety(int operation, int reason);
@@ -502,6 +515,9 @@ interface IDevicePolicyManager {
 
     UserHandle createAndProvisionManagedProfile(in ManagedProfileProvisioningParams provisioningParams, in String callerPackage);
     void provisionFullyManagedDevice(in FullyManagedDeviceProvisioningParams provisioningParams, in String callerPackage);
+
+    void setDeviceOwnerType(in ComponentName admin, in int deviceOwnerType);
+    int getDeviceOwnerType(in ComponentName admin);
 
     void resetDefaultCrossProfileIntentFilters(int userId);
     boolean canAdminGrantSensorsPermissionsForUser(int userId);

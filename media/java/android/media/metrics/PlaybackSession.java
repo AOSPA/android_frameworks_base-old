@@ -29,6 +29,7 @@ import java.util.Objects;
 public final class PlaybackSession implements AutoCloseable {
     private final @NonNull String mId;
     private final @NonNull MediaMetricsManager mManager;
+    private final @NonNull LogSessionId mLogSessionId;
     private boolean mClosed = false;
 
     /**
@@ -41,6 +42,7 @@ public final class PlaybackSession implements AutoCloseable {
         mManager = manager;
         AnnotationValidations.validate(NonNull.class, null, mId);
         AnnotationValidations.validate(NonNull.class, null, mManager);
+        mLogSessionId = new LogSessionId(mId);
     }
 
     /**
@@ -78,8 +80,8 @@ public final class PlaybackSession implements AutoCloseable {
         mManager.reportTrackChangeEvent(mId, event);
     }
 
-    public @NonNull String getId() {
-        return mId;
+    public @NonNull LogSessionId getSessionId() {
+        return mLogSessionId;
     }
 
     @Override

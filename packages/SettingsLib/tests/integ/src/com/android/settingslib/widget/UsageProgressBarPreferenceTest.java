@@ -92,6 +92,28 @@ public class UsageProgressBarPreferenceTest {
     }
 
     @Test
+    public void setBottomSummary_getCorrectSummary() {
+        final String expectedText = "Should last until about 7:45 PM";
+        mUsageProgressBarPreference.setBottomSummary(expectedText);
+
+        mUsageProgressBarPreference.onBindViewHolder(mViewHolder);
+
+        final TextView bottomSummary = (TextView) mViewHolder.findViewById(R.id.bottom_summary);
+        assertThat(bottomSummary.getText()).isEqualTo(expectedText);
+        assertThat(bottomSummary.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void setBottomSummary_emptyText_isGone() {
+        mUsageProgressBarPreference.setBottomSummary(null);
+
+        mUsageProgressBarPreference.onBindViewHolder(mViewHolder);
+
+        final TextView bottomSummary = (TextView) mViewHolder.findViewById(R.id.bottom_summary);
+        assertThat(bottomSummary.getVisibility()).isEqualTo(View.GONE);
+    }
+
+    @Test
     public void setPercent_getCorrectProgress() {
         mUsageProgressBarPreference.setPercent(31, 80);
 
@@ -125,6 +147,22 @@ public class UsageProgressBarPreferenceTest {
                 (FrameLayout) mViewHolder.findViewById(R.id.custom_content);
         assertThat(customContent.getChildCount()).isEqualTo(1);
         assertThat(customContent.getChildAt(0)).isEqualTo(imageView);
+        assertThat(customContent.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void setCustomContent_setImageViewTwice_oneAndLatestChild() {
+        final ImageView imageViewLegacy = mock(ImageView.class);
+        final ImageView imageViewNew = mock(ImageView.class);
+        mUsageProgressBarPreference.setCustomContent(imageViewLegacy);
+        mUsageProgressBarPreference.setCustomContent(imageViewNew);
+
+        mUsageProgressBarPreference.onBindViewHolder(mViewHolder);
+
+        final FrameLayout customContent =
+                (FrameLayout) mViewHolder.findViewById(R.id.custom_content);
+        assertThat(customContent.getChildCount()).isEqualTo(1);
+        assertThat(customContent.getChildAt(0)).isEqualTo(imageViewNew);
         assertThat(customContent.getVisibility()).isEqualTo(View.VISIBLE);
     }
 }

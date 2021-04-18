@@ -25,54 +25,49 @@ import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.widget.Switch;
 
+import com.android.internal.R;
 import com.android.internal.logging.MetricsLogger;
-import com.android.systemui.R;
+import com.android.systemui.R.drawable;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSHost;
-import com.android.systemui.qs.SecureSetting;
+import com.android.systemui.qs.ReduceBrightColorsController;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
-import com.android.systemui.settings.UserTracker;
-import com.android.systemui.util.settings.SecureSettings;
 
 import javax.inject.Inject;
 import javax.inject.Named;
 
 /** Quick settings tile: Reduce Bright Colors **/
-public class ReduceBrightColorsTile extends QSTileImpl<QSTile.BooleanState> {
+public class ReduceBrightColorsTile extends QSTileImpl<QSTile.BooleanState>
+        implements ReduceBrightColorsController.Listener{
 
-    //TODO(b/170973645): get icon drawable
-    private final Icon mIcon = null;
-    private final SecureSetting mActivatedSetting;
+    private final Icon mIcon = ResourceIcon.get(drawable.ic_reduce_bright_colors);
     private final boolean mIsAvailable;
+    private final ReduceBrightColorsController mReduceBrightColorsController;
+    private boolean mIsListening;
 
     @Inject
     public ReduceBrightColorsTile(
             @Named(RBC_AVAILABLE) boolean isAvailable,
+            ReduceBrightColorsController reduceBrightColorsController,
             QSHost host,
             @Background Looper backgroundLooper,
             @Main Handler mainHandler,
+            FalsingManager falsingManager,
             MetricsLogger metricsLogger,
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
-            QSLogger qsLogger,
-            UserTracker userTracker,
-            SecureSettings secureSettings
+            QSLogger qsLogger
     ) {
-        super(host, backgroundLooper, mainHandler, metricsLogger, statusBarStateController,
-                activityStarter, qsLogger);
-
-        mActivatedSetting = new SecureSetting(secureSettings, mainHandler,
-                Settings.Secure.REDUCE_BRIGHT_COLORS_ACTIVATED, userTracker.getUserId()) {
-            @Override
-            protected void handleValueChanged(int value, boolean observedChange) {
-                refreshState();
-            }
-        };
+        super(host, backgroundLooper, mainHandler, falsingManager, metricsLogger,
+                statusBarStateController, activityStarter, qsLogger);
+        mReduceBrightColorsController = reduceBrightColorsController;
+        mReduceBrightColorsController.observe(getLifecycle(), this);
         mIsAvailable = isAvailable;
 
     }
@@ -84,24 +79,11 @@ public class ReduceBrightColorsTile extends QSTileImpl<QSTile.BooleanState> {
     @Override
     protected void handleDestroy() {
         super.handleDestroy();
-        mActivatedSetting.setListening(false);
     }
 
     @Override
     public BooleanState newTileState() {
         return new BooleanState();
-    }
-
-    @Override
-    public void handleSetListening(boolean listening) {
-        super.handleSetListening(listening);
-        mActivatedSetting.setListening(listening);
-    }
-
-    @Override
-    protected void handleUserSwitch(int newUserId) {
-        mActivatedSetting.setUserId(newUserId);
-        refreshState();
     }
 
     @Override
@@ -111,25 +93,31 @@ public class ReduceBrightColorsTile extends QSTileImpl<QSTile.BooleanState> {
 
     @Override
     protected void handleClick() {
-        mActivatedSetting.setValue(mState.value ? 0 : 1);
+        mReduceBrightColorsController.setReduceBrightColorsActivated(!mState.value);
     }
 
     @Override
     public CharSequence getTileLabel() {
-        return mContext.getString(R.string.quick_settings_reduce_bright_colors_label);
+        return mContext.getString(R.string.reduce_bright_colors_feature_name);
     }
 
     @Override
     protected void handleUpdateState(BooleanState state, Object arg) {
-        state.value = mActivatedSetting.getValue() == 1;
+        state.value = mReduceBrightColorsController.isReduceBrightColorsActivated();
         state.state = state.value ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
-        state.label = mContext.getString(R.string.quick_settings_reduce_bright_colors_label);
+        state.label = mContext.getString(R.string.reduce_bright_colors_feature_name);
         state.expandedAccessibilityClassName = Switch.class.getName();
         state.contentDescription = state.label;
+        state.icon = mIcon;
     }
 
     @Override
     public int getMetricsCategory() {
         return 0;
+    }
+
+    @Override
+    public void onActivated(boolean activated) {
+        refreshState();
     }
 }

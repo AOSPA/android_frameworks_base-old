@@ -29,10 +29,12 @@ import static com.android.systemui.DejankUtils.whitelistIpcs;
 import android.app.admin.DevicePolicyManager;
 import android.content.Intent;
 import android.content.res.ColorStateList;
+import android.content.res.Configuration;
 import android.metrics.LogMaker;
 import android.os.UserHandle;
 import android.util.Log;
 import android.util.Slog;
+import android.view.MotionEvent;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
@@ -46,6 +48,7 @@ import com.android.keyguard.KeyguardSecurityContainer.SwipeListener;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.keyguard.dagger.KeyguardBouncerScope;
 import com.android.settingslib.utils.ThreadUtils;
+import com.android.systemui.Gefingerpoken;
 import com.android.systemui.shared.system.SysUiStatsLog;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -72,7 +75,37 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
     private final SecurityCallback mSecurityCallback;
     private final ConfigurationController mConfigurationController;
 
+    private int mLastOrientation = Configuration.ORIENTATION_UNDEFINED;
+
     private SecurityMode mCurrentSecurityMode = SecurityMode.Invalid;
+
+    private final Gefingerpoken mGlobalTouchListener = new Gefingerpoken() {
+        private MotionEvent mTouchDown;
+        @Override
+        public boolean onInterceptTouchEvent(MotionEvent ev) {
+            return false;
+        }
+
+        @Override
+        public boolean onTouchEvent(MotionEvent ev) {
+            // Do just a bit of our own falsing. People should only be tapping on the input, not
+            // swiping.
+            if (ev.getActionMasked() == MotionEvent.ACTION_DOWN) {
+                if (mTouchDown != null) {
+                    mTouchDown.recycle();
+                    mTouchDown = null;
+                }
+                mTouchDown = MotionEvent.obtain(ev);
+            } else if (mTouchDown != null) {
+                if (ev.getActionMasked() == MotionEvent.ACTION_UP
+                        || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
+                    mTouchDown.recycle();
+                    mTouchDown = null;
+                }
+            }
+            return false;
+        }
+    };
 
     private KeyguardSecurityCallback mKeyguardSecurityCallback = new KeyguardSecurityCallback() {
         public void userActivity() {
@@ -182,6 +215,7 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
         mAdminSecondaryLockScreenController = adminSecondaryLockScreenControllerFactory.create(
                 mKeyguardSecurityCallback);
         mConfigurationController = configurationController;
+        mLastOrientation = getResources().getConfiguration().orientation;
     }
 
     @Override
@@ -192,12 +226,14 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
     @Override
     protected void onViewAttached() {
         mView.setSwipeListener(mSwipeListener);
+        mView.addMotionEventListener(mGlobalTouchListener);
         mConfigurationController.addCallback(mConfigurationListener);
     }
 
     @Override
     protected void onViewDetached() {
         mConfigurationController.removeCallback(mConfigurationListener);
+        mView.removeMotionEventListener(mGlobalTouchListener);
     }
 
     /** */
@@ -404,6 +440,7 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
         if (newView != null) {
             newView.onResume(KeyguardSecurityView.VIEW_REVEALED);
             mSecurityViewFlipperController.show(newView);
+            mView.updateLayoutForSecurityMode(securityMode);
         }
 
         mSecurityCallback.onSecurityModeChanged(
@@ -463,6 +500,19 @@ public class KeyguardSecurityContainerController extends ViewController<Keyguard
             SecurityMode securityMode) {
         mCurrentSecurityMode = securityMode;
         return getCurrentSecurityController();
+    }
+
+    /**
+     * Apply keyguard configuration from the currently active resources. This can be called when the
+     * device configuration changes, to re-apply some resources that are qualified on the device
+     * configuration.
+     */
+    public void updateResources() {
+        int newOrientation = getResources().getConfiguration().orientation;
+        if (newOrientation != mLastOrientation) {
+            mLastOrientation = newOrientation;
+            mView.updateLayoutForSecurityMode(mCurrentSecurityMode);
+        }
     }
 
     static class Factory {

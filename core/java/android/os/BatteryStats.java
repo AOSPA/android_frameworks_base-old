@@ -986,26 +986,71 @@ public abstract class BatteryStats implements Parcelable {
         public abstract void getDeferredJobsLineLocked(StringBuilder sb, int which);
 
         /**
-         * Returns the measured energy in microjoules that the display consumed while the screen
-         * was on and uid active.
-         * Will return {@link #ENERGY_DATA_UNAVAILABLE} if data is unavailable
+         * Returns the battery consumption (in microcoulombs) of bluetooth for this uid,
+         * derived from on device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
          *
          * {@hide}
          */
-        public abstract long getScreenOnEnergy();
+        public abstract long getBluetoothMeasuredBatteryConsumptionUC();
 
         /**
-         * Returns the energies used by this uid for each
+         * Returns the battery consumption (in microcoulombs) of the uid's cpu usage, derived from
+         * on device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getCpuMeasuredBatteryConsumptionUC();
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of the uid's GNSS usage, derived from
+         * on device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getGnssMeasuredBatteryConsumptionUC();
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of the uid's radio usage, derived from
+         * on device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getMobileRadioMeasuredBatteryConsumptionUC();
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of the screen while on and uid active,
+         * derived from on device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getScreenOnMeasuredBatteryConsumptionUC();
+
+        /**
+         * Returns the battery consumption (in microcoulombs) of wifi for this uid,
+         * derived from on device power measurement data.
+         * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+         *
+         * {@hide}
+         */
+        public abstract long getWifiMeasuredBatteryConsumptionUC();
+
+        /**
+         * Returns the battery consumption (in microcoulombs) used by this uid for each
          * {@link android.hardware.power.stats.EnergyConsumer.ordinal} of (custom) energy consumer
          * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
          *
-         * @return energies (in microjoules) used since boot for each (custom) energy consumer of
-         *         type OTHER, indexed by their ordinal. Returns null if no energy reporting is
-         *         supported.
+         * @return charge (in microcoulombs) consumed since last reset for each (custom) energy
+         *         consumer of type OTHER, indexed by their ordinal. Returns null if no energy
+         *         reporting is supported.
          *
          * {@hide}
          */
-        public abstract @Nullable long[] getCustomMeasuredEnergiesMicroJoules();
+        public abstract @Nullable long[] getCustomConsumerMeasuredBatteryConsumptionUC();
 
         public static abstract class Sensor {
 
@@ -2179,12 +2224,6 @@ public abstract class BatteryStats implements Parcelable {
 
     public abstract void finishIteratingHistoryLocked();
 
-    public abstract boolean startIteratingOldHistoryLocked();
-
-    public abstract boolean getNextOldHistoryLocked(HistoryItem out);
-
-    public abstract void finishIteratingOldHistoryLocked();
-
     /**
      * Return the base time offset for the battery history.
      */
@@ -2502,40 +2541,86 @@ public abstract class BatteryStats implements Parcelable {
     };
 
     /**
-     * Returned value if energy data is unavailable
+     * Returned value if power data is unavailable.
      *
      * {@hide}
      */
-    public static final long ENERGY_DATA_UNAVAILABLE = -1;
+    public static final long POWER_DATA_UNAVAILABLE = -1L;
 
     /**
-     * Returns the energy in microjoules that the screen consumed while on.
-     * Will return {@link #ENERGY_DATA_UNAVAILABLE} if data is unavailable
+     * Returns the battery consumption (in microcoulombs) of bluetooth, derived from on
+     * device power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
      *
      * {@hide}
      */
-    public abstract long getScreenOnEnergy();
+    public abstract long getBluetoothMeasuredBatteryConsumptionUC();
 
     /**
-     * Returns the energy in microjoules that the screen consumed while in doze
-     * Will return {@link #ENERGY_DATA_UNAVAILABLE} if data is unavailable
+     * Returns the battery consumption (in microcoulombs) of the cpu, derived from on device power
+     * measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
      *
      * {@hide}
      */
-    public abstract long getScreenDozeEnergy();
+    public abstract long getCpuMeasuredBatteryConsumptionUC();
 
     /**
-     * Returns the energies used for each
+     * Returns the battery consumption (in microcoulombs) of the GNSS, derived from on device power
+     * measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getGnssMeasuredBatteryConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of the radio, derived from on device power
+     * measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getMobileRadioMeasuredBatteryConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of the screen while on, derived from on
+     * device power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getScreenOnMeasuredBatteryConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of the screen in doze, derived from on
+     * device power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getScreenDozeMeasuredBatteryConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) of wifi, derived from on
+     * device power measurement data.
+     * Will return {@link #POWER_DATA_UNAVAILABLE} if data is unavailable.
+     *
+     * {@hide}
+     */
+    public abstract long getWifiMeasuredBatteryConsumptionUC();
+
+    /**
+     * Returns the battery consumption (in microcoulombs) that each
      * {@link android.hardware.power.stats.EnergyConsumer.ordinal} of (custom) energy consumer
-     * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
+     * type {@link android.hardware.power.stats.EnergyConsumerType#OTHER}) consumed.
      *
-     * @return energies (in microjoules) used since boot for each (custom) energy consumer of
-     *         type OTHER, indexed by their ordinal. Returns null if no energy reporting is
-     *         supported.
+     * @return charge (in microcoulombs) used by each (custom) energy consumer of type OTHER,
+     * indexed by their ordinal. Returns null if no energy reporting is supported.
      *
      * {@hide}
      */
-    public abstract @Nullable long[] getCustomMeasuredEnergiesMicroJoules();
+    public abstract @Nullable long[] getCustomConsumerMeasuredBatteryConsumptionUC();
 
     public static final BitDescription[] HISTORY_STATE_DESCRIPTIONS = new BitDescription[] {
         new BitDescription(HistoryItem.STATE_CPU_RUNNING_FLAG, "running", "r"),
@@ -5981,7 +6066,7 @@ public abstract class BatteryStats implements Parcelable {
                     pw.print(":");
                     for (int it=0; it<types.size(); it++) {
                         pw.print(" ");
-                        pw.print(JobParameters.getReasonCodeDescription(types.keyAt(it)));
+                        pw.print(JobParameters.getLegacyReasonCodeDescription(types.keyAt(it)));
                         pw.print("(");
                         pw.print(types.valueAt(it));
                         pw.print("x)");
@@ -7059,24 +7144,6 @@ public abstract class BatteryStats implements Parcelable {
                     pw.println();
                 } finally {
                     finishIteratingHistoryLocked();
-                }
-            }
-
-            if (startIteratingOldHistoryLocked()) {
-                try {
-                    final HistoryItem rec = new HistoryItem();
-                    pw.println("Old battery History:");
-                    HistoryPrinter hprinter = new HistoryPrinter();
-                    long baseTime = -1;
-                    while (getNextOldHistoryLocked(rec)) {
-                        if (baseTime < 0) {
-                            baseTime = rec.time;
-                        }
-                        hprinter.printNextItem(pw, rec, baseTime, false, (flags&DUMP_VERBOSE) != 0);
-                    }
-                    pw.println();
-                } finally {
-                    finishIteratingOldHistoryLocked();
                 }
             }
         }

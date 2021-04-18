@@ -272,6 +272,18 @@ public final class RenderNode {
         void positionChanged(long frameNumber, int left, int top, int right, int bottom);
 
         /**
+         * Call to apply a stretch effect to any child SurfaceControl layers
+         *
+         * TODO: Fold this into positionChanged & have HWUI do the ASurfaceControl calls?
+         *   (njawad) update to consume different stretch parameters for horizontal/vertical stretch
+         *   to ensure SkiaGLRenderEngine can also apply the same stretch to a surface
+         *
+         * @hide
+         */
+        default void applyStretch(long frameNumber, float left, float top, float right,
+                float bottom, float vecX, float vecY, float maxStretch) { }
+
+        /**
          * Called by native on RenderThread to notify that the view is no longer in the
          * draw tree. UI thread is blocked at this point.
          *
@@ -310,6 +322,14 @@ public final class RenderNode {
         public void positionLost(long frameNumber) {
             for (PositionUpdateListener pul : mListeners) {
                 pul.positionLost(frameNumber);
+            }
+        }
+
+        @Override
+        public void applyStretch(long frameNumber, float left, float top, float right, float bottom,
+                float vecX, float vecY, float maxStretch) {
+            for (PositionUpdateListener pul : mListeners) {
+                pul.applyStretch(frameNumber, left, top, right, bottom, vecX, vecY, maxStretch);
             }
         }
     }
@@ -700,23 +720,37 @@ public final class RenderNode {
 
     /** @hide */
     public boolean stretch(float left, float top, float right, float bottom,
-            float vecX, float vecY, float maxStretchAmount) {
-        if (1.0 < vecX || vecX < -1.0) {
-            throw new IllegalArgumentException("vecX must be in the range [-1, 1], was " + vecX);
+            float vecX, float vecY, float maxStretchAmountX, float maxStretchAmountY) {
+        if (Float.isInfinite(vecX) || Float.isNaN(vecX)) {
+            throw new IllegalArgumentException("vecX must be a finite, non-NaN value " + vecX);
         }
-        if (1.0 < vecY || vecY < -1.0) {
-            throw new IllegalArgumentException("vecY must be in the range [-1, 1], was " + vecY);
+        if (Float.isInfinite(vecY) || Float.isNaN(vecY)) {
+            throw new IllegalArgumentException("vecY must be a finite, non-NaN value " + vecY);
         }
-        if (top <= bottom || right <= left) {
+        if (top >= bottom || left >= right) {
             throw new IllegalArgumentException(
                     "Stretch region must not be empty, got "
                             + new RectF(left, top, right, bottom).toString());
         }
-        if (maxStretchAmount <= 0.0f) {
+        if (maxStretchAmountX <= 0.0f) {
             throw new IllegalArgumentException(
-                    "The max stretch amount must be >0, got " + maxStretchAmount);
+                    "The max horizontal stretch amount must be >0, got " + maxStretchAmountX);
         }
-        return nStretch(mNativeRenderNode, left, top, right, bottom, vecX, vecY, maxStretchAmount);
+        if (maxStretchAmountY <= 0.0f) {
+            throw new IllegalArgumentException(
+                    "The max vertical stretch amount must be >0, got " + maxStretchAmountY);
+        }
+        return nStretch(
+                mNativeRenderNode,
+                left,
+                top,
+                right,
+                bottom,
+                vecX,
+                vecY,
+                maxStretchAmountX,
+                maxStretchAmountY
+        );
     }
 
     /**
@@ -1668,7 +1702,7 @@ public final class RenderNode {
 
     @CriticalNative
     private static native boolean nStretch(long renderNode, float left, float top, float right,
-            float bottom, float vecX, float vecY, float maxStretch);
+            float bottom, float vecX, float vecY, float maxStretchX, float maxStretchY);
 
     @CriticalNative
     private static native boolean nHasShadow(long renderNode);

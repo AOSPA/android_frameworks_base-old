@@ -22,6 +22,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_DOCK_DIVIDER;
 import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ADD_REMOVE;
+import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_APP_TRANSITIONS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_FOCUS;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_WINDOW_MOVEMENT;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
@@ -53,6 +54,7 @@ import android.view.DisplayInfo;
 import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
+import android.window.WindowContext;
 
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.server.policy.WindowManagerPolicy;
@@ -108,9 +110,12 @@ class WindowToken extends WindowContainer<WindowState> {
     private FixedRotationTransformState mFixedRotationTransformState;
 
     /**
-     * When set to {@code true}, this window token is created from {@link android.app.WindowContext}
+     * When set to {@code true}, this window token is created from {@link WindowContext}
      */
     private final boolean mFromClientToken;
+
+    /** Have we told the window clients to show themselves? */
+    private boolean mClientVisible;
 
     /**
      * Used to fix the transform of the token to be rotated to a rotation different than it's
@@ -397,6 +402,21 @@ class WindowToken extends WindowContainer<WindowState> {
         return builder;
     }
 
+    boolean isClientVisible() {
+        return mClientVisible;
+    }
+
+    void setClientVisible(boolean clientVisible) {
+        if (mClientVisible == clientVisible) {
+            return;
+        }
+        ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
+                "setClientVisible: %s clientVisible=%b Callers=%s", this, clientVisible,
+                Debug.getCallers(5));
+        mClientVisible = clientVisible;
+        sendAppVisibilityToClients();
+    }
+
     boolean hasFixedRotationTransform() {
         return mFixedRotationTransformState != null;
     }
@@ -549,7 +569,7 @@ class WindowToken extends WindowContainer<WindowState> {
     }
 
     /** Notifies application side to enable or disable the rotation adjustment of display info. */
-    private void notifyFixedRotationTransform(boolean enabled) {
+    void notifyFixedRotationTransform(boolean enabled) {
         FixedRotationAdjustments adjustments = null;
         // A token may contain windows of the same processes or different processes. The list is
         // used to avoid sending the same adjustments to a process multiple times.
@@ -735,5 +755,23 @@ class WindowToken extends WindowContainer<WindowState> {
 
     boolean isFromClient() {
         return mFromClientToken;
+    }
+
+    /** @see WindowState#freezeInsetsState() */
+    void setInsetsFrozen(boolean freeze) {
+        forAllWindows(w -> {
+            if (w.mToken == this) {
+                if (freeze) {
+                    w.freezeInsetsState();
+                } else {
+                    w.clearFrozenInsetsState();
+                }
+            }
+        },  true /* traverseTopToBottom */);
+    }
+
+    @Override
+    @WindowManager.LayoutParams.WindowType int getWindowType() {
+        return windowType;
     }
 }

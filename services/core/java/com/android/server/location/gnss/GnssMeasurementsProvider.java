@@ -99,7 +99,7 @@ public final class GnssMeasurementsProvider extends
     }
 
     @Override
-    protected boolean isServiceSupported() {
+    public boolean isSupported() {
         return mGnssNative.isMeasurementSupported();
     }
 
@@ -189,6 +189,7 @@ public final class GnssMeasurementsProvider extends
                 LocationStatsEnums.USAGE_STARTED,
                 LocationStatsEnums.API_ADD_GNSS_MEASUREMENTS_LISTENER,
                 registration.getIdentity().getPackageName(),
+                registration.getIdentity().getAttributionTag(),
                 null,
                 null,
                 true,
@@ -202,6 +203,7 @@ public final class GnssMeasurementsProvider extends
                 LocationStatsEnums.USAGE_ENDED,
                 LocationStatsEnums.API_ADD_GNSS_MEASUREMENTS_LISTENER,
                 registration.getIdentity().getPackageName(),
+                registration.getIdentity().getAttributionTag(),
                 null,
                 null,
                 true,

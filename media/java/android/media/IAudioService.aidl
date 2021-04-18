@@ -158,6 +158,14 @@ interface IAudioService {
 
     oneway void reloadAudioSettings();
 
+    boolean setSurroundFormatEnabled(int audioFormat, boolean enabled);
+
+    boolean isSurroundFormatEnabled(int audioFormat);
+
+    boolean setEncodedSurroundMode(int mode);
+
+    int getEncodedSurroundMode();
+
     oneway void avrcpSupportsAbsoluteVolume(String address, boolean support);
 
     void setSpeakerphoneOn(IBinder cb, boolean on);
@@ -345,18 +353,20 @@ interface IAudioService {
 
     int getDevicesForStream(in int streamType);
 
-    boolean setDeviceForCommunication(IBinder cb, int portId);
+    int[] getAvailableCommunicationDeviceIds();
 
-    int getDeviceForCommunication();
+    boolean setCommunicationDevice(IBinder cb, int portId);
+
+    int getCommunicationDevice();
 
     void registerCommunicationDeviceDispatcher(ICommunicationDeviceDispatcher dispatcher);
 
     oneway void unregisterCommunicationDeviceDispatcher(
             ICommunicationDeviceDispatcher dispatcher);
 
-    boolean areFastScrollSoundEffectsEnabled();
+    boolean areNavigationRepeatSoundEffectsEnabled();
 
-    oneway void setFastScrollSoundEffectsEnabled(boolean enabled);
+    oneway void setNavigationRepeatSoundEffectsEnabled(boolean enabled);
 
     boolean isHomeSoundEffectEnabled();
 
@@ -367,4 +377,13 @@ interface IAudioService {
     long getAdditionalOutputDeviceDelay(in AudioDeviceAttributes device);
 
     long getMaxAdditionalOutputDeviceDelay(in AudioDeviceAttributes device);
+
+    int requestAudioFocusForTest(in AudioAttributes aa, int durationHint, IBinder cb,
+            in IAudioFocusDispatcher fd, in String clientId, in String callingPackageName,
+            int uid, int sdk);
+
+    int abandonAudioFocusForTest(in IAudioFocusDispatcher fd, in String clientId,
+            in AudioAttributes aa, in String callingPackageName);
+
+    long getFadeOutDurationOnFocusLossMillis(in AudioAttributes aa);
 }

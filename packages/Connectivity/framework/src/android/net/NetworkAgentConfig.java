@@ -50,7 +50,8 @@ public final class NetworkAgentConfig implements Parcelable {
      * ap in the wifi settings to trigger a connection is explicit.  A 3rd party app asking to
      * connect to a particular access point is also explicit, though this may change in the future
      * as we want apps to use the multinetwork apis.
-     *
+     * TODO : this is a bad name, because it sounds like the user just tapped on the network.
+     * It's not necessarily the case ; auto-reconnection to WiFi has this true for example.
      * @hide
      */
     public boolean explicitlySelected;
@@ -60,6 +61,16 @@ public final class NetworkAgentConfig implements Parcelable {
      */
     public boolean isExplicitlySelected() {
         return explicitlySelected;
+    }
+
+    /**
+     * @return whether this VPN connection can be bypassed by the apps.
+     *
+     * @hide
+     */
+    @SystemApi(client = MODULE_LIBRARIES)
+    public boolean isBypassableVpn() {
+        return allowBypass;
     }
 
     /**
@@ -164,6 +175,12 @@ public final class NetworkAgentConfig implements Parcelable {
     }
 
     /**
+     * The legacy Sub type of this network agent, or TYPE_NONE if unset.
+     * @hide
+     */
+    public int legacySubType = ConnectivityManager.TYPE_NONE;
+
+    /**
      * Set to true if the PRIVATE_DNS_BROKEN notification has shown for this network.
      * Reset this bit when private DNS mode is changed from strict mode to opportunistic/off mode.
      *
@@ -187,6 +204,13 @@ public final class NetworkAgentConfig implements Parcelable {
     public String getLegacyTypeName() {
         return legacyTypeName;
     }
+
+    /**
+     * The name of the legacy Sub network type. It's a free-form string.
+     * @hide
+     */
+    @NonNull
+    public String legacySubTypeName = "";
 
     /**
      * The legacy extra info of the agent. The extra info should only be :
@@ -224,6 +248,8 @@ public final class NetworkAgentConfig implements Parcelable {
             skip464xlat = nac.skip464xlat;
             legacyType = nac.legacyType;
             legacyTypeName = nac.legacyTypeName;
+            legacySubType = nac.legacySubType;
+            legacySubTypeName = nac.legacySubTypeName;
             mLegacyExtraInfo = nac.mLegacyExtraInfo;
         }
     }
@@ -289,7 +315,6 @@ public final class NetworkAgentConfig implements Parcelable {
          * and reduce idle traffic on networks that are known to be IPv6-only without a NAT64.
          *
          * @return this builder, to facilitate chaining.
-         * @hide
          */
         @NonNull
         public Builder disableNat64Detection() {
@@ -302,7 +327,6 @@ public final class NetworkAgentConfig implements Parcelable {
          * perform its own carrier-specific provisioning procedure.
          *
          * @return this builder, to facilitate chaining.
-         * @hide
          */
         @NonNull
         public Builder disableProvisioningNotification() {
@@ -323,6 +347,18 @@ public final class NetworkAgentConfig implements Parcelable {
         }
 
         /**
+         * Sets the legacy sub-type for this network.
+         *
+         * @param legacySubType the type
+         * @return this builder, to facilitate chaining.
+         */
+        @NonNull
+        public Builder setLegacySubType(final int legacySubType) {
+            mConfig.legacySubType = legacySubType;
+            return this;
+        }
+
+        /**
          * Sets the name of the legacy type of the agent. It's a free-form string used in logging.
          * @param legacyTypeName the name
          * @return this builder, to facilitate chaining.
@@ -334,14 +370,37 @@ public final class NetworkAgentConfig implements Parcelable {
         }
 
         /**
+         * Sets the name of the legacy Sub-type of the agent. It's a free-form string.
+         * @param legacySubTypeName the name
+         * @return this builder, to facilitate chaining.
+         */
+        @NonNull
+        public Builder setLegacySubTypeName(@NonNull String legacySubTypeName) {
+            mConfig.legacySubTypeName = legacySubTypeName;
+            return this;
+        }
+
+        /**
          * Sets the legacy extra info of the agent.
          * @param legacyExtraInfo the legacy extra info.
          * @return this builder, to facilitate chaining.
-         * @hide
          */
         @NonNull
         public Builder setLegacyExtraInfo(@NonNull String legacyExtraInfo) {
             mConfig.mLegacyExtraInfo = legacyExtraInfo;
+            return this;
+        }
+
+        /**
+         * Sets whether the apps can bypass the VPN connection.
+         *
+         * @return this builder, to facilitate chaining.
+         * @hide
+         */
+        @NonNull
+        @SystemApi(client = MODULE_LIBRARIES)
+        public Builder setBypassableVpn(boolean allowBypass) {
+            mConfig.allowBypass = allowBypass;
             return this;
         }
 
@@ -411,6 +470,8 @@ public final class NetworkAgentConfig implements Parcelable {
         out.writeInt(skip464xlat ? 1 : 0);
         out.writeInt(legacyType);
         out.writeString(legacyTypeName);
+        out.writeInt(legacySubType);
+        out.writeString(legacySubTypeName);
         out.writeString(mLegacyExtraInfo);
     }
 
@@ -428,6 +489,8 @@ public final class NetworkAgentConfig implements Parcelable {
             networkAgentConfig.skip464xlat = in.readInt() != 0;
             networkAgentConfig.legacyType = in.readInt();
             networkAgentConfig.legacyTypeName = in.readString();
+            networkAgentConfig.legacySubType = in.readInt();
+            networkAgentConfig.legacySubTypeName = in.readString();
             networkAgentConfig.mLegacyExtraInfo = in.readString();
             return networkAgentConfig;
         }

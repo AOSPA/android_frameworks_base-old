@@ -32,6 +32,7 @@ import android.view.Gravity;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.ViewStub;
 import android.widget.LinearLayout;
 
 import com.android.internal.logging.UiEventLogger;
@@ -112,7 +113,7 @@ public class QSPanel extends LinearLayout implements Tunable {
     private int mMediaTotalBottomMargin;
     private int mFooterMarginStartHorizontal;
     private Consumer<Boolean> mMediaVisibilityChangedListener;
-    private boolean mSideLabels;
+    protected boolean mSideLabels;
 
     public QSPanel(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -127,8 +128,21 @@ public class QSPanel extends LinearLayout implements Tunable {
 
     }
 
+    protected void inflateQSFooter(boolean newFooter) {
+        ViewStub stub = findViewById(R.id.qs_footer_stub);
+        if (stub != null) {
+            stub.setLayoutResource(
+                    newFooter ? R.layout.qs_footer_impl_two_lines : R.layout.qs_footer_impl);
+            stub.inflate();
+            mFooter = findViewById(R.id.qs_footer);
+        }
+    }
+
     void initialize(boolean sideLabels) {
         mSideLabels = sideLabels;
+
+        inflateQSFooter(sideLabels);
+
         mRegularTileLayout = createRegularTileLayout();
         mTileLayout = mRegularTileLayout;
 
@@ -201,16 +215,20 @@ public class QSPanel extends LinearLayout implements Tunable {
                 mFooterPageIndicator.setNumPages(((PagedTileLayout) mTileLayout).getNumPages());
             }
 
-            // Allow the UI to be as big as it want's to, we're in a scroll view
-            int newHeight = 10000;
-            int availableHeight = MeasureSpec.getSize(heightMeasureSpec);
-            int excessHeight = newHeight - availableHeight;
-            // Measure with EXACTLY. That way, The content will only use excess height and will
-            // be measured last, after other views and padding is accounted for. This only
-            // works because our Layouts in here remeasure themselves with the exact content
-            // height.
-            heightMeasureSpec = MeasureSpec.makeMeasureSpec(newHeight, MeasureSpec.EXACTLY);
-            ((PagedTileLayout) mTileLayout).setExcessHeight(excessHeight);
+            // In landscape, mTileLayout's parent is not the panel but a view that contains the
+            // tile layout and the media controls.
+            if (((View) mTileLayout).getParent() == this) {
+                // Allow the UI to be as big as it want's to, we're in a scroll view
+                int newHeight = 10000;
+                int availableHeight = MeasureSpec.getSize(heightMeasureSpec);
+                int excessHeight = newHeight - availableHeight;
+                // Measure with EXACTLY. That way, The content will only use excess height and will
+                // be measured last, after other views and padding is accounted for. This only
+                // works because our Layouts in here remeasure themselves with the exact content
+                // height.
+                heightMeasureSpec = MeasureSpec.makeMeasureSpec(newHeight, MeasureSpec.EXACTLY);
+                ((PagedTileLayout) mTileLayout).setExcessHeight(excessHeight);
+            }
         }
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
@@ -297,7 +315,7 @@ public class QSPanel extends LinearLayout implements Tunable {
         int tileBg = getResources().getDimensionPixelSize(R.dimen.qs_tile_background_size);
         mFooterMarginStartHorizontal = getResources().getDimensionPixelSize(
                 R.dimen.qs_footer_horizontal_margin);
-        mVisualTilePadding = (int) ((tileSize - tileBg) / 2.0f);
+        mVisualTilePadding = mSideLabels ? 0 : (int) ((tileSize - tileBg) / 2.0f);
         updatePadding();
 
         updatePageIndicator();
@@ -340,7 +358,6 @@ public class QSPanel extends LinearLayout implements Tunable {
     @Override
     protected void onFinishInflate() {
         super.onFinishInflate();
-        mFooter = findViewById(R.id.qs_footer);
         mDivider = findViewById(R.id.divider);
     }
 
@@ -374,20 +391,13 @@ public class QSPanel extends LinearLayout implements Tunable {
         index++;
 
         if (mSecurityFooter != null) {
-            LinearLayout.LayoutParams layoutParams =
-                    (LayoutParams) mSecurityFooter.getLayoutParams();
             if (mUsingHorizontalLayout && mHeaderContainer != null) {
                 // Adding the security view to the header, that enables us to avoid scrolling
-                layoutParams.width = 0;
-                layoutParams.weight = 1.6f;
-                switchToParent(mSecurityFooter, mHeaderContainer, 1 /* always in second place */);
+                switchToParent(mSecurityFooter, mHeaderContainer, 0);
             } else {
-                layoutParams.width = LayoutParams.WRAP_CONTENT;
-                layoutParams.weight = 0;
                 switchToParent(mSecurityFooter, parent, index);
                 index++;
             }
-            mSecurityFooter.setLayoutParams(layoutParams);
         }
 
         if (mFooter != null) {
@@ -639,7 +649,7 @@ public class QSPanel extends LinearLayout implements Tunable {
         if (mFooter != null) {
             int footerMargin = 0;
             int indicatorMargin = 0;
-            if (mUsingHorizontalLayout) {
+            if (mUsingHorizontalLayout && !mSideLabels) {
                 footerMargin = mFooterMarginStartHorizontal;
                 indicatorMargin = footerMargin - mVisualMarginEnd;
             }
@@ -667,15 +677,19 @@ public class QSPanel extends LinearLayout implements Tunable {
     }
 
     public Pair<Integer, Integer> getVisualSideMargins() {
-        return new Pair(mVisualMarginStart, mUsingHorizontalLayout ? 0 : mVisualMarginEnd);
+        if (mSideLabels) {
+            return new Pair(0, 0);
+        } else {
+            return new Pair(mVisualMarginStart, mUsingHorizontalLayout ? 0 : mVisualMarginEnd);
+        }
     }
 
     private void updateTileLayoutMargins() {
         int marginEnd = mVisualMarginEnd;
-        if (mUsingHorizontalLayout) {
+        if (mUsingHorizontalLayout || mSideLabels) {
             marginEnd = 0;
         }
-        updateMargins((View) mTileLayout, mVisualMarginStart, marginEnd);
+        updateMargins((View) mTileLayout, mSideLabels ? 0 : mVisualMarginStart, marginEnd);
     }
 
     private void updateDividerMargin() {
@@ -758,7 +772,7 @@ public class QSPanel extends LinearLayout implements Tunable {
                 // Let's use 3 columns to match the current layout
                 int columns;
                 if (mSideLabels) {
-                    columns = horizontal ? 1 : 2;
+                    columns = horizontal ? 2 : 4;
                 } else {
                     columns = horizontal ? 3 : TileLayout.NO_MAX_COLUMNS;
                 }
@@ -843,8 +857,6 @@ public class QSPanel extends LinearLayout implements Tunable {
         default void setExpansion(float expansion) {}
 
         int getNumVisibleTiles();
-
-        default void setShowLabels(boolean show) {}
     }
 
     interface OnConfigurationChangedListener {

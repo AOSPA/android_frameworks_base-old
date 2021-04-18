@@ -37,6 +37,8 @@ import android.view.DisplayInfo;
 
 class TestDisplayContent extends DisplayContent {
 
+    public static final int DEFAULT_LOGICAL_DISPLAY_DENSITY = 300;
+
     /** Please use the {@link Builder} to create, visible for use in test builder overrides only. */
     TestDisplayContent(RootWindowContainer rootWindowContainer, Display display) {
         super(display, rootWindowContainer);
@@ -82,12 +84,21 @@ class TestDisplayContent extends DisplayContent {
             mService.mContext.getDisplay().getDisplayInfo(mInfo);
             mInfo.logicalWidth = width;
             mInfo.logicalHeight = height;
-            mInfo.logicalDensityDpi = 300;
+            mInfo.logicalDensityDpi = DEFAULT_LOGICAL_DISPLAY_DENSITY;
             mInfo.displayCutout = null;
+            // Set unique ID so physical display overrides are not inheritted from
+            // DisplayWindowSettings.
+            mInfo.uniqueId = generateUniqueId();
         }
         Builder(ActivityTaskManagerService service, DisplayInfo info) {
             mService = service;
             mInfo = info;
+            // Set unique ID so physical display overrides are not inheritted from
+            // DisplayWindowSettings.
+            mInfo.uniqueId = generateUniqueId();
+        }
+        private String generateUniqueId() {
+            return "TEST_DISPLAY_CONTENT_" + System.currentTimeMillis();
         }
         Builder setSystemDecorations(boolean yes) {
             mSystemDecorations = yes;
@@ -136,6 +147,10 @@ class TestDisplayContent extends DisplayContent {
             final Display display = new Display(DisplayManagerGlobal.getInstance(), displayId,
                     mInfo, DEFAULT_DISPLAY_ADJUSTMENTS);
             final TestDisplayContent newDisplay = createInternal(display);
+            // Ensure letterbox aspect ratio is not overridden on any device target.
+            // {@link com.android.internal.R.dimen.config_taskLetterboxAspectRatio}, provided by
+            // the below method, is set on some device form factors.
+            mService.mWindowManager.setFixedOrientationLetterboxAspectRatio(0);
             // disable the normal system decorations
             final DisplayPolicy displayPolicy = newDisplay.getDisplayPolicy();
             spyOn(displayPolicy);

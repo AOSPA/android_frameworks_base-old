@@ -57,8 +57,6 @@ import com.android.wm.shell.pip.PipTransitionController;
 import com.android.wm.shell.pip.PipUiEventLogger;
 
 import java.io.PrintWriter;
-import java.lang.ref.WeakReference;
-import java.util.function.Consumer;
 
 /**
  * Manages all the touch handling for PIP on the Phone, including moving, dismissing and expanding
@@ -71,15 +69,15 @@ public class PipTouchHandler {
     private static final float DEFAULT_STASH_VELOCITY_THRESHOLD = 18000.f;
 
     // Allow PIP to resize to a slightly bigger state upon touch
-    private final boolean mEnableResize;
+    private boolean mEnableResize;
     private final Context mContext;
     private final PipBoundsAlgorithm mPipBoundsAlgorithm;
     private final @NonNull PipBoundsState mPipBoundsState;
     private final PipUiEventLogger mPipUiEventLogger;
     private final PipDismissTargetHandler mPipDismissTargetHandler;
+    private final ShellExecutor mMainExecutor;
 
     private PipResizeGestureHandler mPipResizeGestureHandler;
-    private WeakReference<Consumer<Rect>> mPipExclusionBoundsChangeListener;
 
     private final PhonePipMenuController mMenuController;
     private final AccessibilityManager mAccessibilityManager;
@@ -166,15 +164,18 @@ public class PipTouchHandler {
             ShellExecutor mainExecutor) {
         // Initialize the Pip input consumer
         mContext = context;
+        mMainExecutor = mainExecutor;
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
         mPipBoundsAlgorithm = pipBoundsAlgorithm;
         mPipBoundsState = pipBoundsState;
         mMenuController = menuController;
+        mPipUiEventLogger = pipUiEventLogger;
+        mFloatingContentCoordinator = floatingContentCoordinator;
         mMenuController.addListener(new PipMenuListener());
         mGesture = new DefaultPipTouchGesture();
         mMotionHelper = new PipMotionHelper(mContext, pipBoundsState, pipTaskOrganizer,
                 mMenuController, mPipBoundsAlgorithm.getSnapAlgorithm(), pipTransitionController,
-                floatingContentCoordinator, mainExecutor);
+                floatingContentCoordinator);
         mPipResizeGestureHandler =
                 new PipResizeGestureHandler(context, pipBoundsAlgorithm, pipBoundsState,
                         mMotionHelper, pipTaskOrganizer, this::getMovementBounds,
@@ -186,6 +187,8 @@ public class PipTouchHandler {
                 () -> {
                     if (mPipBoundsState.isStashed()) {
                         animateToUnStashedState();
+                        mPipUiEventLogger.log(
+                                PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_STASH_UNSTASHED);
                         mPipBoundsState.setStashed(STASH_TYPE_NONE);
                     } else {
                         mMenuController.showMenuWithPossibleDelay(MENU_STATE_FULL,
@@ -196,24 +199,26 @@ public class PipTouchHandler {
                 },
                 menuController::hideMenu,
                 mainExecutor);
-
-        Resources res = context.getResources();
-        mEnableResize = res.getBoolean(R.bool.config_pipEnableResizeForMenu);
-        reloadResources();
-
-        mFloatingContentCoordinator = floatingContentCoordinator;
         mConnection = new PipAccessibilityInteractionConnection(mContext, pipBoundsState,
                 mMotionHelper, pipTaskOrganizer, mPipBoundsAlgorithm.getSnapAlgorithm(),
                 this::onAccessibilityShowMenu, this::updateMovementBounds, mainExecutor);
+    }
 
-        mPipUiEventLogger = pipUiEventLogger;
+    public void init() {
+        Resources res = mContext.getResources();
+        mEnableResize = res.getBoolean(R.bool.config_pipEnableResizeForMenu);
+        reloadResources();
+
+        mMotionHelper.init();
+        mPipResizeGestureHandler.init();
+        mPipDismissTargetHandler.init();
 
         mEnableStash = DeviceConfig.getBoolean(
                 DeviceConfig.NAMESPACE_SYSTEMUI,
                 PIP_STASHING,
                 /* defaultValue = */ true);
         DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI,
-                mainExecutor,
+                mMainExecutor,
                 properties -> {
                     if (properties.getKeyset().contains(PIP_STASHING)) {
                         mEnableStash = properties.getBoolean(
@@ -225,7 +230,7 @@ public class PipTouchHandler {
                 PIP_STASH_MINIMUM_VELOCITY_THRESHOLD,
                 DEFAULT_STASH_VELOCITY_THRESHOLD);
         DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_SYSTEMUI,
-                mainExecutor,
+                mMainExecutor,
                 properties -> {
                     if (properties.getKeyset().contains(PIP_STASH_MINIMUM_VELOCITY_THRESHOLD)) {
                         mStashVelocityThreshold = properties.getFloat(
@@ -279,11 +284,6 @@ public class PipTouchHandler {
             mPipDismissTargetHandler.cleanUpDismissTarget();
 
             mFloatingContentCoordinator.onContentRemoved(mMotionHelper);
-        }
-        // Reset exclusion to none.
-        if (mPipExclusionBoundsChangeListener != null
-                && mPipExclusionBoundsChangeListener.get() != null) {
-            mPipExclusionBoundsChangeListener.get().accept(new Rect());
         }
         mPipResizeGestureHandler.onActivityUnpinned();
     }
@@ -867,6 +867,8 @@ public class PipTouchHandler {
                 if (mEnableStash && shouldStash(vel, getPossiblyMotionBounds())) {
                     mMotionHelper.stashToEdge(vel.x, vel.y, this::stashEndAction /* endAction */);
                 } else {
+                    mPipUiEventLogger.log(
+                            PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_STASH_UNSTASHED);
                     mPipBoundsState.setStashed(STASH_TYPE_NONE);
                     mMotionHelper.flingToSnapTarget(vel.x, vel.y,
                             this::flingEndAction /* endAction */);
@@ -897,6 +899,8 @@ public class PipTouchHandler {
                 if (!mTouchState.isWaitingForDoubleTap()) {
                     if (mPipBoundsState.isStashed()) {
                         animateToUnStashedState();
+                        mPipUiEventLogger.log(
+                                PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_STASH_UNSTASHED);
                         mPipBoundsState.setStashed(STASH_TYPE_NONE);
                     } else {
                         // User has stalled long enough for this not to be a drag or a double tap,
@@ -917,13 +921,15 @@ public class PipTouchHandler {
         }
 
         private void stashEndAction() {
-            if (mPipExclusionBoundsChangeListener != null
-                    && mPipExclusionBoundsChangeListener.get() != null) {
-                mPipExclusionBoundsChangeListener.get().accept(mPipBoundsState.getBounds());
-            }
-            if (mPipBoundsState.getBounds().left < 0) {
+            if (mPipBoundsState.getBounds().left < 0
+                    && mPipBoundsState.getStashedState() != STASH_TYPE_LEFT) {
+                mPipUiEventLogger.log(
+                        PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_STASH_LEFT);
                 mPipBoundsState.setStashed(STASH_TYPE_LEFT);
-            } else {
+            } else if (mPipBoundsState.getBounds().left >= 0
+                    && mPipBoundsState.getStashedState() != STASH_TYPE_RIGHT) {
+                mPipUiEventLogger.log(
+                        PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_STASH_RIGHT);
                 mPipBoundsState.setStashed(STASH_TYPE_RIGHT);
             }
         }
@@ -933,11 +939,6 @@ public class PipTouchHandler {
                 // If the menu is not visible, then we can still be showing the activity for the
                 // dismiss overlay, so just finish it after the animation completes
                 mMenuController.hideMenu();
-            }
-            // Reset exclusion to none.
-            if (mPipExclusionBoundsChangeListener != null
-                    && mPipExclusionBoundsChangeListener.get() != null) {
-                mPipExclusionBoundsChangeListener.get().accept(new Rect());
             }
         }
 
@@ -960,11 +961,6 @@ public class PipTouchHandler {
 
             return stashFromFlingToEdge || stashFromDroppingOnEdge;
         }
-    }
-
-    void setPipExclusionBoundsChangeListener(Consumer<Rect> pipExclusionBoundsChangeListener) {
-        mPipExclusionBoundsChangeListener = new WeakReference<>(pipExclusionBoundsChangeListener);
-        pipExclusionBoundsChangeListener.accept(mPipBoundsState.getBounds());
     }
 
     /**

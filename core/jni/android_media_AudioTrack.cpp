@@ -48,6 +48,7 @@
 using namespace android;
 
 using ::android::media::VolumeShaper;
+using ::android::media::permission::Identity;
 
 // ----------------------------------------------------------------------------
 static const char* const kClassPathName = "android/media/AudioTrack";
@@ -328,7 +329,10 @@ static jint android_media_AudioTrack_setup(JNIEnv *env, jobject thiz, jobject we
 
         // create the native AudioTrack object
         ScopedUtfChars opPackageNameStr(env, opPackageName);
-        lpTrack = new AudioTrack(opPackageNameStr.c_str());
+        // TODO b/182469354: make consistent with AudioRecord
+        Identity identity = Identity();
+        identity.packageName = std::string(opPackageNameStr.c_str());
+        lpTrack = new AudioTrack(identity);
 
         // read the AudioAttributes values
         auto paa = JNIAudioAttributeHelper::makeUnique();
@@ -390,8 +394,8 @@ static jint android_media_AudioTrack_setup(JNIEnv *env, jobject thiz, jobject we
                                   sessionId, // audio session ID
                                   offload ? AudioTrack::TRANSFER_SYNC_NOTIF_CALLBACK
                                           : AudioTrack::TRANSFER_SYNC,
-                                  (offload || encapsulationMode) ? &offloadInfo : NULL, -1,
-                                  -1, // default uid, pid values
+                                  (offload || encapsulationMode) ? &offloadInfo : NULL,
+                                  Identity(), // default uid, pid values
                                   paa.get());
             break;
 
@@ -416,8 +420,8 @@ static jint android_media_AudioTrack_setup(JNIEnv *env, jobject thiz, jobject we
                                   true,                   // thread can call Java
                                   sessionId,              // audio session ID
                                   AudioTrack::TRANSFER_SHARED,
-                                  NULL,   // default offloadInfo
-                                  -1, -1, // default uid, pid values
+                                  NULL,       // default offloadInfo
+                                  Identity(), // default uid, pid values
                                   paa.get());
             break;
 
@@ -1419,6 +1423,69 @@ static jint android_media_AudioTrack_getDualMonoMode(JNIEnv *env, jobject thiz,
     return nativeToJavaStatus(status);
 }
 
+static void android_media_AudioTrack_setLogSessionId(JNIEnv *env, jobject thiz,
+                                                     jstring jlogSessionId) {
+    sp<AudioTrack> track = getAudioTrack(env, thiz);
+    if (track == nullptr) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                          "Unable to retrieve AudioTrack pointer for setLogSessionId()");
+    }
+    if (jlogSessionId == nullptr) {
+        ALOGV("%s: logSessionId nullptr", __func__);
+        track->setLogSessionId(nullptr);
+        return;
+    }
+    ScopedUtfChars logSessionId(env, jlogSessionId);
+    ALOGV("%s: logSessionId '%s'", __func__, logSessionId.c_str());
+    track->setLogSessionId(logSessionId.c_str());
+}
+
+static void android_media_AudioTrack_setPlayerIId(JNIEnv *env, jobject thiz, jint playerIId) {
+    sp<AudioTrack> track = getAudioTrack(env, thiz);
+    if (track == nullptr) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                          "Unable to retrieve AudioTrack pointer for setPlayerIId()");
+    }
+    ALOGV("%s: playerIId %d", __func__, playerIId);
+    track->setPlayerIId(playerIId);
+}
+
+static jint android_media_AudioTrack_getStartThresholdInFrames(JNIEnv *env, jobject thiz) {
+    sp<AudioTrack> lpTrack = getAudioTrack(env, thiz);
+    if (lpTrack == nullptr) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                          "Unable to retrieve AudioTrack pointer for getStartThresholdInFrames()");
+        return (jint)AUDIO_JAVA_ERROR;
+    }
+    const ssize_t result = lpTrack->getStartThresholdInFrames();
+    if (result <= 0) {
+        jniThrowExceptionFmt(env, "java/lang/IllegalStateException",
+                             "Internal error detected in getStartThresholdInFrames() = %zd",
+                             result);
+        return (jint)AUDIO_JAVA_ERROR;
+    }
+    return (jint)result; // this should be a positive value.
+}
+
+static jint android_media_AudioTrack_setStartThresholdInFrames(JNIEnv *env, jobject thiz,
+                                                               jint startThresholdInFrames) {
+    sp<AudioTrack> lpTrack = getAudioTrack(env, thiz);
+    if (lpTrack == nullptr) {
+        jniThrowException(env, "java/lang/IllegalStateException",
+                          "Unable to retrieve AudioTrack pointer for setStartThresholdInFrames()");
+        return (jint)AUDIO_JAVA_ERROR;
+    }
+    // non-positive values of startThresholdInFrames are not allowed by the Java layer.
+    const ssize_t result = lpTrack->setStartThresholdInFrames(startThresholdInFrames);
+    if (result <= 0) {
+        jniThrowExceptionFmt(env, "java/lang/IllegalStateException",
+                             "Internal error detected in setStartThresholdInFrames() = %zd",
+                             result);
+        return (jint)AUDIO_JAVA_ERROR;
+    }
+    return (jint)result; // this should be a positive value.
+}
+
 // ----------------------------------------------------------------------------
 // ----------------------------------------------------------------------------
 static const JNINativeMethod gMethods[] = {
@@ -1496,6 +1563,13 @@ static const JNINativeMethod gMethods[] = {
          (void *)android_media_AudioTrack_getAudioDescriptionMixLeveldB},
         {"native_set_dual_mono_mode", "(I)I", (void *)android_media_AudioTrack_setDualMonoMode},
         {"native_get_dual_mono_mode", "([I)I", (void *)android_media_AudioTrack_getDualMonoMode},
+        {"native_setLogSessionId", "(Ljava/lang/String;)V",
+         (void *)android_media_AudioTrack_setLogSessionId},
+        {"native_setPlayerIId", "(I)V", (void *)android_media_AudioTrack_setPlayerIId},
+        {"native_setStartThresholdInFrames", "(I)I",
+         (void *)android_media_AudioTrack_setStartThresholdInFrames},
+        {"native_getStartThresholdInFrames", "()I",
+         (void *)android_media_AudioTrack_getStartThresholdInFrames},
 };
 
 // field names found in android/media/AudioTrack.java

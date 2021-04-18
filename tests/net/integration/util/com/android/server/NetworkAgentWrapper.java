@@ -17,6 +17,7 @@
 package com.android.server;
 
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkCapabilities.TRANSPORT_ETHERNET;
@@ -40,14 +41,15 @@ import android.net.NetworkAgent;
 import android.net.NetworkAgentConfig;
 import android.net.NetworkCapabilities;
 import android.net.NetworkProvider;
+import android.net.NetworkScore;
 import android.net.NetworkSpecifier;
 import android.net.QosFilter;
 import android.net.SocketKeepalive;
-import android.net.UidRange;
 import android.os.ConditionVariable;
 import android.os.HandlerThread;
 import android.os.Message;
 import android.util.Log;
+import android.util.Range;
 
 import com.android.net.module.util.ArrayTrackRecord;
 import com.android.server.connectivity.ConnectivityConstants;
@@ -63,6 +65,7 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
     private final HandlerThread mHandlerThread;
     private final Context mContext;
     private final String mLogTag;
+    private final NetworkAgentConfig mNetworkAgentConfig;
 
     private final ConditionVariable mDisconnected = new ConditionVariable();
     private final ConditionVariable mPreventReconnectReceived = new ConditionVariable();
@@ -84,6 +87,7 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
         final String typeName = ConnectivityManager.getNetworkTypeName(type);
         mNetworkCapabilities = (ncTemplate != null) ? ncTemplate : new NetworkCapabilities();
         mNetworkCapabilities.addCapability(NET_CAPABILITY_NOT_SUSPENDED);
+        mNetworkCapabilities.addCapability(NET_CAPABILITY_NOT_VCN_MANAGED);
         mNetworkCapabilities.addTransportType(transport);
         switch (transport) {
             case TRANSPORT_ETHERNET:
@@ -113,13 +117,19 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
         mHandlerThread = new HandlerThread(mLogTag);
         mHandlerThread.start();
 
-        mNetworkAgent = makeNetworkAgent(linkProperties, type, typeName);
+        // extraInfo is set to "" by default in NetworkAgentConfig.
+        final String extraInfo = (transport == TRANSPORT_CELLULAR) ? "internet.apn" : "";
+        mNetworkAgentConfig = new NetworkAgentConfig.Builder()
+                .setLegacyType(type)
+                .setLegacyTypeName(typeName)
+                .setLegacyExtraInfo(extraInfo)
+                .build();
+        mNetworkAgent = makeNetworkAgent(linkProperties, mNetworkAgentConfig);
     }
 
     protected InstrumentedNetworkAgent makeNetworkAgent(LinkProperties linkProperties,
-            final int type, final String typeName)
-            throws Exception {
-        return new InstrumentedNetworkAgent(this, linkProperties, type, typeName);
+            final NetworkAgentConfig nac) throws Exception {
+        return new InstrumentedNetworkAgent(this, linkProperties, nac);
     }
 
     public static class InstrumentedNetworkAgent extends NetworkAgent {
@@ -127,11 +137,9 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
         private static final String PROVIDER_NAME = "InstrumentedNetworkAgentProvider";
 
         public InstrumentedNetworkAgent(NetworkAgentWrapper wrapper, LinkProperties lp,
-                final int type, final String typeName) {
+                NetworkAgentConfig nac) {
             super(wrapper.mContext, wrapper.mHandlerThread.getLooper(), wrapper.mLogTag,
-                    wrapper.mNetworkCapabilities, lp, wrapper.mScore,
-                    new NetworkAgentConfig.Builder()
-                            .setLegacyType(type).setLegacyTypeName(typeName).build(),
+                    wrapper.mNetworkCapabilities, lp, wrapper.mScore, nac,
                     new NetworkProvider(wrapper.mContext, wrapper.mHandlerThread.getLooper(),
                             PROVIDER_NAME));
             mWrapper = wrapper;
@@ -192,6 +200,11 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
         }
     }
 
+    public void setScore(@NonNull final NetworkScore score) {
+        mScore = score.getLegacyInt();
+        mNetworkAgent.sendNetworkScore(score);
+    }
+
     public void adjustScore(int change) {
         mScore += change;
         mNetworkAgent.sendNetworkScore(mScore);
@@ -215,7 +228,7 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
         mNetworkAgent.sendNetworkCapabilities(mNetworkCapabilities);
     }
 
-    public void setUids(Set<UidRange> uids) {
+    public void setUids(Set<Range<Integer>> uids) {
         mNetworkCapabilities.setUids(uids);
         mNetworkAgent.sendNetworkCapabilities(mNetworkCapabilities);
     }
@@ -297,6 +310,14 @@ public class NetworkAgentWrapper implements TestableNetworkCallback.HasNetwork {
 
     public NetworkCapabilities getNetworkCapabilities() {
         return mNetworkCapabilities;
+    }
+
+    public int getLegacyType() {
+        return mNetworkAgentConfig.getLegacyType();
+    }
+
+    public String getExtraInfo() {
+        return mNetworkAgentConfig.getLegacyExtraInfo();
     }
 
     public @NonNull ArrayTrackRecord<CallbackType>.ReadHead getCallbackHistory() {

@@ -87,6 +87,8 @@ private:
     std::unique_ptr<SkiaDisplayList> mDisplayList;
     StartReorderBarrierDrawable* mCurrentBarrier;
 
+    static void FilterForImage(SkPaint&);
+
     /**
      *  A new SkiaDisplayList is created or recycled if available.
      *
@@ -96,7 +98,7 @@ private:
      */
     void initDisplayList(uirenderer::RenderNode* renderNode, int width, int height);
 
-    PaintCoW&& filterBitmap(PaintCoW&& paint);
+    using INHERITED = SkiaCanvas;
 };
 
 }  // namespace skiapipeline

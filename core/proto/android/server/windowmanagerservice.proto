@@ -174,10 +174,10 @@ message DisplayContentProto {
     // Use root_display_area instead
     optional WindowContainerProto window_container = 1 [deprecated=true];
     optional int32 id = 2;
-    reserved 3; // stacks
-    optional DockedStackDividerControllerProto docked_stack_divider_controller = 4 [deprecated=true];
+    reserved 3; // RootTasks
+    optional DockedTaskDividerControllerProto docked_task_divider_controller = 4 [deprecated=true];
     // Will be removed soon.
-    optional PinnedStackControllerProto pinned_stack_controller = 5 [deprecated=true];
+    optional PinnedTaskControllerProto pinned_task_controller = 5 [deprecated=true];
     /* non app windows */
     repeated WindowTokenProto above_app_windows = 6 [deprecated=true];
     repeated WindowTokenProto below_app_windows = 7 [deprecated=true];
@@ -256,15 +256,15 @@ message DisplayRotationProto {
     optional int32 last_orientation = 5 [(.android.typedef) = "android.content.pm.ActivityInfo.ScreenOrientation"];
 }
 
-/* represents DockedStackDividerController */
-message DockedStackDividerControllerProto {
+/* represents DockedTaskDividerController */
+message DockedTaskDividerControllerProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
     optional bool minimized_dock = 1 [deprecated=true];
 }
 
-/* represents PinnedStackController */
-message PinnedStackControllerProto {
+/* represents PinnedTaskController */
+message PinnedTaskControllerProto {
     option (.android.msg_privacy).dest = DEST_AUTOMATIC;
 
     optional .android.graphics.RectProto default_bounds = 1 [deprecated=true];
@@ -337,7 +337,7 @@ message ActivityRecordProto {
     optional bool starting_displayed = 20;
     optional bool starting_moved = 201;
     optional bool visible_set_from_transferred_starting_window = 22;
-    repeated .android.graphics.RectProto frozen_bounds = 23;
+    repeated .android.graphics.RectProto frozen_bounds = 23 [deprecated=true];
     optional bool visible = 24;
     reserved 25; // configuration_container
     optional IdentifierProto identifier = 26 [deprecated=true];
@@ -346,6 +346,7 @@ message ActivityRecordProto {
     optional int32 proc_id = 29;
     optional bool translucent = 30;
     optional bool pip_auto_enter_enabled = 31;
+    optional bool in_size_compat_mode = 32;
 }
 
 /* represents WindowToken */
@@ -406,6 +407,8 @@ message WindowStateProto {
     optional int64 finished_seamless_rotation_frame = 40;
     optional WindowFramesProto window_frames = 41;
     optional bool force_seamless_rotation = 42;
+    optional bool has_compat_scale = 43;
+    optional float global_scale = 44;
 }
 
 message IdentifierProto {
@@ -516,6 +519,7 @@ message WindowFramesProto {
     optional .android.graphics.RectProto visible_insets = 13 [deprecated=true];
     optional .android.graphics.RectProto stable_insets = 14 [deprecated=true];
     optional .android.graphics.RectProto outsets = 15;
+    optional .android.graphics.RectProto compat_frame = 16;
 }
 
 message InsetsSourceProviderProto {

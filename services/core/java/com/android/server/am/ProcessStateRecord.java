@@ -23,25 +23,27 @@ import static android.app.ActivityManager.PROCESS_CAPABILITY_NONE;
 import static android.app.ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
 import static android.app.ActivityManager.PROCESS_STATE_NONEXISTENT;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.os.PowerWhitelistManager.REASON_BACKGROUND_ACTIVITY_PERMISSION;
+import static android.os.PowerWhitelistManager.REASON_BACKGROUND_FGS_PERMISSION;
+import static android.os.PowerWhitelistManager.REASON_COMPANION_DEVICE_MANAGER;
+import static android.os.PowerWhitelistManager.REASON_DENIED;
+import static android.os.PowerWhitelistManager.REASON_DEVICE_OWNER;
+import static android.os.PowerWhitelistManager.REASON_PROFILE_OWNER;
+import static android.os.PowerWhitelistManager.REASON_SYSTEM_ALERT_WINDOW_PERMISSION;
+import static android.os.PowerWhitelistManager.REASON_SYSTEM_ALLOW_LISTED;
+import static android.os.PowerWhitelistManager.REASON_SYSTEM_UID;
+import static android.os.PowerWhitelistManager.ReasonCode;
+import static android.os.PowerWhitelistManager.getReasonCodeFromProcState;
+import static android.os.PowerWhitelistManager.reasonCodeToString;
 import static android.os.Process.NFC_UID;
 import static android.os.Process.ROOT_UID;
 import static android.os.Process.SHELL_UID;
 import static android.os.Process.SYSTEM_UID;
 
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_BACKGROUND_ACTIVITY_PERMISSION;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_BACKGROUND_FGS_PERMISSION;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_COMPANION_APP;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_DEVICE_IDLE_ALLOW_LIST;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_DEVICE_OWNER;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_PROC_STATE;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_PROFILE_OWNER;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_SYSTEM_ALERT_WINDOW_PERMISSION;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_ALLOWED_BY_SYSTEM_UID;
-import static com.android.server.am.ActiveServices.FGS_FEATURE_DENIED;
-import static com.android.server.am.ActiveServices.fgsCodeToString;
 import static com.android.server.am.ActivityManagerDebugConfig.DEBUG_OOM_ADJ;
 import static com.android.server.am.ProcessRecord.TAG;
 
+import android.annotation.ElapsedRealtimeLong;
 import android.app.ActivityManager;
 import android.content.ComponentName;
 import android.os.Binder;
@@ -329,7 +331,7 @@ final class ProcessStateRecord {
      * Does the process has permission to start FGS from background.
      */
     @GuardedBy("mService")
-    private @ActiveServices.FgsFeatureRetCode int mAllowStartFgsByPermission;
+    private @ReasonCode int mAllowStartFgsByPermission = REASON_DENIED;
 
     /**
      * Can this process start FGS from background?
@@ -337,7 +339,7 @@ final class ProcessStateRecord {
      * another process through service binding.
      */
     @GuardedBy("mService")
-    private @ActiveServices.FgsFeatureRetCode int mAllowStartFgs;
+    private @ReasonCode int mAllowStartFgs = REASON_DENIED;
 
     /**
      * Debugging: primary thing impacting oom_adj.
@@ -384,6 +386,16 @@ final class ProcessStateRecord {
      */
     @GuardedBy("mService")
     private boolean mReachable;
+
+    /**
+     * The most recent time when the last visible activity within this process became invisible.
+     *
+     * <p> It'll be set to 0 if there is never a visible activity, or Long.MAX_VALUE if there is
+     * any visible activities within this process at this moment.</p>
+     */
+    @GuardedBy("mService")
+    @ElapsedRealtimeLong
+    private long mLastInvisibleTime;
 
     // Below are the cached task info for OomAdjuster only
     private static final int VALUE_INVALID = -1;
@@ -1039,18 +1051,19 @@ final class ProcessStateRecord {
 
     @GuardedBy("mService")
     void computeOomAdjFromActivitiesIfNecessary(OomAdjuster.ComputeOomAdjWindowCallback callback,
-            int adj, boolean foregroundActivities, int procState, int schedGroup, int appUid,
-            int logUid, int processCurTop) {
+            int adj, boolean foregroundActivities, boolean hasVisibleActivities, int procState,
+            int schedGroup, int appUid, int logUid, int processCurTop) {
         if (mCachedAdj != ProcessList.INVALID_ADJ) {
             return;
         }
-        callback.initialize(mApp, adj, foregroundActivities, procState, schedGroup, appUid, logUid,
-                processCurTop);
+        callback.initialize(mApp, adj, foregroundActivities, hasVisibleActivities, procState,
+                schedGroup, appUid, logUid, processCurTop);
         final int minLayer = Math.min(ProcessList.VISIBLE_APP_LAYER_MAX,
                 mApp.getWindowProcessController().computeOomAdjFromActivities(callback));
 
         mCachedAdj = callback.adj;
         mCachedForegroundActivities = callback.foregroundActivities;
+        mCachedHasVisibleActivities = callback.mHasVisibleActivities ? VALUE_TRUE : VALUE_FALSE;
         mCachedProcState = callback.procState;
         mCachedSchedGroup = callback.schedGroup;
 
@@ -1152,44 +1165,47 @@ final class ProcessStateRecord {
     }
 
     @GuardedBy("mService")
+    int getAllowStartFgsState() {
+        return mAllowStartFgsState;
+    }
+
+    @GuardedBy("mService")
     boolean isAllowedStartFgsState() {
         return mAllowStartFgsState <= PROCESS_STATE_BOUND_FOREGROUND_SERVICE;
     }
 
     @GuardedBy("mService")
     void setAllowStartFgsByPermission() {
-        int ret = FGS_FEATURE_DENIED;
-        if (ret == FGS_FEATURE_DENIED) {
-            boolean isSystem = false;
-            final int uid = UserHandle.getAppId(mApp.info.uid);
-            switch (uid) {
-                case ROOT_UID:
-                case SYSTEM_UID:
-                case NFC_UID:
-                case SHELL_UID:
-                    isSystem = true;
-                    break;
-                default:
-                    isSystem = false;
-                    break;
-            }
-
-            if (isSystem) {
-                ret = FGS_FEATURE_ALLOWED_BY_SYSTEM_UID;
-            }
+        int ret = REASON_DENIED;
+        boolean isSystem = false;
+        final int uid = UserHandle.getAppId(mApp.info.uid);
+        switch (uid) {
+            case ROOT_UID:
+            case SYSTEM_UID:
+            case NFC_UID:
+            case SHELL_UID:
+                isSystem = true;
+                break;
+            default:
+                isSystem = false;
+                break;
         }
 
-        if (ret == FGS_FEATURE_DENIED) {
+        if (isSystem) {
+            ret = REASON_SYSTEM_UID;
+        }
+
+        if (ret == REASON_DENIED) {
             if (ActivityManager.checkComponentPermission(START_ACTIVITIES_FROM_BACKGROUND,
                     mApp.info.uid, -1, true) == PERMISSION_GRANTED) {
-                ret = FGS_FEATURE_ALLOWED_BY_BACKGROUND_ACTIVITY_PERMISSION;
+                ret = REASON_BACKGROUND_ACTIVITY_PERMISSION;
             } else if (ActivityManager.checkComponentPermission(
                     START_FOREGROUND_SERVICES_FROM_BACKGROUND,
                     mApp.info.uid, -1, true) == PERMISSION_GRANTED) {
-                ret = FGS_FEATURE_ALLOWED_BY_BACKGROUND_FGS_PERMISSION;
+                ret = REASON_BACKGROUND_FGS_PERMISSION;
             } else if (ActivityManager.checkComponentPermission(SYSTEM_ALERT_WINDOW,
                     mApp.info.uid, -1, true) == PERMISSION_GRANTED) {
-                ret = FGS_FEATURE_ALLOWED_BY_SYSTEM_ALERT_WINDOW_PERMISSION;
+                ret = REASON_SYSTEM_ALERT_WINDOW_PERMISSION;
             }
         }
         mAllowStartFgs = mAllowStartFgsByPermission = ret;
@@ -1197,60 +1213,81 @@ final class ProcessStateRecord {
 
     @GuardedBy("mService")
     void setAllowStartFgs() {
-        if (mAllowStartFgs != FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs != REASON_DENIED) {
             return;
         }
-        if (mAllowStartFgs == FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs == REASON_DENIED) {
             if (isAllowedStartFgsState()) {
-                mAllowStartFgs = FGS_FEATURE_ALLOWED_BY_PROC_STATE;
+                mAllowStartFgs = getReasonCodeFromProcState(mAllowStartFgsState);
             }
         }
 
-        if (mAllowStartFgs == FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs == REASON_DENIED) {
             // Is the calling UID a device owner app?
             if (mService.mInternal != null) {
                 if (mService.mInternal.isDeviceOwner(mApp.info.uid)) {
-                    mAllowStartFgs = FGS_FEATURE_ALLOWED_BY_DEVICE_OWNER;
+                    mAllowStartFgs = REASON_DEVICE_OWNER;
                 }
             }
         }
 
-        if (mAllowStartFgs == FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs == REASON_DENIED) {
             if (mService.mInternal != null) {
                 final boolean isCompanionApp = mService.mInternal.isAssociatedCompanionApp(
                         UserHandle.getUserId(mApp.info.uid), mApp.info.uid);
                 if (isCompanionApp) {
-                    mAllowStartFgs = FGS_FEATURE_ALLOWED_BY_COMPANION_APP;
+                    mAllowStartFgs = REASON_COMPANION_DEVICE_MANAGER;
                 }
             }
         }
 
-        if (mAllowStartFgs == FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs == REASON_DENIED) {
             // Is the calling UID a profile owner app?
             if (mService.mInternal != null) {
                 if (mService.mInternal.isProfileOwner(mApp.info.uid)) {
-                    mAllowStartFgs = FGS_FEATURE_ALLOWED_BY_PROFILE_OWNER;
+                    mAllowStartFgs = REASON_PROFILE_OWNER;
                 }
             }
         }
 
-        if (mAllowStartFgs == FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs == REASON_DENIED) {
             // uid is on DeviceIdleController's user/system allowlist
             // or AMS's FgsStartTempAllowList.
-            if (mService.isAllowlistedForFgsStartLOSP(mApp.info.uid)) {
-                mAllowStartFgs = FGS_FEATURE_ALLOWED_BY_DEVICE_IDLE_ALLOW_LIST;
+            FgsStartTempAllowList.TempFgsAllowListEntry entry =
+                    mService.isAllowlistedForFgsStartLOSP(mApp.info.uid);
+            if (entry != null) {
+                if (entry == ActivityManagerService.FAKE_TEMP_ALLOWLIST_ENTRY) {
+                    mAllowStartFgs = REASON_SYSTEM_ALLOW_LISTED;
+                } else {
+                    mAllowStartFgs = entry.mReasonCode;
+                }
             }
         }
     }
 
     @GuardedBy("mService")
-    void setAllowStartFgs(@ActiveServices.FgsFeatureRetCode int allowStartFgs) {
+    void setAllowStartFgs(@ReasonCode int allowStartFgs) {
         mAllowStartFgs = allowStartFgs;
     }
 
     @GuardedBy("mService")
-    @ActiveServices.FgsFeatureRetCode int getAllowedStartFgs() {
+    @ReasonCode int getAllowedStartFgs() {
         return mAllowStartFgs;
+    }
+
+    @GuardedBy("mService")
+    void updateLastInvisibleTime(boolean hasVisibleActivities) {
+        if (hasVisibleActivities) {
+            mLastInvisibleTime = Long.MAX_VALUE;
+        } else if (mLastInvisibleTime == Long.MAX_VALUE) {
+            mLastInvisibleTime = SystemClock.elapsedRealtime();
+        }
+    }
+
+    @GuardedBy("mService")
+    @ElapsedRealtimeLong
+    long getLastInvisibleTime() {
+        return mLastInvisibleTime;
     }
 
     @GuardedBy({"mService", "mProcLock"})
@@ -1291,9 +1328,9 @@ final class ProcessStateRecord {
         pw.println();
         pw.print(prefix); pw.print("allowStartFgsState=");
         pw.println(mAllowStartFgsState);
-        if (mAllowStartFgs != FGS_FEATURE_DENIED) {
+        if (mAllowStartFgs != REASON_DENIED) {
             pw.print(prefix); pw.print("allowStartFgs=");
-            pw.println(fgsCodeToString(mAllowStartFgs));
+            pw.println(reasonCodeToString(mAllowStartFgs));
         }
         if (mHasShownUi || mApp.mProfile.hasPendingUiClean()) {
             pw.print(prefix); pw.print("hasShownUi="); pw.print(mHasShownUi);
@@ -1328,6 +1365,15 @@ final class ProcessStateRecord {
         if (mLastTopTime > 0) {
             pw.print(prefix); pw.print("lastTopTime=");
             TimeUtils.formatDuration(mLastTopTime, nowUptime, pw);
+            pw.println();
+        }
+        if (mLastInvisibleTime > 0 && mLastInvisibleTime < Long.MAX_VALUE) {
+            pw.print(prefix); pw.print("lastInvisibleTime=");
+            final long elapsedRealtimeNow = SystemClock.elapsedRealtime();
+            final long currentTimeNow = System.currentTimeMillis();
+            final long lastInvisibleCurrentTime =
+                    currentTimeNow - elapsedRealtimeNow + mLastInvisibleTime;
+            TimeUtils.dumpTimeWithDelta(pw, lastInvisibleCurrentTime, currentTimeNow);
             pw.println();
         }
         if (mHasStartedServices) {

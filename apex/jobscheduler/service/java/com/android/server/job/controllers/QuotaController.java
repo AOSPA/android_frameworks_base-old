@@ -28,11 +28,11 @@ import static com.android.server.job.JobSchedulerService.RESTRICTED_INDEX;
 import static com.android.server.job.JobSchedulerService.WORKING_INDEX;
 import static com.android.server.job.JobSchedulerService.sElapsedRealtimeClock;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.ActivityManagerInternal;
 import android.app.AlarmManager;
 import android.app.AppGlobals;
 import android.app.IUidObserver;
@@ -43,7 +43,9 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageManagerInternal;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
 import android.os.BatteryManager;
 import android.os.BatteryManagerInternal;
 import android.os.Handler;
@@ -118,6 +120,10 @@ public final class QuotaController extends StateController {
 
     private static final String ALARM_TAG_CLEANUP = "*job.cleanup*";
     private static final String ALARM_TAG_QUOTA_CHECK = "*job.quota_check*";
+
+    private static final int SYSTEM_APP_CHECK_FLAGS =
+            PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                    | PackageManager.GET_PERMISSIONS | PackageManager.MATCH_KNOWN_PACKAGES;
 
     /**
      * Standardize the output of userId-packageName combo.
@@ -348,12 +354,20 @@ public final class QuotaController extends StateController {
     private final SparseBooleanArray mTempAllowlistCache = new SparseBooleanArray();
 
     /**
-     * Mapping of app IDs to the when their temp allowlist grace period ends (in the elapsed
+     * Mapping of UIDs to the when their temp allowlist grace period ends (in the elapsed
      * realtime timebase).
      */
     private final SparseLongArray mTempAllowlistGraceCache = new SparseLongArray();
 
-    private final ActivityManagerInternal mActivityManagerInternal;
+    /** Current set of UIDs in the {@link ActivityManager#PROCESS_STATE_TOP} state. */
+    private final SparseBooleanArray mTopAppCache = new SparseBooleanArray();
+
+    /**
+     * Mapping of UIDs to the when their top app grace period ends (in the elapsed realtime
+     * timebase).
+     */
+    private final SparseLongArray mTopAppGraceCache = new SparseLongArray();
+
     private final AlarmManager mAlarmManager;
     private final ChargingTracker mChargeTracker;
     private final QcHandler mHandler;
@@ -412,7 +426,7 @@ public final class QuotaController extends StateController {
                 }
             };
 
-    private final IUidObserver mUidObserver = new IUidObserver.Stub() {
+    private class QcUidObserver extends IUidObserver.Stub {
         @Override
         public void onUidStateChanged(int uid, int procState, long procStateSeq, int capability) {
             mHandler.obtainMessage(MSG_UID_PROCESS_STATE_CHANGED, uid, procState).sendToTarget();
@@ -433,7 +447,7 @@ public final class QuotaController extends StateController {
         @Override
         public void onUidCachedChanged(int uid, boolean cached) {
         }
-    };
+    }
 
     private final BroadcastReceiver mPackageAddedReceiver = new BroadcastReceiver() {
         @Override
@@ -519,7 +533,9 @@ public final class QuotaController extends StateController {
             QcConstants.DEFAULT_EJ_LIMIT_RESTRICTED_MS
     };
 
-    private long mEjLimitSpecialAdditionMs = QcConstants.DEFAULT_EJ_LIMIT_SPECIAL_ADDITION_MS;
+    private long mEjLimitAdditionInstallerMs = QcConstants.DEFAULT_EJ_LIMIT_ADDITION_INSTALLER_MS;
+
+    private long mEjLimitAdditionSpecialMs = QcConstants.DEFAULT_EJ_LIMIT_ADDITION_SPECIAL_MS;
 
     /**
      * The period of time used to calculate expedited job sessions. Apps can only have expedited job
@@ -548,12 +564,16 @@ public final class QuotaController extends StateController {
      */
     private long mEJRewardNotificationSeenMs = QcConstants.DEFAULT_EJ_REWARD_NOTIFICATION_SEEN_MS;
 
-    private long mEJTempAllowlistGracePeriodMs =
-            QcConstants.DEFAULT_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS;
+    private long mEJGracePeriodTempAllowlistMs =
+            QcConstants.DEFAULT_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS;
 
-    /** The package verifier app. */
-    @Nullable
-    private String mPackageVerifier;
+    private long mEJGracePeriodTopAppMs = QcConstants.DEFAULT_EJ_GRACE_PERIOD_TOP_APP_MS;
+
+    /**
+     * List of system apps with the {@link android.Manifest.permission#INSTALL_PACKAGES} permission
+     * granted for each user.
+     */
+    private final SparseSetArray<String> mSystemInstallers = new SparseSetArray<>();
 
     /** An app has reached its quota. The message should contain a {@link Package} object. */
     @VisibleForTesting
@@ -586,7 +606,6 @@ public final class QuotaController extends StateController {
         mHandler = new QcHandler(mContext.getMainLooper());
         mChargeTracker = new ChargingTracker();
         mChargeTracker.startTracking();
-        mActivityManagerInternal = LocalServices.getService(ActivityManagerInternal.class);
         mAlarmManager = (AlarmManager) mContext.getSystemService(Context.ALARM_SERVICE);
         mQcConstants = new QcConstants();
         mBackgroundJobsController = backgroundJobsController;
@@ -606,9 +625,12 @@ public final class QuotaController extends StateController {
         pai.registerTempAllowlistChangeListener(new TempAllowlistTracker());
 
         try {
-            ActivityManager.getService().registerUidObserver(mUidObserver,
+            ActivityManager.getService().registerUidObserver(new QcUidObserver(),
                     ActivityManager.UID_OBSERVER_PROCSTATE,
                     ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE, null);
+            ActivityManager.getService().registerUidObserver(new QcUidObserver(),
+                    ActivityManager.UID_OBSERVER_PROCSTATE,
+                    ActivityManager.PROCESS_STATE_TOP, null);
         } catch (RemoteException e) {
             // ignored; both services live in system_server
         }
@@ -616,16 +638,14 @@ public final class QuotaController extends StateController {
 
     @Override
     public void onSystemServicesReady() {
-        String[] pkgNames = LocalServices.getService(PackageManagerInternal.class)
-                .getKnownPackageNames(
-                        PackageManagerInternal.PACKAGE_VERIFIER, UserHandle.USER_SYSTEM);
         synchronized (mLock) {
-            mPackageVerifier = ArrayUtils.firstOrNull(pkgNames);
+            cacheInstallerPackagesLocked(UserHandle.USER_SYSTEM);
         }
     }
 
     @Override
     public void maybeStartTrackingJobLocked(JobStatus jobStatus, JobStatus lastJob) {
+        final long nowElapsed = sElapsedRealtimeClock.millis();
         final int userId = jobStatus.getSourceUserId();
         final String pkgName = jobStatus.getSourcePackageName();
         ArraySet<JobStatus> jobs = mTrackedJobs.get(userId, pkgName);
@@ -636,11 +656,11 @@ public final class QuotaController extends StateController {
         jobs.add(jobStatus);
         jobStatus.setTrackingController(JobStatus.TRACKING_QUOTA);
         final boolean isWithinQuota = isWithinQuotaLocked(jobStatus);
-        setConstraintSatisfied(jobStatus, isWithinQuota);
+        setConstraintSatisfied(jobStatus, nowElapsed, isWithinQuota);
         final boolean outOfEJQuota;
         if (jobStatus.isRequestedExpeditedJob()) {
             final boolean isWithinEJQuota = isWithinEJQuotaLocked(jobStatus);
-            setExpeditedConstraintSatisfied(jobStatus, isWithinEJQuota);
+            setExpeditedConstraintSatisfied(jobStatus, nowElapsed, isWithinEJQuota);
             outOfEJQuota = !isWithinEJQuota;
         } else {
             outOfEJQuota = false;
@@ -657,7 +677,7 @@ public final class QuotaController extends StateController {
         }
 
         final int uid = jobStatus.getSourceUid();
-        if (mActivityManagerInternal.getUidProcessState(uid) <= ActivityManager.PROCESS_STATE_TOP) {
+        if (mTopAppCache.get(uid)) {
             if (DEBUG) {
                 Slog.d(TAG, jobStatus.toShortString() + " is top started job");
             }
@@ -714,6 +734,13 @@ public final class QuotaController extends StateController {
         mUidToPackageCache.remove(uid);
         mTempAllowlistCache.delete(uid);
         mTempAllowlistGraceCache.delete(uid);
+        mTopAppCache.delete(uid);
+        mTopAppGraceCache.delete(uid);
+    }
+
+    @Override
+    public void onUserAddedLocked(int userId) {
+        cacheInstallerPackagesLocked(userId);
     }
 
     @Override
@@ -727,6 +754,7 @@ public final class QuotaController extends StateController {
         mExecutionStatsCache.delete(userId);
         mEJStats.delete(userId);
         mUidToPackageCache.clear();
+        mSystemInstallers.remove(userId);
     }
 
     /** Drop all historical stats and stop tracking any active sessions for the specified app. */
@@ -753,6 +781,22 @@ public final class QuotaController extends StateController {
         mEJStats.delete(userId, packageName);
     }
 
+    private void cacheInstallerPackagesLocked(int userId) {
+        final List<PackageInfo> packages = mContext.getPackageManager()
+                .getInstalledPackagesAsUser(SYSTEM_APP_CHECK_FLAGS, userId);
+        for (int i = packages.size() - 1; i >= 0; --i) {
+            final PackageInfo pi = packages.get(i);
+            final ApplicationInfo ai = pi.applicationInfo;
+            final int idx = ArrayUtils.indexOf(
+                    pi.requestedPermissions, Manifest.permission.INSTALL_PACKAGES);
+
+            if (idx >= 0 && ai != null && PackageManager.PERMISSION_GRANTED
+                    == mContext.checkPermission(Manifest.permission.INSTALL_PACKAGES, -1, ai.uid)) {
+                mSystemInstallers.add(UserHandle.getUserId(ai.uid), pi.packageName);
+            }
+        }
+    }
+
     private boolean isUidInForeground(int uid) {
         if (UserHandle.isCore(uid)) {
             return true;
@@ -769,14 +813,10 @@ public final class QuotaController extends StateController {
 
     /** Returns the maximum amount of time this job could run for. */
     public long getMaxJobExecutionTimeMsLocked(@NonNull final JobStatus jobStatus) {
-        // Need to look at current proc state as well in the case where the job hasn't started yet.
-        final boolean isTop = mActivityManagerInternal
-                .getUidProcessState(jobStatus.getSourceUid()) <= ActivityManager.PROCESS_STATE_TOP;
-
         if (!jobStatus.shouldTreatAsExpeditedJob()) {
             // If quota is currently "free", then the job can run for the full amount of time.
             if (mChargeTracker.isCharging()
-                    || isTop
+                    || mTopAppCache.get(jobStatus.getSourceUid())
                     || isTopStartedJobLocked(jobStatus)
                     || isUidInForeground(jobStatus.getSourceUid())) {
                 return mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS;
@@ -789,7 +829,7 @@ public final class QuotaController extends StateController {
         if (mChargeTracker.isCharging()) {
             return mConstants.RUNTIME_FREE_QUOTA_MAX_LIMIT_MS;
         }
-        if (isTop || isTopStartedJobLocked(jobStatus)) {
+        if (mTopAppCache.get(jobStatus.getSourceUid()) || isTopStartedJobLocked(jobStatus)) {
             return Math.max(mEJLimitsMs[ACTIVE_INDEX] / 2,
                     getTimeUntilEJQuotaConsumedLocked(
                             jobStatus.getSourceUserId(), jobStatus.getSourcePackageName()));
@@ -809,16 +849,26 @@ public final class QuotaController extends StateController {
             return true;
         }
         // A job is within quota if one of the following is true:
-        //   1. it's already running (already executing expedited jobs should be allowed to finish)
-        //   2. the app is currently in the foreground
-        //   3. the app overall is within its quota
+        //   1. the app is currently in the foreground
+        //   2. the app overall is within its quota
+        //   3. It's on the temp allowlist (or within the grace period)
         if (isTopStartedJobLocked(jobStatus) || isUidInForeground(jobStatus.getSourceUid())) {
             return true;
         }
-        Timer ejTimer = mEJPkgTimers.get(jobStatus.getSourceUserId(),
-                jobStatus.getSourcePackageName());
-        // Any already executing expedited jbos should be allowed to finish.
-        if (ejTimer != null && ejTimer.isRunning(jobStatus)) {
+
+        final long nowElapsed = sElapsedRealtimeClock.millis();
+        final long tempAllowlistGracePeriodEndElapsed =
+                mTempAllowlistGraceCache.get(jobStatus.getSourceUid());
+        final boolean hasTempAllowlistExemption = mTempAllowlistCache.get(jobStatus.getSourceUid())
+                || nowElapsed < tempAllowlistGracePeriodEndElapsed;
+        if (hasTempAllowlistExemption) {
+            return true;
+        }
+
+        final long topAppGracePeriodEndElapsed = mTopAppGraceCache.get(jobStatus.getSourceUid());
+        final boolean hasTopAppExemption = mTopAppCache.get(jobStatus.getSourceUid())
+                || nowElapsed < topAppGracePeriodEndElapsed;
+        if (hasTopAppExemption) {
             return true;
         }
 
@@ -827,8 +877,8 @@ public final class QuotaController extends StateController {
     }
 
     @NonNull
-    private ShrinkableDebits getEJQuotaLocked(final int userId,
-            @NonNull final String packageName) {
+    @VisibleForTesting
+    ShrinkableDebits getEJDebitsLocked(final int userId, @NonNull final String packageName) {
         ShrinkableDebits debits = mEJStats.get(userId, packageName);
         if (debits == null) {
             debits = new ShrinkableDebits(
@@ -930,11 +980,12 @@ public final class QuotaController extends StateController {
 
     @VisibleForTesting
     long getRemainingEJExecutionTimeLocked(final int userId, @NonNull final String packageName) {
-        ShrinkableDebits quota = getEJQuotaLocked(userId, packageName);
+        ShrinkableDebits quota = getEJDebitsLocked(userId, packageName);
         if (quota.getStandbyBucketLocked() == NEVER_INDEX) {
             return 0;
         }
-        final long limitMs = getEJLimitMsLocked(packageName, quota.getStandbyBucketLocked());
+        final long limitMs =
+                getEJLimitMsLocked(userId, packageName, quota.getStandbyBucketLocked());
         long remainingMs = limitMs - quota.getTallyLocked();
 
         // Stale sessions may still be factored into tally. Make sure they're removed.
@@ -947,7 +998,7 @@ public final class QuotaController extends StateController {
                 if (ts.endTimeElapsed < windowStartTimeElapsed) {
                     final long duration = ts.endTimeElapsed - ts.startTimeElapsed;
                     remainingMs += duration;
-                    quota.transactOnDebitsLocked(-duration);
+                    quota.transactLocked(-duration);
                     timingSessions.remove(0);
                 } else if (ts.startTimeElapsed < windowStartTimeElapsed) {
                     remainingMs += windowStartTimeElapsed - ts.startTimeElapsed;
@@ -959,22 +1010,24 @@ public final class QuotaController extends StateController {
             }
         }
 
+        TopAppTimer topAppTimer = mTopAppTrackers.get(userId, packageName);
+        if (topAppTimer != null && topAppTimer.isActive()) {
+            remainingMs += topAppTimer.getPendingReward(nowElapsed);
+        }
+
         Timer timer = mEJPkgTimers.get(userId, packageName);
         if (timer == null) {
             return remainingMs;
         }
-        // There's a case where the debits tally is 0 but a currently running HPJ still counts
-        // towards quota. If the app gets a reward in this case, the reward is lost and the HPJ
-        // run is still fully counted.
-        // TODO(171305774)/STOPSHIP: make sure getting rewards while HPJ currently executing isn't
-        // treated negatively
+
         return remainingMs - timer.getCurrentDuration(sElapsedRealtimeClock.millis());
     }
 
-    private long getEJLimitMsLocked(@NonNull final String packageName, final int standbyBucket) {
+    private long getEJLimitMsLocked(final int userId, @NonNull final String packageName,
+            final int standbyBucket) {
         final long baseLimitMs = mEJLimitsMs[standbyBucket];
-        if (packageName.equals(mPackageVerifier)) {
-            return baseLimitMs + mEjLimitSpecialAdditionMs;
+        if (mSystemInstallers.contains(userId, packageName)) {
+            return baseLimitMs + mEjLimitAdditionInstallerMs;
         }
         return baseLimitMs;
     }
@@ -993,12 +1046,18 @@ public final class QuotaController extends StateController {
         if (standbyBucket == NEVER_INDEX) {
             return 0;
         }
+
         List<TimingSession> sessions = mTimingSessions.get(userId, packageName);
+        final ExecutionStats stats = getExecutionStatsLocked(userId, packageName, standbyBucket);
         if (sessions == null || sessions.size() == 0) {
+            // Regular ACTIVE case. Since the bucket size equals the allowed time, the app jobs can
+            // essentially run until they reach the maximum limit.
+            if (stats.windowSizeMs == mAllowedTimePerPeriodMs) {
+                return mMaxExecutionTimeMs;
+            }
             return mAllowedTimePerPeriodMs;
         }
 
-        final ExecutionStats stats = getExecutionStatsLocked(userId, packageName, standbyBucket);
         final long startWindowElapsed = nowElapsed - stats.windowSizeMs;
         final long startMaxElapsed = nowElapsed - MAX_PERIOD_MS;
         final long allowedTimeRemainingMs = mAllowedTimePerPeriodMs - stats.executionTimeInWindowMs;
@@ -1080,8 +1139,9 @@ public final class QuotaController extends StateController {
         }
 
         final long nowElapsed = sElapsedRealtimeClock.millis();
-        ShrinkableDebits quota = getEJQuotaLocked(userId, packageName);
-        final long limitMs = getEJLimitMsLocked(packageName, quota.getStandbyBucketLocked());
+        ShrinkableDebits quota = getEJDebitsLocked(userId, packageName);
+        final long limitMs =
+                getEJLimitMsLocked(userId, packageName, quota.getStandbyBucketLocked());
         final long startWindowElapsed = Math.max(0, nowElapsed - mEJLimitWindowSizeMs);
         long remainingDeadSpaceMs = remainingExecutionTimeMs;
         // Total time looked at where a session wouldn't be phasing out.
@@ -1371,6 +1431,11 @@ public final class QuotaController extends StateController {
     @VisibleForTesting
     void saveTimingSession(final int userId, @NonNull final String packageName,
             @NonNull final TimingSession session, boolean isExpedited) {
+        saveTimingSession(userId, packageName, session, isExpedited, 0);
+    }
+
+    private void saveTimingSession(final int userId, @NonNull final String packageName,
+            @NonNull final TimingSession session, boolean isExpedited, long debitAdjustment) {
         synchronized (mLock) {
             final SparseArrayMap<String, List<TimingSession>> sessionMap =
                     isExpedited ? mEJTimingSessions : mTimingSessions;
@@ -1381,8 +1446,9 @@ public final class QuotaController extends StateController {
             }
             sessions.add(session);
             if (isExpedited) {
-                final ShrinkableDebits quota = getEJQuotaLocked(userId, packageName);
-                quota.transactOnDebitsLocked(session.endTimeElapsed - session.startTimeElapsed);
+                final ShrinkableDebits quota = getEJDebitsLocked(userId, packageName);
+                quota.transactLocked(session.endTimeElapsed - session.startTimeElapsed
+                        + debitAdjustment);
             } else {
                 // Adding a new session means that the current stats are now incorrect.
                 invalidateAllExecutionStatsLocked(userId, packageName);
@@ -1395,12 +1461,32 @@ public final class QuotaController extends StateController {
     private void grantRewardForInstantEvent(
             final int userId, @NonNull final String packageName, final long credit) {
         synchronized (mLock) {
-            final ShrinkableDebits quota = getEJQuotaLocked(userId, packageName);
-            quota.transactOnDebitsLocked(-credit);
-            if (maybeUpdateConstraintForPkgLocked(userId, packageName)) {
+            final long nowElapsed = sElapsedRealtimeClock.millis();
+            final ShrinkableDebits quota = getEJDebitsLocked(userId, packageName);
+            if (transactQuotaLocked(userId, packageName, nowElapsed, quota, credit)
+                    && maybeUpdateConstraintForPkgLocked(nowElapsed, userId, packageName)) {
                 mStateChangedListener.onControllerStateChanged();
             }
         }
+    }
+
+    private boolean transactQuotaLocked(final int userId, @NonNull final String packageName,
+            final long nowElapsed, @NonNull ShrinkableDebits debits, final long credit) {
+        final long oldTally = debits.getTallyLocked();
+        final long leftover = debits.transactLocked(-credit);
+        if (DEBUG) {
+            Slog.d(TAG, "debits overflowed by " + leftover);
+        }
+        boolean changed = oldTally != debits.getTallyLocked();
+        if (leftover != 0) {
+            // Only adjust timer if its active.
+            final Timer ejTimer = mEJPkgTimers.get(userId, packageName);
+            if (ejTimer != null && ejTimer.isActive()) {
+                ejTimer.updateDebitAdjustment(nowElapsed, leftover);
+                changed = true;
+            }
+        }
+        return changed;
     }
 
     private final class EarliestEndTimeFunctor implements Consumer<List<TimingSession>> {
@@ -1499,11 +1585,12 @@ public final class QuotaController extends StateController {
 
     private void maybeUpdateAllConstraintsLocked() {
         boolean changed = false;
+        final long nowElapsed = sElapsedRealtimeClock.millis();
         for (int u = 0; u < mTrackedJobs.numMaps(); ++u) {
             final int userId = mTrackedJobs.keyAt(u);
             for (int p = 0; p < mTrackedJobs.numElementsForKey(userId); ++p) {
                 final String packageName = mTrackedJobs.keyAt(u, p);
-                changed |= maybeUpdateConstraintForPkgLocked(userId, packageName);
+                changed |= maybeUpdateConstraintForPkgLocked(nowElapsed, userId, packageName);
             }
         }
         if (changed) {
@@ -1516,7 +1603,7 @@ public final class QuotaController extends StateController {
      *
      * @return true if at least one job had its bit changed
      */
-    private boolean maybeUpdateConstraintForPkgLocked(final int userId,
+    private boolean maybeUpdateConstraintForPkgLocked(final long nowElapsed, final int userId,
             @NonNull final String packageName) {
         ArraySet<JobStatus> jobs = mTrackedJobs.get(userId, packageName);
         if (jobs == null || jobs.size() == 0) {
@@ -1533,21 +1620,21 @@ public final class QuotaController extends StateController {
             if (isTopStartedJobLocked(js)) {
                 // Job was started while the app was in the TOP state so we should allow it to
                 // finish.
-                changed |= js.setQuotaConstraintSatisfied(true);
+                changed |= js.setQuotaConstraintSatisfied(nowElapsed, true);
             } else if (realStandbyBucket != ACTIVE_INDEX
                     && realStandbyBucket == js.getEffectiveStandbyBucket()) {
                 // An app in the ACTIVE bucket may be out of quota while the job could be in quota
                 // for some reason. Therefore, avoid setting the real value here and check each job
                 // individually.
-                changed |= setConstraintSatisfied(js, realInQuota);
+                changed |= setConstraintSatisfied(js, nowElapsed, realInQuota);
             } else {
                 // This job is somehow exempted. Need to determine its own quota status.
-                changed |= setConstraintSatisfied(js, isWithinQuotaLocked(js));
+                changed |= setConstraintSatisfied(js, nowElapsed, isWithinQuotaLocked(js));
             }
 
             if (js.isRequestedExpeditedJob()) {
                 boolean isWithinEJQuota = isWithinEJQuotaLocked(js);
-                changed |= setExpeditedConstraintSatisfied(js, isWithinEJQuota);
+                changed |= setExpeditedConstraintSatisfied(js, nowElapsed, isWithinEJQuota);
                 outOfEJQuota |= !isWithinEJQuota;
             }
         }
@@ -1566,14 +1653,21 @@ public final class QuotaController extends StateController {
         private final SparseArrayMap<String, Integer> mToScheduleStartAlarms =
                 new SparseArrayMap<>();
         public boolean wasJobChanged;
+        long mUpdateTimeElapsed = 0;
+
+        void prepare() {
+            mUpdateTimeElapsed = sElapsedRealtimeClock.millis();
+        }
 
         @Override
         public void accept(JobStatus jobStatus) {
-            wasJobChanged |= setConstraintSatisfied(jobStatus, isWithinQuotaLocked(jobStatus));
+            wasJobChanged |= setConstraintSatisfied(
+                    jobStatus, mUpdateTimeElapsed, isWithinQuotaLocked(jobStatus));
             final boolean outOfEJQuota;
             if (jobStatus.isRequestedExpeditedJob()) {
                 final boolean isWithinEJQuota = isWithinEJQuotaLocked(jobStatus);
-                wasJobChanged |= setExpeditedConstraintSatisfied(jobStatus, isWithinEJQuota);
+                wasJobChanged |= setExpeditedConstraintSatisfied(
+                        jobStatus, mUpdateTimeElapsed, isWithinEJQuota);
                 outOfEJQuota = !isWithinEJQuota;
             } else {
                 outOfEJQuota = false;
@@ -1611,6 +1705,7 @@ public final class QuotaController extends StateController {
     private final UidConstraintUpdater mUpdateUidConstraints = new UidConstraintUpdater();
 
     private boolean maybeUpdateConstraintForUidLocked(final int uid) {
+        mUpdateUidConstraints.prepare();
         mService.getJobStore().forEachJobForSourceUid(uid, mUpdateUidConstraints);
 
         mUpdateUidConstraints.postProcess();
@@ -1673,7 +1768,8 @@ public final class QuotaController extends StateController {
             inRegularQuotaTimeElapsed = inQuotaTimeElapsed;
         }
         if (remainingEJQuota <= 0) {
-            final long limitMs = getEJLimitMsLocked(packageName, standbyBucket) - mQuotaBufferMs;
+            final long limitMs =
+                    getEJLimitMsLocked(userId, packageName, standbyBucket) - mQuotaBufferMs;
             long sumMs = 0;
             final Timer ejTimer = mEJPkgTimers.get(userId, packageName);
             if (ejTimer != null && ejTimer.isActive()) {
@@ -1716,21 +1812,22 @@ public final class QuotaController extends StateController {
         mInQuotaAlarmListener.addAlarmLocked(userId, packageName, inQuotaTimeElapsed);
     }
 
-    private boolean setConstraintSatisfied(@NonNull JobStatus jobStatus, boolean isWithinQuota) {
+    private boolean setConstraintSatisfied(@NonNull JobStatus jobStatus, long nowElapsed,
+            boolean isWithinQuota) {
         if (!isWithinQuota && jobStatus.getWhenStandbyDeferred() == 0) {
             // Mark that the job is being deferred due to buckets.
-            jobStatus.setWhenStandbyDeferred(sElapsedRealtimeClock.millis());
+            jobStatus.setWhenStandbyDeferred(nowElapsed);
         }
-        return jobStatus.setQuotaConstraintSatisfied(isWithinQuota);
+        return jobStatus.setQuotaConstraintSatisfied(nowElapsed, isWithinQuota);
     }
 
     /**
      * If the satisfaction changes, this will tell connectivity & background jobs controller to
      * also re-evaluate their state.
      */
-    private boolean setExpeditedConstraintSatisfied(@NonNull JobStatus jobStatus,
+    private boolean setExpeditedConstraintSatisfied(@NonNull JobStatus jobStatus, long nowElapsed,
             boolean isWithinQuota) {
-        if (jobStatus.setExpeditedJobQuotaConstraintSatisfied(isWithinQuota)) {
+        if (jobStatus.setExpeditedJobQuotaConstraintSatisfied(nowElapsed, isWithinQuota)) {
             mBackgroundJobsController.evaluateStateLocked(jobStatus);
             mConnectivityController.evaluateStateLocked(jobStatus);
             if (isWithinQuota && jobStatus.isReady()) {
@@ -1863,7 +1960,8 @@ public final class QuotaController extends StateController {
         }
     }
 
-    private static final class ShrinkableDebits {
+    @VisibleForTesting
+    static final class ShrinkableDebits {
         /** The amount of quota remaining. Can be negative if limit changes. */
         private long mDebitTally;
         private int mStandbyBucket;
@@ -1881,8 +1979,11 @@ public final class QuotaController extends StateController {
          * Negative if the tally should decrease (therefore increasing available quota);
          * or positive if the tally should increase (therefore decreasing available quota).
          */
-        void transactOnDebitsLocked(final long amount) {
+        long transactLocked(final long amount) {
+            final long leftover = amount < 0 && Math.abs(amount) > mDebitTally
+                    ? mDebitTally + amount : 0;
             mDebitTally = Math.max(0, mDebitTally + amount);
+            return leftover;
         }
 
         void setStandbyBucketLocked(int standbyBucket) {
@@ -1915,6 +2016,7 @@ public final class QuotaController extends StateController {
         private final ArraySet<JobStatus> mRunningBgJobs = new ArraySet<>();
         private long mStartTimeElapsed;
         private int mBgJobCount;
+        private long mDebitAdjustment;
 
         Timer(int uid, int userId, String packageName, boolean regularJobTimer) {
             mPkg = new Package(userId, packageName);
@@ -1945,6 +2047,7 @@ public final class QuotaController extends StateController {
                 if (mRunningBgJobs.size() == 1) {
                     // Started tracking the first job.
                     mStartTimeElapsed = sElapsedRealtimeClock.millis();
+                    mDebitAdjustment = 0;
                     if (mRegularJobTimer) {
                         // Starting the timer means that all cached execution stats are now
                         // incorrect.
@@ -1976,6 +2079,11 @@ public final class QuotaController extends StateController {
             }
         }
 
+        void updateDebitAdjustment(long nowElapsed, long debit) {
+            // Make sure we don't have a credit larger than the expected session.
+            mDebitAdjustment = Math.max(mDebitAdjustment + debit, mStartTimeElapsed - nowElapsed);
+        }
+
         /**
          * Stops tracking all jobs and cancels any pending alarms. This should only be called if
          * the Timer is not going to be used anymore.
@@ -1991,7 +2099,8 @@ public final class QuotaController extends StateController {
                 return;
             }
             TimingSession ts = new TimingSession(mStartTimeElapsed, nowElapsed, mBgJobCount);
-            saveTimingSession(mPkg.userId, mPkg.packageName, ts, !mRegularJobTimer);
+            saveTimingSession(mPkg.userId, mPkg.packageName, ts, !mRegularJobTimer,
+                    mDebitAdjustment);
             mBgJobCount = 0;
             // Don't reset the tracked jobs list as we need to keep tracking the current number
             // of jobs.
@@ -2018,7 +2127,7 @@ public final class QuotaController extends StateController {
 
         long getCurrentDuration(long nowElapsed) {
             synchronized (mLock) {
-                return !isActive() ? 0 : nowElapsed - mStartTimeElapsed;
+                return !isActive() ? 0 : nowElapsed - mStartTimeElapsed + mDebitAdjustment;
             }
         }
 
@@ -2036,8 +2145,12 @@ public final class QuotaController extends StateController {
             final boolean hasTempAllowlistExemption = !mRegularJobTimer
                     && (mTempAllowlistCache.get(mUid)
                     || nowElapsed < tempAllowlistGracePeriodEndElapsed);
+            final long topAppGracePeriodEndElapsed = mTopAppGraceCache.get(mUid);
+            final boolean hasTopAppExemption = !mRegularJobTimer
+                    && (mTopAppCache.get(mUid) || nowElapsed < topAppGracePeriodEndElapsed);
             return (standbyBucket == RESTRICTED_INDEX || !mChargeTracker.isCharging())
-                    && !mForegroundUids.get(mUid) && !hasTempAllowlistExemption;
+                    && !mForegroundUids.get(mUid) && !hasTempAllowlistExemption
+                    && !hasTopAppExemption;
         }
 
         void onStateChangedLocked(long nowElapsed, boolean isQuotaFree) {
@@ -2047,6 +2160,7 @@ public final class QuotaController extends StateController {
                 // Start timing from unplug.
                 if (mRunningBgJobs.size() > 0) {
                     mStartTimeElapsed = nowElapsed;
+                    mDebitAdjustment = 0;
                     // NOTE: this does have the unfortunate consequence that if the device is
                     // repeatedly plugged in and unplugged, or an app changes foreground state
                     // very frequently, the job count for a package may be artificially high.
@@ -2116,6 +2230,11 @@ public final class QuotaController extends StateController {
             pw.print(", ");
             pw.print(mBgJobCount);
             pw.print(" running bg jobs");
+            if (!mRegularJobTimer) {
+                pw.print(" (debit adj=");
+                pw.print(mDebitAdjustment);
+                pw.print(")");
+            }
             pw.println();
             pw.increaseIndent();
             for (int i = 0; i < mRunningBgJobs.size(); i++) {
@@ -2159,6 +2278,21 @@ public final class QuotaController extends StateController {
             mPkg = new Package(userId, packageName);
         }
 
+        private int calculateTimeChunks(final long nowElapsed) {
+            final long totalTopTimeMs = nowElapsed - mStartTimeElapsed;
+            int numTimeChunks = (int) (totalTopTimeMs / mEJTopAppTimeChunkSizeMs);
+            final long remainderMs = totalTopTimeMs % mEJTopAppTimeChunkSizeMs;
+            if (remainderMs >= SECOND_IN_MILLIS) {
+                // "Round up"
+                numTimeChunks++;
+            }
+            return numTimeChunks;
+        }
+
+        long getPendingReward(final long nowElapsed) {
+            return mEJRewardTopAppMs * calculateTimeChunks(nowElapsed);
+        }
+
         void processEventLocked(@NonNull UsageEvents.Event event) {
             final long nowElapsed = sElapsedRealtimeClock.millis();
             switch (event.getEventType()) {
@@ -2174,21 +2308,17 @@ public final class QuotaController extends StateController {
                     final UsageEvents.Event existingEvent =
                             mActivities.removeReturnOld(event.mInstanceId);
                     if (existingEvent != null && mActivities.size() == 0) {
-                        final long totalTopTimeMs = nowElapsed - mStartTimeElapsed;
-                        int numTimeChunks = (int) (totalTopTimeMs / mEJTopAppTimeChunkSizeMs);
-                        final long remainderMs = totalTopTimeMs % mEJTopAppTimeChunkSizeMs;
-                        if (remainderMs >= SECOND_IN_MILLIS) {
-                            // "Round up"
-                            numTimeChunks++;
-                        }
+                        final long pendingReward = getPendingReward(nowElapsed);
                         if (DEBUG) {
-                            Slog.d(TAG,
-                                    "Crediting " + mPkg + " for " + numTimeChunks + " time chunks");
+                            Slog.d(TAG, "Crediting " + mPkg + " " + pendingReward + "ms"
+                                    + " for " + calculateTimeChunks(nowElapsed) + " time chunks");
                         }
-                        final ShrinkableDebits quota =
-                                getEJQuotaLocked(mPkg.userId, mPkg.packageName);
-                        quota.transactOnDebitsLocked(-mEJRewardTopAppMs * numTimeChunks);
-                        if (maybeUpdateConstraintForPkgLocked(mPkg.userId, mPkg.packageName)) {
+                        final ShrinkableDebits debits =
+                                getEJDebitsLocked(mPkg.userId, mPkg.packageName);
+                        if (transactQuotaLocked(mPkg.userId, mPkg.packageName,
+                                nowElapsed, debits, pendingReward)
+                                && maybeUpdateConstraintForPkgLocked(nowElapsed,
+                                mPkg.userId, mPkg.packageName)) {
                             mStateChangedListener.onControllerStateChanged();
                         }
                     }
@@ -2292,7 +2422,8 @@ public final class QuotaController extends StateController {
             if (timer != null && timer.isActive()) {
                 timer.rescheduleCutoff();
             }
-            if (maybeUpdateConstraintForPkgLocked(userId, packageName)) {
+            if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
+                    userId, packageName)) {
                 mStateChangedListener.onControllerStateChanged();
             }
         }
@@ -2307,7 +2438,7 @@ public final class QuotaController extends StateController {
          */
         @Override
         public void onUsageEvent(int userId, @NonNull UsageEvents.Event event) {
-            mHandler.obtainMessage(MSG_PROCESS_USAGE_EVENT, userId, 0, event);
+            mHandler.obtainMessage(MSG_PROCESS_USAGE_EVENT, userId, 0, event).sendToTarget();
         }
     }
 
@@ -2338,11 +2469,11 @@ public final class QuotaController extends StateController {
         public void onAppRemoved(int uid) {
             synchronized (mLock) {
                 final long nowElapsed = sElapsedRealtimeClock.millis();
-                final long endElapsed = nowElapsed + mEJTempAllowlistGracePeriodMs;
+                final long endElapsed = nowElapsed + mEJGracePeriodTempAllowlistMs;
                 mTempAllowlistCache.delete(uid);
                 mTempAllowlistGraceCache.put(uid, endElapsed);
                 Message msg = mHandler.obtainMessage(MSG_END_GRACE_PERIOD, uid, 0);
-                mHandler.sendMessageDelayed(msg, mEJTempAllowlistGracePeriodMs);
+                mHandler.sendMessageDelayed(msg, mEJGracePeriodTempAllowlistMs);
             }
         }
     }
@@ -2394,7 +2525,6 @@ public final class QuotaController extends StateController {
     }
 
     private class QcHandler extends Handler {
-        private boolean mIsProcessing;
 
         QcHandler(Looper looper) {
             super(looper);
@@ -2403,8 +2533,6 @@ public final class QuotaController extends StateController {
         @Override
         public void handleMessage(Message msg) {
             synchronized (mLock) {
-                mIsProcessing = true;
-
                 switch (msg.what) {
                     case MSG_REACHED_QUOTA: {
                         Package pkg = (Package) msg.obj;
@@ -2417,7 +2545,8 @@ public final class QuotaController extends StateController {
                         if (timeRemainingMs <= 50) {
                             // Less than 50 milliseconds left. Start process of shutting down jobs.
                             if (DEBUG) Slog.d(TAG, pkg + " has reached its quota.");
-                            if (maybeUpdateConstraintForPkgLocked(pkg.userId, pkg.packageName)) {
+                            if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
+                                    pkg.userId, pkg.packageName)) {
                                 mStateChangedListener.onControllerStateChanged();
                             }
                         } else {
@@ -2444,7 +2573,8 @@ public final class QuotaController extends StateController {
                                 pkg.userId, pkg.packageName);
                         if (timeRemainingMs <= 0) {
                             if (DEBUG) Slog.d(TAG, pkg + " has reached its EJ quota.");
-                            if (maybeUpdateConstraintForPkgLocked(pkg.userId, pkg.packageName)) {
+                            if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
+                                    pkg.userId, pkg.packageName)) {
                                 mStateChangedListener.onControllerStateChanged();
                             }
                         } else {
@@ -2475,7 +2605,8 @@ public final class QuotaController extends StateController {
                         if (DEBUG) {
                             Slog.d(TAG, "Checking pkg " + string(userId, packageName));
                         }
-                        if (maybeUpdateConstraintForPkgLocked(userId, packageName)) {
+                        if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
+                                userId, packageName)) {
                             mStateChangedListener.onControllerStateChanged();
                         }
                         break;
@@ -2488,12 +2619,37 @@ public final class QuotaController extends StateController {
 
                         synchronized (mLock) {
                             boolean isQuotaFree;
-                            if (procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+                            if (procState <= ActivityManager.PROCESS_STATE_TOP) {
+                                mTopAppCache.put(uid, true);
+                                mTopAppGraceCache.delete(uid);
+                                if (mForegroundUids.get(uid)) {
+                                    // Went from FGS to TOP. We don't need to reprocess timers or
+                                    // jobs.
+                                    break;
+                                }
                                 mForegroundUids.put(uid, true);
                                 isQuotaFree = true;
                             } else {
-                                mForegroundUids.delete(uid);
-                                isQuotaFree = false;
+                                final boolean reprocess;
+                                if (procState <= ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE) {
+                                    reprocess = !mForegroundUids.get(uid);
+                                    mForegroundUids.put(uid, true);
+                                    isQuotaFree = true;
+                                } else {
+                                    reprocess = true;
+                                    mForegroundUids.delete(uid);
+                                    isQuotaFree = false;
+                                }
+                                if (mTopAppCache.get(uid)) {
+                                    final long endElapsed = nowElapsed + mEJGracePeriodTopAppMs;
+                                    mTopAppCache.delete(uid);
+                                    mTopAppGraceCache.put(uid, endElapsed);
+                                    sendMessageDelayed(obtainMessage(MSG_END_GRACE_PERIOD, uid, 0),
+                                            mEJGracePeriodTopAppMs);
+                                }
+                                if (!reprocess) {
+                                    break;
+                                }
                             }
                             // Update Timers first.
                             if (mPkgTimers.indexOfKey(userId) >= 0
@@ -2522,6 +2678,10 @@ public final class QuotaController extends StateController {
                         final int userId = msg.arg1;
                         final UsageEvents.Event event = (UsageEvents.Event) msg.obj;
                         final String pkgName = event.getPackageName();
+                        if (DEBUG) {
+                            Slog.d(TAG, "Processing event " + event.getEventType()
+                                    + " for " + string(userId, pkgName));
+                        }
                         switch (event.getEventType()) {
                             case UsageEvents.Event.ACTIVITY_RESUMED:
                             case UsageEvents.Event.ACTIVITY_PAUSED:
@@ -2557,20 +2717,31 @@ public final class QuotaController extends StateController {
                     case MSG_END_GRACE_PERIOD: {
                         final int uid = msg.arg1;
                         synchronized (mLock) {
-                            if (mTempAllowlistCache.get(uid)) {
-                                // App added back to the temp allowlist during the grace period.
+                            if (mTempAllowlistCache.get(uid) || mTopAppCache.get(uid)) {
+                                // App added back to the temp allowlist or became top again
+                                // during the grace period.
                                 if (DEBUG) {
                                     Slog.d(TAG, uid + " is still allowed");
+                                }
+                                break;
+                            }
+                            final long nowElapsed = sElapsedRealtimeClock.millis();
+                            if (nowElapsed < mTempAllowlistGraceCache.get(uid)
+                                    || nowElapsed < mTopAppGraceCache.get(uid)) {
+                                // One of the grace periods is still in effect.
+                                if (DEBUG) {
+                                    Slog.d(TAG, uid + " is still in grace period");
                                 }
                                 break;
                             }
                             if (DEBUG) {
                                 Slog.d(TAG, uid + " is now out of grace period");
                             }
+                            mTempAllowlistGraceCache.delete(uid);
+                            mTopAppGraceCache.delete(uid);
                             final ArraySet<String> packages = getPackagesForUidLocked(uid);
                             if (packages != null) {
                                 final int userId = UserHandle.getUserId(uid);
-                                final long nowElapsed = sElapsedRealtimeClock.millis();
                                 for (int i = packages.size() - 1; i >= 0; --i) {
                                     Timer t = mEJPkgTimers.get(userId, packages.valueAt(i));
                                     if (t != null) {
@@ -2587,8 +2758,6 @@ public final class QuotaController extends StateController {
                     }
                 }
             }
-
-            mIsProcessing = false;
         }
     }
 
@@ -2886,8 +3055,11 @@ public final class QuotaController extends StateController {
         static final String KEY_EJ_LIMIT_RESTRICTED_MS =
                 QC_CONSTANT_PREFIX + "ej_limit_restricted_ms";
         @VisibleForTesting
-        static final String KEY_EJ_LIMIT_SPECIAL_ADDITION_MS =
-                QC_CONSTANT_PREFIX + "ej_limit_special_addition_ms";
+        static final String KEY_EJ_LIMIT_ADDITION_SPECIAL_MS =
+                QC_CONSTANT_PREFIX + "ej_limit_addition_special_ms";
+        @VisibleForTesting
+        static final String KEY_EJ_LIMIT_ADDITION_INSTALLER_MS =
+                QC_CONSTANT_PREFIX + "ej_limit_addition_installer_ms";
         @VisibleForTesting
         static final String KEY_EJ_WINDOW_SIZE_MS =
                 QC_CONSTANT_PREFIX + "ej_window_size_ms";
@@ -2904,8 +3076,11 @@ public final class QuotaController extends StateController {
         static final String KEY_EJ_REWARD_NOTIFICATION_SEEN_MS =
                 QC_CONSTANT_PREFIX + "ej_reward_notification_seen_ms";
         @VisibleForTesting
-        static final String KEY_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS =
-                QC_CONSTANT_PREFIX + "ej_temp_allowlist_grace_period_ms";
+        static final String KEY_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS =
+                QC_CONSTANT_PREFIX + "ej_grace_period_temp_allowlist_ms";
+        @VisibleForTesting
+        static final String KEY_EJ_GRACE_PERIOD_TOP_APP_MS =
+                QC_CONSTANT_PREFIX + "ej_grace_period_top_app_ms";
 
         private static final long DEFAULT_ALLOWED_TIME_PER_PERIOD_MS =
                 10 * 60 * 1000L; // 10 minutes
@@ -2952,13 +3127,15 @@ public final class QuotaController extends StateController {
         private static final long DEFAULT_EJ_LIMIT_FREQUENT_MS = 10 * MINUTE_IN_MILLIS;
         private static final long DEFAULT_EJ_LIMIT_RARE_MS = DEFAULT_EJ_LIMIT_FREQUENT_MS;
         private static final long DEFAULT_EJ_LIMIT_RESTRICTED_MS = 5 * MINUTE_IN_MILLIS;
-        private static final long DEFAULT_EJ_LIMIT_SPECIAL_ADDITION_MS = 30 * MINUTE_IN_MILLIS;
+        private static final long DEFAULT_EJ_LIMIT_ADDITION_SPECIAL_MS = 15 * MINUTE_IN_MILLIS;
+        private static final long DEFAULT_EJ_LIMIT_ADDITION_INSTALLER_MS = 30 * MINUTE_IN_MILLIS;
         private static final long DEFAULT_EJ_WINDOW_SIZE_MS = 24 * HOUR_IN_MILLIS;
         private static final long DEFAULT_EJ_TOP_APP_TIME_CHUNK_SIZE_MS = 30 * SECOND_IN_MILLIS;
         private static final long DEFAULT_EJ_REWARD_TOP_APP_MS = 10 * SECOND_IN_MILLIS;
         private static final long DEFAULT_EJ_REWARD_INTERACTION_MS = 15 * SECOND_IN_MILLIS;
         private static final long DEFAULT_EJ_REWARD_NOTIFICATION_SEEN_MS = 0;
-        private static final long DEFAULT_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS = 3 * MINUTE_IN_MILLIS;
+        private static final long DEFAULT_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS = 3 * MINUTE_IN_MILLIS;
+        private static final long DEFAULT_EJ_GRACE_PERIOD_TOP_APP_MS = 1 * MINUTE_IN_MILLIS;
 
         /** How much time each app will have to run jobs within their standby bucket window. */
         public long ALLOWED_TIME_PER_PERIOD_MS = DEFAULT_ALLOWED_TIME_PER_PERIOD_MS;
@@ -3156,7 +3333,13 @@ public final class QuotaController extends StateController {
         /**
          * How much additional EJ quota special, critical apps should get.
          */
-        public long EJ_LIMIT_SPECIAL_ADDITION_MS = DEFAULT_EJ_LIMIT_SPECIAL_ADDITION_MS;
+        public long EJ_LIMIT_ADDITION_SPECIAL_MS = DEFAULT_EJ_LIMIT_ADDITION_SPECIAL_MS;
+
+        /**
+         * How much additional EJ quota system installers (with the INSTALL_PACKAGES permission)
+         * should get.
+         */
+        public long EJ_LIMIT_ADDITION_INSTALLER_MS = DEFAULT_EJ_LIMIT_ADDITION_INSTALLER_MS;
 
         /**
          * The period of time used to calculate expedited job sessions. Apps can only have expedited
@@ -3190,7 +3373,12 @@ public final class QuotaController extends StateController {
          * How much additional grace period to add to the end of an app's temp allowlist
          * duration.
          */
-        public long EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS = DEFAULT_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS;
+        public long EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS = DEFAULT_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS;
+
+        /**
+         * How much additional grace period to give an app when it leaves the TOP state.
+         */
+        public long EJ_GRACE_PERIOD_TOP_APP_MS = DEFAULT_EJ_GRACE_PERIOD_TOP_APP_MS;
 
         public void processConstantLocked(@NonNull DeviceConfig.Properties properties,
                 @NonNull String key) {
@@ -3217,7 +3405,8 @@ public final class QuotaController extends StateController {
                 case KEY_EJ_LIMIT_FREQUENT_MS:
                 case KEY_EJ_LIMIT_RARE_MS:
                 case KEY_EJ_LIMIT_RESTRICTED_MS:
-                case KEY_EJ_LIMIT_SPECIAL_ADDITION_MS:
+                case KEY_EJ_LIMIT_ADDITION_SPECIAL_MS:
+                case KEY_EJ_LIMIT_ADDITION_INSTALLER_MS:
                 case KEY_EJ_WINDOW_SIZE_MS:
                     updateEJLimitConstantsLocked();
                     break;
@@ -3385,13 +3574,21 @@ public final class QuotaController extends StateController {
                     mEJRewardNotificationSeenMs = Math.min(5 * MINUTE_IN_MILLIS,
                             Math.max(0, EJ_REWARD_NOTIFICATION_SEEN_MS));
                     break;
-                case KEY_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS:
+                case KEY_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS:
                     // We don't need to re-evaluate execution stats or constraint status for this.
-                    EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS =
-                            properties.getLong(key, DEFAULT_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS);
+                    EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS =
+                            properties.getLong(key, DEFAULT_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS);
                     // Limit grace period to be in the range [0 minutes, 1 hour].
-                    mEJTempAllowlistGracePeriodMs = Math.min(HOUR_IN_MILLIS,
-                            Math.max(0, EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS));
+                    mEJGracePeriodTempAllowlistMs = Math.min(HOUR_IN_MILLIS,
+                            Math.max(0, EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS));
+                    break;
+                case KEY_EJ_GRACE_PERIOD_TOP_APP_MS:
+                    // We don't need to re-evaluate execution stats or constraint status for this.
+                    EJ_GRACE_PERIOD_TOP_APP_MS =
+                            properties.getLong(key, DEFAULT_EJ_GRACE_PERIOD_TOP_APP_MS);
+                    // Limit grace period to be in the range [0 minutes, 1 hour].
+                    mEJGracePeriodTopAppMs = Math.min(HOUR_IN_MILLIS,
+                            Math.max(0, EJ_GRACE_PERIOD_TOP_APP_MS));
                     break;
             }
         }
@@ -3544,7 +3741,8 @@ public final class QuotaController extends StateController {
                     DeviceConfig.NAMESPACE_JOB_SCHEDULER,
                     KEY_EJ_LIMIT_ACTIVE_MS, KEY_EJ_LIMIT_WORKING_MS,
                     KEY_EJ_LIMIT_FREQUENT_MS, KEY_EJ_LIMIT_RARE_MS,
-                    KEY_EJ_LIMIT_RESTRICTED_MS, KEY_EJ_LIMIT_SPECIAL_ADDITION_MS,
+                    KEY_EJ_LIMIT_RESTRICTED_MS, KEY_EJ_LIMIT_ADDITION_SPECIAL_MS,
+                    KEY_EJ_LIMIT_ADDITION_INSTALLER_MS,
                     KEY_EJ_WINDOW_SIZE_MS);
             EJ_LIMIT_ACTIVE_MS = properties.getLong(
                     KEY_EJ_LIMIT_ACTIVE_MS, DEFAULT_EJ_LIMIT_ACTIVE_MS);
@@ -3556,8 +3754,10 @@ public final class QuotaController extends StateController {
                     KEY_EJ_LIMIT_RARE_MS, DEFAULT_EJ_LIMIT_RARE_MS);
             EJ_LIMIT_RESTRICTED_MS = properties.getLong(
                     KEY_EJ_LIMIT_RESTRICTED_MS, DEFAULT_EJ_LIMIT_RESTRICTED_MS);
-            EJ_LIMIT_SPECIAL_ADDITION_MS = properties.getLong(
-                    KEY_EJ_LIMIT_SPECIAL_ADDITION_MS, DEFAULT_EJ_LIMIT_SPECIAL_ADDITION_MS);
+            EJ_LIMIT_ADDITION_INSTALLER_MS = properties.getLong(
+                    KEY_EJ_LIMIT_ADDITION_INSTALLER_MS, DEFAULT_EJ_LIMIT_ADDITION_INSTALLER_MS);
+            EJ_LIMIT_ADDITION_SPECIAL_MS = properties.getLong(
+                    KEY_EJ_LIMIT_ADDITION_SPECIAL_MS, DEFAULT_EJ_LIMIT_ADDITION_SPECIAL_MS);
             EJ_WINDOW_SIZE_MS = properties.getLong(
                     KEY_EJ_WINDOW_SIZE_MS, DEFAULT_EJ_WINDOW_SIZE_MS);
 
@@ -3603,11 +3803,17 @@ public final class QuotaController extends StateController {
                 mEJLimitsMs[RESTRICTED_INDEX] = newRestrictedLimitMs;
                 mShouldReevaluateConstraints = true;
             }
-            // The addition must be in the range [0 minutes, window size - active limit].
-            long newSpecialAdditionMs = Math.max(0,
-                    Math.min(newWindowSizeMs - newActiveLimitMs, EJ_LIMIT_SPECIAL_ADDITION_MS));
-            if (mEjLimitSpecialAdditionMs != newSpecialAdditionMs) {
-                mEjLimitSpecialAdditionMs = newSpecialAdditionMs;
+            // The additions must be in the range [0 minutes, window size - active limit].
+            long newAdditionInstallerMs = Math.max(0,
+                    Math.min(newWindowSizeMs - newActiveLimitMs, EJ_LIMIT_ADDITION_INSTALLER_MS));
+            if (mEjLimitAdditionInstallerMs != newAdditionInstallerMs) {
+                mEjLimitAdditionInstallerMs = newAdditionInstallerMs;
+                mShouldReevaluateConstraints = true;
+            }
+            long newAdditionSpecialMs = Math.max(0,
+                    Math.min(newWindowSizeMs - newActiveLimitMs, EJ_LIMIT_ADDITION_SPECIAL_MS));
+            if (mEjLimitAdditionSpecialMs != newAdditionSpecialMs) {
+                mEjLimitAdditionSpecialMs = newAdditionSpecialMs;
                 mShouldReevaluateConstraints = true;
             }
         }
@@ -3648,14 +3854,16 @@ public final class QuotaController extends StateController {
             pw.print(KEY_EJ_LIMIT_FREQUENT_MS, EJ_LIMIT_FREQUENT_MS).println();
             pw.print(KEY_EJ_LIMIT_RARE_MS, EJ_LIMIT_RARE_MS).println();
             pw.print(KEY_EJ_LIMIT_RESTRICTED_MS, EJ_LIMIT_RESTRICTED_MS).println();
-            pw.print(KEY_EJ_LIMIT_SPECIAL_ADDITION_MS, EJ_LIMIT_SPECIAL_ADDITION_MS).println();
+            pw.print(KEY_EJ_LIMIT_ADDITION_INSTALLER_MS, EJ_LIMIT_ADDITION_INSTALLER_MS).println();
+            pw.print(KEY_EJ_LIMIT_ADDITION_SPECIAL_MS, EJ_LIMIT_ADDITION_SPECIAL_MS).println();
             pw.print(KEY_EJ_WINDOW_SIZE_MS, EJ_WINDOW_SIZE_MS).println();
             pw.print(KEY_EJ_TOP_APP_TIME_CHUNK_SIZE_MS, EJ_TOP_APP_TIME_CHUNK_SIZE_MS).println();
             pw.print(KEY_EJ_REWARD_TOP_APP_MS, EJ_REWARD_TOP_APP_MS).println();
             pw.print(KEY_EJ_REWARD_INTERACTION_MS, EJ_REWARD_INTERACTION_MS).println();
             pw.print(KEY_EJ_REWARD_NOTIFICATION_SEEN_MS, EJ_REWARD_NOTIFICATION_SEEN_MS).println();
-            pw.print(KEY_EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS,
-                    EJ_TEMP_ALLOWLIST_GRACE_PERIOD_MS).println();
+            pw.print(KEY_EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS,
+                    EJ_GRACE_PERIOD_TEMP_ALLOWLIST_MS).println();
+            pw.print(KEY_EJ_GRACE_PERIOD_TOP_APP_MS, EJ_GRACE_PERIOD_TOP_APP_MS).println();
 
             pw.decreaseIndent();
         }
@@ -3768,14 +3976,29 @@ public final class QuotaController extends StateController {
     }
 
     @VisibleForTesting
+    long getEJGracePeriodTempAllowlistMs() {
+        return mEJGracePeriodTempAllowlistMs;
+    }
+
+    @VisibleForTesting
+    long getEJGracePeriodTopAppMs() {
+        return mEJGracePeriodTopAppMs;
+    }
+
+    @VisibleForTesting
     @NonNull
     long[] getEJLimitsMs() {
         return mEJLimitsMs;
     }
 
     @VisibleForTesting
-    long getEjLimitSpecialAdditionMs() {
-        return mEjLimitSpecialAdditionMs;
+    long getEjLimitAdditionInstallerMs() {
+        return mEjLimitAdditionInstallerMs;
+    }
+
+    @VisibleForTesting
+    long getEjLimitAdditionSpecialMs() {
+        return mEjLimitAdditionSpecialMs;
     }
 
     @VisibleForTesting
@@ -3800,11 +4023,6 @@ public final class QuotaController extends StateController {
     @NonNull
     long getEJRewardTopAppMs() {
         return mEJRewardTopAppMs;
-    }
-
-    @VisibleForTesting
-    long getEJTempAllowlistGracePeriodMs() {
-        return mEJTempAllowlistGracePeriodMs;
     }
 
     @VisibleForTesting
@@ -3866,11 +4084,6 @@ public final class QuotaController extends StateController {
         return mQcConstants;
     }
 
-    @VisibleForTesting
-    boolean isActiveBackgroundProcessing() {
-        return mHandler.mIsProcessing;
-    }
-
     //////////////////////////// DATA DUMP //////////////////////////////
 
     @Override
@@ -3884,6 +4097,17 @@ public final class QuotaController extends StateController {
         pw.println(mForegroundUids.toString());
         pw.println();
 
+        pw.print("Cached top apps: ");
+        pw.println(mTopAppCache.toString());
+        pw.print("Cached top app grace period: ");
+        pw.println(mTopAppGraceCache.toString());
+
+        pw.print("Cached temp allowlist: ");
+        pw.println(mTempAllowlistCache.toString());
+        pw.print("Cached temp allowlist grace period: ");
+        pw.println(mTempAllowlistGraceCache.toString());
+        pw.println();
+
         pw.println("Cached UID->package map:");
         pw.increaseIndent();
         for (int i = 0; i < mUidToPackageCache.size(); ++i) {
@@ -3895,10 +4119,10 @@ public final class QuotaController extends StateController {
         pw.decreaseIndent();
         pw.println();
 
-        pw.print("Cached temp allowlist: ");
-        pw.println(mTempAllowlistCache.toString());
-        pw.print("Cached temp allowlist grace period: ");
-        pw.println(mTempAllowlistGraceCache.toString());
+        pw.println("Special apps:");
+        pw.increaseIndent();
+        pw.print("System installers", mSystemInstallers.toString());
+        pw.decreaseIndent();
 
         pw.println();
         mTrackedJobs.forEach((jobs) -> {
@@ -3921,6 +4145,8 @@ public final class QuotaController extends StateController {
                 pw.print(", ");
                 if (js.shouldTreatAsExpeditedJob()) {
                     pw.print("within EJ quota");
+                } else if (js.startedAsExpeditedJob) {
+                    pw.print("out of EJ quota");
                 } else if (js.isConstraintSatisfied(JobStatus.CONSTRAINT_WITHIN_QUOTA)) {
                     pw.print("within regular quota");
                 } else {
@@ -3931,6 +4157,8 @@ public final class QuotaController extends StateController {
                     pw.print(getRemainingEJExecutionTimeLocked(
                             js.getSourceUserId(), js.getSourcePackageName()));
                     pw.print("ms remaining in EJ quota");
+                } else if (js.startedAsExpeditedJob) {
+                    pw.print("should be stopped after min execution time");
                 } else {
                     pw.print(getRemainingExecutionTimeLocked(js));
                     pw.print("ms remaining in quota");

@@ -16,21 +16,23 @@
 
 package com.android.server.connectivity;
 
-import static android.net.ConnectivityManager.PRIVATE_DNS_DEFAULT_MODE_FALLBACK;
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_OFF;
 import static android.net.ConnectivityManager.PRIVATE_DNS_MODE_PROVIDER_HOSTNAME;
-import static android.provider.Settings.Global.DNS_RESOLVER_MAX_SAMPLES;
-import static android.provider.Settings.Global.DNS_RESOLVER_MIN_SAMPLES;
-import static android.provider.Settings.Global.DNS_RESOLVER_SAMPLE_VALIDITY_SECONDS;
-import static android.provider.Settings.Global.DNS_RESOLVER_SUCCESS_THRESHOLD_PERCENT;
-import static android.provider.Settings.Global.PRIVATE_DNS_DEFAULT_MODE;
-import static android.provider.Settings.Global.PRIVATE_DNS_MODE;
-import static android.provider.Settings.Global.PRIVATE_DNS_SPECIFIER;
+import static android.net.ConnectivitySettingsManager.DNS_RESOLVER_MAX_SAMPLES;
+import static android.net.ConnectivitySettingsManager.DNS_RESOLVER_MIN_SAMPLES;
+import static android.net.ConnectivitySettingsManager.DNS_RESOLVER_SAMPLE_VALIDITY_SECONDS;
+import static android.net.ConnectivitySettingsManager.DNS_RESOLVER_SUCCESS_THRESHOLD_PERCENT;
+import static android.net.ConnectivitySettingsManager.PRIVATE_DNS_DEFAULT_MODE;
+import static android.net.ConnectivitySettingsManager.PRIVATE_DNS_MODE;
+import static android.net.ConnectivitySettingsManager.PRIVATE_DNS_SPECIFIER;
+import static android.net.resolv.aidl.IDnsResolverUnsolicitedEventListener.VALIDATION_RESULT_FAILURE;
+import static android.net.resolv.aidl.IDnsResolverUnsolicitedEventListener.VALIDATION_RESULT_SUCCESS;
 
 import android.annotation.NonNull;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityManager;
 import android.net.IDnsResolver;
 import android.net.InetAddresses;
 import android.net.LinkProperties;
@@ -125,13 +127,17 @@ public class DnsManager {
     private static final int DNS_RESOLVER_DEFAULT_MIN_SAMPLES = 8;
     private static final int DNS_RESOLVER_DEFAULT_MAX_SAMPLES = 64;
 
-    public static PrivateDnsConfig getPrivateDnsConfig(ContentResolver cr) {
-        final String mode = getPrivateDnsMode(cr);
+    /**
+     * Get PrivateDnsConfig.
+     */
+    public static PrivateDnsConfig getPrivateDnsConfig(Context context) {
+        final String mode = ConnectivityManager.getPrivateDnsMode(context);
 
         final boolean useTls = !TextUtils.isEmpty(mode) && !PRIVATE_DNS_MODE_OFF.equals(mode);
 
         if (PRIVATE_DNS_MODE_PROVIDER_HOSTNAME.equals(mode)) {
-            final String specifier = getStringSetting(cr, PRIVATE_DNS_SPECIFIER);
+            final String specifier = getStringSetting(context.getContentResolver(),
+                    PRIVATE_DNS_SPECIFIER);
             return new PrivateDnsConfig(specifier, null);
         }
 
@@ -147,17 +153,18 @@ public class DnsManager {
     }
 
     public static class PrivateDnsValidationUpdate {
-        final public int netId;
-        final public InetAddress ipAddress;
-        final public String hostname;
-        final public boolean validated;
+        public final int netId;
+        public final InetAddress ipAddress;
+        public final String hostname;
+        // Refer to IDnsResolverUnsolicitedEventListener.VALIDATION_RESULT_*.
+        public final int validationResult;
 
         public PrivateDnsValidationUpdate(int netId, InetAddress ipAddress,
-                String hostname, boolean validated) {
+                String hostname, int validationResult) {
             this.netId = netId;
             this.ipAddress = ipAddress;
             this.hostname = hostname;
-            this.validated = validated;
+            this.validationResult = validationResult;
         }
     }
 
@@ -216,10 +223,13 @@ public class DnsManager {
             if (!mValidationMap.containsKey(p)) {
                 return;
             }
-            if (update.validated) {
+            if (update.validationResult == VALIDATION_RESULT_SUCCESS) {
                 mValidationMap.put(p, ValidationStatus.SUCCEEDED);
-            } else {
+            } else if (update.validationResult == VALIDATION_RESULT_FAILURE) {
                 mValidationMap.put(p, ValidationStatus.FAILED);
+            } else {
+                Log.e(TAG, "Unknown private dns validation operation="
+                        + update.validationResult);
             }
         }
 
@@ -262,7 +272,7 @@ public class DnsManager {
     }
 
     public PrivateDnsConfig getPrivateDnsConfig() {
-        return getPrivateDnsConfig(mContentResolver);
+        return getPrivateDnsConfig(mContext);
     }
 
     public void removeNetwork(Network network) {
@@ -471,13 +481,6 @@ public class DnsManager {
             result[i++] = addr.getHostAddress();
         }
         return result;
-    }
-
-    private static String getPrivateDnsMode(ContentResolver cr) {
-        String mode = getStringSetting(cr, PRIVATE_DNS_MODE);
-        if (TextUtils.isEmpty(mode)) mode = getStringSetting(cr, PRIVATE_DNS_DEFAULT_MODE);
-        if (TextUtils.isEmpty(mode)) mode = PRIVATE_DNS_DEFAULT_MODE_FALLBACK;
-        return mode;
     }
 
     private static String getStringSetting(ContentResolver cr, String which) {

@@ -17,15 +17,10 @@
 package com.android.systemui.util
 
 import android.content.res.Resources
-import android.content.res.TypedArray
-import android.graphics.Canvas
-import android.graphics.Path
 import android.graphics.Rect
 import android.graphics.drawable.Drawable
 import android.graphics.drawable.DrawableWrapper
-import android.util.AttributeSet
-import com.android.systemui.R
-import org.xmlpull.v1.XmlPullParser
+import android.graphics.drawable.InsetDrawable
 
 /**
  * [DrawableWrapper] to use in the progress of a slider.
@@ -38,36 +33,12 @@ import org.xmlpull.v1.XmlPullParser
  * is meant to be smaller than the rounded corner. The background should have rounded corners that
  * are half of the height.
  */
-class RoundedCornerProgressDrawable(drawable: Drawable?) : DrawableWrapper(drawable) {
-
-    constructor() : this(null)
+class RoundedCornerProgressDrawable @JvmOverloads constructor(
+    drawable: Drawable? = null
+) : InsetDrawable(drawable, 0) {
 
     companion object {
         private const val MAX_LEVEL = 10000 // Taken from Drawable
-    }
-
-    private var clipPath: Path = Path()
-
-    init {
-        setClipPath(Rect())
-    }
-
-    override fun inflate(
-        r: Resources,
-        parser: XmlPullParser,
-        attrs: AttributeSet,
-        theme: Resources.Theme?
-    ) {
-        val a = obtainAttributes(r, theme, attrs, R.styleable.RoundedCornerProgressDrawable)
-
-        // Inflation will advance the XmlPullParser and AttributeSet.
-        super.inflate(r, parser, attrs, theme)
-
-        updateStateFromTypedArray(a)
-        if (drawable == null) {
-            throw IllegalStateException("${this::class.java.simpleName} needs a drawable")
-        }
-        a.recycle()
     }
 
     override fun onLayoutDirectionChanged(layoutDirection: Int): Boolean {
@@ -75,44 +46,36 @@ class RoundedCornerProgressDrawable(drawable: Drawable?) : DrawableWrapper(drawa
         return super.onLayoutDirectionChanged(layoutDirection)
     }
 
-    private fun updateStateFromTypedArray(a: TypedArray) {
-        if (a.hasValue(R.styleable.RoundedCornerProgressDrawable_android_drawable)) {
-            setDrawable(a.getDrawable(R.styleable.RoundedCornerProgressDrawable_android_drawable))
-        }
-    }
-
     override fun onBoundsChange(bounds: Rect) {
-        setClipPath(bounds)
         super.onBoundsChange(bounds)
         onLevelChange(level)
     }
 
-    private fun setClipPath(bounds: Rect) {
-        clipPath.reset()
-        clipPath.addRoundRect(
-                bounds.left.toFloat(),
-                bounds.top.toFloat(),
-                bounds.right.toFloat(),
-                bounds.bottom.toFloat(),
-                bounds.height().toFloat() / 2,
-                bounds.height().toFloat() / 2,
-                Path.Direction.CW
-        )
-    }
-
     override fun onLevelChange(level: Int): Boolean {
         val db = drawable?.bounds!!
-        val width = bounds.width() * level / MAX_LEVEL
-        // Extra space on the left to keep the rounded shape on the right end
-        val leftBound = bounds.left - bounds.height()
-        drawable?.setBounds(leftBound, db.top, bounds.left + width, db.bottom)
+        // On 0, the width is bounds.height (a circle), and on MAX_LEVEL, the width is bounds.width
+        val width = bounds.height() + (bounds.width() - bounds.height()) * level / MAX_LEVEL
+        drawable?.setBounds(bounds.left, db.top, bounds.left + width, db.bottom)
         return super.onLevelChange(level)
     }
 
-    override fun draw(canvas: Canvas) {
-        canvas.save()
-        canvas.clipPath(clipPath)
-        super.draw(canvas)
-        canvas.restore()
+    override fun getConstantState(): ConstantState {
+        // This should not be null as it was created with a state in the constructor.
+        return RoundedCornerState(super.getConstantState()!!)
+    }
+
+    private class RoundedCornerState(private val wrappedState: ConstantState) : ConstantState() {
+        override fun newDrawable(): Drawable {
+            return newDrawable(null, null)
+        }
+
+        override fun newDrawable(res: Resources?, theme: Resources.Theme?): Drawable {
+            val wrapper = wrappedState.newDrawable(res, theme) as DrawableWrapper
+            return RoundedCornerProgressDrawable(wrapper.drawable)
+        }
+
+        override fun getChangingConfigurations(): Int {
+            return wrappedState.changingConfigurations
+        }
     }
 }

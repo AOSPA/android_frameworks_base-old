@@ -47,6 +47,7 @@ import android.app.usage.IUsageStatsManager;
 import android.app.usage.NetworkStatsManager;
 import android.app.usage.StorageStatsManager;
 import android.app.usage.UsageStatsManager;
+import android.apphibernation.AppHibernationManager;
 import android.appwidget.AppWidgetManager;
 import android.bluetooth.BluetoothManager;
 import android.companion.CompanionDeviceManager;
@@ -70,7 +71,6 @@ import android.content.pm.LauncherApps;
 import android.content.pm.PackageManager;
 import android.content.pm.ShortcutManager;
 import android.content.pm.verify.domain.DomainVerificationManager;
-import android.content.pm.verify.domain.DomainVerificationManagerImpl;
 import android.content.pm.verify.domain.IDomainVerificationManager;
 import android.content.res.Resources;
 import android.content.rollback.RollbackManagerFrameworkInitializer;
@@ -99,6 +99,7 @@ import android.hardware.input.InputManager;
 import android.hardware.iris.IIrisService;
 import android.hardware.iris.IrisManager;
 import android.hardware.lights.LightsManager;
+import android.hardware.lights.SystemLightsManager;
 import android.hardware.location.ContextHubManager;
 import android.hardware.radio.RadioManager;
 import android.hardware.usb.IUsbManager;
@@ -128,11 +129,13 @@ import android.net.EthernetManager;
 import android.net.IEthernetManager;
 import android.net.IIpSecService;
 import android.net.INetworkPolicyManager;
+import android.net.IPacProxyManager;
 import android.net.IVpnManager;
 import android.net.IpSecManager;
 import android.net.NetworkPolicyManager;
 import android.net.NetworkScoreManager;
 import android.net.NetworkWatchlistManager;
+import android.net.PacProxyManager;
 import android.net.TetheringManager;
 import android.net.VpnManager;
 import android.net.lowpan.ILowpanManager;
@@ -372,6 +375,15 @@ public final class SystemServiceRegistry {
         // interface by class then we want to redirect over to the new interface instead
         // (which extends it).
         SYSTEM_SERVICE_NAMES.put(android.text.ClipboardManager.class, Context.CLIPBOARD_SERVICE);
+
+        registerService(Context.PAC_PROXY_SERVICE, PacProxyManager.class,
+                new CachedServiceFetcher<PacProxyManager>() {
+            @Override
+            public PacProxyManager createService(ContextImpl ctx) throws ServiceNotFoundException {
+                IBinder b = ServiceManager.getServiceOrThrow(Context.PAC_PROXY_SERVICE);
+                IPacProxyManager service = IPacProxyManager.Stub.asInterface(b);
+                return new PacProxyManager(ctx.getOuterContext(), service);
+            }});
 
         registerService(Context.NETD_SERVICE, IBinder.class, new StaticServiceFetcher<IBinder>() {
             @Override
@@ -1344,7 +1356,7 @@ public final class SystemServiceRegistry {
                 @Override
                 public LightsManager createService(ContextImpl ctx)
                     throws ServiceNotFoundException {
-                    return new LightsManager(ctx);
+                    return new SystemLightsManager(ctx);
                 }});
         registerService(Context.INCREMENTAL_SERVICE, IncrementalManager.class,
                 new CachedServiceFetcher<IncrementalManager>() {
@@ -1376,6 +1388,13 @@ public final class SystemServiceRegistry {
                             throws ServiceNotFoundException {
                         IBinder b = ServiceManager.getServiceOrThrow(Context.APP_INTEGRITY_SERVICE);
                         return new AppIntegrityManager(IAppIntegrityManager.Stub.asInterface(b));
+                    }});
+        registerService(Context.APP_HIBERNATION_SERVICE, AppHibernationManager.class,
+                new CachedServiceFetcher<AppHibernationManager>() {
+                    @Override
+                    public AppHibernationManager createService(ContextImpl ctx) {
+                        IBinder b = ServiceManager.getService(Context.APP_HIBERNATION_SERVICE);
+                        return b == null ? null : new AppHibernationManager(ctx);
                     }});
         registerService(Context.DREAM_SERVICE, DreamManager.class,
                 new CachedServiceFetcher<DreamManager>() {
@@ -1413,7 +1432,6 @@ public final class SystemServiceRegistry {
                     }
                 });
 
-        // TODO(b/159952358): Only register this service for the domain verification agent?
         registerService(Context.DOMAIN_VERIFICATION_SERVICE, DomainVerificationManager.class,
                 new CachedServiceFetcher<DomainVerificationManager>() {
                     @Override
@@ -1423,7 +1441,7 @@ public final class SystemServiceRegistry {
                                 Context.DOMAIN_VERIFICATION_SERVICE);
                         IDomainVerificationManager service =
                                 IDomainVerificationManager.Stub.asInterface(binder);
-                        return new DomainVerificationManagerImpl(context, service);
+                        return new DomainVerificationManager(context, service);
                     }
                 });
 

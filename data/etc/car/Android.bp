@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-
-
 // Privapp permission whitelist files
 
 package {
@@ -23,6 +21,14 @@ package {
     // to get the below license kinds:
     //   SPDX-license-identifier-Apache-2.0
     default_applicable_licenses: ["frameworks_base_license"],
+}
+
+prebuilt_etc {
+    name: "allowed_privapp_com.android.carsystemui",
+    system_ext_specific: true,
+    sub_dir: "permissions",
+    src: "com.android.carsystemui.xml",
+    filename_from_src: true,
 }
 
 prebuilt_etc {
@@ -146,6 +152,13 @@ prebuilt_etc {
 }
 
 prebuilt_etc {
+    name: "allowed_privapp_com.android.car.rotary",
+    sub_dir: "permissions",
+    src: "com.android.car.rotary.xml",
+    filename_from_src: true,
+}
+
+prebuilt_etc {
     name: "allowed_privapp_com.android.car.ui.paintbooth",
     sub_dir: "permissions",
     src: "com.android.car.ui.paintbooth.xml",
@@ -171,5 +184,26 @@ prebuilt_etc {
     name: "allowed_privapp_com.android.carshell",
     sub_dir: "permissions",
     src: "com.android.car.shell.xml",
+    filename_from_src: true,
+}
+
+prebuilt_etc {
+    name: "allowed_privapp_com.android.car.activityresolver",
+    sub_dir: "permissions",
+    src: "com.android.car.activityresolver.xml",
+    filename_from_src: true,
+}
+
+prebuilt_etc {
+    name: "allowed_privapp_com.android.car.cluster.home",
+    sub_dir: "permissions",
+    src: "com.android.car.cluster.home.xml",
+    filename_from_src: true,
+}
+
+prebuilt_etc {
+    name: "allowed_privapp_com.android.car.messenger",
+    sub_dir: "permissions",
+    src: "com.android.car.messenger.xml",
     filename_from_src: true,
 }

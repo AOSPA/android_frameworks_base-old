@@ -16,19 +16,16 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerTestRunner
-import com.android.server.wm.flicker.FlickerTestRunnerFactory
-import com.android.server.wm.flicker.helpers.WindowUtils
+import com.android.server.wm.flicker.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.FlickerTestParameter
+import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.wm.shell.flicker.helpers.FixedAppHelper
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.startRotation
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -39,64 +36,79 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
+@Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 class EnterExitPipTest(
-    testSpec: FlickerTestRunnerFactory.TestSpec
-) : FlickerTestRunner(testSpec) {
-    companion object : PipTransitionBase(InstrumentationRegistry.getInstrumentation()) {
-        @Parameterized.Parameters(name = "{0}")
-        @JvmStatic
-        fun getParams(): List<Array<Any>> {
-            val testApp = FixedAppHelper(instrumentation)
-            val testSpec = getTransition(eachRun = true) { configuration ->
-                setup {
-                    eachRun {
-                        testApp.launchViaIntent(wmHelper)
-                    }
-                }
-                transitions {
-                    // This will bring PipApp to fullscreen
-                    pipApp.launchViaIntent(wmHelper)
-                }
-                assertions {
-                    val displayBounds = WindowUtils.getDisplayBounds(configuration.startRotation)
-                    presubmit {
-                        windowManagerTrace {
-                            all("pipApp must remain inside visible bounds") {
-                                coversAtMostRegion(pipApp.defaultWindowName, displayBounds)
-                            }
-                            all("Initially shows both app windows then pipApp hides testApp") {
-                                showsAppWindow(testApp.defaultWindowName)
-                                    .showsAppWindowOnTop(pipApp.defaultWindowName)
-                                    .then()
-                                    .hidesAppWindow(testApp.defaultWindowName)
-                            }
-                            navBarWindowIsAlwaysVisible()
-                            statusBarWindowIsAlwaysVisible()
-                        }
-                        layersTrace {
-                            all("Initially shows both app layers then pipApp hides testApp") {
-                                showsLayer(testApp.defaultWindowName)
-                                    .showsLayer(pipApp.defaultWindowName)
-                                    .then()
-                                    .hidesLayer(testApp.defaultWindowName)
-                            }
-                            start("testApp covers the fullscreen, pipApp remains inside display") {
-                                hasVisibleRegion(testApp.defaultWindowName, displayBounds)
-                                coversAtMostRegion(displayBounds, pipApp.defaultWindowName)
-                            }
-                            end("pipApp covers the fullscreen") {
-                                hasVisibleRegion(pipApp.defaultWindowName, displayBounds)
-                            }
-                            navBarLayerIsAlwaysVisible()
-                            statusBarLayerIsAlwaysVisible()
-                        }
-                    }
+    testSpec: FlickerTestParameter
+) : PipTransition(testSpec) {
+    private val testApp = FixedAppHelper(instrumentation)
+
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = buildTransition(eachRun = true) {
+            setup {
+                eachRun {
+                    testApp.launchViaIntent(wmHelper)
                 }
             }
-            return FlickerTestRunnerFactory.getInstance().buildTest(instrumentation,
-                testSpec, supportedRotations = listOf(Surface.ROTATION_0),
-                repetitions = 5)
+            transitions {
+                // This will bring PipApp to fullscreen
+                pipApp.launchViaIntent(wmHelper)
+            }
+        }
+
+    @Presubmit
+    @Test
+    fun pipAppRemainInsideVisibleBounds() {
+        testSpec.assertWm {
+            coversAtMost(displayBounds, pipApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun showBothAppWindowsThenHidePip() {
+        testSpec.assertWm {
+            showsAppWindow(testApp.defaultWindowName)
+                .showsAppWindowOnTop(pipApp.defaultWindowName)
+                .then()
+                .hidesAppWindow(testApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun showBothAppLayersThenHidePip() {
+        testSpec.assertLayers {
+            isVisible(testApp.defaultWindowName)
+                .isVisible(pipApp.defaultWindowName)
+                .then()
+                .isInvisible(testApp.defaultWindowName)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun testAppCoversFullScreenWithPipOnDisplay() {
+        testSpec.assertLayersStart {
+            visibleRegion(testApp.defaultWindowName).coversExactly(displayBounds)
+            visibleRegion(pipApp.defaultWindowName).coversAtMost(displayBounds)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun pipAppCoversFullScreen() {
+        testSpec.assertLayersEnd {
+            visibleRegion(pipApp.defaultWindowName).coversExactly(displayBounds)
+        }
+    }
+
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): List<FlickerTestParameter> {
+            return FlickerTestParameterFactory.getInstance().getConfigNonRotationTests(
+                supportedRotations = listOf(Surface.ROTATION_0), repetitions = 5)
         }
     }
 }

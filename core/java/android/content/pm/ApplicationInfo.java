@@ -138,6 +138,18 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public int fullBackupContent = 0;
 
     /**
+     * Applications can set this attribute to an xml resource within their app where they specified
+     * the rules determining which files and directories can be copied from the device as part of
+     * backup or transfer operations.
+     *<p>
+     * Set from the {@link android.R.styleable#AndroidManifestApplication_dataExtractionRules}
+     * attribute in the manifest.
+     *
+     * @hide
+     */
+    public int dataExtractionRulesRes = 0;
+
+    /**
      * <code>true</code> if the package is capable of presenting a unified interface representing
      * multiple profiles.
      * @hide
@@ -1120,19 +1132,15 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * <p>
      * This property is the compile-time equivalent of
      * {@link android.os.Build.VERSION#CODENAME Build.VERSION.SDK_INT}.
-     *
-     * @hide For platform use only; we don't expect developers to need to read this value.
      */
     public int compileSdkVersion;
 
     /**
-     * The development codename (ex. "O", "REL") of the framework against which the application
+     * The development codename (ex. "S", "REL") of the framework against which the application
      * claims to have been compiled, or {@code null} if not specified.
      * <p>
      * This property is the compile-time equivalent of
      * {@link android.os.Build.VERSION#CODENAME Build.VERSION.CODENAME}.
-     *
-     * @hide For platform use only; we don't expect developers to need to read this value.
      */
     @Nullable
     public String compileSdkVersionCodename;
@@ -1212,7 +1220,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             CATEGORY_SOCIAL,
             CATEGORY_NEWS,
             CATEGORY_MAPS,
-            CATEGORY_PRODUCTIVITY
+            CATEGORY_PRODUCTIVITY,
+            CATEGORY_ACCESSIBILITY
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Category {
@@ -1288,6 +1297,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public static final int CATEGORY_PRODUCTIVITY = 7;
 
     /**
+     * Category for apps which are primarily accessibility apps, such as screen-readers.
+     *
+     * @see #category
+     */
+    public static final int CATEGORY_ACCESSIBILITY = 8;
+
+    /**
      * Return a concise, localized title for the given
      * {@link ApplicationInfo#category} value, or {@code null} for unknown
      * values such as {@link #CATEGORY_UNDEFINED}.
@@ -1312,6 +1328,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
                 return context.getText(com.android.internal.R.string.app_category_maps);
             case ApplicationInfo.CATEGORY_PRODUCTIVITY:
                 return context.getText(com.android.internal.R.string.app_category_productivity);
+            case ApplicationInfo.CATEGORY_ACCESSIBILITY:
+                return context.getText(com.android.internal.R.string.app_category_accessibility);
             default:
                 return null;
         }
@@ -1360,7 +1378,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * Indicates if the application has requested GWP-ASan to be enabled, disabled, or left
      * unspecified. Processes can override this setting.
      */
-    private @GwpAsanMode int gwpAsanMode;
+    private @GwpAsanMode int gwpAsanMode = GWP_ASAN_DEFAULT;
 
     /**
      * Default (unspecified) setting of Memtag.
@@ -1399,13 +1417,45 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      * Indicates if the application has requested Memtag to be enabled, disabled, or left
      * unspecified. Processes can override this setting.
      */
-    private @MemtagMode int memtagMode;
+    private @MemtagMode int memtagMode = MEMTAG_DEFAULT;
+
+    /**
+     * Default (unspecified) setting of nativeHeapZeroInitialized.
+     */
+    public static final int ZEROINIT_DEFAULT = -1;
+
+    /**
+     * Disable zero-initialization of the native heap in this application or process.
+     */
+    public static final int ZEROINIT_DISABLED = 0;
+
+    /**
+     * Enable zero-initialization of the native heap in this application or process.
+     */
+    public static final int ZEROINIT_ENABLED = 1;
+
+    /**
+     * @hide
+     */
+    @IntDef(prefix = {"ZEROINIT_"}, value = {
+            ZEROINIT_DEFAULT,
+            ZEROINIT_DISABLED,
+            ZEROINIT_ENABLED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface NativeHeapZeroInitialized {}
 
     /**
      * Enable automatic zero-initialization of native heap memory allocations.
      */
+    private @NativeHeapZeroInitialized int nativeHeapZeroInitialized = ZEROINIT_DEFAULT;
+
+    /**
+     * If {@code true} this app requests optimized external storage access.
+     * The request may not be honored due to policy or other reasons.
+     */
     @Nullable
-    private Boolean nativeHeapZeroInit;
+    private Boolean requestOptimizedExternalStorageAccess;
 
     /**
      * Represents the default policy. The actual policy used will depend on other properties of
@@ -1539,6 +1589,9 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
                 pw.println(prefix + "fullBackupContent="
                         + (fullBackupContent < 0 ? "false" : "true"));
             }
+            if (dataExtractionRulesRes != 0) {
+                pw.println(prefix + "dataExtractionRules=@xml/" + dataExtractionRulesRes);
+            }
             pw.println(prefix + "crossProfile=" + (crossProfile ? "true" : "false"));
             if (networkSecurityConfigRes != 0) {
                 pw.println(prefix + "networkSecurityConfigRes=0x"
@@ -1557,8 +1610,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             if (memtagMode != MEMTAG_DEFAULT) {
                 pw.println(prefix + "memtagMode=" + memtagMode);
             }
-            if (nativeHeapZeroInit != null) {
-                pw.println(prefix + "nativeHeapZeroInit=" + nativeHeapZeroInit);
+            if (nativeHeapZeroInitialized != ZEROINIT_DEFAULT) {
+                pw.println(prefix + "nativeHeapZeroInitialized=" + nativeHeapZeroInitialized);
+            }
+            if (requestOptimizedExternalStorageAccess != null) {
+                pw.println(prefix + "requestOptimizedExternalStorageAccess="
+                        + requestOptimizedExternalStorageAccess);
             }
         }
         super.dumpBack(pw, prefix);
@@ -1669,8 +1726,9 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
             if (memtagMode != MEMTAG_DEFAULT) {
                 proto.write(ApplicationInfoProto.Detail.ENABLE_MEMTAG, memtagMode);
             }
-            if (nativeHeapZeroInit != null) {
-                proto.write(ApplicationInfoProto.Detail.NATIVE_HEAP_ZERO_INIT, nativeHeapZeroInit);
+            if (nativeHeapZeroInitialized != ZEROINIT_DEFAULT) {
+                proto.write(ApplicationInfoProto.Detail.NATIVE_HEAP_ZERO_INIT,
+                        nativeHeapZeroInitialized);
             }
             proto.end(detailToken);
         }
@@ -1770,6 +1828,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         uiOptions = orig.uiOptions;
         backupAgentName = orig.backupAgentName;
         fullBackupContent = orig.fullBackupContent;
+        dataExtractionRulesRes = orig.dataExtractionRulesRes;
         crossProfile = orig.crossProfile;
         networkSecurityConfigRes = orig.networkSecurityConfigRes;
         category = orig.category;
@@ -1786,7 +1845,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         zygotePreloadName = orig.zygotePreloadName;
         gwpAsanMode = orig.gwpAsanMode;
         memtagMode = orig.memtagMode;
-        nativeHeapZeroInit = orig.nativeHeapZeroInit;
+        nativeHeapZeroInitialized = orig.nativeHeapZeroInitialized;
+        requestOptimizedExternalStorageAccess = orig.requestOptimizedExternalStorageAccess;
     }
 
     public String toString() {
@@ -1859,6 +1919,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(descriptionRes);
         dest.writeInt(uiOptions);
         dest.writeInt(fullBackupContent);
+        dest.writeInt(dataExtractionRulesRes);
         dest.writeBoolean(crossProfile);
         dest.writeInt(networkSecurityConfigRes);
         dest.writeInt(category);
@@ -1875,7 +1936,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeString8(zygotePreloadName);
         dest.writeInt(gwpAsanMode);
         dest.writeInt(memtagMode);
-        sForBoolean.parcel(nativeHeapZeroInit, dest, parcelableFlags);
+        dest.writeInt(nativeHeapZeroInitialized);
+        sForBoolean.parcel(requestOptimizedExternalStorageAccess, dest, parcelableFlags);
     }
 
     public static final @android.annotation.NonNull Parcelable.Creator<ApplicationInfo> CREATOR
@@ -1945,6 +2007,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         descriptionRes = source.readInt();
         uiOptions = source.readInt();
         fullBackupContent = source.readInt();
+        dataExtractionRulesRes = source.readInt();
         crossProfile = source.readBoolean();
         networkSecurityConfigRes = source.readInt();
         category = source.readInt();
@@ -1961,7 +2024,8 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         zygotePreloadName = source.readString8();
         gwpAsanMode = source.readInt();
         memtagMode = source.readInt();
-        nativeHeapZeroInit = sForBoolean.unparcel(source);
+        nativeHeapZeroInitialized = source.readInt();
+        requestOptimizedExternalStorageAccess = sForBoolean.unparcel(source);
     }
 
     /**
@@ -2073,6 +2137,24 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public boolean hasRequestedLegacyExternalStorage() {
         return (privateFlags & PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE) != 0;
+    }
+
+    /**
+     * @return
+     * <ul>
+     * <li>{@code true} if this app requested optimized external storage access
+     * <li>{@code false} if this app requests to disable optimized external storage access.
+     * <li>{@code null} if the app didn't specify
+     * {@link android.R.styleable#AndroidManifestApplication_requestOptimizedExternalStorageAccess}
+     * in its manifest file.
+     * </ul>
+     *
+     * @hide
+     */
+    @SystemApi
+    @Nullable
+    public Boolean hasRequestOptimizedExternalStorageAccess() {
+        return requestOptimizedExternalStorageAccess;
     }
 
     /**
@@ -2352,7 +2434,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** {@hide} */ public void setSplitResourcePaths(String[] splitResourcePaths) { splitPublicSourceDirs = splitResourcePaths; }
     /** {@hide} */ public void setGwpAsanMode(@GwpAsanMode int value) { gwpAsanMode = value; }
     /** {@hide} */ public void setMemtagMode(@MemtagMode int value) { memtagMode = value; }
-    /** {@hide} */ public void setNativeHeapZeroInit(@Nullable Boolean value) { nativeHeapZeroInit = value; }
+    /** {@hide} */ public void setNativeHeapZeroInitialized(@NativeHeapZeroInitialized int value) {
+        nativeHeapZeroInitialized = value;
+    }
+    /** {@hide} */
+    public void setRequestOptimizedExternalStorageAccess(@Nullable Boolean value) {
+        requestOptimizedExternalStorageAccess = value;
+    }
     /** {@hide} */ public void setOverrideRes(int overrideResolution) { overrideRes = overrideResolution; }
 
     /** {@hide} */
@@ -2367,9 +2455,22 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     /** {@hide} */ public String[] getSplitResourcePaths() { return splitPublicSourceDirs; }
     @GwpAsanMode
     public int getGwpAsanMode() { return gwpAsanMode; }
+
+    /**
+     * Returns whether the application has requested Memtag to be enabled, disabled, or left
+     * unspecified. Processes can override this setting.
+     */
     @MemtagMode
-    public int getMemtagMode() { return memtagMode; }
-    @Nullable
-    public Boolean isNativeHeapZeroInit() { return nativeHeapZeroInit; }
+    public int getMemtagMode() {
+        return memtagMode;
+    }
+    /**
+     * Returns whether the application has requested automatic zero-initialization of native heap
+     * memory allocations to be enabled or disabled.
+     */
+    @NativeHeapZeroInitialized
+    public int getNativeHeapZeroInitialized() {
+        return nativeHeapZeroInitialized;
+    }
     /** {@hide} */ public int canOverrideRes() { return overrideRes; }
 }

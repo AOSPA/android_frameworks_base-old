@@ -64,7 +64,7 @@
         android:id="@+id/new_lockscreen_clock_view"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_alignParentEnd="true"
+        android:layout_alignParentStart="true"
         android:layout_alignParentTop="true"
         android:visibility="gone">
         <com.android.keyguard.AnimatableClockView
@@ -73,12 +73,13 @@
             android:layout_height="wrap_content"
             android:layout_gravity="center_horizontal"
             android:gravity="center_horizontal"
-            android:textSize="100dp"
+            android:textSize="86dp"
             android:fontFamily="@font/clock"
             android:typeface="monospace"
             android:elegantTextHeight="false"
+            android:singleLine="true"
             dozeWeight="200"
-            lockScreenWeight="300"
+            lockScreenWeight="400"
         />
     </FrameLayout>
     <FrameLayout
@@ -97,7 +98,7 @@
             android:fontFamily="@font/clock"
             android:typeface="monospace"
             android:elegantTextHeight="false"
-            dozeWeight="100"
+            dozeWeight="200"
             lockScreenWeight="400"
         />
     </FrameLayout>
@@ -109,8 +110,6 @@
 
     <com.android.systemui.statusbar.phone.NotificationIconContainer
         android:id="@+id/left_aligned_notification_icon_container"
-        android:paddingStart="16dp"
-        android:paddingEnd="16dp"
         android:layout_width="match_parent"
         android:layout_height="@dimen/notification_shelf_height"
         android:layout_marginTop="@dimen/widget_vertical_padding"

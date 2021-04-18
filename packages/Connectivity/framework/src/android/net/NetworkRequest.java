@@ -16,9 +16,27 @@
 
 package android.net;
 
+import static android.net.NetworkCapabilities.NET_CAPABILITY_CAPTIVE_PORTAL;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_DUN;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_FOREGROUND;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VPN;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_PARTIAL_CONNECTIVITY;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_TEMPORARILY_NOT_METERED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_TRUSTED;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_VALIDATED;
+import static android.net.NetworkCapabilities.TRANSPORT_TEST;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.net.NetworkCapabilities.NetCapability;
@@ -28,8 +46,10 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.Process;
 import android.text.TextUtils;
-import android.util.proto.ProtoOutputStream;
+import android.util.Range;
 
+import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 
@@ -95,6 +115,10 @@ public class NetworkRequest implements Parcelable {
      *       for the network (if any) that satisfies the default Internet
      *       request.
      *
+     *     - TRACK_BEST, which causes the framework to send callbacks about
+     *       the single, highest scoring current network (if any) that matches
+     *       the specified NetworkCapabilities.
+     *
      *     - BACKGROUND_REQUEST, like REQUEST but does not cause any networks
      *       to retain the NET_CAPABILITY_FOREGROUND capability. A network with
      *       no foreground requests is in the background. A network that has
@@ -117,6 +141,7 @@ public class NetworkRequest implements Parcelable {
         REQUEST,
         BACKGROUND_REQUEST,
         TRACK_SYSTEM_DEFAULT,
+        LISTEN_FOR_BEST,
     };
 
     /**
@@ -154,7 +179,29 @@ public class NetworkRequest implements Parcelable {
      * needed in terms of {@link NetworkCapabilities} features
      */
     public static class Builder {
+        /**
+         * Capabilities that are currently compatible with VCN networks.
+         */
+        private static final List<Integer> VCN_SUPPORTED_CAPABILITIES = Arrays.asList(
+                NET_CAPABILITY_CAPTIVE_PORTAL,
+                NET_CAPABILITY_DUN,
+                NET_CAPABILITY_FOREGROUND,
+                NET_CAPABILITY_INTERNET,
+                NET_CAPABILITY_NOT_CONGESTED,
+                NET_CAPABILITY_NOT_METERED,
+                NET_CAPABILITY_NOT_RESTRICTED,
+                NET_CAPABILITY_NOT_ROAMING,
+                NET_CAPABILITY_NOT_SUSPENDED,
+                NET_CAPABILITY_NOT_VPN,
+                NET_CAPABILITY_PARTIAL_CONNECTIVITY,
+                NET_CAPABILITY_TEMPORARILY_NOT_METERED,
+                NET_CAPABILITY_TRUSTED,
+                NET_CAPABILITY_VALIDATED);
+
         private final NetworkCapabilities mNetworkCapabilities;
+
+        // A boolean that represents the user modified NOT_VCN_MANAGED capability.
+        private boolean mModifiedNotVcnManaged = false;
 
         /**
          * Default constructor for Builder.
@@ -168,6 +215,14 @@ public class NetworkRequest implements Parcelable {
         }
 
         /**
+         * Creates a new Builder of NetworkRequest from an existing instance.
+         */
+        public Builder(@NonNull final NetworkRequest request) {
+            Objects.requireNonNull(request);
+            mNetworkCapabilities = request.networkCapabilities;
+        }
+
+        /**
          * Build {@link NetworkRequest} give the current set of capabilities.
          */
         public NetworkRequest build() {
@@ -177,6 +232,7 @@ public class NetworkRequest implements Parcelable {
             // maybeMarkCapabilitiesRestricted() doesn't add back.
             final NetworkCapabilities nc = new NetworkCapabilities(mNetworkCapabilities);
             nc.maybeMarkCapabilitiesRestricted();
+            deduceNotVcnManagedCapability(nc);
             return new NetworkRequest(nc, ConnectivityManager.TYPE_NONE,
                     ConnectivityManager.REQUEST_ID_UNSET, Type.NONE);
         }
@@ -193,6 +249,9 @@ public class NetworkRequest implements Parcelable {
          */
         public Builder addCapability(@NetworkCapabilities.NetCapability int capability) {
             mNetworkCapabilities.addCapability(capability);
+            if (capability == NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED) {
+                mModifiedNotVcnManaged = true;
+            }
             return this;
         }
 
@@ -204,6 +263,9 @@ public class NetworkRequest implements Parcelable {
          */
         public Builder removeCapability(@NetworkCapabilities.NetCapability int capability) {
             mNetworkCapabilities.removeCapability(capability);
+            if (capability == NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED) {
+                mModifiedNotVcnManaged = true;
+            }
             return this;
         }
 
@@ -224,11 +286,14 @@ public class NetworkRequest implements Parcelable {
          * Set the watched UIDs for this request. This will be reset and wiped out unless
          * the calling app holds the CHANGE_NETWORK_STATE permission.
          *
-         * @param uids The watched UIDs as a set of UidRanges, or null for everything.
+         * @param uids The watched UIDs as a set of {@code Range<Integer>}, or null for everything.
          * @return The builder to facilitate chaining.
          * @hide
          */
-        public Builder setUids(Set<UidRange> uids) {
+        @NonNull
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        @SuppressLint("MissingGetterMatchingBuilder")
+        public Builder setUids(@Nullable Set<Range<Integer>> uids) {
             mNetworkCapabilities.setUids(uids);
             return this;
         }
@@ -247,8 +312,27 @@ public class NetworkRequest implements Parcelable {
          *
          * @hide
          */
+        @NonNull
+        @SuppressLint("MissingGetterMatchingBuilder")
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
         public Builder addUnwantedCapability(@NetworkCapabilities.NetCapability int capability) {
             mNetworkCapabilities.addUnwantedCapability(capability);
+            return this;
+        }
+
+        /**
+         * Removes (if found) the given unwanted capability from this builder instance.
+         *
+         * @param capability The unwanted capability to remove.
+         * @return The builder to facilitate chaining.
+         *
+         * @hide
+         */
+        @NonNull
+        @SuppressLint("BuilderSetStyle")
+        @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+        public Builder removeUnwantedCapability(@NetworkCapabilities.NetCapability int capability) {
+            mNetworkCapabilities.removeUnwantedCapability(capability);
             return this;
         }
 
@@ -261,6 +345,9 @@ public class NetworkRequest implements Parcelable {
         @NonNull
         public Builder clearCapabilities() {
             mNetworkCapabilities.clearAll();
+            // If the caller explicitly clear all capabilities, the NOT_VCN_MANAGED capabilities
+            // should not be add back later.
+            mModifiedNotVcnManaged = true;
             return this;
         }
 
@@ -332,11 +419,17 @@ public class NetworkRequest implements Parcelable {
                 return setNetworkSpecifier(new TelephonyNetworkSpecifier.Builder()
                         .setSubscriptionId(subId).build());
             } catch (NumberFormatException nfe) {
-                // A StringNetworkSpecifier does not accept null or empty ("") strings. When network
-                // specifiers were strings a null string and an empty string were considered
-                // equivalent. Hence no meaning is attached to a null or empty ("") string.
-                return setNetworkSpecifier(TextUtils.isEmpty(networkSpecifier) ? null
-                        : new StringNetworkSpecifier(networkSpecifier));
+                // An EthernetNetworkSpecifier or TestNetworkSpecifier does not accept null or empty
+                // ("") strings. When network specifiers were strings a null string and an empty
+                // string were considered equivalent. Hence no meaning is attached to a null or
+                // empty ("") string.
+                if (TextUtils.isEmpty(networkSpecifier)) {
+                    return setNetworkSpecifier((NetworkSpecifier) null);
+                } else if (mNetworkCapabilities.hasTransport(TRANSPORT_TEST)) {
+                    return setNetworkSpecifier(new TestNetworkSpecifier(networkSpecifier));
+                } else {
+                    return setNetworkSpecifier(new EthernetNetworkSpecifier(networkSpecifier));
+                }
             }
         }
 
@@ -380,6 +473,40 @@ public class NetworkRequest implements Parcelable {
             mNetworkCapabilities.setSignalStrength(signalStrength);
             return this;
         }
+
+        /**
+         * Deduce the NET_CAPABILITY_NOT_VCN_MANAGED capability from other capabilities
+         * and user intention, which includes:
+         *   1. For the requests that don't have anything besides
+         *      {@link #VCN_SUPPORTED_CAPABILITIES}, add the NET_CAPABILITY_NOT_VCN_MANAGED to
+         *      allow the callers automatically utilize VCN networks if available.
+         *   2. For the requests that explicitly add or remove NET_CAPABILITY_NOT_VCN_MANAGED,
+         *      do not alter them to allow user fire request that suits their need.
+         *
+         * @hide
+         */
+        private void deduceNotVcnManagedCapability(final NetworkCapabilities nc) {
+            if (mModifiedNotVcnManaged) return;
+            for (final int cap : nc.getCapabilities()) {
+                if (!VCN_SUPPORTED_CAPABILITIES.contains(cap)) return;
+            }
+            nc.addCapability(NET_CAPABILITY_NOT_VCN_MANAGED);
+        }
+
+        /**
+         * Sets the optional subscription ID set.
+         * <p>
+         * This specify the subscription IDs requirement.
+         * A network will satisfy this request only if it matches one of the subIds in this set.
+         * An empty set matches all networks, including those without a subId.
+         *
+         * @param subIds A {@code Set} that represents subscription IDs.
+         */
+        @NonNull
+        public Builder setSubIds(@NonNull Set<Integer> subIds) {
+            mNetworkCapabilities.setSubIds(subIds);
+            return this;
+        }
     }
 
     // implement the Parcelable interface
@@ -415,6 +542,15 @@ public class NetworkRequest implements Parcelable {
      */
     public boolean isListen() {
         return type == Type.LISTEN;
+    }
+
+    /**
+     * Returns true iff. this NetworkRequest is of type LISTEN_FOR_BEST.
+     *
+     * @hide
+     */
+    public boolean isListenForBest() {
+        return type == Type.LISTEN_FOR_BEST;
     }
 
     /**
@@ -457,6 +593,7 @@ public class NetworkRequest implements Parcelable {
      *
      * @hide
      */
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public boolean hasUnwantedCapability(@NetCapability int capability) {
         return networkCapabilities.hasUnwantedCapability(capability);
     }
@@ -537,18 +674,6 @@ public class NetworkRequest implements Parcelable {
         }
     }
 
-    /** @hide */
-    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
-        final long token = proto.start(fieldId);
-
-        proto.write(NetworkRequestProto.TYPE, typeToProtoEnum(type));
-        proto.write(NetworkRequestProto.REQUEST_ID, requestId);
-        proto.write(NetworkRequestProto.LEGACY_TYPE, legacyType);
-        networkCapabilities.dumpDebug(proto, NetworkRequestProto.NETWORK_CAPABILITIES);
-
-        proto.end(token);
-    }
-
     public boolean equals(@Nullable Object obj) {
         if (obj instanceof NetworkRequest == false) return false;
         NetworkRequest that = (NetworkRequest)obj;
@@ -560,5 +685,44 @@ public class NetworkRequest implements Parcelable {
 
     public int hashCode() {
         return Objects.hash(requestId, legacyType, networkCapabilities, type);
+    }
+
+    /**
+     * Gets all the capabilities set on this {@code NetworkRequest} instance.
+     *
+     * @return an array of capability values for this instance.
+     */
+    @NonNull
+    public @NetCapability int[] getCapabilities() {
+        // No need to make a defensive copy here as NC#getCapabilities() already returns
+        // a new array.
+        return networkCapabilities.getCapabilities();
+    }
+
+    /**
+     * Gets all the unwanted capabilities set on this {@code NetworkRequest} instance.
+     *
+     * @return an array of unwanted capability values for this instance.
+     *
+     * @hide
+     */
+    @NonNull
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public @NetCapability int[] getUnwantedCapabilities() {
+        // No need to make a defensive copy here as NC#getUnwantedCapabilities() already returns
+        // a new array.
+        return networkCapabilities.getUnwantedCapabilities();
+    }
+
+    /**
+     * Gets all the transports set on this {@code NetworkRequest} instance.
+     *
+     * @return an array of transport type values for this instance.
+     */
+    @NonNull
+    public @Transport int[] getTransportTypes() {
+        // No need to make a defensive copy here as NC#getTransportTypes() already returns
+        // a new array.
+        return networkCapabilities.getTransportTypes();
     }
 }

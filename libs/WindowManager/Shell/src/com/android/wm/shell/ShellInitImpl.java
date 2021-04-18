@@ -24,7 +24,9 @@ import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.annotations.ExternalThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreenController;
+import com.android.wm.shell.pip.phone.PipTouchHandler;
 import com.android.wm.shell.splitscreen.SplitScreenController;
+import com.android.wm.shell.startingsurface.StartingWindowController;
 import com.android.wm.shell.transition.Transitions;
 
 import java.util.Optional;
@@ -41,40 +43,24 @@ public class ShellInitImpl {
     private final Optional<LegacySplitScreenController> mLegacySplitScreenOptional;
     private final Optional<SplitScreenController> mSplitScreenOptional;
     private final Optional<AppPairsController> mAppPairsOptional;
+    private final Optional<PipTouchHandler> mPipTouchHandlerOptional;
     private final FullscreenTaskListener mFullscreenTaskListener;
     private final ShellExecutor mMainExecutor;
     private final Transitions mTransitions;
+    private final StartingWindowController mStartingWindow;
 
     private final InitImpl mImpl = new InitImpl();
 
-    public static ShellInit create(DisplayImeController displayImeController,
+    public ShellInitImpl(DisplayImeController displayImeController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
             Optional<LegacySplitScreenController> legacySplitScreenOptional,
             Optional<SplitScreenController> splitScreenOptional,
             Optional<AppPairsController> appPairsOptional,
+            Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
             Transitions transitions,
-            ShellExecutor mainExecutor) {
-        return new ShellInitImpl(displayImeController,
-                dragAndDropController,
-                shellTaskOrganizer,
-                legacySplitScreenOptional,
-                splitScreenOptional,
-                appPairsOptional,
-                fullscreenTaskListener,
-                transitions,
-                mainExecutor).mImpl;
-    }
-
-    private ShellInitImpl(DisplayImeController displayImeController,
-            DragAndDropController dragAndDropController,
-            ShellTaskOrganizer shellTaskOrganizer,
-            Optional<LegacySplitScreenController> legacySplitScreenOptional,
-            Optional<SplitScreenController> splitScreenOptional,
-            Optional<AppPairsController> appPairsOptional,
-            FullscreenTaskListener fullscreenTaskListener,
-            Transitions transitions,
+            StartingWindowController startingWindow,
             ShellExecutor mainExecutor) {
         mDisplayImeController = displayImeController;
         mDragAndDropController = dragAndDropController;
@@ -83,17 +69,24 @@ public class ShellInitImpl {
         mSplitScreenOptional = splitScreenOptional;
         mAppPairsOptional = appPairsOptional;
         mFullscreenTaskListener = fullscreenTaskListener;
+        mPipTouchHandlerOptional = pipTouchHandlerOptional;
         mTransitions = transitions;
         mMainExecutor = mainExecutor;
+        mStartingWindow = startingWindow;
+    }
+
+    public ShellInit asShellInit() {
+        return mImpl;
     }
 
     private void init() {
         // Start listening for display changes
         mDisplayImeController.startMonitorDisplays();
 
+        // Setup the shell organizer
         mShellTaskOrganizer.addListenerForType(
                 mFullscreenTaskListener, TASK_LISTENER_TYPE_FULLSCREEN);
-        // Register the shell organizer
+        mShellTaskOrganizer.initStartingWindow(mStartingWindow);
         mShellTaskOrganizer.registerOrganizer();
 
         mAppPairsOptional.ifPresent(AppPairsController::onOrganizerRegistered);
@@ -105,6 +98,11 @@ public class ShellInitImpl {
         if (Transitions.ENABLE_SHELL_TRANSITIONS) {
             mTransitions.register(mShellTaskOrganizer);
         }
+
+        // TODO(b/181599115): This should really be the pip controller, but until we can provide the
+        // controller instead of the feature interface, can just initialize the touch handler if
+        // needed
+        mPipTouchHandlerOptional.ifPresent((handler) -> handler.init());
     }
 
     @ExternalThread

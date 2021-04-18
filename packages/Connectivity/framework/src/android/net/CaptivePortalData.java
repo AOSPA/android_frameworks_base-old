@@ -44,7 +44,7 @@ public final class CaptivePortalData implements Parcelable {
     private final boolean mCaptive;
     private final String mVenueFriendlyName;
     private final int mVenueInfoUrlSource;
-    private final int mTermsAndConditionsSource;
+    private final int mUserPortalUrlSource;
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -65,7 +65,7 @@ public final class CaptivePortalData implements Parcelable {
 
     private CaptivePortalData(long refreshTimeMillis, Uri userPortalUrl, Uri venueInfoUrl,
             boolean isSessionExtendable, long byteLimit, long expiryTimeMillis, boolean captive,
-            String venueFriendlyName, int venueInfoUrlSource, int termsAndConditionsSource) {
+            CharSequence venueFriendlyName, int venueInfoUrlSource, int userPortalUrlSource) {
         mRefreshTimeMillis = refreshTimeMillis;
         mUserPortalUrl = userPortalUrl;
         mVenueInfoUrl = venueInfoUrl;
@@ -73,9 +73,9 @@ public final class CaptivePortalData implements Parcelable {
         mByteLimit = byteLimit;
         mExpiryTimeMillis = expiryTimeMillis;
         mCaptive = captive;
-        mVenueFriendlyName = venueFriendlyName;
+        mVenueFriendlyName = venueFriendlyName == null ? null : venueFriendlyName.toString();
         mVenueInfoUrlSource = venueInfoUrlSource;
-        mTermsAndConditionsSource = termsAndConditionsSource;
+        mUserPortalUrlSource = userPortalUrlSource;
     }
 
     private CaptivePortalData(Parcel p) {
@@ -100,7 +100,7 @@ public final class CaptivePortalData implements Parcelable {
         dest.writeBoolean(mCaptive);
         dest.writeString(mVenueFriendlyName);
         dest.writeInt(mVenueInfoUrlSource);
-        dest.writeInt(mTermsAndConditionsSource);
+        dest.writeInt(mUserPortalUrlSource);
     }
 
     /**
@@ -114,7 +114,7 @@ public final class CaptivePortalData implements Parcelable {
         private long mBytesRemaining = -1;
         private long mExpiryTime = -1;
         private boolean mCaptive;
-        private String mVenueFriendlyName;
+        private CharSequence mVenueFriendlyName;
         private @CaptivePortalDataSource int mVenueInfoUrlSource = CAPTIVE_PORTAL_DATA_SOURCE_OTHER;
         private @CaptivePortalDataSource int mUserPortalUrlSource =
                 CAPTIVE_PORTAL_DATA_SOURCE_OTHER;
@@ -130,7 +130,7 @@ public final class CaptivePortalData implements Parcelable {
         public Builder(@Nullable CaptivePortalData data) {
             if (data == null) return;
             setRefreshTime(data.mRefreshTimeMillis)
-                    .setUserPortalUrl(data.mUserPortalUrl, data.mTermsAndConditionsSource)
+                    .setUserPortalUrl(data.mUserPortalUrl, data.mUserPortalUrlSource)
                     .setVenueInfoUrl(data.mVenueInfoUrl, data.mVenueInfoUrlSource)
                     .setSessionExtendable(data.mIsSessionExtendable)
                     .setBytesRemaining(data.mByteLimit)
@@ -228,7 +228,7 @@ public final class CaptivePortalData implements Parcelable {
          * Set the venue friendly name.
          */
         @NonNull
-        public Builder setVenueFriendlyName(@Nullable String venueFriendlyName) {
+        public Builder setVenueFriendlyName(@Nullable CharSequence venueFriendlyName) {
             mVenueFriendlyName = venueFriendlyName;
             return this;
         }
@@ -314,14 +314,14 @@ public final class CaptivePortalData implements Parcelable {
      * @return The source that the user portal URL was obtained from
      */
     public @CaptivePortalDataSource int getUserPortalUrlSource() {
-        return mTermsAndConditionsSource;
+        return mUserPortalUrlSource;
     }
 
     /**
      * Get the venue friendly name
      */
     @Nullable
-    public String getVenueFriendlyName() {
+    public CharSequence getVenueFriendlyName() {
         return mVenueFriendlyName;
     }
 
@@ -342,7 +342,7 @@ public final class CaptivePortalData implements Parcelable {
     public int hashCode() {
         return Objects.hash(mRefreshTimeMillis, mUserPortalUrl, mVenueInfoUrl,
                 mIsSessionExtendable, mByteLimit, mExpiryTimeMillis, mCaptive, mVenueFriendlyName,
-                mVenueInfoUrlSource, mTermsAndConditionsSource);
+                mVenueInfoUrlSource, mUserPortalUrlSource);
     }
 
     @Override
@@ -358,7 +358,7 @@ public final class CaptivePortalData implements Parcelable {
                 && mCaptive == other.mCaptive
                 && Objects.equals(mVenueFriendlyName, other.mVenueFriendlyName)
                 && mVenueInfoUrlSource == other.mVenueInfoUrlSource
-                && mTermsAndConditionsSource == other.mTermsAndConditionsSource;
+                && mUserPortalUrlSource == other.mUserPortalUrlSource;
     }
 
     @Override
@@ -373,7 +373,7 @@ public final class CaptivePortalData implements Parcelable {
                 + ", captive: " + mCaptive
                 + ", venueFriendlyName: " + mVenueFriendlyName
                 + ", venueInfoUrlSource: " + mVenueInfoUrlSource
-                + ", termsAndConditionsSource: " + mTermsAndConditionsSource
+                + ", userPortalUrlSource: " + mUserPortalUrlSource
                 + "}";
     }
 }

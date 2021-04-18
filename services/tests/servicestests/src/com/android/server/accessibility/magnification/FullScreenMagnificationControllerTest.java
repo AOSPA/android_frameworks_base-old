@@ -16,7 +16,7 @@
 
 package com.android.server.accessibility.magnification;
 
-import static com.android.server.accessibility.magnification.FullScreenMagnificationController.MagnificationRequestObserver;
+import static com.android.server.accessibility.magnification.FullScreenMagnificationController.MagnificationInfoChangedCallback;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -65,7 +65,6 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
-import org.mockito.invocation.InvocationOnMock;
 import org.mockito.stubbing.Answer;
 
 import java.util.Locale;
@@ -97,8 +96,8 @@ public class FullScreenMagnificationControllerTest {
     final WindowManagerInternal mMockWindowManager = mock(WindowManagerInternal.class);
     private final MagnificationAnimationCallback mAnimationCallback = mock(
             MagnificationAnimationCallback.class);
-    private final MagnificationRequestObserver mRequestObserver = mock(
-            MagnificationRequestObserver.class);
+    private final MagnificationInfoChangedCallback mRequestObserver = mock(
+            MagnificationInfoChangedCallback.class);
     final MessageCapturingHandler mMessageCapturingHandler = new MessageCapturingHandler(null);
 
     ValueAnimator mMockValueAnimator;
@@ -1114,18 +1113,65 @@ public class FullScreenMagnificationControllerTest {
                 argThat(closeTo(newEndSpec)));
     }
 
+    @Test
+    public void testSetForceShowMagnifiableBounds() {
+        register(DISPLAY_0);
+
+        mFullScreenMagnificationController.setForceShowMagnifiableBounds(DISPLAY_0, true);
+
+        verify(mMockWindowManager).setForceShowMagnifiableBounds(DISPLAY_0, true);
+    }
+
+    @Test
+    public void testIsForceShowMagnifiableBounds() {
+        register(DISPLAY_0);
+        mFullScreenMagnificationController.setForceShowMagnifiableBounds(DISPLAY_0, true);
+
+        assertTrue(mFullScreenMagnificationController.isForceShowMagnifiableBounds(DISPLAY_0));
+    }
+
+    @Test
+    public void testSetScale_toMagnifying_shouldNotifyActivatedState() {
+        setScaleToMagnifying();
+
+        verify(mRequestObserver).onFullScreenMagnificationActivationState(eq(true));
+    }
+
+    @Test
+    public void testReset_afterMagnifying_shouldNotifyDeactivatedState() {
+        setScaleToMagnifying();
+
+        mFullScreenMagnificationController.reset(DISPLAY_0, mAnimationCallback);
+        verify(mRequestObserver).onFullScreenMagnificationActivationState(eq(false));
+    }
+
+    @Test
+    public void testImeWindowIsShown_serviceNotified() {
+        register(DISPLAY_0);
+        MagnificationCallbacks callbacks = getMagnificationCallbacks(DISPLAY_0);
+        callbacks.onImeWindowVisibilityChanged(true);
+        mMessageCapturingHandler.sendAllMessages();
+        verify(mRequestObserver).onImeWindowVisibilityChanged(eq(true));
+    }
+
+    private void setScaleToMagnifying() {
+        register(DISPLAY_0);
+        float scale = 2.0f;
+        PointF pivotPoint = INITIAL_BOUNDS_LOWER_RIGHT_2X_CENTER;
+
+        mFullScreenMagnificationController.setScale(DISPLAY_0, scale, pivotPoint.x, pivotPoint.y,
+                false, SERVICE_ID_1);
+    }
+
     private void initMockWindowManager() {
         for (int i = 0; i < DISPLAY_COUNT; i++) {
             when(mMockWindowManager.setMagnificationCallbacks(eq(i), any())).thenReturn(true);
         }
-        doAnswer(new Answer<Void>() {
-            @Override
-            public Void answer(InvocationOnMock invocationOnMock) throws Throwable {
-                Object[] args = invocationOnMock.getArguments();
-                Region regionArg = (Region) args[1];
-                regionArg.set(INITIAL_MAGNIFICATION_REGION);
-                return null;
-            }
+        doAnswer((Answer<Void>) invocationOnMock -> {
+            Object[] args = invocationOnMock.getArguments();
+            Region regionArg = (Region) args[1];
+            regionArg.set(INITIAL_MAGNIFICATION_REGION);
+            return null;
         }).when(mMockWindowManager).getMagnificationRegion(anyInt(), (Region) anyObject());
     }
 

@@ -40,9 +40,9 @@ import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.QSIconView;
 import com.android.systemui.plugins.qs.QSTile;
-import com.android.systemui.plugins.qs.QSTile.Icon;
 import com.android.systemui.plugins.qs.QSTile.SignalState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.AlphaControlledSignalTileView;
@@ -51,7 +51,9 @@ import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
+import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
+import com.android.systemui.statusbar.policy.NetworkController.WifiIndicators;
 import com.android.systemui.statusbar.policy.WifiIcons;
 
 import java.io.FileDescriptor;
@@ -78,14 +80,15 @@ public class InternetTile extends QSTileImpl<SignalState> {
             QSHost host,
             @Background Looper backgroundLooper,
             @Main Handler mainHandler,
+            FalsingManager falsingManager,
             MetricsLogger metricsLogger,
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
             QSLogger qsLogger,
             NetworkController networkController
     ) {
-        super(host, backgroundLooper, mainHandler, metricsLogger, statusBarStateController,
-                activityStarter, qsLogger);
+        super(host, backgroundLooper, mainHandler, falsingManager, metricsLogger,
+                statusBarStateController, activityStarter, qsLogger);
         mController = networkController;
         mDataController = mController.getMobileDataController();
         mController.observe(getLifecycle(), mSignalCallback);
@@ -234,70 +237,44 @@ public class InternetTile extends QSTileImpl<SignalState> {
 
 
         @Override
-        public void setWifiIndicators(boolean enabled, IconState statusIcon, IconState qsIcon,
-                boolean activityIn, boolean activityOut, String description, boolean isTransient,
-                String statusLabel) {
+        public void setWifiIndicators(WifiIndicators indicators) {
             if (DEBUG) {
-                Log.d(TAG, "setWifiIndicators: "
-                        + "enabled = " + enabled + ","
-                        + "statusIcon = " + (statusIcon == null ? "" : statusIcon.toString()) + ","
-                        + "qsIcon = " + (qsIcon == null ? "" : qsIcon.toString()) + ","
-                        + "activityIn = " + activityIn + ","
-                        + "activityOut = " + activityOut + ","
-                        + "description = " + description + ","
-                        + "isTransient = " + isTransient + ","
-                        + "statusLabel = " + statusLabel);
+                Log.d(TAG, "setWifiIndicators: " + indicators);
             }
-            mWifiInfo.mEnabled = enabled;
-            if (qsIcon == null) {
+            mWifiInfo.mEnabled = indicators.enabled;
+            if (indicators.qsIcon == null) {
                 return;
             }
-            mWifiInfo.mConnected = qsIcon.visible;
-            mWifiInfo.mWifiSignalIconId = qsIcon.icon;
-            mWifiInfo.mWifiSignalContentDescription = qsIcon.contentDescription;
-            mWifiInfo.mSsid = description;
-            mWifiInfo.mActivityIn = activityIn;
-            mWifiInfo.mActivityOut = activityOut;
-            mWifiInfo.mIsTransient = isTransient;
-            mWifiInfo.mStatusLabel = statusLabel;
+            mWifiInfo.mConnected = indicators.qsIcon.visible;
+            mWifiInfo.mWifiSignalIconId = indicators.qsIcon.icon;
+            mWifiInfo.mWifiSignalContentDescription = indicators.qsIcon.contentDescription;
+            mWifiInfo.mEnabled = indicators.enabled;
+            mWifiInfo.mSsid = indicators.description;
+            mWifiInfo.mActivityIn = indicators.activityIn;
+            mWifiInfo.mActivityOut = indicators.activityOut;
+            mWifiInfo.mIsTransient = indicators.isTransient;
+            mWifiInfo.mStatusLabel = indicators.statusLabel;
             refreshState(mWifiInfo);
         }
 
         @Override
-        public void setMobileDataIndicators(IconState statusIcon, IconState qsIcon, int statusType,
-                int qsType, boolean activityIn, boolean activityOut, int volteIcon,
-                CharSequence typeContentDescription,
-                CharSequence typeContentDescriptionHtml, CharSequence description,
-                boolean isWide, int subId, boolean roaming, boolean showTriangle) {
+        public void setMobileDataIndicators(MobileDataIndicators indicators) {
             if (DEBUG) {
-                Log.d(TAG, "setMobileDataIndicators: "
-                        + "statusIcon = " + (statusIcon == null ? "" :  statusIcon.toString()) + ","
-                        + "qsIcon = " + (qsIcon == null ? "" : qsIcon.toString()) + ","
-                        + "statusType = " + statusType + ","
-                        + "qsType = " + qsType + ","
-                        + "activityIn = " + activityIn + ","
-                        + "activityOut = " + activityOut + ","
-                        + "typeContentDescription = " + typeContentDescription + ","
-                        + "typeContentDescriptionHtml = " + typeContentDescriptionHtml + ","
-                        + "description = " + description + ","
-                        + "isWide = " + isWide + ","
-                        + "subId = " + subId + ","
-                        + "roaming = " + roaming + ","
-                        + "showTriangle = " + showTriangle);
+                Log.d(TAG, "setMobileDataIndicators: " + indicators);
             }
-            if (qsIcon == null) {
+            if (indicators.qsIcon == null) {
                 // Not data sim, don't display.
                 return;
             }
-            mCellularInfo.mDataSubscriptionName =
-                    description == null ? mController.getMobileDataNetworkName() : description;
-            mCellularInfo.mDataContentDescription =
-                    (description != null) ? typeContentDescriptionHtml : null;
-            mCellularInfo.mMobileSignalIconId = qsIcon.icon;
-            mCellularInfo.mQsTypeIcon = qsType;
-            mCellularInfo.mActivityIn = activityIn;
-            mCellularInfo.mActivityOut = activityOut;
-            mCellularInfo.mRoaming = roaming;
+            mCellularInfo.mDataSubscriptionName = indicators.description == null
+                    ? mController.getMobileDataNetworkName() : indicators.description;
+            mCellularInfo.mDataContentDescription = indicators.description != null
+                    ? indicators.typeContentDescriptionHtml : null;
+            mCellularInfo.mMobileSignalIconId = indicators.qsIcon.icon;
+            mCellularInfo.mQsTypeIcon = indicators.qsType;
+            mCellularInfo.mActivityIn = indicators.activityIn;
+            mCellularInfo.mActivityOut = indicators.activityOut;
+            mCellularInfo.mRoaming = indicators.roaming;
             mCellularInfo.mMultipleSubs = mController.getNumberSubscriptions() > 1;
             refreshState(mCellularInfo);
         }
@@ -439,7 +416,6 @@ public class InternetTile extends QSTileImpl<SignalState> {
                 }
             } else {
                 state.icon = ResourceIcon.get(cb.mWifiSignalIconId);
-                state.label = r.getString(R.string.quick_settings_airplane_safe_label);
             }
         } else if (cb.mNoDefaultNetwork && cb.mNoNetworksAvailable) {
             state.icon = ResourceIcon.get(R.drawable.ic_qs_no_internet_unavailable);
@@ -503,9 +479,6 @@ public class InternetTile extends QSTileImpl<SignalState> {
             state.icon = ResourceIcon.get(R.drawable.ic_qs_no_internet_available);
             state.secondaryLabel = r.getString(R.string.quick_settings_networks_available);
         } else {
-            if (cb.mAirplaneModeEnabled) {
-                state.label = r.getString(R.string.quick_settings_airplane_safe_label);
-            }
             state.icon = new SignalIcon(cb.mMobileSignalIconId);
             state.secondaryLabel = appendMobileDataType(cb.mDataSubscriptionName,
                     getMobileDataContentName(cb));

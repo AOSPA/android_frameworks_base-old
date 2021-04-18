@@ -17,6 +17,7 @@
 package android.view;
 
 import static android.content.res.Resources.ID_NULL;
+import static android.view.ContentInfo.SOURCE_DRAG_AND_DROP;
 import static android.view.accessibility.AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_INVALID_BOUNDS;
 import static android.view.displayhash.DisplayHashResultCallback.DISPLAY_HASH_ERROR_MISSING_WINDOW;
@@ -106,6 +107,7 @@ import android.util.AttributeSet;
 import android.util.FloatProperty;
 import android.util.LayoutDirection;
 import android.util.Log;
+import android.util.LongSparseArray;
 import android.util.LongSparseLongArray;
 import android.util.Pair;
 import android.util.Pools.SynchronizedPool;
@@ -150,7 +152,11 @@ import android.view.inputmethod.InputConnection;
 import android.view.inspector.InspectableProperty;
 import android.view.inspector.InspectableProperty.EnumEntry;
 import android.view.inspector.InspectableProperty.FlagEntry;
-import android.view.translation.TranslationRequest;
+import android.view.translation.TranslationCapability;
+import android.view.translation.TranslationSpec.DataFormat;
+import android.view.translation.ViewTranslationCallback;
+import android.view.translation.ViewTranslationRequest;
+import android.view.translation.ViewTranslationResponse;
 import android.widget.Checkable;
 import android.widget.FrameLayout;
 import android.widget.ScrollBarDrawable;
@@ -184,10 +190,10 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
-import java.util.Queue;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 import java.util.function.Predicate;
 
 /**
@@ -1484,7 +1490,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_AUTO = 0;
 
@@ -1495,7 +1500,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_EXCLUDE = 0x1;
 
@@ -1506,7 +1510,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_INCLUDE = 0x2;
 
@@ -1517,7 +1520,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @see #getScrollCaptureHint()
      * @see #setScrollCaptureHint(int)
-     * @hide
      */
     public static final int SCROLL_CAPTURE_HINT_EXCLUDE_DESCENDANTS = 0x4;
 
@@ -5255,6 +5257,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     @Nullable
     private String[] mOnReceiveContentMimeTypes;
 
+    @Nullable
+    private ViewTranslationCallback mViewTranslationCallback;
+
     /**
      * Simple constructor to use when creating a view from code.
      *
@@ -6996,6 +7001,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getScrollIndicators()
      * @attr ref android.R.styleable#View_scrollIndicators
      */
+    @RemotableViewMethod
     public void setScrollIndicators(@ScrollIndicators int indicators) {
         setScrollIndicators(indicators,
                 SCROLL_INDICATORS_PFLAG3_MASK >>> SCROLL_INDICATORS_TO_PFLAGS3_LSHIFT);
@@ -11881,6 +11887,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusable(int)
      * @attr ref android.R.styleable#View_focusable
      */
+    @RemotableViewMethod
     public void setFocusable(boolean focusable) {
         setFocusable(focusable ? FOCUSABLE : NOT_FOCUSABLE);
     }
@@ -11899,6 +11906,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusableInTouchMode(boolean)
      * @attr ref android.R.styleable#View_focusable
      */
+    @RemotableViewMethod
     public void setFocusable(@Focusable int focusable) {
         if ((focusable & (FOCUSABLE_AUTO | FOCUSABLE)) == 0) {
             setFlags(0, FOCUSABLE_IN_TOUCH_MODE);
@@ -11917,6 +11925,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #setFocusable(boolean)
      * @attr ref android.R.styleable#View_focusableInTouchMode
      */
+    @RemotableViewMethod
     public void setFocusableInTouchMode(boolean focusableInTouchMode) {
         // Focusable in touch mode should always be set before the focusable flag
         // otherwise, setting the focusable flag will trigger a focusableViewAvailable()
@@ -12871,6 +12880,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_focusedByDefault
      */
+    @RemotableViewMethod
     public void setFocusedByDefault(boolean isFocusedByDefault) {
         if (isFocusedByDefault == ((mPrivateFlags3 & PFLAG3_FOCUSED_BY_DEFAULT) != 0)) {
             return;
@@ -16854,6 +16864,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_rotation
      */
+    @RemotableViewMethod
     public void setRotation(float rotation) {
         if (rotation != getRotation()) {
             // Double-invalidation is necessary to capture view's old and new areas
@@ -16900,6 +16911,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_rotationY
      */
+    @RemotableViewMethod
     public void setRotationY(float rotationY) {
         if (rotationY != getRotationY()) {
             invalidateViewProperty(true, false);
@@ -16945,6 +16957,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_rotationX
      */
+    @RemotableViewMethod
     public void setRotationX(float rotationX) {
         if (rotationX != getRotationX()) {
             invalidateViewProperty(true, false);
@@ -16982,6 +16995,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scaleX
      */
+    @RemotableViewMethod
     public void setScaleX(float scaleX) {
         if (scaleX != getScaleX()) {
             scaleX = sanitizeFloatPropertyValue(scaleX, "scaleX");
@@ -17020,6 +17034,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_scaleY
      */
+    @RemotableViewMethod
     public void setScaleY(float scaleY) {
         if (scaleY != getScaleY()) {
             scaleY = sanitizeFloatPropertyValue(scaleY, "scaleY");
@@ -17065,6 +17080,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_transformPivotX
      */
+    @RemotableViewMethod
     public void setPivotX(float pivotX) {
         if (!mRenderNode.isPivotExplicitlySet() || pivotX != getPivotX()) {
             invalidateViewProperty(true, false);
@@ -17107,6 +17123,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_transformPivotY
      */
+    @RemotableViewMethod
     public void setPivotY(float pivotY) {
         if (!mRenderNode.isPivotExplicitlySet() || pivotY != getPivotY()) {
             invalidateViewProperty(true, false);
@@ -17247,6 +17264,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_alpha
      */
+    @RemotableViewMethod
     public void setAlpha(@FloatRange(from=0.0, to=1.0) float alpha) {
         ensureTransformationInfo();
         if (mTransformationInfo.mAlpha != alpha) {
@@ -17736,6 +17754,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_elevation
      */
+    @RemotableViewMethod
     public void setElevation(float elevation) {
         if (elevation != getElevation()) {
             elevation = sanitizeFloatPropertyValue(elevation, "elevation");
@@ -17770,6 +17789,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_translationX
      */
+    @RemotableViewMethod
     public void setTranslationX(float translationX) {
         if (translationX != getTranslationX()) {
             invalidateViewProperty(true, false);
@@ -17805,6 +17825,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_translationY
      */
+    @RemotableViewMethod
     public void setTranslationY(float translationY) {
         if (translationY != getTranslationY()) {
             invalidateViewProperty(true, false);
@@ -17832,6 +17853,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *
      * @attr ref android.R.styleable#View_translationZ
      */
+    @RemotableViewMethod
     public void setTranslationZ(float translationZ) {
         if (translationZ != getTranslationZ()) {
             translationZ = sanitizeFloatPropertyValue(translationZ, "translationZ");
@@ -22179,9 +22201,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * and hardware acceleration.
      */
     boolean draw(Canvas canvas, ViewGroup parent, long drawingTime) {
-        // Clear the overscroll effect:
-        // TODO: Use internal API instead of overriding the existing RenderEffect
-        setRenderEffect(null);
 
         final boolean hardwareAcceleratedCanvas = canvas.isHardwareAccelerated();
         /* If an attached view draws to a HW canvas, it may use its RenderNode + DisplayList.
@@ -23993,6 +24012,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getBackgroundTintList()
      * @see Drawable#setTintList(ColorStateList)
      */
+    @RemotableViewMethod
     public void setBackgroundTintList(@Nullable ColorStateList tint) {
         if (mBackgroundTint == null) {
             mBackgroundTint = new TintInfo();
@@ -24252,6 +24272,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * @see #getForegroundTintList()
      * @see Drawable#setTintList(ColorStateList)
      */
+    @RemotableViewMethod
     public void setForegroundTintList(@Nullable ColorStateList tint) {
         if (mForegroundInfo == null) {
             mForegroundInfo = new ForegroundInfo();
@@ -26126,9 +26147,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * <p>The sound effect will only be played if sound effects are enabled by the user, and
      * {@link #isSoundEffectsEnabled()} is true.
      *
-     * @param soundConstant One of the constants defined in {@link SoundEffectConstants}
+     * @param soundConstant One of the constants defined in {@link SoundEffectConstants}.
      */
-    public void playSoundEffect(int soundConstant) {
+    public void playSoundEffect(@SoundEffectConstants.SoundEffect int soundConstant) {
         if (mAttachInfo == null || mAttachInfo.mRootCallbacks == null || !isSoundEffectsEnabled()) {
             return;
         }
@@ -26738,6 +26759,21 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link android.view.DragEvent#getAction()} returns one of the action type constants defined
      * in DragEvent. The method uses these to determine what is happening in the drag and drop
      * operation.
+     * </p>
+     * <p>
+     * The default implementation returns false, except if an {@link OnReceiveContentListener}
+     * is {@link #setOnReceiveContentListener set} for this view. If an
+     * {@link OnReceiveContentListener} is set, the default implementation...
+     * <ul>
+     * <li>returns true for an
+     * {@link android.view.DragEvent#ACTION_DRAG_STARTED ACTION_DRAG_STARTED} event
+     * <li>calls {@link #performReceiveContent} for an
+     * {@link android.view.DragEvent#ACTION_DROP ACTION_DROP} event
+     * <li>returns true for an {@link android.view.DragEvent#ACTION_DROP ACTION_DROP} event, if
+     * the listener consumed some or all of the content
+     * </ul>
+     * </p>
+     *
      * @param event The {@link android.view.DragEvent} sent by the system.
      * The {@link android.view.DragEvent#getAction()} method returns an action type constant defined
      * in DragEvent, indicating the type of drag event represented by this object.
@@ -26757,6 +26793,26 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * </p>
      */
     public boolean onDragEvent(DragEvent event) {
+        if (mListenerInfo == null || mListenerInfo.mOnReceiveContentListener == null) {
+            return false;
+        }
+        // Accept drag events by default if there's an OnReceiveContentListener set.
+        if (event.getAction() == DragEvent.ACTION_DRAG_STARTED) {
+            return true;
+        }
+        if (event.getAction() == DragEvent.ACTION_DROP) {
+            final DragAndDropPermissions permissions = DragAndDropPermissions.obtain(event);
+            if (permissions != null) {
+                permissions.takeTransient();
+            }
+            final ContentInfo payload =
+                    new ContentInfo.Builder(event.getClipData(), SOURCE_DRAG_AND_DROP)
+                            .setDragAndDropPermissions(permissions)
+                            .build();
+            ContentInfo remainingPayload = performReceiveContent(payload);
+            // Return true unless none of the payload was consumed.
+            return remainingPayload != payload;
+        }
         return false;
     }
 
@@ -30038,8 +30094,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Returns the current scroll capture hint for this view.
      *
      * @return the current scroll capture hint
-     *
-     * @hide
      */
     @ScrollCaptureHint
     public int getScrollCaptureHint() {
@@ -30052,8 +30106,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * scroll capture targets.
      *
      * @param hint the scrollCaptureHint flags value to set
-     *
-     * @hide
      */
     public void setScrollCaptureHint(@ScrollCaptureHint int hint) {
         mPrivateFlags4 &= ~PFLAG4_SCROLL_CAPTURE_HINT_MASK;
@@ -30073,10 +30125,8 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * setting a custom callback to help ensure it is selected as the target.
      *
      * @param callback the new callback to assign
-     *
-     * @hide
      */
-    public void setScrollCaptureCallback(@Nullable ScrollCaptureCallback callback) {
+    public final void setScrollCaptureCallback(@Nullable ScrollCaptureCallback callback) {
         getListenerInfo().mScrollCaptureCallback = callback;
     }
 
@@ -30095,21 +30145,46 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
+     * Dispatch a scroll capture search request down the view hierarchy.
+     *
+     * @param localVisibleRect the visible area of this ViewGroup in local coordinates, according to
+     *                         the parent
+     * @param windowOffset     the offset of this view within the window
+     * @param targets          accepts potential scroll capture targets; {@link Consumer#accept
+     *                         results.accept} may be called zero or more times on the calling
+     *                         thread before onScrollCaptureSearch returns
+     */
+    public void dispatchScrollCaptureSearch(
+            @NonNull Rect localVisibleRect, @NonNull Point windowOffset,
+            @NonNull Consumer<ScrollCaptureTarget> targets) {
+        onScrollCaptureSearch(localVisibleRect, windowOffset, targets);
+    }
+
+    /**
      * Called when scroll capture is requested, to search for appropriate content to scroll. If
      * applicable, this view adds itself to the provided list for consideration, subject to the
      * flags set by {@link #setScrollCaptureHint}.
      *
      * @param localVisibleRect the local visible rect of this view
      * @param windowOffset     the offset of localVisibleRect within the window
-     * @param targets          a queue which collects potential targets
-     *
+     * @param targets          accepts potential scroll capture targets; {@link Consumer#accept
+     *                         results.accept} may be called zero or more times on the calling
+     *                         thread before onScrollCaptureSearch returns
      * @throws IllegalStateException if this view is not attached to a window
-     * @hide
      */
-    public void dispatchScrollCaptureSearch(@NonNull Rect localVisibleRect,
-            @NonNull Point windowOffset, @NonNull Queue<ScrollCaptureTarget> targets) {
+    public void onScrollCaptureSearch(@NonNull Rect localVisibleRect,
+            @NonNull Point windowOffset, @NonNull Consumer<ScrollCaptureTarget> targets) {
         int hint = getScrollCaptureHint();
         if ((hint & SCROLL_CAPTURE_HINT_EXCLUDE) != 0) {
+            return;
+        }
+        boolean rectIsVisible = true;
+
+        // Apply clipBounds if present.
+        if (mClipBounds != null) {
+            rectIsVisible = localVisibleRect.intersect(mClipBounds);
+        }
+        if (!rectIsVisible) {
             return;
         }
 
@@ -30117,7 +30192,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         ScrollCaptureCallback callback =
                 (mListenerInfo == null) ? null : mListenerInfo.mScrollCaptureCallback;
 
-        // Try internal support for standard scrolling containers.
+        // Try framework support for standard scrolling containers.
         if (callback == null) {
             callback = createScrollCaptureCallbackInternal(localVisibleRect, windowOffset);
         }
@@ -30127,7 +30202,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             // Add to the list for consideration
             Point offset = new Point(windowOffset.x, windowOffset.y);
             Rect rect = new Rect(localVisibleRect);
-            targets.add(new ScrollCaptureTarget(this, rect, offset, callback));
+            targets.accept(new ScrollCaptureTarget(this, rect, offset, callback));
         }
     }
 
@@ -30656,71 +30731,141 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
     }
 
     /**
-     * Returns a {@link TranslationRequest} to the {@link onStartUiTranslation} which represents
-     * the content to be translated.
+     * Returns a {@link ViewTranslationRequest} which represents the content to be translated.
      *
-     * <p>The default implementation does nothing and return null.</p>
+     * <p>The default implementation does nothing and returns null.</p>
      *
-     * @hide
-     *
-     * @return the {@link TranslationRequest} which contains the information to be translated.
+     * @param supportedFormats the supported translation formats. For now, the only possible value
+     * is the {@link android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
+     * @return the {@link ViewTranslationRequest} which contains the information to be translated or
+     * {@code null} if this View doesn't support translation.
+     * The {@link AutofillId} must be set on the returned value.
      */
     @Nullable
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public TranslationRequest onCreateTranslationRequest() {
+    public ViewTranslationRequest onCreateTranslationRequest(
+            @NonNull @DataFormat int[] supportedFormats) {
         return null;
     }
 
     /**
-     * Called when the user wants to show the original text instead of the translated text.
+     * Returns a {@link ViewTranslationRequest} list which represents the content to be translated
+     * in the virtual view. This is called if this view returned a virtual view structure
+     * from {@link #onProvideContentCaptureStructure} and the system determined that those virtual
+     * views were relevant for translation.
      *
-     * @hide
+     * <p>The default implementation does nothing.</p>
      *
-     * <p> The default implementation does nothing.
+     * @param virtualChildIds the virtual child ids which represents the child views in the virtual
+     * view.
+     * @param supportedFormats the supported translation formats. For now, the only possible value
+     * is the {@link android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
+     * @param requestsCollector a {@link ViewTranslationRequest} collector that will be called
+     * multiple times to collect the information to be translated in the virtual view. One
+     * {@link ViewTranslationRequest} per virtual child. The {@link ViewTranslationRequest} must
+     * contains the {@link AutofillId} corresponding to the virtualChildIds.
      */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onPauseUiTranslation() {
+    @SuppressLint("NullableCollection")
+    public void onCreateTranslationRequests(@NonNull long[] virtualChildIds,
+            @NonNull @DataFormat int[] supportedFormats,
+            @NonNull Consumer<ViewTranslationRequest> requestsCollector) {
         // no-op
     }
 
     /**
-     * User can switch back to show the original text, this method called when the user wants to
-     * re-show the translated text again.
+     * Returns a {@link ViewTranslationCallback} that is used to display/hide the translated
+     * information. If the View supports displaying translated content, it should implement
+     * {@link ViewTranslationCallback}.
      *
-     * @hide
+     * <p>The default implementation returns null if developers don't set the customized
+     * {@link ViewTranslationCallback} by {@link #setViewTranslationCallback} </p>
+     *
+     * @return a {@link ViewTranslationCallback} that is used to control how to display the
+     * translated information or {@code null} if this View doesn't support translation.
+     */
+    @Nullable
+    public ViewTranslationCallback getViewTranslationCallback() {
+        return mViewTranslationCallback;
+    }
+
+    /**
+     * Sets a {@link ViewTranslationCallback} that is used to display/hide the translated
+     * information. Developers can provide the customized implementation for show/hide translated
+     * information.
+     *
+     * @param callback a {@link ViewTranslationCallback} that is used to control how to display the
+     * translated information
+     */
+    public void setViewTranslationCallback(@NonNull ViewTranslationCallback callback) {
+        mViewTranslationCallback = callback;
+    }
+
+    /**
+     * Called when the content from {@link View#onCreateTranslationRequest} had been translated by
+     * the TranslationService.
      *
      * <p> The default implementation does nothing.</p>
+     *
+     * @param response a {@link ViewTranslationResponse} that contains the translated information
+     * which can be shown in the view.
      */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onRestoreUiTranslation() {
+    public void onTranslationResponse(@NonNull ViewTranslationResponse response) {
         // no-op
     }
 
     /**
-     * Called when the user finish the Ui translation and no longer to show the translated text.
-     *
-     * @hide
+     * Called when the content from {@link View#onCreateTranslationRequest} had been translated by
+     * the TranslationService.
      *
      * <p> The default implementation does nothing.</p>
+     *
+     * @param response a {@link ViewTranslationResponse} SparseArray for the request that send by
+     * {@link View#onCreateTranslationRequests} that contains the translated information which can
+     * be shown in the view. The key of SparseArray is
+     * the virtual child ids.
      */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onFinishUiTranslation() {
+    public void onTranslationResponse(@NonNull LongSparseArray<ViewTranslationResponse> response) {
         // no-op
     }
 
     /**
-     * Called when the request from {@link onStartUiTranslation} is completed by the translation
-     * service so that the translation result can be shown.
+     * Dispatch to collect the {@link ViewTranslationRequest}s for translation purpose by traversing
+     * the hierarchy when the app requests ui translation. Typically, this method should only be
+     * overridden by subclasses that provide a view hierarchy (such as {@link ViewGroup}). Other
+     * classes should override {@link View#onCreateTranslationRequest}. When requested to start the
+     * ui translation, the system will call this method to traverse the view hierarchy to call
+     * {@link View#onCreateTranslationRequest} to build {@link ViewTranslationRequest}s and create a
+     * {@link android.view.translation.Translator} to translate the requests. All the
+     * {@link ViewTranslationRequest}s will be added when the traversal is done.
      *
-     * @hide
+     * <p> The default implementation will call {@link View#onCreateTranslationRequest} to build
+     * {@link ViewTranslationRequest} if the view should be translated. </p>
      *
-     * <p> The default implementation does nothing.</p>
-     *
-     * @param request the translated information which can be shown in the view.
+     * @param viewIds a map for the view's {@link AutofillId} and its virtual child ids or
+     * {@code null} if the view doesn't have virtual child that should be translated. The virtual
+     * child ids are the same virtual ids provided by ContentCapture.
+     * @param supportedFormats the supported translation formats. For now, the only possible value
+     * is the {@link android.view.translation.TranslationSpec#DATA_FORMAT_TEXT}.
+     * @param capability a {@link TranslationCapability} that holds translation capability.
+     * information, e.g. source spec, target spec.
+     * @param requests fill in with {@link ViewTranslationRequest}s for translation purpose.
      */
-    //TODO(b/178046780): initial version for demo. Will mark public when the design is reviewed.
-    public void onTranslationComplete(@NonNull TranslationRequest request) {
-        // no-op
+    public void dispatchRequestTranslation(@NonNull Map<AutofillId, long[]> viewIds,
+            @NonNull @DataFormat int[] supportedFormats,
+            @Nullable TranslationCapability capability,
+            @NonNull List<ViewTranslationRequest> requests) {
+        AutofillId autofillId = getAutofillId();
+        if (viewIds.containsKey(autofillId)) {
+            if (viewIds.get(autofillId) == null) {
+                ViewTranslationRequest request = onCreateTranslationRequest(supportedFormats);
+                if (request != null && request.getKeys().size() > 0) {
+                    requests.add(request);
+                }
+            } else {
+                onCreateTranslationRequests(viewIds.get(autofillId), supportedFormats, request -> {
+                    requests.add(request);
+                });
+            }
+        }
     }
 
     /**

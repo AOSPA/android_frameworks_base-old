@@ -16,8 +16,8 @@
 
 package android.net.util;
 
-import static android.provider.Settings.Global.NETWORK_AVOID_BAD_WIFI;
-import static android.provider.Settings.Global.NETWORK_METERED_MULTIPATH_PREFERENCE;
+import static android.net.ConnectivitySettingsManager.NETWORK_AVOID_BAD_WIFI;
+import static android.net.ConnectivitySettingsManager.NETWORK_METERED_MULTIPATH_PREFERENCE;
 
 import android.annotation.NonNull;
 import android.content.BroadcastReceiver;
@@ -27,19 +27,21 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Resources;
 import android.database.ContentObserver;
+import android.net.ConnectivityResources;
 import android.net.Uri;
 import android.os.Handler;
 import android.provider.Settings;
-import android.telephony.PhoneStateListener;
 import android.telephony.SubscriptionManager;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
-import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Arrays;
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 
 /**
  * A class to encapsulate management of the "Smart Networking" capability of
@@ -62,6 +64,7 @@ public class MultinetworkPolicyTracker {
     private static String TAG = MultinetworkPolicyTracker.class.getSimpleName();
 
     private final Context mContext;
+    private final ConnectivityResources mResources;
     private final Handler mHandler;
     private final Runnable mAvoidBadWifiCallback;
     private final List<Uri> mSettingsUris;
@@ -73,17 +76,44 @@ public class MultinetworkPolicyTracker {
     private volatile int mMeteredMultipathPreference;
     private int mActiveSubId = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
+    // Mainline module can't use internal HandlerExecutor, so add an identical executor here.
+    private static class HandlerExecutor implements Executor {
+        @NonNull
+        private final Handler mHandler;
+
+        HandlerExecutor(@NonNull Handler handler) {
+            mHandler = handler;
+        }
+        @Override
+        public void execute(Runnable command) {
+            if (!mHandler.post(command)) {
+                throw new RejectedExecutionException(mHandler + " is shutting down");
+            }
+        }
+    }
+
+    @VisibleForTesting
+    protected class ActiveDataSubscriptionIdListener extends TelephonyCallback
+            implements TelephonyCallback.ActiveDataSubscriptionIdListener {
+        @Override
+        public void onActiveDataSubscriptionIdChanged(int subId) {
+            mActiveSubId = subId;
+            reevaluateInternal();
+        }
+    }
+
     public MultinetworkPolicyTracker(Context ctx, Handler handler) {
         this(ctx, handler, null);
     }
 
     public MultinetworkPolicyTracker(Context ctx, Handler handler, Runnable avoidBadWifiCallback) {
         mContext = ctx;
+        mResources = new ConnectivityResources(ctx);
         mHandler = handler;
         mAvoidBadWifiCallback = avoidBadWifiCallback;
         mSettingsUris = Arrays.asList(
-            Settings.Global.getUriFor(NETWORK_AVOID_BAD_WIFI),
-            Settings.Global.getUriFor(NETWORK_METERED_MULTIPATH_PREFERENCE));
+                Settings.Global.getUriFor(NETWORK_AVOID_BAD_WIFI),
+                Settings.Global.getUriFor(NETWORK_METERED_MULTIPATH_PREFERENCE));
         mResolver = mContext.getContentResolver();
         mSettingObserver = new SettingObserver();
         mBroadcastReceiver = new BroadcastReceiver() {
@@ -93,14 +123,8 @@ public class MultinetworkPolicyTracker {
             }
         };
 
-        ctx.getSystemService(TelephonyManager.class).listen(
-                new PhoneStateListener(handler.getLooper()) {
-            @Override
-            public void onActiveDataSubscriptionIdChanged(int subId) {
-                mActiveSubId = subId;
-                reevaluateInternal();
-            }
-        }, PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
+        ctx.getSystemService(TelephonyManager.class).registerTelephonyCallback(
+                new HandlerExecutor(handler), new ActiveDataSubscriptionIdListener());
 
         updateAvoidBadWifi();
         updateMeteredMultipathPreference();
@@ -138,12 +162,16 @@ public class MultinetworkPolicyTracker {
      * Whether the device or carrier configuration disables avoiding bad wifi by default.
      */
     public boolean configRestrictsAvoidBadWifi() {
-        return (getResourcesForActiveSubId().getInteger(R.integer.config_networkAvoidBadWifi) == 0);
+        // TODO: use R.integer.config_networkAvoidBadWifi directly
+        final int id = mResources.get().getIdentifier("config_networkAvoidBadWifi",
+                "integer", mResources.getResourcesContext().getPackageName());
+        return (getResourcesForActiveSubId().getInteger(id) == 0);
     }
 
     @NonNull
     private Resources getResourcesForActiveSubId() {
-        return SubscriptionManager.getResourcesForSubId(mContext, mActiveSubId);
+        return SubscriptionManager.getResourcesForSubId(
+                mResources.getResourcesContext(), mActiveSubId);
     }
 
     /**
@@ -183,8 +211,10 @@ public class MultinetworkPolicyTracker {
      * The default (device and carrier-dependent) value for metered multipath preference.
      */
     public int configMeteredMultipathPreference() {
-        return mContext.getResources().getInteger(
-                R.integer.config_networkMeteredMultipathPreference);
+        // TODO: use R.integer.config_networkMeteredMultipathPreference directly
+        final int id = mResources.get().getIdentifier("config_networkMeteredMultipathPreference",
+                "integer", mResources.getResourcesContext().getPackageName());
+        return mResources.get().getInteger(id);
     }
 
     public void updateMeteredMultipathPreference() {

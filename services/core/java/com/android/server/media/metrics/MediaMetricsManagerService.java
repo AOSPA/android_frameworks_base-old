@@ -75,6 +75,8 @@ public final class MediaMetricsManagerService extends SystemService {
                     .writeLong(metrics.getNetworkBytesRead())
                     .writeLong(metrics.getLocalBytesRead())
                     .writeLong(metrics.getNetworkTransferDurationMillis())
+                    // Raw bytes type not allowed in atoms
+                    .writeString(Base64.encodeToString(metrics.getDrmSessionId(), Base64.DEFAULT))
                     .usePooledBuffer()
                     .build();
             StatsLog.write(statsEvent);
@@ -93,12 +95,21 @@ public final class MediaMetricsManagerService extends SystemService {
             StatsLog.write(statsEvent);
         }
 
-        @Override
-        public String getSessionId(int userId) {
+        private String getSessionIdInternal(int userId) {
             byte[] byteId = new byte[16]; // 128 bits
             mSecureRandom.nextBytes(byteId);
             String id = Base64.encodeToString(byteId, Base64.DEFAULT);
             return id;
+        }
+
+        @Override
+        public String getPlaybackSessionId(int userId) {
+            return getSessionIdInternal(userId);
+        }
+
+        @Override
+        public String getRecordingSessionId(int userId) {
+            return getSessionIdInternal(userId);
         }
 
         @Override
@@ -145,9 +156,10 @@ public final class MediaMetricsManagerService extends SystemService {
                     .writeString(event.getLanguage())
                     .writeString(event.getLanguageRegion())
                     .writeInt(event.getChannelCount())
-                    .writeInt(event.getSampleRate())
+                    .writeInt(event.getAudioSampleRate())
                     .writeInt(event.getWidth())
                     .writeInt(event.getHeight())
+                    .writeFloat(event.getVideoFrameRate())
                     .usePooledBuffer()
                     .build();
             StatsLog.write(statsEvent);

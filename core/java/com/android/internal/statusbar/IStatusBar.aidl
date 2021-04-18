@@ -21,6 +21,7 @@ import android.content.ComponentName;
 import android.graphics.Rect;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
+import android.hardware.fingerprint.IUdfpsHbmListener;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
 import android.service.notification.StatusBarNotification;
@@ -156,6 +157,11 @@ oneway interface IStatusBar
     void hideAuthenticationDialog();
 
     /**
+     * Sets an instance of IUdfpsHbmListener for UdfpsController.
+     */
+    void setUdfpsHbmListener(in IUdfpsHbmListener listener);
+
+    /**
      * Notifies System UI that the display is ready to show system decorations.
      */
     void onDisplayReady(int displayId);
@@ -257,4 +263,12 @@ oneway interface IStatusBar
      * file descriptor passed in.
      */
      void passThroughShellCommand(in String[] args, in ParcelFileDescriptor pfd);
+
+    /**
+     * Enables/disables the navigation bar luma sampling.
+     *
+     * @param displayId the id of the display to notify.
+     * @param enable {@code true} if enable, otherwise set to {@code false}.
+     */
+    void setNavigationBarLumaSamplingEnabled(int displayId, boolean enable);
 }

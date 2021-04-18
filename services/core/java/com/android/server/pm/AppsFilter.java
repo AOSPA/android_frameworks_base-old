@@ -69,6 +69,7 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.StringTokenizer;
 import java.util.concurrent.Executor;
+import java.util.function.Function;
 
 /**
  * The entity responsible for filtering visibility between apps based on declarations in their
@@ -102,6 +103,12 @@ public class AppsFilter implements Watchable, Snappable {
      * of packages that the they resolve to.
      */
     private final SparseSetArray<Integer> mQueriesViaComponent = new SparseSetArray<>();
+
+    /**
+     * A mapping from the set of App IDs that query other App IDs via library name to the
+     * list of packages that they can see.
+     */
+    private final SparseSetArray<Integer> mQueryableViaUsesLibrary = new SparseSetArray<>();
 
     /**
      * Executor for running reasonably short background tasks such as building the initial
@@ -238,6 +245,7 @@ public class AppsFilter implements Watchable, Snappable {
         Snapshots.copy(mImplicitlyQueryable, orig.mImplicitlyQueryable);
         Snapshots.copy(mQueriesViaPackage, orig.mQueriesViaPackage);
         Snapshots.copy(mQueriesViaComponent, orig.mQueriesViaComponent);
+        Snapshots.copy(mQueryableViaUsesLibrary, orig.mQueryableViaUsesLibrary);
         mQueriesViaComponentRequireRecompute = orig.mQueriesViaComponentRequireRecompute;
         mForceQueryable.addAll(orig.mForceQueryable);
         mForceQueryableByDevicePackageNames = orig.mForceQueryableByDevicePackageNames;
@@ -507,6 +515,22 @@ public class AppsFilter implements Watchable, Snappable {
         return false;
     }
 
+    private static boolean canQueryViaUsesLibrary(AndroidPackage querying,
+            AndroidPackage potentialTarget) {
+        if (potentialTarget.getLibraryNames().isEmpty()) {
+            return false;
+        }
+        final List<String> libNames = potentialTarget.getLibraryNames();
+        for (int i = 0, size = libNames.size(); i < size; i++) {
+            final String libName = libNames.get(i);
+            if (querying.getUsesLibraries().contains(libName)
+                    || querying.getUsesOptionalLibraries().contains(libName)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     private static boolean matchesProviders(
             Set<String> queriesAuthorities, AndroidPackage potentialTarget) {
         for (int p = ArrayUtils.size(potentialTarget.getProviders()) - 1; p >= 0; p--) {
@@ -706,6 +730,9 @@ public class AppsFilter implements Watchable, Snappable {
                         || canQueryAsInstaller(existingSetting, newPkg)) {
                     mQueriesViaPackage.add(existingSetting.appId, newPkgSetting.appId);
                 }
+                if (canQueryViaUsesLibrary(existingPkg, newPkg)) {
+                    mQueryableViaUsesLibrary.add(existingSetting.appId, newPkgSetting.appId);
+                }
             }
             // now we'll evaluate our new package's ability to see existing packages
             if (!mForceQueryable.contains(existingSetting.appId)) {
@@ -716,6 +743,9 @@ public class AppsFilter implements Watchable, Snappable {
                 if (canQueryViaPackage(newPkg, existingPkg)
                         || canQueryAsInstaller(newPkgSetting, existingPkg)) {
                     mQueriesViaPackage.add(newPkgSetting.appId, existingSetting.appId);
+                }
+                if (canQueryViaUsesLibrary(newPkg, existingPkg)) {
+                    mQueryableViaUsesLibrary.add(newPkgSetting.appId, existingSetting.appId);
                 }
             }
             // if either package instruments the other, mark both as visible to one another
@@ -1034,6 +1064,10 @@ public class AppsFilter implements Watchable, Snappable {
             for (int i = mQueriesViaPackage.size() - 1; i >= 0; i--) {
                 mQueriesViaPackage.remove(mQueriesViaPackage.keyAt(i), setting.appId);
             }
+            mQueryableViaUsesLibrary.remove(setting.appId);
+            for (int i = mQueryableViaUsesLibrary.size() - 1; i >= 0; i--) {
+                mQueryableViaUsesLibrary.remove(mQueryableViaUsesLibrary.keyAt(i), setting.appId);
+            }
 
             mForceQueryable.remove(setting.appId);
 
@@ -1314,6 +1348,18 @@ public class AppsFilter implements Watchable, Snappable {
                 Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
 
+            try {
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueryableViaUsesLibrary");
+                if (mQueryableViaUsesLibrary.contains(callingAppId, targetAppId)) {
+                    if (DEBUG_LOGGING) {
+                        log(callingSetting, targetPkgSetting, "queryable for library users");
+                    }
+                    return false;
+                }
+            } finally {
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
+            }
+
             return true;
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
@@ -1354,14 +1400,13 @@ public class AppsFilter implements Watchable, Snappable {
     }
 
     public void dumpQueries(
-            PrintWriter pw, PackageManagerService pms, @Nullable Integer filteringAppId,
-            DumpState dumpState,
-            int[] users) {
+            PrintWriter pw, @Nullable Integer filteringAppId, DumpState dumpState, int[] users,
+            Function<Integer, String[]> getPackagesForUid) {
         final SparseArray<String> cache = new SparseArray<>();
         ToString<Integer> expandPackages = input -> {
             String cachedValue = cache.get(input);
             if (cachedValue == null) {
-                final String[] packagesForUid = pms.getPackagesForUid(input);
+                final String[] packagesForUid = getPackagesForUid.apply(input);
                 if (packagesForUid == null) {
                     cachedValue = "[unknown app id " + input + "]";
                 } else {
@@ -1394,6 +1439,8 @@ public class AppsFilter implements Watchable, Snappable {
                     filteringAppId == null ? null : UserHandle.getUid(user, filteringAppId),
                     mImplicitlyQueryable, "      ", expandPackages);
         }
+        pw.println("  queryable via uses-library:");
+        dumpQueriesMap(pw, filteringAppId, mQueryableViaUsesLibrary, "    ", expandPackages);
     }
 
     private static void dumpQueriesMap(PrintWriter pw, @Nullable Integer filteringId,

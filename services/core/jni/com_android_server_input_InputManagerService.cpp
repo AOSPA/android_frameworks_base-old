@@ -131,6 +131,7 @@ static struct {
     jmethodID getDeviceAlias;
     jmethodID getTouchCalibrationForInputDevice;
     jmethodID getContextForDisplay;
+    jmethodID notifyDropWindow;
 } gServiceClassInfo;
 
 static struct {
@@ -154,6 +155,20 @@ static struct {
     jclass clazz;
     jmethodID getAffineTransform;
 } gTouchCalibrationClassInfo;
+
+static struct {
+    jclass clazz;
+    jmethodID constructor;
+    jfieldID lightTypeSingle;
+    jfieldID lightTypePlayerId;
+    jfieldID lightTypeRgb;
+} gLightClassInfo;
+
+static struct {
+    jclass clazz;
+    jmethodID constructor;
+    jmethodID add;
+} gArrayListClassInfo;
 
 static struct {
     jclass clazz;
@@ -317,10 +332,11 @@ public:
                                           uint32_t policyFlags) override;
     bool dispatchUnhandledKey(const sp<IBinder>& token, const KeyEvent* keyEvent,
                               uint32_t policyFlags, KeyEvent* outFallbackKeyEvent) override;
-    void pokeUserActivity(nsecs_t eventTime, int32_t eventType) override;
+    void pokeUserActivity(nsecs_t eventTime, int32_t eventType, int32_t displayId) override;
     bool checkInjectEventsPermissionNonReentrant(int32_t injectorPid, int32_t injectorUid) override;
     void onPointerDownOutsideFocus(const sp<IBinder>& touchedToken) override;
     void setPointerCapture(bool enabled) override;
+    void notifyDropWindow(const sp<IBinder>& token, float x, float y) override;
 
     /* --- PointerControllerPolicyInterface implementation --- */
 
@@ -891,6 +907,20 @@ void NativeInputManager::notifyFocusChanged(const sp<IBinder>& oldToken,
     checkAndClearExceptionFromCallback(env, "notifyFocusChanged");
 }
 
+void NativeInputManager::notifyDropWindow(const sp<IBinder>& token, float x, float y) {
+#if DEBUG_INPUT_DISPATCHER_POLICY
+    ALOGD("notifyDropWindow");
+#endif
+    ATRACE_CALL();
+
+    JNIEnv* env = jniEnv();
+    ScopedLocalFrame localFrame(env);
+
+    jobject tokenObj = javaObjectForIBinder(env, token);
+    env->CallVoidMethod(mServiceObj, gServiceClassInfo.notifyDropWindow, tokenObj, x, y);
+    checkAndClearExceptionFromCallback(env, "notifyDropWindow");
+}
+
 void NativeInputManager::notifySensorEvent(int32_t deviceId, InputDeviceSensorType sensorType,
                                            InputDeviceSensorAccuracy accuracy, nsecs_t timestamp,
                                            const std::vector<float>& values) {
@@ -1311,9 +1341,9 @@ bool NativeInputManager::dispatchUnhandledKey(const sp<IBinder>& token,
     return result;
 }
 
-void NativeInputManager::pokeUserActivity(nsecs_t eventTime, int32_t eventType) {
+void NativeInputManager::pokeUserActivity(nsecs_t eventTime, int32_t eventType, int32_t displayId) {
     ATRACE_CALL();
-    android_server_PowerManagerService_userActivity(eventTime, eventType);
+    android_server_PowerManagerService_userActivity(eventTime, eventType, displayId);
 }
 
 bool NativeInputManager::checkInjectEventsPermissionNonReentrant(
@@ -1769,8 +1799,9 @@ static void nativeSetSystemUiLightsOut(JNIEnv* /* env */, jclass /* clazz */, jl
     im->setSystemUiLightsOut(lightsOut);
 }
 
-static jboolean nativeTransferTouchFocus(JNIEnv* env,
-        jclass /* clazz */, jlong ptr, jobject fromChannelTokenObj, jobject toChannelTokenObj) {
+static jboolean nativeTransferTouchFocus(JNIEnv* env, jclass /* clazz */, jlong ptr,
+                                         jobject fromChannelTokenObj, jobject toChannelTokenObj,
+                                         jboolean isDragDrop) {
     if (fromChannelTokenObj == nullptr || toChannelTokenObj == nullptr) {
         return JNI_FALSE;
     }
@@ -1779,8 +1810,8 @@ static jboolean nativeTransferTouchFocus(JNIEnv* env,
     sp<IBinder> toChannelToken = ibinderForJavaObject(env, toChannelTokenObj);
 
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
-    if (im->getInputManager()->getDispatcher()->transferTouchFocus(
-            fromChannelToken, toChannelToken)) {
+    if (im->getInputManager()->getDispatcher()->transferTouchFocus(fromChannelToken, toChannelToken,
+                                                                   isDragDrop)) {
         return JNI_TRUE;
     } else {
         return JNI_FALSE;
@@ -1921,6 +1952,79 @@ static jintArray nativeGetVibratorIds(JNIEnv* env, jclass clazz, jlong ptr, jint
         env->SetIntArrayRegion(vibIdArray, 0, vibrators.size(), vibrators.data());
     }
     return vibIdArray;
+}
+
+static jobject nativeGetLights(JNIEnv* env, jclass clazz, jlong ptr, jint deviceId) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+    jobject jLights = env->NewObject(gArrayListClassInfo.clazz, gArrayListClassInfo.constructor);
+
+    std::vector<int> lightIds = im->getInputManager()->getReader()->getLightIds(deviceId);
+
+    for (size_t i = 0; i < lightIds.size(); i++) {
+        const InputDeviceLightInfo* lightInfo =
+                im->getInputManager()->getReader()->getLightInfo(deviceId, lightIds[i]);
+        if (lightInfo == nullptr) {
+            ALOGW("Failed to get input device %d light info for id %d", deviceId, lightIds[i]);
+            continue;
+        }
+
+        jint jTypeId = 0;
+        if (lightInfo->type == InputDeviceLightType::SINGLE) {
+            jTypeId =
+                    env->GetStaticIntField(gLightClassInfo.clazz, gLightClassInfo.lightTypeSingle);
+        } else if (lightInfo->type == InputDeviceLightType::PLAYER_ID) {
+            jTypeId = env->GetStaticIntField(gLightClassInfo.clazz,
+                                             gLightClassInfo.lightTypePlayerId);
+        } else if (lightInfo->type == InputDeviceLightType::RGB ||
+                   lightInfo->type == InputDeviceLightType::MULTI_COLOR) {
+            jTypeId = env->GetStaticIntField(gLightClassInfo.clazz, gLightClassInfo.lightTypeRgb);
+        } else {
+            ALOGW("Unknown light type %d", lightInfo->type);
+            continue;
+        }
+        ScopedLocalRef<jobject>
+                lightObj(env,
+                         env->NewObject(gLightClassInfo.clazz, gLightClassInfo.constructor,
+                                        (jint)lightInfo->id, (jint)lightInfo->ordinal, jTypeId,
+                                        env->NewStringUTF(lightInfo->name.c_str())));
+        // Add light object to list
+        env->CallBooleanMethod(jLights, gArrayListClassInfo.add, lightObj.get());
+    }
+
+    return jLights;
+}
+
+static jint nativeGetLightPlayerId(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId,
+                                   jint lightId) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    std::optional<int32_t> ret =
+            im->getInputManager()->getReader()->getLightPlayerId(deviceId, lightId);
+
+    return static_cast<jint>(ret.value_or(0));
+}
+
+static jint nativeGetLightColor(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId,
+                                jint lightId) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    std::optional<int32_t> ret =
+            im->getInputManager()->getReader()->getLightColor(deviceId, lightId);
+    return static_cast<jint>(ret.value_or(0));
+}
+
+static void nativeSetLightPlayerId(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId,
+                                   jint lightId, jint playerId) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    im->getInputManager()->getReader()->setLightPlayerId(deviceId, lightId, playerId);
+}
+
+static void nativeSetLightColor(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId,
+                                jint lightId, jint color) {
+    NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
+
+    im->getInputManager()->getReader()->setLightColor(deviceId, lightId, color);
 }
 
 static jint nativeGetBatteryCapacity(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId) {
@@ -2180,7 +2284,7 @@ static const JNINativeMethod gInputManagerMethods[] = {
          (void*)nativeRequestPointerCapture},
         {"nativeSetInputDispatchMode", "(JZZ)V", (void*)nativeSetInputDispatchMode},
         {"nativeSetSystemUiLightsOut", "(JZ)V", (void*)nativeSetSystemUiLightsOut},
-        {"nativeTransferTouchFocus", "(JLandroid/os/IBinder;Landroid/os/IBinder;)Z",
+        {"nativeTransferTouchFocus", "(JLandroid/os/IBinder;Landroid/os/IBinder;Z)Z",
          (void*)nativeTransferTouchFocus},
         {"nativeSetPointerSpeed", "(JI)V", (void*)nativeSetPointerSpeed},
         {"nativeSetShowTouches", "(JZ)V", (void*)nativeSetShowTouches},
@@ -2192,6 +2296,11 @@ static const JNINativeMethod gInputManagerMethods[] = {
         {"nativeCancelVibrate", "(JII)V", (void*)nativeCancelVibrate},
         {"nativeIsVibrating", "(JI)Z", (void*)nativeIsVibrating},
         {"nativeGetVibratorIds", "(JI)[I", (void*)nativeGetVibratorIds},
+        {"nativeGetLights", "(JI)Ljava/util/List;", (void*)nativeGetLights},
+        {"nativeGetLightPlayerId", "(JII)I", (void*)nativeGetLightPlayerId},
+        {"nativeGetLightColor", "(JII)I", (void*)nativeGetLightColor},
+        {"nativeSetLightPlayerId", "(JIII)V", (void*)nativeSetLightPlayerId},
+        {"nativeSetLightColor", "(JIII)V", (void*)nativeSetLightColor},
         {"nativeGetBatteryCapacity", "(JI)I", (void*)nativeGetBatteryCapacity},
         {"nativeGetBatteryStatus", "(JI)I", (void*)nativeGetBatteryStatus},
         {"nativeReloadKeyboardLayouts", "(J)V", (void*)nativeReloadKeyboardLayouts},
@@ -2257,6 +2366,8 @@ int register_android_server_InputManager(JNIEnv* env) {
 
     GET_METHOD_ID(gServiceClassInfo.notifyFocusChanged, clazz,
             "notifyFocusChanged", "(Landroid/os/IBinder;Landroid/os/IBinder;)V");
+    GET_METHOD_ID(gServiceClassInfo.notifyDropWindow, clazz, "notifyDropWindow",
+                  "(Landroid/os/IBinder;FF)V");
 
     GET_METHOD_ID(gServiceClassInfo.notifySensorEvent, clazz, "notifySensorEvent", "(IIIJ[F)V");
 
@@ -2385,6 +2496,27 @@ int register_android_server_InputManager(JNIEnv* env) {
 
     GET_METHOD_ID(gTouchCalibrationClassInfo.getAffineTransform, gTouchCalibrationClassInfo.clazz,
             "getAffineTransform", "()[F");
+
+    // Light
+    FIND_CLASS(gLightClassInfo.clazz, "android/hardware/lights/Light");
+    gLightClassInfo.clazz = jclass(env->NewGlobalRef(gLightClassInfo.clazz));
+    GET_METHOD_ID(gLightClassInfo.constructor, gLightClassInfo.clazz, "<init>",
+                  "(IIILjava/lang/String;)V");
+
+    gLightClassInfo.clazz = jclass(env->NewGlobalRef(gLightClassInfo.clazz));
+    gLightClassInfo.lightTypeSingle =
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT_SINGLE", "I");
+    gLightClassInfo.lightTypePlayerId =
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT_PLAYER_ID", "I");
+    gLightClassInfo.lightTypeRgb =
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT_RGB", "I");
+
+    // ArrayList
+    FIND_CLASS(gArrayListClassInfo.clazz, "java/util/ArrayList");
+    gArrayListClassInfo.clazz = jclass(env->NewGlobalRef(gArrayListClassInfo.clazz));
+    GET_METHOD_ID(gArrayListClassInfo.constructor, gArrayListClassInfo.clazz, "<init>", "()V");
+    GET_METHOD_ID(gArrayListClassInfo.add, gArrayListClassInfo.clazz, "add",
+                  "(Ljava/lang/Object;)Z");
 
     // SparseArray
     FIND_CLASS(gSparseArrayClassInfo.clazz, "android/util/SparseArray");

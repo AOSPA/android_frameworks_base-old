@@ -16,13 +16,21 @@
 
 package com.android.keyguard;
 
+import static android.view.WindowInsets.Type.ime;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.WindowInsetsController;
@@ -33,6 +41,7 @@ import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
@@ -82,21 +91,48 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
     @Mock
     private KeyguardSecurityViewFlipperController mKeyguardSecurityViewFlipperController;
     @Mock
+    private KeyguardMessageAreaController.Factory mKeyguardMessageAreaControllerFactory;
+    @Mock
+    private KeyguardMessageArea mKeyguardMessageArea;
+    @Mock
     private ConfigurationController mConfigurationController;
+    @Mock
+    private EmergencyButtonController mEmergencyButtonController;
+    @Mock
+    private Resources mResources;
+    private Configuration mConfiguration;
 
     private KeyguardSecurityContainerController mKeyguardSecurityContainerController;
+    private KeyguardPasswordViewController mKeyguardPasswordViewController;
+    private KeyguardPasswordView mKeyguardPasswordView;
 
     @Before
     public void setup() {
+        mConfiguration = new Configuration();
+        mConfiguration.setToDefaults(); // Defaults to ORIENTATION_UNDEFINED.
+
+        when(mResources.getConfiguration()).thenReturn(mConfiguration);
+        when(mView.getResources()).thenReturn(mResources);
         when(mAdminSecondaryLockScreenControllerFactory.create(any(KeyguardSecurityCallback.class)))
                 .thenReturn(mAdminSecondaryLockScreenController);
         when(mSecurityViewFlipper.getWindowInsetsController()).thenReturn(mWindowInsetsController);
+        mKeyguardPasswordView = spy(new KeyguardPasswordView(getContext()));
+        when(mKeyguardPasswordView.getRootView()).thenReturn(mSecurityViewFlipper);
+        when(mKeyguardPasswordView.findViewById(R.id.keyguard_message_area))
+                .thenReturn(mKeyguardMessageArea);
+        when(mKeyguardPasswordView.getWindowInsetsController()).thenReturn(mWindowInsetsController);
+        mKeyguardPasswordViewController = new KeyguardPasswordViewController(
+                (KeyguardPasswordView) mKeyguardPasswordView, mKeyguardUpdateMonitor,
+                SecurityMode.Password, mLockPatternUtils, null,
+                mKeyguardMessageAreaControllerFactory, null, null, mEmergencyButtonController,
+                null, mock(Resources.class), null);
 
         mKeyguardSecurityContainerController = new KeyguardSecurityContainerController.Factory(
-                mView,  mAdminSecondaryLockScreenControllerFactory, mLockPatternUtils,
+                mView, mAdminSecondaryLockScreenControllerFactory, mLockPatternUtils,
                 mKeyguardUpdateMonitor, mKeyguardSecurityModel, mMetricsLogger, mUiEventLogger,
                 mKeyguardStateController, mKeyguardSecurityViewFlipperController,
-                mConfigurationController).create(mSecurityCallback);
+                mConfigurationController)
+                .create(mSecurityCallback);
     }
 
     @Test
@@ -119,14 +155,26 @@ public class KeyguardSecurityContainerControllerTest extends SysuiTestCase {
     public void startDisappearAnimation_animatesKeyboard() {
         when(mKeyguardSecurityModel.getSecurityMode(anyInt())).thenReturn(
                 SecurityMode.Password);
-        when(mInputViewController.getSecurityMode()).thenReturn(
-                SecurityMode.Password);
         when(mKeyguardSecurityViewFlipperController.getSecurityView(
                 eq(SecurityMode.Password), any(KeyguardSecurityCallback.class)))
-                .thenReturn(mInputViewController);
-        mKeyguardSecurityContainerController.showPrimarySecurityScreen(false /* turningOff */);
+                .thenReturn((KeyguardInputViewController) mKeyguardPasswordViewController);
+        mKeyguardSecurityContainerController.showSecurityScreen(SecurityMode.Password);
 
         mKeyguardSecurityContainerController.startDisappearAnimation(null);
-        verify(mInputViewController).startDisappearAnimation(eq(null));
+        verify(mWindowInsetsController).controlWindowInsetsAnimation(
+                eq(ime()), anyLong(), any(), any(), any());
+    }
+
+    @Test
+    public void onResourcesUpdate_callsThroughOnRotationChange() {
+        // Rotation is the same, shouldn't cause an update
+        mKeyguardSecurityContainerController.updateResources();
+        verify(mView, times(0)).updateLayoutForSecurityMode(any());
+
+        // Update rotation. Should trigger update
+        mConfiguration.orientation = Configuration.ORIENTATION_LANDSCAPE;
+
+        mKeyguardSecurityContainerController.updateResources();
+        verify(mView, times(1)).updateLayoutForSecurityMode(any());
     }
 }

@@ -81,6 +81,14 @@ genrule {
     out: ["services.core.protolog.json"],
 }
 
+genrule {
+    name: "statslog-art-java-gen",
+    tools: ["stats-log-api-gen"],
+    cmd: "$(location stats-log-api-gen) --java $(out) --module art" +
+         " --javaPackage com.android.internal.art --javaClass ArtStatsLog --worksource",
+    out: ["com/android/internal/art/ArtStatsLog.java"],
+}
+
 java_library_static {
     name: "services.core.unboosted",
     defaults: [
@@ -88,6 +96,7 @@ java_library_static {
         "platform_service_defaults",
     ],
     srcs: [
+        ":statslog-art-java-gen",
         ":services.core-sources",
         ":services.core.protologsrc",
         ":dumpstate_aidl",
@@ -100,7 +109,7 @@ java_library_static {
         ":platform-compat-config",
         ":platform-compat-overrides",
         ":display-device-config",
-        ":cec-config",
+        ":display-layout-config",
         ":device-state-config",
         "java/com/android/server/EventLogTags.logtags",
         "java/com/android/server/am/EventLogTags.logtags",
@@ -121,7 +130,6 @@ java_library_static {
     ],
 
     required: [
-        "cec_config.xml",
         "gps_debug.conf",
         "protolog.conf.json.gz",
     ],
@@ -153,7 +161,7 @@ java_library_static {
         "android.hardware.power.stats-V1-java",
         "android.hidl.manager-V1.2-java",
         "capture_state_listener-aidl-java",
-        "dnsresolver_aidl_interface-V7-java",
+        "dnsresolver_aidl_interface-V8-java",
         "icu4j_calendar_astronomer",
         "netd-client",
         "overlayable_policy_aidl-java",
@@ -189,11 +197,6 @@ java_library_host {
 }
 
 prebuilt_etc {
-    name: "cec_config.xml",
-    src: "java/com/android/server/hdmi/cec_config.xml",
-}
-
-prebuilt_etc {
     name: "gps_debug.conf",
     src: "java/com/android/server/location/gnss/gps_debug.conf",
 }
@@ -224,11 +227,12 @@ filegroup {
     srcs: [
         "java/com/android/server/ConnectivityService.java",
         "java/com/android/server/ConnectivityServiceInitializer.java",
+        "java/com/android/server/NetIdManager.java",
         "java/com/android/server/TestNetworkService.java",
         "java/com/android/server/connectivity/AutodestructReference.java",
         "java/com/android/server/connectivity/ConnectivityConstants.java",
-        "java/com/android/server/connectivity/DataConnectionStats.java",
         "java/com/android/server/connectivity/DnsManager.java",
+        "java/com/android/server/connectivity/FullScore.java",
         "java/com/android/server/connectivity/KeepaliveTracker.java",
         "java/com/android/server/connectivity/LingerMonitor.java",
         "java/com/android/server/connectivity/MockableSystemProperties.java",
@@ -236,8 +240,11 @@ filegroup {
         "java/com/android/server/connectivity/NetworkAgentInfo.java",
         "java/com/android/server/connectivity/NetworkDiagnostics.java",
         "java/com/android/server/connectivity/NetworkNotificationManager.java",
+        "java/com/android/server/connectivity/NetworkOffer.java",
         "java/com/android/server/connectivity/NetworkRanker.java",
+        "java/com/android/server/connectivity/OsCompat.java",
         "java/com/android/server/connectivity/PermissionMonitor.java",
+        "java/com/android/server/connectivity/ProfileNetworkPreferences.java",
         "java/com/android/server/connectivity/ProxyTracker.java",
         "java/com/android/server/connectivity/QosCallbackAgentConnection.java",
         "java/com/android/server/connectivity/QosCallbackTracker.java",

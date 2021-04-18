@@ -132,7 +132,7 @@ public class NavigationModeController implements Dumpable {
             Settings.Secure.putString(mCurrentUserContext.getContentResolver(),
                     Secure.NAVIGATION_MODE, String.valueOf(mode)));
         if (DEBUG) {
-            Log.e(TAG, "updateCurrentInteractionMode: mode=" + mode);
+            Log.d(TAG, "updateCurrentInteractionMode: mode=" + mode);
             dumpAssetPaths(mCurrentUserContext);
         }
 
@@ -200,7 +200,7 @@ public class NavigationModeController implements Dumpable {
         Log.d(TAG, "  assetPaths=");
         ApkAssets[] assets = context.getResources().getAssets().getApkAssets();
         for (ApkAssets a : assets) {
-            Log.d(TAG, "    " + a.getAssetPath());
+            Log.d(TAG, "    " + a.getDebugName());
         }
     }
 }

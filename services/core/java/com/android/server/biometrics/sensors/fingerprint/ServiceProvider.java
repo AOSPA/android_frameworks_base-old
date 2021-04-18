@@ -67,7 +67,13 @@ public interface ServiceProvider {
     @NonNull
     List<FingerprintSensorPropertiesInternal> getSensorProperties();
 
-    @NonNull
+    /**
+     * Returns the internal properties of the specified sensor, if owned by this provider.
+     *
+     * @param sensorId The ID of a fingerprint sensor, or -1 for any sensor.
+     * @return An object representing the internal properties of the specified sensor.
+     */
+    @Nullable
     FingerprintSensorPropertiesInternal getSensorProperties(int sensorId);
 
     void scheduleResetLockout(int sensorId, int userId, @Nullable byte[] hardwareAuthToken);
@@ -90,7 +96,8 @@ public interface ServiceProvider {
 
     void scheduleAuthenticate(int sensorId, @NonNull IBinder token, long operationId, int userId,
             int cookie, @NonNull ClientMonitorCallbackConverter callback,
-            @NonNull String opPackageName, boolean restricted, int statsClient, boolean isKeyguard);
+            @NonNull String opPackageName, boolean restricted, int statsClient,
+            boolean allowBackgroundAuthentication);
 
     void startPreparedClient(int sensorId, int cookie);
 

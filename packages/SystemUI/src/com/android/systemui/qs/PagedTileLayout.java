@@ -71,7 +71,6 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
     private int mMinRows = 1;
     private int mMaxColumns = TileLayout.NO_MAX_COLUMNS;
 
-    private boolean mShowLabels = true;
     private final boolean mSideLabels;
 
     public PagedTileLayout(Context context, AttributeSet attrs) {
@@ -88,18 +87,12 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
                 attrs, R.styleable.PagedTileLayout, 0, 0);
         mSideLabels = t.getBoolean(R.styleable.PagedTileLayout_sideLabels, false);
         t.recycle();
+        if (mSideLabels) {
+            setPageMargin(context.getResources().getDimensionPixelOffset(
+                    R.dimen.qs_tile_margin_horizontal));
+        }
     }
     private int mLastMaxHeight = -1;
-
-    @Override
-    public void setShowLabels(boolean show) {
-        mShowLabels = show;
-        for (TileLayout p : mPages) {
-            p.setShowLabels(show);
-        }
-        mDistributeTiles = true;
-        requestLayout();
-    }
 
     public void saveInstanceState(Bundle outState) {
         outState.putInt(CURRENT_PAGE, getCurrentItem());
@@ -239,7 +232,6 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
                         : R.layout.qs_paged_page, this, false);
         page.setMinRows(mMinRows);
         page.setMaxColumns(mMaxColumns);
-        page.setShowLabels(mShowLabels);
         return page;
     }
 
@@ -353,6 +345,9 @@ public class PagedTileLayout extends ViewPager implements QSTileLayout {
         // Update bottom padding, useful for removing extra space once the panel page indicator is
         // hidden.
         Resources res = getContext().getResources();
+        if (mSideLabels) {
+            setPageMargin(res.getDimensionPixelOffset(R.dimen.qs_tile_margin_horizontal));
+        }
         setPadding(0, 0, 0,
                 getContext().getResources().getDimensionPixelSize(
                         R.dimen.qs_paged_tile_layout_padding_bottom));

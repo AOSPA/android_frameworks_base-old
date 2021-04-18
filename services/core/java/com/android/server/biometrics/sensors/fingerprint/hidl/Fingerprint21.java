@@ -28,6 +28,7 @@ import android.content.pm.UserInfo;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricsProtoEnums;
+import android.hardware.biometrics.ComponentInfoInternal;
 import android.hardware.biometrics.IInvalidationCallback;
 import android.hardware.biometrics.ITestSession;
 import android.hardware.biometrics.ITestSessionCallback;
@@ -347,14 +348,16 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
         final @FingerprintSensorProperties.SensorType int sensorType =
                 mIsUdfps ? FingerprintSensorProperties.TYPE_UDFPS_OPTICAL
                         : FingerprintSensorProperties.TYPE_REAR;
-        // resetLockout is controlled by the framework, so hardwareAuthToken is not required
+        // IBiometricsFingerprint@2.1 does not manage timeout below the HAL, so the Gatekeeper HAT
+        // cannot be checked
         final boolean resetLockoutRequiresHardwareAuthToken = false;
         final int maxEnrollmentsPerUser = mContext.getResources()
                 .getInteger(R.integer.config_fingerprintMaxTemplatesPerUser);
 
         mSensorProperties = new FingerprintSensorPropertiesInternal(context, sensorId,
                 Utils.authenticatorStrengthToPropertyStrength(strength), maxEnrollmentsPerUser,
-                sensorType, resetLockoutRequiresHardwareAuthToken);
+                new ArrayList<ComponentInfoInternal>() /* componentInfo */, sensorType,
+                resetLockoutRequiresHardwareAuthToken);
     }
 
     public static Fingerprint21 newInstance(@NonNull Context context, int sensorId, int strength,
@@ -387,7 +390,8 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
 
                 FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,
                         BiometricsProtoEnums.MODALITY_FINGERPRINT,
-                        BiometricsProtoEnums.ISSUE_HAL_DEATH);
+                        BiometricsProtoEnums.ISSUE_HAL_DEATH,
+                        -1 /* sensorId */);
             }
 
             mScheduler.recordCrashState();
@@ -398,7 +402,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     @VisibleForTesting
     synchronized IBiometricsFingerprint getDaemon() {
         if (mTestHalEnabled) {
-            final TestHal testHal = new TestHal();
+            final TestHal testHal = new TestHal(mContext, mSensorId);
             testHal.setNotify(mHalResultController);
             return testHal;
         }
@@ -515,7 +519,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
         return properties;
     }
 
-    @NonNull
+    @Nullable
     @Override
     public FingerprintSensorPropertiesInternal getSensorProperties(int sensorId) {
         return mSensorProperties;
@@ -526,7 +530,9 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
         // Fingerprint2.1 keeps track of lockout in the framework. Let's just do it on the handler
         // thread.
         mHandler.post(() -> {
-            mLockoutTracker.resetFailedAttemptsForUser(true /* clearAttemptCounter */, userId);
+            final FingerprintResetLockoutClient client = new FingerprintResetLockoutClient(mContext,
+                    userId, mContext.getOpPackageName(), sensorId, mLockoutTracker);
+            mScheduler.scheduleClientMonitor(client);
         });
     }
 
@@ -606,7 +612,7 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
     public void scheduleAuthenticate(int sensorId, @NonNull IBinder token, long operationId,
             int userId, int cookie, @NonNull ClientMonitorCallbackConverter listener,
             @NonNull String opPackageName, boolean restricted, int statsClient,
-            boolean isKeyguard) {
+            boolean allowBackgroundAuthentication) {
         mHandler.post(() -> {
             scheduleUpdateActiveUserWithoutHandler(userId);
 
@@ -615,7 +621,8 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
                     mContext, mLazyDaemon, token, listener, userId, operationId, restricted,
                     opPackageName, cookie, false /* requireConfirmation */,
                     mSensorProperties.sensorId, isStrongBiometric, statsClient,
-                    mTaskStackListener, mLockoutTracker, mUdfpsOverlayController, isKeyguard);
+                    mTaskStackListener, mLockoutTracker, mUdfpsOverlayController,
+                    allowBackgroundAuthentication);
             mScheduler.scheduleClientMonitor(client);
         });
     }
@@ -757,6 +764,11 @@ public class Fingerprint21 implements IHwBinder.DeathRecipient, ServiceProvider 
                     .getBiometricsForUser(mContext, userId).size());
             proto.end(userToken);
         }
+
+        proto.write(SensorStateProto.RESET_LOCKOUT_REQUIRES_HARDWARE_AUTH_TOKEN,
+                mSensorProperties.resetLockoutRequiresHardwareAuthToken);
+        proto.write(SensorStateProto.RESET_LOCKOUT_REQUIRES_CHALLENGE,
+                mSensorProperties.resetLockoutRequiresChallenge);
 
         proto.end(sensorToken);
     }

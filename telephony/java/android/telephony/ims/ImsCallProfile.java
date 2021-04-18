@@ -282,9 +282,22 @@ public final class ImsCallProfile implements Parcelable {
      * server infrastructure to get the picture. It can be set via
      * {@link #setCallExtra(String, String)}.
      *
+     * Note that this URL is not intended to be parsed by the IMS stack -- it should be sent
+     * directly to the network for consumption by the called party or forwarded directly from the
+     * network to the platform for caching and download.
+     *
      * Reference: RCC.20 Section 2.4.3.2
      */
     public static final String EXTRA_PICTURE_URL = "android.telephony.ims.extra.PICTURE_URL";
+
+    /**
+     * Boolean extra indicating whether the call is a business call.
+     *
+     * This extra will be set to {@code true} if and only if the SIP INVITE headers contain the
+     * "Organization" header.
+     */
+    public static final String EXTRA_IS_BUSINESS_CALL =
+            "android.telephony.ims.extra.IS_BUSINESS_CALL";
 
     /**
      * Values for EXTRA_OIR / EXTRA_CNAP
@@ -725,6 +738,10 @@ public final class ImsCallProfile implements Parcelable {
 
     /**
      * Set the call extra value (Parcelable), given the call extra name.
+     *
+     * Note that the {@link Parcelable} provided must be a class defined in the Android API surface,
+     * as opposed to a class defined by your app.
+     *
      * @param name call extra name
      * @param parcelable call extra value
      */
@@ -796,7 +813,9 @@ public final class ImsCallProfile implements Parcelable {
                 + ", emergencyCallTesting=" + mEmergencyCallTesting
                 + ", hasKnownUserIntentEmergency=" + mHasKnownUserIntentEmergency
                 + ", mRestrictCause=" + mRestrictCause
-                + ", mCallerNumberVerstat= " + mCallerNumberVerificationStatus + " }";
+                + ", mCallerNumberVerstat= " + mCallerNumberVerificationStatus
+                + ", mAcceptedRtpHeaderExtensions= " + mAcceptedRtpHeaderExtensionTypes
+                + " }";
     }
 
     @Override

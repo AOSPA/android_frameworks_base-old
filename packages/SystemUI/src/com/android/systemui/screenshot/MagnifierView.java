@@ -16,6 +16,9 @@
 
 package com.android.systemui.screenshot;
 
+import android.animation.Animator;
+import android.animation.AnimatorListenerAdapter;
+import android.annotation.NonNull;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.graphics.Canvas;
@@ -27,6 +30,7 @@ import android.graphics.drawable.Drawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewPropertyAnimator;
 
 import androidx.annotation.Nullable;
 
@@ -34,7 +38,7 @@ import com.android.systemui.R;
 
 /**
  * MagnifierView shows a full-res cropped circular display of a given ImageTileSet, contents and
- * positioning dereived from events from a CropView to which it listens.
+ * positioning derived from events from a CropView to which it listens.
  *
  * Not meant to be a general-purpose magnifier!
  */
@@ -54,7 +58,22 @@ public class MagnifierView extends View implements CropView.CropInteractionListe
     private float mCheckerboardBoxSize = 40;
 
     private float mLastCropPosition;
+    private float mLastCenter = 0.5f;
     private CropView.CropBoundary mCropBoundary;
+
+    private ViewPropertyAnimator mTranslationAnimator;
+    private final Animator.AnimatorListener mTranslationAnimatorListener =
+            new AnimatorListenerAdapter() {
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            mTranslationAnimator = null;
+        }
+
+        @Override
+        public void onAnimationEnd(Animator animation) {
+            mTranslationAnimator = null;
+        }
+    };
 
     public MagnifierView(Context context, @Nullable AttributeSet attrs) {
         this(context, attrs, 0);
@@ -77,13 +96,12 @@ public class MagnifierView extends View implements CropView.CropInteractionListe
         mCheckerboardPaint.setColor(Color.GRAY);
     }
 
-    public void setImageTileset(ImageTileSet tiles) {
-        if (tiles != null) {
-            mDrawable = tiles.getDrawable();
-            mDrawable.setBounds(0, 0, tiles.getWidth(), tiles.getHeight());
-        } else {
-            mDrawable = null;
-        }
+    /**
+     * Set the drawable to be displayed by the magnifier.
+     */
+    public void setDrawable(@NonNull Drawable drawable, int width, int height) {
+        mDrawable = drawable;
+        mDrawable.setBounds(0, 0, width, height);
         invalidate();
     }
 
@@ -114,7 +132,7 @@ public class MagnifierView extends View implements CropView.CropInteractionListe
             canvas.save();
             // Translate such that the center of this view represents the center of the crop
             // boundary.
-            canvas.translate(-mDrawable.getBounds().width() / 2 + getWidth() / 2,
+            canvas.translate(-mDrawable.getBounds().width() * mLastCenter + getWidth() / 2,
                     -mDrawable.getBounds().height() * mLastCropPosition + getHeight() / 2);
             mDrawable.draw(canvas);
             canvas.restore();
@@ -131,8 +149,11 @@ public class MagnifierView extends View implements CropView.CropInteractionListe
 
     @Override
     public void onCropMotionEvent(MotionEvent event, CropView.CropBoundary boundary,
-            float cropPosition, int cropPositionPx) {
+            float cropPosition, int cropPositionPx, float horizontalCenter) {
         mCropBoundary = boundary;
+        mLastCenter = horizontalCenter;
+        boolean touchOnRight = event.getX() > getParentWidth() / 2;
+        float translateXTarget = touchOnRight ? 0 : getParentWidth() - getWidth();
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 mLastCropPosition = cropPosition;
@@ -144,11 +165,22 @@ public class MagnifierView extends View implements CropView.CropInteractionListe
                 setAlpha(0f);
                 setTranslationX((getParentWidth() - getWidth()) / 2);
                 setVisibility(View.VISIBLE);
-                boolean touchOnRight = event.getX() > getParentWidth() / 2;
-                float translateXTarget = touchOnRight ? 0 : getParentWidth() - getWidth();
-                animate().alpha(1f).translationX(translateXTarget).scaleX(1f).scaleY(1f).start();
+                mTranslationAnimator =
+                        animate().alpha(1f).translationX(translateXTarget).scaleX(1f).scaleY(1f);
+                mTranslationAnimator.setListener(mTranslationAnimatorListener);
+                mTranslationAnimator.start();
                 break;
             case MotionEvent.ACTION_MOVE:
+                // The touch is near the middle if it's within 10% of the center point.
+                // We don't want to animate horizontally if the touch is near the middle.
+                boolean nearMiddle = Math.abs(event.getX() - getParentWidth() / 2)
+                        < getParentWidth() / 10f;
+                boolean viewOnLeft = getTranslationX() < (getParentWidth() - getWidth()) / 2;
+                if (!nearMiddle && viewOnLeft != touchOnRight && mTranslationAnimator == null) {
+                    mTranslationAnimator = animate().translationX(translateXTarget);
+                    mTranslationAnimator.setListener(mTranslationAnimatorListener);
+                    mTranslationAnimator.start();
+                }
                 mLastCropPosition = cropPosition;
                 setTranslationY(cropPositionPx - getHeight() / 2);
                 invalidate();

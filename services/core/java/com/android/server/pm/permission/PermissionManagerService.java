@@ -24,19 +24,18 @@ import static android.app.AppOpsManager.MODE_IGNORED;
 import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISALLOWED;
 import static android.content.pm.ApplicationInfo.AUTO_REVOKE_DISCOURAGED;
 import static android.content.pm.PackageManager.FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT;
-import static android.content.pm.PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_APPLY_RESTRICTION;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_DEFAULT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_GRANTED_BY_ROLE;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_ONE_TIME;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_POLICY_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVIEW_REQUIRED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKED_COMPAT;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_REVOKE_WHEN_REQUESTED;
+import static android.content.pm.PackageManager.FLAG_PERMISSION_SELECTED_LOCATION_ACCURACY;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_SYSTEM_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_FIXED;
 import static android.content.pm.PackageManager.FLAG_PERMISSION_USER_SET;
@@ -68,15 +67,10 @@ import android.app.ActivityManager;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.admin.DevicePolicyManagerInternal;
-import android.app.role.RoleManager;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
-import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.PermissionGroupInfoFlags;
 import android.content.pm.PackageManager.PermissionInfoFlags;
@@ -86,17 +80,18 @@ import android.content.pm.PackageParser;
 import android.content.pm.ParceledListSlice;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
-import android.content.pm.UserInfo;
 import android.content.pm.parsing.component.ParsedPermission;
 import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.permission.SplitPermissionInfoParcelable;
 import android.metrics.LogMaker;
 import android.os.AsyncTask;
+import android.content.AttributionSource;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Debug;
 import android.os.Handler;
 import android.os.HandlerThread;
+import android.os.IBinder;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Process;
@@ -166,6 +161,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.WeakHashMap;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
@@ -260,6 +256,10 @@ public class PermissionManagerService extends IPermissionManager.Stub {
     @GuardedBy("mLock")
     @NonNull
     private final PermissionRegistry mRegistry = new PermissionRegistry();
+
+    @NonNull
+    private final AttributionSourceRegistry mAttributionSourceRegistry =
+            new AttributionSourceRegistry();
 
     @GuardedBy("mLock")
     @Nullable
@@ -401,105 +401,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 new PermissionManagerServiceInternalImpl();
         LocalServices.addService(PermissionManagerServiceInternal.class, localService);
         LocalServices.addService(PermissionManagerInternal.class, localService);
-
-        context.getMainThreadHandler().post(() -> context.registerReceiver(new BroadcastReceiver() {
-            @Override
-            public void onReceive(Context context, Intent intent) {
-                if (!Intent.ACTION_BOOT_COMPLETED.equals(intent.getAction())) {
-                    return;
-                }
-
-                try {
-                    fixBgMicCamera(context);
-                } catch (Throwable t) {
-                    // Don't crash the system if this fails for any reason. Any intermediate state
-                    // this can leave the permissions in is okay and in the worst case the state is
-                    // the same as before the user rebooted.
-                    Log.e(LOG_TAG, "Unable to fix background permissions", t);
-                }
-            }
-
-
-            private void fixBgMicCamera(Context context) {
-                PackageManager pm = context.getPackageManager();
-                for (UserInfo userInfo : context.getSystemService(UserManager.class).getUsers()) {
-                    UserHandle user = userInfo.getUserHandle();
-                    List<String> assistants = context.getSystemService(RoleManager.class)
-                            .getRoleHoldersAsUser(RoleManager.ROLE_ASSISTANT, user);
-                    List<PackageInfo> packages =
-                            pm.getInstalledPackagesAsUser(PackageManager.MATCH_SYSTEM_ONLY
-                                    | PackageManager.GET_PERMISSIONS, user.getIdentifier());
-                    for (PackageInfo packageInfo : packages) {
-                        String[] requestedPermissions = packageInfo.requestedPermissions;
-                        if (requestedPermissions == null) {
-                            continue;
-                        }
-                        for (String permName : requestedPermissions) {
-                            String pkg = packageInfo.packageName;
-                            switch (permName) {
-                                case Manifest.permission.BACKGROUND_CAMERA:
-                                    removeFromAllowlistsAndRevoke(pm, pkg, permName, user);
-                                    break;
-                                case Manifest.permission.RECORD_BACKGROUND_AUDIO:
-                                    if (assistants.contains(pkg)) {
-                                        removeFromAllowlistsAndRevokeForAssistant(pm, pkg, permName,
-                                                user);
-                                    } else {
-                                        removeFromAllowlistsAndRevoke(pm, pkg, permName, user);
-                                    }
-                                    break;
-                            }
-                        }
-                    }
-                }
-            }
-
-            private void removeFromAllowlistsAndRevoke(PackageManager pm, String pkg,
-                    String permName, UserHandle user) {
-                if ((pm.getPermissionFlags(permName, pkg, user)
-                        & FLAGS_PERMISSION_RESTRICTION_ANY_EXEMPT) != 0) {
-                    Slog.i(LOG_TAG, "removing " + pkg + " " + permName + " from all allowlists");
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_UPGRADE);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_SYSTEM);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_INSTALLER);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_ALLOWLIST_ROLE);
-                }
-                if (pm.checkPermission(permName, pkg) == PackageManager.PERMISSION_GRANTED) {
-                    Slog.i(LOG_TAG, "revoking " + pkg + " " + permName);
-                    pm.revokeRuntimePermission(pkg, permName, user);
-                }
-            }
-
-            private void removeFromAllowlistsAndRevokeForAssistant(PackageManager pm, String pkg,
-                    String permName, UserHandle user) {
-                int anyNonRoleExempt =
-                        FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT
-                                | FLAG_PERMISSION_RESTRICTION_SYSTEM_EXEMPT
-                                | FLAG_PERMISSION_RESTRICTION_UPGRADE_EXEMPT;
-
-                if ((pm.getPermissionFlags(permName, pkg, user) & anyNonRoleExempt) != 0) {
-                    Slog.i(LOG_TAG, "removing " + pkg + " " + permName
-                            + " from all allowlists except role");
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_UPGRADE);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_SYSTEM);
-                    pm.removeWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_WHITELIST_INSTALLER);
-                }
-                if ((pm.getPermissionFlags(permName, pkg, user)
-                        & FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT) == 0) {
-                    Slog.i(LOG_TAG, "adding " + pkg + " " + permName
-                            + " to role allowlist");
-                    pm.addWhitelistedRestrictedPermission(pkg, permName,
-                            FLAG_PERMISSION_ALLOWLIST_ROLE);
-                }
-            }
-        }, new IntentFilter(Intent.ACTION_BOOT_COMPLETED)));
     }
 
     @Override
@@ -876,10 +777,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
             isRuntimePermission = bp.isRuntime();
 
-            if (bp.isInstallerExemptIgnored()) {
-                flagValues &= ~FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-            }
-
             final UidPermissionState uidState = getUidStateLocked(pkg, userId);
             if (uidState == null) {
                 Slog.e(TAG, "Missing permissions state for " + packageName + " and user " + userId);
@@ -1123,8 +1020,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         Preconditions.checkFlagsArgument(flags,
                 PackageManager.FLAG_PERMISSION_WHITELIST_UPGRADE
                         | PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER
-                        | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE);
+                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER);
         Preconditions.checkArgumentNonNegative(userId, null);
 
         if (UserHandle.getCallingUserId() != userId) {
@@ -1148,9 +1044,9 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final boolean isCallerInstallerOnRecord =
                 mPackageManagerInt.isCallerInstallerOfRecord(pkg, callingUid);
 
-        if ((flags & (PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE)) != 0 && !isCallerPrivileged) {
-            throw new SecurityException("Querying system or role allowlist requires "
+        if ((flags & PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM) != 0
+                && !isCallerPrivileged) {
+            throw new SecurityException("Querying system allowlist requires "
                     + Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS);
         }
 
@@ -1191,9 +1087,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             }
             if ((flags & PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER) != 0) {
                 queryFlags |= FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-            }
-            if ((flags & PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE) != 0) {
-                queryFlags |=  FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
             }
 
             ArrayList<String> allowlistedPermissions = null;
@@ -1287,8 +1180,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         Preconditions.checkFlagsArgument(flags,
                 PackageManager.FLAG_PERMISSION_WHITELIST_UPGRADE
                         | PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER
-                        | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE);
+                        | PackageManager.FLAG_PERMISSION_WHITELIST_INSTALLER);
         Preconditions.checkArgument(Integer.bitCount(flags) == 1);
         Preconditions.checkArgumentNonNegative(userId, null);
 
@@ -1314,10 +1206,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         final boolean isCallerInstallerOnRecord =
                 mPackageManagerInt.isCallerInstallerOfRecord(pkg, callingUid);
 
-        if ((flags & (PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM
-                | PackageManager.FLAG_PERMISSION_ALLOWLIST_ROLE)) != 0
-                && !isCallerPrivileged) {
-            throw new SecurityException("Modifying system or role allowlist requires "
+        if ((flags & PackageManager.FLAG_PERMISSION_WHITELIST_SYSTEM) != 0 && !isCallerPrivileged) {
+            throw new SecurityException("Modifying system allowlist requires "
                     + Manifest.permission.WHITELIST_RESTRICTED_PERMISSIONS);
         }
 
@@ -1455,7 +1345,7 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             boolean overridePolicy, int callingUid, final int userId, PermissionCallback callback) {
         if (PermissionManager.DEBUG_TRACE_GRANTS
                 && PermissionManager.shouldTraceGrant(packageName, permName, userId)) {
-            Log.i(TAG, "System is granting " + packageName + " "
+            Log.i(PermissionManager.LOG_TAG_TRACE_GRANTS, "System is granting " + packageName + " "
                     + permName + " for user " + userId + " on behalf of uid " + callingUid
                     + " " + mPackageManagerInt.getNameForUid(callingUid),
                     new RuntimeException());
@@ -1775,7 +1665,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 | FLAG_PERMISSION_USER_FIXED
                 | FLAG_PERMISSION_REVOKED_COMPAT
                 | FLAG_PERMISSION_REVIEW_REQUIRED
-                | FLAG_PERMISSION_ONE_TIME;
+                | FLAG_PERMISSION_ONE_TIME
+                | FLAG_PERMISSION_SELECTED_LOCATION_ACCURACY;
 
         final int policyOrSystemFlags = FLAG_PERMISSION_SYSTEM_FIXED
                 | FLAG_PERMISSION_POLICY_FIXED;
@@ -1914,9 +1805,12 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 // PermissionPolicyService will handle the app op for runtime permissions later.
                 grantRuntimePermissionInternal(packageName, permName, false,
                         Process.SYSTEM_UID, userId, delayingPermCallback);
-            // If permission review is enabled the permissions for a legacy apps
-            // are represented as constantly granted runtime ones, so don't revoke.
-            } else if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0) {
+            // In certain cases we should leave the state unchanged:
+            // -- If permission review is enabled the permissions for a legacy apps
+            // are represented as constantly granted runtime ones
+            // -- If the permission was split from a non-runtime permission
+            } else if ((flags & FLAG_PERMISSION_REVIEW_REQUIRED) == 0
+                    && !isPermissionSplitFromNonRuntime(permName, targetSdk)) {
                 // Otherwise, reset the permission.
                 revokeRuntimePermissionInternal(packageName, permName, false, Process.SYSTEM_UID,
                         userId, null, delayingPermCallback);
@@ -1946,6 +1840,27 @@ public class PermissionManagerService extends IPermissionManager.Stub {
 
         mPackageManagerInt.writePermissionSettings(syncUpdatedUsers.toArray(), false);
         mPackageManagerInt.writePermissionSettings(asyncUpdatedUsers.toArray(), true);
+    }
+
+    /**
+     * Determine if the given permission should be treated as split from a
+     * non-runtime permission for an application targeting the given SDK level.
+     */
+    private boolean isPermissionSplitFromNonRuntime(String permName, int targetSdk) {
+        final List<PermissionManager.SplitPermissionInfo> splitPerms = getSplitPermissionInfos();
+        final int size = splitPerms.size();
+        for (int i = 0; i < size; i++) {
+            final PermissionManager.SplitPermissionInfo splitPerm = splitPerms.get(i);
+            if (targetSdk < splitPerm.getTargetSdk()
+                    && splitPerm.getNewPermissions().contains(permName)) {
+                synchronized (mLock) {
+                    final Permission perm =
+                            mRegistry.getPermission(splitPerm.getSplitPermission());
+                    return perm != null && !perm.isRuntime();
+                }
+            }
+        }
+        return false;
     }
 
     /**
@@ -3055,7 +2970,8 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                 >= Build.VERSION_CODES.M;
 
         for (String permission : ps.getGrantedPermissions()) {
-            if (!pkg.getImplicitPermissions().contains(permission)) {
+            if (pkg.getRequestedPermissions().contains(permission)
+                    && !pkg.getImplicitPermissions().contains(permission)) {
                 Permission bp = mRegistry.getPermission(permission);
                 if (bp != null && bp.isRuntime()) {
                     int flags = ps.getPermissionFlags(permission);
@@ -3319,6 +3235,16 @@ public class PermissionManagerService extends IPermissionManager.Stub {
         } finally {
             Binder.restoreCallingIdentity(token);
         }
+    }
+
+    @Override
+    public @NonNull AttributionSource registerAttributionSource(@NonNull AttributionSource source) {
+        return mAttributionSourceRegistry.registerAttributionSource(source);
+    }
+
+    @Override
+    public boolean isRegisteredAttributionSource(@NonNull AttributionSource source) {
+        return mAttributionSourceRegistry.isRegisteredAttributionSource(source);
     }
 
     @Override
@@ -3589,13 +3515,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             // Special permissions for the device configurator.
             allowed = true;
         }
-        if (!allowed && bp.isWellbeing()
-                && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
-                        PackageManagerInternal.PACKAGE_WELLBEING, UserHandle.USER_SYSTEM),
-                pkg.getPackageName())) {
-            // Special permission granted only to the OEM specified wellbeing app
-            allowed = true;
-        }
         if (!allowed && bp.isDocumenter()
                 && ArrayUtils.contains(mPackageManagerInt.getKnownPackageNames(
                         PackageManagerInternal.PACKAGE_DOCUMENTER, UserHandle.USER_SYSTEM),
@@ -3820,15 +3739,6 @@ public class PermissionManagerService extends IPermissionManager.Stub {
                             newFlags |= FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
                         } else {
                             newFlags &= ~FLAG_PERMISSION_RESTRICTION_INSTALLER_EXEMPT;
-                        }
-                    }
-                    break;
-                    case FLAG_PERMISSION_ALLOWLIST_ROLE: {
-                        mask |= FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
-                        if (permissions != null && permissions.contains(permissionName)) {
-                            newFlags |= FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
-                        } else {
-                            newFlags &= ~FLAG_PERMISSION_RESTRICTION_ROLE_EXEMPT;
                         }
                     }
                     break;
@@ -5370,6 +5280,75 @@ public class PermissionManagerService extends IPermissionManager.Stub {
             // null permissions means all permissions are targeted
             return mDelegatedPermissionNames == null
                     || mDelegatedPermissionNames.contains(permissionName);
+        }
+    }
+
+    private static final class AttributionSourceRegistry {
+        private final Object mLock = new Object();
+
+        private final WeakHashMap<IBinder, AttributionSource> mAttributions = new WeakHashMap<>();
+
+        public @NonNull AttributionSource registerAttributionSource(
+                @NonNull AttributionSource source) {
+            //   Here we keep track of attribution sources that were created by an app
+            // from an attribution chain that called into the app and the apps's
+            // own attribution source. An app can register an attribution chain up
+            // to itself inclusive if and only if it is adding a node for itself which
+            // optionally points to an attribution chain that was created by each
+            // preceding app recursively up to the beginning of the chain.
+            //   The only special case is when the first app in the attribution chain
+            // creates a source that points to another app (not a chain of apps). We
+            // allow this even if the source the app points to is not registered since
+            // in app ops we allow every app to blame every other app (untrusted if not
+            // holding a special permission).
+            //  This technique ensures that a bad actor in the middle of the attribution
+            // chain can neither prepend nor append an invalid attribution sequence, i.e.
+            // a sequence that is not constructed by trusted sources up to the that bad
+            // actor's app.
+            //   Note that passing your attribution source to another app means you allow
+            // it to blame private data access on your app. This can be mediated by the OS
+            // in, which case security is already enforced; by other app's code running in
+            // your process calling into the other app, in which case it can already access
+            // the private data in your process; or by you explicitly calling to another
+            // app passing the source, in which case you must trust the other side;
+
+            final int callingUid = Binder.getCallingUid();
+            if (source.getUid() != callingUid) {
+                throw new SecurityException("Cannot register attribution source for uid:"
+                        + source.getUid() + " from uid:" + callingUid);
+            }
+
+            final PackageManagerInternal packageManagerInternal = LocalServices.getService(
+                    PackageManagerInternal.class);
+            if (packageManagerInternal.getPackageUid(source.getPackageName(), 0,
+                    UserHandle.getUserId(callingUid)) != source.getUid()) {
+                throw new SecurityException("Cannot register attribution source for package:"
+                        + source.getPackageName() + " from uid:" + callingUid);
+            }
+
+            final AttributionSource next = source.getNext();
+            if (next != null && next.getNext() != null
+                    && !isRegisteredAttributionSource(next)) {
+                throw new SecurityException("Cannot register forged attribution source:"
+                        + source);
+            }
+
+            synchronized (mLock) {
+                final IBinder token = new Binder();
+                final AttributionSource result = source.withToken(token);
+                mAttributions.put(token, result);
+                return result;
+            }
+        }
+
+        public boolean isRegisteredAttributionSource(@NonNull AttributionSource source) {
+            synchronized (mLock) {
+                final AttributionSource cachedSource = mAttributions.get(source.getToken());
+                if (cachedSource != null) {
+                    return cachedSource.equals(source);
+                }
+                return false;
+            }
         }
     }
 }

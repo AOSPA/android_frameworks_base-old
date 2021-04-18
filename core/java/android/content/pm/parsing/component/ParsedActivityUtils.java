@@ -16,6 +16,7 @@
 
 package android.content.pm.parsing.component;
 
+import static android.content.pm.ActivityInfo.LAUNCH_SINGLE_INSTANCE_PER_TASK;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.pm.parsing.component.ComponentParseUtils.flag;
 
@@ -23,6 +24,7 @@ import android.annotation.NonNull;
 import android.app.ActivityTaskManager;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
+import android.content.pm.PackageParser;
 import android.content.pm.parsing.ParsingPackage;
 import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.parsing.ParsingUtils;
@@ -147,7 +149,10 @@ public class ParsedActivityUtils {
                         | flag(ActivityInfo.FLAG_TURN_SCREEN_ON, R.styleable.AndroidManifestActivity_turnScreenOn, sa)
                         | flag(ActivityInfo.FLAG_PREFER_MINIMAL_POST_PROCESSING, R.styleable.AndroidManifestActivity_preferMinimalPostProcessing, sa);
 
-                activity.privateFlags |= flag(ActivityInfo.FLAG_INHERIT_SHOW_WHEN_LOCKED, R.styleable.AndroidManifestActivity_inheritShowWhenLocked, sa);
+                activity.privateFlags |= flag(ActivityInfo.FLAG_INHERIT_SHOW_WHEN_LOCKED,
+                        R.styleable.AndroidManifestActivity_inheritShowWhenLocked, sa)
+                        | flag(ActivityInfo.PRIVATE_FLAG_HOME_TRANSITION_SOUND,
+                        R.styleable.AndroidManifestActivity_playHomeTransitionSound, true, sa);
 
                 activity.colorMode = sa.getInt(R.styleable.AndroidManifestActivity_colorMode, ActivityInfo.COLOR_MODE_DEFAULT);
                 activity.documentLaunchMode = sa.getInt(R.styleable.AndroidManifestActivity_documentLaunchMode, ActivityInfo.DOCUMENT_LAUNCH_NONE);
@@ -206,6 +211,11 @@ public class ParsedActivityUtils {
             if (visibleToEphemeral) {
                 activity.flags |= ActivityInfo.FLAG_VISIBLE_TO_INSTANT_APP;
                 pkg.setVisibleToInstantApps(true);
+            }
+
+            String attributionTags = sa.getString(R.styleable.AndroidManifestActivity_attributionTags);
+            if (attributionTags != null) {
+                activity.attributionTags = attributionTags.split("\\|");
             }
 
             return parseActivityOrAlias(activity, pkg, tag, parser, res, sa, receiver,
@@ -399,6 +409,16 @@ public class ParsedActivityUtils {
 
             if (result.isError()) {
                 return input.error(result);
+            }
+        }
+
+        if (!isAlias && activity.launchMode != LAUNCH_SINGLE_INSTANCE_PER_TASK
+                && activity.metaData != null && activity.metaData.containsKey(
+                PackageParser.METADATA_ACTIVITY_LAUNCH_MODE)) {
+            final String launchMode = activity.metaData.getString(
+                    PackageParser.METADATA_ACTIVITY_LAUNCH_MODE);
+            if (launchMode != null && launchMode.equals("singleInstancePerTask")) {
+                activity.launchMode = LAUNCH_SINGLE_INSTANCE_PER_TASK;
             }
         }
 

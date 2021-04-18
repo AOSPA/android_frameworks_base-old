@@ -16,29 +16,37 @@
 
 package com.android.server.translation;
 
-import static android.view.translation.TranslationManager.STATUS_SYNC_CALL_SUCCESS;
+import static android.view.translation.UiTranslationManager.EXTRA_SOURCE_LOCALE;
+import static android.view.translation.UiTranslationManager.EXTRA_STATE;
+import static android.view.translation.UiTranslationManager.EXTRA_TARGET_LOCALE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.IRemoteCallback;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
+import android.os.ResultReceiver;
 import android.service.translation.TranslationServiceInfo;
 import android.util.Slog;
 import android.view.autofill.AutofillId;
+import android.view.inputmethod.InputMethodInfo;
+import android.view.translation.TranslationContext;
 import android.view.translation.TranslationSpec;
 import android.view.translation.UiTranslationManager.UiTranslationState;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
-import com.android.internal.util.SyncResultReceiver;
 import com.android.server.LocalServices;
 import com.android.server.infra.AbstractPerUserSystemService;
+import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal;
 import com.android.server.wm.ActivityTaskManagerInternal.ActivityTokens;
 
-import java.util.ArrayList;
 import java.util.List;
 
 final class TranslationManagerServiceImpl extends
@@ -54,6 +62,9 @@ final class TranslationManagerServiceImpl extends
     @Nullable
     private ServiceInfo mRemoteTranslationServiceInfo;
 
+    @GuardedBy("mLock")
+    private TranslationServiceInfo mTranslationServiceInfo;
+
     private ActivityTaskManagerInternal mActivityTaskManagerInternal;
 
     protected TranslationManagerServiceImpl(
@@ -68,10 +79,10 @@ final class TranslationManagerServiceImpl extends
     @Override // from PerUserSystemService
     protected ServiceInfo newServiceInfoLocked(@NonNull ComponentName serviceComponent)
             throws PackageManager.NameNotFoundException {
-        final TranslationServiceInfo info = new TranslationServiceInfo(getContext(),
+        mTranslationServiceInfo = new TranslationServiceInfo(getContext(),
                 serviceComponent, isTemporaryServiceSetLocked(), mUserId);
-        mRemoteTranslationServiceInfo = info.getServiceInfo();
-        return info.getServiceInfo();
+        mRemoteTranslationServiceInfo = mTranslationServiceInfo.getServiceInfo();
+        return mTranslationServiceInfo.getServiceInfo();
     }
 
     @GuardedBy("mLock")
@@ -113,43 +124,122 @@ final class TranslationManagerServiceImpl extends
     }
 
     @GuardedBy("mLock")
-    void getSupportedLocalesLocked(@NonNull IResultReceiver resultReceiver) {
-        // TODO: implement this
-        try {
-            resultReceiver.send(STATUS_SYNC_CALL_SUCCESS,
-                    SyncResultReceiver.bundleFor(new ArrayList<>()));
-        } catch (RemoteException e) {
-            Slog.w(TAG, "RemoteException returning supported locales: " + e);
-        }
-    }
-
-    @GuardedBy("mLock")
-    void onSessionCreatedLocked(@NonNull TranslationSpec sourceSpec,
-            @NonNull TranslationSpec destSpec, int sessionId, IResultReceiver resultReceiver) {
+    void onTranslationCapabilitiesRequestLocked(@TranslationSpec.DataFormat int sourceFormat,
+            @TranslationSpec.DataFormat int destFormat,
+            @NonNull ResultReceiver resultReceiver) {
         final RemoteTranslationService remoteService = ensureRemoteServiceLocked();
         if (remoteService != null) {
-            remoteService.onSessionCreated(sourceSpec, destSpec, sessionId, resultReceiver);
+            remoteService.onTranslationCapabilitiesRequest(sourceFormat, destFormat,
+                    resultReceiver);
         }
     }
 
     @GuardedBy("mLock")
-    public void updateUiTranslationState(@UiTranslationState int state,
-            TranslationSpec sourceSpec, TranslationSpec destSpec, List<AutofillId> viewIds,
+    void onSessionCreatedLocked(@NonNull TranslationContext translationContext, int sessionId,
+            IResultReceiver resultReceiver) {
+        final RemoteTranslationService remoteService = ensureRemoteServiceLocked();
+        if (remoteService != null) {
+            remoteService.onSessionCreated(translationContext, sessionId, resultReceiver);
+        }
+    }
+
+    @GuardedBy("mLock")
+    public void updateUiTranslationStateLocked(@UiTranslationState int state,
+            TranslationSpec sourceSpec, TranslationSpec targetSpec, List<AutofillId> viewIds,
             int taskId) {
-        // TODO(b/177394471): use taskId as a temporary solution. The solution may use a token to
-        //  content capture manager service find the activitytoken. Then we can use this
-        //  activitytoken to find the activity to callback. But we need to change cc API so use
-        //  temporary solution.
-        final ActivityTokens tokens = mActivityTaskManagerInternal.getTopActivityForTask(taskId);
-        if (tokens == null) {
+        // deprecated
+        final ActivityTokens taskTopActivityTokens =
+                mActivityTaskManagerInternal.getTopActivityForTask(taskId);
+        if (taskTopActivityTokens == null) {
             Slog.w(TAG, "Unknown activity to query for update translation state.");
             return;
         }
+        updateUiTranslationStateByActivityTokens(taskTopActivityTokens, state, sourceSpec,
+                targetSpec, viewIds);
+    }
+
+    @GuardedBy("mLock")
+    public void updateUiTranslationStateLocked(@UiTranslationState int state,
+            TranslationSpec sourceSpec, TranslationSpec targetSpec, List<AutofillId> viewIds,
+            IBinder token, int taskId) {
+        // Get top activity for a given task id
+        final ActivityTokens taskTopActivityTokens =
+                mActivityTaskManagerInternal.getTopActivityForTask(taskId);
+        if (taskTopActivityTokens == null
+                || taskTopActivityTokens.getShareableActivityToken() != token) {
+            Slog.w(TAG, "Unknown activity or it was finished to query for update "
+                    + "translation state for token=" + token + " taskId=" + taskId);
+            return;
+        }
+        updateUiTranslationStateByActivityTokens(taskTopActivityTokens, state, sourceSpec,
+                targetSpec, viewIds);
+    }
+
+    private void updateUiTranslationStateByActivityTokens(ActivityTokens tokens,
+            @UiTranslationState int state, TranslationSpec sourceSpec, TranslationSpec targetSpec,
+            List<AutofillId> viewIds) {
         try {
             tokens.getApplicationThread().updateUiTranslationState(tokens.getActivityToken(), state,
-                    sourceSpec, destSpec, viewIds);
+                    sourceSpec, targetSpec, viewIds);
         } catch (RemoteException e) {
             Slog.w(TAG, "Update UiTranslationState fail: " + e);
         }
+        invokeCallbacks(state, sourceSpec, targetSpec);
+    }
+
+    private void invokeCallbacks(
+            int state, TranslationSpec sourceSpec, TranslationSpec targetSpec) {
+        Bundle res = new Bundle();
+        res.putInt(EXTRA_STATE, state);
+        // TODO(177500482): Store the locale pair so it can be sent for RESUME events.
+        if (sourceSpec != null) {
+            res.putString(EXTRA_SOURCE_LOCALE, sourceSpec.getLanguage());
+            res.putString(EXTRA_TARGET_LOCALE, targetSpec.getLanguage());
+        }
+        // TODO(177500482): Only support the *current* Input Method.
+        List<InputMethodInfo> enabledInputMethods =
+                LocalServices.getService(InputMethodManagerInternal.class)
+                        .getEnabledInputMethodListAsUser(mUserId);
+        mCallbacks.broadcast((callback, uid) -> {
+            // Code here is non-optimal since it's temporary..
+            boolean isIme = false;
+            for (InputMethodInfo inputMethod : enabledInputMethods) {
+                if ((int) uid == inputMethod.getServiceInfo().applicationInfo.uid) {
+                    isIme = true;
+                }
+            }
+            // TODO(177500482): Invoke it for the application being translated too.
+            if (!isIme) {
+                return;
+            }
+            try {
+                callback.sendResult(res);
+            } catch (RemoteException e) {
+                Slog.w(TAG, "Failed to invoke UiTranslationStateCallback: " + e);
+            }
+        });
+    }
+
+    public void registerUiTranslationStateCallback(IRemoteCallback callback, int sourceUid) {
+        mCallbacks.register(callback, sourceUid);
+        // TODO(177500482): trigger the callback here if we're already translating the UI.
+    }
+
+    public void unregisterUiTranslationStateCallback(IRemoteCallback callback) {
+        mCallbacks.unregister(callback);
+    }
+
+    private final RemoteCallbackList<IRemoteCallback> mCallbacks = new RemoteCallbackList<>();
+
+    public ComponentName getServiceSettingsActivityLocked() {
+        if (mTranslationServiceInfo == null) {
+            return null;
+        }
+        final String activityName = mTranslationServiceInfo.getSettingsActivity();
+        if (activityName == null) {
+            return null;
+        }
+        final String packageName = mTranslationServiceInfo.getServiceInfo().packageName;
+        return new ComponentName(packageName, activityName);
     }
 }

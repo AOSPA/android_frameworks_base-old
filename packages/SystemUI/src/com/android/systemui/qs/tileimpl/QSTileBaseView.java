@@ -58,13 +58,13 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
     private static final int ICON_MASK_ID = com.android.internal.R.string.config_icon_mask;
     protected final Handler mHandler = new H();
     private final int[] mLocInScreen = new int[2];
-    private final FrameLayout mIconFrame;
+    protected final FrameLayout mIconFrame;
     protected QSIconView mIcon;
     protected RippleDrawable mRipple;
     protected Drawable mTileBackground;
     private String mAccessibilityClass;
     private boolean mTileState;
-    private boolean mCollapsedView;
+    protected boolean mCollapsedView;
     protected boolean mShowRippleEffect = true;
     private float mStrokeWidthActive;
     private float mStrokeWidthInactive;
@@ -259,22 +259,29 @@ public class QSTileBaseView extends com.android.systemui.plugins.qs.QSTileView {
         mIcon.setIcon(state, allowAnimations);
         setContentDescription(state.contentDescription);
         final StringBuilder stateDescription = new StringBuilder();
+        String text = "";
         switch (state.state) {
             case Tile.STATE_UNAVAILABLE:
-                stateDescription.append(mContext.getString(R.string.tile_unavailable));
+                text = mContext.getString(R.string.tile_unavailable);
                 break;
             case Tile.STATE_INACTIVE:
                 if (state instanceof QSTile.BooleanState) {
-                    stateDescription.append(mContext.getString(R.string.switch_bar_off));
+                    text = mContext.getString(R.string.switch_bar_off);
                 }
                 break;
             case Tile.STATE_ACTIVE:
                 if (state instanceof QSTile.BooleanState) {
-                    stateDescription.append(mContext.getString(R.string.switch_bar_on));
+                    text = mContext.getString(R.string.switch_bar_on);
                 }
                 break;
             default:
                 break;
+        }
+        if (!TextUtils.isEmpty(text)) {
+            stateDescription.append(text);
+            if (TextUtils.isEmpty(state.secondaryLabel)) {
+                state.secondaryLabel = text;
+            }
         }
         if (!TextUtils.isEmpty(state.stateDescription)) {
             stateDescription.append(", ");

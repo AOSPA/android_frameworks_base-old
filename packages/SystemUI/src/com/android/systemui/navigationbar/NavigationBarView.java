@@ -171,6 +171,7 @@ public class NavigationBarView extends FrameLayout implements
     private NotificationPanelViewController mPanelView;
     private FloatingRotationButton mFloatingRotationButton;
     private RotationButtonController mRotationButtonController;
+    private NavigationBarOverlayController mNavBarOverlayController;
 
     /**
      * Helper that is responsible for showing the right toast when a disallowed activity operation
@@ -278,9 +279,11 @@ public class NavigationBarView extends FrameLayout implements
             return;
         }
 
+        // When in gestural and the IME is showing, don't use the nearest region since it will take
+        // gesture space away from the IME
         info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
         info.touchableRegion.set(getButtonLocations(false /* includeFloatingRotationButton */,
-                false /* inScreen */));
+                false /* inScreen */, false /* useNearestRegion */));
     };
 
     private final Consumer<Boolean> mRotationButtonListener = (visible) -> {
@@ -339,8 +342,11 @@ public class NavigationBarView extends FrameLayout implements
                 isGesturalMode ? mFloatingRotationButton : rotateSuggestionButton,
                 mRotationButtonListener);
 
-        Dependency.get(NavigationBarOverlayController.class).init(
-                mNavbarOverlayVisibilityChangeCallback, mLightIconColor, mDarkIconColor);
+        mNavBarOverlayController = Dependency.get(NavigationBarOverlayController.class);
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
+            mNavBarOverlayController.init(
+                    mNavbarOverlayVisibilityChangeCallback, mLightIconColor, mDarkIconColor);
+        }
 
         mConfiguration = new Configuration();
         mTmpLastConfiguration = new Configuration();
@@ -431,8 +437,9 @@ public class NavigationBarView extends FrameLayout implements
 
         // The visibility of the navigation bar buttons is dependent on the transient state of
         // the navigation bar.
-        Dependency.get(NavigationBarOverlayController.class).setButtonState(
-                isTransient, /* force */ false);
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
+            mNavBarOverlayController.setButtonState(isTransient, /* force */ false);
+        }
     }
 
     void onBarTransition(int newMode) {
@@ -666,7 +673,9 @@ public class NavigationBarView extends FrameLayout implements
         }
         mImeVisible = visible;
         mRotationButtonController.getRotationButton().setCanShowRotationButton(!mImeVisible);
-        Dependency.get(NavigationBarOverlayController.class).setCanShow(!mImeVisible);
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
+            mNavBarOverlayController.setCanShow(!mImeVisible);
+        }
     }
 
     public void setDisabledFlags(int disabledFlags) {
@@ -974,7 +983,8 @@ public class NavigationBarView extends FrameLayout implements
      */
     public void notifyActiveTouchRegions() {
         mOverviewProxyService.onActiveNavBarRegionChanges(
-                getButtonLocations(true /* includeFloatingRotationButton */, true /* inScreen */));
+                getButtonLocations(true /* includeFloatingRotationButton */, true /* inScreen */,
+                        true /* useNearestRegion */));
     }
 
     private void updateButtonTouchRegionCache() {
@@ -985,36 +995,49 @@ public class NavigationBarView extends FrameLayout implements
                 .findViewById(R.id.nav_buttons)).getFullTouchableChildRegions();
     }
 
+    /**
+     * @param includeFloatingRotationButton Whether to include the floating rotation button in the
+     *                                      region for all the buttons
+     * @param inScreenSpace Whether to return values in screen space or window space
+     * @param useNearestRegion Whether to use the nearest region instead of the actual button bounds
+     * @return
+     */
     private Region getButtonLocations(boolean includeFloatingRotationButton,
-            boolean inScreenSpace) {
+            boolean inScreenSpace, boolean useNearestRegion) {
+        if (useNearestRegion && !inScreenSpace) {
+            // We currently don't support getting the nearest region in anything but screen space
+            useNearestRegion = false;
+        }
         mTmpRegion.setEmpty();
         updateButtonTouchRegionCache();
-        updateButtonLocation(getBackButton(), inScreenSpace);
-        updateButtonLocation(getHomeButton(), inScreenSpace);
-        updateButtonLocation(getRecentsButton(), inScreenSpace);
-        updateButtonLocation(getImeSwitchButton(), inScreenSpace);
-        updateButtonLocation(getAccessibilityButton(), inScreenSpace);
+        updateButtonLocation(getBackButton(), inScreenSpace, useNearestRegion);
+        updateButtonLocation(getHomeButton(), inScreenSpace, useNearestRegion);
+        updateButtonLocation(getRecentsButton(), inScreenSpace, useNearestRegion);
+        updateButtonLocation(getImeSwitchButton(), inScreenSpace, useNearestRegion);
+        updateButtonLocation(getAccessibilityButton(), inScreenSpace, useNearestRegion);
         if (includeFloatingRotationButton && mFloatingRotationButton.isVisible()) {
+            // Note: this button is floating so the nearest region doesn't apply
             updateButtonLocation(mFloatingRotationButton.getCurrentView(), inScreenSpace);
         } else {
-            updateButtonLocation(getRotateSuggestionButton(), inScreenSpace);
+            updateButtonLocation(getRotateSuggestionButton(), inScreenSpace, useNearestRegion);
         }
-        final NavigationBarOverlayController navBarButtonsController =
-                Dependency.get(NavigationBarOverlayController.class);
-        if (navBarButtonsController.isVisible()) {
-            updateButtonLocation(navBarButtonsController.getCurrentView(), inScreenSpace);
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()
+                && mNavBarOverlayController.isVisible()) {
+            // Note: this button is floating so the nearest region doesn't apply
+            updateButtonLocation(mNavBarOverlayController.getCurrentView(), inScreenSpace);
         }
         return mTmpRegion;
     }
 
-    private void updateButtonLocation(ButtonDispatcher button, boolean inScreenSpace) {
+    private void updateButtonLocation(ButtonDispatcher button, boolean inScreenSpace,
+            boolean useNearestRegion) {
         View view = button.getCurrentView();
         if (view == null || !button.isVisible()) {
             return;
         }
         // If the button is tappable from perspective of NearestTouchFrame, then we'll
         // include the regions where the tap is valid instead of just the button layout location
-        if (mButtonFullTouchableRegions.containsKey(view)) {
+        if (useNearestRegion && mButtonFullTouchableRegions.containsKey(view)) {
             mTmpRegion.op(mButtonFullTouchableRegions.get(view), Op.UNION);
             return;
         }
@@ -1135,6 +1158,8 @@ public class NavigationBarView extends FrameLayout implements
             int frameHeight = getResources().getDimensionPixelSize(
                     com.android.internal.R.dimen.navigation_bar_frame_height);
             mBarTransitions.setBackgroundFrame(new Rect(0, frameHeight - height, w, h));
+        } else {
+            mBarTransitions.setBackgroundFrame(null);
         }
 
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
@@ -1230,7 +1255,9 @@ public class NavigationBarView extends FrameLayout implements
         if (mRotationButtonController != null) {
             mRotationButtonController.registerListeners();
         }
-        Dependency.get(NavigationBarOverlayController.class).registerListeners();
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
+            mNavBarOverlayController.registerListeners();
+        }
 
         getViewTreeObserver().addOnComputeInternalInsetsListener(mOnComputeInternalInsetsListener);
         updateNavButtonIcons();
@@ -1247,7 +1274,10 @@ public class NavigationBarView extends FrameLayout implements
         if (mRotationButtonController != null) {
             mRotationButtonController.unregisterListeners();
         }
-        Dependency.get(NavigationBarOverlayController.class).unregisterListeners();
+
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
+            mNavBarOverlayController.unregisterListeners();
+        }
 
         mEdgeBackGestureHandler.onNavBarDetached();
         getViewTreeObserver().removeOnComputeInternalInsetsListener(
@@ -1303,6 +1333,7 @@ public class NavigationBarView extends FrameLayout implements
         if (mNavigationInflaterView != null) {
             mNavigationInflaterView.dump(pw);
         }
+        mBarTransitions.dump(pw);
         mContextualButtonGroup.dump(pw);
         mRecentsOnboarding.dump(pw);
         mRegionSamplingHelper.dump(pw);
@@ -1369,4 +1400,12 @@ public class NavigationBarView extends FrameLayout implements
     private final Consumer<Rect> mPipListener = bounds -> post(() -> {
         mEdgeBackGestureHandler.setPipStashExclusionBounds(bounds);
     });
+
+    void setNavigationBarLumaSamplingEnabled(boolean enable) {
+        if (enable) {
+            mRegionSamplingHelper.start(mSamplingBounds);
+        } else {
+            mRegionSamplingHelper.stop();
+        }
+    }
 }

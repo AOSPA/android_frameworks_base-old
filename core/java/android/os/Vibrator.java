@@ -186,7 +186,8 @@ public abstract class Vibrator {
     /**
      * Return the ID of this vibrator.
      *
-     * @return The id of the vibrator controlled by this service.
+     * @return A non-negative integer representing the id of the vibrator controlled by this
+     * service, or -1 this service is not attached to any physical vibrator.
      */
     public int getId() {
         return -1;
@@ -205,6 +206,28 @@ public abstract class Vibrator {
      * @return True if the hardware can control the amplitude of the vibrations, otherwise false.
      */
     public abstract boolean hasAmplitudeControl();
+
+    /**
+     * Gets the resonant frequency of the vibrator.
+     *
+     * @return the resonant frequency of the vibrator, or {@link Float#NaN NaN} if it's unknown or
+     *         this vibrator is a composite of multiple physical devices.
+     * @hide
+     */
+    public float getResonantFrequency() {
+        return Float.NaN;
+    }
+
+    /**
+     * Gets the <a href="https://en.wikipedia.org/wiki/Q_factor">Q factor</a> of the vibrator.
+     *
+     * @return the Q factor of the vibrator, or {@link Float#NaN NaN} if it's unknown or
+     *         this vibrator is a composite of multiple physical devices.
+     * @hide
+     */
+    public float getQFactor() {
+        return Float.NaN;
+    }
 
     /**
      * Configure an always-on haptics effect.
@@ -444,7 +467,7 @@ public abstract class Vibrator {
      */
     @NonNull
     public boolean[] arePrimitivesSupported(
-            @NonNull @VibrationEffect.Composition.Primitive int... primitiveIds) {
+            @NonNull @VibrationEffect.Composition.PrimitiveType int... primitiveIds) {
         return new boolean[primitiveIds.length];
     }
 
@@ -455,7 +478,7 @@ public abstract class Vibrator {
      * @return Whether primitives effects are supported.
      */
     public final boolean areAllPrimitivesSupported(
-            @NonNull @VibrationEffect.Composition.Primitive int... primitiveIds) {
+            @NonNull @VibrationEffect.Composition.PrimitiveType int... primitiveIds) {
         for (boolean supported : arePrimitivesSupported(primitiveIds)) {
             if (!supported) {
                 return false;

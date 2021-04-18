@@ -16,6 +16,7 @@
 
 package com.android.server.wm;
 
+import static com.android.server.wm.WindowFramesProto.COMPAT_FRAME;
 import static com.android.server.wm.WindowFramesProto.CONTAINING_FRAME;
 import static com.android.server.wm.WindowFramesProto.DISPLAY_FRAME;
 import static com.android.server.wm.WindowFramesProto.FRAME;
@@ -112,7 +113,7 @@ public class WindowFrames {
     }
 
     /**
-     * @return true if the width or height has changed since last reported to the client.
+     * @return true if the width or height has changed since last updating resizing window.
      */
     boolean didFrameSizeChange() {
         return (mLastFrame.width() != mFrame.width()) || (mLastFrame.height() != mFrame.height());
@@ -131,6 +132,13 @@ public class WindowFrames {
         mLastForceReportingResized |= mForceReportingResized;
         mFrameSizeChanged |= didFrameSizeChange();
         return mLastForceReportingResized || mFrameSizeChanged;
+    }
+
+    /**
+     * @return true if the width or height has changed since last reported to the client.
+     */
+    boolean isFrameSizeChangeReported() {
+        return mFrameSizeChanged || didFrameSizeChange();
     }
 
     /**
@@ -177,7 +185,7 @@ public class WindowFrames {
         mDisplayFrame.dumpDebug(proto, DISPLAY_FRAME);
         mContainingFrame.dumpDebug(proto, CONTAINING_FRAME);
         mFrame.dumpDebug(proto, FRAME);
-
+        mCompatFrame.dumpDebug(proto, COMPAT_FRAME);
         proto.end(token);
     }
 

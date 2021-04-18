@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -31,8 +32,8 @@ import java.util.Objects;
  * Media network event.
  */
 public final class NetworkEvent extends Event implements Parcelable {
-    /** Network type is not specified. Default type. */
-    public static final int NETWORK_TYPE_NONE = 0;
+    /** Network type is not known. Default type. */
+    public static final int NETWORK_TYPE_UNKNOWN = 0;
     /** Other network type */
     public static final int NETWORK_TYPE_OTHER = 1;
     /** Wi-Fi network */
@@ -49,13 +50,15 @@ public final class NetworkEvent extends Event implements Parcelable {
     public static final int NETWORK_TYPE_5G_NSA = 7;
     /** 5G SA network */
     public static final int NETWORK_TYPE_5G_SA = 8;
+    /** Not network connected */
+    public static final int NETWORK_TYPE_OFFLINE = 9;
 
     private final int mNetworkType;
     private final long mTimeSinceCreatedMillis;
 
     /** @hide */
     @IntDef(prefix = "NETWORK_TYPE_", value = {
-        NETWORK_TYPE_NONE,
+        NETWORK_TYPE_UNKNOWN,
         NETWORK_TYPE_OTHER,
         NETWORK_TYPE_WIFI,
         NETWORK_TYPE_ETHERNET,
@@ -63,7 +66,8 @@ public final class NetworkEvent extends Event implements Parcelable {
         NETWORK_TYPE_3G,
         NETWORK_TYPE_4G,
         NETWORK_TYPE_5G_NSA,
-        NETWORK_TYPE_5G_SA
+        NETWORK_TYPE_5G_SA,
+        NETWORK_TYPE_OFFLINE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface NetworkType {}
@@ -74,8 +78,8 @@ public final class NetworkEvent extends Event implements Parcelable {
      */
     public static String networkTypeToString(@NetworkType int value) {
         switch (value) {
-            case NETWORK_TYPE_NONE:
-                return "NETWORK_TYPE_NONE";
+            case NETWORK_TYPE_UNKNOWN:
+                return "NETWORK_TYPE_UNKNOWN";
             case NETWORK_TYPE_OTHER:
                 return "NETWORK_TYPE_OTHER";
             case NETWORK_TYPE_WIFI:
@@ -92,6 +96,8 @@ public final class NetworkEvent extends Event implements Parcelable {
                 return "NETWORK_TYPE_5G_NSA";
             case NETWORK_TYPE_5G_SA:
                 return "NETWORK_TYPE_5G_SA";
+            case NETWORK_TYPE_OFFLINE:
+                return "NETWORK_TYPE_OFFLINE";
             default:
                 return Integer.toHexString(value);
         }
@@ -102,9 +108,11 @@ public final class NetworkEvent extends Event implements Parcelable {
      *
      * @hide
      */
-    public NetworkEvent(@NetworkType int type, long timeSinceCreatedMillis) {
+    public NetworkEvent(@NetworkType int type, long timeSinceCreatedMillis,
+            @NonNull Bundle extras) {
         this.mNetworkType = type;
         this.mTimeSinceCreatedMillis = timeSinceCreatedMillis;
+        this.mMetricsBundle = extras == null ? null : extras.deepCopy();
     }
 
     /**
@@ -123,6 +131,16 @@ public final class NetworkEvent extends Event implements Parcelable {
     @IntRange(from = -1)
     public long getTimeSinceCreatedMillis() {
         return mTimeSinceCreatedMillis;
+    }
+
+    /**
+     * Gets metrics-related information that is not supported by dedicated methods.
+     * <p>It is intended to be used for backwards compatibility by the metrics infrastructure.
+     */
+    @Override
+    @NonNull
+    public Bundle getMetricsBundle() {
+        return mMetricsBundle;
     }
 
     @Override
@@ -151,6 +169,7 @@ public final class NetworkEvent extends Event implements Parcelable {
     public void writeToParcel(@NonNull android.os.Parcel dest, int flags) {
         dest.writeInt(mNetworkType);
         dest.writeLong(mTimeSinceCreatedMillis);
+        dest.writeBundle(mMetricsBundle);
     }
 
     @Override
@@ -162,9 +181,11 @@ public final class NetworkEvent extends Event implements Parcelable {
     /* package-private */ NetworkEvent(@NonNull android.os.Parcel in) {
         int type = in.readInt();
         long timeSinceCreatedMillis = in.readLong();
+        Bundle extras = in.readBundle();
 
         this.mNetworkType = type;
         this.mTimeSinceCreatedMillis = timeSinceCreatedMillis;
+        this.mMetricsBundle = extras;
     }
 
     /**
@@ -187,8 +208,9 @@ public final class NetworkEvent extends Event implements Parcelable {
      * A builder for {@link NetworkEvent}
      */
     public static final class Builder {
-        private int mNetworkType = NETWORK_TYPE_NONE;
+        private int mNetworkType = NETWORK_TYPE_UNKNOWN;
         private long mTimeSinceCreatedMillis = -1;
+        private Bundle mMetricsBundle = new Bundle();
 
         /**
          * Creates a new Builder.
@@ -214,9 +236,21 @@ public final class NetworkEvent extends Event implements Parcelable {
             return this;
         }
 
+        /**
+         * Sets metrics-related information that is not supported by dedicated
+         * methods.
+         * <p>It is intended to be used for backwards compatibility by the
+         * metrics infrastructure.
+         */
+        public @NonNull Builder setMetricsBundle(@NonNull Bundle metricsBundle) {
+            mMetricsBundle = metricsBundle;
+            return this;
+        }
+
         /** Builds the instance. */
         public @NonNull NetworkEvent build() {
-            NetworkEvent o = new NetworkEvent(mNetworkType, mTimeSinceCreatedMillis);
+            NetworkEvent o =
+                    new NetworkEvent(mNetworkType, mTimeSinceCreatedMillis, mMetricsBundle);
             return o;
         }
     }

@@ -23,6 +23,7 @@ import org.junit.runners.Suite;
 @Suite.SuiteClasses({
         AmbientDisplayPowerCalculatorTest.class,
         AudioPowerCalculatorTest.class,
+        BatteryChargeCalculatorTest.class,
         BatteryStatsCpuTimesTest.class,
         BatteryStatsBackgroundStatsTest.class,
         BatteryStatsBinderCallStatsTest.class,
@@ -30,6 +31,7 @@ import org.junit.runners.Suite;
         BatteryStatsDualTimerTest.class,
         BatteryStatsDurationTimerTest.class,
         BatteryStatsHelperTest.class,
+        BatteryStatsHistoryIteratorTest.class,
         BatteryStatsHistoryTest.class,
         BatteryStatsImplTest.class,
         BatteryStatsNoteTest.class,
@@ -40,6 +42,7 @@ import org.junit.runners.Suite;
         BatteryStatsTimeBaseTest.class,
         BatteryStatsTimerTest.class,
         BatteryStatsUidTest.class,
+        BatteryUsageStatsProviderTest.class,
         BatteryUsageStatsTest.class,
         BatteryStatsUserLifecycleTests.class,
         BluetoothPowerCalculatorTest.class,
@@ -47,7 +50,6 @@ import org.junit.runners.Suite;
         CameraPowerCalculatorTest.class,
         CpuPowerCalculatorTest.class,
         CustomMeasuredPowerCalculatorTest.class,
-        DischargedPowerCalculatorTest.class,
         FlashlightPowerCalculatorTest.class,
         GnssPowerCalculatorTest.class,
         IdlePowerCalculatorTest.class,
@@ -58,6 +60,7 @@ import org.junit.runners.Suite;
         KernelCpuUidFreqTimeReaderTest.class,
         KernelCpuUidUserSysTimeReaderTest.class,
         KernelMemoryBandwidthStatsTest.class,
+        KernelSingleProcessCpuThreadReaderTest.class,
         KernelSingleUidTimeReaderTest.class,
         KernelWakelockReaderTest.class,
         LongSamplingCounterTest.class,
@@ -67,13 +70,14 @@ import org.junit.runners.Suite;
         PowerProfileTest.class,
         ScreenPowerCalculatorTest.class,
         SensorPowerCalculatorTest.class,
+        SystemServerCpuThreadReaderTest.class,
         SystemServicePowerCalculatorTest.class,
         UserPowerCalculatorTest.class,
         VideoPowerCalculatorTest.class,
         WakelockPowerCalculatorTest.class,
+        WifiPowerCalculatorTest.class,
 
         com.android.internal.power.MeasuredEnergyStatsTest.class
     })
 public class BatteryStatsTests {
 }
-

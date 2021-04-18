@@ -110,6 +110,7 @@ import android.content.pm.UserInfo;
 import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Debug;
 import android.os.Handler;
@@ -173,13 +174,13 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     static final String TAG_TASKS = TAG + POSTFIX_TASKS;
 
     /** How long we wait until giving up on the last activity telling us it is idle. */
-    private static final int IDLE_TIMEOUT = 10 * 1000;
+    private static final int IDLE_TIMEOUT = 10 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     /** How long we can hold the sleep wake lock before giving up. */
-    private static final int SLEEP_TIMEOUT = 5 * 1000;
+    private static final int SLEEP_TIMEOUT = 5 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     // How long we can hold the launch wake lock before giving up.
-    private static final int LAUNCH_TIMEOUT = 10 * 1000;
+    private static final int LAUNCH_TIMEOUT = 10 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
     public static boolean mPerfSendTapHint = false;
     public static boolean mIsPerfBoostAcquired = false;
@@ -863,7 +864,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         r.getSavedState(), r.getPersistentSavedState(), results, newIntents,
                         r.takeOptions(), dc.isNextTransitionForward(),
                         proc.createProfilerInfoIfNeeded(), r.assistToken, activityClientController,
-                        r.createFixedRotationAdjustmentsIfNeeded()));
+                        r.createFixedRotationAdjustmentsIfNeeded(), r.shareableActivityToken));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -1556,7 +1557,13 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             // Prevent recursion.
             return;
         }
-        mService.getTransitionController().requestTransitionIfNeeded(TRANSIT_CLOSE, task);
+        if (task.isVisible()) {
+            mService.getTransitionController().requestTransitionIfNeeded(TRANSIT_CLOSE, task);
+        } else {
+            // Removing a non-visible task doesn't require a transition, but if there is one
+            // collecting, this should be a member just in case.
+            mService.getTransitionController().collect(task);
+        }
         task.mInRemoveTask = true;
         try {
             task.performClearTask(reason);
@@ -2298,19 +2305,6 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
         mService.getTaskChangeNotificationController().notifyActivityForcedResizable(
                 task.mTaskId, reason, topActivity.info.applicationInfo.packageName);
-    }
-
-    void activityRelaunchedLocked(IBinder token) {
-        final ActivityRecord r = ActivityRecord.isInRootTaskLocked(token);
-        if (r != null) {
-            r.finishRelaunching();
-            if (r.getRootTask().shouldSleepOrShutDownActivities()) {
-                // Activity is always relaunched to either resumed or paused state. If it was
-                // relaunched while hidden (by keyguard or smth else), it should be stopped.
-                r.getRootTask().ensureActivitiesVisible(null /* starting */, 0 /* configChanges */,
-                        false /* preserveWindows */);
-            }
-        }
     }
 
     void logRootTaskState() {

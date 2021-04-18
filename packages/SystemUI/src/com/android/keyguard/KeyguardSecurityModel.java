@@ -23,7 +23,6 @@ import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 
 import com.android.internal.widget.LockPatternUtils;
-import com.android.systemui.Dependency;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -50,23 +49,25 @@ public class KeyguardSecurityModel {
     private final boolean mIsPukScreenAvailable;
 
     private final LockPatternUtils mLockPatternUtils;
+    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
 
     @Inject
-    KeyguardSecurityModel(@Main Resources resources, LockPatternUtils lockPatternUtils) {
+    KeyguardSecurityModel(@Main Resources resources, LockPatternUtils lockPatternUtils,
+            KeyguardUpdateMonitor keyguardUpdateMonitor) {
         mIsPukScreenAvailable = resources.getBoolean(
                 com.android.internal.R.bool.config_enable_puk_unlock_screen);
         mLockPatternUtils = lockPatternUtils;
+        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
     }
 
     public SecurityMode getSecurityMode(int userId) {
-        KeyguardUpdateMonitor monitor = Dependency.get(KeyguardUpdateMonitor.class);
-
         if (mIsPukScreenAvailable && SubscriptionManager.isValidSubscriptionId(
-                monitor.getNextSubIdForState(TelephonyManager.SIM_STATE_PUK_REQUIRED))) {
+                mKeyguardUpdateMonitor.getNextSubIdForState(
+                        TelephonyManager.SIM_STATE_PUK_REQUIRED))) {
             return SecurityMode.SimPuk;
         }
 
-        int subId = monitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
+        int subId = mKeyguardUpdateMonitor.getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
         if (SubscriptionManager.isValidSubscriptionId((subId))){
             return SecurityMode.SimPin;
         }
@@ -92,5 +93,14 @@ public class KeyguardSecurityModel {
             default:
                 throw new IllegalStateException("Unknown security quality:" + security);
         }
+    }
+
+    /**
+     * Returns whether the given security view should be used in a "one handed" way. This can be
+     * used to change how the security view is drawn (e.g. take up less of the screen, and align to
+     * one side).
+     */
+    public static boolean isSecurityViewOneHanded(SecurityMode securityMode) {
+        return securityMode == SecurityMode.Pattern || securityMode == SecurityMode.PIN;
     }
 }

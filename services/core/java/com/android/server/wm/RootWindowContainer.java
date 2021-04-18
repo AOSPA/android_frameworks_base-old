@@ -273,7 +273,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     // Whether tasks have moved and we need to rank the tasks before next OOM scoring
     private boolean mTaskLayersChanged = true;
     private int mTmpTaskLayerRank;
-    private final LockedScheduler mRankTaskLayersScheduler;
+    private final RankTaskLayersRunnable mRankTaskLayersRunnable = new RankTaskLayersRunnable();
 
     private boolean mTmpBoolean;
     private RemoteException mTmpRemoteException;
@@ -451,12 +451,6 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         mTaskSupervisor = mService.mTaskSupervisor;
         mTaskSupervisor.mRootWindowContainer = this;
         mDisplayOffTokenAcquirer = mService.new SleepTokenAcquirerImpl("Display-off");
-        mRankTaskLayersScheduler = new LockedScheduler(mService) {
-            @Override
-            public void execute() {
-                rankTaskLayersIfNeeded();
-            }
-        };
     }
 
     boolean updateFocusedWindowLocked(int mode, boolean updateInputWindows) {
@@ -650,14 +644,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     @Override
-    public void onConfigurationChanged(Configuration newParentConfig) {
-        prepareFreezingTaskBounds();
-        super.onConfigurationChanged(newParentConfig);
-    }
-
-    private void prepareFreezingTaskBounds() {
-        for (int i = mChildren.size() - 1; i >= 0; i--) {
-            mChildren.get(i).prepareFreezingTaskBounds();
+    void dispatchConfigurationToChild(DisplayContent child, Configuration config) {
+        if (child.isDefaultDisplay) {
+            // The global configuration is also the override configuration of default display.
+            child.performDisplayOverrideConfigUpdate(config);
+        } else {
+            child.onConfigurationChanged(config);
         }
     }
 
@@ -1822,11 +1814,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * @return a list of activities which are the top ones in each visible root task. The first
-     * entry will be the focused activity.
+     * @return a list of pairs, containing activities and their task id which are the top ones in
+     * each visible root task. The first entry will be the focused activity.
      */
-    List<IBinder> getTopVisibleActivities() {
-        final ArrayList<IBinder> topActivityTokens = new ArrayList<>();
+    List<ActivityAssistInfo> getTopVisibleActivities() {
+        final ArrayList<ActivityAssistInfo> topVisibleActivities = new ArrayList<>();
         final Task topFocusedRootTask = getTopDisplayFocusedRootTask();
         // Traverse all displays.
         forAllRootTasks(rootTask -> {
@@ -1834,15 +1826,16 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             if (rootTask.shouldBeVisible(null /* starting */)) {
                 final ActivityRecord top = rootTask.getTopNonFinishingActivity();
                 if (top != null) {
+                    ActivityAssistInfo visibleActivity = new ActivityAssistInfo(top);
                     if (rootTask == topFocusedRootTask) {
-                        topActivityTokens.add(0, top.appToken);
+                        topVisibleActivities.add(0, visibleActivity);
                     } else {
-                        topActivityTokens.add(top.appToken);
+                        topVisibleActivities.add(visibleActivity);
                     }
                 }
             }
         });
-        return topActivityTokens;
+        return topVisibleActivities;
     }
 
     @Nullable
@@ -2662,16 +2655,18 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     void invalidateTaskLayers() {
-        mTaskLayersChanged = true;
-        mRankTaskLayersScheduler.scheduleIfNeeded();
+        if (!mTaskLayersChanged) {
+            mTaskLayersChanged = true;
+            mService.mH.post(mRankTaskLayersRunnable);
+        }
     }
 
     /** Generate oom-score-adjustment rank for all tasks in the system based on z-order. */
-    void rankTaskLayersIfNeeded() {
-        if (!mTaskLayersChanged) {
-            return;
+    void rankTaskLayers() {
+        if (mTaskLayersChanged) {
+            mTaskLayersChanged = false;
+            mService.mH.removeCallbacks(mRankTaskLayersRunnable);
         }
-        mTaskLayersChanged = false;
         mTmpTaskLayerRank = 0;
         // Only rank for leaf tasks because the score of activity is based on immediate parent.
         forAllLeafTasks(task -> {
@@ -2820,7 +2815,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
      * @param launchParams   The resolved launch params to use.
      * @param realCallingPid The pid from {@link ActivityStarter#setRealCallingPid}
      * @param realCallingUid The uid from {@link ActivityStarter#setRealCallingUid}
-     * @return The roott task to use for the launch or INVALID_TASK_ID.
+     * @return The root task to use for the launch or INVALID_TASK_ID.
      */
     Task getLaunchRootTask(@Nullable ActivityRecord r,
             @Nullable ActivityOptions options, @Nullable Task candidateTask, boolean onTop,
@@ -2889,7 +2884,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // Falling back to default task container
                 taskDisplayArea = taskDisplayArea.mDisplayContent.getDefaultTaskDisplayArea();
                 rootTask = taskDisplayArea.getOrCreateRootTask(r, options, candidateTask,
-                        activityType, onTop);
+                        launchParams, activityType, onTop);
                 if (rootTask != null) {
                     return rootTask;
                 }
@@ -2944,7 +2939,8 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             }
         }
 
-        return container.getOrCreateRootTask(r, options, candidateTask, activityType, onTop);
+        return container.getOrCreateRootTask(
+                r, options, candidateTask, launchParams, activityType, onTop);
     }
 
     /** @return true if activity record is null or can be launched on provided display. */
@@ -3129,11 +3125,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * Returns {@code true} if {@code uid} has a visible window that's above a window of type {@link
-     * WindowManager.LayoutParams#TYPE_NOTIFICATION_SHADE}. If there is no window with type {@link
-     * WindowManager.LayoutParams#TYPE_NOTIFICATION_SHADE}, it returns {@code false}.
+     * Returns {@code true} if {@code uid} has a visible window that's above the window of type
+     * {@link WindowManager.LayoutParams#TYPE_NOTIFICATION_SHADE} and {@code uid} is not owner of
+     * the window of type {@link WindowManager.LayoutParams#TYPE_NOTIFICATION_SHADE}.
+     *
+     * If there is no window with type {@link WindowManager.LayoutParams#TYPE_NOTIFICATION_SHADE},
+     * it returns {@code false}.
      */
-    boolean hasVisibleWindowAboveNotificationShade(int uid) {
+    boolean hasVisibleWindowAboveButDoesNotOwnNotificationShade(int uid) {
         boolean[] visibleWindowFound = {false};
         // We only return true if we found the notification shade (ie. window of type
         // TYPE_NOTIFICATION_SHADE). Usually, it should always be there, but if for some reason
@@ -3143,7 +3142,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 visibleWindowFound[0] = true;
             }
             if (w.mAttrs.type == TYPE_NOTIFICATION_SHADE) {
-                return visibleWindowFound[0];
+                return visibleWindowFound[0] && w.mOwnerUid != uid;
             }
             return false;
         }, true /* traverseTopToBottom */);
@@ -3667,32 +3666,14 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
-    /**
-     * Helper class to schedule the runnable if it hasn't scheduled on display thread inside window
-     * manager lock.
-     */
-    abstract static class LockedScheduler implements Runnable {
-        private final ActivityTaskManagerService mService;
-        private boolean mScheduled;
-
-        LockedScheduler(ActivityTaskManagerService service) {
-            mService = service;
-        }
-
+    private class RankTaskLayersRunnable implements Runnable {
         @Override
         public void run() {
             synchronized (mService.mGlobalLock) {
-                mScheduled = false;
-                execute();
-            }
-        }
-
-        abstract void execute();
-
-        void scheduleIfNeeded() {
-            if (!mScheduled) {
-                mService.mH.post(this);
-                mScheduled = true;
+                if (mTaskLayersChanged) {
+                    mTaskLayersChanged = false;
+                    rankTaskLayers();
+                }
             }
         }
     }

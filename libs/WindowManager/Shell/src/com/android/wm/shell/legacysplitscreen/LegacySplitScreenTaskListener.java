@@ -52,6 +52,9 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
     private final SyncTransactionQueue mSyncQueue;
     private final SparseArray<SurfaceControl> mLeashByTaskId = new SparseArray<>();
 
+    // TODO(shell-transitions): Remove when switched to shell-transitions.
+    private final SparseArray<Point> mPositionByTaskId = new SparseArray<>();
+
     RunningTaskInfo mPrimary;
     RunningTaskInfo mSecondary;
     SurfaceControl mPrimarySurface;
@@ -64,7 +67,7 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
 
     final SurfaceSession mSurfaceSession = new SurfaceSession();
 
-    private final SplitScreenTransitions mSplitTransitions;
+    private final LegacySplitScreenTransitions mSplitTransitions;
 
     LegacySplitScreenTaskListener(LegacySplitScreenController splitScreenController,
                     ShellTaskOrganizer shellTaskOrganizer,
@@ -72,7 +75,7 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
                     SyncTransactionQueue syncQueue) {
         mSplitScreenController = splitScreenController;
         mTaskOrganizer = shellTaskOrganizer;
-        mSplitTransitions = new SplitScreenTransitions(splitScreenController.mTransactionPool,
+        mSplitTransitions = new LegacySplitScreenTransitions(splitScreenController.mTransactionPool,
                 transitions, mSplitScreenController, this);
         transitions.addHandler(mSplitTransitions);
         mSyncQueue = syncQueue;
@@ -109,7 +112,7 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
         return mTaskOrganizer;
     }
 
-    SplitScreenTransitions getSplitTransitions() {
+    LegacySplitScreenTransitions getSplitTransitions() {
         return mSplitTransitions;
     }
 
@@ -167,6 +170,7 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
     @Override
     public void onTaskVanished(RunningTaskInfo taskInfo) {
         synchronized (this) {
+            mPositionByTaskId.remove(taskInfo.taskId);
             if (taskInfo.hasParentTask()) {
                 mLeashByTaskId.remove(taskInfo.taskId);
                 return;
@@ -200,16 +204,24 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
         }
         synchronized (this) {
             if (taskInfo.hasParentTask()) {
+                // changed messages are noisy since it reports on every ensureVisibility. This
+                // conflicts with legacy app-transitions which "swaps" the position to a
+                // leash. For now, only update when position actually changes to avoid
+                // poorly-timed duplicate calls.
+                if (taskInfo.positionInParent.equals(mPositionByTaskId.get(taskInfo.taskId))) {
+                    return;
+                }
                 handleChildTaskChanged(taskInfo);
-                return;
+            } else {
+                handleTaskInfoChanged(taskInfo);
             }
-
-            handleTaskInfoChanged(taskInfo);
+            mPositionByTaskId.put(taskInfo.taskId, new Point(taskInfo.positionInParent));
         }
     }
 
     private void handleChildTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) {
         mLeashByTaskId.put(taskInfo.taskId, leash);
+        mPositionByTaskId.put(taskInfo.taskId, new Point(taskInfo.positionInParent));
         if (Transitions.ENABLE_SHELL_TRANSITIONS) return;
         updateChildTaskSurface(taskInfo, leash, true /* firstAppeared */);
     }

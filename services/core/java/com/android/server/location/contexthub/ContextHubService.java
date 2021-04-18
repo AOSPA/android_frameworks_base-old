@@ -17,13 +17,16 @@
 package com.android.server.location.contexthub;
 
 import android.annotation.Nullable;
+import android.app.ActivityManager;
 import android.app.PendingIntent;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
+import android.content.pm.UserInfo;
 import android.database.ContentObserver;
 import android.hardware.SensorPrivacyManager;
+import android.hardware.SensorPrivacyManagerInternal;
 import android.hardware.contexthub.V1_0.AsyncEventType;
 import android.hardware.contexthub.V1_0.ContextHub;
 import android.hardware.contexthub.V1_0.ContextHubMsg;
@@ -59,6 +62,7 @@ import android.util.Pair;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.util.DumpUtils;
+import com.android.server.LocalServices;
 import com.android.server.location.ContextHubServiceProto;
 
 import java.io.FileDescriptor;
@@ -127,6 +131,8 @@ public class ContextHubService extends IContextHubService.Stub {
     // Lock object for sendWifiSettingUpdate()
     private final Object mSendWifiSettingUpdateLock = new Object();
 
+    private final SensorPrivacyManagerInternal mSensorPrivacyManagerInternal;
+
     /**
      * Class extending the callback to register with a Context Hub.
      */
@@ -186,6 +192,7 @@ public class ContextHubService extends IContextHubService.Stub {
         if (mContextHubWrapper == null) {
             mTransactionManager = null;
             mClientManager = null;
+            mSensorPrivacyManagerInternal = null;
             mDefaultClientMap = Collections.emptyMap();
             mContextHubIdToInfoMap = Collections.emptyMap();
             mSupportedContextHubPerms = Collections.emptyList();
@@ -208,6 +215,8 @@ public class ContextHubService extends IContextHubService.Stub {
         mClientManager = new ContextHubClientManager(mContext, mContextHubWrapper);
         mTransactionManager = new ContextHubTransactionManager(
                 mContextHubWrapper.getHub(), mClientManager, mNanoAppStateManager);
+        mSensorPrivacyManagerInternal =
+                LocalServices.getService(SensorPrivacyManagerInternal.class);
 
         HashMap<Integer, IContextHubClient> defaultClientMap = new HashMap<>();
         for (int contextHubId : mContextHubIdToInfoMap.keySet()) {
@@ -250,13 +259,16 @@ public class ContextHubService extends IContextHubService.Stub {
             BroadcastReceiver wifiReceiver = new BroadcastReceiver() {
                 @Override
                 public void onReceive(Context context, Intent intent) {
-                    if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(intent.getAction())) {
+                    if (WifiManager.WIFI_STATE_CHANGED_ACTION.equals(intent.getAction())
+                            || WifiManager.ACTION_WIFI_SCAN_AVAILABILITY_CHANGED.equals(
+                                intent.getAction())) {
                         sendWifiSettingUpdate(false /* forceUpdate */);
                     }
                 }
             };
             IntentFilter filter = new IntentFilter();
             filter.addAction(WifiManager.WIFI_STATE_CHANGED_ACTION);
+            filter.addAction(WifiManager.ACTION_WIFI_SCAN_AVAILABILITY_CHANGED);
             mContext.registerReceiver(wifiReceiver, filter);
 
             mContext.getContentResolver().registerContentObserver(
@@ -284,18 +296,16 @@ public class ContextHubService extends IContextHubService.Stub {
         }
 
         if (mContextHubWrapper.supportsMicrophoneDisableSettingNotifications()) {
-            sendMicrophoneDisableSettingUpdate();
+            sendMicrophoneDisableSettingUpdateForCurrentUser();
 
-            SensorPrivacyManager.OnSensorPrivacyChangedListener listener =
-                    new SensorPrivacyManager.OnSensorPrivacyChangedListener() {
-                    @Override
-                    public void onSensorPrivacyChanged(boolean enabled) {
-                        sendMicrophoneDisableSettingUpdate();
-                    }
-                };
-            SensorPrivacyManager manager = SensorPrivacyManager.getInstance(mContext);
-            manager.addSensorPrivacyListener(
-                    SensorPrivacyManager.INDIVIDUAL_SENSOR_MICROPHONE, listener);
+            mSensorPrivacyManagerInternal.addSensorPrivacyListenerForAllUsers(
+                    SensorPrivacyManager.Sensors.MICROPHONE, (userId, enabled) -> {
+                        if (userId == getCurrentUserId()) {
+                            Log.d(TAG, "User: " + userId + "mic privacy: " + enabled);
+                            sendMicrophoneDisableSettingUpdate(enabled);
+                        }
+                });
+
         }
     }
 
@@ -684,6 +694,7 @@ public class ContextHubService extends IContextHubService.Stub {
             sendLocationSettingUpdate();
             sendWifiSettingUpdate(true /* forceUpdate */);
             sendAirplaneModeSettingUpdate();
+            sendMicrophoneDisableSettingUpdateForCurrentUser();
 
             mTransactionManager.onHubReset();
             queryNanoAppsInternal(contextHubId);
@@ -942,8 +953,8 @@ public class ContextHubService extends IContextHubService.Stub {
         mClientManager.forEachClientOfHub(contextHubId, client -> {
             if (client.getPackageName().equals(packageName)) {
                 client.updateNanoAppAuthState(
-                        nanoAppId, false /* hasPermissions */, false /* gracePeriodExpired */,
-                        true /* forceDenied */);
+                        nanoAppId, Collections.emptyList() /* nanoappPermissions */,
+                        false /* gracePeriodExpired */, true /* forceDenied */);
             }
         });
     }
@@ -1074,19 +1085,49 @@ public class ContextHubService extends IContextHubService.Stub {
     }
 
     /**
-     * Obtains the latest microphone disable setting value and notifies the
-     * Context Hub.
+     * Notifies a microphone disable settings change to the Context Hub.
      */
-    private void sendMicrophoneDisableSettingUpdate() {
-        SensorPrivacyManager manager = SensorPrivacyManager.getInstance(mContext);
-        boolean disabled = manager.isIndividualSensorPrivacyEnabled(
-                SensorPrivacyManager.INDIVIDUAL_SENSOR_MICROPHONE);
-        Log.d(TAG, "Mic Disabled Setting: " + disabled);
-        mContextHubWrapper.onMicrophoneDisableSettingChanged(disabled);
+    private void sendMicrophoneDisableSettingUpdate(boolean enabled) {
+        Log.d(TAG, "Mic Disabled Setting: " + enabled);
+        mContextHubWrapper.onMicrophoneDisableSettingChanged(enabled);
+    }
+
+    /**
+     * Obtains the latest microphone disabled setting for the current user
+     * and notifies the Context Hub.
+     */
+    private void sendMicrophoneDisableSettingUpdateForCurrentUser() {
+        boolean isEnabled = mSensorPrivacyManagerInternal.isSensorPrivacyEnabled(
+                getCurrentUserId(), SensorPrivacyManager.Sensors.MICROPHONE);
+        sendMicrophoneDisableSettingUpdate(isEnabled);
     }
 
 
     private String getCallingPackageName() {
         return mContext.getPackageManager().getNameForUid(Binder.getCallingUid());
+    }
+
+    private int getCurrentUserId() {
+        final long id = Binder.clearCallingIdentity();
+        try {
+            UserInfo currentUser = ActivityManager.getService().getCurrentUser();
+            return currentUser.id;
+        } catch (RemoteException e) {
+            // Activity manager not running, nothing we can do - assume user 0.
+        } finally {
+            Binder.restoreCallingIdentity(id);
+        }
+        return UserHandle.USER_SYSTEM;
+    }
+
+    /**
+     * Send a microphone disable settings update whenever the foreground user changes.
+     * We always send a settings update regardless of the previous state for the same user
+     * since the CHRE framework is expected to handle repeated identical setting update.
+     */
+    public void onUserChanged() {
+        Log.d(TAG, "User changed to id: " + getCurrentUserId());
+        sendLocationSettingUpdate();
+        sendMicrophoneDisableSettingUpdateForCurrentUser();
     }
 }

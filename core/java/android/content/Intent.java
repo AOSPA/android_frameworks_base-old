@@ -28,6 +28,7 @@ import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
+import android.annotation.TestApi;
 import android.app.AppGlobals;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.ActivityInfo;
@@ -1901,6 +1902,20 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.AUTO_REVOKE_PERMISSIONS";
 
     /**
+     * Activity action: Launch UI to manage unused apps (hibernated apps).
+     *
+     * <p>
+     * Input: Nothing.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_MANAGE_UNUSED_APPS =
+            "android.intent.action.MANAGE_UNUSED_APPS";
+
+    /**
      * Activity action: Launch UI to review permissions for an app.
      * The system uses this intent if permission review for apps not
      * supporting the new runtime permissions model is enabled. In
@@ -1940,8 +1955,8 @@ public class Intent implements Parcelable, Cloneable {
 
     /**
      * Activity action: Launch UI to show information about the usage
-     * of a given permission. This action would be handled by apps that
-     * want to show details about how and why given permission is being
+     * of a given permission group. This action would be handled by apps that
+     * want to show details about how and why given permission group is being
      * used.
      * <p>
      * <strong>Important:</strong>You must protect the activity that handles
@@ -1951,7 +1966,7 @@ public class Intent implements Parcelable, Cloneable {
      * activities that are not properly protected.
      *
      * <p>
-     * Input: {@code android.intent.extra.PERMISSION_NAME} specifies the permission
+     * Input: {@link android.Manifest.permission_group} specifies the permission group
      * for which the launched UI would be targeted.
      * </p>
      * <p>
@@ -1962,6 +1977,43 @@ public class Intent implements Parcelable, Cloneable {
     @RequiresPermission(android.Manifest.permission.START_VIEW_PERMISSION_USAGE)
     public static final String ACTION_VIEW_PERMISSION_USAGE =
             "android.intent.action.VIEW_PERMISSION_USAGE";
+
+    /**
+     * Activity action: Launch UI to show information about the usage of a given permission group in
+     * a given period. This action would be handled by apps that want to show details about how and
+     * why given permission group is being used.
+     * <p>
+     * <strong>Important:</strong>You must protect the activity that handles this action with the
+     * {@link android.Manifest.permission#START_VIEW_PERMISSION_USAGE} permission to ensure that
+     * only the system can launch this activity. The system will not launch activities that are not
+     * properly protected.
+     *
+     * <p>
+     * Input: {@link #EXTRA_PERMISSION_GROUP_NAME} specifies the permission group for which the
+     * launched UI would be targeted.
+     * </p>
+     * <p>
+     * Input: {@link #EXTRA_ATTRIBUTION_TAGS} specifies the attribution tags for the usage entry.
+     * </p>
+     * <p>
+     * Input: {@link #EXTRA_START_TIME} specifies the start time of the period. Both start time and
+     * end time are needed and start time must be <= end time.
+     * </p>
+     * <p>
+     * Input: {@link #EXTRA_END_TIME} specifies the end time of the period. Both start time and end
+     * time are needed and start time must be <= end time.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    @RequiresPermission(android.Manifest.permission.START_VIEW_PERMISSION_USAGE)
+    @SystemApi
+    public static final String ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD =
+            "android.intent.action.VIEW_PERMISSION_USAGE_FOR_PERIOD";
 
     /**
      * Activity action: Launch UI to manage a default app.
@@ -2172,6 +2224,29 @@ public class Intent implements Parcelable, Cloneable {
             "android.intent.action.REVIEW_PERMISSION_USAGE";
 
     /**
+     * Activity action: Launch UI to review the timeline history of permissions.
+     * <p>
+     * Input: {@link #EXTRA_PERMISSION_GROUP_NAME} specifies the permission group name
+     * that will be displayed by the launched UI.
+     * </p>
+     * <p>
+     * Output: Nothing.
+     * </p>
+     * <p class="note">
+     * This requires {@link android.Manifest.permission#GRANT_RUNTIME_PERMISSIONS} permission.
+     * </p>
+     *
+     * @see #EXTRA_PERMISSION_GROUP_NAME
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS)
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_REVIEW_PERMISSION_HISTORY =
+            "android.intent.action.REVIEW_PERMISSION_HISTORY";
+
+    /**
      * Activity action: Launch UI to review ongoing app uses of permissions.
      * <p>
      * Input: {@link #EXTRA_DURATION_MILLIS} specifies the minimum number of milliseconds of recent
@@ -2331,6 +2406,7 @@ public class Intent implements Parcelable, Cloneable {
      * @hide
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public static final String ACTION_CLEAR_DNS_CACHE = "android.intent.action.CLEAR_DNS_CACHE";
     /**
      * Alarm Changed Action: This is broadcast when the AlarmClock
@@ -3745,6 +3821,7 @@ public class Intent implements Parcelable, Cloneable {
      * has just been stopped (which is no longer running).
      * @hide
      */
+    @TestApi
     public static final String ACTION_USER_STOPPED =
             "android.intent.action.USER_STOPPED";
 
@@ -5308,6 +5385,33 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_TASK_ID = "android.intent.extra.TASK_ID";
 
     /**
+     * A String[] holding attribution tags when used with
+     * {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_ATTRIBUTION_TAGS = "android.intent.extra.ATTRIBUTION_TAGS";
+
+    /**
+     * A long representing the start timestamp (in millis) of the permission usage when used with
+     * {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_START_TIME = "android.intent.extra.START_TIME";
+
+    /**
+     * A long representing the end timestamp (in millis) of the permission usage when used with
+     * {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_END_TIME = "android.intent.extra.END_TIME";
+
+    /**
      * An Intent[] describing additional, alternate choices you would like shown with
      * {@link #ACTION_CHOOSER}.
      *
@@ -6767,6 +6871,18 @@ public class Intent implements Parcelable, Cloneable {
      */
     private static final int LOCAL_FLAG_FROM_PROTECTED_COMPONENT = 1 << 2;
 
+    /**
+     * Local flag indicating this instance had unfiltered extras copied into it. This could be
+     * from either {@link #putExtras(Intent)} when an unparceled Intent is provided or {@link
+     * #putExtras(Bundle)} when the provided Bundle has not been unparceled.
+     */
+    private static final int LOCAL_FLAG_UNFILTERED_EXTRAS = 1 << 3;
+
+    /**
+     * Local flag indicating this instance was created from a {@link Uri}.
+     */
+    private static final int LOCAL_FLAG_FROM_URI = 1 << 4;
+
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------
     // toUri() and parseUri() options.
@@ -7179,6 +7295,16 @@ public class Intent implements Parcelable, Cloneable {
      * @see #toUri
      */
     public static Intent parseUri(String uri, @UriFlags int flags) throws URISyntaxException {
+        Intent intent = parseUriInternal(uri, flags);
+        intent.mLocalFlags |= LOCAL_FLAG_FROM_URI;
+        return intent;
+    }
+
+    /**
+     * @see #parseUri(String, int)
+     */
+    private static Intent parseUriInternal(String uri, @UriFlags int flags)
+            throws URISyntaxException {
         int i = 0;
         try {
             final boolean androidApp = uri.startsWith("android-app:");
@@ -7398,7 +7524,9 @@ public class Intent implements Parcelable, Cloneable {
     }
 
     public static Intent getIntentOld(String uri) throws URISyntaxException {
-        return getIntentOld(uri, 0);
+        Intent intent = getIntentOld(uri, 0);
+        intent.mLocalFlags |= LOCAL_FLAG_FROM_URI;
+        return intent;
     }
 
     private static Intent getIntentOld(String uri, int flags) throws URISyntaxException {
@@ -10021,6 +10149,15 @@ public class Intent implements Parcelable, Cloneable {
                 mExtras.putAll(src.mExtras);
             }
         }
+        // If the provided Intent was unparceled and this is not an Intent delivered to a protected
+        // component then mark the extras as unfiltered. An Intent delivered to a protected
+        // component had to come from a trusted component, and if unfiltered data was copied to the
+        // delivered Intent then it would have been reported when that Intent left the sending
+        // process.
+        if ((src.mLocalFlags & LOCAL_FLAG_FROM_PARCEL) != 0
+                && (src.mLocalFlags & LOCAL_FLAG_FROM_PROTECTED_COMPONENT) == 0) {
+            mLocalFlags |= LOCAL_FLAG_UNFILTERED_EXTRAS;
+        }
         return this;
     }
 
@@ -10035,6 +10172,10 @@ public class Intent implements Parcelable, Cloneable {
      * @see #removeExtra
      */
     public @NonNull Intent putExtras(@NonNull Bundle extras) {
+        // If the provided Bundle has not yet been unparceled then treat this as unfiltered extras.
+        if (extras.isParcelled()) {
+            mLocalFlags |= LOCAL_FLAG_UNFILTERED_EXTRAS;
+        }
         if (mExtras == null) {
             mExtras = new Bundle();
         }
@@ -11341,10 +11482,20 @@ public class Intent implements Parcelable, Cloneable {
         }
 
         // Detect cases where we're about to launch a potentially unsafe intent
-        if ((mLocalFlags & LOCAL_FLAG_FROM_PARCEL) != 0
-                && (mLocalFlags & LOCAL_FLAG_FROM_PROTECTED_COMPONENT) == 0
-                && StrictMode.vmUnsafeIntentLaunchEnabled()) {
-            StrictMode.onUnsafeIntentLaunch(this);
+        if (StrictMode.vmUnsafeIntentLaunchEnabled()) {
+            if ((mLocalFlags & LOCAL_FLAG_FROM_PARCEL) != 0
+                    && (mLocalFlags & LOCAL_FLAG_FROM_PROTECTED_COMPONENT) == 0) {
+                StrictMode.onUnsafeIntentLaunch(this);
+            } else if ((mLocalFlags & LOCAL_FLAG_UNFILTERED_EXTRAS) != 0) {
+                StrictMode.onUnsafeIntentLaunch(this);
+            } else if ((mLocalFlags & LOCAL_FLAG_FROM_URI) != 0
+                    && !(mCategories != null && mCategories.contains(CATEGORY_BROWSABLE)
+                        && mComponent == null)) {
+                // Since the docs for #URI_ALLOW_UNSAFE recommend setting the category to browsable
+                // for an implicit Intent parsed from a URI a violation should be reported if these
+                // conditions are not met.
+                StrictMode.onUnsafeIntentLaunch(this);
+            }
         }
     }
 

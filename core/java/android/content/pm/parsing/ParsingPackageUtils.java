@@ -34,6 +34,8 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StyleableRes;
+import android.app.ActivityThread;
+import android.app.ResourcesManager;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
@@ -67,6 +69,7 @@ import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedProviderUtils;
 import android.content.pm.parsing.component.ParsedService;
 import android.content.pm.parsing.component.ParsedServiceUtils;
+import android.content.pm.parsing.component.ParsedUsesPermission;
 import android.content.pm.parsing.result.ParseInput;
 import android.content.pm.parsing.result.ParseInput.DeferredError;
 import android.content.pm.parsing.result.ParseResult;
@@ -84,7 +87,9 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.FileUtils;
+import android.os.RemoteException;
 import android.os.Trace;
+import android.os.UserHandle;
 import android.os.ext.SdkExtensions;
 import android.permission.PermissionManager;
 import android.text.TextUtils;
@@ -119,6 +124,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.StringTokenizer;
 
@@ -1206,6 +1212,10 @@ public class ParsingPackageUtils {
                 requiredNotFeatures.add(feature);
             }
 
+            final int usesPermissionFlags = sa.getInt(
+                com.android.internal.R.styleable.AndroidManifestUsesPermission_usesPermissionFlags,
+                0);
+
             final int outerDepth = parser.getDepth();
             int type;
             while ((type = parser.next()) != XmlPullParser.END_DOCUMENT
@@ -1270,14 +1280,31 @@ public class ParsingPackageUtils {
                 }
             }
 
-            if (!pkg.getRequestedPermissions().contains(name)) {
-                pkg.addRequestedPermission(name.intern());
-            } else {
-                Slog.w(TAG, "Ignoring duplicate uses-permissions/uses-permissions-sdk-m: "
-                        + name + " in package: " + pkg.getPackageName() + " at: "
-                        + parser.getPositionDescription());
+            // Quietly ignore duplicate permission requests, but fail loudly if
+            // the two requests have conflicting flags
+            boolean found = false;
+            final List<ParsedUsesPermission> usesPermissions = pkg.getUsesPermissions();
+            final int size = usesPermissions.size();
+            for (int i = 0; i < size; i++) {
+                final ParsedUsesPermission usesPermission = usesPermissions.get(i);
+                if (Objects.equals(usesPermission.name, name)) {
+                    if (usesPermission.usesPermissionFlags != usesPermissionFlags) {
+                        return input.error("Conflicting uses-permissions flags: "
+                                + name + " in package: " + pkg.getPackageName() + " at: "
+                                + parser.getPositionDescription());
+                    } else {
+                        Slog.w(TAG, "Ignoring duplicate uses-permissions/uses-permissions-sdk-m: "
+                                + name + " in package: " + pkg.getPackageName() + " at: "
+                                + parser.getPositionDescription());
+                    }
+                    found = true;
+                    break;
+                }
             }
 
+            if (!found) {
+                pkg.addUsesPermission(new ParsedUsesPermission(name, usesPermissionFlags));
+            }
             return success;
         } finally {
             sa.recycle();
@@ -1985,9 +2012,17 @@ public class ParsingPackageUtils {
 
             pkg.setGwpAsanMode(sa.getInt(R.styleable.AndroidManifestApplication_gwpAsanMode, -1));
             pkg.setMemtagMode(sa.getInt(R.styleable.AndroidManifestApplication_memtagMode, -1));
-            if (sa.hasValue(R.styleable.AndroidManifestApplication_nativeHeapZeroInit)) {
-                pkg.setNativeHeapZeroInit(sa.getBoolean(
-                        R.styleable.AndroidManifestApplication_nativeHeapZeroInit, false));
+            if (sa.hasValue(R.styleable.AndroidManifestApplication_nativeHeapZeroInitialized)) {
+                Boolean v = sa.getBoolean(
+                        R.styleable.AndroidManifestApplication_nativeHeapZeroInitialized, false);
+                pkg.setNativeHeapZeroInitialized(
+                        v ? ApplicationInfo.ZEROINIT_ENABLED : ApplicationInfo.ZEROINIT_DISABLED);
+            }
+            if (sa.hasValue(
+                    R.styleable.AndroidManifestApplication_requestOptimizedExternalStorageAccess)) {
+                pkg.setRequestOptimizedExternalStorageAccess(sa.getBoolean(R.styleable
+                                .AndroidManifestApplication_requestOptimizedExternalStorageAccess,
+                        false));
             }
         } finally {
             sa.recycle();
@@ -2168,6 +2203,8 @@ public class ParsingPackageUtils {
                 .setNetworkSecurityConfigRes(resId(R.styleable.AndroidManifestApplication_networkSecurityConfig, sa))
                 .setRoundIconRes(resId(R.styleable.AndroidManifestApplication_roundIcon, sa))
                 .setTheme(resId(R.styleable.AndroidManifestApplication_theme, sa))
+                .setDataExtractionRules(
+                        resId(R.styleable.AndroidManifestApplication_dataExtractionRules, sa))
                 // Strings
                 .setClassLoaderName(string(R.styleable.AndroidManifestApplication_classLoader, sa))
                 .setRequiredAccountType(string(R.styleable.AndroidManifestApplication_requiredAccountType, sa))
@@ -2753,7 +2790,7 @@ public class ParsingPackageUtils {
                     newPermsMsg.append(' ');
                 }
                 newPermsMsg.append(npi.name);
-                pkg.addRequestedPermission(npi.name)
+                pkg.addUsesPermission(new ParsedUsesPermission(npi.name, 0))
                         .addImplicitPermission(npi.name);
             }
         }
@@ -2763,6 +2800,12 @@ public class ParsingPackageUtils {
     }
 
     private void convertSplitPermissions(ParsingPackage pkg) {
+        // STOPSHIP(b/183905675): REMOVE THIS TERRIBLE, HORRIBLE, NO GOOD, VERY BAD HACK
+        if ("com.android.chrome".equals(pkg.getPackageName())
+                && 445500383 == pkg.getVersionCode()) {
+            pkg.setTargetSdkVersion(Build.VERSION_CODES.R);
+        }
+
         final int listSize = mSplitPermissionInfos.size();
         for (int is = 0; is < listSize; is++) {
             final PermissionManager.SplitPermissionInfo spi = mSplitPermissionInfos.get(is);
@@ -2775,7 +2818,7 @@ public class ParsingPackageUtils {
             for (int in = 0; in < newPerms.size(); in++) {
                 final String perm = newPerms.get(in);
                 if (!requestedPermissions.contains(perm)) {
-                    pkg.addRequestedPermission(perm)
+                    pkg.addUsesPermission(new ParsedUsesPermission(perm, 0))
                             .addImplicitPermission(perm);
                 }
             }
@@ -3008,6 +3051,42 @@ public class ParsingPackageUtils {
 
             return input.success(existingSigningDetails);
         }
+    }
+
+    /**
+     * @hide
+     */
+    public static void readConfigUseRoundIcon(Resources r) {
+        if (r != null) {
+            sUseRoundIcon = r.getBoolean(com.android.internal.R.bool.config_useRoundIcon);
+            return;
+        }
+
+        final ApplicationInfo androidAppInfo;
+        try {
+            androidAppInfo = ActivityThread.getPackageManager().getApplicationInfo(
+                    "android", 0 /* flags */,
+                    UserHandle.myUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+        final Resources systemResources = Resources.getSystem();
+
+        // Create in-flight as this overlayable resource is only used when config changes
+        final Resources overlayableRes = ResourcesManager.getInstance().getResources(
+                null /* activityToken */,
+                null /* resDir */,
+                null /* splitResDirs */,
+                androidAppInfo.resourceDirs,
+                androidAppInfo.overlayPaths,
+                androidAppInfo.sharedLibraryFiles,
+                null /* overrideDisplayId */,
+                null /* overrideConfig */,
+                systemResources.getCompatibilityInfo(),
+                systemResources.getClassLoader(),
+                null /* loaders */);
+
+        sUseRoundIcon = overlayableRes.getBoolean(com.android.internal.R.bool.config_useRoundIcon);
     }
 
     /*

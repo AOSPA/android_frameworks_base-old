@@ -16,6 +16,7 @@
 
 #pragma once
 
+#include <android-base/function_ref.h>
 #include <android-base/unique_fd.h>
 #include <android/content/pm/DataLoaderParamsParcel.h>
 #include <android/content/pm/FileSystemControlParcel.h>
@@ -77,31 +78,43 @@ public:
     using ErrorCode = incfs::ErrorCode;
     using UniqueFd = incfs::UniqueFd;
     using WaitResult = incfs::WaitResult;
+    using Features = incfs::Features;
 
-    using ExistingMountCallback =
-            std::function<void(std::string_view root, std::string_view backingDir,
-                               std::span<std::pair<std::string_view, std::string_view>> binds)>;
+    using ExistingMountCallback = android::base::function_ref<
+            void(std::string_view root, std::string_view backingDir,
+                 std::span<std::pair<std::string_view, std::string_view>> binds)>;
+
+    using FileCallback = android::base::function_ref<bool(const Control& control, FileId fileId)>;
+
+    static std::string toString(FileId fileId);
 
     virtual ~IncFsWrapper() = default;
+    virtual Features features() const = 0;
     virtual void listExistingMounts(const ExistingMountCallback& cb) const = 0;
     virtual Control openMount(std::string_view path) const = 0;
     virtual Control createControl(IncFsFd cmd, IncFsFd pendingReads, IncFsFd logs,
                                   IncFsFd blocksWritten) const = 0;
     virtual ErrorCode makeFile(const Control& control, std::string_view path, int mode, FileId id,
                                incfs::NewFileParams params) const = 0;
+    virtual ErrorCode makeMappedFile(const Control& control, std::string_view path, int mode,
+                                     incfs::NewMappedFileParams params) const = 0;
     virtual ErrorCode makeDir(const Control& control, std::string_view path, int mode) const = 0;
     virtual ErrorCode makeDirs(const Control& control, std::string_view path, int mode) const = 0;
     virtual incfs::RawMetadata getMetadata(const Control& control, FileId fileid) const = 0;
     virtual incfs::RawMetadata getMetadata(const Control& control, std::string_view path) const = 0;
     virtual FileId getFileId(const Control& control, std::string_view path) const = 0;
-    virtual std::string toString(FileId fileId) const = 0;
     virtual std::pair<IncFsBlockIndex, IncFsBlockIndex> countFilledBlocks(
             const Control& control, std::string_view path) const = 0;
+    virtual incfs::LoadingState isFileFullyLoaded(const Control& control,
+                                                  std::string_view path) const = 0;
+    virtual incfs::LoadingState isFileFullyLoaded(const Control& control, FileId id) const = 0;
+    virtual incfs::LoadingState isEverythingFullyLoaded(const Control& control) const = 0;
     virtual ErrorCode link(const Control& control, std::string_view from,
                            std::string_view to) const = 0;
     virtual ErrorCode unlink(const Control& control, std::string_view path) const = 0;
     virtual UniqueFd openForSpecialOps(const Control& control, FileId id) const = 0;
     virtual ErrorCode writeBlocks(std::span<const incfs::DataBlock> blocks) const = 0;
+    virtual ErrorCode reserveSpace(const Control& control, FileId id, IncFsSize size) const = 0;
     virtual WaitResult waitForPendingReads(
             const Control& control, std::chrono::milliseconds timeout,
             std::vector<incfs::ReadInfo>* pendingReadsBuffer) const = 0;
@@ -109,6 +122,8 @@ public:
             const Control& control,
             const std::vector<::android::os::incremental::PerUidReadTimeouts>& perUidReadTimeouts)
             const = 0;
+    virtual ErrorCode forEachFile(const Control& control, FileCallback cb) const = 0;
+    virtual ErrorCode forEachIncompleteFile(const Control& control, FileCallback cb) const = 0;
 };
 
 class AppOpsManagerWrapper {
@@ -148,7 +163,15 @@ public:
 class FsWrapper {
 public:
     virtual ~FsWrapper() = default;
-    virtual std::vector<std::string> listFilesRecursive(std::string_view directoryPath) const = 0;
+
+    using FileCallback = android::base::function_ref<bool(std::string_view)>;
+    virtual void listFilesRecursive(std::string_view directoryPath, FileCallback onFile) const = 0;
+};
+
+class ClockWrapper {
+public:
+    virtual ~ClockWrapper() = default;
+    virtual TimePoint now() const = 0;
 };
 
 class ServiceManagerWrapper {
@@ -163,6 +186,7 @@ public:
     virtual std::unique_ptr<TimedQueueWrapper> getTimedQueue() = 0;
     virtual std::unique_ptr<TimedQueueWrapper> getProgressUpdateJobQueue() = 0;
     virtual std::unique_ptr<FsWrapper> getFs() = 0;
+    virtual std::unique_ptr<ClockWrapper> getClock() = 0;
 };
 
 // --- Real stuff ---
@@ -180,6 +204,7 @@ public:
     std::unique_ptr<TimedQueueWrapper> getTimedQueue() final;
     std::unique_ptr<TimedQueueWrapper> getProgressUpdateJobQueue() final;
     std::unique_ptr<FsWrapper> getFs() final;
+    std::unique_ptr<ClockWrapper> getClock() final;
 
 private:
     template <class INTERFACE>

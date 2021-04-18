@@ -17,41 +17,61 @@
 package com.android.wm.shell.flicker.apppairs
 
 import android.app.Instrumentation
-import android.os.Bundle
+import android.content.Context
+import android.platform.test.annotations.Presubmit
 import android.system.helpers.ActivityHelper
 import android.util.Log
+import android.view.Surface
+import androidx.test.platform.app.InstrumentationRegistry
 import com.android.compatibility.common.util.SystemUtil
+import com.android.server.wm.flicker.FlickerBuilderProvider
+import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.dsl.FlickerBuilder
+import com.android.server.wm.flicker.endRotation
+import com.android.server.wm.flicker.helpers.isRotated
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
 import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.navBarLayerRotatesAndScales
 import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
+import com.android.server.wm.flicker.repetitions
 import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
+import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.wm.shell.flicker.helpers.AppPairsHelper
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.testapp.Components
+import org.junit.Test
 import java.io.IOException
 
-open class AppPairsTransition(
-    protected val instrumentation: Instrumentation
-) {
-    internal val activityHelper = ActivityHelper.getInstance()
-
-    internal val appPairsHelper = AppPairsHelper(instrumentation,
+abstract class AppPairsTransition(protected val testSpec: FlickerTestParameter) {
+    protected val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
+    protected val context: Context = instrumentation.context
+    protected val isRotated = testSpec.config.startRotation.isRotated()
+    protected val activityHelper = ActivityHelper.getInstance()
+    protected val appPairsHelper = AppPairsHelper(instrumentation,
         Components.SplitScreenActivity.LABEL,
         Components.SplitScreenActivity.COMPONENT)
 
-    internal val primaryApp = SplitScreenHelper.getPrimary(instrumentation)
-    internal val secondaryApp = SplitScreenHelper.getSecondary(instrumentation)
-    internal open val nonResizeableApp: SplitScreenHelper? =
+    protected val primaryApp = SplitScreenHelper.getPrimary(instrumentation)
+    protected val secondaryApp = SplitScreenHelper.getSecondary(instrumentation)
+    protected open val nonResizeableApp: SplitScreenHelper? =
         SplitScreenHelper.getNonResizeable(instrumentation)
-    internal var primaryTaskId = ""
-    internal var secondaryTaskId = ""
-    internal var nonResizeableTaskId = ""
+    protected var primaryTaskId = ""
+    protected var secondaryTaskId = ""
+    protected var nonResizeableTaskId = ""
 
-    internal open val transition: FlickerBuilder.(Bundle) -> Unit
+    @FlickerBuilderProvider
+    fun buildFlicker(): FlickerBuilder {
+        return FlickerBuilder(instrumentation).apply {
+            withTestName { testSpec.name }
+            repeat { testSpec.config.repetitions }
+            transition(this, testSpec.config)
+        }
+    }
+
+    internal open val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
         get() = { configuration ->
             setup {
                 test {
@@ -71,20 +91,9 @@ open class AppPairsTransition(
                         primaryTaskId, secondaryTaskId, pair = false))
                     executeShellCommand(composePairsCommand(
                         primaryTaskId, nonResizeableTaskId, pair = false))
-                    primaryApp.exit()
-                    secondaryApp.exit()
-                    nonResizeableApp?.exit()
-                }
-            }
-
-            assertions {
-                layersTrace {
-                    navBarLayerIsAlwaysVisible()
-                    statusBarLayerIsAlwaysVisible()
-                }
-                windowManagerTrace {
-                    navBarWindowIsAlwaysVisible()
-                    statusBarWindowIsAlwaysVisible()
+                    primaryApp.exit(wmHelper)
+                    secondaryApp.exit(wmHelper)
+                    nonResizeableApp?.exit(wmHelper)
                 }
             }
         }
@@ -127,5 +136,43 @@ open class AppPairsTransition(
             append("unpair ")
         }
         append("$primaryApp $secondaryApp")
+    }
+
+    @Presubmit
+    @Test
+    open fun navBarLayerIsAlwaysVisible() {
+        testSpec.navBarLayerIsAlwaysVisible()
+    }
+
+    @Presubmit
+    @Test
+    open fun statusBarLayerIsAlwaysVisible() {
+        testSpec.statusBarLayerIsAlwaysVisible()
+    }
+
+    @Presubmit
+    @Test
+    open fun navBarWindowIsAlwaysVisible() {
+        testSpec.navBarWindowIsAlwaysVisible()
+    }
+
+    @Presubmit
+    @Test
+    open fun statusBarWindowIsAlwaysVisible() {
+        testSpec.statusBarWindowIsAlwaysVisible()
+    }
+
+    @Presubmit
+    @Test
+    open fun navBarLayerRotatesAndScales() {
+        testSpec.navBarLayerRotatesAndScales(Surface.ROTATION_0,
+            testSpec.config.endRotation)
+    }
+
+    @Presubmit
+    @Test
+    open fun statusBarLayerRotatesScales() {
+        testSpec.statusBarLayerRotatesScales(Surface.ROTATION_0,
+            testSpec.config.endRotation)
     }
 }

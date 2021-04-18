@@ -285,9 +285,6 @@
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the system default text classifier -->
         <flag name="textClassifier" value="0x10000" />
-        <!-- Additional flag from base permission type: this permission will be granted to the
-             wellbeing app, as defined by the OEM. -->
-        <flag name="wellbeing" value="0x20000" />
         <!-- Additional flag from base permission type: this permission can be automatically
             granted to the document manager -->
         <flag name="documenter" value="0x40000" />
@@ -825,8 +822,13 @@
             <a href="{@docRoot}guide/topics/fundamentals/tasks-and-back-stack.html">Tasks and Back
             Stack</a> document for more details about tasks.-->
         <enum name="singleInstance" value="3" />
+        <!-- The activity can only be running as the root activity of the task, the first activity
+            that created the task, and therefore there will only be one instance of this activity
+            in a task. In constrast to the {@code singleTask} launch mode, this activity can be
+            started in multiple instances in different tasks if the
+            {@code FLAG_ACTIVITY_MULTIPLE_TASK} is set.-->
+        <enum name="singleInstancePerTask" value="4" />
     </attr>
-
     <!-- Specify the orientation an activity should be run in.  If not
          specified, it will run in the current preferred orientation
          of the screen.
@@ -1370,7 +1372,7 @@
          <p>The default value of this attribute is <code>false</code>. -->
     <attr name="resumeWhilePausing" format="boolean" />
 
-    <!-- Indicates that it is okay for this activity to be put in multi-window mode. Intended for a
+    <!-- Hint to platform that the activity works well in multi-window mode. Intended for a
          multi-window device where there can be multiple activities of various sizes on the screen
          at the same time.
 
@@ -1390,7 +1392,7 @@
          resizeable.
 
          <p>NOTE: The value of {@link android.R.attr#screenOrientation} is ignored for
-         resizeable activities when in multi-window mode. -->
+         resizeable activities when in multi-window mode before Android 12. -->
     <attr name="resizeableActivity" format="boolean" />
 
     <!-- Indicates that the activity specifically supports the picture-in-picture form of
@@ -1593,12 +1595,32 @@
        <enum name="always" value="1" />
     </attr>
 
+    <!-- Enable hardware memory tagging (ARM MTE) in this process.
+         When enabled, heap memory bugs like use-after-free and buffer overlow
+         are detected and result in an immediate ("sync" mode) or delayed ("async"
+         mode) crash instead of a silent memory corruption. Sync mode, while slower,
+         provides enhanced bug reports including stack traces at the time of allocation
+         and deallocation of memory, similar to AddressSanitizer.
+
+         See the <a href="https://community.arm.com/developer/ip-products/processors/b/processors-ip-blog/posts/enhancing-memory-safety">ARM announcement</a>
+         for more details.
+
+         <p>This attribute can be applied to a
+         {@link android.R.styleable#AndroidManifestProcess process} tag, or to an
+         {@link android.R.styleable#AndroidManifestApplication application} tag (to supply
+         a default setting for all application components). -->
     <attr name="memtagMode">
        <enum name="default" value="-1" />
        <enum name="off" value="0" />
        <enum name="async" value="1" />
        <enum name="sync" value="2" />
     </attr>
+
+    <!-- Attribution tag to be used for permission sub-attribution if a
+      permission is checked in  {@link android.content.Context#sendBroadcast(Intent, String)}.
+      Multiple tags can be specified separated by '|'.
+    -->
+    <attr name="attributionTags" format="string" />
 
     <!-- The <code>manifest</code> tag is the root of an
          <code>AndroidManifest.xml</code> file,
@@ -1773,6 +1795,8 @@
             <enum name="maps" value="6" />
             <!-- Apps which are primarily productivity apps, such as cloud storage or workplace apps. -->
             <enum name="productivity" value="7" />
+            <!-- Apps which are primarily accessibility apps, such as screen-readers. -->
+            <enum name="accessibility" value="8" />
         </attr>
 
         <!-- Declares the kind of classloader this application's classes must be loaded with -->
@@ -1843,6 +1867,25 @@
              -->
         <attr name="preserveLegacyExternalStorage" format="boolean" />
 
+        <!-- If {@code true} this app would like optimized external storage access.
+
+        <p> This flag can only be used by apps holding
+        <ul>
+        <li>{@link android.Manifest.permission#MANAGE_EXTERNAL_STORAGE} permission or
+        <li>{@link android.app.role}#SYSTEM_GALLERY role.
+        </ul>
+        When the flag is set, bulk file path operations will be optimized.
+
+        The default value is {@code true} if
+        <ul>
+        <li>app has {@link android.Manifest.permission#MANAGE_EXTERNAL_STORAGE} permission and
+        targets targetSDK<=30.
+        <li>app has {@link android.app.role}#SYSTEM_GALLERY role and targetSDK<=29
+        </ul>
+        {@code false} otherwise.
+        -->
+        <attr name="requestOptimizedExternalStorageAccess" format="boolean" />
+
         <!-- If {@code true} this app declares that it should be visible to all other apps on
              device, regardless of what they declare via the {@code queries} tags in their
              manifest.
@@ -1869,7 +1912,9 @@
 
         <attr name="memtagMode" />
 
-        <attr name="nativeHeapZeroInit" format="boolean" />
+        <!-- If {@code true} enables automatic zero initialization of all native heap
+             allocations. -->
+        <attr name="nativeHeapZeroInitialized" format="boolean" />
 
         <!-- @hide no longer used, kept to preserve padding -->
         <attr name="allowAutoRevokePermissionsExemption" format="boolean" />
@@ -1893,6 +1938,11 @@
             <!-- User data will remain unchanged during rollback. -->
             <enum name="retain" value="2" />
         </attr>
+
+        <!-- Applications can set this attribute to an xml resource within their app where they
+         specified the rules determining which files and directories can be copied from the device
+         as part of backup or transfer operations. -->
+        <attr name="dataExtractionRules" format="reference"/>
     </declare-styleable>
 
     <!-- An attribution is a logical part of an app and is identified by a tag.
@@ -2048,6 +2098,15 @@
         requested.  If it does support the feature, it will be as if the manifest didn't
         request it at all. -->
         <attr name="requiredNotFeature" format="string" />
+        <!-- Optional: set of flags that should apply to this permission request. Note that
+             these flags start at 0x4 to match PackageInfo.requestedPermissionsFlags. -->
+        <attr name="usesPermissionFlags">
+            <!-- Strong assertion by a developer that they will never use this
+                 permission to derive the physical location of the device, even
+                 when the app has been granted the ACCESS_FINE_LOCATION and/or
+                 ACCESS_COARSE_LOCATION permissions. -->
+            <flag name="neverForLocation" value="0x00010000" />
+        </attr>
     </declare-styleable>
 
     <!-- <code>required-feature</code> and <code>required-not-feature</code> elements inside
@@ -2443,7 +2502,7 @@
         <attr name="process" />
         <attr name="gwpAsanMode" />
         <attr name="memtagMode" />
-        <attr name="nativeHeapZeroInit" />
+        <attr name="nativeHeapZeroInitialized" />
     </declare-styleable>
 
     <!-- The <code>deny-permission</code> tag specifies that a permission is to be denied
@@ -2815,6 +2874,17 @@
 
              <p> See {@link android.content.pm.ActivityInfo#FLAG_PREFER_MINIMAL_POST_PROCESSING} -->
         <attr name="preferMinimalPostProcessing" format="boolean"/>
+        <!-- Specify the attributionTags to be used if a permission is required due to
+            {@link android.content.Context#sendBroadcast(Intent, String)} being used.
+            Multiple tags can be specified separated by '|'. -->
+        <attr name="attributionTags"/>
+        <!-- Specifies whether a home sound effect should be played if the home app moves to
+             front after an activity with this flag set to <code>true</code>.
+             <p>The default value of this attribute is <code>true</code>.
+             <p>Also note that home sounds are only played if the device supports home sounds,
+             usually TVs.
+             <p>Requires permission {@code android.permission.DISABLE_SYSTEM_SOUND_EFFECTS}. -->
+        <attr name="playHomeTransitionSound" format="boolean"/>
     </declare-styleable>
 
     <!-- The <code>activity-alias</code> tag declares a new

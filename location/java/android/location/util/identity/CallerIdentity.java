@@ -42,7 +42,30 @@ public final class CallerIdentity {
     @VisibleForTesting
     public static CallerIdentity forTest(int uid, int pid, String packageName,
             @Nullable String attributionTag) {
-        return new CallerIdentity(uid, pid, packageName, attributionTag, null);
+        return forTest(uid, pid, packageName, attributionTag, null);
+    }
+
+    /**
+     * Construct a CallerIdentity for test purposes.
+     */
+    @VisibleForTesting
+    public static CallerIdentity forTest(int uid, int pid, String packageName,
+            @Nullable String attributionTag, @Nullable String listenerId) {
+        return new CallerIdentity(uid, pid, packageName, attributionTag, listenerId);
+    }
+
+    /**
+     * Returns a CallerIdentity with PID and listener ID information stripped. This is mostly
+     * useful for aggregating information for debug purposes, and should not be used in any API with
+     * security requirements.
+     */
+    public static CallerIdentity forAggregation(CallerIdentity callerIdentity) {
+        if (callerIdentity.getPid() == 0 && callerIdentity.getListenerId() == null) {
+            return callerIdentity;
+        }
+
+        return new CallerIdentity(callerIdentity.getUid(), 0, callerIdentity.getPackageName(),
+                callerIdentity.getAttributionTag(), null);
     }
 
     /**
@@ -145,7 +168,10 @@ public final class CallerIdentity {
         return mAttributionTag;
     }
 
-    /** The calling listener id. */
+    /**
+     * The calling listener id. A null listener id will match any other listener id for the purposes
+     * of {@link #equals(Object)}.
+     */
     public String getListenerId() {
         return mListenerId;
     }
@@ -201,15 +227,12 @@ public final class CallerIdentity {
             return false;
         }
         CallerIdentity that = (CallerIdentity) o;
-        return equalsIgnoringListenerId(that) && Objects.equals(mListenerId, that.mListenerId);
-    }
-
-    public boolean equalsIgnoringListenerId(CallerIdentity that) {
-        return that != null
-                && mUid == that.mUid
+        return mUid == that.mUid
                 && mPid == that.mPid
                 && mPackageName.equals(that.mPackageName)
-                && Objects.equals(mAttributionTag, that.mAttributionTag);
+                && Objects.equals(mAttributionTag, that.mAttributionTag)
+                && (mListenerId == null || that.mListenerId == null || mListenerId.equals(
+                that.mListenerId));
     }
 
     @Override

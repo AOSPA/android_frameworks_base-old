@@ -16,27 +16,16 @@
 
 package com.android.systemui.people;
 
+import static android.app.Notification.CATEGORY_MISSED_CALL;
 import static android.app.Notification.EXTRA_MESSAGES;
-import static android.app.people.ConversationStatus.ACTIVITY_ANNIVERSARY;
-import static android.app.people.ConversationStatus.ACTIVITY_BIRTHDAY;
-import static android.app.people.ConversationStatus.ACTIVITY_GAME;
-import static android.app.people.ConversationStatus.ACTIVITY_LOCATION;
-import static android.app.people.ConversationStatus.ACTIVITY_MEDIA;
-import static android.app.people.ConversationStatus.ACTIVITY_NEW_STORY;
-import static android.app.people.ConversationStatus.ACTIVITY_UPCOMING_BIRTHDAY;
-import static android.app.people.ConversationStatus.AVAILABILITY_AVAILABLE;
 
-import android.annotation.Nullable;
 import android.app.INotificationManager;
 import android.app.Notification;
-import android.app.PendingIntent;
 import android.app.people.ConversationChannel;
-import android.app.people.ConversationStatus;
 import android.app.people.IPeopleManager;
 import android.app.people.PeopleSpaceTile;
 import android.appwidget.AppWidgetManager;
 import android.content.Context;
-import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.LauncherApps;
 import android.content.pm.ShortcutInfo;
@@ -46,7 +35,6 @@ import android.graphics.Bitmap;
 import android.graphics.Canvas;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.Icon;
 import android.icu.text.MeasureFormat;
 import android.icu.util.Measure;
 import android.icu.util.MeasureUnit;
@@ -56,12 +44,10 @@ import android.os.Parcelable;
 import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.provider.ContactsContract;
-import android.provider.Settings;
 import android.service.notification.ConversationChannelWrapper;
 import android.service.notification.StatusBarNotification;
 import android.text.TextUtils;
 import android.util.Log;
-import android.view.View;
 import android.widget.RemoteViews;
 
 import androidx.preference.PreferenceManager;
@@ -71,10 +57,9 @@ import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.util.ArrayUtils;
 import com.android.settingslib.utils.ThreadUtils;
-import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.people.widget.LaunchConversationActivity;
-import com.android.systemui.people.widget.PeopleSpaceWidgetProvider;
+import com.android.systemui.people.widget.AppWidgetOptionsHelper;
+import com.android.systemui.people.widget.PeopleTileKey;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 
@@ -85,16 +70,12 @@ import java.util.Arrays;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.Date;
-import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
@@ -106,19 +87,15 @@ public class PeopleSpaceUtils {
     private static final int DAYS_IN_A_WEEK = 7;
     private static final int MIN_HOUR = 1;
     private static final int ONE_DAY = 1;
-    public static final String OPTIONS_PEOPLE_SPACE_TILE = "options_people_space_tile";
     public static final String PACKAGE_NAME = "package_name";
     public static final String USER_ID = "user_id";
     public static final String SHORTCUT_ID = "shortcut_id";
 
     public static final String EMPTY_STRING = "";
-    public static final int INVALID_WIDGET_ID = -1;
     public static final int INVALID_USER_ID = -1;
 
-    private static final Pattern DOUBLE_EXCLAMATION_PATTERN = Pattern.compile("[!][!]+");
-    private static final Pattern DOUBLE_QUESTION_PATTERN = Pattern.compile("[?][?]+");
-    private static final Pattern ANY_DOUBLE_MARK_PATTERN = Pattern.compile("[!?][!?]+");
-    private static final Pattern MIXED_MARK_PATTERN = Pattern.compile("![?].*|.*[?]!");
+    public static final PeopleTileKey EMPTY_KEY =
+            new PeopleTileKey(EMPTY_STRING, INVALID_USER_ID, EMPTY_STRING);
 
     /** Represents whether {@link StatusBarNotification} was posted or removed. */
     public enum NotificationAction {
@@ -154,12 +131,9 @@ public class PeopleSpaceUtils {
             Context context, INotificationManager notificationManager, IPeopleManager peopleManager,
             LauncherApps launcherApps, NotificationEntryManager notificationEntryManager)
             throws Exception {
-        boolean showOnlyPriority = Settings.Global.getInt(context.getContentResolver(),
-                Settings.Global.PEOPLE_SPACE_CONVERSATION_TYPE, 0) == 1;
         List<ConversationChannelWrapper> conversations =
                 notificationManager.getConversations(
                         false).getList();
-
         // Add priority conversations to tiles list.
         Stream<ShortcutInfo> priorityConversations = conversations.stream()
                 .filter(c -> c.getNotificationChannel() != null
@@ -169,172 +143,72 @@ public class PeopleSpaceUtils {
                 priorityConversations);
 
         // Sort and then add recent and non priority conversations to tiles list.
-        if (!showOnlyPriority) {
-            if (DEBUG) Log.d(TAG, "Add recent conversations");
-            Stream<ShortcutInfo> nonPriorityConversations = conversations.stream()
-                    .filter(c -> c.getNotificationChannel() == null
-                            || !c.getNotificationChannel().isImportantConversation())
-                    .map(c -> c.getShortcutInfo());
+        if (DEBUG) Log.d(TAG, "Add recent conversations");
+        Stream<ShortcutInfo> nonPriorityConversations = conversations.stream()
+                .filter(c -> c.getNotificationChannel() == null
+                        || !c.getNotificationChannel().isImportantConversation())
+                .map(c -> c.getShortcutInfo());
 
-            List<ConversationChannel> recentConversationsList =
-                    peopleManager.getRecentConversations().getList();
-            Stream<ShortcutInfo> recentConversations = recentConversationsList
-                    .stream()
-                    .map(c -> c.getShortcutInfo());
+        List<ConversationChannel> recentConversationsList =
+                peopleManager.getRecentConversations().getList();
+        Stream<ShortcutInfo> recentConversations = recentConversationsList
+                .stream()
+                .map(c -> c.getShortcutInfo());
 
-            Stream<ShortcutInfo> mergedStream = Stream.concat(nonPriorityConversations,
-                    recentConversations);
-            List<PeopleSpaceTile> recentTiles =
-                    getSortedTiles(peopleManager, launcherApps, mergedStream);
-            tiles.addAll(recentTiles);
-        }
+        Stream<ShortcutInfo> mergedStream = Stream.concat(nonPriorityConversations,
+                recentConversations);
+        List<PeopleSpaceTile> recentTiles =
+                getSortedTiles(peopleManager, launcherApps, mergedStream);
+        tiles.addAll(recentTiles);
 
-        tiles = augmentTilesFromVisibleNotifications(tiles, notificationEntryManager);
+        tiles = augmentTilesFromVisibleNotifications(context, tiles, notificationEntryManager);
         return tiles;
     }
 
-    /**
-     * Updates {@code appWidgetIds} with their associated conversation stored, handling a
-     * notification being posted or removed.
-     */
-    public static void updateSingleConversationWidgets(Context context, int[] appWidgetIds,
-            AppWidgetManager appWidgetManager, IPeopleManager peopleManager) {
-        Map<Integer, PeopleSpaceTile> widgetIdToTile = new HashMap<>();
-        for (int appWidgetId : appWidgetIds) {
-            PeopleSpaceTile tile = getPeopleSpaceTile(peopleManager, appWidgetManager, context,
-                    appWidgetId);
-            if (tile == null) {
-                if (DEBUG) Log.d(TAG, "Matching conversation not found for shortcut ID");
-                //TODO: Delete app widget id when crash is fixed (b/172932636)
-                continue;
-            }
-
-            if (DEBUG) Log.d(TAG, "Widget: " + appWidgetId + ", " + tile.getUserName());
-            RemoteViews views = createRemoteViews(context, tile, appWidgetId);
-
-            // Tell the AppWidgetManager to perform an update on the current app widget.
-            appWidgetManager.updateAppWidget(appWidgetId, views);
-
-            widgetIdToTile.put(appWidgetId, tile);
+    /** Returns stored widgets for the conversation specified. */
+    public static Set<String> getStoredWidgetIds(SharedPreferences sp, PeopleTileKey key) {
+        if (!key.isValid()) {
+            return new HashSet<>();
         }
-        getBirthdaysOnBackgroundThread(context, appWidgetManager, widgetIdToTile, appWidgetIds);
-    }
-
-    @Nullable
-    private static PeopleSpaceTile getPeopleSpaceTile(IPeopleManager peopleManager,
-            AppWidgetManager appWidgetManager,
-            Context context, int appWidgetId) {
-        try {
-            // Migrate storage for existing users.
-            SharedPreferences widgetSp = context.getSharedPreferences(String.valueOf(appWidgetId),
-                    Context.MODE_PRIVATE);
-            String pkg = widgetSp.getString(PACKAGE_NAME, EMPTY_STRING);
-            int userId = widgetSp.getInt(USER_ID, INVALID_USER_ID);
-            String shortcutId = widgetSp.getString(SHORTCUT_ID, EMPTY_STRING);
-            if (pkg.isEmpty() || shortcutId.isEmpty() || userId == INVALID_WIDGET_ID) {
-                SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
-                shortcutId = sp.getString(String.valueOf(appWidgetId), null);
-                if (shortcutId == null) {
-                    Log.e(TAG, "Cannot restore widget");
-                    return null;
-                }
-                migrateExistingUsersToNewStorage(context, shortcutId, appWidgetId);
-                pkg = widgetSp.getString(PACKAGE_NAME, EMPTY_STRING);
-                userId = widgetSp.getInt(USER_ID, INVALID_USER_ID);
-            }
-
-            // Check if tile is cached.
-            Bundle options = appWidgetManager.getAppWidgetOptions(appWidgetId);
-            PeopleSpaceTile tile = options.getParcelable(OPTIONS_PEOPLE_SPACE_TILE);
-            if (tile != null) {
-                return tile;
-            }
-
-            // If tile is null, we need to retrieve from persisted storage.
-            if (DEBUG) Log.d(TAG, "Retrieving from storage after reboots");
-            LauncherApps launcherApps = context.getSystemService(LauncherApps.class);
-            ConversationChannel channel = peopleManager.getConversation(pkg, userId, shortcutId);
-            if (channel == null) {
-                Log.d(TAG, "Could not retrieve conversation from storage");
-                return null;
-            }
-            return new PeopleSpaceTile.Builder(channel, launcherApps).build();
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to retrieve conversation for tile: " + e);
-            return null;
-        }
-    }
-
-    /** Best-effort attempts to migrate existing users to the new storage format. */
-    // TODO: Remove after sufficient time. Temporary migration storage for existing users.
-    private static void migrateExistingUsersToNewStorage(Context context, String shortcutId,
-            int appWidgetId) {
-        try {
-            List<PeopleSpaceTile> tiles =
-                    PeopleSpaceUtils.getTiles(context, INotificationManager.Stub.asInterface(
-                            ServiceManager.getService(Context.NOTIFICATION_SERVICE)),
-                            IPeopleManager.Stub.asInterface(
-                                    ServiceManager.getService(Context.PEOPLE_SERVICE)),
-                            context.getSystemService(LauncherApps.class),
-                            Dependency.get(NotificationEntryManager.class));
-            Optional<PeopleSpaceTile> entry = tiles.stream().filter(
-                    e -> e.getId().equals(shortcutId)).findFirst();
-            if (entry.isPresent()) {
-                if (DEBUG) Log.d(TAG, "Migrate storage for " + entry.get().getUserName());
-                setStorageForTile(context, entry.get(), appWidgetId);
-            } else {
-                Log.e(TAG, "Could not migrate user");
-            }
-        } catch (Exception e) {
-            Log.e(TAG, "Could not query conversations");
-        }
+        return new HashSet<>(sp.getStringSet(key.toString(), new HashSet<>()));
     }
 
     /** Sets all relevant storage for {@code appWidgetId} association to {@code tile}. */
-    public static void setStorageForTile(Context context, PeopleSpaceTile tile, int appWidgetId) {
+    public static void setSharedPreferencesStorageForTile(Context context, PeopleTileKey key,
+            int appWidgetId, Uri contactUri) {
         // Write relevant persisted storage.
         SharedPreferences widgetSp = context.getSharedPreferences(String.valueOf(appWidgetId),
                 Context.MODE_PRIVATE);
         SharedPreferences.Editor widgetEditor = widgetSp.edit();
-        widgetEditor.putString(PeopleSpaceUtils.PACKAGE_NAME, tile.getPackageName());
-        widgetEditor.putString(PeopleSpaceUtils.SHORTCUT_ID, tile.getId());
-        int userId = getUserId(tile);
-        widgetEditor.putInt(PeopleSpaceUtils.USER_ID, userId);
+        widgetEditor.putString(PeopleSpaceUtils.PACKAGE_NAME, key.getPackageName());
+        widgetEditor.putString(PeopleSpaceUtils.SHORTCUT_ID, key.getShortcutId());
+        widgetEditor.putInt(PeopleSpaceUtils.USER_ID, key.getUserId());
         widgetEditor.apply();
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = sp.edit();
-        editor.putString(String.valueOf(appWidgetId), tile.getId());
-        String key = PeopleSpaceUtils.getKey(tile.getId(), tile.getPackageName(), userId);
-        // Don't overwrite existing widgets with the same key.
-        Set<String> storedWidgetIds = new HashSet<>(sp.getStringSet(key, new HashSet<>()));
-        storedWidgetIds.add(String.valueOf(appWidgetId));
-        editor.putStringSet(key, storedWidgetIds);
-        editor.apply();
+        String contactUriString = contactUri == null ? EMPTY_STRING : contactUri.toString();
+        editor.putString(String.valueOf(appWidgetId), contactUriString);
 
-        // Write cached storage.
-        updateAppWidgetOptionsAndView(AppWidgetManager.getInstance(context), context, appWidgetId,
-                tile);
+        // Don't overwrite existing widgets with the same key.
+        addAppWidgetIdForKey(sp, editor, appWidgetId, key.toString());
+        addAppWidgetIdForKey(sp, editor, appWidgetId, contactUriString);
+        editor.apply();
     }
 
     /** Removes stored data when tile is deleted. */
-    public static void removeStorageForTile(Context context, int widgetId) {
-        SharedPreferences widgetSp = context.getSharedPreferences(String.valueOf(widgetId),
-                Context.MODE_PRIVATE);
-        String packageName = widgetSp.getString(PACKAGE_NAME, null);
-        String shortcutId = widgetSp.getString(SHORTCUT_ID, null);
-        int userId = widgetSp.getInt(USER_ID, -1);
-
+    public static void removeSharedPreferencesStorageForTile(Context context, PeopleTileKey key,
+            int widgetId, String contactUriString) {
         // Delete widgetId mapping to key.
         SharedPreferences sp = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = sp.edit();
-        String key = PeopleSpaceUtils.getKey(shortcutId, packageName, userId);
-        Set<String> storedWidgetIds = new HashSet<>(sp.getStringSet(key, new HashSet<>()));
-        storedWidgetIds.remove(String.valueOf(widgetId));
-        editor.putStringSet(key, storedWidgetIds);
         editor.remove(String.valueOf(widgetId));
+        removeAppWidgetIdForKey(sp, editor, widgetId, key.toString());
+        removeAppWidgetIdForKey(sp, editor, widgetId, contactUriString);
         editor.apply();
 
         // Delete all data specifically mapped to widgetId.
+        SharedPreferences widgetSp = context.getSharedPreferences(String.valueOf(widgetId),
+                Context.MODE_PRIVATE);
         SharedPreferences.Editor widgetEditor = widgetSp.edit();
         widgetEditor.remove(PACKAGE_NAME);
         widgetEditor.remove(USER_ID);
@@ -342,381 +216,113 @@ public class PeopleSpaceUtils {
         widgetEditor.apply();
     }
 
-    /**
-     * Returns whether the data mapped to app widget specified by {@code appWidgetId} matches the
-     * requested update data.
-     */
-    public static boolean isCorrectAppWidget(Context context, int appWidgetId, String shortcutId,
-            String packageName, int userId) {
-        SharedPreferences sp = context.getSharedPreferences(String.valueOf(appWidgetId),
-                Context.MODE_PRIVATE);
-        String storedPackage = sp.getString(PACKAGE_NAME, EMPTY_STRING);
-        int storedUserId = sp.getInt(USER_ID, INVALID_USER_ID);
-        String storedShortcutId = sp.getString(SHORTCUT_ID, EMPTY_STRING);
-        return storedPackage.equals(packageName) && storedShortcutId.equals(shortcutId)
-                && storedUserId == userId;
+    private static void addAppWidgetIdForKey(SharedPreferences sp, SharedPreferences.Editor editor,
+            int widgetId, String storageKey) {
+        Set<String> storedWidgetIdsByKey = new HashSet<>(
+                sp.getStringSet(storageKey, new HashSet<>()));
+        storedWidgetIdsByKey.add(String.valueOf(widgetId));
+        editor.putStringSet(storageKey, storedWidgetIdsByKey);
     }
 
-    static List<PeopleSpaceTile> augmentTilesFromVisibleNotifications(List<PeopleSpaceTile> tiles,
-            NotificationEntryManager notificationEntryManager) {
+    private static void removeAppWidgetIdForKey(SharedPreferences sp,
+            SharedPreferences.Editor editor,
+            int widgetId, String storageKey) {
+        Set<String> storedWidgetIds = new HashSet<>(
+                sp.getStringSet(storageKey, new HashSet<>()));
+        storedWidgetIds.remove(String.valueOf(widgetId));
+        editor.putStringSet(storageKey, storedWidgetIds);
+    }
+
+    /** Augments a single {@link PeopleSpaceTile} with notification content, if one is present. */
+    public static PeopleSpaceTile augmentSingleTileFromVisibleNotifications(Context context,
+            PeopleSpaceTile tile, NotificationEntryManager notificationEntryManager) {
+        List<PeopleSpaceTile> augmentedTile = augmentTilesFromVisibleNotifications(
+                context, Arrays.asList(tile), notificationEntryManager);
+        return augmentedTile.get(0);
+    }
+
+    static List<PeopleSpaceTile> augmentTilesFromVisibleNotifications(Context context,
+            List<PeopleSpaceTile> tiles, NotificationEntryManager notificationEntryManager) {
         if (notificationEntryManager == null) {
             Log.w(TAG, "NotificationEntryManager is null");
             return tiles;
         }
-        Map<String, NotificationEntry> visibleNotifications = notificationEntryManager
+        Map<PeopleTileKey, NotificationEntry> visibleNotifications = notificationEntryManager
                 .getVisibleNotifications()
                 .stream()
                 .filter(entry -> entry.getRanking() != null
                         && entry.getRanking().getConversationShortcutInfo() != null)
-                .collect(Collectors.toMap(PeopleSpaceUtils::getKey, e -> e));
+                .collect(Collectors.toMap(PeopleTileKey::new, e -> e,
+                        // Handle duplicate keys to avoid crashes.
+                        (e1, e2) -> e1.getSbn().getNotification().when
+                                > e2.getSbn().getNotification().when ? e1 : e2));
         if (DEBUG) {
             Log.d(TAG, "Number of visible notifications:" + visibleNotifications.size());
         }
         return tiles
                 .stream()
-                .map(entry -> augmentTileFromVisibleNotifications(entry, visibleNotifications))
+                .map(entry -> augmentTileFromVisibleNotifications(
+                        context, entry, visibleNotifications))
                 .collect(Collectors.toList());
     }
 
-    static PeopleSpaceTile augmentTileFromVisibleNotifications(PeopleSpaceTile tile,
-            Map<String, NotificationEntry> visibleNotifications) {
-        String shortcutId = tile.getId();
-        String packageName = tile.getPackageName();
-        int userId = UserHandle.getUserHandleForUid(tile.getUid()).getIdentifier();
-        String key = getKey(shortcutId, packageName, userId);
+    static PeopleSpaceTile augmentTileFromVisibleNotifications(Context context,
+            PeopleSpaceTile tile, Map<PeopleTileKey, NotificationEntry> visibleNotifications) {
+        PeopleTileKey key = new PeopleTileKey(
+                tile.getId(), getUserId(tile), tile.getPackageName());
+        // TODO: Match missed calls with matching Uris in addition to keys.
         if (!visibleNotifications.containsKey(key)) {
-            if (DEBUG) Log.d(TAG, "No existing notifications for key:" + key);
+            if (DEBUG) Log.d(TAG, "No existing notifications for key:" + key.toString());
             return tile;
         }
-        if (DEBUG) Log.d(TAG, "Augmenting tile from visible notifications, key:" + key);
-        return augmentTileFromNotification(tile, visibleNotifications.get(key).getSbn());
+        if (DEBUG) Log.d(TAG, "Augmenting tile from visible notifications, key:" + key.toString());
+        return augmentTileFromNotification(context, tile, visibleNotifications.get(key).getSbn());
     }
 
-    /**
-     * If incoming notification changed tile, store the changes in the tile options.
-     */
-    public static void updateWidgetWithNotificationChanged(IPeopleManager peopleManager,
-            Context context,
-            StatusBarNotification sbn,
-            NotificationAction notificationAction, AppWidgetManager appWidgetManager,
-            int appWidgetId) {
-        PeopleSpaceTile storedTile = getPeopleSpaceTile(peopleManager, appWidgetManager, context,
-                appWidgetId);
-        if (storedTile == null) {
-            if (DEBUG) Log.d(TAG, "Could not find stored tile to add notification to");
-            return;
-        }
-        if (notificationAction == PeopleSpaceUtils.NotificationAction.POSTED) {
-            if (DEBUG) Log.i(TAG, "Adding notification to storage, appWidgetId: " + appWidgetId);
-            storedTile = augmentTileFromNotification(storedTile, sbn);
-        } else {
-            if (DEBUG) {
-                Log.i(TAG, "Removing notification from storage, appWidgetId: " + appWidgetId);
-            }
-            storedTile = storedTile
-                    .toBuilder()
-                    .setNotificationKey(null)
-                    .setNotificationContent(null)
-                    .setNotificationDataUri(null)
-                    .build();
-        }
-        updateAppWidgetOptionsAndView(appWidgetManager, context, appWidgetId, storedTile);
-    }
-
-    static PeopleSpaceTile augmentTileFromNotification(PeopleSpaceTile tile,
+    /** Augments {@code tile} with the notification content from {@code sbn}. */
+    public static PeopleSpaceTile augmentTileFromNotification(Context context, PeopleSpaceTile tile,
             StatusBarNotification sbn) {
-        Notification.MessagingStyle.Message message = getLastMessagingStyleMessage(sbn);
-        if (message == null) {
-            if (DEBUG) Log.i(TAG, "Notification doesn't have content, skipping.");
+        Notification notification = sbn.getNotification();
+        if (notification == null) {
+            if (DEBUG) Log.d(TAG, "Notification is null");
             return tile;
         }
+        boolean isMissedCall = Objects.equals(notification.category, CATEGORY_MISSED_CALL);
+        List<Notification.MessagingStyle.Message> messages =
+                getMessagingStyleMessages(notification);
+
+        if (!isMissedCall && ArrayUtils.isEmpty(messages)) {
+            if (DEBUG) Log.d(TAG, "Notification has no content");
+            return tile;
+        }
+
+        // messages are in chronological order from most recent to least.
+        Notification.MessagingStyle.Message message = messages != null ? messages.get(0) : null;
+        int messagesCount = messages != null ? messages.size() : 0;
+        // If it's a missed call notification and it doesn't include content, use fallback value,
+        // otherwise, use notification content.
+        boolean hasMessageText = message != null && !TextUtils.isEmpty(message.getText());
+        CharSequence content = (isMissedCall && !hasMessageText)
+                ? context.getString(R.string.missed_call) : message.getText();
+        Uri dataUri = message != null ? message.getDataUri() : null;
+
         return tile
                 .toBuilder()
                 .setNotificationKey(sbn.getKey())
-                .setNotificationContent(message.getText())
-                .setNotificationDataUri(message.getDataUri())
+                .setNotificationCategory(notification.category)
+                .setNotificationContent(content)
+                .setNotificationDataUri(dataUri)
+                .setMessagesCount(messagesCount)
                 .build();
     }
 
-    private static void updateAppWidgetOptions(AppWidgetManager appWidgetManager, int appWidgetId,
-            PeopleSpaceTile tile) {
-        if (tile == null) {
-            if (DEBUG) Log.d(TAG, "Requested to store null tile");
-            return;
-        }
-        Bundle newOptions = new Bundle();
-        newOptions.putParcelable(OPTIONS_PEOPLE_SPACE_TILE, tile);
-        appWidgetManager.updateAppWidgetOptions(appWidgetId, newOptions);
-    }
-
-    /** Creates a {@link RemoteViews} for {@code tile}. */
-    public static RemoteViews createRemoteViews(Context context,
-            PeopleSpaceTile tile, int appWidgetId) {
-        RemoteViews viewsForTile = getViewForTile(context, tile);
-        RemoteViews views = setCommonRemoteViewsFields(context, viewsForTile, tile);
-        return setLaunchIntents(context, views, tile, appWidgetId);
-    }
-
     /**
-     * The prioritization for the {@code tile} content is missed calls, followed by notification
-     * content, then birthdays, then the most recent status, and finally last interaction.
+     * Returns {@link Notification.MessagingStyle.Message}s from the Notification in chronological
+     * order from most recent to least.
      */
-    private static RemoteViews getViewForTile(Context context, PeopleSpaceTile tile) {
-        if (tile.getNotificationKey() != null) {
-            if (DEBUG) Log.d(TAG, "Create notification view");
-            return createNotificationRemoteViews(context, tile);
-        }
-
-        // TODO: Add sorting when we expose timestamp of statuses.
-        List<ConversationStatus> statusesForEntireView =
-                tile.getStatuses() == null ? Arrays.asList() : tile.getStatuses().stream().filter(
-                        c -> isStatusValidForEntireStatusView(c)).collect(Collectors.toList());
-        ConversationStatus birthdayStatus = getBirthdayStatus(tile, statusesForEntireView);
-        if (birthdayStatus != null) {
-            if (DEBUG) Log.d(TAG, "Create birthday view");
-            return createStatusRemoteViews(context, birthdayStatus);
-        }
-
-        if (!statusesForEntireView.isEmpty()) {
-            if (DEBUG) {
-                Log.d(TAG,
-                        "Create status view for: " + statusesForEntireView.get(0).getActivity());
-            }
-            return createStatusRemoteViews(context, statusesForEntireView.get(0));
-        }
-
-        return createLastInteractionRemoteViews(context, tile);
-    }
-
-    @Nullable
-    private static ConversationStatus getBirthdayStatus(PeopleSpaceTile tile,
-            List<ConversationStatus> statuses) {
-        Optional<ConversationStatus> birthdayStatus = statuses.stream().filter(
-                c -> c.getActivity() == ACTIVITY_BIRTHDAY).findFirst();
-        if (birthdayStatus.isPresent()) {
-            return birthdayStatus.get();
-        }
-        if (!TextUtils.isEmpty(tile.getBirthdayText())) {
-            return new ConversationStatus.Builder(tile.getId(), ACTIVITY_BIRTHDAY).build();
-        }
-
-        return null;
-    }
-
-    /**
-     * Returns whether a {@code status} should have its own entire templated view.
-     *
-     * <p>A status may still be shown on the view (for example, as a new story ring) even if it's
-     * not valid to compose an entire view.
-     */
-    private static boolean isStatusValidForEntireStatusView(ConversationStatus status) {
-        switch (status.getActivity()) {
-            // Birthday & Anniversary don't require text provided or icon provided.
-            case ACTIVITY_BIRTHDAY:
-            case ACTIVITY_ANNIVERSARY:
-                return true;
-            default:
-                // For future birthday, location, new story, video, music, game, and other, the
-                // app must provide either text or an icon.
-                return !TextUtils.isEmpty(status.getDescription())
-                        || status.getIcon() != null;
-        }
-    }
-
-    private static RemoteViews createStatusRemoteViews(Context context, ConversationStatus status) {
-        RemoteViews views = new RemoteViews(
-                context.getPackageName(), R.layout.people_space_small_avatar_tile);
-        CharSequence statusText = status.getDescription();
-        if (TextUtils.isEmpty(statusText)) {
-            statusText = getStatusTextByType(context, status.getActivity());
-        }
-        views.setTextViewText(R.id.status, statusText);
-        Icon statusIcon = status.getIcon();
-        if (statusIcon != null) {
-            views.setImageViewIcon(R.id.image, statusIcon);
-            views.setBoolean(R.id.content_background, "setClipToOutline", true);
-        } else {
-            views.setViewVisibility(R.id.content_background, View.GONE);
-        }
-        // TODO: Set status pre-defined icons
-        return views;
-    }
-
-    private static String getStatusTextByType(Context context, int activity) {
-        switch (activity) {
-            case ACTIVITY_BIRTHDAY:
-                return context.getString(R.string.birthday_status);
-            case ACTIVITY_UPCOMING_BIRTHDAY:
-                return context.getString(R.string.upcoming_birthday_status);
-            case ACTIVITY_ANNIVERSARY:
-                return context.getString(R.string.anniversary_status);
-            case ACTIVITY_LOCATION:
-                return context.getString(R.string.location_status);
-            case ACTIVITY_NEW_STORY:
-                return context.getString(R.string.new_story_status);
-            case ACTIVITY_MEDIA:
-                return context.getString(R.string.video_status);
-            case ACTIVITY_GAME:
-                return context.getString(R.string.game_status);
-            default:
-                return EMPTY_STRING;
-        }
-    }
-
-    private static RemoteViews setCommonRemoteViewsFields(Context context, RemoteViews views,
-            PeopleSpaceTile tile) {
-        try {
-            boolean isAvailable =
-                    tile.getStatuses() != null && tile.getStatuses().stream().anyMatch(
-                            c -> c.getAvailability() == AVAILABILITY_AVAILABLE);
-            if (isAvailable) {
-                views.setViewVisibility(R.id.availability, View.VISIBLE);
-            } else {
-                views.setViewVisibility(R.id.availability, View.GONE);
-            }
-            boolean hasNewStory =
-                    tile.getStatuses() != null && tile.getStatuses().stream().anyMatch(
-                            c -> c.getActivity() == ACTIVITY_NEW_STORY);
-            if (hasNewStory) {
-                views.setViewVisibility(R.id.person_icon_with_story, View.VISIBLE);
-                views.setViewVisibility(R.id.person_icon_only, View.GONE);
-                views.setImageViewIcon(R.id.person_icon_inside_ring, tile.getUserIcon());
-            } else {
-                views.setViewVisibility(R.id.person_icon_with_story, View.GONE);
-                views.setViewVisibility(R.id.person_icon_only, View.VISIBLE);
-                views.setImageViewIcon(R.id.person_icon_only, tile.getUserIcon());
-            }
-
-            views.setTextViewText(R.id.name, tile.getUserName().toString());
-            views.setImageViewIcon(R.id.person_icon, tile.getUserIcon());
-            views.setBoolean(R.id.content_background, "setClipToOutline", true);
-
-            views.setImageViewBitmap(
-                    R.id.package_icon,
-                    PeopleSpaceUtils.convertDrawableToBitmap(
-                            context.getPackageManager().getApplicationIcon(
-                                    tile.getPackageName())
-                    )
-            );
-            return views;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to set common fields: " + e);
-        }
-        return views;
-    }
-
-    private static RemoteViews setLaunchIntents(Context context, RemoteViews views,
-            PeopleSpaceTile tile, int appWidgetId) {
-        try {
-            Intent activityIntent = new Intent(context, LaunchConversationActivity.class);
-            activityIntent.addFlags(
-                    Intent.FLAG_ACTIVITY_NEW_TASK
-                            | Intent.FLAG_ACTIVITY_CLEAR_TASK
-                            | Intent.FLAG_ACTIVITY_NO_HISTORY
-                            | Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-            activityIntent.putExtra(PeopleSpaceWidgetProvider.EXTRA_TILE_ID, tile.getId());
-            activityIntent.putExtra(
-                    PeopleSpaceWidgetProvider.EXTRA_PACKAGE_NAME, tile.getPackageName());
-            activityIntent.putExtra(PeopleSpaceWidgetProvider.EXTRA_UID, tile.getUid());
-            views.setOnClickPendingIntent(R.id.item, PendingIntent.getActivity(
-                    context,
-                    appWidgetId,
-                    activityIntent,
-                    PendingIntent.FLAG_UPDATE_CURRENT | PendingIntent.FLAG_MUTABLE));
-            return views;
-        } catch (Exception e) {
-            Log.e(TAG, "Failed to add launch intents: " + e);
-        }
-        return views;
-    }
-
-    private static RemoteViews createNotificationRemoteViews(Context context,
-            PeopleSpaceTile tile) {
-        RemoteViews views = new RemoteViews(
-                context.getPackageName(), R.layout.people_space_notification_content_tile);
-        Uri image = tile.getNotificationDataUri();
-        if (image != null) {
-            // TODO: Use NotificationInlineImageCache
-            views.setImageViewUri(R.id.image, image);
-            views.setViewVisibility(R.id.content_background, View.VISIBLE);
-            views.setBoolean(R.id.content_background, "setClipToOutline", true);
-            views.setViewVisibility(R.id.content, View.GONE);
-        } else {
-            CharSequence content = tile.getNotificationContent();
-            views = setPunctuationRemoteViewsFields(views, content);
-            views.setTextViewText(R.id.content, content);
-            views.setViewVisibility(R.id.content, View.VISIBLE);
-            views.setViewVisibility(R.id.content_background, View.GONE);
-        }
-        // TODO: Set subtext as Group Sender name once storing the name in PeopleSpaceTile.
-        views.setTextViewText(R.id.subtext, PeopleSpaceUtils.getLastInteractionString(
-                context, tile.getLastInteractionTimestamp(), false));
-        return views;
-    }
-
-    private static RemoteViews createLastInteractionRemoteViews(Context context,
-            PeopleSpaceTile tile) {
-        RemoteViews views = new RemoteViews(
-                context.getPackageName(), R.layout.people_space_large_avatar_tile);
-        String status = PeopleSpaceUtils.getLastInteractionString(
-                context, tile.getLastInteractionTimestamp(), true);
-        views.setTextViewText(R.id.last_interaction, status);
-        return views;
-    }
-
-    private static RemoteViews setPunctuationRemoteViewsFields(
-            RemoteViews views, CharSequence content) {
-        String punctuation = getBackgroundTextFromMessage(content.toString());
-        int visibility = View.GONE;
-        if (punctuation != null) {
-            visibility = View.VISIBLE;
-        }
-        views.setTextViewText(R.id.punctuation1, punctuation);
-        views.setTextViewText(R.id.punctuation2, punctuation);
-        views.setTextViewText(R.id.punctuation3, punctuation);
-        views.setTextViewText(R.id.punctuation4, punctuation);
-        views.setTextViewText(R.id.punctuation5, punctuation);
-        views.setTextViewText(R.id.punctuation6, punctuation);
-
-        views.setViewVisibility(R.id.punctuation1, visibility);
-        views.setViewVisibility(R.id.punctuation2, visibility);
-        views.setViewVisibility(R.id.punctuation3, visibility);
-        views.setViewVisibility(R.id.punctuation4, visibility);
-        views.setViewVisibility(R.id.punctuation5, visibility);
-        views.setViewVisibility(R.id.punctuation6, visibility);
-
-        return views;
-    }
-
-    /** Gets character for tile background decoration based on notification content. */
     @VisibleForTesting
-    static String getBackgroundTextFromMessage(String message) {
-        if (!ANY_DOUBLE_MARK_PATTERN.matcher(message).find()) {
-            return null;
-        }
-        if (MIXED_MARK_PATTERN.matcher(message).find()) {
-            return "!?";
-        }
-        Matcher doubleQuestionMatcher = DOUBLE_QUESTION_PATTERN.matcher(message);
-        if (!doubleQuestionMatcher.find()) {
-            return "!";
-        }
-        Matcher doubleExclamationMatcher = DOUBLE_EXCLAMATION_PATTERN.matcher(message);
-        if (!doubleExclamationMatcher.find()) {
-            return "?";
-        }
-        // If we have both "!!" and "??", return the one that comes first.
-        if (doubleQuestionMatcher.start() < doubleExclamationMatcher.start()) {
-            return "?";
-        }
-        return "!";
-    }
-
-    /** Gets the most recent {@link Notification.MessagingStyle.Message} from the notification. */
-    @VisibleForTesting
-    public static Notification.MessagingStyle.Message getLastMessagingStyleMessage(
-            StatusBarNotification sbn) {
-        Notification notification = sbn.getNotification();
+    public static List<Notification.MessagingStyle.Message> getMessagingStyleMessages(
+            Notification notification) {
         if (notification == null) {
             return null;
         }
@@ -728,7 +334,7 @@ public class PeopleSpaceUtils {
                         Notification.MessagingStyle.Message.getMessagesFromBundleArray(messages);
                 sortedMessages.sort(Collections.reverseOrder(
                         Comparator.comparing(Notification.MessagingStyle.Message::getTimestamp)));
-                return sortedMessages.get(0);
+                return sortedMessages;
             }
         }
         return null;
@@ -755,7 +361,6 @@ public class PeopleSpaceUtils {
             Log.i(TAG, "ConversationChannel is null");
             return null;
         }
-
         PeopleSpaceTile tile = new PeopleSpaceTile.Builder(channel, launcherApps).build();
         if (!PeopleSpaceUtils.shouldKeepConversation(tile)) {
             Log.i(TAG, "PeopleSpaceTile is not valid");
@@ -807,8 +412,7 @@ public class PeopleSpaceUtils {
     }
 
     /** Returns a readable status describing the {@code lastInteraction}. */
-    public static String getLastInteractionString(Context context, long lastInteraction,
-            boolean includeLastChatted) {
+    public static String getLastInteractionString(Context context, long lastInteraction) {
         if (lastInteraction == 0L) {
             Log.e(TAG, "Could not get valid last interaction");
             return context.getString(R.string.basic_status);
@@ -817,41 +421,20 @@ public class PeopleSpaceUtils {
         Duration durationSinceLastInteraction = Duration.ofMillis(now - lastInteraction);
         MeasureFormat formatter = MeasureFormat.getInstance(Locale.getDefault(),
                 MeasureFormat.FormatWidth.WIDE);
-        MeasureFormat shortFormatter = MeasureFormat.getInstance(Locale.getDefault(),
-                MeasureFormat.FormatWidth.SHORT);
         if (durationSinceLastInteraction.toHours() < MIN_HOUR) {
-            if (includeLastChatted) {
-                return context.getString(R.string.last_interaction_status_less_than,
-                        formatter.formatMeasures(new Measure(MIN_HOUR, MeasureUnit.HOUR)));
-            }
-            return context.getString(R.string.timestamp, shortFormatter.formatMeasures(
+            return context.getString(R.string.timestamp, formatter.formatMeasures(
                     new Measure(durationSinceLastInteraction.toMinutes(), MeasureUnit.MINUTE)));
         } else if (durationSinceLastInteraction.toDays() < ONE_DAY) {
-            if (includeLastChatted) {
-                return context.getString(R.string.last_interaction_status,
-                        formatter.formatMeasures(
-                                new Measure(durationSinceLastInteraction.toHours(),
-                                        MeasureUnit.HOUR)));
-            }
-            return context.getString(R.string.timestamp, shortFormatter.formatMeasures(
+            return context.getString(R.string.timestamp, formatter.formatMeasures(
                     new Measure(durationSinceLastInteraction.toHours(),
                             MeasureUnit.HOUR)));
         } else if (durationSinceLastInteraction.toDays() < DAYS_IN_A_WEEK) {
-            if (includeLastChatted) {
-                return context.getString(R.string.last_interaction_status,
-                        formatter.formatMeasures(
-                                new Measure(durationSinceLastInteraction.toDays(),
-                                        MeasureUnit.DAY)));
-            }
-            return context.getString(R.string.timestamp, shortFormatter.formatMeasures(
+            return context.getString(R.string.timestamp, formatter.formatMeasures(
                     new Measure(durationSinceLastInteraction.toHours(),
                             MeasureUnit.DAY)));
         } else {
             return context.getString(durationSinceLastInteraction.toDays() == DAYS_IN_A_WEEK
-                            ? (includeLastChatted ? R.string.last_interaction_status :
-                            R.string.timestamp) :
-                            (includeLastChatted ? R.string.last_interaction_status_over
-                                    : R.string.over_timestamp),
+                            ? R.string.timestamp : R.string.over_timestamp,
                     formatter.formatMeasures(
                             new Measure(durationSinceLastInteraction.toDays() / DAYS_IN_A_WEEK,
                                     MeasureUnit.WEEK)));
@@ -878,7 +461,7 @@ public class PeopleSpaceUtils {
     }
 
     /** Calls to retrieve birthdays on a background thread. */
-    private static void getBirthdaysOnBackgroundThread(Context context,
+    public static void getBirthdaysOnBackgroundThread(Context context,
             AppWidgetManager appWidgetManager,
             Map<Integer, PeopleSpaceTile> peopleSpaceTiles, int[] appWidgetIds) {
         ThreadUtils.postOnBackgroundThread(
@@ -956,12 +539,22 @@ public class PeopleSpaceUtils {
         removeBirthdayStatusIfPresent(appWidgetManager, context, storedTile, appWidgetId);
     }
 
-    /** Update app widget options and the current view. */
-    private static void updateAppWidgetOptionsAndView(AppWidgetManager appWidgetManager,
-            Context context, int appWidgetId, PeopleSpaceTile tile) {
-        updateAppWidgetOptions(appWidgetManager, appWidgetId, tile);
-        RemoteViews views = createRemoteViews(context, tile, appWidgetId);
+    /** Updates the current widget view with provided {@link PeopleSpaceTile}. */
+    public static void updateAppWidgetViews(AppWidgetManager appWidgetManager,
+            Context context, int appWidgetId, PeopleSpaceTile tile, Bundle options) {
+        if (DEBUG) Log.d(TAG, "Widget: " + appWidgetId + ", " + tile.getUserName());
+        RemoteViews views = new PeopleTileViewHelper(context, tile, appWidgetId,
+                options).getViews();
+
+        // Tell the AppWidgetManager to perform an update on the current app widget.
         appWidgetManager.updateAppWidget(appWidgetId, views);
+    }
+
+    /** Updates tile in app widget options and the current view. */
+    public static void updateAppWidgetOptionsAndView(AppWidgetManager appWidgetManager,
+            Context context, int appWidgetId, PeopleSpaceTile tile) {
+        Bundle options = AppWidgetOptionsHelper.setPeopleTile(appWidgetManager, appWidgetId, tile);
+        updateAppWidgetViews(appWidgetManager, context, appWidgetId, tile, options);
     }
 
     /**
@@ -1005,42 +598,45 @@ public class PeopleSpaceUtils {
         return lookupKeysWithBirthdaysToday;
     }
 
-    static String getKey(NotificationEntry entry) {
-        if (entry.getRanking() == null || entry.getRanking().getConversationShortcutInfo() == null
-                || entry.getSbn() == null || entry.getSbn().getUser() == null) {
+    /**
+     * Returns a {@link RemoteViews} preview of a Conversation's People Tile. Returns null if one
+     * is not available.
+     */
+    public static RemoteViews getPreview(Context context, IPeopleManager peopleManager,
+            LauncherApps launcherApps, NotificationEntryManager notificationEntryManager,
+            String shortcutId, UserHandle userHandle, String packageName) {
+        peopleManager = (peopleManager != null) ? peopleManager : IPeopleManager.Stub.asInterface(
+                ServiceManager.getService(Context.PEOPLE_SERVICE));
+        launcherApps = (launcherApps != null) ? launcherApps
+                : context.getSystemService(LauncherApps.class);
+        if (peopleManager == null || launcherApps == null) {
             return null;
         }
-        return getKey(entry.getRanking().getConversationShortcutInfo().getId(),
-                entry.getSbn().getPackageName(),
-                entry.getSbn().getUser().getIdentifier());
-    }
 
-    /**
-     * Returns the uniquely identifying key for the conversation.
-     *
-     * <p>{@code userId} will always be a number, so we put user ID as the
-     * delimiter between the app-provided strings of shortcut ID and package name.
-     *
-     * <p>There aren't restrictions on shortcut ID characters, but there are restrictions requiring
-     * a {@code packageName} to always start with a letter. This restriction means we are
-     * guaranteed to avoid cases like "a/b/0/0/package.name" having two potential keys, as the first
-     * case is impossible given the package name restrictions:
-     * <ul>
-     *     <li>"a/b" + "/" + 0 + "/" + "0/packageName"</li>
-     *     <li>"a/b/0" + "/" + 0 + "/" + "packageName"</li>
-     * </ul>
-     */
-    public static String getKey(String shortcutId, String packageName, int userId) {
-        return shortcutId + "/" + userId + "/" + packageName;
+        ConversationChannel channel;
+        try {
+            channel = peopleManager.getConversation(
+                    packageName, userHandle.getIdentifier(), shortcutId);
+        } catch (Exception e) {
+            Log.w(TAG, "Exception getting tiles: " + e);
+            return null;
+        }
+        PeopleSpaceTile tile = PeopleSpaceUtils.getTile(channel, launcherApps);
+
+        if (tile == null) {
+            if (DEBUG) Log.i(TAG, "No tile was returned");
+            return null;
+        }
+        PeopleSpaceTile augmentedTile = augmentSingleTileFromVisibleNotifications(
+                context, tile, notificationEntryManager);
+
+        if (DEBUG) Log.i(TAG, "Returning tile preview for shortcutId: " + shortcutId);
+        Bundle bundle = new Bundle();
+        return new PeopleTileViewHelper(context, augmentedTile, 0, bundle).getViews();
     }
 
     /** Returns the userId associated with a {@link PeopleSpaceTile} */
     public static int getUserId(PeopleSpaceTile tile) {
-        return getUserHandle(tile).getIdentifier();
-    }
-
-    /** Returns the {@link UserHandle} associated with a {@link PeopleSpaceTile} */
-    public static UserHandle getUserHandle(PeopleSpaceTile tile) {
-        return UserHandle.getUserHandleForUid(tile.getUid());
+        return tile.getUserHandle().getIdentifier();
     }
 }

@@ -32,6 +32,7 @@ import android.app.WindowConfiguration;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ParceledListSlice;
+import android.graphics.Rect;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
@@ -131,10 +132,30 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             });
         }
 
-        void removeStartingWindow(Task task) {
+        void removeStartingWindow(Task task, boolean prepareAnimation) {
             mDeferTaskOrgCallbacksConsumer.accept(() -> {
+                SurfaceControl firstWindowLeash = null;
+                Rect mainFrame = null;
+                // TODO enable shift up animation once we fix flicker test
+//                final boolean playShiftUpAnimation = !task.inMultiWindowMode();
+//                if (prepareAnimation && playShiftUpAnimation) {
+//                    final ActivityRecord topActivity = task.topActivityWithStartingWindow();
+//                    if (topActivity != null) {
+//                        final WindowState mainWindow =
+//                                topActivity.findMainWindow(false/* includeStartingApp */);
+//                        if (mainWindow != null) {
+                // TODO create proper leash instead of the copied SC
+//                            firstWindowLeash = new SurfaceControl(mainWindow.getSurfaceControl(),
+//                                    "TaskOrganizerController.removeStartingWindow");
+//                            mainFrame = mainWindow.getRelativeFrame();
+//                        }
+//                    }
+//                }
                 try {
-                    mTaskOrganizer.removeStartingWindow(task.mTaskId);
+                    mTaskOrganizer.removeStartingWindow(task.mTaskId, firstWindowLeash, mainFrame,
+                    /* TODO(183004107) Revert this when jankiness is solved
+                        prepareAnimation); */ false);
+
                 } catch (RemoteException e) {
                     Slog.e(TAG, "Exception sending onStartTaskFinished callback", e);
                 }
@@ -249,8 +270,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             mOrganizer.addStartingWindow(t, appToken, launchTheme);
         }
 
-        void removeStartingWindow(Task t) {
-            mOrganizer.removeStartingWindow(t);
+        void removeStartingWindow(Task t, boolean prepareAnimation) {
+            mOrganizer.removeStartingWindow(t, prepareAnimation);
         }
 
         void copySplashScreenView(Task t) {
@@ -285,18 +306,20 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             return false;
         }
 
-        private boolean removeTask(Task t) {
+        private boolean removeTask(Task t, boolean removeFromSystem) {
             mOrganizedTasks.remove(t);
             mInterceptBackPressedOnRootTasks.remove(t.mTaskId);
-
-            if (t.mTaskAppearedSent) {
+            boolean taskAppearedSent = t.mTaskAppearedSent;
+            if (taskAppearedSent) {
                 if (t.getSurfaceControl() != null) {
-                    t.migrateToNewSurfaceControl();
+                    t.migrateToNewSurfaceControl(t.getSyncTransaction());
                 }
                 t.mTaskAppearedSent = false;
-                return true;
             }
-            return false;
+            if (removeFromSystem) {
+                mService.removeTask(t.mTaskId);
+            }
+            return taskAppearedSent;
         }
 
         void dispose() {
@@ -311,7 +334,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
                 if (mOrganizedTasks.contains(t)) {
                     // updateTaskOrganizerState should remove the task from the list, but still
                     // check it again to avoid while-loop isn't terminate.
-                    if (removeTask(t)) {
+                    if (removeTask(t, t.mRemoveWithTaskOrganizer)) {
                         TaskOrganizerController.this.onTaskVanishedInternal(
                                 mOrganizer.mTaskOrganizer, t);
                     }
@@ -493,14 +516,14 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         return true;
     }
 
-    void removeStartingWindow(Task task) {
+    void removeStartingWindow(Task task, boolean prepareAnimation) {
         final Task rootTask = task.getRootTask();
         if (rootTask == null || rootTask.mTaskOrganizer == null) {
             return;
         }
         final TaskOrganizerState state =
                 mTaskOrganizerStates.get(rootTask.mTaskOrganizer.asBinder());
-        state.removeStartingWindow(task);
+        state.removeStartingWindow(task, prepareAnimation);
     }
 
     boolean copySplashScreenView(Task task) {
@@ -527,7 +550,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
 
     void onTaskVanished(ITaskOrganizer organizer, Task task) {
         final TaskOrganizerState state = mTaskOrganizerStates.get(organizer.asBinder());
-        if (state != null && state.removeTask(task)) {
+        if (state != null && state.removeTask(task, false /* removeFromSystem */)) {
             onTaskVanishedInternal(organizer, task);
         }
     }
@@ -596,9 +619,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
         try {
             synchronized (mGlobalLock) {
                 final WindowContainer wc = WindowContainer.fromBinder(token.asBinder());
-                if (wc == null) {
-                    throw new IllegalArgumentException("Can't resolve window from token");
-                }
+                if (wc == null) return false;
                 final Task task = wc.asTask();
                 if (task == null) return false;
                 if (!task.mCreatedByOrganizer) {
@@ -865,6 +886,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             mPendingTaskEvents.remove(pending);
         }
         mPendingTaskEvents.add(pending);
+        mService.mWindowManager.mWindowPlacerLocked.requestTraversal();
         return true;
     }
 

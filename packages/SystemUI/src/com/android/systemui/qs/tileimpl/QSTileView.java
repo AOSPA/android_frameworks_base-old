@@ -26,6 +26,8 @@ import android.view.ViewGroup;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.Nullable;
+
 import com.android.settingslib.Utils;
 import com.android.systemui.FontSizeUtils;
 import com.android.systemui.R;
@@ -105,22 +107,26 @@ public class QSTileView extends QSTileBaseView {
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
+        mLabel.setSingleLine(false);
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-        // Remeasure view if the primary label requires more then 2 lines or the secondary label
-        // text will be cut off.
-        if (mLabel.getLineCount() > mMaxLabelLines || !TextUtils.isEmpty(mSecondLine.getText())
-                        && mSecondLine.getLineHeight() > mSecondLine.getHeight()) {
-            if (!mLabel.isSingleLine()) {
-                mLabel.setSingleLine();
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-            }
-        } else {
-            if (mLabel.isSingleLine()) {
-                mLabel.setSingleLine(false);
-                super.onMeasure(widthMeasureSpec, heightMeasureSpec);
-            }
+        // Remeasure view if the primary label requires more than mMaxLabelLines lines or the
+        // secondary label text will be cut off.
+        if (shouldLabelBeSingleLine()) {
+            mLabel.setSingleLine();
+            super.onMeasure(widthMeasureSpec, heightMeasureSpec);
         }
+    }
+
+    protected boolean shouldLabelBeSingleLine() {
+        if (mCollapsedView) return true;
+        if (mLabel.getLineCount() > mMaxLabelLines) {
+            return true;
+        } else if (!TextUtils.isEmpty(mSecondLine.getText())
+                && mLabel.getLineCount() > mMaxLabelLines - 1) {
+            return true;
+        }
+        return false;
     }
 
     @Override
@@ -135,14 +141,14 @@ public class QSTileView extends QSTileBaseView {
             } else {
                 labelColor = mColorLabelUnavailable;
             }
-            mLabel.setTextColor(labelColor);
+            changeLabelColor(labelColor);
             mState = state.state;
             mLabel.setText(state.label);
         }
         if (!Objects.equals(mSecondLine.getText(), state.secondaryLabel)) {
             mSecondLine.setText(state.secondaryLabel);
-            mSecondLine.setVisibility(TextUtils.isEmpty(state.secondaryLabel) ? View.GONE
-                    : View.VISIBLE);
+            mSecondLine.setVisibility(TextUtils.isEmpty(state.secondaryLabel) || mCollapsedView
+                    ? View.GONE : View.VISIBLE);
         }
         boolean dualTarget = mDualTargetAllowed && state.dualTarget;
         handleExpand(dualTarget);
@@ -155,6 +161,10 @@ public class QSTileView extends QSTileBaseView {
         }
         mLabel.setEnabled(!state.disabledByPolicy);
         mPadLock.setVisibility(state.disabledByPolicy ? View.VISIBLE : View.GONE);
+    }
+
+    protected void changeLabelColor(ColorStateList color) {
+        mLabel.setTextColor(color);
     }
 
     protected void handleExpand(boolean dualTarget) {
@@ -172,8 +182,13 @@ public class QSTileView extends QSTileBaseView {
         mLabelContainer.setLongClickable(false);
     }
 
+    public TextView getAppLabel() {
+        return mSecondLine;
+    }
+
+    @Nullable
     @Override
-    public void setShowLabels(boolean show) {
-        mHandler.post(() -> mLabelContainer.setVisibility(show ? VISIBLE : GONE));
+    public View getLabelContainer() {
+        return mLabelContainer;
     }
 }

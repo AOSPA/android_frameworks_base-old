@@ -244,6 +244,8 @@
         <item name="android:paddingTop">12dp</item>
         <item name="android:paddingHorizontal">24dp</item>
         <item name="android:textSize">24sp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
     </style>
 
     <style name="TextAppearance.AuthCredential.Subtitle">
@@ -251,6 +253,8 @@
         <item name="android:paddingTop">8dp</item>
         <item name="android:paddingHorizontal">24dp</item>
         <item name="android:textSize">16sp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
     </style>
 
     <style name="TextAppearance.AuthCredential.Description">
@@ -258,6 +262,8 @@
         <item name="android:paddingTop">8dp</item>
         <item name="android:paddingHorizontal">24dp</item>
         <item name="android:textSize">14sp</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">marquee</item>
     </style>
 
     <style name="TextAppearance.AuthCredential.Error">
@@ -315,6 +321,7 @@
         <item name="darkIconTheme">@style/DualToneDarkTheme</item>
         <item name="wallpaperTextColor">@*android:color/primary_text_material_dark</item>
         <item name="wallpaperTextColorSecondary">@*android:color/secondary_text_material_dark</item>
+        <item name="wallpaperTextColorAccent">@*android:color/system_accent1_100</item>
         <item name="android:colorError">@*android:color/error_color_material_dark</item>
         <item name="android:colorControlHighlight">@*android:color/primary_text_material_dark</item>
         <item name="*android:lockPatternStyle">@style/LockPatternStyle</item>
@@ -331,6 +338,7 @@
     <style name="Theme.SystemUI.Light">
         <item name="wallpaperTextColor">@*android:color/primary_text_material_light</item>
         <item name="wallpaperTextColorSecondary">@*android:color/secondary_text_material_light</item>
+        <item name="wallpaperTextColorAccent">@*android:color/system_accent2_600</item>
         <item name="android:colorError">@*android:color/error_color_material_light</item>
         <item name="android:colorControlHighlight">#40000000</item>
         <item name="shadowRadius">0</item>
@@ -377,10 +385,6 @@
 
     <!-- Overridden by values-television/styles.xml with tv-specific settings -->
     <style name="volume_dialog_theme" parent="qs_theme"/>
-
-    <style name="systemui_theme_remote_input" parent="@android:style/Theme.DeviceDefault.Light">
-        <item name="android:colorAccent">@color/remote_input_accent</item>
-    </style>
 
     <style name="Theme.SystemUI.Dialog" parent="@android:style/Theme.DeviceDefault.Light.Dialog" />
 
@@ -608,6 +612,16 @@
         <item name="android:windowCloseOnTouchOutside">true</item>
     </style>
 
+    <!-- Screenshots -->
+    <style name="LongScreenshotActivity" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <!-- Privacy dialog -->
+    <style name="PrivacyDialog" parent="ScreenRecord">
+        <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
+    </style>
+
     <!-- USB Contaminant dialog -->
     <style name ="USBContaminant" />
 
@@ -638,6 +652,16 @@
         <item name="wallpaperTextColor">@*android:color/primary_text_material_dark</item>
     </style>
 
+    <style name="Theme.ControlsActivity" parent="@android:style/Theme.DeviceDefault.NoActionBar">
+        <item name="android:windowActivityTransitions">true</item>
+        <item name="android:windowContentTransitions">false</item>
+        <item name="android:windowIsTranslucent">false</item>
+        <item name="android:windowBackground">@android:color/transparent</item>
+        <item name="android:windowAnimationStyle">@null</item>
+        <item name="android:statusBarColor">@*android:color/transparent</item>
+        <item name="wallpaperTextColor">@*android:color/primary_text_material_dark</item>
+    </style>
+
     <style name="Theme.CreateUser" parent="@style/Theme.SystemUI">
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">#33000000</item>
@@ -649,30 +673,12 @@
         <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
     </style>
 
-    <style name="Theme.SystemUI.Dialog.Control.DetailPanel" parent="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
-      <item name="android:windowAnimationStyle">@style/Animation.Bottomsheet</item>
-      <item name="android:windowFullscreen">true</item>
+     <style name="Theme.SystemUI.Dialog.Control.DetailPanel" parent="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
+      <item name="android:windowFullscreen">false</item>
       <item name="android:windowIsFloating">false</item>
-      <item name="android:windowBackground">@null</item>
-      <item name="android:backgroundDimEnabled">true</item>
-    </style>
-
-    <style name="Animation.Bottomsheet">
-      <item name="android:windowEnterAnimation">@anim/bottomsheet_in</item>
-      <item name="android:windowExitAnimation">@anim/bottomsheet_out</item>
-    </style>
-
-    <style name="Theme.SystemUI.Dialog.Control.LockScreen" parent="@android:style/Theme.DeviceDefault.Dialog.NoActionBar">
-      <item name="android:windowAnimationStyle">@style/Animation.Fade</item>
-      <item name="android:windowFullscreen">true</item>
-      <item name="android:windowIsFloating">false</item>
-      <item name="android:windowBackground">@color/controls_lockscreen_scrim</item>
-      <item name="android:backgroundDimEnabled">true</item>
-    </style>
-
-    <style name="Animation.Fade">
-      <item name="android:windowEnterAnimation">@android:anim/fade_in</item>
-      <item name="android:windowExitAnimation">@android:anim/fade_out</item>
+      <item name="android:windowBackground">@android:color/black</item>
+      <item name="android:backgroundDimEnabled">false</item>
+      <item name="android:windowAnimationStyle">@android:style/Animation.Dialog</item>
     </style>
 
     <style name="Control" />

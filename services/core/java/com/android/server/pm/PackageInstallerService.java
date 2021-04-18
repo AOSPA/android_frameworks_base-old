@@ -88,7 +88,6 @@ import com.android.server.SystemConfig;
 import com.android.server.SystemService;
 import com.android.server.SystemServiceManager;
 import com.android.server.pm.parsing.PackageParser2;
-import com.android.server.pm.permission.PermissionManagerServiceInternal;
 
 import libcore.io.IoUtils;
 
@@ -145,7 +144,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     private final PackageManagerService mPm;
     private final ApexManager mApexManager;
     private final StagingManager mStagingManager;
-    private final PermissionManagerServiceInternal mPermissionManager;
 
     private AppOpsManager mAppOps;
 
@@ -226,7 +224,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             Supplier<PackageParser2> apexParserSupplier) {
         mContext = context;
         mPm = pm;
-        mPermissionManager = LocalServices.getService(PermissionManagerServiceInternal.class);
 
         mInstallThread = new HandlerThread(TAG);
         mInstallThread.start();
@@ -529,14 +526,6 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
 
         if (mPm.isUserRestricted(userId, UserManager.DISALLOW_INSTALL_APPS)) {
             throw new SecurityException("User restriction prevents installing");
-        }
-
-        if (params.dataLoaderParams != null
-                && mContext.checkCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2)
-                        != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("You need the "
-                    + "com.android.permission.USE_INSTALLER_V2 permission "
-                    + "to use a data loader");
         }
 
         // INSTALL_REASON_ROLLBACK allows an app to be rolled back without requiring the ROLLBACK

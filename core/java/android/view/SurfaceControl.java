@@ -68,6 +68,7 @@ import java.lang.ref.WeakReference;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Objects;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
@@ -104,7 +105,6 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeMergeTransaction(long transactionObj,
             long otherTransactionObj);
     private static native void nativeSetAnimationTransaction(long transactionObj);
-    private static native void nativeSetEarlyWakeup(long transactionObj);
     private static native void nativeSetEarlyWakeupStart(long transactionObj);
     private static native void nativeSetEarlyWakeupEnd(long transactionObj);
 
@@ -141,6 +141,9 @@ public final class SurfaceControl implements Parcelable {
             int layerStack);
     private static native void nativeSetBlurRegions(long transactionObj, long nativeObj,
             float[][] regions, int length);
+    private static native void nativeSetStretchEffect(long transactionObj, long nativeObj,
+            float left, float top, float right, float bottom, float vecX, float vecY,
+            float maxStretchAmount);
 
     private static native boolean nativeClearContentFrameStats(long nativeObject);
     private static native boolean nativeGetContentFrameStats(long nativeObject, WindowContentFrameStats outStats);
@@ -161,25 +164,21 @@ public final class SurfaceControl implements Parcelable {
             int L, int T, int R, int B);
     private static native void nativeSetDisplaySize(long transactionObj, IBinder displayToken,
             int width, int height);
-    private static native DisplayInfo nativeGetDisplayInfo(IBinder displayToken);
-    private static native DisplayMode[] nativeGetDisplayModes(
-            IBinder displayToken);
+    private static native StaticDisplayInfo nativeGetStaticDisplayInfo(IBinder displayToken);
+    private static native DynamicDisplayInfo nativeGetDynamicDisplayInfo(IBinder displayToken);
     private static native DisplayedContentSamplingAttributes
             nativeGetDisplayedContentSamplingAttributes(IBinder displayToken);
     private static native boolean nativeSetDisplayedContentSamplingEnabled(IBinder displayToken,
             boolean enable, int componentMask, int maxFrames);
     private static native DisplayedContentSample nativeGetDisplayedContentSample(
             IBinder displayToken, long numFrames, long timestamp);
-    private static native int nativeGetActiveDisplayMode(IBinder displayToken);
     private static native boolean nativeSetDesiredDisplayModeSpecs(IBinder displayToken,
             DesiredDisplayModeSpecs desiredDisplayModeSpecs);
     private static native DesiredDisplayModeSpecs
             nativeGetDesiredDisplayModeSpecs(IBinder displayToken);
-    private static native int[] nativeGetDisplayColorModes(IBinder displayToken);
     private static native DisplayPrimaries nativeGetDisplayNativePrimaries(
             IBinder displayToken);
     private static native int[] nativeGetCompositionDataspaces();
-    private static native int nativeGetActiveColorMode(IBinder displayToken);
     private static native boolean nativeSetActiveColorMode(IBinder displayToken,
             int colorMode);
     private static native void nativeSetAutoLowLatencyMode(IBinder displayToken, boolean on);
@@ -191,10 +190,7 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeReparent(long transactionObj, long nativeObject,
             long newParentNativeObject);
 
-    private static native Display.HdrCapabilities nativeGetHdrCapabilities(IBinder displayToken);
-
-    private static native boolean nativeGetAutoLowLatencyModeSupport(IBinder displayToken);
-    private static native boolean nativeGetGameContentTypeSupport(IBinder displayToken);
+    private static native void nativeOverrideHdrTypes(IBinder displayToken, int[] modes);
 
     private static native void nativeSetInputWindowInfo(long transactionObj, long nativeObject,
             InputWindowHandle handle);
@@ -205,7 +201,8 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeSyncInputWindows(long transactionObj);
     private static native boolean nativeGetDisplayBrightnessSupport(IBinder displayToken);
     private static native boolean nativeSetDisplayBrightness(IBinder displayToken,
-            float brightness);
+            float sdrBrightness, float sdrBrightnessNits, float displayBrightness,
+            float displayBrightnessNits);
     private static native long nativeReadTransactionFromParcel(Parcel in);
     private static native void nativeWriteTransactionToParcel(long nativeObject, Parcel out);
     private static native void nativeSetShadowRadius(long transactionObj, long nativeObject,
@@ -1710,7 +1707,7 @@ public final class SurfaceControl implements Parcelable {
      *
      * @hide
      */
-    public static final class DisplayInfo {
+    public static final class StaticDisplayInfo {
         public boolean isInternal;
         public float density;
         public boolean secure;
@@ -1718,7 +1715,7 @@ public final class SurfaceControl implements Parcelable {
 
         @Override
         public String toString() {
-            return "DisplayInfo{isInternal=" + isInternal
+            return "StaticDisplayInfo{isInternal=" + isInternal
                     + ", density=" + density
                     + ", secure=" + secure
                     + ", deviceProductInfo=" + deviceProductInfo + "}";
@@ -1728,7 +1725,7 @@ public final class SurfaceControl implements Parcelable {
         public boolean equals(@Nullable Object o) {
             if (this == o) return true;
             if (o == null || getClass() != o.getClass()) return false;
-            DisplayInfo that = (DisplayInfo) o;
+            StaticDisplayInfo that = (StaticDisplayInfo) o;
             return isInternal == that.isInternal
                     && density == that.density
                     && secure == that.secure
@@ -1738,6 +1735,54 @@ public final class SurfaceControl implements Parcelable {
         @Override
         public int hashCode() {
             return Objects.hash(isInternal, density, secure, deviceProductInfo);
+        }
+    }
+
+    /**
+     * Dynamic information about physical display.
+     *
+     * @hide
+     */
+    public static final class DynamicDisplayInfo {
+        public DisplayMode[] supportedDisplayModes;
+        public int activeDisplayModeId;
+
+        public int[] supportedColorModes;
+        public int activeColorMode;
+
+        public Display.HdrCapabilities hdrCapabilities;
+
+        public boolean autoLowLatencyModeSupported;
+        public boolean gameContentTypeSupported;
+
+        @Override
+        public String toString() {
+            return "DynamicDisplayInfo{"
+                    + "supportedDisplayModes=" + Arrays.toString(supportedDisplayModes)
+                    + ", activeDisplayModeId=" + activeDisplayModeId
+                    + ", supportedColorModes=" + Arrays.toString(supportedColorModes)
+                    + ", activeColorMode=" + activeColorMode
+                    + ", hdrCapabilities=" + hdrCapabilities
+                    + ", autoLowLatencyModeSupported=" + autoLowLatencyModeSupported
+                    + ", gameContentTypeSupported" + gameContentTypeSupported + "}";
+        }
+
+        @Override
+        public boolean equals(@Nullable Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            DynamicDisplayInfo that = (DynamicDisplayInfo) o;
+            return Arrays.equals(supportedDisplayModes, that.supportedDisplayModes)
+                && activeDisplayModeId == that.activeDisplayModeId
+                && Arrays.equals(supportedColorModes, that.supportedColorModes)
+                && activeColorMode == that.activeColorMode
+                && Objects.equals(hdrCapabilities, that.hdrCapabilities);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(supportedDisplayModes, activeDisplayModeId, activeDisplayModeId,
+                    activeColorMode, hdrCapabilities);
         }
     }
 
@@ -1752,6 +1797,7 @@ public final class SurfaceControl implements Parcelable {
          */
         public static final int INVALID_DISPLAY_MODE_ID = -1;
 
+        public int id;
         public int width;
         public int height;
         public float xDpi;
@@ -1771,7 +1817,8 @@ public final class SurfaceControl implements Parcelable {
 
         @Override
         public String toString() {
-            return "DisplayConfig{width=" + width
+            return "DisplayMode{id=" + id
+                    + ", width=" + width
                     + ", height=" + height
                     + ", xDpi=" + xDpi
                     + ", yDpi=" + yDpi
@@ -1779,6 +1826,28 @@ public final class SurfaceControl implements Parcelable {
                     + ", appVsyncOffsetNanos=" + appVsyncOffsetNanos
                     + ", presentationDeadlineNanos=" + presentationDeadlineNanos
                     + ", group=" + group + "}";
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            DisplayMode that = (DisplayMode) o;
+            return id == that.id
+                    && width == that.width
+                    && height == that.height
+                    && Float.compare(that.xDpi, xDpi) == 0
+                    && Float.compare(that.yDpi, yDpi) == 0
+                    && Float.compare(that.refreshRate, refreshRate) == 0
+                    && appVsyncOffsetNanos == that.appVsyncOffsetNanos
+                    && presentationDeadlineNanos == that.presentationDeadlineNanos
+                    && group == that.group;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(id, width, height, xDpi, yDpi, refreshRate, appVsyncOffsetNanos,
+                    presentationDeadlineNanos, group);
         }
     }
 
@@ -1795,31 +1864,21 @@ public final class SurfaceControl implements Parcelable {
     /**
      * @hide
      */
-    public static SurfaceControl.DisplayInfo getDisplayInfo(IBinder displayToken) {
+    public static StaticDisplayInfo getStaticDisplayInfo(IBinder displayToken) {
         if (displayToken == null) {
             throw new IllegalArgumentException("displayToken must not be null");
         }
-        return nativeGetDisplayInfo(displayToken);
+        return nativeGetStaticDisplayInfo(displayToken);
     }
 
     /**
      * @hide
      */
-    public static DisplayMode[] getDisplayModes(IBinder displayToken) {
+    public static DynamicDisplayInfo getDynamicDisplayInfo(IBinder displayToken) {
         if (displayToken == null) {
             throw new IllegalArgumentException("displayToken must not be null");
         }
-        return nativeGetDisplayModes(displayToken);
-    }
-
-    /**
-     * @hide
-     */
-    public static int getActiveDisplayMode(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeGetActiveDisplayMode(displayToken);
+        return nativeGetDynamicDisplayInfo(displayToken);
     }
 
     /**
@@ -1981,16 +2040,6 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
-     * @hide
-     */
-    public static int[] getDisplayColorModes(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeGetDisplayColorModes(displayToken);
-    }
-
-    /**
      * Color coordinates in CIE1931 XYZ color space
      *
      * @hide
@@ -2055,16 +2104,6 @@ public final class SurfaceControl implements Parcelable {
         }
 
         return nativeGetDisplayNativePrimaries(displayToken);
-    }
-
-    /**
-     * @hide
-     */
-    public static int getActiveColorMode(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeGetActiveColorMode(displayToken);
     }
 
     /**
@@ -2170,35 +2209,15 @@ public final class SurfaceControl implements Parcelable {
     }
 
     /**
+     * Overrides HDR modes for a display device.
+     *
+     * If the caller does not have ACCESS_SURFACE_FLINGER permission, this will throw a Security
+     * Exception.
      * @hide
      */
-    public static Display.HdrCapabilities getHdrCapabilities(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-        return nativeGetHdrCapabilities(displayToken);
-    }
-
-    /**
-     * @hide
-     */
-    public static boolean getAutoLowLatencyModeSupport(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-
-        return nativeGetAutoLowLatencyModeSupport(displayToken);
-    }
-
-    /**
-     * @hide
-     */
-    public static boolean getGameContentTypeSupport(IBinder displayToken) {
-        if (displayToken == null) {
-            throw new IllegalArgumentException("displayToken must not be null");
-        }
-
-        return nativeGetGameContentTypeSupport(displayToken);
+    @TestApi
+    public static void overrideHdrTypes(@NonNull IBinder displayToken, @NonNull int[] modes) {
+        nativeOverrideHdrTypes(displayToken, modes);
     }
 
     /**
@@ -2242,6 +2261,8 @@ public final class SurfaceControl implements Parcelable {
      *
      * @hide
      */
+    @TestApi
+    @NonNull
     public static IBinder getInternalDisplayToken() {
         final long[] physicalDisplayIds = getPhysicalDisplayIds();
         if (physicalDisplayIds.length == 0) {
@@ -2403,13 +2424,50 @@ public final class SurfaceControl implements Parcelable {
      * @hide
      */
     public static boolean setDisplayBrightness(IBinder displayToken, float brightness) {
+        return setDisplayBrightness(displayToken, brightness, -1, brightness, -1);
+    }
+
+    /**
+     * Sets the brightness of a display.
+     *
+     * @param displayToken
+     *      The token for the display whose brightness is set.
+     * @param sdrBrightness
+     *      A number between 0.0f (minimum brightness) and 1.0f (maximum brightness), or -1.0f to
+     *      turn the backlight off. Specifies the desired brightness of SDR content.
+     * @param sdrBrightnessNits
+     *      The value of sdrBrightness converted to calibrated nits. -1 if this isn't available.
+     * @param displayBrightness
+     *     A number between 0.0f (minimum brightness) and 1.0f (maximum brightness), or
+     *     -1.0f to turn the backlight off. Specifies the desired brightness of the display itself,
+     *     used directly for HDR content.
+     * @param displayBrightnessNits
+     *      The value of displayBrightness converted to calibrated nits. -1 if this isn't
+     *      available.
+     *
+     * @return Whether the method succeeded or not.
+     *
+     * @throws IllegalArgumentException if:
+     *      - displayToken is null;
+     *      - brightness is NaN or greater than 1.0f.
+     *
+     * @hide
+     */
+    public static boolean setDisplayBrightness(IBinder displayToken, float sdrBrightness,
+            float sdrBrightnessNits, float displayBrightness, float displayBrightnessNits) {
         Objects.requireNonNull(displayToken);
-        if (Float.isNaN(brightness) || brightness > 1.0f
-                || (brightness < 0.0f && brightness != -1.0f)) {
-            throw new IllegalArgumentException("brightness must be a number between 0.0f and 1.0f,"
-                    + " or -1 to turn the backlight off: " + brightness);
+        if (Float.isNaN(displayBrightness) || displayBrightness > 1.0f
+                || (displayBrightness < 0.0f && displayBrightness != -1.0f)) {
+            throw new IllegalArgumentException("displayBrightness must be a number between 0.0f "
+                    + " and 1.0f, or -1 to turn the backlight off: " + displayBrightness);
         }
-        return nativeSetDisplayBrightness(displayToken, brightness);
+        if (Float.isNaN(sdrBrightness) || sdrBrightness > 1.0f
+                || (sdrBrightness < 0.0f && sdrBrightness != -1.0f)) {
+            throw new IllegalArgumentException("sdrBrightness must be a number between 0.0f "
+                    + "and 1.0f, or -1 to turn the backlight off: " + displayBrightness);
+        }
+        return nativeSetDisplayBrightness(displayToken, sdrBrightness, sdrBrightnessNits,
+                displayBrightness, displayBrightnessNits);
     }
 
     /**
@@ -2954,6 +3012,17 @@ public final class SurfaceControl implements Parcelable {
         /**
          * @hide
          */
+        public Transaction setStretchEffect(SurfaceControl sc, float left, float top, float right,
+                float bottom, float vecX, float vecY, float maxStretchAmount) {
+            checkPreconditions(sc);
+            nativeSetStretchEffect(mNativeObject, sc.mNativeObject, left, top, right, bottom,
+                    vecX, vecY, maxStretchAmount);
+            return this;
+        }
+
+        /**
+         * @hide
+         */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.O)
         public Transaction setLayerStack(SurfaceControl sc, int layerStack) {
             checkPreconditions(sc);
@@ -3121,23 +3190,6 @@ public final class SurfaceControl implements Parcelable {
          */
         public Transaction setAnimationTransaction() {
             nativeSetAnimationTransaction(mNativeObject);
-            return this;
-        }
-
-        /**
-         * @deprecated use {@link Transaction#setEarlyWakeupStart()}
-         *
-         * Indicate that SurfaceFlinger should wake up earlier than usual as a result of this
-         * transaction. This should be used when the caller thinks that the scene is complex enough
-         * that it's likely to hit GL composition, and thus, SurfaceFlinger needs to more time in
-         * order not to miss frame deadlines.
-         * <p>
-         * Corresponds to setting ISurfaceComposer::eEarlyWakeup
-         * @hide
-         */
-        @Deprecated
-        public Transaction setEarlyWakeup() {
-            nativeSetEarlyWakeup(mNativeObject);
             return this;
         }
 
@@ -3490,65 +3542,5 @@ public final class SurfaceControl implements Parcelable {
      */
     public static Transaction getGlobalTransaction() {
         return sGlobalTransaction;
-    }
-
-    /**
-     * Wrapper for sending blur data to SurfaceFlinger.
-     * @hide
-     */
-    public static final class BlurRegion {
-        public int blurRadius;
-        public float cornerRadiusTL;
-        public float cornerRadiusTR;
-        public float cornerRadiusBL;
-        public float cornerRadiusBR;
-        public float alpha = 1;
-        public boolean visible = true;
-        public final Rect rect = new Rect();
-
-        private final float[] mFloatArray = new float[10];
-
-        public BlurRegion() {
-        }
-
-        public BlurRegion(BlurRegion other) {
-            rect.set(other.rect);
-            blurRadius = other.blurRadius;
-            alpha = other.alpha;
-            cornerRadiusTL = other.cornerRadiusTL;
-            cornerRadiusTR = other.cornerRadiusTR;
-            cornerRadiusBL = other.cornerRadiusBL;
-            cornerRadiusBR = other.cornerRadiusBR;
-        }
-
-        /**
-         * Serializes this class into a float array that's more JNI friendly.
-         */
-        public float[] toFloatArray() {
-            mFloatArray[0] = blurRadius;
-            mFloatArray[1] = alpha;
-            mFloatArray[2] = rect.left;
-            mFloatArray[3] = rect.top;
-            mFloatArray[4] = rect.right;
-            mFloatArray[5] = rect.bottom;
-            mFloatArray[6] = cornerRadiusTL;
-            mFloatArray[7] = cornerRadiusTR;
-            mFloatArray[8] = cornerRadiusBL;
-            mFloatArray[9] = cornerRadiusBR;
-            return mFloatArray;
-        }
-
-        @Override
-        public String toString() {
-            return "BlurRegion{"
-                    + "blurRadius=" + blurRadius
-                    + ", corners={" + cornerRadiusTL
-                    + "," + cornerRadiusTR
-                    + "," + cornerRadiusBL
-                    + "," + cornerRadiusBR
-                    + "}, alpha=" + alpha
-                    + ", rect=" + rect
-                    + "}";
-        }
     }
 }

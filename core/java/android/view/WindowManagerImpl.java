@@ -23,6 +23,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
 import static android.view.WindowManager.LayoutParams.SOFT_INPUT_ADJUST_NOTHING;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UiContext;
@@ -35,11 +36,14 @@ import android.graphics.Region;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.window.WindowContext;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.IResultReceiver;
 
 import java.util.List;
+import java.util.concurrent.Executor;
+import java.util.function.Consumer;
 
 /**
  * Provides low-level communication with the system window manager for
@@ -107,7 +111,7 @@ public final class WindowManagerImpl implements WindowManager {
         return new WindowManagerImpl(displayContext, mParentWindow, mWindowContextToken);
     }
 
-    /** Creates a {@link WindowManager} for a {@link android.app.WindowContext}. */
+    /** Creates a {@link WindowManager} for a {@link WindowContext}. */
     public static WindowManager createWindowContextWindowManager(Context context) {
         final IBinder clientToken = context.getWindowContextToken();
         return new WindowManagerImpl(context, null /* parentWindow */, clientToken);
@@ -301,6 +305,36 @@ public final class WindowManagerImpl implements WindowManager {
             WindowManagerGlobal.getWindowManagerService().holdLock(token, durationMs);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
+    public boolean isCrossWindowBlurEnabled() {
+        return CrossWindowBlurListeners.getInstance().isCrossWindowBlurEnabled();
+    }
+
+    @Override
+    public void addCrossWindowBlurEnabledListener(@NonNull Consumer<Boolean> listener) {
+        addCrossWindowBlurEnabledListener(mContext.getMainExecutor(), listener);
+    }
+
+    @Override
+    public void addCrossWindowBlurEnabledListener(@NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<Boolean> listener) {
+        CrossWindowBlurListeners.getInstance().addListener(executor, listener);
+    }
+
+    @Override
+    public void removeCrossWindowBlurEnabledListener(@NonNull Consumer<Boolean> listener) {
+        CrossWindowBlurListeners.getInstance().removeListener(listener);
+    }
+
+    @Override
+    public void setForceCrossWindowBlurDisabled(boolean disable) {
+        try {
+            WindowManagerGlobal.getWindowManagerService()
+                .setForceCrossWindowBlurDisabled(disable);
+        } catch (RemoteException e) {
         }
     }
 }

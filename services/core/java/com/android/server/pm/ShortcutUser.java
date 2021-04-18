@@ -18,9 +18,13 @@ package com.android.server.pm;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
+import android.app.appsearch.AppSearchManager;
+import android.app.appsearch.AppSearchSession;
 import android.content.pm.ShortcutManager;
 import android.metrics.LogMaker;
+import android.os.Binder;
 import android.os.FileUtils;
+import android.os.UserHandle;
 import android.text.TextUtils;
 import android.text.format.Formatter;
 import android.util.ArrayMap;
@@ -30,8 +34,10 @@ import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
+import com.android.server.FgThread;
 import com.android.server.pm.ShortcutService.DumpFilter;
 import com.android.server.pm.ShortcutService.InvalidFileFormatException;
 
@@ -45,6 +51,7 @@ import java.io.File;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.Objects;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
@@ -111,6 +118,8 @@ class ShortcutUser {
     }
 
     final ShortcutService mService;
+    final AppSearchManager mAppSearchManager;
+    final Executor mExecutor;
 
     @UserIdInt
     private final int mUserId;
@@ -132,6 +141,9 @@ class ShortcutUser {
     public ShortcutUser(ShortcutService service, int userId) {
         mService = service;
         mUserId = userId;
+        mAppSearchManager = service.mContext.createContextAsUser(UserHandle.of(userId), 0)
+                .getSystemService(AppSearchManager.class);
+        mExecutor = FgThread.getExecutor();
     }
 
     public int getUserId() {
@@ -173,6 +185,9 @@ class ShortcutUser {
     public ShortcutPackage removePackage(@NonNull String packageName) {
         final ShortcutPackage removed = mPackages.remove(packageName);
 
+        if (removed != null) {
+            removed.removeShortcuts();
+        }
         mService.cleanupBitmapsForPackage(mUserId, packageName);
 
         return removed;
@@ -442,6 +457,7 @@ class ShortcutUser {
                         case ShortcutPackage.TAG_ROOT: {
                             final ShortcutPackage shortcuts = ShortcutPackage.loadFromXml(
                                     s, ret, parser, fromBackup);
+                            shortcuts.restoreParsedShortcuts(false);
 
                             // Don't use addShortcut(), we don't need to save the icon.
                             ret.mPackages.put(shortcuts.getPackageName(), shortcuts);
@@ -476,6 +492,7 @@ class ShortcutUser {
                 final ShortcutPackage sp = ShortcutPackage.loadFromFile(s, ret, f, fromBackup);
                 if (sp != null) {
                     ret.mPackages.put(sp.getPackageName(), sp);
+                    sp.restoreParsedShortcuts(false);
                 }
             });
 
@@ -558,6 +575,7 @@ class ShortcutUser {
                 Log.w(TAG, "Shortcuts for package " + sp.getPackageName() + " are being restored."
                         + " Existing non-manifeset shortcuts will be overwritten.");
             }
+            sp.restoreParsedShortcuts(true);
             addPackage(sp);
             restoredPackages[0]++;
             restoredShortcuts[0] += sp.getShortcutCount();
@@ -692,5 +710,34 @@ class ShortcutUser {
                 .setSubtype(packageWithShareTargetsCount));
         logger.write(logMaker.setType(MetricsEvent.SHORTCUTS_CHANGED_SHORTCUT_COUNT)
                 .setSubtype(totalSharingShortcutCount));
+    }
+
+    AndroidFuture<AppSearchSession> getAppSearch(
+            @NonNull final AppSearchManager.SearchContext searchContext) {
+        final AndroidFuture<AppSearchSession> future = new AndroidFuture<>();
+        if (mAppSearchManager == null) {
+            future.completeExceptionally(new RuntimeException("app search manager is null"));
+            return future;
+        }
+        if (!mService.mUserManagerInternal.isUserUnlockingOrUnlocked(getUserId())) {
+            // In rare cases the user might be stopped immediate after it started, in these cases
+            // any on-going session will need to be abandoned.
+            future.completeExceptionally(new RuntimeException("User " + getUserId() + " is "));
+            return future;
+        }
+        final long callingIdentity = Binder.clearCallingIdentity();
+        try {
+            mAppSearchManager.createSearchSession(searchContext, mExecutor, result -> {
+                if (!result.isSuccess()) {
+                    future.completeExceptionally(
+                            new RuntimeException(result.getErrorMessage()));
+                    return;
+                }
+                future.complete(result.getResultValue());
+            });
+        } finally {
+            Binder.restoreCallingIdentity(callingIdentity);
+        }
+        return future;
     }
 }

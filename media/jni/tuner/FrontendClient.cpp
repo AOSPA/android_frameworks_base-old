@@ -78,8 +78,6 @@ namespace android {
 
 FrontendClient::FrontendClient(shared_ptr<ITunerFrontend> tunerFrontend, int type) {
     mTunerFrontend = tunerFrontend;
-    mAidlCallback = NULL;
-    mHidlCallback = NULL;
     mType = type;
 }
 
@@ -87,22 +85,21 @@ FrontendClient::~FrontendClient() {
     mTunerFrontend = NULL;
     mFrontend = NULL;
     mFrontend_1_1 = NULL;
-    mAidlCallback = NULL;
-    mHidlCallback = NULL;
     mId = -1;
     mType = -1;
 }
 
 Result FrontendClient::setCallback(sp<FrontendClientCallback> frontendClientCallback) {
     if (mTunerFrontend != NULL) {
-        mAidlCallback = ::ndk::SharedRefBase::make<TunerFrontendCallback>(frontendClientCallback);
-        mAidlCallback->setFrontendType(mType);
-        Status s = mTunerFrontend->setCallback(mAidlCallback);
+        shared_ptr<TunerFrontendCallback> aidlCallback =
+                ::ndk::SharedRefBase::make<TunerFrontendCallback>(frontendClientCallback);
+        aidlCallback->setFrontendType(mType);
+        Status s = mTunerFrontend->setCallback(aidlCallback);
         return ClientHelper::getServiceSpecificErrorCode(s);
     }
 
-    mHidlCallback = new HidlFrontendCallback(frontendClientCallback);
-    return mFrontend->setCallback(mHidlCallback);
+    sp<HidlFrontendCallback> hidlCallback = new HidlFrontendCallback(frontendClientCallback);
+    return mFrontend->setCallback(hidlCallback);
 }
 
 void FrontendClient::setHidlFrontend(sp<IFrontend> frontend) {
@@ -591,14 +588,15 @@ vector<FrontendStatusExt1_1> FrontendClient::getHidlStatusExt(
                 break;
             }
             case TunerFrontendStatus::codeRates: {
-                int size = s.get<TunerFrontendStatus::codeRates>().size();
-                status.codeRates().resize(size);
-                for (int i = 0; i < size; i++) {
-                    auto aidlCodeRate = s.get<TunerFrontendStatus::codeRates>()[i];
-                    status.codeRates()[i] =
-                            static_cast<hardware::tv::tuner::V1_1::FrontendInnerFec>(aidlCodeRate);
+                vector<hardware::tv::tuner::V1_1::FrontendInnerFec> codeRates;
+                for (auto aidlCodeRate : s.get<TunerFrontendStatus::codeRates>()) {
+                    codeRates.push_back(
+                            static_cast<hardware::tv::tuner::V1_1::FrontendInnerFec>(aidlCodeRate));
                 }
-                hidlStatus.push_back(status);
+                if (codeRates.size() > 0) {
+                    status.codeRates(codeRates);
+                    hidlStatus.push_back(status);
+                }
                 break;
             }
             case TunerFrontendStatus::bandwidth: {

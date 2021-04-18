@@ -17,6 +17,7 @@
 package com.android.server.wm;
 
 import static android.os.Build.IS_USER;
+import static android.view.CrossWindowBlurListeners.CROSS_WINDOW_BLUR_SUPPORTED;
 
 import static com.android.server.wm.WindowManagerService.LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND;
 import static com.android.server.wm.WindowManagerService.LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND_FLOATING;
@@ -117,10 +118,10 @@ public class WindowManagerShellCommand extends ShellCommand {
                     return runGetIgnoreOrientationRequest(pw);
                 case "dump-visible-window-views":
                     return runDumpVisibleWindowViews(pw);
-                case "set-task-letterbox-aspect-ratio":
-                    return runSetTaskLetterboxAspectRatio(pw);
-                case "get-task-letterbox-aspect-ratio":
-                    return runGetTaskLetterboxAspectRatio(pw);
+                case "set-fixed-orientation-letterbox-aspect-ratio":
+                    return runSetFixedOrientationLetterboxAspectRatio(pw);
+                case "get-fixed-orientation-letterbox-aspect-ratio":
+                    return runGetFixedOrientationLetterboxAspectRatio(pw);
                 case "set-letterbox-activity-corners-radius":
                     return runSetLetterboxActivityCornersRadius(pw);
                 case "get-letterbox-activity-corners-radius":
@@ -135,6 +136,8 @@ public class WindowManagerShellCommand extends ShellCommand {
                     return runGetLetterboxBackgroundColor(pw);
                 case "reset":
                     return runReset(pw);
+                case "disable-blur":
+                    return runSetBlurDisabled(pw);
                 default:
                     return handleDefaultCommands(cmd);
             }
@@ -211,6 +214,33 @@ public class WindowManagerShellCommand extends ShellCommand {
         } else {
             mInterface.clearForcedDisplaySize(displayId);
         }
+        return 0;
+    }
+
+    private int runSetBlurDisabled(PrintWriter pw) throws RemoteException {
+        String arg = getNextArg();
+        if (arg == null) {
+            pw.println("Blur supported on device: " + CROSS_WINDOW_BLUR_SUPPORTED);
+            pw.println("Blur enabled: " + mInternal.mBlurController.mBlurEnabled);
+            return 0;
+        }
+
+        final boolean disableBlur;
+        switch (arg) {
+            case "true":
+            case "1":
+                disableBlur = true;
+                break;
+            case "false":
+            case "0":
+                disableBlur = false;
+                break;
+            default:
+                getErrPrintWriter().println("Error: expected true, 1, false, 0, but got " + arg);
+                return -1;
+        }
+
+        mInterface.setForceCrossWindowBlurDisabled(disableBlur);
         return 0;
     }
 
@@ -531,12 +561,12 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    private int runSetTaskLetterboxAspectRatio(PrintWriter pw) throws RemoteException {
+    private int runSetFixedOrientationLetterboxAspectRatio(PrintWriter pw) throws RemoteException {
         final float aspectRatio;
         try {
             String arg = getNextArgRequired();
             if ("reset".equals(arg)) {
-                mInternal.resetTaskLetterboxAspectRatio();
+                mInternal.resetFixedOrientationLetterboxAspectRatio();
                 return 0;
             }
             aspectRatio = Float.parseFloat(arg);
@@ -549,13 +579,13 @@ public class WindowManagerShellCommand extends ShellCommand {
             return -1;
         }
 
-        mInternal.setTaskLetterboxAspectRatio(aspectRatio);
+        mInternal.setFixedOrientationLetterboxAspectRatio(aspectRatio);
         return 0;
     }
 
-    private int runGetTaskLetterboxAspectRatio(PrintWriter pw) throws RemoteException {
-        final float aspectRatio = mInternal.getTaskLetterboxAspectRatio();
-        if (aspectRatio <= WindowManagerService.MIN_TASK_LETTERBOX_ASPECT_RATIO) {
+    private int runGetFixedOrientationLetterboxAspectRatio(PrintWriter pw) throws RemoteException {
+        final float aspectRatio = mInternal.getFixedOrientationLetterboxAspectRatio();
+        if (aspectRatio <= WindowManagerService.MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO) {
             pw.println("Letterbox aspect ratio is not set");
         } else {
             pw.println("Letterbox aspect ratio is " + aspectRatio);
@@ -692,8 +722,8 @@ public class WindowManagerShellCommand extends ShellCommand {
         // set-ignore-orientation-request
         mInterface.setIgnoreOrientationRequest(displayId, false /* ignoreOrientationRequest */);
 
-        // set-task-letterbox-aspect-ratio
-        mInternal.resetTaskLetterboxAspectRatio();
+        // set-fixed-orientation-letterbox-aspect-ratio
+        mInternal.resetFixedOrientationLetterboxAspectRatio();
 
         // set-letterbox-activity-corners-radius
         mInternal.resetLetterboxActivityCornersRadius();
@@ -725,6 +755,7 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("    Set display scaling mode.");
         pw.println("  dismiss-keyguard");
         pw.println("    Dismiss the keyguard, prompting user for auth if necessary.");
+        pw.println("  disable-blur [true|1|false|0]");
         pw.println("  user-rotation [-d DISPLAY_ID] [free|lock] [rotation]");
         pw.println("    Print or set user rotation mode and user rotation.");
         pw.println("  dump-visible-window-views");
@@ -734,12 +765,12 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("  set-ignore-orientation-request [-d DISPLAY_ID] [true|1|false|0]");
         pw.println("  get-ignore-orientation-request [-d DISPLAY_ID] ");
         pw.println("    If app requested orientation should be ignored.");
-        pw.println("  set-task-letterbox-aspect-ratio [reset|aspectRatio]");
-        pw.println("  get-task-letterbox-aspect-ratio");
-        pw.println("    Aspect ratio of task level letterboxing. If aspectRatio <= "
-                + WindowManagerService.MIN_TASK_LETTERBOX_ASPECT_RATIO);
-        pw.println("    both it and R.dimen.config_taskLetterboxAspectRatio will be ignored");
-        pw.println("    and framework implementation will be used to determine aspect ratio.");
+        pw.println("  set-fixed-orientation-letterbox-aspect-ratio [reset|aspectRatio]");
+        pw.println("  get-fixed-orientation-letterbox-aspect-ratio");
+        pw.println("    Aspect ratio of letterbox for fixed orientation. If aspectRatio <= "
+                + WindowManagerService.MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO);
+        pw.println("    both it and R.dimen.config_fixedOrientationLetterboxAspectRatio will be");
+        pw.println("    ignored and framework implementation will determine aspect ratio.");
         pw.println("  set-letterbox-activity-corners-radius [reset|cornersRadius]");
         pw.println("  get-letterbox-activity-corners-radius");
         pw.println("    Corners radius for activities in the letterbox mode. If radius < 0,");

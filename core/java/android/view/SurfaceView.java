@@ -544,6 +544,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         // recreate this Surface, so only release it when we are fully
         // detached.
         if (mSurfacePackage != null) {
+            mTmpTransaction.reparent(mSurfacePackage.getSurfaceControl(), null).apply();
             mSurfacePackage.release();
             mSurfacePackage = null;
         }
@@ -1315,7 +1316,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             mBlastBufferQueue.destroy();
         }
         mBlastBufferQueue = new BLASTBufferQueue(name, mBlastSurfaceControl, mSurfaceWidth,
-                mSurfaceHeight, mFormat, true /* TODO */);
+                mSurfaceHeight, mFormat);
     }
 
     private void onDrawFinished() {
@@ -1408,15 +1409,9 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             // If we are using BLAST, merge the transaction with the viewroot buffer transaction.
             viewRoot.mergeWithNextTransaction(mRtTransaction, frameNumber);
             return;
+        } else {
+            mRtTransaction.apply();
         }
-
-        // Otherwise if the if the ViewRoot is not null, use deferred transaction instead.
-        if (frameNumber > 0 && viewRoot != null && viewRoot.mSurface.isValid()
-                && mSurfaceControl != null) {
-            mRtTransaction.deferTransactionUntil(mSurfaceControl,
-                    viewRoot.getSurfaceControl(), frameNumber);
-        }
-        mRtTransaction.apply();
     }
 
     private Rect mRTLastReportedPosition = new Rect();
@@ -1464,6 +1459,14 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         }
 
         @Override
+        public void applyStretch(long frameNumber, float left, float top, float right,
+                float bottom, float vecX, float vecY, float maxStretch) {
+            mRtTransaction.setStretchEffect(mSurfaceControl, left, top, right, bottom, vecX, vecY,
+                    maxStretch);
+            applyRtTransaction(frameNumber);
+        }
+
+        @Override
         public void positionLost(long frameNumber) {
             if (DEBUG) {
                 Log.d(TAG, String.format("%d windowPositionLost, frameNr = %d",
@@ -1481,12 +1484,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
              */
             synchronized (mSurfaceControlLock) {
                 final ViewRootImpl viewRoot = getViewRootImpl();
-                boolean deferTransaction = frameNumber > 0 && viewRoot != null
-                        && viewRoot.mSurface.isValid() && !useBLASTSync(viewRoot);
-                if (deferTransaction) {
-                    mRtTransaction.deferTransactionUntil(mSurfaceControl,
-                            viewRoot.getSurfaceControl(), frameNumber);
-                }
 
                 mRtTransaction.hide(mSurfaceControl);
                 if (mRtReleaseSurfaces) {

@@ -475,28 +475,11 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
-    public void revokeChallenge() {
-        final List<FaceSensorPropertiesInternal> faceSensorProperties =
-                getSensorPropertiesInternal();
-        if (faceSensorProperties.isEmpty()) {
-            Slog.e(TAG, "No sensors during revokeChallenge");
-        }
-        revokeChallenge(faceSensorProperties.get(0).sensorId);
-    }
-
-    /**
-     * Invalidates the current challenge.
-     *
-     * TODO(b/171335732): should take userId and challenge
-     *
-     * @hide
-     */
-    @RequiresPermission(MANAGE_BIOMETRIC)
-    public void revokeChallenge(int sensorId) {
+    public void revokeChallenge(int sensorId, int userId, long challenge) {
         if (mService != null) {
             try {
-                mService.revokeChallenge(mToken, sensorId, 0 /* userId */,
-                        mContext.getOpPackageName(), 0 /* challenge */);
+                mService.revokeChallenge(mToken, sensorId, userId,
+                        mContext.getOpPackageName(), challenge);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -831,6 +814,9 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
             case BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED:
                 return context.getString(
                         com.android.internal.R.string.face_error_security_update_required);
+            case BIOMETRIC_ERROR_RE_ENROLL:
+                return context.getString(
+                        com.android.internal.R.string.face_recalibrate_notification_content);
             case FACE_ERROR_VENDOR: {
                 String[] msgArray = context.getResources().getStringArray(
                         com.android.internal.R.array.face_error_vendor);
@@ -1073,7 +1059,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
          *
          * @param face The face template that was removed.
          */
-        public void onRemovalSucceeded(Face face, int remaining) {
+        public void onRemovalSucceeded(@Nullable Face face, int remaining) {
         }
     }
 
@@ -1272,10 +1258,6 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         if (mRemovalCallback == null) {
             return;
         }
-        if (face == null) {
-            Slog.e(TAG, "Received MSG_REMOVED, but face is null");
-            return;
-        }
         mRemovalCallback.onRemovalSucceeded(face, remaining);
     }
 
@@ -1389,7 +1371,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
             case FACE_ACQUIRED_PAN_TOO_EXTREME:
             case FACE_ACQUIRED_TILT_TOO_EXTREME:
             case FACE_ACQUIRED_ROLL_TOO_EXTREME:
-                return context.getString(R.string.face_acquired_not_detected);
+                return context.getString(R.string.face_acquired_poor_gaze);
 
             // Provide more detailed feedback for other soft errors.
             case FACE_ACQUIRED_INSUFFICIENT:
@@ -1445,13 +1427,17 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
             case FACE_ACQUIRED_TOO_FAR:
                 return context.getString(R.string.face_acquired_too_far);
             case FACE_ACQUIRED_TOO_HIGH:
-                return context.getString(R.string.face_acquired_too_high);
-            case FACE_ACQUIRED_TOO_LOW:
+                // TODO(b/181269243): Change back once error codes are fixed.
                 return context.getString(R.string.face_acquired_too_low);
+            case FACE_ACQUIRED_TOO_LOW:
+                // TODO(b/181269243) Change back once error codes are fixed.
+                return context.getString(R.string.face_acquired_too_high);
             case FACE_ACQUIRED_TOO_RIGHT:
-                return context.getString(R.string.face_acquired_too_right);
-            case FACE_ACQUIRED_TOO_LEFT:
+                // TODO(b/181269243) Change back once error codes are fixed.
                 return context.getString(R.string.face_acquired_too_left);
+            case FACE_ACQUIRED_TOO_LEFT:
+                // TODO(b/181269243) Change back once error codes are fixed.
+                return context.getString(R.string.face_acquired_too_right);
             case FACE_ACQUIRED_POOR_GAZE:
                 return context.getString(R.string.face_acquired_poor_gaze);
             case FACE_ACQUIRED_NOT_DETECTED:

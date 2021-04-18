@@ -209,7 +209,7 @@ public class TimeDetectorServiceTest {
     @Test(expected = SecurityException.class)
     public void testSuggestExternalTime_withoutPermission() {
         doThrow(new SecurityException("Mock"))
-                .when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+                .when(mMockContext).enforceCallingPermission(anyString(), any());
         ExternalTimeSuggestion externalTimeSuggestion = createExternalTimeSuggestion();
 
         try {
@@ -217,20 +217,20 @@ public class TimeDetectorServiceTest {
             fail();
         } finally {
             verify(mMockContext).enforceCallingPermission(
-                    eq(android.Manifest.permission.SET_TIME), anyString());
+                    eq(android.Manifest.permission.SUGGEST_EXTERNAL_TIME), anyString());
         }
     }
 
     @Test
     public void testSuggestExternalTime() throws Exception {
-        doNothing().when(mMockContext).enforceCallingOrSelfPermission(anyString(), any());
+        doNothing().when(mMockContext).enforceCallingPermission(anyString(), any());
 
         ExternalTimeSuggestion externalTimeSuggestion = createExternalTimeSuggestion();
         mTimeDetectorService.suggestExternalTime(externalTimeSuggestion);
         mTestHandler.assertTotalMessagesEnqueued(1);
 
         verify(mMockContext).enforceCallingPermission(
-                eq(android.Manifest.permission.SET_TIME), anyString());
+                eq(android.Manifest.permission.SUGGEST_EXTERNAL_TIME), anyString());
 
         mTestHandler.waitForMessagesToBeProcessed();
         mStubbedTimeDetectorStrategy.verifySuggestExternalTimeCalled(externalTimeSuggestion);
@@ -287,8 +287,7 @@ public class TimeDetectorServiceTest {
     }
 
     private static ExternalTimeSuggestion createExternalTimeSuggestion() {
-        TimestampedValue<Long> timeValue = new TimestampedValue<>(100L, 1_000_000L);
-        return new ExternalTimeSuggestion(timeValue);
+        return new ExternalTimeSuggestion(100L, 1_000_000L);
     }
 
     private static class StubbedTimeDetectorStrategy implements TimeDetectorStrategy {
@@ -326,6 +325,11 @@ public class TimeDetectorServiceTest {
         @Override
         public void suggestExternalTime(ExternalTimeSuggestion timeSuggestion) {
             mLastExternalSuggestion = timeSuggestion;
+        }
+
+        @Override
+        public ConfigurationInternal getConfigurationInternal(int userId) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

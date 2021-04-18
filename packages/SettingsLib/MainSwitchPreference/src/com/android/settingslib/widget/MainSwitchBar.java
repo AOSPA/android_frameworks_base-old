@@ -17,20 +17,18 @@
 package com.android.settingslib.widget;
 
 import android.content.Context;
+import android.content.res.TypedArray;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.AttributeSet;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.CompoundButton;
-import android.widget.ImageView;
 import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import androidx.annotation.VisibleForTesting;
-
-import com.android.settingslib.RestrictedLockUtils;
+import androidx.core.content.res.TypedArrayUtils;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -46,12 +44,8 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
 
     private View mAboveDivider;
     private View mBelowDivider;
-    private TextView mTextView;
-    private ImageView mRestrictedIcon;
-    private Switch mSwitch;
-
-    private RestrictedLockUtils.EnforcedAdmin mEnforcedAdmin;
-    private boolean mDisabledByAdmin;
+    protected TextView mTextView;
+    protected Switch mSwitch;
 
     public MainSwitchBar(Context context) {
         this(context, null);
@@ -69,7 +63,8 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
 
-        LayoutInflater.from(context).inflate(R.layout.main_switch_bar, this);
+        LayoutInflater.from(context).inflate(resourceId(context, "layout", "main_switch_bar"),
+                this);
 
         setFocusable(true);
         setClickable(true);
@@ -79,15 +74,18 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
 
         addOnSwitchChangeListener((switchView, isChecked) -> setChecked(isChecked));
 
-        mRestrictedIcon = findViewById(R.id.restricted_icon);
-        mRestrictedIcon.setOnClickListener((View v) -> {
-            if (mDisabledByAdmin) {
-                RestrictedLockUtils.sendShowAdminSupportDetailsIntent(context, mEnforcedAdmin);
-                onRestrictedIconClick();
-            }
-        });
-
         setChecked(mSwitch.isChecked());
+
+        if (attrs != null) {
+            final TypedArray a = context.obtainStyledAttributes(attrs,
+                    androidx.preference.R.styleable.Preference, 0 /*defStyleAttr*/,
+                    0 /*defStyleRes*/);
+            final CharSequence title = TypedArrayUtils.getText(a,
+                    androidx.preference.R.styleable.Preference_title,
+                    androidx.preference.R.styleable.Preference_android_title);
+            setTitle(title);
+            a.recycle();
+        }
     }
 
     @Override
@@ -97,7 +95,7 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
 
     @Override
     public boolean performClick() {
-        return getDelegatingView().performClick();
+        return mSwitch.performClick();
     }
 
     /**
@@ -126,7 +124,7 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
     /**
      * Set the title text
      */
-    public void setTitle(String text) {
+    public void setTitle(CharSequence text) {
         if (mTextView != null) {
             mTextView.setText(text);
         }
@@ -176,49 +174,12 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
     }
 
     /**
-     * If admin is not null, disables the text and switch but keeps the view clickable.
-     * Otherwise, calls setEnabled which will enables the entire view including
-     * the text and switch.
-     */
-    public void setDisabledByAdmin(RestrictedLockUtils.EnforcedAdmin admin) {
-        mEnforcedAdmin = admin;
-        if (admin != null) {
-            super.setEnabled(true);
-            mDisabledByAdmin = true;
-            mTextView.setEnabled(false);
-            mSwitch.setEnabled(false);
-            mSwitch.setVisibility(View.GONE);
-            mRestrictedIcon.setVisibility(View.VISIBLE);
-        } else {
-            mDisabledByAdmin = false;
-            mSwitch.setVisibility(View.VISIBLE);
-            mRestrictedIcon.setVisibility(View.GONE);
-            setEnabled(true);
-        }
-    }
-
-    /**
      * Enable or disable the text and switch.
      */
     public void setEnabled(boolean enabled) {
-        if (enabled && mDisabledByAdmin) {
-            setDisabledByAdmin(null);
-            return;
-        }
         super.setEnabled(enabled);
         mTextView.setEnabled(enabled);
         mSwitch.setEnabled(enabled);
-    }
-
-    /**
-     * Called by the restricted icon clicked.
-     */
-    protected void onRestrictedIconClick() {
-    }
-
-    @VisibleForTesting
-    View getDelegatingView() {
-        return mDisabledByAdmin ? mRestrictedIcon : mSwitch;
     }
 
     private void propagateChecked(boolean isChecked) {
@@ -294,5 +255,9 @@ public class MainSwitchBar extends LinearLayout implements CompoundButton.OnChec
         mSwitch.setOnCheckedChangeListener(ss.mVisible ? this : null);
 
         requestLayout();
+    }
+
+    private int resourceId(Context context, String type, String name) {
+        return context.getResources().getIdentifier(name, type, context.getPackageName());
     }
 }

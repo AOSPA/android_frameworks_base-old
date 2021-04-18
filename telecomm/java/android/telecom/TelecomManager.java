@@ -25,6 +25,8 @@ import android.annotation.SuppressAutoDoc;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.SystemService;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.ComponentName;
 import android.content.Context;
@@ -325,8 +327,8 @@ public class TelecomManager {
     public static final String EXTRA_HAS_PICTURE = "android.telecom.extra.HAS_PICTURE";
 
     /**
-     * A URI representing the picture that was downloaded when a call is received or uploaded
-     * when a call is placed.
+     * A {@link Uri} representing the picture that was downloaded when a call is received or
+     * uploaded when a call is placed.
      *
      * This is a content URI within the call log provider which can be used to open a file
      * descriptor. This could be set a short time after a call is added to the Dialer app if the
@@ -1021,6 +1023,17 @@ public class TelecomManager {
             value = {PRESENTATION_ALLOWED, PRESENTATION_RESTRICTED, PRESENTATION_UNKNOWN,
             PRESENTATION_PAYPHONE})
     public @interface Presentation {}
+
+
+    /**
+     * Enable READ_PHONE_STATE protection on APIs querying and notifying call state, such as
+     * {@code TelecomManager#getCallState}, {@link TelephonyManager#getCallStateForSubscription()},
+     * and {@link android.telephony.TelephonyCallback.CallStateListener}.
+     */
+    @ChangeId
+    @EnabledSince(targetSdkVersion = Build.VERSION_CODES.S)
+    // this magic number is a bug ID
+    public static final long ENABLE_GET_CALL_STATE_PERMISSION_PROTECTION = 157233955L;
 
     private static final String TAG = "TelecomManager";
 
@@ -1720,22 +1733,22 @@ public class TelecomManager {
     }
 
     /**
-     * Returns whether the caller has {@link InCallService} access for companion apps.
-     *
-     * A companion app is an app associated with a physical wearable device via the
-     * {@link android.companion.CompanionDeviceManager} API.
+     * Returns whether the caller has {@link android.Manifest.permission#MANAGE_ONGOING_CALLS}
+     * permission. The permission can be obtained by associating with a physical wearable device
+     * via the {@link android.companion.CompanionDeviceManager} API as a companion app. If the
+     * caller app has the permission, it has {@link InCallService} access to manage ongoing calls.
      *
      * @return {@code true} if the caller has {@link InCallService} access for
      *      companion app; {@code false} otherwise.
      */
-    public boolean hasCompanionInCallServiceAccess() {
+    public boolean hasManageOngoingCallsPermission() {
         ITelecomService service = getTelecomService();
         if (service != null) {
             try {
-                return service.hasCompanionInCallServiceAccess(
+                return service.hasManageOngoingCallsPermission(
                         mContext.getOpPackageName());
             } catch (RemoteException e) {
-                Log.e(TAG, "RemoteException calling hasCompanionInCallServiceAccess().", e);
+                Log.e(TAG, "RemoteException calling hasManageOngoingCallsPermission().", e);
                 if (!isSystemProcess()) {
                     e.rethrowAsRuntimeException();
                 }
@@ -1776,21 +1789,23 @@ public class TelecomManager {
      * {@link TelephonyManager#CALL_STATE_OFFHOOK}
      * {@link TelephonyManager#CALL_STATE_IDLE}
      *
-     * Note that this API does not require the
-     * {@link android.Manifest.permission#READ_PHONE_STATE} permission. This is intentional, to
-     * preserve the behavior of {@link TelephonyManager#getCallState()}, which also did not require
-     * the permission.
-     *
      * Takes into consideration both managed and self-managed calls.
+     * <p>
+     * Requires Permission:
+     * {@link android.Manifest.permission#READ_PHONE_STATE READ_PHONE_STATE} for applications
+     * targeting API level 31+.
      *
      * @hide
      */
+    @RequiresPermission(anyOf = {READ_PRIVILEGED_PHONE_STATE,
+            android.Manifest.permission.READ_PHONE_STATE}, conditional = true)
     @SystemApi
     public @CallState int getCallState() {
         ITelecomService service = getTelecomService();
         if (service != null) {
             try {
-                return service.getCallState();
+                return service.getCallStateUsingPackage(mContext.getPackageName(),
+                        mContext.getAttributionTag());
             } catch (RemoteException e) {
                 Log.d(TAG, "RemoteException calling getCallState().", e);
             }

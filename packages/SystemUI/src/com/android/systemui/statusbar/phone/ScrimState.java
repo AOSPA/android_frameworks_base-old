@@ -88,6 +88,17 @@ public enum ScrimState {
         }
     },
 
+    AUTH_SCRIMMED {
+        @Override
+        public void prepare(ScrimState previousState) {
+            mFrontTint = Color.BLACK;
+
+            mBehindAlpha = 0f;
+            mFrontAlpha = .66f;
+            mBubbleAlpha = 0f;
+        }
+    },
+
     /**
      * Showing password challenge on the keyguard.
      */
@@ -140,11 +151,13 @@ public enum ScrimState {
         @Override
         public void prepare(ScrimState previousState) {
             final boolean alwaysOnEnabled = mDozeParameters.getAlwaysOn();
+            final boolean quickPickupEnabled = mDozeParameters.isQuickPickupEnabled();
             final boolean isDocked = mDockManager.isDocked();
             mBlankScreen = mDisplayRequiresBlanking;
 
             mFrontTint = Color.BLACK;
-            mFrontAlpha = (alwaysOnEnabled || isDocked) ? mAodFrontScrimAlpha : 1f;
+            mFrontAlpha = (alwaysOnEnabled || isDocked || quickPickupEnabled)
+                    ? mAodFrontScrimAlpha : 1f;
 
             mBehindTint = Color.BLACK;
             mBehindAlpha = ScrimController.TRANSPARENT;

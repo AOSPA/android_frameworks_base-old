@@ -239,10 +239,8 @@
     <string name="screenshot_edit_label">Edit</string>
     <!-- Content description indicating that tapping the element will allow editing the screenshot [CHAR LIMIT=NONE] -->
     <string name="screenshot_edit_description">Edit screenshot</string>
-    <!-- Label for UI element which allows scrolling and extending the screenshot to be taller [CHAR LIMIT=30] -->
-    <string name="screenshot_scroll_label">Scroll</string>
-    <!-- Content description UI element which allows scrolling and extending the screenshot to be taller [CHAR LIMIT=NONE] -->
-    <string name="screenshot_scroll_description">Scroll screenshot</string>
+    <!-- Label for UI element which allows the user to capture additional off-screen content in a screenshot. [CHAR LIMIT=30] -->
+    <string name="screenshot_scroll_label">Capture more</string>
     <!-- Content description indicating that tapping a button will dismiss the screenshots UI [CHAR LIMIT=NONE] -->
     <string name="screenshot_dismiss_description">Dismiss screenshot</string>
     <!-- Content description indicating that the view is a preview of the screenshot that was just taken [CHAR LIMIT=NONE] -->
@@ -294,8 +292,10 @@
     <string name="screenrecord_share_label">Share</string>
     <!-- A toast message shown after successfully canceling a screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_cancel_success">Screen recording canceled</string>
-    <!-- Notification text shown after saving a screen recording to prompt the user to view it [CHAR LIMIT=100] -->
-    <string name="screenrecord_save_message">Screen recording saved, tap to view</string>
+    <!-- Notification text shown after saving a screen recording [CHAR LIMIT=100] -->
+    <string name="screenrecord_save_title">Screen recording saved</string>
+    <!-- Subtext for a notification shown after saving a screen recording to prompt the user to view it [CHAR_LIMIT=100] -->
+    <string name="screenrecord_save_text">Tap to view</string>
     <!-- A toast message shown when there is an error deleting a screen recording [CHAR LIMIT=NONE] -->
     <string name="screenrecord_delete_error">Error deleting screen recording</string>
     <!-- A toast message shown when the screen recording cannot be started due to insufficient permissions [CHAR LIMIT=NONE] -->
@@ -424,6 +424,12 @@
     <string name="fingerprint_dialog_touch_sensor">Touch the fingerprint sensor</string>
     <!-- Content description of the fingerprint icon when the system-provided fingerprint dialog is showing, for accessibility (not shown on the screen). [CHAR LIMIT=NONE] -->
     <string name="accessibility_fingerprint_dialog_fingerprint_icon">Fingerprint icon</string>
+    <!-- Message shown to inform the user a face cannot be recognized and fingerprint should instead be used.[CHAR LIMIT=50] -->
+    <string name="fingerprint_dialog_use_fingerprint_instead">Can\u2019t recognize face. Use fingerprint instead.</string>
+    <!-- Message shown to ask the user to use fingerprint to continue.[CHAR LIMIT=50] -->
+    <string name="fingerprint_dialog_use_fingerprint">Use your fingerprint to continue</string>
+    <!-- Message shown to ask the user to use screenlock to continue.[CHAR LIMIT=NONE] -->
+    <string name="fingerprint_dialog_cant_recognize_fp_use_screenlock">Can\u2019t recognize fingerprint. Use screen lock instead.</string>
 
     <!-- Message shown when the system-provided face dialog is shown, asking for authentication [CHAR LIMIT=30] -->
     <string name="face_dialog_looking_for_face">Looking for you\u2026</string>
@@ -849,8 +855,6 @@
     <string name="quick_settings_wifi_label">Wi-Fi</string>
     <!-- QuickSettings: Internet [CHAR LIMIT=NONE] -->
     <string name="quick_settings_internet_label">Internet</string>
-    <!-- QuickSettings: Airplane-safe [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_airplane_safe_label">Airplane-safe</string>
     <!-- QuickSettings: networks available [CHAR LIMIT=NONE] -->
     <string name="quick_settings_networks_available">Networks available</string>
     <!-- QuickSettings: networks unavailable [CHAR LIMIT=NONE] -->
@@ -889,8 +893,12 @@
     <string name="quick_settings_color_space_label">Color correction mode</string>
     <!-- QuickSettings: Control panel: Label for button that navigates to settings. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_more_settings">More settings</string>
+    <!-- QuickSettings: Control panel: Label for button that navigates to user settings. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_more_user_settings">User settings</string>
     <!-- QuickSettings: Control panel: Label for button that dismisses control panel. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_done">Done</string>
+    <!-- QuickSettings: Control panel: Label for button that dismisses user switcher control panel. [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_close_user_panel">Close</string>
     <!-- QuickSettings: Control panel: Label for connected device. [CHAR LIMIT=NONE] -->
     <string name="quick_settings_connected">Connected</string>
     <!-- QuickSettings: Control panel: Label for connected device, showing remote device battery level. [CHAR LIMIT=NONE] -->
@@ -958,8 +966,6 @@
     <string name="quick_settings_dark_mode_secondary_label_on_at">On at <xliff:g id="time" example="10 pm">%s</xliff:g></string>
     <!-- QuickSettings: Secondary text for when the Dark theme or some other tile will be on until some user-selected time. [CHAR LIMIT=20] -->
     <string name="quick_settings_dark_mode_secondary_label_until">Until <xliff:g id="time" example="7 am">%s</xliff:g></string>
-    <!-- QuickSettings: Label for the toggle that controls whether Reduce Brightness is enabled. [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_reduce_bright_colors_label">Reduce Brightness</string>
 
     <!-- QuickSettings: NFC tile [CHAR LIMIT=NONE] -->
     <string name="quick_settings_nfc_label">NFC</string>
@@ -1054,6 +1060,9 @@
     <!-- Text on keyguard screen and in Quick Settings footer indicating that user's device belongs to their organization. [CHAR LIMIT=40] -->
     <string name="do_disclosure_with_name">This device belongs to <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
 
+    <!-- Text on keyguard screen and in Quick Settings footer indicating that the user's device is provided by the Creditor. [CHAR LIMIT=60] -->
+    <string name="do_financed_disclosure_with_name">This device is provided by <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
+
     <!-- Shows when people have clicked on the phone icon [CHAR LIMIT=60] -->
     <string name="phone_hint">Swipe from icon for phone</string>
 
@@ -1115,9 +1124,6 @@
 
     <!-- Name for a freshly added user [CHAR LIMIT=30] -->
     <string name="user_new_user_name">New user</string>
-
-    <!-- Label for button that exits guest session and clears the guest user data [CHAR LIMIT=50]-->
-    <string name="guest_exit_button">End guest session</string>
 
     <!-- Title of the confirmation dialog when exiting guest session [CHAR LIMIT=NONE] -->
     <string name="guest_exit_guest_dialog_title">Remove guest?</string>
@@ -1257,6 +1263,9 @@
     <!-- Disclosure at the bottom of Quick Settings that indicates that the user's device belongs to their organization, and the organization can monitor network traffic on that device. The placeholder is the organization's name. [CHAR LIMIT=100] -->
     <string name="quick_settings_disclosure_named_management_monitoring"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> owns this device and may monitor network traffic</string>
 
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the user's financed device belongs to the Creditor. The placeholder is the Creditor's name. [CHAR LIMIT=100] -->
+    <string name="quick_settings_financed_disclosure_named_management">This device is provided by <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
+
     <!-- Disclosure at the bottom of Quick Settings that indicates that the user's device belongs to their organization, and the device is connected to a VPN. The placeholder is the VPN name. [CHAR LIMIT=100] -->
     <string name="quick_settings_disclosure_management_named_vpn">This device belongs to your organization and is connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g></string>
 
@@ -1281,6 +1290,9 @@
     <!-- Disclosure at the bottom of Quick Settings that indicates that the device has a managed profile which can be monitored by the profile owner [CHAR LIMIT=100] -->
     <string name="quick_settings_disclosure_named_managed_profile_monitoring"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> may monitor network traffic in your work profile</string>
 
+    <!-- Disclosure at the bottom of Quick Settings that indicates that the user's device has a managed profile where network activity is visible to their IT admin [CHAR LIMIT=100] -->
+    <string name="quick_settings_disclosure_managed_profile_network_activity">Work profile network activity is visible to your IT admin</string>
+
     <!-- Disclosure at the bottom of Quick Settings that indicates that a certificate authorithy is installed on this device and the traffic might be monitored [CHAR LIMIT=100] -->
     <string name="quick_settings_disclosure_monitoring">Network may be monitored</string>
 
@@ -1295,6 +1307,9 @@
 
     <!-- Disclosure at the bottom of Quick Settings that indicates that the device is connected to a VPN. The placeholder is the VPN name. [CHAR LIMIT=100] -->
     <string name="quick_settings_disclosure_named_vpn">This device is connected to <xliff:g id="vpn_app" example="Foo VPN App">%1$s</xliff:g></string>
+
+    <!-- Monitoring dialog title for financed device [CHAR LIMIT=60] -->
+    <string name="monitoring_title_financed_device">This device is provided by <xliff:g id="organization_name" example="Foo, Inc.">%s</xliff:g></string>
 
     <!-- Monitoring dialog title for device owned devices [CHAR LIMIT=35] -->
     <string name="monitoring_title_device_owned">Device management</string>
@@ -1329,6 +1344,9 @@
 
     <!-- Dialog that a user can access via Quick Settings. The dialog describes what the IT admin can monitor (and the changes they can make) on the user's device. [CHAR LIMIT=NONE]-->
     <string name="monitoring_description_named_management">This device belongs to <xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g>.\n\nYour IT admin can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.\n\nFor more information, contact your IT admin.</string>
+
+    <!-- Dialog that a user can access via Quick Settings. The dialog describes what a Creditor can monitor (and the changes they can make) on the user's financed device. [CHAR LIMIT=NONE]-->
+    <string name="monitoring_financed_description_named_management"><xliff:g id="organization_name" example="Foo, Inc.">%1$s</xliff:g> may be able to access data associated with this device, manage apps, and change this device\’s settings.\n\nIf you have questions, contact <xliff:g id="organization_name" example="Foo, Inc.">%2$s</xliff:g>.</string>
 
     <!-- Dialog that a user can access via Quick Settings. The dialog describes what the IT admin can monitor (and the changes they can make) on the user's device. [CHAR LIMIT=NONE]-->
     <string name="monitoring_description_management">This device belongs to your organization.\n\nYour IT admin can monitor and manage settings, corporate access, apps, data associated with your device, and your device\'s location information.\n\nFor more information, contact your IT admin.</string>
@@ -1558,6 +1576,8 @@
     <string name="volume_stream_content_description_vibrate_a11y">%1$s. Tap to set to vibrate.</string>
     <string name="volume_stream_content_description_mute_a11y">%1$s. Tap to mute.</string>
 
+    <string name="volume_ringer_change">Tap to change ringer mode</string>
+
     <!-- Hint for accessibility. For example: double tap to mute [CHAR_LIMIT=NONE] -->
     <string name="volume_ringer_hint_mute">mute</string>
     <!-- Hint for accessibility. For example: double tap to unmute [CHAR_LIMIT=NONE] -->
@@ -1609,6 +1629,12 @@
 
     <!-- Name of the alarm status bar icon. -->
     <string name="status_bar_alarm">Alarm</string>
+
+    <!-- Wallet strings -->
+    <!-- Wallet empty state, title [CHAR LIMIT=32] -->
+    <string name="wallet_title">Wallet</string>
+    <!-- Secondary label of the quick access wallet tile. [CHAR LIMIT=32] -->
+    <string name="wallet_secondary_label">Ready</string>
 
     <!-- Name of the work status bar icon. -->
     <string name="status_bar_work">Work profile</string>
@@ -2293,6 +2319,9 @@
     <!-- accessibility label for button to select user [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_user">Signed in as <xliff:g name="user" example="John">%s</xliff:g></string>
 
+    <!-- Accessibility description (not shown on the screen) of action to open user switcher when the multi-user icon is clicked. It will read as "Double-tap to choose user" in screen readers [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_choose_user_action">choose user</string>
+
     <!-- Content description for no internet connection [CHAR LIMIT=NONE] -->
     <string name="data_connection_no_internet">No internet</string>
 
@@ -2307,6 +2336,9 @@
 
     <!-- accessibility label for button to edit quick settings [CHAR LIMIT=NONE] -->
     <string name="accessibility_quick_settings_edit">Edit order of settings.</string>
+
+    <!-- accessibility label for button to open power menu [CHAR LIMIT=NONE] -->
+    <string name="accessibility_quick_settings_power_menu">Power menu</string>
 
     <!-- accessibility label for paging indicator in quick settings [CHAR LIMITi=NONE] -->
     <string name="accessibility_quick_settings_page">Page <xliff:g name="current_page" example="1">%1$d</xliff:g> of <xliff:g name="num_pages" example="2">%2$d</xliff:g></string>
@@ -2644,11 +2676,17 @@
     <!-- Content description for magnification mode switch. [CHAR LIMIT=NONE] -->
     <string name="magnification_mode_switch_description">Magnification switch</string>
     <!-- A11y state description for magnification mode switch that device is in full-screen mode. [CHAR LIMIT=NONE] -->
-    <string name="magnification_mode_switch_state_full_screen">Magnify entire screen</string>
+    <string name="magnification_mode_switch_state_full_screen">Magnify full screen</string>
     <!-- A11y state description for magnification mode switch that device is in window mode. [CHAR LIMIT=NONE] -->
     <string name="magnification_mode_switch_state_window">Magnify part of screen</string>
     <!-- Click action label for magnification switch. [CHAR LIMIT=NONE] -->
     <string name="magnification_mode_switch_click_label">Switch</string>
+
+    <!-- Accessibility floating menu strings -->
+    <!-- Message for the accessibility floating button migration tooltip. It shows when the user use gestural navigation then upgrade their system. It will tell the user the accessibility gesture had been replaced by accessibility floating button. [CHAR LIMIT=100] -->
+    <string name="accessibility_floating_button_migration_tooltip">Accessibility button replaced the accessibility gesture\n\n<annotation id="link">View settings</annotation></string>
+    <!-- Message for the accessibility floating button docking tooltip. It shows when the user first time drag the button. It will tell the user about docking behavior. [CHAR LIMIT=70] -->
+    <string name="accessibility_floating_button_docking_tooltip">Move button to the edge to hide it temporarily</string>
 
     <!-- Device Controls strings -->
     <!-- Device Controls empty state, title [CHAR LIMIT=30] -->
@@ -2716,6 +2754,9 @@
     <string name="controls_dialog_message">Suggested by <xliff:g id="app" example="System UI">%s</xliff:g></string>
     <!-- Controls dialog confirmation [CHAR LIMIT=30] -->
     <string name="controls_dialog_confirmation">Controls updated</string>
+
+    <!-- Controls tile secondary label when device is locked and user does not want access to controls from lockscreen [CHAR LIMIT=20] -->
+    <string name="controls_tile_locked">Device locked</string>
 
     <!-- Controls PIN entry dialog, switch to alphanumeric keyboard [CHAR LIMIT=100] -->
     <string name="controls_pin_use_alphanumeric">PIN contains letters or symbols</string>
@@ -2801,42 +2842,46 @@
     <!-- Text to display when copying the build number off QS [CHAR LIMIT=NONE]-->
     <string name="build_number_copy_toast">Build number copied to clipboard.</string>
 
-    <!-- Status for last interaction with exact time [CHAR LIMIT=120] -->
-    <string name="last_interaction_status" translatable="false">Last chatted <xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
-    <!-- Status for last interaction when less than a certain time window [CHAR LIMIT=120] -->
-    <string name="last_interaction_status_less_than" translatable="false">Last chatted less than <xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
-    <!-- Status for last interaction when over a certain time window [CHAR LIMIT=120] -->
-    <string name="last_interaction_status_over" translatable="false">Last chatted over <xliff:g id="duration" example="1 week">%1$s</xliff:g> ago</string>
-    <!-- Status for conversation without interaction data [CHAR LIMIT=120] -->
-    <string name="basic_status" translatable="false">Open conversation</string>
-    <!-- Status for conversation without interaction data [CHAR LIMIT=120] -->
-    <string name="select_conversation_text" translatable="false">Select one conversation to show in your widget:</string>
-    <!-- Timestamp for notification with exact time [CHAR LIMIT=120] -->
-    <string name="timestamp" translatable="false"><xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
-    <!-- Timestamp for notification when less than a certain time window [CHAR LIMIT=120] -->
-    <string name="less_than_timestamp" translatable="false">Less than <xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
-    <!-- Timestamp for notification when over a certain time window [CHAR LIMIT=120] -->
-    <string name="over_timestamp" translatable="false">Over <xliff:g id="duration" example="1 week">%1$s</xliff:g> ago</string>
-    <!-- Status text for a birthday today [CHAR LIMIT=30] -->
-    <string name="birthday_status" translatable="false">Birthday</string>
-    <!-- Status text for an upcoming birthday [CHAR LIMIT=30] -->
-    <string name="upcoming_birthday_status" translatable="false">Birthday soon</string>
-    <!-- Status text for an anniversary [CHAR LIMIT=30] -->
-    <string name="anniversary_status" translatable="false">Anniversary</string>
-    <!-- Status text for sharing location [CHAR LIMIT=30] -->
-    <string name="location_status" translatable="false">Sharing location</string>
-    <!-- Status text for a new story posted [CHAR LIMIT=30] -->
-    <string name="new_story_status" translatable="false">New story</string>
-    <!-- Status text for watching a video [CHAR LIMIT=30] -->
-    <string name="video_status" translatable="false">Watching</string>
-    <!-- Status text for listening to audio [CHAR LIMIT=30] -->
-    <string name="audio_status" translatable="false">Listening</string>
-    <!-- Status text for playing a game [CHAR LIMIT=30] -->
-    <string name="game_status" translatable="false">Playing</string>
-    <!-- Empty user name before user has selected a friend [CHAR LIMIT=30] -->
-    <string name="empty_user_name" translatable="false">Your friend</string>
-    <!-- Empty status shown before user has selected a friend [CHAR LIMIT=30] -->
-    <string name="empty_status" translatable="false">Their status</string>
+     <!-- Status for conversation without interaction data [CHAR LIMIT=120] -->
+    <string name="basic_status">Open conversation</string>
+    <!--Title text for Conversation widget set up screen [CHAR LIMIT=180] -->
+    <string name="select_conversation_title">Conversation widgets</string>
+    <!--Text explaining to tap a conversation to select it show in their Conversation widget [CHAR LIMIT=180] -->
+    <string name="select_conversation_text">Tap a conversation to add it to your Home screen</string>
+    <!-- Timestamp for notification with exact time [CHAR LIMIT=25] -->
+    <string name="timestamp"><xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
+    <!-- Timestamp for notification when less than a certain time window [CHAR LIMIT=25] -->
+    <string name="less_than_timestamp">Less than <xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
+    <!-- Timestamp for notification when over a certain time window [CHAR LIMIT=25] -->
+    <string name="over_timestamp">Over <xliff:g id="duration" example="1 week">%1$s</xliff:g> ago</string>
+    <!-- Status text on the Conversation widget for a birthday today [CHAR LIMIT=20] -->
+    <string name="birthday_status">Birthday</string>
+    <!-- Status text on the Conversation widget for an upcoming birthday [CHAR LIMIT=20] -->
+    <string name="upcoming_birthday_status">Birthday soon</string>
+    <!-- Status text on the Conversation widget for an anniversary [CHAR LIMIT=20] -->
+    <string name="anniversary_status">Anniversary</string>
+    <!-- Status text on the Conversation widget for sharing location [CHAR LIMIT=20] -->
+    <string name="location_status">Sharing location</string>
+    <!-- Status text on the Conversation widget for a new story posted [CHAR LIMIT=20] -->
+    <string name="new_story_status">New story</string>
+    <!-- Status text on the Conversation widget for watching a video [CHAR LIMIT=20] -->
+    <string name="video_status">Watching</string>
+    <!-- Status text on the Conversation widget for listening to audio [CHAR LIMIT=20] -->
+    <string name="audio_status">Listening</string>
+    <!-- Status text on the Conversation widget for playing a game [CHAR LIMIT=20] -->
+    <string name="game_status">Playing</string>
+    <!-- Empty user name before user has selected a friend for their Conversation widget [CHAR LIMIT=20] -->
+    <string name="empty_user_name">Friends</string>
+    <!-- Empty status shown before user has selected a friend for their Conversation widget [CHAR LIMIT=20] -->
+    <string name="empty_status">Let’s chat tonight!</string>
+    <!-- Default text for missed call notifications on their Conversation widget [CHAR LIMIT=20] -->
+    <string name="missed_call">Missed call</string>
+    <!-- Text when a Notification may have more messages than the number indicated [CHAR LIMIT=5] -->
+    <string name="messages_count_overflow_indicator"><xliff:g id="number" example="7">%d</xliff:g>+</string>
+    <!-- Description text for adding a Conversation widget [CHAR LIMIT=100] -->
+    <string name="people_tile_description">See recent messages, missed calls, and status updates</string>
+    <!-- Title text displayed for the Conversation widget [CHAR LIMIT=50] -->
+    <string name="people_tile_title">Conversation</string>
 
     <!-- Title to display in a notification when ACTION_BATTERY_CHANGED.EXTRA_PRESENT field is false
     [CHAR LIMIT=NONE] -->
@@ -2849,4 +2894,7 @@
     <string name="qs_remove_labels" translatable="false"></string>
 
     <string name="qs_tile_label_fontFamily" translatable="false">@*android:string/config_headlineFontFamily</string>
+
+    <!-- Secondary label for alarm tile when there is no next alarm information [CHAR LIMIT=20] -->
+    <string name="qs_alarm_tile_no_alarm">No alarm set</string>
 </resources>

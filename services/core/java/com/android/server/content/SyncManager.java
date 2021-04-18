@@ -16,6 +16,9 @@
 
 package com.android.server.content;
 
+import static android.os.PowerWhitelistManager.REASON_SYNC_MANAGER;
+import static android.os.PowerWhitelistManager.TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED;
+
 import static com.android.server.content.SyncLogger.logSafe;
 
 import android.accounts.Account;
@@ -86,6 +89,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.WorkSource;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.text.format.TimeMigrationUtils;
 import android.util.EventLog;
 import android.util.Log;
@@ -263,6 +267,10 @@ public class SyncManager {
     private final Random mRand;
 
     private final SyncLogger mLogger;
+
+    // NOTE: this is a temporary allow-list for testing purposes; it will be removed before release.
+    private final String[] mEjSyncAllowedPackages = new String[]{
+            "com.google.android.google", "com.android.frameworks.servicestests"};
 
     private boolean isJobIdInUseLockedH(int jobId, List<JobInfo> pendingJobs) {
         for (JobInfo job: pendingJobs) {
@@ -983,6 +991,14 @@ public class SyncManager {
             }
         }
 
+        final boolean scheduleAsEj =
+                extras.getBoolean(ContentResolver.SYNC_EXTRAS_SCHEDULE_AS_EXPEDITED_JOB, false);
+        // NOTE: this is a temporary check for internal testing - to be removed before release.
+        if (scheduleAsEj && !ArrayUtils.contains(mEjSyncAllowedPackages, callingPackage)) {
+            throw new IllegalArgumentException(
+                    callingPackage + " is not allowed to schedule a sync as an EJ yet.");
+        }
+
         for (AccountAndUser account : accounts) {
             // If userId is specified, do not sync accounts of other users
             if (userId >= UserHandle.USER_SYSTEM && account.userId >= UserHandle.USER_SYSTEM
@@ -1242,16 +1258,19 @@ public class SyncManager {
                 syncExemptionFlag, callingUid, callingPid, callingPackage);
     }
 
-    public SyncAdapterType[] getSyncAdapterTypes(int userId) {
+    public SyncAdapterType[] getSyncAdapterTypes(int callingUid, int userId) {
         final Collection<RegisteredServicesCache.ServiceInfo<SyncAdapterType>> serviceInfos;
         serviceInfos = mSyncAdapters.getAllServices(userId);
-        SyncAdapterType[] types = new SyncAdapterType[serviceInfos.size()];
-        int i = 0;
+        final List<SyncAdapterType> types = new ArrayList<>(serviceInfos.size());
         for (RegisteredServicesCache.ServiceInfo<SyncAdapterType> serviceInfo : serviceInfos) {
-            types[i] = serviceInfo.type;
-            ++i;
+            final String packageName = serviceInfo.type.getPackageName();
+            if (!TextUtils.isEmpty(packageName) && mPackageManagerInternal.filterAppAccess(
+                    packageName, callingUid, userId)) {
+                continue;
+            }
+            types.add(serviceInfo.type);
         }
-        return types;
+        return types.toArray(new SyncAdapterType[] {});
     }
 
     public String[] getSyncAdapterPackagesForAuthorityAsUser(String authority, int userId) {
@@ -1490,6 +1509,12 @@ public class SyncManager {
                         + logSafe(syncOperation.target));
                 backoff = new Pair<Long, Long>(SyncStorageEngine.NOT_IN_BACKOFF_MODE,
                         SyncStorageEngine.NOT_IN_BACKOFF_MODE);
+            } else {
+                // if an EJ is being backed-off but doesn't have SYNC_EXTRAS_IGNORE_BACKOFF set,
+                // reschedule it as a regular job
+                if (syncOperation.isScheduledAsExpeditedJob()) {
+                    syncOperation.scheduleEjAsRegularJob = true;
+                }
             }
             long now = SystemClock.elapsedRealtime();
             long backoffDelay = backoff.first == SyncStorageEngine.NOT_IN_BACKOFF_MODE ? 0
@@ -1640,6 +1665,10 @@ public class SyncManager {
             b.setRequiresCharging(true);
         }
 
+        if (syncOperation.isScheduledAsExpeditedJob() && !syncOperation.scheduleEjAsRegularJob) {
+            b.setExpedited(true);
+        }
+
         if (syncOperation.syncExemptionFlag
                 == ContentResolver.SYNC_EXEMPTION_PROMOTE_BUCKET_WITH_TEMP) {
             DeviceIdleInternal dic =
@@ -1648,8 +1677,9 @@ public class SyncManager {
                 dic.addPowerSaveTempWhitelistApp(Process.SYSTEM_UID,
                         syncOperation.owningPackage,
                         mConstants.getKeyExemptionTempWhitelistDurationInSeconds() * 1000,
+                        TEMPORARY_ALLOWLIST_TYPE_FOREGROUND_SERVICE_NOT_ALLOWED,
                         UserHandle.getUserId(syncOperation.owningUid),
-                        /* sync=*/ false, "sync by top app");
+                        /* sync=*/ false, REASON_SYNC_MANAGER, "sync by top app");
             }
         }
 
@@ -3948,7 +3978,13 @@ public class SyncManager {
      * @return true if the provided key is used by the SyncManager in scheduling the sync.
      */
     private static boolean isSyncSetting(String key) {
+        if (key == null) {
+            return false;
+        }
         if (key.equals(ContentResolver.SYNC_EXTRAS_EXPEDITED)) {
+            return true;
+        }
+        if (key.equals(ContentResolver.SYNC_EXTRAS_SCHEDULE_AS_EXPEDITED_JOB)) {
             return true;
         }
         if (key.equals(ContentResolver.SYNC_EXTRAS_IGNORE_SETTINGS)) {

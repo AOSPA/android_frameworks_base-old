@@ -36,6 +36,7 @@ import android.hardware.biometrics.face.IFace;
 import android.hardware.biometrics.face.SensorProps;
 import android.hardware.face.Face;
 import android.hardware.face.FaceSensorPropertiesInternal;
+import android.hardware.face.FaceServiceReceiver;
 import android.hardware.face.IFaceService;
 import android.hardware.face.IFaceServiceReceiver;
 import android.os.Binder;
@@ -166,12 +167,7 @@ public class FaceService extends SystemService implements BiometricServiceCallba
                 String opPackageName) {
             Utils.checkPermission(getContext(), MANAGE_BIOMETRIC);
 
-            final List<FaceSensorPropertiesInternal> properties =
-                    FaceService.this.getSensorProperties();
-
-            Slog.d(TAG, "Retrieved sensor properties for: " + opPackageName
-                    + ", sensors: " + properties.size());
-            return properties;
+            return FaceService.this.getSensorProperties();
         }
 
         @Override // Binder call
@@ -306,7 +302,8 @@ public class FaceService extends SystemService implements BiometricServiceCallba
         @Override // Binder call
         public void prepareForAuthentication(int sensorId, boolean requireConfirmation,
                 IBinder token, long operationId, int userId,
-                IBiometricSensorReceiver sensorReceiver, String opPackageName, int cookie) {
+                IBiometricSensorReceiver sensorReceiver, String opPackageName, int cookie,
+                boolean allowBackgroundAuthentication) {
             Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
 
             final ServiceProvider provider = getProviderForSensor(sensorId);
@@ -318,7 +315,7 @@ public class FaceService extends SystemService implements BiometricServiceCallba
             final boolean restricted = true; // BiometricPrompt is always restricted
             provider.scheduleAuthenticate(sensorId, token, operationId, userId, cookie,
                     new ClientMonitorCallbackConverter(sensorReceiver), opPackageName, restricted,
-                    BiometricsProtoEnums.CLIENT_BIOMETRIC_PROMPT, false /* isKeyguard */);
+                    BiometricsProtoEnums.CLIENT_BIOMETRIC_PROMPT, allowBackgroundAuthentication);
         }
 
         @Override // Binder call
@@ -393,14 +390,32 @@ public class FaceService extends SystemService implements BiometricServiceCallba
                 final IFaceServiceReceiver receiver, final String opPackageName) {
             Utils.checkPermission(getContext(), USE_BIOMETRIC_INTERNAL);
 
-            final Pair<Integer, ServiceProvider> provider = getSingleProvider();
-            if (provider == null) {
-                Slog.w(TAG, "Null provider for removeAll");
-                return;
-            }
+            final FaceServiceReceiver internalReceiver = new FaceServiceReceiver() {
+                int sensorsFinishedRemoving = 0;
+                final int numSensors = getSensorPropertiesInternal(
+                        getContext().getOpPackageName()).size();
+                @Override
+                public void onRemoved(Face face, int remaining) throws RemoteException {
+                    if (remaining == 0) {
+                        sensorsFinishedRemoving++;
+                        Slog.d(TAG, "sensorsFinishedRemoving: " + sensorsFinishedRemoving
+                                + ", numSensors: " + numSensors);
+                        if (sensorsFinishedRemoving == numSensors) {
+                            receiver.onRemoved(null, 0 /* remaining */);
+                        }
+                    }
+                }
+            };
 
-            provider.second.scheduleRemoveAll(provider.first, token, userId, receiver,
-                    opPackageName);
+            // This effectively iterates through all sensors, but has to do so by finding all
+            // sensors under each provider.
+            for (ServiceProvider provider : mServiceProviders) {
+                List<FaceSensorPropertiesInternal> props = provider.getSensorProperties();
+                for (FaceSensorPropertiesInternal prop : props) {
+                    provider.scheduleRemoveAll(prop.sensorId, token, userId, internalReceiver,
+                            opPackageName);
+                }
+            }
         }
 
         @Override // Binder call
@@ -501,9 +516,6 @@ public class FaceService extends SystemService implements BiometricServiceCallba
                 Slog.w(TAG, "Null provider for hasEnrolledFaces, caller: " + opPackageName);
                 return false;
             }
-
-            final boolean enrolled = provider.getEnrolledFaces(sensorId, userId).size() > 0;
-            Slog.d(TAG, "hasEnrolledFaces, sensor: " + sensorId + ", enrolled: " + enrolled);
 
             return provider.getEnrolledFaces(sensorId, userId).size() > 0;
         }

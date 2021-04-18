@@ -21,20 +21,20 @@ import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.pm.verify.domain.DomainVerificationInfo
 import android.content.pm.verify.domain.DomainVerificationManager
 import android.content.pm.verify.domain.DomainVerificationRequest
-import android.content.pm.verify.domain.DomainVerificationInfo
 import android.content.pm.verify.domain.DomainVerificationState
 import android.os.Bundle
 import android.os.UserHandle
 import android.util.ArraySet
 import com.android.server.DeviceIdleInternal
+import com.android.server.pm.parsing.pkg.AndroidPackage
 import com.android.server.pm.verify.domain.DomainVerificationCollector
 import com.android.server.pm.verify.domain.DomainVerificationManagerInternal
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxy
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxyV1
 import com.android.server.pm.verify.domain.proxy.DomainVerificationProxyV2
-import com.android.server.pm.parsing.pkg.AndroidPackage
 import com.android.server.testutils.mockThrowOnUnmocked
 import com.android.server.testutils.whenever
 import com.google.common.truth.Truth.assertThat
@@ -106,23 +106,25 @@ class DomainVerificationProxyTest {
                 when (val pkgName = arguments[0] as String) {
                     TEST_PKG_NAME_TARGET_ONE -> DomainVerificationInfo(
                         TEST_UUID_ONE, pkgName, mapOf(
-                            "example1.com" to DomainVerificationManager.STATE_NO_RESPONSE,
-                            "example2.com" to DomainVerificationManager.STATE_NO_RESPONSE
+                            "example1.com" to DomainVerificationInfo.STATE_NO_RESPONSE,
+                            "example2.com" to DomainVerificationInfo.STATE_NO_RESPONSE
                         )
                     )
                     TEST_PKG_NAME_TARGET_TWO -> DomainVerificationInfo(
                         TEST_UUID_TWO, pkgName, mapOf(
-                            "example3.com" to DomainVerificationManager.STATE_NO_RESPONSE,
-                            "example4.com" to DomainVerificationManager.STATE_NO_RESPONSE
+                            "example3.com" to DomainVerificationInfo.STATE_NO_RESPONSE,
+                            "example4.com" to DomainVerificationInfo.STATE_NO_RESPONSE
                         )
                     )
                     else -> throw IllegalArgumentException("Unexpected package name $pkgName")
                 }
             }
-            whenever(setDomainVerificationStatusInternal(anyInt(), any(), any(), anyInt()))
+            whenever(setDomainVerificationStatusInternal(anyInt(), any(), any(), anyInt())) {
+                DomainVerificationManager.STATUS_OK
+            }
         }
         collector = mockThrowOnUnmocked {
-            whenever(collectAutoVerifyDomains(any())) {
+            whenever(collectValidAutoVerifyDomains(any())) {
                 when (val pkgName = (arguments[0] as AndroidPackage).packageName) {
                     TEST_PKG_NAME_TARGET_ONE -> ArraySet(setOf("example1.com", "example2.com"))
                     TEST_PKG_NAME_TARGET_TWO -> ArraySet(setOf("example3.com", "example4.com"))
@@ -316,7 +318,7 @@ class DomainVerificationProxyTest {
             eq(TEST_CALLING_UID_ACCEPT),
             idCaptor.capture(),
             hostCaptor.capture(),
-            eq(DomainVerificationManager.STATE_SUCCESS)
+            eq(DomainVerificationState.STATE_SUCCESS)
         )
 
         assertThat(idCaptor.allValues).containsExactly(TEST_UUID_ONE, TEST_UUID_TWO)
@@ -477,7 +479,7 @@ class DomainVerificationProxyTest {
                     whenever(
                         addPowerSaveTempWhitelistApp(
                             anyInt(), anyString(), anyLong(), anyInt(),
-                            anyBoolean(), anyString()
+                            anyBoolean(), anyInt(), anyString()
                         )
                     )
                 }

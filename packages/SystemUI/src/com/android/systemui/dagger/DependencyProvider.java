@@ -25,11 +25,13 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.om.OverlayManager;
 import android.hardware.display.AmbientDisplayConfiguration;
+import android.hardware.display.ColorDisplayManager;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.ServiceManager;
 import android.os.UserHandle;
+import android.service.quickaccesswallet.QuickAccessWalletClient;
 import android.view.Choreographer;
 import android.view.IWindowManager;
 import android.view.LayoutInflater;
@@ -44,8 +46,11 @@ import com.android.keyguard.ViewMediatorCallback;
 import com.android.settingslib.bluetooth.LocalBluetoothManager;
 import com.android.systemui.Prefs;
 import com.android.systemui.R;
+import com.android.systemui.accessibility.AccessibilityButtonModeObserver;
+import com.android.systemui.accessibility.AccessibilityButtonTargetsObserver;
 import com.android.systemui.accessibility.ModeSwitchesController;
 import com.android.systemui.accessibility.SystemActions;
+import com.android.systemui.accessibility.floatingmenu.AccessibilityFloatingMenuController;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.broadcast.logging.BroadcastDispatcherLogger;
@@ -60,6 +65,7 @@ import com.android.systemui.navigationbar.NavigationBarOverlayController;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.PluginInitializerImpl;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.qs.ReduceBrightColorsController;
 import com.android.systemui.recents.OverviewProxyService;
 import com.android.systemui.recents.Recents;
 import com.android.systemui.settings.UserTracker;
@@ -82,6 +88,7 @@ import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.theme.ThemeOverlayApplier;
 import com.android.systemui.util.leak.LeakDetector;
+import com.android.systemui.util.settings.SecureSettings;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.pip.Pip;
 
@@ -209,6 +216,7 @@ public class DependencyProvider {
             MetricsLogger metricsLogger,
             OverviewProxyService overviewProxyService,
             NavigationModeController navigationModeController,
+            AccessibilityButtonModeObserver accessibilityButtonModeObserver,
             StatusBarStateController statusBarStateController,
             SysUiState sysUiFlagsContainer,
             BroadcastDispatcher broadcastDispatcher,
@@ -233,6 +241,7 @@ public class DependencyProvider {
                 metricsLogger,
                 overviewProxyService,
                 navigationModeController,
+                accessibilityButtonModeObserver,
                 statusBarStateController,
                 sysUiFlagsContainer,
                 broadcastDispatcher,
@@ -253,6 +262,16 @@ public class DependencyProvider {
     /** */
     @Provides
     @SysUISingleton
+    public AccessibilityFloatingMenuController provideAccessibilityFloatingMenuController(
+            Context context, AccessibilityButtonTargetsObserver accessibilityButtonTargetsObserver,
+            AccessibilityButtonModeObserver accessibilityButtonModeObserver) {
+        return new AccessibilityFloatingMenuController(context, accessibilityButtonTargetsObserver,
+                accessibilityButtonModeObserver);
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
     public ConfigurationController provideConfigurationController(Context context) {
         return new ConfigurationControllerImpl(context);
     }
@@ -266,6 +285,15 @@ public class DependencyProvider {
     }
 
     /** */
+    @SysUISingleton
+    @Provides
+    public ReduceBrightColorsController provideReduceBrightColorsListener(
+            @Background Handler bgHandler, UserTracker userTracker,
+            ColorDisplayManager colorDisplayManager, SecureSettings secureSettings) {
+        return new ReduceBrightColorsController(userTracker, bgHandler,
+                colorDisplayManager, secureSettings);
+    }
+
     @Provides
     @SysUISingleton
     public ActivityManagerWrapper provideActivityManagerWrapper() {
@@ -312,6 +340,7 @@ public class DependencyProvider {
 
     /** */
     @Provides
+    @SysUISingleton
     public AlwaysOnDisplayPolicy provideAlwaysOnDisplayPolicy(Context context) {
         return new AlwaysOnDisplayPolicy(context);
     }
@@ -337,13 +366,6 @@ public class DependencyProvider {
     /** */
     @Provides
     @SysUISingleton
-    public SystemActions providesSystemActions(Context context) {
-        return new SystemActions(context);
-    }
-
-    /** */
-    @Provides
-    @SysUISingleton
     public Choreographer providesChoreographer() {
         return Choreographer.getInstance();
     }
@@ -353,5 +375,12 @@ public class DependencyProvider {
     @SysUISingleton
     public ModeSwitchesController providesModeSwitchesController(Context context) {
         return new ModeSwitchesController(context);
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    public QuickAccessWalletClient provideQuickAccessWalletClient(Context context) {
+        return QuickAccessWalletClient.create(context);
     }
 }

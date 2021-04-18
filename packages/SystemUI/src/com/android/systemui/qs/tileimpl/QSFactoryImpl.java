@@ -30,6 +30,7 @@ import com.android.systemui.plugins.qs.QSTileView;
 import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.external.CustomTile;
 import com.android.systemui.qs.tiles.AirplaneModeTile;
+import com.android.systemui.qs.tiles.AlarmTile;
 import com.android.systemui.qs.tiles.BatterySaverTile;
 import com.android.systemui.qs.tiles.BluetoothTile;
 import com.android.systemui.qs.tiles.CameraToggleTile;
@@ -46,6 +47,7 @@ import com.android.systemui.qs.tiles.LocationTile;
 import com.android.systemui.qs.tiles.MicrophoneToggleTile;
 import com.android.systemui.qs.tiles.NfcTile;
 import com.android.systemui.qs.tiles.NightDisplayTile;
+import com.android.systemui.qs.tiles.QuickAccessWalletTile;
 import com.android.systemui.qs.tiles.ReduceBrightColorsTile;
 import com.android.systemui.qs.tiles.RotationLockTile;
 import com.android.systemui.qs.tiles.ScreenRecordTile;
@@ -91,6 +93,8 @@ public class QSFactoryImpl implements QSFactory {
     private final Provider<CameraToggleTile> mCameraToggleTileProvider;
     private final Provider<MicrophoneToggleTile> mMicrophoneToggleTileProvider;
     private final Provider<DeviceControlsTile> mDeviceControlsTileProvider;
+    private final Provider<AlarmTile> mAlarmTileProvider;
+    private final Provider<QuickAccessWalletTile> mQuickAccessWalletTileProvider;
 
     private final Lazy<QSHost> mQsHostLazy;
     private final Provider<CustomTile.Builder> mCustomTileBuilderProvider;
@@ -126,7 +130,9 @@ public class QSFactoryImpl implements QSFactory {
             Provider<ReduceBrightColorsTile> reduceBrightColorsTileProvider,
             Provider<CameraToggleTile> cameraToggleTileProvider,
             Provider<MicrophoneToggleTile> microphoneToggleTileProvider,
-            Provider<DeviceControlsTile> deviceControlsTileProvider) {
+            Provider<DeviceControlsTile> deviceControlsTileProvider,
+            Provider<AlarmTile> alarmTileProvider,
+            Provider<QuickAccessWalletTile> quickAccessWalletTileProvider) {
         mQsHostLazy = qsHostLazy;
         mCustomTileBuilderProvider = customTileBuilderProvider;
 
@@ -157,6 +163,8 @@ public class QSFactoryImpl implements QSFactory {
         mCameraToggleTileProvider = cameraToggleTileProvider;
         mMicrophoneToggleTileProvider = microphoneToggleTileProvider;
         mDeviceControlsTileProvider = deviceControlsTileProvider;
+        mAlarmTileProvider = alarmTileProvider;
+        mQuickAccessWalletTileProvider = quickAccessWalletTileProvider;
     }
 
     public QSTile createTile(String tileSpec) {
@@ -218,6 +226,10 @@ public class QSFactoryImpl implements QSFactory {
                 return mMicrophoneToggleTileProvider.get();
             case "controls":
                 return mDeviceControlsTileProvider.get();
+            case "alarm":
+                return mAlarmTileProvider.get();
+            case "wallet":
+                return mQuickAccessWalletTileProvider.get();
         }
 
         // Custom tiles
@@ -242,10 +254,10 @@ public class QSFactoryImpl implements QSFactory {
     public QSTileView createTileView(QSTile tile, boolean collapsedView) {
         Context context = new ContextThemeWrapper(mQsHostLazy.get().getContext(), R.style.qs_theme);
         QSIconView icon = tile.createTileView(context);
-        if (collapsedView) {
+        if (mSideLabels) {
+            return new QSTileViewHorizontal(context, icon, collapsedView);
+        } else if (collapsedView) {
             return new QSTileBaseView(context, icon, collapsedView);
-        } else if (mSideLabels) {
-            return new QSTileViewHorizontal(context, icon);
         } else {
             return new com.android.systemui.qs.tileimpl.QSTileView(context, icon);
         }

@@ -27,7 +27,8 @@ import android.net.QosSession;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.telephony.data.EpsBearerQosSessionAttributes;
-import android.util.Slog;
+import android.telephony.data.NrQosSessionAttributes;
+import android.util.Log;
 
 import java.util.Objects;
 
@@ -146,13 +147,23 @@ class QosCallbackAgentConnection implements IBinder.DeathRecipient {
         mNetworkAgentInfo.onQosCallbackUnregistered(mAgentCallbackId);
     }
 
-    void sendEventQosSessionAvailable(final QosSession session,
+    void sendEventEpsQosSessionAvailable(final QosSession session,
             final EpsBearerQosSessionAttributes attributes) {
         try {
-            if (DBG) log("sendEventQosSessionAvailable: sending...");
+            if (DBG) log("sendEventEpsQosSessionAvailable: sending...");
             mCallback.onQosEpsBearerSessionAvailable(session, attributes);
         } catch (final RemoteException e) {
-            loge("sendEventQosSessionAvailable: remote exception", e);
+            loge("sendEventEpsQosSessionAvailable: remote exception", e);
+        }
+    }
+
+    void sendEventNrQosSessionAvailable(final QosSession session,
+            final NrQosSessionAttributes attributes) {
+        try {
+            if (DBG) log("sendEventNrQosSessionAvailable: sending...");
+            mCallback.onNrQosSessionAvailable(session, attributes);
+        } catch (final RemoteException e) {
+            loge("sendEventNrQosSessionAvailable: remote exception", e);
         }
     }
 
@@ -175,18 +186,14 @@ class QosCallbackAgentConnection implements IBinder.DeathRecipient {
     }
 
     private static void log(@NonNull final String msg) {
-        Slog.d(TAG, msg);
+        Log.d(TAG, msg);
     }
 
     private static void logw(@NonNull final String msg) {
-        Slog.w(TAG, msg);
+        Log.w(TAG, msg);
     }
 
     private static void loge(@NonNull final String msg, final Throwable t) {
-        Slog.e(TAG, msg, t);
-    }
-
-    private static void logwtf(@NonNull final String msg) {
-        Slog.wtf(TAG, msg);
+        Log.e(TAG, msg, t);
     }
 }

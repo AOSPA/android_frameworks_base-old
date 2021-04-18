@@ -23,13 +23,9 @@ import android.view.MotionEvent.PointerProperties;
 
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.policy.BatteryController;
-import com.android.systemui.util.time.SystemClock;
 
 import java.util.ArrayList;
-import java.util.Deque;
-import java.util.LinkedList;
 import java.util.List;
-import java.util.Queue;
 
 import javax.inject.Inject;
 
@@ -40,24 +36,21 @@ import javax.inject.Inject;
 public class FalsingDataProvider {
 
     private static final long MOTION_EVENT_AGE_MS = 1000;
-    private static final long EXTENDED_MOTION_EVENT_AGE_MS = 30 * 1000;
     private static final float THREE_HUNDRED_SIXTY_DEG = (float) (2 * Math.PI);
 
     private final int mWidthPixels;
     private final int mHeightPixels;
     private final BatteryController mBatteryController;
-    private final SystemClock mSystemClock;
     private final float mXdpi;
     private final float mYdpi;
     private final List<SessionListener> mSessionListeners = new ArrayList<>();
     private final List<MotionEventListener> mMotionEventListeners = new ArrayList<>();
-    private final List<GestureCompleteListener> mGestuerCompleteListeners = new ArrayList<>();
-
-    private @Classifier.InteractionType int mInteractionType;
-    private final Deque<TimeLimitedMotionEventBuffer> mExtendedMotionEvents = new LinkedList<>();
+    private final List<GestureFinalizedListener> mGestureFinalizedListeners = new ArrayList<>();
 
     private TimeLimitedMotionEventBuffer mRecentMotionEvents =
             new TimeLimitedMotionEventBuffer(MOTION_EVENT_AGE_MS);
+    private List<MotionEvent> mPriorMotionEvents;
+
     private boolean mDirty = true;
 
     private float mAngle = 0;
@@ -66,14 +59,12 @@ public class FalsingDataProvider {
     private boolean mJustUnlockedWithFace;
 
     @Inject
-    public FalsingDataProvider(DisplayMetrics displayMetrics, BatteryController batteryController,
-            SystemClock systemClock) {
+    public FalsingDataProvider(DisplayMetrics displayMetrics, BatteryController batteryController) {
         mXdpi = displayMetrics.xdpi;
         mYdpi = displayMetrics.ydpi;
         mWidthPixels = displayMetrics.widthPixels;
         mHeightPixels = displayMetrics.heightPixels;
         mBatteryController = batteryController;
-        mSystemClock = systemClock;
 
         FalsingClassifier.logInfo("xdpi, ydpi: " + getXdpi() + ", " + getYdpi());
         FalsingClassifier.logInfo("width, height: " + getWidthPixels() + ", " + getHeightPixels());
@@ -99,7 +90,7 @@ public class FalsingDataProvider {
 
         mMotionEventListeners.forEach(listener -> listener.onMotionEvent(motionEvent));
 
-        // We explicitly do not complete a gesture on UP or CANCEL events.
+        // We explicitly do not "finalize" a gesture on UP or CANCEL events.
         // We wait for the next gesture to start before marking the prior gesture as complete.  This
         // has multiple benefits. First, it makes it trivial to track the "current" or "recent"
         // gesture, as it will always be found in mRecentMotionEvents. Second, and most importantly,
@@ -111,10 +102,10 @@ public class FalsingDataProvider {
 
     private void completePriorGesture() {
         if (!mRecentMotionEvents.isEmpty()) {
-            mGestuerCompleteListeners.forEach(listener -> listener.onGestureComplete(
+            mGestureFinalizedListeners.forEach(listener -> listener.onGestureFinalized(
                     mRecentMotionEvents.get(mRecentMotionEvents.size() - 1).getEventTime()));
 
-            mExtendedMotionEvents.addFirst(mRecentMotionEvents);
+            mPriorMotionEvents = mRecentMotionEvents;
         }
     }
 
@@ -140,29 +131,8 @@ public class FalsingDataProvider {
         return mRecentMotionEvents;
     }
 
-    /** Returns recent gestures, exclusive of the most recent gesture. Newer gestures come first. */
-    public Queue<? extends List<MotionEvent>> getHistoricalMotionEvents() {
-        long nowMs = mSystemClock.uptimeMillis();
-
-        mExtendedMotionEvents.removeIf(
-                motionEvents -> motionEvents.isFullyExpired(nowMs - EXTENDED_MOTION_EVENT_AGE_MS));
-
-        return mExtendedMotionEvents;
-    }
-
-    /**
-     * interactionType is defined by {@link com.android.systemui.classifier.Classifier}.
-     */
-    public final void setInteractionType(@Classifier.InteractionType int interactionType) {
-        if (mInteractionType != interactionType) {
-            mInteractionType = interactionType;
-            mDirty = true;
-        }
-    }
-
-    /** Return the interaction type that is being compared against for falsing. */
-    public  final int getInteractionType() {
-        return mInteractionType;
+    public List<MotionEvent> getPriorMotionEvents() {
+        return mPriorMotionEvents;
     }
 
     /**
@@ -342,14 +312,14 @@ public class FalsingDataProvider {
         mMotionEventListeners.remove(listener);
     }
 
-    /** Register a {@link GestureCompleteListener}. */
-    public void addGestureCompleteListener(GestureCompleteListener listener) {
-        mGestuerCompleteListeners.add(listener);
+    /** Register a {@link GestureFinalizedListener}. */
+    public void addGestureCompleteListener(GestureFinalizedListener listener) {
+        mGestureFinalizedListeners.add(listener);
     }
 
-    /** Unregister a {@link GestureCompleteListener}. */
-    public void removeGestureCompleteListener(GestureCompleteListener listener) {
-        mGestuerCompleteListeners.remove(listener);
+    /** Unregister a {@link GestureFinalizedListener}. */
+    public void removeGestureCompleteListener(GestureFinalizedListener listener) {
+        mGestureFinalizedListeners.remove(listener);
     }
 
     void onSessionStarted() {
@@ -392,8 +362,12 @@ public class FalsingDataProvider {
     }
 
     /** Callback to be alerted when the current gesture ends. */
-    public interface GestureCompleteListener {
-        /** */
-        void onGestureComplete(long completionTimeMs);
+    public interface GestureFinalizedListener {
+        /**
+         * Called just before a new gesture starts.
+         *
+         * Any pending work on a prior gesture can be considered cemented in place.
+         */
+        void onGestureFinalized(long completionTimeMs);
     }
 }

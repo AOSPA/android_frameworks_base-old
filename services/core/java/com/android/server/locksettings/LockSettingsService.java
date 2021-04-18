@@ -91,7 +91,6 @@ import android.provider.Settings.SettingNotFoundException;
 import android.security.AndroidKeyStoreMaintenance;
 import android.security.Authorization;
 import android.security.KeyStore;
-import android.security.keystore.AndroidKeyStoreProvider;
 import android.security.keystore.KeyProperties;
 import android.security.keystore.KeyProtection;
 import android.security.keystore.UserNotAuthenticatedException;
@@ -158,7 +157,6 @@ import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.CountDownLatch;
@@ -266,13 +264,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         @Override
         public void onStart() {
-            Optional<Boolean> keystore2_enabled =
-                    android.sysprop.Keystore2Properties.keystore2_enabled();
-            if (keystore2_enabled.isPresent() && keystore2_enabled.get()) {
-                android.security.keystore2.AndroidKeyStoreProvider.install();
-            } else {
-                AndroidKeyStoreProvider.install();
-            }
+            android.security.keystore2.AndroidKeyStoreProvider.install();
             mLockSettingsService = new LockSettingsService(getContext());
             publishBinderService("lock_settings", mLockSettingsService);
         }
@@ -482,8 +474,8 @@ public class LockSettingsService extends ILockSettings.Stub {
             return KeyStore.getInstance();
         }
 
-        public RecoverableKeyStoreManager getRecoverableKeyStoreManager(KeyStore keyStore) {
-            return RecoverableKeyStoreManager.getInstance(mContext, keyStore);
+        public RecoverableKeyStoreManager getRecoverableKeyStoreManager() {
+            return RecoverableKeyStoreManager.getInstance(mContext);
         }
 
         public IStorageManager getStorageManager() {
@@ -564,7 +556,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         mInjector = injector;
         mContext = injector.getContext();
         mKeyStore = injector.getKeyStore();
-        mRecoverableKeyStoreManager = injector.getRecoverableKeyStoreManager(mKeyStore);
+        mRecoverableKeyStoreManager = injector.getRecoverableKeyStoreManager();
         mHandler = injector.getHandler(injector.getServiceThread());
         mStrongAuth = injector.getStrongAuth();
         mActivityManager = injector.getActivityManager();

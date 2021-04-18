@@ -21,6 +21,7 @@ import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SuppressLint;
+import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 
@@ -32,11 +33,77 @@ import java.util.Objects;
  */
 public final class PlaybackErrorEvent extends Event implements Parcelable {
     /** Unknown error code. */
-    public static final int ERROR_CODE_UNKNOWN = 0;
+    public static final int ERROR_UNKNOWN = 0;
     /** Error code for other errors */
-    public static final int ERROR_CODE_OTHER = 1;
+    public static final int ERROR_OTHER = 1;
     /** Error code for runtime errors */
-    public static final int ERROR_CODE_RUNTIME = 2;
+    public static final int ERROR_RUNTIME = 2;
+
+    /** No network */
+    public static final int ERROR_NETWORK_OFFLINE = 3;
+    /** Connection opening error */
+    public static final int ERROR_NETWORK_CONNECT = 4;
+    /** Bad HTTP status code */
+    public static final int ERROR_NETWORK_BAD_STATUS = 5;
+    /** DNS resolution error */
+    public static final int ERROR_NETWORK_DNS = 6;
+    /** Network socket timeout */
+    public static final int ERROR_NETWORK_TIMEOUT = 7;
+    /** Connection closed */
+    public static final int ERROR_NETWORK_CLOSED = 8;
+    /** Other network errors */
+    public static final int ERROR_NETWORK_OTHER = 9;
+
+    /** Manifest parsing error */
+    public static final int ERROR_MEDIA_MANIFEST = 10;
+    /**
+     * Media bitstream (audio, video, text, metadata) parsing error, either malformed or
+     * unsupported.
+     */
+    public static final int ERROR_MEDIA_PARSER = 11;
+    /** Other media errors */
+    public static final int ERROR_MEDIA_OTHER = 12;
+
+    /** Codec initialization failed */
+    public static final int ERROR_DECODER_INIT = 13;
+    /** Decoding failed */
+    public static final int ERROR_DECODER_DECODE = 14;
+    /** Out of memory */
+    public static final int ERROR_DECODER_OOM = 15;
+    /** Other decoder errors */
+    public static final int ERROR_DECODER_OTHER = 16;
+
+    /** AudioTrack initialization failed */
+    public static final int ERROR_AUDIOTRACK_INIT = 17;
+    /** AudioTrack writing failed */
+    public static final int ERROR_AUDIOTRACK_WRITE = 18;
+    /** Other AudioTrack errors */
+    public static final int ERROR_AUDIOTRACK_OTHER = 19;
+
+    /** Exception in remote controller or player */
+    public static final int ERROR_PLAYER_REMOTE = 20;
+    /** Error when a Live playback falls behind the Live DVR window. */
+    public static final int ERROR_PLAYER_BEHIND_LIVE_WINDOW = 21;
+    /** Other player errors */
+    public static final int ERROR_PLAYER_OTHER = 22;
+
+    /** Scheme unsupported by device */
+    public static final int ERROR_DRM_UNAVAILABLE = 23;
+    /** Provisioning failed */
+    public static final int ERROR_DRM_PROVISIONING_FAILED = 24;
+    /** Failed to acquire license */
+    public static final int ERROR_DRM_LICENSE_ERROR = 25;
+    /** Operation prevented by license policy */
+    public static final int ERROR_DRM_DISALLOWED = 26;
+    /** Failure in the DRM system */
+    public static final int ERROR_DRM_SYSTEM_ERROR = 27;
+    /** Incompatible content */
+    public static final int ERROR_DRM_CONTENT_ERROR = 28;
+    /** Device has been revoked */
+    public static final int ERROR_DRM_REVOKED = 29;
+    /** Other drm errors */
+    public static final int ERROR_DRM_OTHER = 30;
+
 
     private final @Nullable String mExceptionStack;
     private final int mErrorCode;
@@ -45,11 +112,38 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
 
 
     /** @hide */
-    // TODO: more error types
-    @IntDef(prefix = "ERROR_CODE_", value = {
-        ERROR_CODE_UNKNOWN,
-        ERROR_CODE_OTHER,
-        ERROR_CODE_RUNTIME
+    @IntDef(prefix = "ERROR_", value = {
+        ERROR_UNKNOWN,
+        ERROR_OTHER,
+        ERROR_RUNTIME,
+        ERROR_NETWORK_OFFLINE,
+        ERROR_NETWORK_CONNECT,
+        ERROR_NETWORK_BAD_STATUS,
+        ERROR_NETWORK_DNS,
+        ERROR_NETWORK_TIMEOUT,
+        ERROR_NETWORK_CLOSED,
+        ERROR_NETWORK_OTHER,
+        ERROR_MEDIA_MANIFEST,
+        ERROR_MEDIA_PARSER,
+        ERROR_MEDIA_OTHER,
+        ERROR_DECODER_INIT,
+        ERROR_DECODER_DECODE,
+        ERROR_DECODER_OOM,
+        ERROR_DECODER_OTHER,
+        ERROR_AUDIOTRACK_INIT,
+        ERROR_AUDIOTRACK_WRITE,
+        ERROR_AUDIOTRACK_OTHER,
+        ERROR_PLAYER_REMOTE,
+        ERROR_PLAYER_BEHIND_LIVE_WINDOW,
+        ERROR_PLAYER_OTHER,
+        ERROR_DRM_UNAVAILABLE,
+        ERROR_DRM_PROVISIONING_FAILED,
+        ERROR_DRM_LICENSE_ERROR,
+        ERROR_DRM_DISALLOWED,
+        ERROR_DRM_SYSTEM_ERROR,
+        ERROR_DRM_CONTENT_ERROR,
+        ERROR_DRM_REVOKED,
+        ERROR_DRM_OTHER,
     })
     @Retention(java.lang.annotation.RetentionPolicy.SOURCE)
     public @interface ErrorCode {}
@@ -63,11 +157,13 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
             @Nullable String exceptionStack,
             int errorCode,
             int subErrorCode,
-            long timeSinceCreatedMillis) {
+            long timeSinceCreatedMillis,
+            @NonNull Bundle extras) {
         this.mExceptionStack = exceptionStack;
         this.mErrorCode = errorCode;
         this.mSubErrorCode = subErrorCode;
         this.mTimeSinceCreatedMillis = timeSinceCreatedMillis;
+        this.mMetricsBundle = extras.deepCopy();
     }
 
     /** @hide */
@@ -102,6 +198,16 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
     @IntRange(from = -1)
     public long getTimeSinceCreatedMillis() {
         return mTimeSinceCreatedMillis;
+    }
+
+    /**
+     * Gets metrics-related information that is not supported by dedicated methods.
+     * <p>It is intended to be used for backwards compatibility by the metrics infrastructure.
+     */
+    @Override
+    @NonNull
+    public Bundle getMetricsBundle() {
+        return mMetricsBundle;
     }
 
     @Override
@@ -140,6 +246,7 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
         dest.writeInt(mErrorCode);
         dest.writeInt(mSubErrorCode);
         dest.writeLong(mTimeSinceCreatedMillis);
+        dest.writeBundle(mMetricsBundle);
     }
 
     @Override
@@ -154,11 +261,13 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
         int errorCode = in.readInt();
         int subErrorCode = in.readInt();
         long timeSinceCreatedMillis = in.readLong();
+        Bundle extras = in.readBundle();
 
         this.mExceptionStack = exceptionStack;
         this.mErrorCode = errorCode;
         this.mSubErrorCode = subErrorCode;
         this.mTimeSinceCreatedMillis = timeSinceCreatedMillis;
+        this.mMetricsBundle = extras;
     }
 
 
@@ -183,6 +292,7 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
         private int mErrorCode;
         private int mSubErrorCode;
         private long mTimeSinceCreatedMillis = -1;
+        private Bundle mMetricsBundle = new Bundle();
 
         /**
          * Creates a new Builder.
@@ -226,6 +336,17 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
             return this;
         }
 
+        /**
+         * Sets metrics-related information that is not supported by dedicated
+         * methods.
+         * <p>It is intended to be used for backwards compatibility by the
+         * metrics infrastructure.
+         */
+        public @NonNull Builder setMetricsBundle(@NonNull Bundle metricsBundle) {
+            mMetricsBundle = metricsBundle;
+            return this;
+        }
+
         /** Builds the instance. */
         public @NonNull PlaybackErrorEvent build() {
 
@@ -241,7 +362,8 @@ public final class PlaybackErrorEvent extends Event implements Parcelable {
                     stack,
                     mErrorCode,
                     mSubErrorCode,
-                    mTimeSinceCreatedMillis);
+                    mTimeSinceCreatedMillis,
+                    mMetricsBundle);
             return o;
         }
     }

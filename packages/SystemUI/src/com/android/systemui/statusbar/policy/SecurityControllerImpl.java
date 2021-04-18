@@ -15,9 +15,11 @@
  */
 package com.android.systemui.statusbar.policy;
 
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.admin.DeviceAdminInfo;
 import android.app.admin.DevicePolicyManager;
+import android.app.admin.DevicePolicyManager.DeviceOwnerType;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.Context;
@@ -222,6 +224,18 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
             return getNameForVpnConfig(cfg, UserHandle.of(profileId));
         }
         return null;
+    }
+
+    @Override
+    @Nullable
+    public ComponentName getDeviceOwnerComponentOnAnyUser() {
+        return mDevicePolicyManager.getDeviceOwnerComponentOnAnyUser();
+    }
+
+    @Override
+    @DeviceOwnerType
+    public int getDeviceOwnerType(@NonNull ComponentName admin) {
+        return mDevicePolicyManager.getDeviceOwnerType(admin);
     }
 
     @Override
@@ -439,7 +453,7 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
     private final NetworkCallback mNetworkCallback = new NetworkCallback() {
         @Override
         public void onAvailable(Network network) {
-            if (DEBUG) Log.d(TAG, "onAvailable " + network.netId);
+            if (DEBUG) Log.d(TAG, "onAvailable " + network.getNetId());
             updateState();
             fireCallbacks();
         };
@@ -448,7 +462,7 @@ public class SecurityControllerImpl extends CurrentUserTracker implements Securi
         // how long the VPN connection is held on to.
         @Override
         public void onLost(Network network) {
-            if (DEBUG) Log.d(TAG, "onLost " + network.netId);
+            if (DEBUG) Log.d(TAG, "onLost " + network.getNetId());
             updateState();
             fireCallbacks();
         };

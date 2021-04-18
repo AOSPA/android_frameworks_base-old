@@ -18,12 +18,17 @@ package com.android.server;
 
 import static android.Manifest.permission.ACCESS_MTP;
 import static android.Manifest.permission.INSTALL_PACKAGES;
+import static android.Manifest.permission.MANAGE_EXTERNAL_STORAGE;
 import static android.Manifest.permission.WRITE_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.MODE_ALLOWED;
 import static android.app.AppOpsManager.OP_LEGACY_STORAGE;
 import static android.app.AppOpsManager.OP_MANAGE_EXTERNAL_STORAGE;
 import static android.app.AppOpsManager.OP_REQUEST_INSTALL_PACKAGES;
 import static android.app.AppOpsManager.OP_WRITE_EXTERNAL_STORAGE;
+import static android.app.PendingIntent.FLAG_CANCEL_CURRENT;
+import static android.app.PendingIntent.FLAG_IMMUTABLE;
+import static android.app.PendingIntent.FLAG_ONE_SHOT;
+import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.PackageManager.MATCH_ANY_USER;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AWARE;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_UNAWARE;
@@ -51,9 +56,11 @@ import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
+import android.app.AnrController;
 import android.app.AppOpsManager;
 import android.app.IActivityManager;
 import android.app.KeyguardManager;
+import android.app.PendingIntent;
 import android.app.admin.SecurityLog;
 import android.app.usage.StorageStatsManager;
 import android.content.BroadcastReceiver;
@@ -136,7 +143,6 @@ import com.android.internal.os.AppFuseMount;
 import com.android.internal.os.BackgroundThread;
 import com.android.internal.os.FuseUnavailableMountException;
 import com.android.internal.os.SomeArgs;
-import com.android.internal.os.Zygote;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.DumpUtils;
@@ -573,6 +579,12 @@ class StorageManagerService extends IStorageManager.Stub
      */
     private static final int PBKDF2_HASH_ROUNDS = 1024;
 
+    private static final String ANR_DELAY_MILLIS_DEVICE_CONFIG_KEY =
+            "anr_delay_millis";
+
+    private static final String ANR_DELAY_NOTIFY_EXTERNAL_STORAGE_SERVICE_DEVICE_CONFIG_KEY =
+            "anr_delay_notify_external_storage_service";
+
     /**
      * Mounted OBB tracking information. Used to track the current state of all
      * OBBs.
@@ -939,14 +951,55 @@ class StorageManagerService extends IStorageManager.Stub
 
         if (transcodeEnabled) {
             LocalServices.getService(ActivityManagerInternal.class)
-                    .registerAnrController((packageName, uid) -> {
-                        try {
-                            return mStorageSessionController.getAnrDelayMillis(packageName, uid);
-                        } catch (ExternalStorageServiceException e) {
-                            Log.e(TAG, "Failed to get ANR delay for " + packageName, e);
-                            return 0;
-                        }
-                    });
+                .registerAnrController(new ExternalStorageServiceAnrController());
+        }
+    }
+
+    private class ExternalStorageServiceAnrController implements AnrController {
+        @Override
+        public long getAnrDelayMillis(String packageName, int uid) {
+            if (!isAppIoBlocked(uid)) {
+                return 0;
+            }
+
+            int delay = DeviceConfig.getInt(DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    ANR_DELAY_MILLIS_DEVICE_CONFIG_KEY, 5000);
+            Slog.v(TAG, "getAnrDelayMillis for " + packageName + ". " + delay + "ms");
+            return delay;
+        }
+
+        @Override
+        public void onAnrDelayStarted(String packageName, int uid) {
+            if (!isAppIoBlocked(uid)) {
+                return;
+            }
+
+            boolean notifyExternalStorageService = DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+                    ANR_DELAY_NOTIFY_EXTERNAL_STORAGE_SERVICE_DEVICE_CONFIG_KEY, true);
+            if (notifyExternalStorageService) {
+                Slog.d(TAG, "onAnrDelayStarted for " + packageName
+                        + ". Notifying external storage service");
+                try {
+                    mStorageSessionController.notifyAnrDelayStarted(packageName, uid, 0 /* tid */,
+                            StorageManager.APP_IO_BLOCKED_REASON_TRANSCODING);
+                } catch (ExternalStorageServiceException e) {
+                    Slog.e(TAG, "Failed to notify ANR delay started for " + packageName, e);
+                }
+            } else {
+                // TODO(b/170973510): Implement framework spinning dialog for ANR delay
+            }
+        }
+
+        @Override
+        public boolean onAnrDelayCompleted(String packageName, int uid) {
+            if (isAppIoBlocked(uid)) {
+                Slog.d(TAG, "onAnrDelayCompleted for " + packageName + ". Showing ANR dialog...");
+                return true;
+            } else {
+                Slog.d(TAG, "onAnrDelayCompleted for " + packageName + ". Skipping ANR dialog...");
+                return false;
+            }
         }
     }
 
@@ -3337,6 +3390,96 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @Override
+    public void notifyAppIoBlocked(String volumeUuid, int uid, int tid,
+            @StorageManager.AppIoBlockedReason int reason) {
+        enforceExternalStorageService();
+
+        mStorageSessionController.notifyAppIoBlocked(volumeUuid, uid, tid, reason);
+    }
+
+    @Override
+    public void notifyAppIoResumed(String volumeUuid, int uid, int tid,
+            @StorageManager.AppIoBlockedReason int reason) {
+        enforceExternalStorageService();
+
+        mStorageSessionController.notifyAppIoResumed(volumeUuid, uid, tid, reason);
+    }
+
+    @Override
+    public boolean isAppIoBlocked(String volumeUuid, int uid, int tid,
+            @StorageManager.AppIoBlockedReason int reason) {
+        return isAppIoBlocked(uid);
+    }
+
+
+    private boolean isAppIoBlocked(int uid) {
+        return mStorageSessionController.isAppIoBlocked(uid);
+    }
+
+    /**
+     * Enforces that the caller is the {@link ExternalStorageService}
+     *
+     * @throws SecurityException if the caller doesn't have the
+     * {@link android.Manifest.permission.WRITE_MEDIA_STORAGE} permission or is not the
+     * {@link ExternalStorageService}
+     */
+    private void enforceExternalStorageService() {
+        enforcePermission(android.Manifest.permission.WRITE_MEDIA_STORAGE);
+        int callingAppId = UserHandle.getAppId(Binder.getCallingUid());
+        if (callingAppId != mMediaStoreAuthorityAppId) {
+            throw new SecurityException("Only the ExternalStorageService is permitted");
+        }
+    }
+
+    /**
+     * Returns PendingIntent which can be used by Apps with MANAGE_EXTERNAL_STORAGE permission
+     * to launch the manageSpaceActivity of the App specified by packageName.
+     */
+    @Override
+    @Nullable
+    public PendingIntent getManageSpaceActivityIntent(
+            @NonNull String packageName, int requestCode) {
+        // Only Apps with MANAGE_EXTERNAL_STORAGE permission should be able to call this API.
+        enforcePermission(android.Manifest.permission.MANAGE_EXTERNAL_STORAGE);
+
+        // We want to call the manageSpaceActivity as a SystemService and clear identity
+        // of the calling App
+        int originalUid = Binder.getCallingUidOrThrow();
+        long token = Binder.clearCallingIdentity();
+
+        try {
+            ApplicationInfo appInfo = mIPackageManager.getApplicationInfo(packageName, 0,
+                    UserHandle.getUserId(originalUid));
+            if (appInfo == null) {
+                throw new IllegalArgumentException(
+                        "Invalid packageName");
+            }
+            if (appInfo.manageSpaceActivityName == null) {
+                Log.i(TAG, packageName + " doesn't have a manageSpaceActivity");
+                return null;
+            }
+            Context targetAppContext = mContext.createPackageContext(packageName, 0);
+
+            Intent intent = new Intent(Intent.ACTION_DEFAULT);
+            intent.setClassName(packageName,
+                    appInfo.manageSpaceActivityName);
+            intent.setFlags(FLAG_ACTIVITY_NEW_TASK);
+
+            PendingIntent activity = PendingIntent.getActivity(targetAppContext, requestCode,
+                    intent,
+                    FLAG_ONE_SHOT | FLAG_CANCEL_CURRENT | FLAG_IMMUTABLE);
+            return activity;
+        } catch (RemoteException e) {
+            throw e.rethrowAsRuntimeException();
+        } catch (PackageManager.NameNotFoundException e) {
+            throw new IllegalArgumentException(
+                    "packageName not found");
+        } finally {
+            Binder.restoreCallingIdentity(token);
+        }
+    }
+
     /** Not thread safe */
     class AppFuseMountScope extends AppFuseBridge.MountScope {
         private boolean mMounted = false;
@@ -4139,31 +4282,37 @@ class StorageManagerService extends IStorageManager.Stub
         }
     }
 
+    @Override
+    public int getExternalStorageMountMode(int uid, String packageName) {
+        enforcePermission(android.Manifest.permission.WRITE_MEDIA_STORAGE);
+        return mStorageManagerInternal.getExternalStorageMountMode(uid, packageName);
+    }
+
     private int getMountModeInternal(int uid, String packageName) {
         try {
             // Get some easy cases out of the way first
             if (Process.isIsolated(uid)) {
-                return Zygote.MOUNT_EXTERNAL_NONE;
+                return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
             }
 
             final String[] packagesForUid = mIPackageManager.getPackagesForUid(uid);
             if (ArrayUtils.isEmpty(packagesForUid)) {
                 // It's possible the package got uninstalled already, so just ignore.
-                return Zygote.MOUNT_EXTERNAL_NONE;
+                return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
             }
             if (packageName == null) {
                 packageName = packagesForUid[0];
             }
 
             if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
-                return Zygote.MOUNT_EXTERNAL_NONE;
+                return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
             }
 
             if (mStorageManagerInternal.isExternalStorageService(uid)) {
                 // Determine if caller requires pass_through mount; note that we do this for
                 // all processes that share a UID with MediaProvider; but this is fine, since
                 // those processes anyway share the same rights as MediaProvider.
-                return Zygote.MOUNT_EXTERNAL_PASS_THROUGH;
+                return StorageManager.MOUNT_MODE_EXTERNAL_PASS_THROUGH;
             }
 
             if ((mDownloadsAuthorityAppId == UserHandle.getAppId(uid)
@@ -4171,7 +4320,7 @@ class StorageManagerService extends IStorageManager.Stub
                 // DownloadManager can write in app-private directories on behalf of apps;
                 // give it write access to Android/
                 // ExternalStorageProvider can access Android/{data,obb} dirs in managed mode
-                return Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE;
+                return StorageManager.MOUNT_MODE_EXTERNAL_ANDROID_WRITABLE;
             }
 
             final boolean hasMtp = mIPackageManager.checkUidPermission(ACCESS_MTP, uid) ==
@@ -4181,7 +4330,7 @@ class StorageManagerService extends IStorageManager.Stub
                         0, UserHandle.getUserId(uid));
                 if (ai != null && ai.isSignedWithPlatformKey()) {
                     // Platform processes hosting the MTP server should be able to write in Android/
-                    return Zygote.MOUNT_EXTERNAL_ANDROID_WRITABLE;
+                    return StorageManager.MOUNT_MODE_EXTERNAL_ANDROID_WRITABLE;
                 }
             }
 
@@ -4206,13 +4355,13 @@ class StorageManagerService extends IStorageManager.Stub
                 }
             }
             if ((hasInstall || hasInstallOp) && hasWrite) {
-                return Zygote.MOUNT_EXTERNAL_INSTALLER;
+                return StorageManager.MOUNT_MODE_EXTERNAL_INSTALLER;
             }
-            return Zygote.MOUNT_EXTERNAL_DEFAULT;
+            return StorageManager.MOUNT_MODE_EXTERNAL_DEFAULT;
         } catch (RemoteException e) {
             // Should not happen
         }
-        return Zygote.MOUNT_EXTERNAL_NONE;
+        return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
     }
 
     private static class Callbacks extends Handler {
@@ -4434,6 +4583,13 @@ class StorageManagerService extends IStorageManager.Stub
         private final List<StorageManagerInternal.ResetListener> mResetListeners =
                 new ArrayList<>();
 
+        @Override
+        public boolean isFuseMounted(int userId) {
+            synchronized (mLock) {
+                return mFuseMountedUser.contains(userId);
+            }
+        }
+
         /**
          * Check if fuse is running in target user, if it's running then setup its storage dirs.
          * Return true if storage dirs are mounted.
@@ -4477,6 +4633,25 @@ class StorageManagerService extends IStorageManager.Stub
                         + UserHandle.formatUid(uid));
             }
             return mode;
+        }
+
+        @Override
+        public boolean hasExternalStorageAccess(int uid, String packageName) {
+            try {
+                if (mIPackageManager.checkUidPermission(
+                                MANAGE_EXTERNAL_STORAGE, uid) == PERMISSION_GRANTED) {
+                    return true;
+                }
+
+                if (mIAppOpsService.checkOperation(
+                                OP_MANAGE_EXTERNAL_STORAGE, uid, packageName) == MODE_ALLOWED) {
+                    return true;
+                }
+            } catch (RemoteException e) {
+                Slog.w("Failed to check MANAGE_EXTERNAL_STORAGE access for " + packageName, e);
+            }
+
+            return false;
         }
 
         @Override
@@ -4556,7 +4731,8 @@ class StorageManagerService extends IStorageManager.Stub
                 return true;
             }
 
-            return getExternalStorageMountMode(uid, packageName) != Zygote.MOUNT_EXTERNAL_NONE;
+            return getExternalStorageMountMode(uid, packageName)
+                    != StorageManager.MOUNT_MODE_EXTERNAL_NONE;
         }
 
         private void killAppForOpChange(int code, int uid) {
@@ -4602,6 +4778,20 @@ class StorageManagerService extends IStorageManager.Stub
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
+        }
+
+        @Override
+        public List<String> getPrimaryVolumeIds() {
+            final List<String> primaryVolumeIds = new ArrayList<>();
+            synchronized (mLock) {
+                for (int i = 0; i < mVolumes.size(); i++) {
+                    final VolumeInfo vol = mVolumes.valueAt(i);
+                    if (vol.isPrimary()) {
+                        primaryVolumeIds.add(vol.getId());
+                    }
+                }
+            }
+            return primaryVolumeIds;
         }
     }
 }

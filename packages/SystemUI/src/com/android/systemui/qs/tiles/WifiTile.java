@@ -37,6 +37,7 @@ import com.android.systemui.R;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSIconView;
 import com.android.systemui.plugins.qs.QSTile;
@@ -51,8 +52,8 @@ import com.android.systemui.qs.tileimpl.QSIconViewImpl;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.statusbar.policy.NetworkController.AccessPointController;
-import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
+import com.android.systemui.statusbar.policy.NetworkController.WifiIndicators;
 import com.android.systemui.statusbar.policy.WifiIcons;
 import com.android.wifitrackerlib.WifiEntry;
 
@@ -77,6 +78,7 @@ public class WifiTile extends QSTileImpl<SignalState> {
             QSHost host,
             @Background Looper backgroundLooper,
             @Main Handler mainHandler,
+            FalsingManager falsingManager,
             MetricsLogger metricsLogger,
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
@@ -84,8 +86,8 @@ public class WifiTile extends QSTileImpl<SignalState> {
             NetworkController networkController,
             AccessPointController accessPointController
     ) {
-        super(host, backgroundLooper, mainHandler, metricsLogger, statusBarStateController,
-                activityStarter, qsLogger);
+        super(host, backgroundLooper, mainHandler, falsingManager, metricsLogger,
+                statusBarStateController, activityStarter, qsLogger);
         mController = networkController;
         mWifiController = accessPointController;
         mDetailAdapter = (WifiDetailAdapter) createDetailAdapter();
@@ -175,8 +177,10 @@ public class WifiTile extends QSTileImpl<SignalState> {
             }
         }
         boolean transientEnabling = arg == ARG_SHOW_TRANSIENT_ENABLING;
-        boolean wifiConnected = cb.enabled && (cb.wifiSignalIconId > 0) && (cb.ssid != null);
-        boolean wifiNotConnected = (cb.wifiSignalIconId > 0) && (cb.ssid == null);
+        boolean wifiConnected = cb.enabled && (cb.wifiSignalIconId > 0)
+                && (cb.ssid != null || cb.wifiSignalIconId != WifiIcons.QS_WIFI_NO_NETWORK);
+        boolean wifiNotConnected = (cb.ssid == null)
+                && (cb.wifiSignalIconId == WifiIcons.QS_WIFI_NO_NETWORK);
         boolean enabledChanging = state.value != cb.enabled;
         if (enabledChanging) {
             mDetailAdapter.setItemsVisible(cb.enabled);
@@ -208,7 +212,7 @@ public class WifiTile extends QSTileImpl<SignalState> {
             state.label = r.getString(R.string.quick_settings_wifi_label);
         } else if (wifiConnected) {
             state.icon = ResourceIcon.get(cb.wifiSignalIconId);
-            state.label = removeDoubleQuotes(cb.ssid);
+            state.label = cb.ssid != null ? removeDoubleQuotes(cb.ssid) : getTileLabel();
         } else if (wifiNotConnected) {
             state.icon = ResourceIcon.get(WifiIcons.QS_WIFI_NO_NETWORK);
             state.label = r.getString(R.string.quick_settings_wifi_label);
@@ -303,22 +307,20 @@ public class WifiTile extends QSTileImpl<SignalState> {
         final CallbackInfo mInfo = new CallbackInfo();
 
         @Override
-        public void setWifiIndicators(boolean enabled, IconState statusIcon, IconState qsIcon,
-                boolean activityIn, boolean activityOut, String description, boolean isTransient,
-                String statusLabel) {
-            if (DEBUG) Log.d(TAG, "onWifiSignalChanged enabled=" + enabled);
-            if (qsIcon == null) {
+        public void setWifiIndicators(WifiIndicators indicators) {
+            if (DEBUG) Log.d(TAG, "onWifiSignalChanged enabled=" + indicators.enabled);
+            if (indicators.qsIcon == null) {
                 return;
             }
-            mInfo.enabled = enabled;
-            mInfo.connected = qsIcon.visible;
-            mInfo.wifiSignalIconId = qsIcon.icon;
-            mInfo.ssid = description;
-            mInfo.activityIn = activityIn;
-            mInfo.activityOut = activityOut;
-            mInfo.wifiSignalContentDescription = qsIcon.contentDescription;
-            mInfo.isTransient = isTransient;
-            mInfo.statusLabel = statusLabel;
+            mInfo.enabled = indicators.enabled;
+            mInfo.connected = indicators.qsIcon.visible;
+            mInfo.wifiSignalIconId = indicators.qsIcon.icon;
+            mInfo.ssid = indicators.description;
+            mInfo.activityIn = indicators.activityIn;
+            mInfo.activityOut = indicators.activityOut;
+            mInfo.wifiSignalContentDescription = indicators.qsIcon.contentDescription;
+            mInfo.isTransient = indicators.isTransient;
+            mInfo.statusLabel = indicators.statusLabel;
             if (isShowingDetail()) {
                 mDetailAdapter.updateItems();
             }

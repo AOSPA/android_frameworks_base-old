@@ -16,7 +16,6 @@
 
 package com.android.server.storage;
 
-import static android.service.storage.ExternalStorageService.EXTRA_ANR_TIMEOUT_MS;
 import static android.service.storage.ExternalStorageService.EXTRA_ERROR;
 import static android.service.storage.ExternalStorageService.FLAG_SESSION_ATTRIBUTE_INDEXABLE;
 import static android.service.storage.ExternalStorageService.FLAG_SESSION_TYPE_FUSE;
@@ -38,11 +37,13 @@ import android.os.ParcelableException;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.os.storage.StorageManager;
 import android.os.storage.StorageManagerInternal;
 import android.os.storage.StorageVolume;
 import android.service.storage.ExternalStorageService;
 import android.service.storage.IExternalStorageService;
 import android.util.Slog;
+import android.util.SparseArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.Preconditions;
@@ -52,11 +53,13 @@ import java.io.IOException;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * Controls the lifecycle of the {@link ActiveConnection} to an {@link ExternalStorageService}
@@ -71,14 +74,17 @@ public final class StorageUserConnection {
     private final Context mContext;
     private final int mUserId;
     private final StorageSessionController mSessionController;
+    private final StorageManagerInternal mSmInternal;
     private final ActiveConnection mActiveConnection = new ActiveConnection();
-    @GuardedBy("mLock") private final Map<String, Session> mSessions = new HashMap<>();
+    @GuardedBy("mSessionsLock") private final Map<String, Session> mSessions = new HashMap<>();
+    @GuardedBy("mSessionsLock") private final SparseArray<Integer> mUidsBlockedOnIo = new SparseArray<>();
     private final HandlerThread mHandlerThread;
 
     public StorageUserConnection(Context context, int userId, StorageSessionController controller) {
         mContext = Objects.requireNonNull(context);
         mUserId = Preconditions.checkArgumentNonnegative(userId);
         mSessionController = controller;
+        mSmInternal = LocalServices.getService(StorageManagerInternal.class);
         mHandlerThread = new HandlerThread("StorageUserConnectionThread-" + mUserId);
         mHandlerThread.start();
     }
@@ -148,17 +154,17 @@ public final class StorageUserConnection {
      *
      * @return ANR dialog delay in milliseconds
      */
-    public long getAnrDelayMillis(String packageName, int uid)
+    public void notifyAnrDelayStarted(String packageName, int uid, int tid, int reason)
             throws ExternalStorageServiceException {
+        List<String> primarySessionIds = mSmInternal.getPrimaryVolumeIds();
         synchronized (mSessionsLock) {
             for (String sessionId : mSessions.keySet()) {
-                long delay = mActiveConnection.getAnrDelayMillis(packageName, uid);
-                if (delay > 0) {
-                    return delay;
+                if (primarySessionIds.contains(sessionId)) {
+                    mActiveConnection.notifyAnrDelayStarted(packageName, uid, tid, reason);
+                    return;
                 }
             }
         }
-        return 0;
     }
 
     /**
@@ -170,6 +176,7 @@ public final class StorageUserConnection {
      **/
     public Session removeSession(String sessionId) {
         synchronized (mSessionsLock) {
+            mUidsBlockedOnIo.clear();
             return mSessions.remove(sessionId);
         }
     }
@@ -202,8 +209,7 @@ public final class StorageUserConnection {
                 return;
             }
         }
-        StorageManagerInternal sm = LocalServices.getService(StorageManagerInternal.class);
-        sm.resetUser(mUserId);
+        mSmInternal.resetUser(mUserId);
     }
 
     /**
@@ -232,6 +238,51 @@ public final class StorageUserConnection {
         }
     }
 
+    /**
+     * Notify the controller that an app with {@code uid} and {@code tid} is blocked on an IO
+     * request on {@code volumeUuid} for {@code reason}.
+     *
+     * This blocked state can be queried with {@link #isAppIoBlocked}
+     *
+     * @hide
+     */
+    public void notifyAppIoBlocked(String volumeUuid, int uid, int tid,
+            @StorageManager.AppIoBlockedReason int reason) {
+        synchronized (mSessionsLock) {
+            int ioBlockedCounter = mUidsBlockedOnIo.get(uid, 0);
+            mUidsBlockedOnIo.put(uid, ++ioBlockedCounter);
+        }
+    }
+
+    /**
+     * Notify the connection that an app with {@code uid} and {@code tid} has resmed a previously
+     * blocked IO request on {@code volumeUuid} for {@code reason}.
+     *
+     * All app IO will be automatically marked as unblocked if {@code volumeUuid} is unmounted.
+     */
+    public void notifyAppIoResumed(String volumeUuid, int uid, int tid,
+            @StorageManager.AppIoBlockedReason int reason) {
+        synchronized (mSessionsLock) {
+            int ioBlockedCounter = mUidsBlockedOnIo.get(uid, 0);
+            if (ioBlockedCounter == 0) {
+                Slog.w(TAG, "Unexpected app IO resumption for uid: " + uid);
+            }
+
+            if (ioBlockedCounter <= 1) {
+                mUidsBlockedOnIo.remove(uid);
+            } else {
+                mUidsBlockedOnIo.put(uid, --ioBlockedCounter);
+            }
+        }
+    }
+
+    /** Returns {@code true} if {@code uid} is blocked on IO, {@code false} otherwise */
+    public boolean isAppIoBlocked(int uid) {
+        synchronized (mSessionsLock) {
+            return mUidsBlockedOnIo.contains(uid);
+        }
+    }
+
     @FunctionalInterface
     interface AsyncStorageServiceCall {
         void run(@NonNull IExternalStorageService service, RemoteCallback callback) throws
@@ -253,9 +304,6 @@ public final class StorageUserConnection {
         @GuardedBy("mLock")
         private final ArrayList<CompletableFuture<Void>> mOutstandingOps = new ArrayList<>();
 
-        @GuardedBy("mLock")
-        private final ArrayList<CompletableFuture<Long>> mOutstandingTimeoutOps = new ArrayList<>();
-
         @Override
         public void close() {
             ServiceConnection oldConnection = null;
@@ -272,9 +320,6 @@ public final class StorageUserConnection {
                 for (CompletableFuture<Void> op : mOutstandingOps) {
                     op.cancel(true);
                 }
-                for (CompletableFuture<Long> op : mOutstandingTimeoutOps) {
-                    op.cancel(true);
-                }
                 mOutstandingOps.clear();
             }
 
@@ -289,21 +334,29 @@ public final class StorageUserConnection {
             }
         }
 
+        private void asyncBestEffort(Consumer<IExternalStorageService> consumer) {
+            synchronized (mLock) {
+                if (mRemoteFuture == null) {
+                    Slog.w(TAG, "Dropping async request service is not bound");
+                    return;
+                }
+
+                IExternalStorageService service = mRemoteFuture.getNow(null);
+                if (service == null) {
+                    Slog.w(TAG, "Dropping async request service is not connected");
+                    return;
+                }
+
+                consumer.accept(service);
+            }
+        }
+
         private void waitForAsyncVoid(AsyncStorageServiceCall asyncCall) throws Exception {
             CompletableFuture<Void> opFuture = new CompletableFuture<>();
             RemoteCallback callback = new RemoteCallback(result -> setResult(result, opFuture));
 
             waitForAsync(asyncCall, callback, opFuture, mOutstandingOps,
                     DEFAULT_REMOTE_TIMEOUT_SECONDS);
-        }
-
-        private long waitForAsyncLong(AsyncStorageServiceCall asyncCall) throws Exception {
-            CompletableFuture<Long> opFuture = new CompletableFuture<>();
-            RemoteCallback callback =
-                    new RemoteCallback(result -> setTimeoutResult(result, opFuture));
-
-            return waitForAsync(asyncCall, callback, opFuture, mOutstandingTimeoutOps,
-                    1 /* timeoutSeconds */);
         }
 
         private <T> T waitForAsync(AsyncStorageServiceCall asyncCall, RemoteCallback callback,
@@ -380,25 +433,15 @@ public final class StorageUserConnection {
             }
         }
 
-        public long getAnrDelayMillis(String packgeName, int uid)
+        public void notifyAnrDelayStarted(String packgeName, int uid, int tid, int reason)
                 throws ExternalStorageServiceException {
-            try {
-                return waitForAsyncLong((service, callback) ->
-                        service.getAnrDelayMillis(packgeName, uid, callback));
-            } catch (Exception e) {
-                throw new ExternalStorageServiceException("Failed to notify app not responding: "
-                        + packgeName, e);
-            }
-        }
-
-        private void setTimeoutResult(Bundle result, CompletableFuture<Long> future) {
-            ParcelableException ex = result.getParcelable(EXTRA_ERROR);
-            if (ex != null) {
-                future.completeExceptionally(ex);
-            } else {
-                long timeoutMs = result.getLong(EXTRA_ANR_TIMEOUT_MS);
-                future.complete(timeoutMs);
-            }
+            asyncBestEffort(service -> {
+                try {
+                    service.notifyAnrDelayStarted(packgeName, uid, tid, reason);
+                } catch (RemoteException e) {
+                    Slog.w(TAG, "Failed to notify ANR delay started", e);
+                }
+            });
         }
 
         private void setResult(Bundle result, CompletableFuture<Void> future) {

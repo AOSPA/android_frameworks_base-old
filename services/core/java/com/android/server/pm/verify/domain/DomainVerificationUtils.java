@@ -22,11 +22,13 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
-import android.os.Binder;
 
+import com.android.internal.util.CollectionUtils;
 import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.PackageManagerService;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+
+import java.util.Set;
 
 public final class DomainVerificationUtils {
 
@@ -40,17 +42,41 @@ public final class DomainVerificationUtils {
         throw new NameNotFoundException("Package " + packageName + " unavailable");
     }
 
-    public static boolean isDomainVerificationIntent(Intent intent) {
-        return intent.isWebIntent()
-                && intent.hasCategory(Intent.CATEGORY_BROWSABLE)
-                && intent.hasCategory(Intent.CATEGORY_DEFAULT);
+    public static boolean isDomainVerificationIntent(Intent intent,
+            @PackageManager.ResolveInfoFlags int resolveInfoFlags) {
+        if (!intent.isWebIntent()) {
+            return false;
+        }
+
+        Set<String> categories = intent.getCategories();
+        int categoriesSize = CollectionUtils.size(categories);
+        if (categoriesSize > 2) {
+            // Specifying at least one non-app-link category
+            return false;
+        } else if (categoriesSize == 2) {
+            // Check for explicit app link intent with exactly BROWSABLE && DEFAULT
+            return intent.hasCategory(Intent.CATEGORY_DEFAULT)
+                    && intent.hasCategory(Intent.CATEGORY_BROWSABLE);
+        }
+
+        boolean matchDefaultByFlags = (resolveInfoFlags & PackageManager.MATCH_DEFAULT_ONLY) != 0;
+
+        // Check if matches (BROWSABLE || none) && DEFAULT
+        if (categoriesSize == 0) {
+            // No categories, only allow matching DEFAULT by flags
+            return matchDefaultByFlags;
+        } else if (intent.hasCategory(Intent.CATEGORY_BROWSABLE)) {
+            // Intent matches BROWSABLE, must match DEFAULT by flags
+            return matchDefaultByFlags;
+        } else {
+            // Otherwise only needs to have DEFAULT
+            return intent.hasCategory(Intent.CATEGORY_DEFAULT);
+        }
     }
 
     static boolean isChangeEnabled(PlatformCompat platformCompat, AndroidPackage pkg,
             long changeId) {
-        //noinspection ConstantConditions
-        return Binder.withCleanCallingIdentity(
-                () -> platformCompat.isChangeEnabled(changeId, buildMockAppInfo(pkg)));
+        return  platformCompat.isChangeEnabledInternalNoLogging(changeId, buildMockAppInfo(pkg));
     }
 
     /**

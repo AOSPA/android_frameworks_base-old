@@ -16,24 +16,23 @@
 
 package com.android.wm.shell.flicker.pip
 
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
-import androidx.test.platform.app.InstrumentationRegistry
-import com.android.server.wm.flicker.FlickerTestRunner
-import com.android.server.wm.flicker.FlickerTestRunnerFactory
+import com.android.server.wm.flicker.FlickerParametersRunnerFactory
+import com.android.server.wm.flicker.FlickerTestParameter
+import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.endRotation
 import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.server.wm.flicker.helpers.setRotation
-import com.android.server.wm.flicker.startRotation
-import com.android.wm.shell.flicker.helpers.FixedAppHelper
-import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
-import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
-import com.android.server.wm.flicker.noUncoveredRegions
 import com.android.server.wm.flicker.navBarLayerRotatesAndScales
+import com.android.server.wm.flicker.noUncoveredRegions
+import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
+import com.android.wm.shell.flicker.helpers.FixedAppHelper
 import org.junit.FixMethodOrder
+import org.junit.Test
 import org.junit.runner.RunWith
 import org.junit.runners.MethodSorters
 import org.junit.runners.Parameterized
@@ -44,72 +43,74 @@ import org.junit.runners.Parameterized
  */
 @RequiresDevice
 @RunWith(Parameterized::class)
+@Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-class PipRotationTest(
-    testSpec: FlickerTestRunnerFactory.TestSpec
-) : FlickerTestRunner(testSpec) {
-    companion object : PipTransitionBase(InstrumentationRegistry.getInstrumentation()) {
-        @Parameterized.Parameters(name = "{0}")
-        @JvmStatic
-        fun getParams(): Collection<Array<Any>> {
-            val fixedApp = FixedAppHelper(instrumentation)
-            val testSpec = getTransition(eachRun = false) { configuration ->
-                setup {
-                    test {
-                        fixedApp.launchViaIntent(wmHelper)
-                    }
-                    eachRun {
-                        setRotation(configuration.startRotation)
-                    }
+class PipRotationTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
+    private val fixedApp = FixedAppHelper(instrumentation)
+    private val startingBounds = WindowUtils.getDisplayBounds(testSpec.config.startRotation)
+    private val endingBounds = WindowUtils.getDisplayBounds(testSpec.config.endRotation)
+
+    override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
+        get() = buildTransition(eachRun = false) { configuration ->
+            setup {
+                test {
+                    fixedApp.launchViaIntent(wmHelper)
                 }
-                transitions {
-                    setRotation(configuration.endRotation)
-                }
-                teardown {
-                    eachRun {
-                        setRotation(Surface.ROTATION_0)
-                    }
-                }
-                assertions {
-                    val startingBounds = WindowUtils.getDisplayBounds(configuration.startRotation)
-                    val endingBounds = WindowUtils.getDisplayBounds(configuration.endRotation)
-
-                    presubmit {
-                        windowManagerTrace {
-                            navBarWindowIsAlwaysVisible()
-                            statusBarWindowIsAlwaysVisible()
-                        }
-
-                        layersTrace {
-                            noUncoveredRegions(configuration.startRotation,
-                                configuration.endRotation, allStates = false)
-                        }
-                    }
-
-                    flaky {
-                        layersTrace {
-                            navBarLayerIsAlwaysVisible(bugId = 140855415)
-                            statusBarLayerIsAlwaysVisible(bugId = 140855415)
-                            navBarLayerRotatesAndScales(configuration.startRotation,
-                                configuration.endRotation, bugId = 140855415)
-                            statusBarLayerRotatesScales(configuration.startRotation,
-                                configuration.endRotation, bugId = 140855415)
-
-                            start("appLayerRotates_StartingBounds", bugId = 140855415) {
-                                hasVisibleRegion(fixedApp.defaultWindowName, startingBounds)
-                                coversAtMostRegion(startingBounds, pipApp.defaultWindowName)
-                            }
-                            end("appLayerRotates_EndingBounds", bugId = 140855415) {
-                                hasVisibleRegion(fixedApp.defaultWindowName, endingBounds)
-                                coversAtMostRegion(endingBounds, pipApp.defaultWindowName)
-                            }
-                        }
-                    }
+                eachRun {
+                    setRotation(configuration.startRotation)
                 }
             }
+            transitions {
+                setRotation(configuration.endRotation)
+            }
+            teardown {
+                eachRun {
+                    setRotation(Surface.ROTATION_0)
+                }
+            }
+        }
 
-            return FlickerTestRunnerFactory.getInstance().buildRotationTest(instrumentation,
-                testSpec, supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90),
+    @Presubmit
+    @Test
+    override fun noUncoveredRegions() = testSpec.noUncoveredRegions(testSpec.config.startRotation,
+        testSpec.config.endRotation, allStates = false)
+
+    @Presubmit
+    @Test
+    override fun navBarLayerRotatesAndScales() =
+        testSpec.navBarLayerRotatesAndScales(testSpec.config.startRotation,
+            testSpec.config.endRotation)
+
+    @Presubmit
+    @Test
+    override fun statusBarLayerRotatesScales() =
+        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation,
+            testSpec.config.endRotation)
+
+    @Presubmit
+    @Test
+    fun appLayerRotates_StartingBounds() {
+        testSpec.assertLayersStart {
+            visibleRegion(fixedApp.defaultWindowName).coversExactly(startingBounds)
+            visibleRegion(pipApp.defaultWindowName).coversAtMost(startingBounds)
+        }
+    }
+
+    @Presubmit
+    @Test
+    fun appLayerRotates_EndingBounds() {
+        testSpec.assertLayersEnd {
+            visibleRegion(fixedApp.defaultWindowName).coversExactly(endingBounds)
+            visibleRegion(pipApp.defaultWindowName).coversAtMost(endingBounds)
+        }
+    }
+
+    companion object {
+        @Parameterized.Parameters(name = "{0}")
+        @JvmStatic
+        fun getParams(): Collection<FlickerTestParameter> {
+            return FlickerTestParameterFactory.getInstance().getConfigRotationTests(
+                supportedRotations = listOf(Surface.ROTATION_0, Surface.ROTATION_90),
                 repetitions = 5)
         }
     }

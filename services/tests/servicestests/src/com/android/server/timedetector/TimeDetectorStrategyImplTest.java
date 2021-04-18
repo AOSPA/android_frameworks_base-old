@@ -1158,6 +1158,11 @@ public class TimeDetectorStrategyImplTest {
         }
 
         @Override
+        public ConfigurationInternal configurationInternal(int userId) {
+            throw new UnsupportedOperationException();
+        }
+
+        @Override
         public void acquireWakeLock() {
             if (mWakeLockAcquired) {
                 fail("Wake lock already acquired");
@@ -1483,11 +1488,8 @@ public class TimeDetectorStrategyImplTest {
          * reference time.
          */
         ExternalTimeSuggestion generateExternalTimeSuggestion(Instant suggestedTime) {
-            TimestampedValue<Long> utcTime =
-                    new TimestampedValue<>(
-                            mFakeEnvironment.peekElapsedRealtimeMillis(),
+            return new ExternalTimeSuggestion(mFakeEnvironment.peekElapsedRealtimeMillis(),
                             suggestedTime.toEpochMilli());
-            return new ExternalTimeSuggestion(utcTime);
         }
 
         /**

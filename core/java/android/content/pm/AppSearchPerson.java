@@ -42,7 +42,7 @@ public class AppSearchPerson extends GenericDocument {
     public static final String KEY_IS_BOT = "isBot";
     public static final String KEY_IS_IMPORTANT = "isImportant";
 
-    private AppSearchPerson(@NonNull GenericDocument document) {
+    public AppSearchPerson(@NonNull GenericDocument document) {
         super(document);
     }
 
@@ -107,7 +107,7 @@ public class AppSearchPerson extends GenericDocument {
     public static class Builder extends GenericDocument.Builder<Builder> {
 
         public Builder(@NonNull final String id) {
-            super(id, SCHEMA_TYPE);
+            super(/*namespace=*/ "", id, SCHEMA_TYPE);
         }
 
         /** @hide */

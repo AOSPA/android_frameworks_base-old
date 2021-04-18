@@ -99,7 +99,7 @@
 
     <!-- The default tiles to display in QuickSettings -->
     <string name="quick_settings_tiles_default" translatable="false">
-        wifi,bt,dnd,flashlight,rotation,battery,cell,airplane,cast,screenrecord
+        internet,wifi,bt,dnd,flashlight,rotation,battery,cell,airplane,cast,screenrecord
     </string>
 
     <!-- The minimum number of tiles to display in QuickSettings -->
@@ -107,7 +107,7 @@
 
     <!-- Tiles native to System UI. Order should match "quick_settings_tiles_default" -->
     <string name="quick_settings_tiles_stock" translatable="false">
-        wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night,screenrecord,reverse,reduce_brightness,cameratoggle,mictoggle,controls
+        internet,wifi,cell,battery,dnd,flashlight,rotation,bt,airplane,location,hotspot,inversion,saver,dark,work,cast,night,screenrecord,reverse,reduce_brightness,cameratoggle,mictoggle,controls,alarm,wallet
     </string>
 
     <!-- The tiles to display in QuickSettings -->
@@ -179,6 +179,9 @@
 
     <!-- Doze: duration to avoid false pickup gestures triggered by notification vibrations -->
     <integer name="doze_pickup_vibration_threshold">2000</integer>
+
+    <!-- Doze: quick pickup duration to stay in AOD until the next gesture is triggered -->
+    <integer name="doze_quick_pickup_aod_duration">5000</integer>
 
     <!-- Type of a sensor that provides a low-power estimate of the desired display
          brightness, suitable to listen to while the device is asleep (e.g. during
@@ -312,7 +315,6 @@
         <item>com.android.systemui.accessibility.SystemActions</item>
         <item>com.android.systemui.toast.ToastUI</item>
         <item>com.android.systemui.wmshell.WMShell</item>
-        <item>com.android.systemui.people.widget.PeopleSpaceWidgetEnabler</item>
     </string-array>
 
     <!-- QS tile shape store width. negative implies fill configuration instead of stroke-->
@@ -414,6 +416,9 @@
     <!-- Whether or not child notifications that are part of a group will have shadows. -->
     <bool name="config_enableShadowOnChildNotifications">true</bool>
 
+    <!-- If true, group numbers are shown in the expander instead of via "+N" overflow number -->
+    <bool name="config_showNotificationGroupCountInExpander">true</bool>
+
     <!-- Whether or not a view containing child notifications will have a custom background when
          it has been expanded to reveal its children. -->
     <bool name="config_showGroupNotificationBgWhenExpanded">false</bool>
@@ -421,6 +426,9 @@
     <!-- Should we vibrate on an icon animation of the shelf. This should only be active if the
      vibrator is capable of subtle vibrations -->
     <bool name="config_vibrateOnIconAnimation">false</bool>
+
+    <!-- Adjust the theme on fully custom and decorated custom view notifications -->
+    <bool name="config_adjustThemeOnNotificationCustomViews">false</bool>
 
     <!-- If true, enable the advance anti-falsing classifier on the lockscreen. On some devices it
          does not work well, particularly with noisy touchscreens. Note that disabling it may
@@ -576,6 +584,23 @@
     <!-- Whether wallet view is shown in landscape / seascape orientations -->
     <bool name="global_actions_show_landscape_wallet_view">false</bool>
 
+    <!-- Package name of the preferred system app to perform eSOS action -->
+    <string name="config_preferredEmergencySosPackage" translatable="false"></string>
+
     <!-- Whether to use the split 2-column notification shade -->
     <bool name="config_use_split_notification_shade">false</bool>
+
+    <!-- Determines whether the shell features all run on another thread. -->
+    <bool name="config_enableShellMainThread">false</bool>
+
+    <!-- Determines whether to allow the nav bar handle to be forced to be opaque. -->
+    <bool name="allow_force_nav_bar_handle_opaque">true</bool>
+
+    <!-- Whether a transition of ACTIVITY_TYPE_DREAM to the home app should play a home sound
+         effect -->
+    <bool name="config_playHomeSoundAfterDream">false</bool>
+
+    <!-- Whether a transition of ACTIVITY_TYPE_ASSISTANT to the home app should play a home sound
+         effect -->
+    <bool name="config_playHomeSoundAfterAssistant">false</bool>
 </resources>

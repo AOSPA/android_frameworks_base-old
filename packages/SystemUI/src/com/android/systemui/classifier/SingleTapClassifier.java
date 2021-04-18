@@ -39,12 +39,17 @@ public class SingleTapClassifier extends FalsingClassifier {
     }
 
     @Override
-    Result calculateFalsingResult(double historyPenalty, double historyConfidence) {
+    Result calculateFalsingResult(
+            @Classifier.InteractionType int interactionType,
+            double historyBelief, double historyConfidence) {
         return isTap(getRecentMotionEvents());
     }
 
     /** Given a list of {@link android.view.MotionEvent}'s, returns true if the look like a tap. */
     public Result isTap(List<MotionEvent> motionEvents) {
+        if (motionEvents.isEmpty()) {
+            return falsed(0, "no motion events");
+        }
         float downX = motionEvents.get(0).getX();
         float downY = motionEvents.get(0).getY();
 
@@ -55,13 +60,13 @@ public class SingleTapClassifier extends FalsingClassifier {
                         + Math.abs(event.getX() - downX)
                         + "vs "
                         + mTouchSlop;
-                return Result.falsed(0.5, reason);
+                return falsed(0.5, reason);
             } else if (Math.abs(event.getY() - downY) >= mTouchSlop) {
                 reason = "dY too big for a tap: "
                         + Math.abs(event.getY() - downY)
-                        + "vs "
+                        + " vs "
                         + mTouchSlop;
-                return Result.falsed(0.5, reason);
+                return falsed(0.5, reason);
             }
         }
         return Result.passed(0);

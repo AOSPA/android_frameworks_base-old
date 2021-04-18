@@ -23,8 +23,8 @@ import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
 import android.location.LocationManager;
 import android.media.AudioManager;
-import android.net.ConnectivityManager;
 import android.net.NetworkCapabilities;
+import android.net.TetheringManager;
 import android.net.vcn.VcnTransportInfo;
 import android.net.wifi.WifiInfo;
 import android.os.BatteryManager;
@@ -36,6 +36,7 @@ import android.provider.Settings;
 import android.telephony.AccessNetworkConstants;
 import android.telephony.NetworkRegistrationInfo;
 import android.telephony.ServiceState;
+import android.telephony.TelephonyManager;
 
 import androidx.annotation.NonNull;
 import androidx.core.graphics.drawable.RoundedBitmapDrawable;
@@ -114,10 +115,10 @@ public class Utils {
      * Return string resource that best describes combination of tethering
      * options available on this device.
      */
-    public static int getTetheringLabel(ConnectivityManager cm) {
-        String[] usbRegexs = cm.getTetherableUsbRegexs();
-        String[] wifiRegexs = cm.getTetherableWifiRegexs();
-        String[] bluetoothRegexs = cm.getTetherableBluetoothRegexs();
+    public static int getTetheringLabel(TetheringManager tm) {
+        String[] usbRegexs = tm.getTetherableUsbRegexs();
+        String[] wifiRegexs = tm.getTetherableWifiRegexs();
+        String[] bluetoothRegexs = tm.getTetherableBluetoothRegexs();
 
         boolean usbAvailable = usbRegexs.length != 0;
         boolean wifiAvailable = wifiRegexs.length != 0;
@@ -500,8 +501,7 @@ public class Utils {
     }
 
     public static boolean isWifiOnly(Context context) {
-        return !context.getSystemService(ConnectivityManager.class)
-                .isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
+        return !context.getSystemService(TelephonyManager.class).isDataCapable();
     }
 
     /** Returns if the automatic storage management feature is turned on or not. **/

@@ -21,9 +21,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.graphics.Color;
-import android.graphics.Paint;
 import android.icu.text.NumberFormat;
-import android.util.MathUtils;
 
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
@@ -47,6 +45,7 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
     private int mLockScreenColor;
 
     private boolean mIsDozing;
+    private float mDozeAmount;
     private Locale mLocale;
 
     private final NumberFormat mBurmeseNf = NumberFormat.getInstance(Locale.forLanguageTag("my"));
@@ -61,6 +60,7 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
         super(view);
         mStatusBarStateController = statusBarStateController;
         mIsDozing = mStatusBarStateController.isDozing();
+        mDozeAmount = mStatusBarStateController.getDozeAmount();
         mBroadcastDispatcher = broadcastDispatcher;
 
         mBurmeseNumerals = mBurmeseNf.format(FORMAT_NUMBER);
@@ -84,6 +84,7 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
                 new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
         mStatusBarStateController.addCallback(mStatusBarStateListener);
         mIsDozing = mStatusBarStateController.isDozing();
+        mDozeAmount = mStatusBarStateController.getDozeAmount();
         refreshTime();
         initColors();
     }
@@ -92,11 +93,6 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
     protected void onViewDetached() {
         mBroadcastDispatcher.unregisterReceiver(mLocaleBroadcastReceiver);
         mStatusBarStateController.removeCallback(mStatusBarStateListener);
-    }
-
-    float getClockTextTopPadding() {
-        Paint.FontMetrics fm = mView.getPaint().getFontMetrics();
-        return MathUtils.abs(fm.ascent - fm.top);
     }
 
     /**
@@ -135,7 +131,7 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
 
     private void initColors() {
         mLockScreenColor = Utils.getColorAttrDefaultColor(getContext(),
-                com.android.systemui.R.attr.wallpaperTextColor);
+                com.android.systemui.R.attr.wallpaperTextColorAccent);
         mView.setColors(mDozingColor, mLockScreenColor);
         mView.animateDoze(mIsDozing, false);
     }
@@ -143,9 +139,15 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
     private final StatusBarStateController.StateListener mStatusBarStateListener =
             new StatusBarStateController.StateListener() {
                 @Override
-                public void onDozingChanged(boolean isDozing) {
-                    mIsDozing = isDozing;
-                    mView.animateDoze(mIsDozing, true);
+                public void onDozeAmountChanged(float linear, float eased) {
+                    boolean noAnimation = (mDozeAmount == 0f && linear == 1f)
+                            || (mDozeAmount == 1f && linear == 0f);
+                    boolean isDozing = linear > mDozeAmount;
+                    mDozeAmount = linear;
+                    if (mIsDozing != isDozing) {
+                        mIsDozing = isDozing;
+                        mView.animateDoze(mIsDozing, !noAnimation);
+                    }
                 }
             };
 }

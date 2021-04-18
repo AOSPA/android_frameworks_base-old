@@ -52,7 +52,8 @@ public class BiometricDeferredQueue {
 
     // Entries added by LockSettingsService once a user's synthetic password is known. At this point
     // things are still keyed by userId.
-    @NonNull private final ArrayList<UserAuthInfo> mPendingResetLockouts;
+    @NonNull private final ArrayList<UserAuthInfo> mPendingResetLockoutsForFingerprint;
+    @NonNull private final ArrayList<UserAuthInfo> mPendingResetLockoutsForFace;
 
     /**
      * Authentication info for a successful user unlock via Synthetic Password. This can be used to
@@ -119,37 +120,24 @@ public class BiometricDeferredQueue {
             for (UserAuthInfo userAuthInfo : pendingResetLockuts) {
                 Slog.d(TAG, "Resetting face lockout for sensor: " + sensorId
                         + ", user: " + userAuthInfo.userId);
-                final VerifyCredentialResponse response = spManager.verifyChallengeInternal(
-                        getGatekeeperService(), userAuthInfo.gatekeeperPassword, challenge,
-                        userAuthInfo.userId);
-                if (response == null) {
-                    Slog.wtf(TAG, "VerifyChallenge failed, null response");
-                    continue;
+                final byte[] hat = requestHatFromGatekeeperPassword(spManager, userAuthInfo,
+                        challenge);
+                if (hat != null) {
+                    faceManager.resetLockout(sensorId, userAuthInfo.userId, hat);
                 }
-                if (response.getResponseCode() != VerifyCredentialResponse.RESPONSE_OK) {
-                    Slog.wtf(TAG, "VerifyChallenge failed, response: "
-                            + response.getResponseCode());
-                }
-                faceManager.resetLockout(sensorId, userAuthInfo.userId,
-                        response.getGatekeeperHAT());
             }
 
             sensorIds.remove(sensorId);
-            faceManager.revokeChallenge(sensorId);
+            // Challenge is only required for IBiometricsFace@1.0 (and not IFace AIDL). The
+            // IBiometricsFace@1.0 HAL does not require userId to revokeChallenge, so passing
+            // in 0 is OK.
+            final int userId = 0;
+            faceManager.revokeChallenge(sensorId, userId, challenge);
 
             if (sensorIds.isEmpty()) {
                 Slog.d(TAG, "Done requesting resetLockout for all face sensors");
                 finishCallback.onFinished();
             }
-        }
-
-        synchronized IGateKeeperService getGatekeeperService() {
-            final IBinder service = ServiceManager.getService(Context.GATEKEEPER_SERVICE);
-            if (service == null) {
-                Slog.e(TAG, "Unable to acquire GateKeeperService");
-                return null;
-            }
-            return IGateKeeperService.Stub.asInterface(service);
         }
     }
 
@@ -164,7 +152,8 @@ public class BiometricDeferredQueue {
         mContext = context;
         mSpManager = spManager;
         mHandler = handler;
-        mPendingResetLockouts = new ArrayList<>();
+        mPendingResetLockoutsForFingerprint = new ArrayList<>();
+        mPendingResetLockoutsForFace = new ArrayList<>();
     }
 
     public void systemReady(@Nullable FingerprintManager fingerprintManager,
@@ -186,17 +175,34 @@ public class BiometricDeferredQueue {
      */
     void addPendingLockoutResetForUser(int userId, @NonNull byte[] gatekeeperPassword) {
         mHandler.post(() -> {
-            Slog.d(TAG, "addPendingLockoutResetForUser: " + userId);
-            mPendingResetLockouts.add(new UserAuthInfo(userId, gatekeeperPassword));
+            if (mFaceManager != null && mFaceManager.hasEnrolledTemplates(userId)) {
+                Slog.d(TAG, "Face addPendingLockoutResetForUser: " + userId);
+                mPendingResetLockoutsForFace.add(new UserAuthInfo(userId, gatekeeperPassword));
+            }
+
+            if (mFingerprintManager != null
+                    && mFingerprintManager.hasEnrolledFingerprints(userId)) {
+                Slog.d(TAG, "Fingerprint addPendingLockoutResetForUser: " + userId);
+                mPendingResetLockoutsForFingerprint.add(new UserAuthInfo(userId,
+                        gatekeeperPassword));
+            }
         });
     }
 
     void processPendingLockoutResets() {
         mHandler.post(() -> {
-            Slog.d(TAG, "processPendingLockoutResets: " + mPendingResetLockouts.size());
-            processPendingLockoutsForFingerprint(new ArrayList<>(mPendingResetLockouts));
-            processPendingLockoutsForFace(new ArrayList<>(mPendingResetLockouts));
-            mPendingResetLockouts.clear();
+            if (!mPendingResetLockoutsForFace.isEmpty()) {
+                Slog.d(TAG, "Processing pending resetLockout for face");
+                processPendingLockoutsForFace(new ArrayList<>(mPendingResetLockoutsForFace));
+                mPendingResetLockoutsForFace.clear();
+            }
+
+            if (!mPendingResetLockoutsForFingerprint.isEmpty()) {
+                Slog.d(TAG, "Processing pending resetLockout for fingerprint");
+                processPendingLockoutsForFingerprint(
+                        new ArrayList<>(mPendingResetLockoutsForFingerprint));
+                mPendingResetLockoutsForFingerprint.clear();
+            }
         });
     }
 
@@ -210,10 +216,19 @@ public class BiometricDeferredQueue {
                         mFingerprintManager.resetLockout(prop.sensorId, user.userId,
                                 null /* hardwareAuthToken */);
                     }
+                } else if (!prop.resetLockoutRequiresChallenge) {
+                    for (UserAuthInfo user : pendingResetLockouts) {
+                        Slog.d(TAG, "Resetting fingerprint lockout for sensor: " + prop.sensorId
+                                + ", user: " + user.userId);
+                        final byte[] hat = requestHatFromGatekeeperPassword(mSpManager, user,
+                                0 /* challenge */);
+                        if (hat != null) {
+                            mFingerprintManager.resetLockout(prop.sensorId, user.userId, hat);
+                        }
+                    }
                 } else {
-                    Slog.e(TAG, "Fingerprint resetLockout with HAT not supported yet");
-                    // TODO(b/152414803): Implement this when resetLockout is implemented below
-                    //  the framework.
+                    Slog.w(TAG, "No fingerprint HAL interface requires HAT with challenge"
+                            + ", sensorId: " + prop.sensorId);
                 }
             }
         }
@@ -224,11 +239,6 @@ public class BiometricDeferredQueue {
      * in-flight challenge, we generate a single challenge to reset lockout for all profiles. This
      * hopefully reduces/eliminates issues such as overwritten challenge, incorrectly revoked
      * challenge, or other race conditions.
-     *
-     * TODO(b/162965646) This logic can be avoided if multiple in-flight challenges are supported.
-     *  Though it will need to continue to exist to support existing HIDLs, each profile that
-     *  requires resetLockout could have its own challenge, and the `mPendingResetLockouts` queue
-     *  can be avoided.
      */
     private void processPendingLockoutsForFace(List<UserAuthInfo> pendingResetLockouts) {
         if (mFaceManager != null) {
@@ -247,10 +257,60 @@ public class BiometricDeferredQueue {
             mFaceResetLockoutTask = new FaceResetLockoutTask(mFaceFinishCallback, mFaceManager,
                     mSpManager, sensorIds, pendingResetLockouts);
             for (final FaceSensorPropertiesInternal prop : faceSensorProperties) {
-                // Generate a challenge for each sensor. The challenge does not need to be
-                // per-user, since the HAT returned by gatekeeper contains userId.
-                mFaceManager.generateChallenge(prop.sensorId, mFaceResetLockoutTask);
+                if (prop.resetLockoutRequiresHardwareAuthToken) {
+                    if (prop.resetLockoutRequiresChallenge) {
+                        // Generate a challenge for each sensor. The challenge does not need to be
+                        // per-user, since the HAT returned by gatekeeper contains userId.
+                        mFaceManager.generateChallenge(prop.sensorId, mFaceResetLockoutTask);
+                    } else {
+                        for (UserAuthInfo user : pendingResetLockouts) {
+                            Slog.d(TAG, "Resetting face lockout for sensor: " + prop.sensorId
+                                    + ", user: " + user.userId);
+                            final byte[] hat = requestHatFromGatekeeperPassword(mSpManager, user,
+                                    0 /* challenge */);
+                            if (hat != null) {
+                                mFaceManager.resetLockout(prop.sensorId, user.userId, hat);
+                            }
+                        }
+                    }
+                } else {
+                    Slog.w(TAG, "Lockout is below the HAL for all face authentication interfaces"
+                            + ", sensorId: " + prop.sensorId);
+                }
             }
         }
+    }
+
+    @Nullable
+    private static byte[] requestHatFromGatekeeperPassword(
+            @NonNull SyntheticPasswordManager spManager,
+            @NonNull UserAuthInfo userAuthInfo, long challenge) {
+        final VerifyCredentialResponse response = spManager.verifyChallengeInternal(
+                getGatekeeperService(), userAuthInfo.gatekeeperPassword, challenge,
+                userAuthInfo.userId);
+        if (response == null) {
+            Slog.wtf(TAG, "VerifyChallenge failed, null response");
+            return null;
+        }
+        if (response.getResponseCode() != VerifyCredentialResponse.RESPONSE_OK) {
+            Slog.wtf(TAG, "VerifyChallenge failed, response: "
+                    + response.getResponseCode());
+            return null;
+        }
+        if (response.getGatekeeperHAT() == null) {
+            Slog.e(TAG, "Null HAT received from spManager");
+        }
+
+        return response.getGatekeeperHAT();
+    }
+
+    @Nullable
+    private static synchronized IGateKeeperService getGatekeeperService() {
+        final IBinder service = ServiceManager.getService(Context.GATEKEEPER_SERVICE);
+        if (service == null) {
+            Slog.e(TAG, "Unable to acquire GateKeeperService");
+            return null;
+        }
+        return IGateKeeperService.Stub.asInterface(service);
     }
 }

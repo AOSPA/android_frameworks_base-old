@@ -16,14 +16,10 @@
 
 package com.android.wm.shell.onehanded;
 
-import static android.view.Display.DEFAULT_DISPLAY;
-
 import android.content.Context;
 import android.content.res.Resources;
 import android.graphics.PixelFormat;
-import android.graphics.Point;
 import android.graphics.Rect;
-import android.os.Handler;
 import android.util.Log;
 import android.view.SurfaceControl;
 import android.view.SurfaceSession;
@@ -37,8 +33,9 @@ import androidx.annotation.VisibleForTesting;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.wm.shell.R;
-import com.android.wm.shell.common.DisplayController;
+import com.android.wm.shell.common.DisplayLayout;
 
+import java.io.PrintWriter;
 import java.util.List;
 import java.util.concurrent.Executor;
 
@@ -55,12 +52,15 @@ public class OneHandedBackgroundPanelOrganizer extends DisplayAreaOrganizer
     private final SurfaceSession mSurfaceSession = new SurfaceSession();
     private final float[] mColor;
     private final float mAlpha;
-    private final Rect mRect;
     private final Executor mMainExecutor;
-    private final Point mDisplaySize = new Point();
     private final OneHandedSurfaceTransactionHelper.SurfaceControlTransactionFactory
             mSurfaceControlTransactionFactory;
 
+    /**
+     * The background to distinguish the boundary of translated windows and empty region when
+     * one handed mode triggered.
+     */
+    private Rect mBkgBounds;
     @VisibleForTesting
     @GuardedBy("mLock")
     boolean mIsShowing;
@@ -85,15 +85,19 @@ public class OneHandedBackgroundPanelOrganizer extends DisplayAreaOrganizer
         mMainExecutor.execute(() -> removeBackgroundPanelLayer());
     }
 
-    public OneHandedBackgroundPanelOrganizer(Context context, DisplayController displayController,
+    public OneHandedBackgroundPanelOrganizer(Context context, DisplayLayout displayLayout,
             Executor executor) {
         super(executor);
-        displayController.getDisplay(DEFAULT_DISPLAY).getRealSize(mDisplaySize);
         final Resources res = context.getResources();
         final float defaultRGB = res.getFloat(R.dimen.config_one_handed_background_rgb);
         mColor = new float[]{defaultRGB, defaultRGB, defaultRGB};
         mAlpha = res.getFloat(R.dimen.config_one_handed_background_alpha);
-        mRect = new Rect(0, 0, mDisplaySize.x, mDisplaySize.y);
+        // Ensure the mBkgBounds is portrait, due to OHM only support on portrait
+        if (displayLayout.height() > displayLayout.width()) {
+            mBkgBounds = new Rect(0, 0, displayLayout.width(), displayLayout.height());
+        } else {
+            mBkgBounds = new Rect(0, 0, displayLayout.height(), displayLayout.width());
+        }
         mMainExecutor = executor;
         mSurfaceControlTransactionFactory = SurfaceControl.Transaction::new;
     }
@@ -147,6 +151,7 @@ public class OneHandedBackgroundPanelOrganizer extends DisplayAreaOrganizer
             if (mBackgroundSurface == null) {
                 mBackgroundSurface = new SurfaceControl.Builder(mSurfaceSession)
                         .setParent(mParentLeash)
+                        .setBufferSize(mBkgBounds.width(), mBkgBounds.height())
                         .setColorLayer()
                         .setFormat(PixelFormat.RGBA_8888)
                         .setOpaque(false)
@@ -191,11 +196,19 @@ public class OneHandedBackgroundPanelOrganizer extends DisplayAreaOrganizer
 
             SurfaceControl.Transaction transaction =
                     mSurfaceControlTransactionFactory.getTransaction();
-            transaction.remove(mBackgroundSurface);
-            transaction.apply();
+            transaction.remove(mBackgroundSurface).apply();
             transaction.close();
             mBackgroundSurface = null;
             mIsShowing = false;
         }
+    }
+
+    void dump(@NonNull PrintWriter pw) {
+        final String innerPrefix = "  ";
+        pw.println(TAG + "states: ");
+        pw.print(innerPrefix + "mIsShowing=");
+        pw.println(mIsShowing);
+        pw.print(innerPrefix + "mBkgBounds=");
+        pw.println(mBkgBounds);
     }
 }

@@ -104,12 +104,6 @@ public abstract class IContextHubWrapper {
             int hubId, IContexthubCallback callback) throws RemoteException;
 
     /**
-     * Calls the appropriate sendMessageToHub function depending on the HAL version.
-     */
-    public abstract int sendMessageToHub(int hubId,
-            android.hardware.contexthub.V1_0.ContextHubMsg message) throws RemoteException;
-
-    /**
      * @return A valid instance of Contexthub HAL 1.0.
      */
     public abstract android.hardware.contexthub.V1_0.IContexthub getHub();
@@ -180,11 +174,6 @@ public abstract class IContextHubWrapper {
             mHub.registerCallback(hubId, callback);
         }
 
-        public int sendMessageToHub(int hubId,
-                android.hardware.contexthub.V1_0.ContextHubMsg message) throws RemoteException {
-            return mHub.sendMessageToHub(hubId, message);
-        }
-
         public android.hardware.contexthub.V1_0.IContexthub getHub() {
             return mHub;
         }
@@ -232,11 +221,6 @@ public abstract class IContextHubWrapper {
         public void registerCallback(
                 int hubId, IContexthubCallback callback) throws RemoteException {
             mHub.registerCallback(hubId, callback);
-        }
-
-        public int sendMessageToHub(int hubId,
-                android.hardware.contexthub.V1_0.ContextHubMsg message) throws RemoteException {
-            return mHub.sendMessageToHub(hubId, message);
         }
 
         public android.hardware.contexthub.V1_0.IContexthub getHub() {
@@ -304,14 +288,6 @@ public abstract class IContextHubWrapper {
             mHub.registerCallback_1_2(hubId, callback);
         }
 
-        public int sendMessageToHub(int hubId,
-                android.hardware.contexthub.V1_0.ContextHubMsg message) throws RemoteException {
-            android.hardware.contexthub.V1_2.ContextHubMsg newMessage =
-                    new android.hardware.contexthub.V1_2.ContextHubMsg();
-            newMessage.msg_1_0 = message;
-            return mHub.sendMessageToHub_1_2(hubId, newMessage);
-        }
-
         public android.hardware.contexthub.V1_0.IContexthub getHub() {
             return mHub;
         }
@@ -348,8 +324,11 @@ public abstract class IContextHubWrapper {
         }
 
         public void onMicrophoneDisableSettingChanged(boolean enabled) {
-            sendSettingChanged(android.hardware.contexthub.V1_2.Setting.GLOBAL_MIC_DISABLE,
-                    enabled ? SettingValue.ENABLED : SettingValue.DISABLED);
+            // The SensorPrivacyManager reports if microphone privacy was enabled,
+            // which translates to microphone access being disabled (and vice-versa).
+            // With this in mind, we flip the argument before piping it to CHRE.
+            sendSettingChanged(android.hardware.contexthub.V1_2.Setting.MICROPHONE,
+                    enabled ? SettingValue.DISABLED : SettingValue.ENABLED);
         }
 
         private void sendSettingChanged(byte setting, byte newValue) {

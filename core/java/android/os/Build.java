@@ -27,6 +27,7 @@ import android.app.ActivityThread;
 import android.app.Application;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.Context;
+import android.sysprop.DeviceProperties;
 import android.sysprop.SocProperties;
 import android.sysprop.TelephonyProperties;
 import android.text.TextUtils;
@@ -139,7 +140,7 @@ public class Build {
      */
     @UnsupportedAppUsage
     @TestApi
-    public static final boolean IS_EMULATOR = getString("ro.kernel.qemu").equals("1");
+    public static final boolean IS_EMULATOR = getString("ro.boot.qemu").equals("1");
 
     /**
      * A hardware serial number, if available. Alphanumeric only, case-insensitive.
@@ -296,6 +297,19 @@ public class Build {
          */
         public static final String SECURITY_PATCH = SystemProperties.get(
                 "ro.build.version.security_patch", "");
+
+        /**
+         * The media performance class of the device or 0 if none.
+         * <p>
+         * If this value is not <code>0</code>, the device conforms to the media performance class
+         * definition of the SDK version of this value. This value never changes while a device is
+         * booted, but it may increase when the hardware manufacturer provides an OTA update.
+         * <p>
+         * Possible non-zero values are defined in {@link Build.VERSION_CODES} starting with
+         * {@link Build.VERSION_CODES#S}.
+         */
+        public static final int MEDIA_PERFORMANCE_CLASS =
+                DeviceProperties.media_performance_class().orElse(0);
 
         /**
          * The user-visible SDK version of the framework in its raw String
@@ -1117,6 +1131,18 @@ public class Build {
     }
 
     /**
+     * A multiplier for various timeouts on the system.
+     *
+     * The intent is that products targeting software emulators that are orders of magnitude slower
+     * than real hardware may set this to a large number. On real devices and hardware-accelerated
+     * virtualized devices this should not be set.
+     *
+     * @hide
+     */
+    public static final int HW_TIMEOUT_MULTIPLIER =
+        SystemProperties.getInt("ro.hw_timeout_multiplier", 1);
+
+    /**
      * True if Treble is enabled and required for this device.
      *
      * @hide
@@ -1288,10 +1314,12 @@ public class Build {
     public static final String HOST = getString("ro.build.host");
 
     /**
-     * Returns true if we are running a debug build such as "user-debug" or "eng".
-     * @hide
+     * Returns true if the device is running a debuggable build such as "userdebug" or "eng".
+     *
+     * Debuggable builds allow users to gain root access via local shell, attach debuggers to any
+     * application regardless of whether they have the "debuggable" attribute set, or downgrade
+     * selinux into "permissive" mode in particular.
      */
-    @UnsupportedAppUsage
     public static final boolean IS_DEBUGGABLE =
             SystemProperties.getInt("ro.debuggable", 0) == 1;
 

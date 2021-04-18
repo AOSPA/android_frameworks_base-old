@@ -452,7 +452,7 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
          *         {@link #remove} is called on a group, this should be the number of remaining
          *         fingerprints in the group, and 0 after the last fingerprint is removed.
          */
-        public void onRemovalSucceeded(Fingerprint fp, int remaining) { }
+        public void onRemovalSucceeded(@Nullable Fingerprint fp, int remaining) { }
     }
 
     /**
@@ -683,17 +683,6 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             return;
         }
         generateChallenge(sensorProps.sensorId, userId, callback);
-    }
-
-    /**
-     * Revokes the current challenge.
-     * @hide
-     */
-    @RequiresPermission(MANAGE_FINGERPRINT)
-    public void revokeChallenge(int userId) {
-        // On HALs with only single in-flight challenge such as IBiometricsFingerprint@2.1,
-        // this parameter is ignored.
-        revokeChallenge(userId, 0L);
     }
 
     /**

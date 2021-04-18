@@ -30,7 +30,6 @@ import static com.android.server.wm.InsetsSourceProviderProto.CONTROLLABLE;
 import static com.android.server.wm.InsetsSourceProviderProto.CONTROL_TARGET;
 import static com.android.server.wm.InsetsSourceProviderProto.FAKE_CONTROL;
 import static com.android.server.wm.InsetsSourceProviderProto.FAKE_CONTROL_TARGET;
-import static com.android.server.wm.InsetsSourceProviderProto.FINISH_SEAMLESS_ROTATE_FRAME_NUMBER;
 import static com.android.server.wm.InsetsSourceProviderProto.FRAME;
 import static com.android.server.wm.InsetsSourceProviderProto.IME_OVERRIDDEN_FRAME;
 import static com.android.server.wm.InsetsSourceProviderProto.IS_LEASH_READY_FOR_DISPATCHING;
@@ -43,6 +42,7 @@ import static com.android.server.wm.WindowManagerService.H.LAYOUT_AND_ASSIGN_WIN
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.util.proto.ProtoOutputStream;
@@ -59,6 +59,7 @@ import com.android.server.wm.SurfaceAnimator.AnimationType;
 import com.android.server.wm.SurfaceAnimator.OnAnimationFinishedCallback;
 
 import java.io.PrintWriter;
+import java.util.function.Consumer;
 
 /**
  * Controller for a specific inset source on the server. It's called provider as it provides the
@@ -84,6 +85,16 @@ class InsetsSourceProvider {
     private final Rect mImeOverrideFrame = new Rect();
     private boolean mIsLeashReadyForDispatching;
 
+    private final Consumer<Transaction> mSetLeashPositionConsumer = t -> {
+        if (mControl != null) {
+            final SurfaceControl leash = mControl.getLeash();
+            if (leash != null) {
+                final Point position = mControl.getSurfacePosition();
+                t.setPosition(leash, position.x, position.y);
+            }
+        }
+    };
+
     /** The visibility override from the current controlling window. */
     private boolean mClientVisible;
 
@@ -93,7 +104,6 @@ class InsetsSourceProvider {
     private boolean mServerVisible;
 
     private boolean mSeamlessRotating;
-    private long mFinishSeamlessRotateFrameNumber = -1;
 
     private final boolean mControllable;
 
@@ -103,7 +113,8 @@ class InsetsSourceProvider {
         mSource = source;
         mDisplayContent = displayContent;
         mStateController = stateController;
-        mFakeControl = new InsetsSourceControl(source.getType(), null /* leash */, new Point());
+        mFakeControl = new InsetsSourceControl(
+                source.getType(), null /* leash */, new Point(), Insets.NONE);
 
         switch (source.getType()) {
             case ITYPE_STATUS_BAR:
@@ -150,7 +161,6 @@ class InsetsSourceProvider {
             // TODO: Ideally, we should wait for the animation to finish so previous window can
             // animate-out as new one animates-in.
             mWin.cancelAnimation();
-            mWin.mPendingPositionChanged = null;
             mWin.mProvidedInsetsSources.remove(mSource.getType());
         }
         ProtoLog.d(WM_DEBUG_IME, "InsetsSource setWin %s", win);
@@ -247,30 +257,26 @@ class InsetsSourceProvider {
         setServerVisible(mWin.wouldBeVisibleIfPolicyIgnored() && mWin.isVisibleByPolicy());
         updateSourceFrame();
         if (mControl != null) {
+            boolean changed = false;
             final Point position = getWindowFrameSurfacePosition();
             if (mControl.setSurfacePosition(position.x, position.y) && mControlTarget != null) {
-                if (!mWin.getWindowFrames().didFrameSizeChange()) {
-                    updateLeashPosition(-1 /* frameNumber */);
-                } else if (mWin.mInRelayout) {
-                    updateLeashPosition(mWin.getFrameNumber());
+                changed = true;
+                if (mWin.getWindowFrames().didFrameSizeChange() && mWin.mWinAnimator.getShown()
+                        && mWin.okToDisplay()) {
+                    mWin.applyWithNextDraw(mSetLeashPositionConsumer);
                 } else {
-                    mWin.mPendingPositionChanged = this;
+                    mSetLeashPositionConsumer.accept(mWin.getPendingTransaction());
                 }
+            }
+            final Insets insetsHint = mSource.calculateInsets(
+                    mWin.getBounds(), true /* ignoreVisibility */);
+            if (!insetsHint.equals(mControl.getInsetsHint())) {
+                changed = true;
+                mControl.setInsetsHint(insetsHint);
+            }
+            if (changed) {
                 mStateController.notifyControlChanged(mControlTarget);
             }
-        }
-    }
-
-    void updateLeashPosition(long frameNumber) {
-        if (mControl == null) {
-            return;
-        }
-        final SurfaceControl leash = mControl.getLeash();
-        if (leash != null) {
-            final Transaction t = mDisplayContent.getPendingTransaction();
-            final Point position = mControl.getSurfacePosition();
-            t.setPosition(leash, position.x, position.y);
-            deferTransactionUntil(t, leash, frameNumber);
         }
     }
 
@@ -279,14 +285,6 @@ class InsetsSourceProvider {
         final Point position = new Point();
         mWin.transformFrameToSurfacePosition(frame.left, frame.top, position);
         return position;
-    }
-
-    private void deferTransactionUntil(Transaction t, SurfaceControl leash, long frameNumber) {
-        if (frameNumber >= 0) {
-            final SurfaceControl barrier = mWin.getClientViewRootSurface();
-            t.deferTransactionUntil(mWin.getSurfaceControl(), barrier, frameNumber);
-            t.deferTransactionUntil(leash, barrier, frameNumber);
-        }
     }
 
     /**
@@ -342,36 +340,23 @@ class InsetsSourceProvider {
         mIsLeashReadyForDispatching = false;
 
         final SurfaceControl leash = mAdapter.mCapturedLeash;
-        final long frameNumber = mFinishSeamlessRotateFrameNumber;
-        mFinishSeamlessRotateFrameNumber = -1;
-        if (mWin.mHasSurface && leash != null) {
-            // We just finished the seamless rotation. We don't want to change the position or the
-            // window crop of the surface controls (including the leash) until the client finishes
-            // drawing the new frame of the new orientation. Although we cannot defer the reparent
-            // operation, it is fine, because reparent won't cause any visual effect.
-            deferTransactionUntil(t, leash, frameNumber);
-        }
         mControlTarget = target;
         updateVisibility();
-        mControl = new InsetsSourceControl(mSource.getType(), leash, surfacePosition);
+        mControl = new InsetsSourceControl(mSource.getType(), leash, surfacePosition,
+                mSource.calculateInsets(mWin.getBounds(), true /* ignoreVisibility */));
         ProtoLog.d(WM_DEBUG_IME,
                 "InsetsSource Control %s for target %s", mControl, mControlTarget);
     }
 
     void startSeamlessRotation() {
-        if (!mSeamlessRotating) {
-            mSeamlessRotating = true;
-
-            // This will revoke the leash and clear the control target.
-            mWin.cancelAnimation();
-        }
+      if (!mSeamlessRotating) {
+          mSeamlessRotating = true;
+          mWin.cancelAnimation();
+      }
     }
 
-    void finishSeamlessRotation(boolean timeout) {
-        if (mSeamlessRotating) {
-            mSeamlessRotating = false;
-            mFinishSeamlessRotateFrameNumber = timeout ? -1 : mWin.getFrameNumber();
-        }
+    void finishSeamlessRotation() {
+        mSeamlessRotating = false;
     }
 
     boolean updateClientVisibility(InsetsControlTarget caller) {
@@ -433,7 +418,7 @@ class InsetsSourceProvider {
                 // to the client in case that the client applies its transaction sooner than ours
                 // that we could unexpectedly overwrite the surface state.
                 return new InsetsSourceControl(mControl.getType(), null /* leash */,
-                        mControl.getSurfacePosition());
+                        mControl.getSurfacePosition(), mControl.getInsetsHint());
             }
             return mControl;
         }
@@ -529,7 +514,6 @@ class InsetsSourceProvider {
         proto.write(CLIENT_VISIBLE, mClientVisible);
         proto.write(SERVER_VISIBLE, mServerVisible);
         proto.write(SEAMLESS_ROTATING, mSeamlessRotating);
-        proto.write(FINISH_SEAMLESS_ROTATE_FRAME_NUMBER, mFinishSeamlessRotateFrameNumber);
         proto.write(CONTROLLABLE, mControllable);
         proto.end(token);
     }

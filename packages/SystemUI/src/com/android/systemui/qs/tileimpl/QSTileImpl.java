@@ -56,8 +56,8 @@ import com.android.settingslib.RestrictedLockUtils;
 import com.android.settingslib.RestrictedLockUtilsInternal;
 import com.android.settingslib.Utils;
 import com.android.systemui.Dumpable;
-import com.android.systemui.Prefs;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.qs.DetailAdapter;
 import com.android.systemui.plugins.qs.QSIconView;
 import com.android.systemui.plugins.qs.QSTile;
@@ -66,7 +66,6 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.PagedTileLayout.TilePage;
 import com.android.systemui.qs.QSEvent;
 import com.android.systemui.qs.QSHost;
-import com.android.systemui.qs.QuickStatusBarHeader;
 import com.android.systemui.qs.logging.QSLogger;
 
 import java.io.FileDescriptor;
@@ -103,6 +102,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
     private final StatusBarStateController mStatusBarStateController;
     protected final ActivityStarter mActivityStarter;
     private final UiEventLogger mUiEventLogger;
+    private final FalsingManager mFalsingManager;
     private final QSLogger mQSLogger;
     private volatile int mReadyState;
 
@@ -159,6 +159,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
             QSHost host,
             Looper backgroundLooper,
             Handler mainHandler,
+            FalsingManager falsingManager,
             MetricsLogger metricsLogger,
             StatusBarStateController statusBarStateController,
             ActivityStarter activityStarter,
@@ -171,6 +172,7 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
 
         mUiHandler = mainHandler;
         mHandler = new H(backgroundLooper);
+        mFalsingManager = falsingManager;
         mQSLogger = qsLogger;
         mMetricsLogger = metricsLogger;
         mStatusBarStateController = statusBarStateController;
@@ -296,11 +298,6 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
                 getInstanceId());
         mQSLogger.logTileLongClick(mTileSpec, mStatusBarStateController.getState(), mState.state);
         mHandler.sendEmptyMessage(H.LONG_CLICK);
-
-        Prefs.putInt(
-                mContext,
-                Prefs.Key.QS_LONG_PRESS_TOOLTIP_SHOWN_COUNT,
-                QuickStatusBarHeader.MAX_TOOLTIP_SHOWN_COUNT);
     }
 
     public LogMaker populate(LogMaker logMaker) {
@@ -608,7 +605,9 @@ public abstract class QSTileImpl<TState extends State> implements QSTile, Lifecy
                                 mContext, mEnforcedAdmin);
                         mActivityStarter.postStartActivityDismissingKeyguard(intent, 0);
                     } else {
-                        handleClick();
+                        if (!mFalsingManager.isFalseTap(true, 0.1)) {
+                            handleClick();
+                        }
                     }
                 } else if (msg.what == SECONDARY_CLICK) {
                     name = "handleSecondaryClick";

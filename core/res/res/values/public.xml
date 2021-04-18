@@ -2816,6 +2816,7 @@
     <public type="attr" name="iconSpaceReserved" id="0x01010561"/>
     <public type="attr" name="defaultFocusHighlightEnabled" id="0x01010562" />
     <public type="attr" name="persistentWhenFeatureAvailable" id="0x01010563"/>
+    <!-- {@deprecated Use windowSplashscreenAnimatedIcon instead } -->
     <public type="attr" name="windowSplashscreenContent" id="0x01010564" />
     <!-- @hide @SystemApi -->
     <public type="attr" name="requiredSystemPropertyName" id="0x01010565" />
@@ -3058,7 +3059,7 @@
     <public name="fontProviderSystemFontFamily" />
     <public name="hand_second" />
     <public name="memtagMode" />
-    <public name="nativeHeapZeroInit" />
+    <public name="nativeHeapZeroInitialized" />
     <!-- @hide @SystemApi -->
     <public name="hotwordDetectionService" />
     <public name="previewLayout" />
@@ -3070,12 +3071,34 @@
     <public name="windowSplashScreenAnimatedIcon"/>
     <public name="windowSplashScreenAnimationDuration"/>
     <public name="windowSplashScreenBrandingImage"/>
+    <public name="windowSplashScreenIconBackgroundColor"/>
     <public name="splashScreenTheme" />
-    <public name="rippleStyle" />
     <public name="maxResizeWidth" />
     <public name="maxResizeHeight" />
     <public name="targetCellWidth" />
     <public name="targetCellHeight" />
+    <public name="dialTint"/>
+    <public name="dialTintMode"/>
+    <public name="hand_hourTint"/>
+    <public name="hand_hourTintMode"/>
+    <public name="hand_minuteTint"/>
+    <public name="hand_minuteTintMode"/>
+    <public name="hand_secondTint"/>
+    <public name="hand_secondTintMode"/>
+    <public name="dataExtractionRules"/>
+    <public name="passwordsActivity"/>
+    <public name="selectableAsDefault"/>
+    <public name="isAccessibilityTool"/>
+    <public name="attributionTags"/>
+    <public name="suppressesSpellChecker" />
+    <public name="usesPermissionFlags" />
+    <public name="requestOptimizedExternalStorageAccess" />
+    <!-- @hide @SystemApi -->
+    <public name="playHomeTransitionSound" />
+    <public name="lStar" />
+    <!-- @hide @SystemApi -->
+    <public name="throttleDurationMillis" />
+    <public name="showInInputMethodPicker" />
   </public-group>
 
   <public-group type="drawable" first-id="0x010800b5">
@@ -3086,45 +3109,68 @@
     <!-- color definitions go here -->
 
     <!-- Material design dynamic system palette:-->
-    <!-- Primary color -->
-    <public name="system_primary_0" />
-    <public name="system_primary_50" />
-    <public name="system_primary_100" />
-    <public name="system_primary_200" />
-    <public name="system_primary_300" />
-    <public name="system_primary_400" />
-    <public name="system_primary_500" />
-    <public name="system_primary_600" />
-    <public name="system_primary_700" />
-    <public name="system_primary_800" />
-    <public name="system_primary_900" />
-    <public name="system_primary_1000" />
-    <!-- Secondary color -->
-    <public name="system_secondary_0" />
-    <public name="system_secondary_50" />
-    <public name="system_secondary_100" />
-    <public name="system_secondary_200" />
-    <public name="system_secondary_300" />
-    <public name="system_secondary_400" />
-    <public name="system_secondary_500" />
-    <public name="system_secondary_600" />
-    <public name="system_secondary_700" />
-    <public name="system_secondary_800" />
-    <public name="system_secondary_900" />
-    <public name="system_secondary_1000" />
-    <!-- Neutral color -->
-    <public name="system_neutral_0" />
-    <public name="system_neutral_50" />
-    <public name="system_neutral_100" />
-    <public name="system_neutral_200" />
-    <public name="system_neutral_300" />
-    <public name="system_neutral_400" />
-    <public name="system_neutral_500" />
-    <public name="system_neutral_600" />
-    <public name="system_neutral_700" />
-    <public name="system_neutral_800" />
-    <public name="system_neutral_900" />
-    <public name="system_neutral_1000" />
+    <!-- Neutral colors for background and text -->
+    <public name="system_neutral1_0" />
+    <public name="system_neutral1_50" />
+    <public name="system_neutral1_100" />
+    <public name="system_neutral1_200" />
+    <public name="system_neutral1_300" />
+    <public name="system_neutral1_400" />
+    <public name="system_neutral1_500" />
+    <public name="system_neutral1_600" />
+    <public name="system_neutral1_700" />
+    <public name="system_neutral1_800" />
+    <public name="system_neutral1_900" />
+    <public name="system_neutral1_1000" />
+    <public name="system_neutral2_0" />
+    <public name="system_neutral2_50" />
+    <public name="system_neutral2_100" />
+    <public name="system_neutral2_200" />
+    <public name="system_neutral2_300" />
+    <public name="system_neutral2_400" />
+    <public name="system_neutral2_500" />
+    <public name="system_neutral2_600" />
+    <public name="system_neutral2_700" />
+    <public name="system_neutral2_800" />
+    <public name="system_neutral2_900" />
+    <public name="system_neutral2_1000" />
+    <!-- Accent colors, for buttons and UI decorations -->
+    <public name="system_accent1_0" />
+    <public name="system_accent1_50" />
+    <public name="system_accent1_100" />
+    <public name="system_accent1_200" />
+    <public name="system_accent1_300" />
+    <public name="system_accent1_400" />
+    <public name="system_accent1_500" />
+    <public name="system_accent1_600" />
+    <public name="system_accent1_700" />
+    <public name="system_accent1_800" />
+    <public name="system_accent1_900" />
+    <public name="system_accent1_1000" />
+    <public name="system_accent2_0" />
+    <public name="system_accent2_50" />
+    <public name="system_accent2_100" />
+    <public name="system_accent2_200" />
+    <public name="system_accent2_300" />
+    <public name="system_accent2_400" />
+    <public name="system_accent2_500" />
+    <public name="system_accent2_600" />
+    <public name="system_accent2_700" />
+    <public name="system_accent2_800" />
+    <public name="system_accent2_900" />
+    <public name="system_accent2_1000" />
+    <public name="system_accent3_0" />
+    <public name="system_accent3_50" />
+    <public name="system_accent3_100" />
+    <public name="system_accent3_200" />
+    <public name="system_accent3_300" />
+    <public name="system_accent3_400" />
+    <public name="system_accent3_500" />
+    <public name="system_accent3_600" />
+    <public name="system_accent3_700" />
+    <public name="system_accent3_800" />
+    <public name="system_accent3_900" />
+    <public name="system_accent3_1000" />
   </public-group>
 
   <public-group type="dimen" first-id="0x01050008">
@@ -3157,6 +3203,14 @@
     <public name="config_customMediaKeyDispatcher" />
     <!-- @hide @SystemApi -->
     <public name="config_customMediaSessionPolicyProvider" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemSpeechRecognizer" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemWifiCoexManager" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemWellbeing" />
+    <!-- @hide @SystemApi -->
+    <public name="config_systemTelevisionNotificationHandler" />
   </public-group>
 
   <public-group type="id" first-id="0x01020055">

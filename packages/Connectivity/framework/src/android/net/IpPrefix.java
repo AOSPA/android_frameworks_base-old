@@ -24,6 +24,8 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Pair;
 
+import com.android.net.module.util.NetUtils;
+
 import java.net.Inet4Address;
 import java.net.Inet6Address;
 import java.net.InetAddress;
@@ -59,7 +61,7 @@ public final class IpPrefix implements Parcelable {
             throw new IllegalArgumentException(
                     "IpPrefix has " + address.length + " bytes which is neither 4 nor 16");
         }
-        NetworkUtils.maskRawAddress(address, prefixLength);
+        NetUtils.maskRawAddress(address, prefixLength);
     }
 
     /**
@@ -111,7 +113,7 @@ public final class IpPrefix implements Parcelable {
         // first statement in constructor". We could factor out setting the member variables to an
         // init() method, but if we did, then we'd have to make the members non-final, or "error:
         // cannot assign a value to final variable address". So we just duplicate the code here.
-        Pair<InetAddress, Integer> ipAndMask = NetworkUtils.parseIpAndMask(prefix);
+        Pair<InetAddress, Integer> ipAndMask = NetworkUtils.legacyParseIpAndMask(prefix);
         this.address = ipAndMask.first.getAddress();
         this.prefixLength = ipAndMask.second;
         checkAndMaskAddressAndPrefixLength();
@@ -190,7 +192,7 @@ public final class IpPrefix implements Parcelable {
         if (addrBytes == null || addrBytes.length != this.address.length) {
             return false;
         }
-        NetworkUtils.maskRawAddress(addrBytes, prefixLength);
+        NetUtils.maskRawAddress(addrBytes, prefixLength);
         return Arrays.equals(this.address, addrBytes);
     }
 
@@ -204,7 +206,7 @@ public final class IpPrefix implements Parcelable {
     public boolean containsPrefix(@NonNull IpPrefix otherPrefix) {
         if (otherPrefix.getPrefixLength() < prefixLength) return false;
         final byte[] otherAddress = otherPrefix.getRawAddress();
-        NetworkUtils.maskRawAddress(otherAddress, prefixLength);
+        NetUtils.maskRawAddress(otherAddress, prefixLength);
         return Arrays.equals(otherAddress, address);
     }
 

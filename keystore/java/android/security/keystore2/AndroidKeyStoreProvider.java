@@ -43,6 +43,7 @@ import java.security.interfaces.RSAPublicKey;
 
 import javax.crypto.Cipher;
 import javax.crypto.Mac;
+import javax.crypto.SecretKey;
 
 /**
  * A provider focused on providing JCA interfaces for the Android KeyStore.
@@ -144,23 +145,15 @@ public class AndroidKeyStoreProvider extends Provider {
         sInstalled = true;
 
         Security.addProvider(new AndroidKeyStoreProvider());
-        Security.addProvider(
-                new android.security.keystore.AndroidKeyStoreProvider(
-                        "AndroidKeyStoreLegacy"));
         Provider workaroundProvider = new AndroidKeyStoreBCWorkaroundProvider();
-        Provider legacyWorkaroundProvider =
-                new android.security.keystore.AndroidKeyStoreBCWorkaroundProvider(
-                        "AndroidKeyStoreBCWorkaroundLegacy");
         if (bcProviderIndex != -1) {
             // Bouncy Castle provider found -- install the workaround provider above it.
             // insertProviderAt uses 1-based positions.
-            Security.insertProviderAt(legacyWorkaroundProvider, bcProviderIndex + 1);
             Security.insertProviderAt(workaroundProvider, bcProviderIndex + 1);
         } else {
             // Bouncy Castle provider not found -- install the workaround provider at lowest
             // priority.
             Security.addProvider(workaroundProvider);
-            Security.addProvider(legacyWorkaroundProvider);
         }
     }
 
@@ -273,10 +266,10 @@ public class AndroidKeyStoreProvider extends Provider {
     /** @hide **/
     @NonNull
     public static KeyPair loadAndroidKeyStoreKeyPairFromKeystore(
-            @NonNull KeyStore2 keyStore, @NonNull String privateKeyAlias, int namespace)
+            @NonNull KeyStore2 keyStore, @NonNull KeyDescriptor descriptor)
             throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
         AndroidKeyStoreKey key =
-                loadAndroidKeyStoreKeyFromKeystore(keyStore, privateKeyAlias, namespace);
+                loadAndroidKeyStoreKeyFromKeystore(keyStore, descriptor);
         if (key instanceof AndroidKeyStorePublicKey) {
             AndroidKeyStorePublicKey publicKey = (AndroidKeyStorePublicKey) key;
             return new KeyPair(publicKey, publicKey.getPrivateKey());
@@ -299,13 +292,26 @@ public class AndroidKeyStoreProvider extends Provider {
         }
     }
 
+    /** @hide **/
+    @NonNull
+    public static SecretKey loadAndroidKeyStoreSecretKeyFromKeystore(
+            @NonNull KeyStore2 keyStore, @NonNull KeyDescriptor descriptor)
+            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
+
+        AndroidKeyStoreKey key =
+                loadAndroidKeyStoreKeyFromKeystore(keyStore, descriptor);
+        if (key instanceof SecretKey) {
+            return (SecretKey) key;
+        } else {
+            throw new UnrecoverableKeyException("No secret key found by the given alias.");
+        }
+    }
 
     @NonNull
     private static AndroidKeyStoreSecretKey makeAndroidKeyStoreSecretKeyFromKeyEntryResponse(
             @NonNull KeyDescriptor descriptor,
             @NonNull KeyEntryResponse response, int algorithm, int digest)
             throws UnrecoverableKeyException {
-
         @KeyProperties.KeyAlgorithmEnum String keyAlgorithmString;
         try {
             keyAlgorithmString = KeyProperties.KeyAlgorithm.fromKeymasterSecretKeyAlgorithm(
@@ -326,18 +332,17 @@ public class AndroidKeyStoreProvider extends Provider {
      * @param keyStore The keystore2 backend.
      * @param alias The alias of the key in the Keystore database.
      * @param namespace The a Keystore namespace. This is used by system api only to request
-     *                  Android system specific keystore namespace, which can be configured
-     *                  in the device's SEPolicy. Third party apps and most system components
-     *                  set this parameter to -1 to indicate their application specific namespace.
-     *                  TODO b/171806779 link to public Keystore 2.0 documentation.
-     *                       See bug for more details for now.
+     *         Android system specific keystore namespace, which can be configured
+     *         in the device's SEPolicy. Third party apps and most system components
+     *         set this parameter to -1 to indicate their application specific namespace.
+     *         See <a href="https://source.android.com/security/keystore#access-control">
+     *             Keystore 2.0 access control</a>
      * @hide
      **/
     @NonNull
     public static AndroidKeyStoreKey loadAndroidKeyStoreKeyFromKeystore(
             @NonNull KeyStore2 keyStore, @NonNull String alias, int namespace)
-            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException  {
-
+            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
         KeyDescriptor descriptor = new KeyDescriptor();
         if (namespace == KeyProperties.NAMESPACE_APPLICATION) {
             descriptor.nspace = KeyProperties.NAMESPACE_APPLICATION; // ignored;
@@ -348,6 +353,18 @@ public class AndroidKeyStoreProvider extends Provider {
         }
         descriptor.alias = alias;
         descriptor.blob = null;
+
+        final AndroidKeyStoreKey key = loadAndroidKeyStoreKeyFromKeystore(keyStore, descriptor);
+        if (key instanceof AndroidKeyStorePublicKey) {
+            return ((AndroidKeyStorePublicKey) key).getPrivateKey();
+        } else {
+            return key;
+        }
+    }
+
+    private static AndroidKeyStoreKey loadAndroidKeyStoreKeyFromKeystore(
+            @NonNull KeyStore2 keyStore, @NonNull KeyDescriptor descriptor)
+            throws UnrecoverableKeyException, KeyPermanentlyInvalidatedException {
         KeyEntryResponse response = null;
         try {
             response = keyStore.getKeyEntry(descriptor);
@@ -397,7 +414,7 @@ public class AndroidKeyStoreProvider extends Provider {
                 keymasterAlgorithm == KeymasterDefs.KM_ALGORITHM_EC) {
             return makeAndroidKeyStorePublicKeyFromKeyEntryResponse(descriptor, response.metadata,
                     new KeyStoreSecurityLevel(response.iSecurityLevel),
-                    keymasterAlgorithm).getPrivateKey();
+                    keymasterAlgorithm);
         } else {
             throw new UnrecoverableKeyException("Key algorithm unknown");
         }

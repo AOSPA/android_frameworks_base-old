@@ -36,12 +36,12 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.TextView;
 
-import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
 import com.android.internal.util.ContrastColorUtil;
 import com.android.internal.widget.CachingIconView;
 import com.android.settingslib.Utils;
+import com.android.systemui.R;
 import com.android.systemui.statusbar.CrossFadeHelper;
 import com.android.systemui.statusbar.TransformableView;
 import com.android.systemui.statusbar.notification.TransformState;
@@ -58,9 +58,11 @@ public abstract class NotificationViewWrapper implements TransformableView {
     private final Rect mTmpRect = new Rect();
 
     protected int mBackgroundColor = 0;
-    private int mLightTextColor;
-    private int mDarkTextColor;
-    private int mDefaultTextColor;
+    private int mMaterialTextColorPrimary;
+    private int mMaterialTextColorSecondary;
+    private int mThemedTextColorPrimary;
+    private int mThemedTextColorSecondary;
+    private boolean mAdjustTheme;
 
     public static NotificationViewWrapper wrap(Context ctx, View v, ExpandableNotificationRow row) {
         if (v.getId() == com.android.internal.R.id.status_bar_latest_event_content) {
@@ -97,6 +99,8 @@ public abstract class NotificationViewWrapper implements TransformableView {
         mView = view;
         mRow = row;
         onReinflated();
+        mAdjustTheme = ctx.getResources().getBoolean(
+                R.bool.config_adjustThemeOnNotificationCustomViews);
     }
 
     /**
@@ -121,15 +125,22 @@ public abstract class NotificationViewWrapper implements TransformableView {
             mBackgroundColor = backgroundColor;
             mView.setBackground(new ColorDrawable(Color.TRANSPARENT));
         }
-        mLightTextColor = mView.getContext().getColor(
-                com.android.internal.R.color.notification_primary_text_color_light);
-        mDarkTextColor = mView.getContext().getColor(
-                R.color.notification_primary_text_color_dark);
+
+        Context materialTitleContext = new ContextThemeWrapper(mView.getContext(),
+                com.android.internal.R.style.TextAppearance_Material_Notification_Title);
+        mMaterialTextColorPrimary = Utils.getColorAttr(materialTitleContext,
+                com.android.internal.R.attr.textColor).getDefaultColor();
+        Context materialContext = new ContextThemeWrapper(mView.getContext(),
+                com.android.internal.R.style.TextAppearance_Material_Notification);
+        mMaterialTextColorSecondary = Utils.getColorAttr(materialContext,
+                com.android.internal.R.attr.textColor).getDefaultColor();
 
         Context themedContext = new ContextThemeWrapper(mView.getContext(),
-                R.style.Theme_DeviceDefault_DayNight);
-        mDefaultTextColor = Utils.getColorAttr(themedContext, R.attr.textColorPrimary)
-                .getDefaultColor();
+                com.android.internal.R.style.Theme_DeviceDefault_DayNight);
+        mThemedTextColorPrimary = Utils.getColorAttr(themedContext,
+                com.android.internal.R.attr.textColorPrimary).getDefaultColor();
+        mThemedTextColorSecondary = Utils.getColorAttr(themedContext,
+                com.android.internal.R.attr.textColorSecondary).getDefaultColor();
     }
 
     protected boolean needsInversion(int defaultBackgroundColor, View view) {
@@ -207,38 +218,35 @@ public abstract class NotificationViewWrapper implements TransformableView {
         return false;
     }
 
-    protected void ensureThemeOnChildren() {
-        if (mView == null) {
+    protected void ensureThemeOnChildren(View rootView) {
+        if (!mAdjustTheme || mView == null || rootView == null) {
             return;
         }
 
         // Notifications with custom backgrounds should not be adjusted
         if (mBackgroundColor != Color.TRANSPARENT
-                || getBackgroundColor(mView) != Color.TRANSPARENT) {
+                || getBackgroundColor(mView) != Color.TRANSPARENT
+                || getBackgroundColor(rootView) != Color.TRANSPARENT) {
             return;
         }
 
         // Now let's check if there's unprotected text somewhere, and apply the theme if we find it.
-        if (!(mView instanceof ViewGroup)) {
-            return;
-        }
-        processChildrenTextColor((ViewGroup) mView);
+        processTextColorRecursive(rootView);
     }
 
-    private void processChildrenTextColor(ViewGroup viewGroup) {
-        if (viewGroup == null) {
-            return;
-        }
-
-        for (int i = 0; i < viewGroup.getChildCount(); i++) {
-            View child = viewGroup.getChildAt(i);
-            if (child instanceof TextView) {
-                int foreground = ((TextView) child).getCurrentTextColor();
-                if (foreground == mLightTextColor || foreground == mDarkTextColor) {
-                    ((TextView) child).setTextColor(mDefaultTextColor);
-                }
-            } else if (child instanceof ViewGroup) {
-                processChildrenTextColor((ViewGroup) child);
+    private void processTextColorRecursive(View view) {
+        if (view instanceof TextView) {
+            TextView textView = (TextView) view;
+            int foreground = textView.getCurrentTextColor();
+            if (foreground == mMaterialTextColorPrimary) {
+                textView.setTextColor(mThemedTextColorPrimary);
+            } else if (foreground == mMaterialTextColorSecondary) {
+                textView.setTextColor(mThemedTextColorSecondary);
+            }
+        } else if (view instanceof ViewGroup) {
+            ViewGroup viewGroup = (ViewGroup) view;
+            for (int i = 0; i < viewGroup.getChildCount(); i++) {
+                processTextColorRecursive(viewGroup.getChildAt(i));
             }
         }
     }
@@ -283,8 +291,10 @@ public abstract class NotificationViewWrapper implements TransformableView {
      *
      * @param expandable should this view be expandable
      * @param onClickListener the listener to invoke when the expand affordance is clicked on
+     * @param requestLayout the expandability changed during onLayout, so a requestLayout required
      */
-    public void updateExpandability(boolean expandable, View.OnClickListener onClickListener) {}
+    public void updateExpandability(boolean expandable, View.OnClickListener onClickListener,
+            boolean requestLayout) {}
 
     /** Set the expanded state on the view wrapper */
     public void setExpanded(boolean expanded) {}
@@ -322,11 +332,6 @@ public abstract class NotificationViewWrapper implements TransformableView {
     public @Nullable View getShelfTransformationTarget() {
         return null;
     }
-
-    /**
-     * Set the shelf icon to be visible and hide our own icons.
-     */
-    public void setShelfIconVisible(boolean shelfIconVisible) {}
 
     public int getHeaderTranslation(boolean forceNoHeader) {
         return 0;

@@ -17,8 +17,6 @@
 package com.android.server.wm;
 
 import static android.Manifest.permission.START_TASKS_FROM_RECENTS;
-import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_ACTIVITY;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_SHORTCUT;
 import static android.content.ClipDescription.MIMETYPE_APPLICATION_TASK;
@@ -124,9 +122,8 @@ public class DragDropControllerTests extends WindowTestsBase {
      */
     private WindowState createDropTargetWindow(String name, int ownerId) {
         final ActivityRecord activity = createNonAttachedActivityRecord(mDisplayContent);
-        final Task stack = createTaskStackOnDisplay(
-                WINDOWING_MODE_FULLSCREEN, ACTIVITY_TYPE_STANDARD, mDisplayContent);
-        final Task task = createTaskInStack(stack, ownerId);
+        final Task rootTask = createTask(mDisplayContent);
+        final Task task = createTaskInRootTask(rootTask, ownerId);
         task.addChild(activity, 0);
 
         // Use a new TestIWindow so we don't collect events for other windows
@@ -134,6 +131,7 @@ public class DragDropControllerTests extends WindowTestsBase {
                 null, TYPE_BASE_APPLICATION, activity, name, ownerId, false, new TestIWindow());
         window.mInputChannel = new InputChannel();
         window.mHasSurface = true;
+        mWm.mInputToWindowMap.put(window.mInputChannelToken, window);
         return window;
     }
 
@@ -154,7 +152,7 @@ public class DragDropControllerTests extends WindowTestsBase {
         mWindow = createDropTargetWindow("Drag test window", 0);
         doReturn(mWindow).when(mDisplayContent).getTouchableWinAtPointLocked(0, 0);
         when(mWm.mInputManager.transferTouchFocus(any(InputChannel.class),
-                any(InputChannel.class))).thenReturn(true);
+                any(InputChannel.class), any(boolean.class))).thenReturn(true);
 
         mWm.mWindowMap.put(mWindow.mClient.asBinder(), mWindow);
     }
@@ -226,7 +224,7 @@ public class DragDropControllerTests extends WindowTestsBase {
                     // Verify after consuming that the drag surface is relinquished
                     try {
                         mTarget.mDeferDragStateClosed = true;
-
+                        mTarget.reportDropWindow(mWindow.mInputChannelToken, 0, 0);
                         // Verify the drop event includes the drag surface
                         mTarget.handleMotionEvent(false, 0, 0);
                         final DragEvent dropEvent = dragEvents.get(dragEvents.size() - 1);
@@ -355,6 +353,7 @@ public class DragDropControllerTests extends WindowTestsBase {
 
     private void doDragAndDrop(int flags, ClipData data, float dropX, float dropY) {
         startDrag(flags, data, () -> {
+            mTarget.reportDropWindow(mWindow.mInputChannelToken, dropX, dropY);
             mTarget.handleMotionEvent(false, dropX, dropY);
             mToken = mWindow.mClient.asBinder();
         });
@@ -370,7 +369,7 @@ public class DragDropControllerTests extends WindowTestsBase {
                     .build();
 
             assertTrue(mWm.mInputManager.transferTouchFocus(new InputChannel(),
-                    new InputChannel()));
+                    new InputChannel(), true /* isDragDrop */));
             mToken = mTarget.performDrag(0, 0, mWindow.mClient, flag, surface, 0, 0, 0, 0, 0, data);
             assertNotNull(mToken);
 

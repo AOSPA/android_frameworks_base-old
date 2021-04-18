@@ -81,6 +81,7 @@ import android.view.WindowManager.LayoutParams.WindowType;
 import android.view.autofill.AutofillManager.AutofillClient;
 import android.view.contentcapture.ContentCaptureManager.ContentCaptureClient;
 import android.view.textclassifier.TextClassificationManager;
+import android.window.WindowContext;
 
 import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.compat.IPlatformCompatNative;
@@ -370,6 +371,34 @@ public abstract class Context {
     /***********    Hidden flags below this line ***********/
 
     /**
+     * Flag for {@link #bindService}: This flag is only intended to be used by the system to
+     * indicate that a service binding is not considered as real package component usage and should
+     * not generate a {@link android.app.usage.UsageEvents.Event#APP_COMPONENT_USED} event in usage
+     * stats.
+     * @hide
+     */
+    public static final int BIND_NOT_APP_COMPONENT_USAGE = 0x00008000;
+
+    /**
+     * Flag for {@link #bindService}: allow the process hosting the target service to be treated
+     * as if it's as important as a perceptible app to the user and avoid the oom killer killing
+     * this process in low memory situations until there aren't any other processes left but the
+     * ones which are user-perceptible.
+     *
+     * @hide
+     */
+    public static final int BIND_ALMOST_PERCEPTIBLE = 0x000010000;
+
+    /**
+     * Flag for {@link #bindService}: allow the process hosting the target service to gain
+     * {@link ActivityManager#PROCESS_CAPABILITY_NETWORK}, which allows it be able
+     * to access network regardless of any power saving restrictions.
+     *
+     * @hide
+     */
+    public static final int BIND_BYPASS_POWER_NETWORK_RESTRICTIONS = 0x00020000;
+
+    /**
      * Flag for {@link #bindService}: allow background foreground service starts from the bound
      * service's process.
      * This flag is only respected if the caller is holding
@@ -627,12 +656,21 @@ public abstract class Context {
     /**
      * Add a new {@link ComponentCallbacks} to the base application of the
      * Context, which will be called at the same times as the ComponentCallbacks
-     * methods of activities and other components are called.  Note that you
+     * methods of activities and other components are called. Note that you
      * <em>must</em> be sure to use {@link #unregisterComponentCallbacks} when
      * appropriate in the future; this will not be removed for you.
+     * <p>
+     * After {@link Build.VERSION_CODES#S}, Registering the ComponentCallbacks to Context created
+     * via {@link #createWindowContext(int, Bundle)} or
+     * {@link #createWindowContext(Display, int, Bundle)} will receive
+     * {@link ComponentCallbacks#onConfigurationChanged(Configuration)} from Window Context rather
+     * than its base application. It is helpful if you want to handle UI components that
+     * associated with the Window Context when the Window Context has configuration changes.</p>
      *
      * @param callback The interface to call.  This can be either a
      * {@link ComponentCallbacks} or {@link ComponentCallbacks2} interface.
+     *
+     * @see Context#createWindowContext(int, Bundle)
      */
     public void registerComponentCallbacks(ComponentCallbacks callback) {
         getApplicationContext().registerComponentCallbacks(callback);
@@ -851,6 +889,15 @@ public abstract class Context {
         return null;
     }
 
+    /**
+     * @return The identity of this context for permission purposes.
+     *
+     * @see AttributionSource
+     */
+    public @NonNull AttributionSource getAttributionSource() {
+        return null;
+    }
+
     // TODO moltmann: Remove
     /**
      * @removed
@@ -858,6 +905,14 @@ public abstract class Context {
     @Deprecated
     public @Nullable String getFeatureId() {
         return getAttributionTag();
+    }
+
+    /**
+     * Return the set of parameters which this Context was created with, if it
+     * was created via {@link #createContext(ContextParams)}.
+     */
+    public @Nullable ContextParams getParams() {
+        return null;
     }
 
     /** Return the full application info for this context's package. */
@@ -3118,8 +3173,18 @@ public abstract class Context {
      *
      * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
-     * @throws IllegalStateException If the application is in a state where the service
-     * can not be started (such as not in the foreground in a state when services are allowed).
+     * @throws IllegalStateException
+     * Before Android {@link android.os.Build.VERSION_CODES#S},
+     * if the application is in a state where the service
+     * can not be started (such as not in the foreground in a state when services are allowed),
+     * {@link IllegalStateException} was thrown.
+     * @throws android.app.BackgroundServiceStartNotAllowedException
+     * On Android {@link android.os.Build.VERSION_CODES#S} and later,
+     * if the application is in a state where the service
+     * can not be started (such as not in the foreground in a state when services are allowed),
+     * {@link android.app.BackgroundServiceStartNotAllowedException} is thrown
+     * This excemption extends {@link IllegalStateException}, so apps can
+     * use {@code catch (IllegalStateException)} to catch both.
      *
      * @see #stopService
      * @see #bindService
@@ -3150,7 +3215,8 @@ public abstract class Context {
      * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
      *
-     * @throws IllegalStateException If the caller app's targeting API is
+     * @throws android.app.ForegroundServiceStartNotAllowedException
+     * If the caller app's targeting API is
      * {@link android.os.Build.VERSION_CODES#S} or later, and the foreground service is restricted
      * from start due to background restriction.
      *
@@ -3484,6 +3550,7 @@ public abstract class Context {
             VIBRATOR_SERVICE,
             //@hide: STATUS_BAR_SERVICE,
             CONNECTIVITY_SERVICE,
+            PAC_PROXY_SERVICE,
             VCN_MANAGEMENT_SERVICE,
             //@hide: IP_MEMORY_STORE_SERVICE,
             IPSEC_SERVICE,
@@ -3666,6 +3733,9 @@ public abstract class Context {
      * usage statistics.
      * <dt> {@link #HARDWARE_PROPERTIES_SERVICE} ("hardware_properties")
      * <dd> A {@link android.os.HardwarePropertiesManager} for accessing hardware properties.
+     * <dt> {@link #DOMAIN_VERIFICATION_SERVICE} ("domain_verification")
+     * <dd> A {@link android.content.pm.verify.domain.DomainVerificationManager} for accessing
+     * web domain approval state.
      * </dl>
      *
      * <p>Note:  System services obtained via this API may be closely associated with
@@ -3747,6 +3817,8 @@ public abstract class Context {
      * @see android.app.usage.NetworkStatsManager
      * @see android.os.HardwarePropertiesManager
      * @see #HARDWARE_PROPERTIES_SERVICE
+     * @see #DOMAIN_VERIFICATION_SERVICE
+     * @see android.content.pm.verify.domain.DomainVerificationManager
      */
     public abstract @Nullable Object getSystemService(@ServiceName @NonNull String name);
 
@@ -3766,7 +3838,8 @@ public abstract class Context {
      * {@link android.view.inputmethod.InputMethodManager},
      * {@link android.app.UiModeManager}, {@link android.app.DownloadManager},
      * {@link android.os.BatteryManager}, {@link android.app.job.JobScheduler},
-     * {@link android.app.usage.NetworkStatsManager}.
+     * {@link android.app.usage.NetworkStatsManager},
+     * {@link android.content.pm.verify.domain.DomainVerificationManager}.
      * </p>
      *
      * <p>
@@ -3822,7 +3895,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @hide
      */
-    public static final String POWER_STATS_SERVICE = "power_stats";
+    public static final String POWER_STATS_SERVICE = "powerstats";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -4084,6 +4157,17 @@ public abstract class Context {
     public static final String CONNECTIVITY_SERVICE = "connectivity";
 
     /**
+     * Use with {@link #getSystemService(String)} to retrieve a {@link
+     * android.net.PacProxyManager} for handling management of
+     * pac proxy information.
+     *
+     * @see #getSystemService(String)
+     * @see android.net.PacProxyManager
+     * @hide
+     */
+    public static final String PAC_PROXY_SERVICE = "pac_proxy";
+
+    /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link android.net.vcn.VcnManager}
      * for managing Virtual Carrier Networks
      *
@@ -4154,7 +4238,8 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @hide
      */
-    @TestApi public static final String TEST_NETWORK_SERVICE = "test_network";
+    @TestApi @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public static final String TEST_NETWORK_SERVICE = "test_network";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
@@ -4786,8 +4871,18 @@ public abstract class Context {
      * @hide
      */
     @TestApi
-    @SuppressLint("ServiceName")  // TODO: This should be renamed to POWER_WHITELIST_SERVICE
+    @Deprecated
+    @SuppressLint("ServiceName")
     public static final String POWER_WHITELIST_MANAGER = "power_whitelist";
+
+    /**
+     * System service name for the PowerExemptionManager.
+     *
+     * @see #getSystemService(String)
+     * @hide
+     */
+    @TestApi
+    public static final String POWER_EXEMPTION_SERVICE = "power_exemption";
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a
@@ -5484,18 +5579,17 @@ public abstract class Context {
      * {@link GameManager}.
      *
      * @see #getSystemService(String)
-     *
-     * @hide
      */
     public static final String GAME_SERVICE = "game";
 
     /**
-     * Use with {@link #getSystemService(String)} to access domain verification service.
+     * Use with {@link #getSystemService(String)} to access
+     * {@link android.content.pm.verify.domain.DomainVerificationManager} to retrieve approval and
+     * user state for declared web domains.
      *
      * @see #getSystemService(String)
-     * @hide
+     * @see android.content.pm.verify.domain.DomainVerificationManager
      */
-    @SystemApi
     public static final String DOMAIN_VERIFICATION_SERVICE = "domain_verification";
 
     /**
@@ -6283,6 +6377,16 @@ public abstract class Context {
      * windowContext.getSystemService(WindowManager.class).addView(overlayView, mParams);
      * </pre>
      * <p>
+     * After {@link Build.VERSION_CODES#S}, window context provides the capability to listen to its
+     * {@link Configuration} changes by calling
+     * {@link #registerComponentCallbacks(ComponentCallbacks)}, while other kinds of {@link Context}
+     * will register the {@link ComponentCallbacks} to {@link #getApplicationContext() its
+     * Application context}. Note that window context only propagate
+     * {@link ComponentCallbacks#onConfigurationChanged(Configuration)} callback.
+     * {@link ComponentCallbacks#onLowMemory()} or other callbacks in {@link ComponentCallbacks2}
+     * won't be invoked.
+     * </p>
+     * <p>
      * Note that using {@link android.app.Application} or {@link android.app.Service} context for
      * UI-related queries may result in layout or continuity issues on devices with variable screen
      * sizes (e.g. foldables) or in multi-window modes, since these non-UI contexts may not reflect
@@ -6338,6 +6442,19 @@ public abstract class Context {
     }
 
     /**
+     * Creates a context with specific properties and behaviors.
+     *
+     * @param contextParams Parameters for how the new context should behave.
+     * @return A context with the specified behaviors.
+     *
+     * @see ContextParams
+     */
+    @NonNull
+    public Context createContext(@NonNull ContextParams contextParams) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Return a new Context object for the current Context but attribute to a different tag.
      * In complex apps attribution tagging can be used to distinguish between separate logical
      * parts.
@@ -6357,8 +6474,10 @@ public abstract class Context {
      * @removed
      */
     @Deprecated
-    public @NonNull Context createFeatureContext(@Nullable String featureId) {
-        return createAttributionContext(featureId);
+    public @NonNull Context createFeatureContext(@Nullable String attributionTag) {
+        return createContext(new ContextParams.Builder(getParams())
+                .setAttributionTag(attributionTag)
+                .build());
     }
 
     /**
@@ -6663,15 +6782,6 @@ public abstract class Context {
     }
 
     /**
-     * Indicates if this context is a visual context such as {@link android.app.Activity} or
-     * a context created from {@link #createWindowContext(int, Bundle)}.
-     * @hide
-     */
-    public boolean isUiContext() {
-        throw new RuntimeException("Not implemented. Must override in a subclass.");
-    }
-
-    /**
      * Returns {@code true} if the context is a UI context which can access UI components such as
      * {@link WindowManager}, {@link android.view.LayoutInflater LayoutInflater} or
      * {@link android.app.WallpaperManager WallpaperManager}. Accessing UI components from non-UI
@@ -6683,12 +6793,27 @@ public abstract class Context {
      * {@link #createWindowContext(int, Bundle)} or
      * {@link android.inputmethodservice.InputMethodService InputMethodService}
      * </p>
+     * <p>
+     * Note that even if it is allowed programmatically, it is not suggested to override this
+     * method to bypass {@link android.os.strictmode.IncorrectContextUseViolation} verification.
+     * </p>
      *
      * @see #getDisplay()
      * @see #getSystemService(String)
      * @see android.os.StrictMode.VmPolicy.Builder#detectIncorrectContextUse()
      */
-    public static boolean isUiContext(@NonNull Context context) {
-        return context.isUiContext();
+    public boolean isUiContext() {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
     }
+
+    /**
+     * Called when a {@link Context} is going to be released.
+     * This method can be overridden to perform the final cleanups, such as release
+     * {@link BroadcastReceiver} registrations.
+     *
+     * @see WindowContext#destroy()
+     *
+     * @hide
+     */
+    public void destroy() { }
 }

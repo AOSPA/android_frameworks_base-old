@@ -161,6 +161,10 @@ public final class MediaFormat {
     public static final String MIMETYPE_AUDIO_EAC3_JOC = "audio/eac3-joc";
     public static final String MIMETYPE_AUDIO_AC4 = "audio/ac4";
     public static final String MIMETYPE_AUDIO_SCRAMBLED = "audio/scrambled";
+    /** MIME type for MPEG-H Audio single stream */
+    public static final String MIMETYPE_AUDIO_MPEGH_MHA1 = "audio/mha1";
+    /** MIME type for MPEG-H Audio single stream, encapsulated in MHAS */
+    public static final String MIMETYPE_AUDIO_MPEGH_MHM1 = "audio/mhm1";
 
     /**
      * MIME type for HEIF still image data encoded in HEVC.
@@ -978,6 +982,82 @@ public final class MediaFormat {
      * @see MediaCodecInfo.EncoderCapabilities#isBitrateModeSupported(int)
      */
     public static final String KEY_BITRATE_MODE = "bitrate-mode";
+
+    /**
+     * A key describing the maximum Quantization Parameter allowed for encoding video.
+     * This key applies to all three video picture types (I, P, and B).
+     * The value is used directly for picture type I; a per-mime formula is used
+     * to calculate the value for the remaining picture types.
+     *
+     * This calculation can be avoided by directly specifying values for each picture type
+     * using the type-specific keys {@link #KEY_VIDEO_QP_I_MAX}, {@link #KEY_VIDEO_QP_P_MAX},
+     * and {@link #KEY_VIDEO_QP_B_MAX}.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_MAX = "video-qp-max";
+
+    /**
+     * A key describing the minimum Quantization Parameter allowed for encoding video.
+     * This key applies to all three video frame types (I, P, and B).
+     * The value is used directly for picture type I; a per-mime formula is used
+     * to calculate the value for the remaining picture types.
+     *
+     * This calculation can be avoided by directly specifying values for each picture type
+     * using the type-specific keys {@link #KEY_VIDEO_QP_I_MIN}, {@link #KEY_VIDEO_QP_P_MIN},
+     * and {@link #KEY_VIDEO_QP_B_MIN}.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_MIN = "video-qp-min";
+
+    /**
+     * A key describing the maximum Quantization Parameter allowed for encoding video.
+     * This value applies to video I-frames.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_I_MAX = "video-qp-i-max";
+
+    /**
+     * A key describing the minimum Quantization Parameter allowed for encoding video.
+     * This value applies to video I-frames.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_I_MIN = "video-qp-i-min";
+
+    /**
+     * A key describing the maximum Quantization Parameter allowed for encoding video.
+     * This value applies to video P-frames.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_P_MAX = "video-qp-p-max";
+
+    /**
+     * A key describing the minimum Quantization Parameter allowed for encoding video.
+     * This value applies to video P-frames.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_P_MIN = "video-qp-p-min";
+
+    /**
+     * A key describing the maximum Quantization Parameter allowed for encoding video.
+     * This value applies to video B-frames.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_B_MAX = "video-qp-b-max";
+
+    /**
+     * A key describing the minimum Quantization Parameter allowed for encoding video.
+     * This value applies to video B-frames.
+     *
+     * The associated value is an integer.
+     */
+    public static final String KEY_VIDEO_QP_B_MIN = "video-qp-b-min";
 
     /**
      * A key describing the audio session ID of the AudioTrack associated

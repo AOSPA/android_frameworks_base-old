@@ -33,6 +33,7 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.classifier.FalsingCollectorFake;
+import com.android.systemui.classifier.SingleTapClassifier;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -67,11 +68,16 @@ public class KeyguardPinBasedInputViewControllerTest extends SysuiTestCase {
     private LatencyTracker mLatencyTracker;
     @Mock
     private LiftToActivateListener mLiftToactivateListener;
+    @Mock
+    private EmergencyButtonController mEmergencyButtonController;
     private FalsingCollector mFalsingCollector = new FalsingCollectorFake();
+    @Mock
+    private SingleTapClassifier mSingleTapClassifier;
     @Mock
     private View mDeleteButton;
     @Mock
     private View mOkButton;
+    private NumPadKey[] mButtons = new NumPadKey[]{};
 
     private KeyguardPinBasedInputViewController mKeyguardPinViewController;
 
@@ -83,6 +89,7 @@ public class KeyguardPinBasedInputViewControllerTest extends SysuiTestCase {
         when(mPinBasedInputView.getPasswordTextViewId()).thenReturn(1);
         when(mPinBasedInputView.findViewById(1)).thenReturn(mPasswordEntry);
         when(mPinBasedInputView.isAttachedToWindow()).thenReturn(true);
+        when(mPinBasedInputView.getButtons()).thenReturn(mButtons);
         when(mPinBasedInputView.findViewById(R.id.keyguard_message_area))
                 .thenReturn(mKeyguardMessageArea);
         when(mPinBasedInputView.findViewById(R.id.delete_button))
@@ -92,7 +99,7 @@ public class KeyguardPinBasedInputViewControllerTest extends SysuiTestCase {
         mKeyguardPinViewController = new KeyguardPinBasedInputViewController(mPinBasedInputView,
                 mKeyguardUpdateMonitor, mSecurityMode, mLockPatternUtils, mKeyguardSecurityCallback,
                 mKeyguardMessageAreaControllerFactory, mLatencyTracker, mLiftToactivateListener,
-                mFalsingCollector) {
+                mEmergencyButtonController, mFalsingCollector) {
             @Override
             public void onResume(int reason) {
                 super.onResume(reason);

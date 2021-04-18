@@ -153,6 +153,16 @@ public class Utils {
     /**
      * Checks if any of the publicly defined strengths are set.
      *
+     * @param authenticators composed of one or more values from {@link Authenticators}
+     * @return true if biometric authentication is allowed.
+     */
+    static boolean isBiometricRequested(@Authenticators.Types int authenticators) {
+        return getPublicBiometricStrength(authenticators) != 0;
+    }
+
+    /**
+     * Checks if any of the publicly defined strengths are set.
+     *
      * @param promptInfo should be first processed by
      * {@link #combineAuthenticatorBundles(PromptInfo)}
      * @return true if biometric authentication is allowed.
@@ -166,7 +176,8 @@ public class Utils {
      * @param requestedStrength the strength that it must meet
      * @return true only if the sensor is at least as strong as the requested strength
      */
-    public static boolean isAtLeastStrength(int sensorStrength, int requestedStrength) {
+    public static boolean isAtLeastStrength(@Authenticators.Types int sensorStrength,
+            @Authenticators.Types int requestedStrength) {
         // Clear out any bits that are not reserved for biometric
         sensorStrength &= Authenticators.BIOMETRIC_MIN_STRENGTH;
 

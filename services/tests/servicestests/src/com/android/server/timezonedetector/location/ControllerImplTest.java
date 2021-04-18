@@ -78,12 +78,15 @@ public class ControllerImplTest {
         // For simplicity, the TestThreadingDomain uses the test's main thread. To execute posted
         // runnables, the test must call methods on mTestThreadingDomain otherwise those runnables
         // will never get a chance to execute.
+        LocationTimeZoneProvider.ProviderMetricsLogger stubbedProviderMetricsLogger = stateEnum -> {
+            // Stubbed.
+        };
         mTestThreadingDomain = new TestThreadingDomain();
         mTestCallback = new TestCallback(mTestThreadingDomain);
-        mTestPrimaryLocationTimeZoneProvider =
-                new TestLocationTimeZoneProvider(mTestThreadingDomain, "primary");
-        mTestSecondaryLocationTimeZoneProvider =
-                new TestLocationTimeZoneProvider(mTestThreadingDomain, "secondary");
+        mTestPrimaryLocationTimeZoneProvider = new TestLocationTimeZoneProvider(
+                stubbedProviderMetricsLogger, mTestThreadingDomain, "primary");
+        mTestSecondaryLocationTimeZoneProvider = new TestLocationTimeZoneProvider(
+                stubbedProviderMetricsLogger, mTestThreadingDomain, "secondary");
     }
 
     @Test
@@ -1177,8 +1180,10 @@ public class ControllerImplTest {
         /**
          * Creates the instance.
          */
-        TestLocationTimeZoneProvider(ThreadingDomain threadingDomain, String providerName) {
-            super(threadingDomain, providerName);
+        TestLocationTimeZoneProvider(ProviderMetricsLogger providerMetricsLogger,
+                ThreadingDomain threadingDomain, String providerName) {
+            super(providerMetricsLogger, threadingDomain, providerName,
+                    new FakeTimeZoneProviderEventPreProcessor());
         }
 
         public void setFailDuringInitialization(boolean failInitialization) {

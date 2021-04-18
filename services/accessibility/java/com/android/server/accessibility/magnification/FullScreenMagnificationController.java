@@ -79,7 +79,7 @@ public class FullScreenMagnificationController {
 
     private final ScreenStateObserver mScreenStateObserver;
 
-    private final MagnificationRequestObserver mMagnificationRequestObserver;
+    private final MagnificationInfoChangedCallback mMagnificationInfoChangedCallback;
 
     private int mUserId;
 
@@ -114,10 +114,13 @@ public class FullScreenMagnificationController {
         private boolean mUnregisterPending;
         private boolean mDeleteAfterUnregister;
 
+        private boolean mForceShowMagnifiableBounds;
+
         private final int mDisplayId;
 
         private static final int INVALID_ID = -1;
         private int mIdOfLastServiceToMagnify = INVALID_ID;
+        private boolean mMagnificationActivated = false;
 
         DisplayMagnification(int displayId) {
             mDisplayId = displayId;
@@ -281,6 +284,14 @@ public class FullScreenMagnificationController {
             mControllerCtx.getHandler().sendMessage(m);
         }
 
+        @Override
+        public void onImeWindowVisibilityChanged(boolean shown) {
+            final Message m = PooledLambda.obtainMessage(
+                    FullScreenMagnificationController::notifyImeWindowVisibilityChanged,
+                    FullScreenMagnificationController.this, shown);
+            mControllerCtx.getHandler().sendMessage(m);
+        }
+
         /**
          * Update our copy of the current magnification region
          *
@@ -321,6 +332,13 @@ public class FullScreenMagnificationController {
                         SpecAnimationBridge::updateSentSpecMainThread,
                         mSpecAnimationBridge, spec, animationCallback);
                 mControllerCtx.getHandler().sendMessage(m);
+            }
+
+            final boolean lastMagnificationActivated = mMagnificationActivated;
+            mMagnificationActivated = spec.scale > 1.0f;
+            if (mMagnificationActivated != lastMagnificationActivated) {
+                mMagnificationInfoChangedCallback.onFullScreenMagnificationActivationState(
+                        mMagnificationActivated);
             }
         }
 
@@ -412,9 +430,15 @@ public class FullScreenMagnificationController {
         @GuardedBy("mLock")
         void setForceShowMagnifiableBounds(boolean show) {
             if (mRegistered) {
+                mForceShowMagnifiableBounds = show;
                 mControllerCtx.getWindowManager().setForceShowMagnifiableBounds(
                         mDisplayId, show);
             }
+        }
+
+        @GuardedBy("mLock")
+        boolean isForceShowMagnifiableBounds() {
+            return mRegistered && mForceShowMagnifiableBounds;
         }
 
         @GuardedBy("mLock")
@@ -434,6 +458,7 @@ public class FullScreenMagnificationController {
                 onMagnificationChangedLocked();
             }
             mIdOfLastServiceToMagnify = INVALID_ID;
+            mForceShowMagnifiableBounds = false;
             sendSpecToAnimation(spec, animationCallback);
             return changed;
         }
@@ -481,7 +506,7 @@ public class FullScreenMagnificationController {
             sendSpecToAnimation(mCurrentMagnificationSpec, animationCallback);
             if (isMagnifying() && (id != INVALID_ID)) {
                 mIdOfLastServiceToMagnify = id;
-                mMagnificationRequestObserver.onRequestMagnificationSpec(mDisplayId,
+                mMagnificationInfoChangedCallback.onRequestMagnificationSpec(mDisplayId,
                         mIdOfLastServiceToMagnify);
             }
             return changed;
@@ -614,12 +639,12 @@ public class FullScreenMagnificationController {
      */
     public FullScreenMagnificationController(@NonNull Context context,
             @NonNull AccessibilityManagerService ams, @NonNull Object lock,
-            @NonNull MagnificationRequestObserver magnificationRequestObserver) {
+            @NonNull MagnificationInfoChangedCallback magnificationInfoChangedCallback) {
         this(new ControllerContext(context, ams,
                 LocalServices.getService(WindowManagerInternal.class),
                 new Handler(context.getMainLooper()),
                 context.getResources().getInteger(R.integer.config_longAnimTime)), lock,
-                magnificationRequestObserver);
+                magnificationInfoChangedCallback);
     }
 
     /**
@@ -628,12 +653,12 @@ public class FullScreenMagnificationController {
     @VisibleForTesting
     public FullScreenMagnificationController(@NonNull ControllerContext ctx,
             @NonNull Object lock,
-            @NonNull MagnificationRequestObserver magnificationRequestObserver) {
+            @NonNull MagnificationInfoChangedCallback magnificationInfoChangedCallback) {
         mControllerCtx = ctx;
         mLock = lock;
         mMainThreadId = mControllerCtx.getContext().getMainLooper().getThread().getId();
         mScreenStateObserver = new ScreenStateObserver(mControllerCtx.getContext(), this);
-        mMagnificationRequestObserver = magnificationRequestObserver;
+        mMagnificationInfoChangedCallback = magnificationInfoChangedCallback;
     }
 
     /**
@@ -1150,6 +1175,31 @@ public class FullScreenMagnificationController {
         }
     }
 
+    /**
+     * Notifies that the IME window visibility changed.
+     *
+     * @param shown {@code true} means the IME window shows on the screen. Otherwise it's
+     *                           hidden.
+     */
+    void notifyImeWindowVisibilityChanged(boolean shown) {
+        mMagnificationInfoChangedCallback.onImeWindowVisibilityChanged(shown);
+    }
+
+    /**
+     * Returns {@code true} if the magnifiable regions of the display is forced to be shown.
+     *
+     * @param displayId The logical display id.
+     */
+    public boolean isForceShowMagnifiableBounds(int displayId) {
+        synchronized (mLock) {
+            final DisplayMagnification display = mDisplays.get(displayId);
+            if (display == null) {
+                return false;
+            }
+            return display.isForceShowMagnifiableBounds();
+        }
+    }
+
     private void onScreenTurnedOff() {
         final Message m = PooledLambda.obtainMessage(
                 FullScreenMagnificationController::resetAllIfNeeded, this, false);
@@ -1496,7 +1546,7 @@ public class FullScreenMagnificationController {
         return animate ? STUB_ANIMATION_CALLBACK : null;
     }
 
-    interface  MagnificationRequestObserver {
+    interface  MagnificationInfoChangedCallback {
 
         /**
          * Called when the {@link MagnificationSpec} is changed with non-default
@@ -1506,5 +1556,20 @@ public class FullScreenMagnificationController {
          * @param serviceId the ID of the service requesting the change
          */
         void onRequestMagnificationSpec(int displayId, int serviceId);
+
+        /**
+         * Called when the state of the magnification activation is changed.
+         * It is for the logging data of the magnification activation state.
+         *
+         * @param activated {@code true} if the magnification is activated, otherwise {@code false}.
+         */
+        void onFullScreenMagnificationActivationState(boolean activated);
+
+        /**
+         * Called when the IME window visibility changed.
+         * @param shown {@code true} means the IME window shows on the screen. Otherwise it's
+         *                           hidden.
+         */
+        void onImeWindowVisibilityChanged(boolean shown);
     }
 }

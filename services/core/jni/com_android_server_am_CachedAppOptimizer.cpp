@@ -86,7 +86,7 @@ static int compactMemory(const std::vector<Vma>& vmas, int pid, int madviseType)
 
     int pidfd = syscall(__NR_pidfd_open, pid, 0);
     err = -errno;
-    if (err < 0) {
+    if (pidfd < 0) {
         // Skip compaction if failed to open pidfd with any error
         return err;
     }
@@ -135,7 +135,7 @@ static int getAnyPageAdvice(const Vma& vma) {
 static int compactProcess(int pid, VmaToAdviseFunc vmaToAdviseFunc) {
     ProcMemInfo meminfo(pid);
     std::vector<Vma> pageoutVmas, coldVmas;
-    auto vmaCollectorCb = [&](Vma vma) {
+    auto vmaCollectorCb = [&coldVmas,&pageoutVmas,&vmaToAdviseFunc](const Vma& vma) {
         int advice = vmaToAdviseFunc(vma);
         switch (advice) {
             case MADV_COLD:
@@ -146,7 +146,7 @@ static int compactProcess(int pid, VmaToAdviseFunc vmaToAdviseFunc) {
                 break;
         }
     };
-    meminfo.ForEachVma(vmaCollectorCb);
+    meminfo.ForEachVmaFromMaps(vmaCollectorCb);
 
     int err = compactMemory(pageoutVmas, pid, MADV_PAGEOUT);
     if (!err) {
@@ -232,21 +232,6 @@ static void com_android_server_am_CachedAppOptimizer_compactProcess(JNIEnv*, job
     compactProcessOrFallback(pid, compactionFlags);
 }
 
-static void com_android_server_am_CachedAppOptimizer_enableFreezerInternal(
-        JNIEnv *env, jobject clazz, jboolean enable) {
-    bool success = true;
-
-    if (enable) {
-        success = SetTaskProfiles(0, {"FreezerEnabled"}, true);
-    } else {
-        success = SetTaskProfiles(0, {"FreezerDisabled"}, true);
-    }
-
-    if (!success) {
-        jniThrowException(env, "java/lang/RuntimeException", "Unknown error");
-    }
-}
-
 static void com_android_server_am_CachedAppOptimizer_freezeBinder(
         JNIEnv *env, jobject clazz, jint pid, jboolean freeze) {
 
@@ -280,15 +265,19 @@ static jint com_android_server_am_CachedAppOptimizer_getBinderFreezeInfo(JNIEnv 
 
 static jstring com_android_server_am_CachedAppOptimizer_getFreezerCheckPath(JNIEnv* env,
                                                                             jobject clazz) {
-    return env->NewStringUTF(CGROUP_FREEZE_PATH);
+    std::string path;
+
+    if (!getAttributePathForTask("FreezerState", getpid(), &path)) {
+        path = "";
+    }
+
+    return env->NewStringUTF(path.c_str());
 }
 
 static const JNINativeMethod sMethods[] = {
         /* name, signature, funcPtr */
         {"compactSystem", "()V", (void*)com_android_server_am_CachedAppOptimizer_compactSystem},
         {"compactProcess", "(II)V", (void*)com_android_server_am_CachedAppOptimizer_compactProcess},
-        {"enableFreezerInternal", "(Z)V",
-         (void*)com_android_server_am_CachedAppOptimizer_enableFreezerInternal},
         {"freezeBinder", "(IZ)V", (void*)com_android_server_am_CachedAppOptimizer_freezeBinder},
         {"getBinderFreezeInfo", "(I)I",
          (void*)com_android_server_am_CachedAppOptimizer_getBinderFreezeInfo},

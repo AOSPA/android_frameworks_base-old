@@ -19,10 +19,13 @@ package android.media;
 import android.annotation.NonNull;
 import android.content.ContentResolver;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.util.Log;
+
+import com.android.modules.annotation.MinSdk;
 
 import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
@@ -39,10 +42,12 @@ import java.util.Set;
  for handling newer video codec format and media features.
 
  <p>
- Android 12 introduces seamless media transcoding feature. By default, Android assumes apps can
- support playback of all media formats. Apps that would like to request that media be transcoded
- into a more compatible format should declare their media capabilities in a media_capabilities
- .xml resource file and add it as a property tag in the AndroidManifest.xml file. Here is a example:
+ Android 12 introduces Compatible media transcoding feature.  See
+ <a href="https://developer.android.com/about/versions/12/features#compatible_media_transcoding">
+ Compatible media transcoding</a>. By default, Android assumes apps can support playback of all
+ media formats. Apps that would like to request that media be transcoded into a more compatible
+ format should declare their media capabilities in a media_capabilities.xml resource file and add it
+ as a property tag in the AndroidManifest.xml file. Here is a example:
  <pre>
  {@code
  <media-capabilities xmlns:android="http://schemas.android.com/apk/res/android">
@@ -75,6 +80,7 @@ import java.util.Set;
  There are four types of HDR video(Dolby-Vision, HDR10, HDR10+, HLG) supported by the platform,
  application will only need to specify individual types they supported.
  */
+@MinSdk(Build.VERSION_CODES.S)
 public final class ApplicationMediaCapabilities implements Parcelable {
     private static final String TAG = "ApplicationMediaCapabilities";
 

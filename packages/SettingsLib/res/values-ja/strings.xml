@@ -404,6 +404,7 @@
     <string name="transcode_user_control" msgid="6176368544817731314">"デフォルトのコード変換をオーバーライド"</string>
     <string name="transcode_enable_all" msgid="2411165920039166710">"コード変換を有効にする"</string>
     <string name="transcode_default" msgid="3784803084573509491">"アプリによる最新形式のサポートを想定"</string>
+    <string name="transcode_notification" msgid="5560515979793436168">"コード変換に関する通知の表示"</string>
     <string name="runningservices_settings_title" msgid="6460099290493086515">"実行中のサービス"</string>
     <string name="runningservices_settings_summary" msgid="1046080643262665743">"現在実行中のサービスを表示して制御する"</string>
     <string name="select_webview_provider_title" msgid="3917815648099445503">"WebView の実装"</string>
@@ -423,7 +424,7 @@
     <string name="daltonizer_mode_protanomaly" msgid="7805583306666608440">"第一色弱（赤緑）"</string>
     <string name="daltonizer_mode_tritanomaly" msgid="7135266249220732267">"第三色弱（青黄）"</string>
     <string name="accessibility_display_daltonizer_preference_title" msgid="1810693571332381974">"色補正"</string>
-    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="1284746051652993443">"色補正機能では、デバイスで色をどのように表示するかを調整できます"</string>
+    <string name="accessibility_display_daltonizer_preference_subtitle" msgid="2333641630205214702">"デバイスで色をどのように表示するかを調整できます。この設定は以下の場合に役立ちます。&lt;br/&gt;&lt;br/&gt; &lt;ol&gt; &lt;li&gt;&amp;nbsp;色をより正確に表示したい場合&lt;/li&gt; &lt;li&gt;&amp;nbsp;はっきり読み取れるよう色を取り除きたい場合&lt;/li&gt; &lt;/ol&gt;"</string>
     <string name="daltonizer_type_overridden" msgid="4509604753672535721">"<xliff:g id="TITLE">%1$s</xliff:g>によって上書き済み"</string>
     <string name="power_remaining_settings_home_page" msgid="4885165789445462557">"<xliff:g id="PERCENTAGE">%1$s</xliff:g> - <xliff:g id="TIME_STRING">%2$s</xliff:g>"</string>
     <string name="power_remaining_duration_only" msgid="8264199158671531431">"残り時間: 約 <xliff:g id="TIME_REMAINING">%1$s</xliff:g>"</string>
@@ -514,6 +515,7 @@
     <string name="zen_mode_forever" msgid="3339224497605461291">"OFF にするまで"</string>
     <string name="time_unit_just_now" msgid="3006134267292728099">"たった今"</string>
     <string name="media_transfer_this_device_name" msgid="2716555073132169240">"スマートフォンのスピーカー"</string>
+    <string name="media_transfer_this_phone" msgid="7194341457812151531">"このスマートフォン"</string>
     <string name="profile_connect_timeout_subtext" msgid="4043408193005851761">"接続エラーです。デバイスを OFF にしてから ON に戻してください"</string>
     <string name="media_transfer_wired_device_name" msgid="4447880899964056007">"有線オーディオ デバイス"</string>
     <string name="help_label" msgid="3528360748637781274">"ヘルプとフィードバック"</string>

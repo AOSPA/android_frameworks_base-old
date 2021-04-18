@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.IVold;
 
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -38,6 +39,17 @@ public abstract class StorageManagerInternal {
     public abstract int getExternalStorageMountMode(int uid, String packageName);
 
     /**
+     * Checks whether the {@code packageName} with {@code uid} has full external storage access via
+     * the {@link MANAGE_EXTERNAL_STORAGE} permission.
+     *
+     * @param uid the UID for which to check access.
+     * @param packageName the package in the UID for making the call.
+     * @return whether the {@code packageName} has full external storage access.
+     * Returns {@code true} if it has access, {@code false} otherwise.
+     */
+    public abstract boolean hasExternalStorageAccess(int uid, String packageName);
+
+    /**
      * A listener for reset events in the StorageManagerService.
      */
     public interface ResetListener {
@@ -49,6 +61,11 @@ public abstract class StorageManagerInternal {
          */
         void onReset(IVold vold);
     }
+
+    /**
+     * Return true if fuse is mounted.
+     */
+    public abstract boolean isFuseMounted(int userId);
 
     /**
      * Create storage directories if it does not exist.
@@ -112,4 +129,10 @@ public abstract class StorageManagerInternal {
      * @param bytes number of bytes which need to be freed
      */
     public abstract void freeCache(@Nullable String volumeUuid, long bytes);
+
+    /**
+     * Returns the {@link VolumeInfo#getId()} values for the volumes matching
+     * {@link VolumeInfo#isPrimary()}
+     */
+    public abstract List<String> getPrimaryVolumeIds();
 }

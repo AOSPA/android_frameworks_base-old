@@ -20,7 +20,6 @@ import static android.Manifest.permission.ACCESS_COARSE_LOCATION;
 import static android.Manifest.permission.ACCESS_FINE_LOCATION;
 import static android.Manifest.permission.LOCATION_HARDWARE;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
-import static android.location.GpsStatus.GPS_EVENT_STARTED;
 import static android.location.LocationRequest.createFromDeprecatedCriteria;
 import static android.location.LocationRequest.createFromDeprecatedProvider;
 
@@ -44,15 +43,13 @@ import android.app.PropertyInvalidatedCache;
 import android.compat.Compatibility;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledAfter;
-import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.IntentFilter;
 import android.content.pm.PackageManager;
 import android.location.provider.IProviderRequestListener;
 import android.location.provider.ProviderProperties;
 import android.location.provider.ProviderRequest;
-import android.location.provider.ProviderRequest.Listener;
+import android.location.provider.ProviderRequest.ChangedListener;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
@@ -77,6 +74,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.WeakHashMap;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
@@ -348,71 +346,12 @@ public class LocationManager {
      */
     public static final String EXTRA_GNSS_CAPABILITIES = "android.location.extra.GNSS_CAPABILITIES";
 
-    /**
-     * Broadcast intent action when GNSS antenna infos change. Includes an intent extra,
-     * {@link #EXTRA_GNSS_ANTENNA_INFOS}, with an ArrayList of the new {@link GnssAntennaInfo}. This
-     * may be read via {@link android.content.Intent#getParcelableArrayListExtra(String)}.
-     *
-     * @see #EXTRA_GNSS_ANTENNA_INFOS
-     * @see #getGnssAntennaInfos()
-     */
-    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_GNSS_ANTENNA_INFOS_CHANGED =
-            "android.location.action.GNSS_ANTENNA_INFOS_CHANGED";
-
-    /**
-     * Intent extra included with {@link #ACTION_GNSS_ANTENNA_INFOS_CHANGED} broadcasts, containing
-     * the new ArrayList of {@link GnssAntennaInfo}. This may be read via
-     * {@link android.content.Intent#getParcelableArrayListExtra(String)}.
-     *
-     * @see #ACTION_GNSS_ANTENNA_INFOS_CHANGED
-     */
-    public static final String EXTRA_GNSS_ANTENNA_INFOS =
-            "android.location.extra.GNSS_ANTENNA_INFOS";
-
-    /**
-     * Broadcast intent action for Settings app to inject a footer at the bottom of location
-     * settings. This is for use only by apps that are included in the system image.
-     *
-     * <p>To inject a footer to location settings, you must declare a broadcast receiver for
-     * this action in the manifest:
-     * <pre>
-     *     &lt;receiver android:name="com.example.android.footer.MyFooterInjector"&gt;
-     *         &lt;intent-filter&gt;
-     *             &lt;action android:name="com.android.settings.location.INJECT_FOOTER" /&gt;
-     *         &lt;/intent-filter&gt;
-     *         &lt;meta-data
-     *             android:name="com.android.settings.location.FOOTER_STRING"
-     *             android:resource="@string/my_injected_footer_string" /&gt;
-     *     &lt;/receiver&gt;
-     * </pre>
-     *
-     * <p>This broadcast receiver will never actually be invoked. See also
-     * {#METADATA_SETTINGS_FOOTER_STRING}.
-     *
-     * @hide
-     */
-    public static final String SETTINGS_FOOTER_DISPLAYED_ACTION =
-            "com.android.settings.location.DISPLAYED_FOOTER";
-
-    /**
-     * Metadata name for {@link LocationManager#SETTINGS_FOOTER_DISPLAYED_ACTION} broadcast
-     * receivers to specify a string resource id as location settings footer text. This is for use
-     * only by apps that are included in the system image.
-     *
-     * <p>See {@link #SETTINGS_FOOTER_DISPLAYED_ACTION} for more detail on how to use.
-     *
-     * @hide
-     */
-    public static final String METADATA_SETTINGS_FOOTER_STRING =
-            "com.android.settings.location.FOOTER_STRING";
-
     private static final long MAX_SINGLE_LOCATION_TIMEOUT_MS = 30 * 1000;
 
     private static final String CACHE_KEY_LOCATION_ENABLED_PROPERTY =
             "cache_key.location_enabled";
 
-    private static ILocationManager getService() throws RemoteException {
+    static ILocationManager getService() throws RemoteException {
         try {
             return ILocationManager.Stub.asInterface(
                     ServiceManager.getServiceOrThrow(Context.LOCATION_SERVICE));
@@ -439,11 +378,13 @@ public class LocationManager {
                 new GnssNavigationTransportManager();
     }
 
-    private static final ProviderRequestTransportManager sProviderRequestListeners =
-            new ProviderRequestTransportManager();
+    private static class ProviderRequestLazyLoader {
+        static final ProviderRequestTransportManager sProviderRequestListeners =
+                new ProviderRequestTransportManager();
+    }
 
-    private final Context mContext;
-    private final ILocationManager mService;
+    final Context mContext;
+    final ILocationManager mService;
 
     private volatile PropertyInvalidatedCache<Integer, Boolean> mLocationEnabledCache =
             new PropertyInvalidatedCache<Integer, Boolean>(
@@ -1972,12 +1913,33 @@ public class LocationManager {
      * allowed} for your app.
      */
     public void addTestProvider(@NonNull String provider, @NonNull ProviderProperties properties) {
+        addTestProvider(provider, properties, Collections.emptySet());
+    }
+
+    /**
+     * Creates a test location provider and adds it to the set of active providers. This provider
+     * will replace any provider with the same name that exists prior to this call.
+     *
+     * @param provider the provider name
+     * @param properties the provider properties
+     * @param extraAttributionTags additional attribution tags associated with this provider
+     *
+     * @throws IllegalArgumentException if provider is null
+     * @throws IllegalArgumentException if properties is null
+     * @throws SecurityException if {@link android.app.AppOpsManager#OPSTR_MOCK_LOCATION
+     * mock location app op} is not set to {@link android.app.AppOpsManager#MODE_ALLOWED
+     * allowed} for your app.
+     */
+    public void addTestProvider(@NonNull String provider, @NonNull ProviderProperties properties,
+            @NonNull Set<String> extraAttributionTags) {
         Preconditions.checkArgument(provider != null, "invalid null provider");
         Preconditions.checkArgument(properties != null, "invalid null properties");
+        Preconditions.checkArgument(extraAttributionTags != null,
+                "invalid null extra attribution tags");
 
         try {
-            mService.addTestProvider(provider, properties, mContext.getOpPackageName(),
-                    mContext.getFeatureId());
+            mService.addTestProvider(provider, properties, new ArrayList<>(extraAttributionTags),
+                    mContext.getOpPackageName(), mContext.getFeatureId());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2655,10 +2617,11 @@ public class LocationManager {
     }
 
     /**
-     * Registers a GNSS antenna info listener. GNSS antenna info updates will only be received while
-     * the {@link #GPS_PROVIDER} is enabled, and while the client app is in the foreground.
+     * Registers a GNSS antenna info listener that will receive all changes to antenna info. Use
+     * {@link #getGnssAntennaInfos()} to get current antenna info.
      *
-     * <p>Not all GNSS chipsets support antenna info updates, see {@link #getGnssCapabilities()}.
+     * <p>Not all GNSS chipsets support antenna info updates, see {@link #getGnssCapabilities()}. If
+     * unsupported, the listener will never be invoked.
      *
      * <p>Prior to Android S, this requires the {@link Manifest.permission#ACCESS_FINE_LOCATION}
      * permission.
@@ -2669,10 +2632,7 @@ public class LocationManager {
      *
      * @throws IllegalArgumentException if executor is null
      * @throws IllegalArgumentException if listener is null
-     *
-     * @deprecated Prefer to use a receiver for {@link #ACTION_GNSS_ANTENNA_INFOS_CHANGED}.
      */
-    @Deprecated
     public boolean registerAntennaInfoListener(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull GnssAntennaInfo.Listener listener) {
@@ -2682,13 +2642,10 @@ public class LocationManager {
     }
 
     /**
-     * Unregisters a GNSS Antenna Info listener.
+     * Unregisters a GNSS antenna info listener.
      *
      * @param listener a {@link GnssAntennaInfo.Listener} object to remove
-     *
-     * @deprecated Prefer to use a receiver for {@link #ACTION_GNSS_ANTENNA_INFOS_CHANGED}.
      */
-    @Deprecated
     public void unregisterAntennaInfoListener(@NonNull GnssAntennaInfo.Listener listener) {
         GnssLazyLoader.sGnssAntennaInfoListeners.removeListener(listener);
     }
@@ -2796,34 +2753,33 @@ public class LocationManager {
     }
 
     /**
-     * Registers a {@link ProviderRequest.Listener} to all providers.
+     * Adds a {@link ProviderRequest.ChangedListener} for listening to all providers'
+     * {@link ProviderRequest} changed events.
      *
      * @param executor the executor that the callback runs on
      * @param listener the listener to register
-     * @return {@code true} always
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.LOCATION_HARDWARE)
-    public boolean registerProviderRequestListener(
+    public void addProviderRequestChangedListener(
             @NonNull @CallbackExecutor Executor executor,
-            @NonNull Listener listener) {
-        sProviderRequestListeners.addListener(listener,
+            @NonNull ChangedListener listener) {
+        ProviderRequestLazyLoader.sProviderRequestListeners.addListener(listener,
                 new ProviderRequestTransport(executor, listener));
-        return true;
     }
 
     /**
-     * Unregisters a {@link ProviderRequest.Listener}.
+     * Removes a {@link ProviderRequest.ChangedListener} that has been added.
      *
      * @param listener the listener to remove.
      * @hide
      */
     @SystemApi
     @RequiresPermission(Manifest.permission.LOCATION_HARDWARE)
-    public void unregisterProviderRequestListener(
-            @NonNull Listener listener) {
-        sProviderRequestListeners.removeListener(listener);
+    public void removeProviderRequestChangedListener(
+            @NonNull ProviderRequest.ChangedListener listener) {
+        ProviderRequestLazyLoader.sProviderRequestListeners.removeListener(listener);
     }
 
     /**
@@ -2935,11 +2891,16 @@ public class LocationManager {
     private static class GnssStatusTransportManager extends
             ListenerTransportManager<GnssStatusTransport> {
 
+        GnssStatusTransportManager() {
+            super(false);
+        }
+
         @Override
         protected void registerTransport(GnssStatusTransport transport)
                             throws RemoteException {
             getService().registerGnssStatusCallback(transport, transport.getPackage(),
-                    transport.getAttributionTag());
+                    transport.getAttributionTag(),
+                    AppOpsManager.toReceiverId(transport.getListener()));
         }
 
         @Override
@@ -2952,11 +2913,16 @@ public class LocationManager {
     private static class GnssNmeaTransportManager extends
             ListenerTransportManager<GnssNmeaTransport> {
 
+        GnssNmeaTransportManager() {
+            super(false);
+        }
+
         @Override
         protected void registerTransport(GnssNmeaTransport transport)
                             throws RemoteException {
             getService().registerGnssNmeaCallback(transport, transport.getPackage(),
-                    transport.getAttributionTag());
+                    transport.getAttributionTag(),
+                    AppOpsManager.toReceiverId(transport.getListener()));
         }
 
         @Override
@@ -2969,11 +2935,16 @@ public class LocationManager {
     private static class GnssMeasurementsTransportManager extends
             ListenerTransportManager<GnssMeasurementsTransport> {
 
+        GnssMeasurementsTransportManager() {
+            super(false);
+        }
+
         @Override
         protected void registerTransport(GnssMeasurementsTransport transport)
                             throws RemoteException {
             getService().addGnssMeasurementsListener(transport.getRequest(), transport,
-                    transport.getPackage(), transport.getAttributionTag());
+                    transport.getPackage(), transport.getAttributionTag(),
+                    AppOpsManager.toReceiverId(transport.getListener()));
         }
 
         @Override
@@ -2986,26 +2957,38 @@ public class LocationManager {
     private static class GnssAntennaTransportManager extends
             ListenerTransportManager<GnssAntennaInfoTransport> {
 
-        @Override
-        protected void registerTransport(GnssAntennaInfoTransport transport) {
-            transport.getContext().registerReceiver(transport,
-                    new IntentFilter(ACTION_GNSS_ANTENNA_INFOS_CHANGED));
+        GnssAntennaTransportManager() {
+            super(false);
         }
 
         @Override
-        protected void unregisterTransport(GnssAntennaInfoTransport transport) {
-            transport.getContext().unregisterReceiver(transport);
+        protected void registerTransport(GnssAntennaInfoTransport transport)
+                throws RemoteException {
+            getService().addGnssAntennaInfoListener(transport, transport.getPackage(),
+                    transport.getAttributionTag(),
+                    AppOpsManager.toReceiverId(transport.getListener()));
+        }
+
+        @Override
+        protected void unregisterTransport(GnssAntennaInfoTransport transport)
+                throws RemoteException {
+            getService().removeGnssAntennaInfoListener(transport);
         }
     }
 
     private static class GnssNavigationTransportManager extends
             ListenerTransportManager<GnssNavigationTransport> {
 
+        GnssNavigationTransportManager() {
+            super(false);
+        }
+
         @Override
         protected void registerTransport(GnssNavigationTransport transport)
                             throws RemoteException {
             getService().addGnssNavigationMessageListener(transport,
-                    transport.getPackage(), transport.getAttributionTag());
+                    transport.getPackage(), transport.getAttributionTag(),
+                    AppOpsManager.toReceiverId(transport.getListener()));
         }
 
         @Override
@@ -3017,6 +3000,10 @@ public class LocationManager {
 
     private static class ProviderRequestTransportManager extends
             ListenerTransportManager<ProviderRequestTransport> {
+
+        ProviderRequestTransportManager() {
+            super(false);
+        }
 
         @Override
         protected void registerTransport(ProviderRequestTransport transport)
@@ -3135,6 +3122,8 @@ public class LocationManager {
         }
     }
 
+    /** @deprecated */
+    @Deprecated
     private static class GpsAdapter extends GnssStatus.Callback {
 
         private final GpsStatus.Listener mGpsListener;
@@ -3145,7 +3134,7 @@ public class LocationManager {
 
         @Override
         public void onStarted() {
-            mGpsListener.onGpsStatusChanged(GPS_EVENT_STARTED);
+            mGpsListener.onGpsStatusChanged(GpsStatus.GPS_EVENT_STARTED);
         }
 
         @Override
@@ -3222,6 +3211,8 @@ public class LocationManager {
         }
     }
 
+    /** @deprecated */
+    @Deprecated
     private static class GpsStatusTransport extends GnssStatusTransport {
 
         static volatile int sTtff;
@@ -3341,11 +3332,12 @@ public class LocationManager {
         }
     }
 
-    private static class GnssAntennaInfoTransport extends BroadcastReceiver implements
+    private static class GnssAntennaInfoTransport extends IGnssAntennaInfoListener.Stub implements
             ListenerTransport<GnssAntennaInfo.Listener> {
 
         private final Executor mExecutor;
-        private final Context mContext;
+        private final String mPackageName;
+        private final String mAttributionTag;
 
         private volatile @Nullable GnssAntennaInfo.Listener mListener;
 
@@ -3354,12 +3346,17 @@ public class LocationManager {
             Preconditions.checkArgument(executor != null, "invalid null executor");
             Preconditions.checkArgument(listener != null, "invalid null listener");
             mExecutor = executor;
-            mContext = context;
+            mPackageName = context.getPackageName();
+            mAttributionTag = context.getAttributionTag();
             mListener = listener;
         }
 
-        public Context getContext() {
-            return mContext;
+        public String getPackage() {
+            return mPackageName;
+        }
+
+        public String getAttributionTag() {
+            return mAttributionTag;
         }
 
         @Override
@@ -3373,12 +3370,8 @@ public class LocationManager {
         }
 
         @Override
-        public void onReceive(Context context, Intent intent) {
-            ArrayList<GnssAntennaInfo> infos = intent.getParcelableArrayListExtra(
-                    EXTRA_GNSS_ANTENNA_INFOS);
-            if (infos != null) {
-                execute(mExecutor, callback -> callback.onGnssAntennaInfoReceived(infos));
-            }
+        public void onGnssAntennaInfoChanged(List<GnssAntennaInfo> antennaInfos) {
+            execute(mExecutor, callback -> callback.onGnssAntennaInfoReceived(antennaInfos));
         }
     }
 
@@ -3431,13 +3424,13 @@ public class LocationManager {
     }
 
     private static class ProviderRequestTransport extends IProviderRequestListener.Stub
-            implements ListenerTransport<ProviderRequest.Listener> {
+            implements ListenerTransport<ChangedListener> {
 
         private final Executor mExecutor;
 
-        private volatile @Nullable ProviderRequest.Listener mListener;
+        private volatile @Nullable ProviderRequest.ChangedListener mListener;
 
-        ProviderRequestTransport(Executor executor, ProviderRequest.Listener listener) {
+        ProviderRequestTransport(Executor executor, ChangedListener listener) {
             Preconditions.checkArgument(executor != null, "invalid null executor");
             Preconditions.checkArgument(listener != null, "invalid null callback");
             mExecutor = executor;
@@ -3450,7 +3443,7 @@ public class LocationManager {
         }
 
         @Override
-        public @Nullable ProviderRequest.Listener getListener() {
+        public @Nullable ProviderRequest.ChangedListener getListener() {
             return mListener;
         }
 
@@ -3460,6 +3453,8 @@ public class LocationManager {
         }
     }
 
+    /** @deprecated */
+    @Deprecated
     private static class BatchedLocationCallbackWrapper implements LocationListener {
 
         private final BatchedLocationCallback mCallback;
@@ -3479,6 +3474,8 @@ public class LocationManager {
         }
     }
 
+    /** @deprecated */
+    @Deprecated
     private static class BatchedLocationCallbackTransport extends LocationListenerTransport {
 
         BatchedLocationCallbackTransport(BatchedLocationCallback callback, Handler handler) {

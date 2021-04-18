@@ -16,12 +16,9 @@
 
 package com.android.systemui.classifier;
 
-import static com.android.systemui.classifier.Classifier.UNLOCK;
-
 import android.util.DisplayMetrics;
 import android.view.MotionEvent;
 
-import com.android.systemui.util.time.FakeSystemClock;
 import com.android.systemui.utils.leaks.FakeBatteryController;
 import com.android.systemui.utils.leaks.LeakCheckedTest;
 
@@ -45,9 +42,7 @@ public class ClassifierTest extends LeakCheckedTest {
         displayMetrics.widthPixels = 1000;
         displayMetrics.heightPixels = 1000;
         mFakeBatteryController = new FakeBatteryController(getLeakCheck());
-        mDataProvider = new FalsingDataProvider(displayMetrics, mFakeBatteryController,
-                new FakeSystemClock());
-        mDataProvider.setInteractionType(UNLOCK);
+        mDataProvider = new FalsingDataProvider(displayMetrics, mFakeBatteryController);
     }
 
     @After

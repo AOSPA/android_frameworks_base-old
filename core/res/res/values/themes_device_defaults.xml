@@ -214,6 +214,9 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
         <item name="colorBackground">@color/background_device_default_dark</item>
         <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
@@ -237,7 +240,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -270,7 +278,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -305,7 +318,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -339,7 +357,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -388,6 +411,9 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
         <item name="colorBackground">@color/background_device_default_dark</item>
         <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
@@ -416,7 +442,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -448,7 +479,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -481,7 +517,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -530,7 +571,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -564,7 +610,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -596,7 +647,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -630,7 +686,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -663,7 +724,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -696,7 +762,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -729,7 +800,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -762,7 +838,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -799,7 +880,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -833,7 +919,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -864,7 +955,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -1049,6 +1145,9 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="colorBackground">@color/background_device_default_light</item>
         <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
@@ -1068,7 +1167,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_dark</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_dark</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1100,7 +1204,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1133,7 +1242,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1168,7 +1282,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1202,7 +1321,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1253,6 +1377,9 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="colorBackground">@color/background_device_default_light</item>
         <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
@@ -1280,7 +1407,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1315,7 +1447,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1351,7 +1488,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1388,6 +1530,9 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
@@ -1407,6 +1552,9 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
@@ -1425,7 +1573,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1462,7 +1615,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1497,7 +1655,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1531,7 +1694,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1564,7 +1732,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1597,7 +1770,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1628,7 +1806,12 @@ easier.
         <item name="colorPrimary">@color/primary_device_default_light</item>
         <item name="colorPrimaryDark">@color/primary_dark_device_default_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1676,6 +1859,9 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings_light</item>
         <item name="colorSecondary">@color/secondary_device_default_settings_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="colorEdgeEffect">@color/edge_effect_device_default_light</item>
 
@@ -1706,6 +1892,9 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings_light</item>
         <item name="colorSecondary">@color/secondary_device_default_settings_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="colorControlNormal">?attr/textColorPrimary</item>
         <item name="alertDialogTheme">@style/Theme.DeviceDefault.Light.Dialog.Alert</item>
@@ -1731,6 +1920,9 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings_light</item>
         <item name="colorSecondary">@color/secondary_device_default_settings_light</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
         <item name="alertDialogTheme">@style/Theme.DeviceDefault.Light.Dialog.Alert</item>
 
@@ -1749,7 +1941,12 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings</item>
         <item name="colorSecondary">@color/secondary_device_default_settings</item>
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_dark</item>
+        <item name="colorBackground">@color/background_device_default_dark</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_dark</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_dark</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_dark</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_dark</item>
@@ -1781,7 +1978,12 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings</item>
         <item name="colorSecondary">@color/secondary_device_default_settings</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1823,7 +2025,12 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings</item>
         <item name="colorSecondary">@color/secondary_device_default_settings</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1858,7 +2065,12 @@ easier.
         <item name="colorPrimaryDark">@color/primary_dark_device_default_settings</item>
         <item name="colorSecondary">@color/secondary_device_default_settings</item>
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
         <item name="colorError">@color/error_color_device_default_light</item>
+        <item name="colorBackground">@color/background_device_default_light</item>
+        <item name="colorBackgroundFloating">@color/background_floating_device_default_light</item>
         <item name="textColorPrimary">@color/text_color_primary_device_default_light</item>
         <item name="textColorSecondary">@color/text_color_secondary_device_default_light</item>
         <item name="textColorTertiary">@color/text_color_tertiary_device_default_light</item>
@@ -1956,10 +2168,16 @@ easier.
 
     <style name="ThemeOverlay.DeviceDefault.Accent">
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
     </style>
 
     <style name="ThemeOverlay.DeviceDefault.Accent.Light">
         <item name="colorAccent">@color/accent_device_default_light</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
     </style>
 
     <!-- Theme overlay that replaces colorAccent with the colorAccent from {@link #Theme_DeviceDefault_DayNight}. -->
@@ -1968,6 +2186,9 @@ easier.
 
     <style name="ThemeOverlay.DeviceDefault.Dark.ActionBar.Accent" parent="ThemeOverlay.Material.Dark.ActionBar">
         <item name="colorAccent">@color/accent_device_default_dark</item>
+        <item name="colorAccentPrimary">@color/accent_primary_device_default</item>
+        <item name="colorAccentSecondary">@color/accent_secondary_device_default</item>
+        <item name="colorAccentTertiary">@color/accent_tertiary_device_default</item>
     </style>
 
     <style name="Theme.DeviceDefault.Light.Dialog.Alert.UserSwitchingDialog" parent="Theme.DeviceDefault.NoActionBar.Fullscreen">

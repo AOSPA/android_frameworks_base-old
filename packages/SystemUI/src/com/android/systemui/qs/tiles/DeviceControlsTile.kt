@@ -16,6 +16,7 @@
 
 package com.android.systemui.qs.tiles
 
+import android.content.ComponentName
 import android.content.Intent
 import android.os.Handler
 import android.os.Looper
@@ -25,12 +26,14 @@ import com.android.internal.logging.MetricsLogger
 import com.android.systemui.R
 import com.android.systemui.controls.ControlsServiceInfo
 import com.android.systemui.controls.dagger.ControlsComponent
-import com.android.systemui.controls.dagger.ControlsComponent.Visibility.UNAVAILABLE
+import com.android.systemui.controls.dagger.ControlsComponent.Visibility.AVAILABLE
 import com.android.systemui.controls.management.ControlsListingController
-import com.android.systemui.controls.ui.ControlsDialog
+import com.android.systemui.controls.ui.ControlsActivity
+import com.android.systemui.controls.ui.ControlsUiController
 import com.android.systemui.dagger.qualifiers.Background
 import com.android.systemui.dagger.qualifiers.Main
 import com.android.systemui.plugins.ActivityStarter
+import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.qs.QSTile
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.qs.QSHost
@@ -40,24 +43,24 @@ import com.android.systemui.statusbar.FeatureFlags
 import com.android.systemui.util.settings.GlobalSettings
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
-import javax.inject.Provider
 
 class DeviceControlsTile @Inject constructor(
     host: QSHost,
     @Background backgroundLooper: Looper,
     @Main mainHandler: Handler,
+    falsingManager: FalsingManager,
     metricsLogger: MetricsLogger,
     statusBarStateController: StatusBarStateController,
     activityStarter: ActivityStarter,
     qsLogger: QSLogger,
     private val controlsComponent: ControlsComponent,
     private val featureFlags: FeatureFlags,
-    private val dialogProvider: Provider<ControlsDialog>,
     globalSettings: GlobalSettings
 ) : QSTileImpl<QSTile.State>(
         host,
         backgroundLooper,
         mainHandler,
+        falsingManager,
         metricsLogger,
         statusBarStateController,
         activityStarter,
@@ -72,7 +75,6 @@ class DeviceControlsTile @Inject constructor(
     private var hasControlsApps = AtomicBoolean(false)
     private val intent = Intent(Settings.ACTION_DEVICE_CONTROLS_SETTINGS)
 
-    private var controlsDialog: ControlsDialog? = null
     private val icon = ResourceIcon.get(R.drawable.ic_device_light)
 
     private val listingCallback = object : ControlsListingController.ControlsListingCallback {
@@ -92,7 +94,7 @@ class DeviceControlsTile @Inject constructor(
     override fun isAvailable(): Boolean {
         return featureFlags.isKeyguardLayoutEnabled &&
                 controlsLockscreen &&
-                controlsComponent.getVisibility() != UNAVAILABLE
+                controlsComponent.getControlsController().isPresent
     }
 
     override fun newTileState(): QSTile.State {
@@ -102,45 +104,39 @@ class DeviceControlsTile @Inject constructor(
     }
 
     override fun handleDestroy() {
-        dismissDialog()
         super.handleDestroy()
     }
 
-    private fun createDialog() {
-        if (controlsDialog?.isShowing != true) {
-            controlsDialog = dialogProvider.get()
-        }
-    }
-
-    private fun dismissDialog() {
-        controlsDialog?.dismiss()?.also {
-            controlsDialog = null
-        }
-    }
-
     override fun handleClick() {
-        if (state.state != Tile.STATE_UNAVAILABLE) {
+        if (state.state == Tile.STATE_ACTIVE) {
             mUiHandler.post {
-                createDialog()
-                controlsDialog?.show(controlsComponent.getControlsUiController().get())
+                mHost.collapsePanels()
+                val i = Intent().apply {
+                    component = ComponentName(mContext, ControlsActivity::class.java)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(ControlsUiController.BACK_TO_GLOBAL_ACTIONS, false)
+                }
+                mContext.startActivity(i)
             }
         }
     }
 
     override fun handleUpdateState(state: QSTile.State, arg: Any?) {
         state.label = tileLabel
-        state.secondaryLabel = ""
-        state.stateDescription = ""
+
         state.contentDescription = state.label
         state.icon = icon
-        if (hasControlsApps.get()) {
-            state.state = Tile.STATE_ACTIVE
-            if (controlsDialog == null) {
-                mUiHandler.post(this::createDialog)
+        if (controlsComponent.isEnabled() && hasControlsApps.get()) {
+            if (controlsComponent.getVisibility() == AVAILABLE) {
+                state.state = Tile.STATE_ACTIVE
+                state.secondaryLabel = ""
+            } else {
+                state.state = Tile.STATE_INACTIVE
+                state.secondaryLabel = mContext.getText(R.string.controls_tile_locked)
             }
+            state.stateDescription = state.secondaryLabel
         } else {
             state.state = Tile.STATE_UNAVAILABLE
-            dismissDialog()
         }
     }
 

@@ -35,11 +35,11 @@ import android.os.ServiceDebugInfo;
 import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.sysprop.WatchdogProperties;
 import android.util.EventLog;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.sysprop.WatchdogProperties;
 
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.os.ZygoteConnectionConstants;
@@ -58,9 +58,9 @@ import java.io.BufferedReader;
 import java.io.StringWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
-import java.util.concurrent.TimeUnit;
 import java.util.HashSet;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 import java.util.Date;
 import java.text.SimpleDateFormat;
 
@@ -79,7 +79,8 @@ public class Watchdog {
     //         can trigger the watchdog.
     // Note 2: The debug value is already below the wait time in ZygoteConnection. Wrapped
     //         applications may not work with a debug build. CTS will fail.
-    private static final long DEFAULT_TIMEOUT = DB ? 10 * 1000 : 60 * 1000;
+    private static final long DEFAULT_TIMEOUT =
+            (DB ? 10 * 1000 : 60 * 1000) * Build.HW_TIMEOUT_MULTIPLIER;
     private static final long CHECK_INTERVAL = DEFAULT_TIMEOUT / 2;
 
     // These are temporally ordered: larger values as lateness increases
@@ -743,7 +744,7 @@ public class Watchdog {
                         if (mActivity != null) {
                             mActivity.addErrorToDropBox(
                                     "watchdog", null, "system_server", null, null, null,
-                                    subject, report.toString(), finalStack, null);
+                                    subject, report.toString(), finalStack, null, null, null);
                         }
                         FrameworkStatsLog.write(FrameworkStatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED,
                                 subject);

@@ -22,7 +22,6 @@ import static com.android.systemui.classifier.FalsingModule.DOUBLE_TAP_TOUCH_SLO
 import android.view.MotionEvent;
 
 import java.util.List;
-import java.util.Queue;
 
 import javax.inject.Inject;
 import javax.inject.Named;
@@ -47,19 +46,20 @@ public class DoubleTapClassifier extends FalsingClassifier {
     }
 
     @Override
-    Result calculateFalsingResult(double historyPenalty, double historyConfidence) {
+    Result calculateFalsingResult(
+            @Classifier.InteractionType int interactionType,
+            double historyBelief, double historyConfidence) {
         List<MotionEvent> secondTapEvents = getRecentMotionEvents();
-        Queue<? extends List<MotionEvent>> historicalEvents = getHistoricalEvents();
-        List<MotionEvent> firstTapEvents = historicalEvents.peek();
+        List<MotionEvent> firstTapEvents = getPriorMotionEvents();
 
         StringBuilder reason = new StringBuilder();
 
         if (firstTapEvents == null) {
-            return Result.falsed(1, "Only one gesture recorded");
+            return falsed(0, "Only one gesture recorded");
         }
 
         return !isDoubleTap(firstTapEvents, secondTapEvents, reason)
-                ? Result.falsed(0.5, reason.toString()) : Result.passed(0.5);
+                ? falsed(0.5, reason.toString()) : Result.passed(0.5);
     }
 
     /** Returns true if the two supplied lists of {@link MotionEvent}s look like a double-tap. */

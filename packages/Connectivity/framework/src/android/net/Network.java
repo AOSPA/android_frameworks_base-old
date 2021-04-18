@@ -27,13 +27,12 @@ import android.os.Parcelable;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.OsConstants;
-import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.okhttp.internalandroidapi.Dns;
-import com.android.okhttp.internalandroidapi.HttpURLConnectionFactory;
 
 import libcore.io.IoUtils;
+import libcore.net.http.Dns;
+import libcore.net.http.HttpURLConnectionFactory;
 
 import java.io.FileDescriptor;
 import java.io.IOException;
@@ -93,6 +92,7 @@ public class Network implements Parcelable {
     // value in the native/android/net.c NDK implementation.
     private static final long HANDLE_MAGIC = 0xcafed00dL;
     private static final int HANDLE_MAGIC_SIZE = 32;
+    private static final int USE_LOCAL_NAMESERVERS_FLAG = 0x80000000;
 
     // A boolean to control how getAllByName()/getByName() behaves in the face
     // of Private DNS.
@@ -142,7 +142,7 @@ public class Network implements Parcelable {
      * @throws UnknownHostException if the address lookup fails.
      */
     public InetAddress[] getAllByName(String host) throws UnknownHostException {
-        return InetAddress.getAllByNameOnNet(host, getNetIdForResolv());
+        return InetAddressCompat.getAllByNameOnNet(host, getNetIdForResolv());
     }
 
     /**
@@ -155,7 +155,7 @@ public class Network implements Parcelable {
      *             if the address lookup fails.
      */
     public InetAddress getByName(String host) throws UnknownHostException {
-        return InetAddress.getByNameOnNet(host, getNetIdForResolv());
+        return InetAddressCompat.getByNameOnNet(host, getNetIdForResolv());
     }
 
     /**
@@ -190,7 +190,7 @@ public class Network implements Parcelable {
      */
     public int getNetIdForResolv() {
         return mPrivateDnsBypass
-                ? (int) (0x80000000L | (long) netId)  // Non-portable DNS resolution flag.
+                ? (USE_LOCAL_NAMESERVERS_FLAG | netId)  // Non-portable DNS resolution flag.
                 : netId;
     }
 
@@ -299,7 +299,7 @@ public class Network implements Parcelable {
         // Set configuration on the HttpURLConnectionFactory that will be good for all
         // connections created by this Network. Configuration that might vary is left
         // until openConnection() and passed as arguments.
-        HttpURLConnectionFactory urlConnectionFactory = new HttpURLConnectionFactory();
+        HttpURLConnectionFactory urlConnectionFactory = HttpURLConnectionFactory.createInstance();
         urlConnectionFactory.setDns(dnsLookup); // Let traffic go via dnsLookup
         // A private connection pool just for this Network.
         urlConnectionFactory.setNewConnectionPool(httpMaxConnections,
@@ -453,12 +453,13 @@ public class Network implements Parcelable {
             throw new IllegalArgumentException(
                     "Network.fromNetworkHandle refusing to instantiate NETID_UNSET Network.");
         }
-        if ((networkHandle & ((1L << HANDLE_MAGIC_SIZE) - 1)) != HANDLE_MAGIC
-                || networkHandle < 0) {
+        if ((networkHandle & ((1L << HANDLE_MAGIC_SIZE) - 1)) != HANDLE_MAGIC) {
             throw new IllegalArgumentException(
                     "Value passed to fromNetworkHandle() is not a network handle.");
         }
-        return new Network((int) (networkHandle >> HANDLE_MAGIC_SIZE));
+        final int netIdForResolv = (int) (networkHandle >>> HANDLE_MAGIC_SIZE);
+        return new Network((netIdForResolv & ~USE_LOCAL_NAMESERVERS_FLAG),
+                ((netIdForResolv & USE_LOCAL_NAMESERVERS_FLAG) != 0) /* privateDnsBypass */);
     }
 
     /**
@@ -486,7 +487,7 @@ public class Network implements Parcelable {
         if (netId == 0) {
             return 0L;  // make this zero condition obvious for debugging
         }
-        return (((long) netId) << HANDLE_MAGIC_SIZE) | HANDLE_MAGIC;
+        return (((long) getNetIdForResolv()) << HANDLE_MAGIC_SIZE) | HANDLE_MAGIC;
     }
 
     // implement the Parcelable interface
@@ -525,12 +526,5 @@ public class Network implements Parcelable {
     @Override
     public String toString() {
         return Integer.toString(netId);
-    }
-
-    /** @hide */
-    public void dumpDebug(ProtoOutputStream proto, long fieldId) {
-        final long token = proto.start(fieldId);
-        proto.write(NetworkProto.NET_ID, netId);
-        proto.end(token);
     }
 }

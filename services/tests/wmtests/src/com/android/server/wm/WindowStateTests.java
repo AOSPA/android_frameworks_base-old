@@ -249,21 +249,22 @@ public class WindowStateTests extends WindowTestsBase {
         assertFalse(appWindow.canBeImeTarget());
         assertFalse(imeWindow.canBeImeTarget());
 
-        // Simulate the window is in split screen primary stack and the current state is
-        // minimized and home stack is resizable, so that we should ignore input for the stack.
-        final DockedStackDividerController controller =
+        // Simulate the window is in split screen primary root task and the current state is
+        // minimized and home root task is resizable, so that we should ignore input for the
+        // root task.
+        final DockedTaskDividerController controller =
                 mDisplayContent.getDockedDividerController();
-        final Task stack = createTaskStackOnDisplay(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY,
-                ACTIVITY_TYPE_STANDARD, mDisplayContent);
+        final Task rootTask = createTask(mDisplayContent,
+                WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, ACTIVITY_TYPE_STANDARD);
         spyOn(appWindow);
         spyOn(controller);
-        spyOn(stack);
-        stack.setFocusable(false);
-        doReturn(stack).when(appWindow).getRootTask();
+        spyOn(rootTask);
+        rootTask.setFocusable(false);
+        doReturn(rootTask).when(appWindow).getRootTask();
 
         // Make sure canBeImeTarget is false due to shouldIgnoreInput is true;
         assertFalse(appWindow.canBeImeTarget());
-        assertTrue(stack.shouldIgnoreInput());
+        assertTrue(rootTask.shouldIgnoreInput());
     }
 
     @Test
@@ -521,7 +522,7 @@ public class WindowStateTests extends WindowTestsBase {
         matrix.mapPoints(curSurfacePos);
         verify(t).setPosition(eq(app.mSurfaceControl), eq(curSurfacePos[0]), eq(curSurfacePos[1]));
 
-        app.finishSeamlessRotation(false /* timeout */);
+        app.finishSeamlessRotation(t);
         assertFalse(app.mSeamlesslyRotated);
         assertNull(app.mPendingSeamlessRotate);
 

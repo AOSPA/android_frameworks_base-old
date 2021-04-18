@@ -1,5 +1,5 @@
 /*
- * Copyright (C) 2017 The Android Open Source Project
+ * Copyright (C) 2021 The Android Open Source Project
  *
  * Licensed under the Apache License, Version 2.0 (the "License");
  * you may not use this file except in compliance with the License.
@@ -17,14 +17,14 @@
 package android.net;
 
 import static android.annotation.SystemApi.Client.MODULE_LIBRARIES;
+import static android.net.NetworkCapabilities.REDACT_FOR_NETWORK_SETTINGS;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.annotation.SystemApi;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.util.SparseArray;
-
-import com.android.internal.util.MessageUtils;
+import android.text.TextUtils;
 
 import java.util.Objects;
 
@@ -38,14 +38,29 @@ import java.util.Objects;
  */
 @SystemApi(client = MODULE_LIBRARIES)
 public final class VpnTransportInfo implements TransportInfo, Parcelable {
-    private static final SparseArray<String> sTypeToString =
-            MessageUtils.findMessageNames(new Class[]{VpnManager.class}, new String[]{"TYPE_VPN_"});
-
     /** Type of this VPN. */
-    @VpnManager.VpnType public final int type;
+    public final int type;
 
-    public VpnTransportInfo(@VpnManager.VpnType int type) {
+    @Nullable
+    public final String sessionId;
+
+    @Override
+    public long getApplicableRedactions() {
+        return REDACT_FOR_NETWORK_SETTINGS;
+    }
+
+    /**
+     * Create a copy of a {@link VpnTransportInfo} with the sessionId redacted if necessary.
+     */
+    @NonNull
+    public VpnTransportInfo makeCopy(long redactions) {
+        return new VpnTransportInfo(type,
+            ((redactions & REDACT_FOR_NETWORK_SETTINGS) != 0) ? null : sessionId);
+    }
+
+    public VpnTransportInfo(int type, @Nullable String sessionId) {
         this.type = type;
+        this.sessionId = sessionId;
     }
 
     @Override
@@ -53,18 +68,17 @@ public final class VpnTransportInfo implements TransportInfo, Parcelable {
         if (!(o instanceof VpnTransportInfo)) return false;
 
         VpnTransportInfo that = (VpnTransportInfo) o;
-        return this.type == that.type;
+        return (this.type == that.type) && TextUtils.equals(this.sessionId, that.sessionId);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(type);
+        return Objects.hash(type, sessionId);
     }
 
     @Override
     public String toString() {
-        final String typeString = sTypeToString.get(type, "VPN_TYPE_???");
-        return String.format("VpnTransportInfo{%s}", typeString);
+        return String.format("VpnTransportInfo{type=%d, sessionId=%s}", type, sessionId);
     }
 
     @Override
@@ -75,12 +89,13 @@ public final class VpnTransportInfo implements TransportInfo, Parcelable {
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeInt(type);
+        dest.writeString(sessionId);
     }
 
     public static final @NonNull Creator<VpnTransportInfo> CREATOR =
             new Creator<VpnTransportInfo>() {
         public VpnTransportInfo createFromParcel(Parcel in) {
-            return new VpnTransportInfo(in.readInt());
+            return new VpnTransportInfo(in.readInt(), in.readString());
         }
         public VpnTransportInfo[] newArray(int size) {
             return new VpnTransportInfo[size];

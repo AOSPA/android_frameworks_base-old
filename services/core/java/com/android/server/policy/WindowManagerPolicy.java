@@ -238,8 +238,9 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
         /**
          * Removes the starting window surface. Do not hold the window manager lock when calling
          * this method!
+         * @param animate Whether need to play the default exit animation for starting window.
          */
-        void remove();
+        void remove(boolean animate);
     }
 
     /**
@@ -303,9 +304,10 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
         /**
          * Notifies the window manager that screen is being turned off.
          *
+         * @param displayId the ID of the display which is turning off
          * @param listener callback to call when display can be turned off
          */
-        void screenTurningOff(ScreenOffListener listener);
+        void screenTurningOff(int displayId, ScreenOffListener listener);
 
         /**
          * Convert the lid state to a human readable format.
@@ -712,9 +714,9 @@ public interface WindowManagerPolicy extends WindowManagerPolicyConstants {
      * @return The starting surface.
      *
      */
-    public StartingSurface addSplashScreen(IBinder appToken, String packageName, int theme,
-            CompatibilityInfo compatInfo, CharSequence nonLocalizedLabel, int labelRes, int icon,
-            int logo, int windowFlags, Configuration overrideConfig, int displayId);
+    StartingSurface addSplashScreen(IBinder appToken, int userId, String packageName,
+            int theme, CompatibilityInfo compatInfo, CharSequence nonLocalizedLabel, int labelRes,
+            int icon, int logo, int windowFlags, Configuration overrideConfig, int displayId);
 
     /**
      * Set or clear a window which can behave as the keyguard.

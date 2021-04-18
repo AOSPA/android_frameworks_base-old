@@ -17,6 +17,8 @@
 package android.app;
 
 import static android.app.ActivityManager.PROCESS_STATE_UNKNOWN;
+import static android.app.ConfigurationController.createNewConfigAndUpdateIfNotNull;
+import static android.app.ConfigurationController.freeTextLayoutCachesIfNeeded;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.app.servertransaction.ActivityLifecycleItem.ON_CREATE;
@@ -79,7 +81,6 @@ import android.content.res.AssetManager;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.content.res.Resources;
-import android.content.res.Resources.Theme;
 import android.content.res.loader.ResourcesLoader;
 import android.database.sqlite.SQLiteDatabase;
 import android.database.sqlite.SQLiteDebug;
@@ -158,12 +159,10 @@ import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.SparseIntArray;
 import android.util.SuperNotCalledException;
 import android.util.UtilConfig;
 import android.util.proto.ProtoOutputStream;
 import android.view.Choreographer;
-import android.view.ContextThemeWrapper;
 import android.view.Display;
 import android.view.DisplayAdjustments;
 import android.view.DisplayAdjustments.FixedRotationAdjustments;
@@ -177,8 +176,11 @@ import android.view.Window;
 import android.view.WindowManager;
 import android.view.WindowManagerGlobal;
 import android.view.autofill.AutofillId;
+import android.view.contentcapture.IContentCaptureManager;
+import android.view.contentcapture.IContentCaptureOptionsCallback;
 import android.view.translation.TranslationSpec;
 import android.webkit.WebView;
+import android.window.SizeConfigurationBuckets;
 import android.window.SplashScreen;
 import android.window.SplashScreenView;
 
@@ -227,7 +229,6 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Objects;
 import java.util.TimeZone;
@@ -250,7 +251,8 @@ final class RemoteServiceException extends AndroidRuntimeException {
  *
  * {@hide}
  */
-public final class ActivityThread extends ClientTransactionHandler {
+public final class ActivityThread extends ClientTransactionHandler
+        implements ActivityThreadInternal {
     /** @hide */
     public static final String TAG = "ActivityThread";
     private static final android.graphics.Bitmap.Config THUMBNAIL_FORMAT = Bitmap.Config.RGB_565;
@@ -291,7 +293,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     /** Use background GC policy and default JIT threshold. */
     private static final int VM_PROCESS_STATE_JANK_IMPERCEPTIBLE = 1;
 
-    private static final int REMOVE_SPLASH_SCREEN_VIEW_TIMEOUT = 5000;
     /**
      * Denotes an invalid sequence number corresponding to a process state change.
      */
@@ -362,13 +363,15 @@ public final class ActivityThread extends ClientTransactionHandler {
     @UnsupportedAppUsage
     AppBindData mBoundApplication;
     Profiler mProfiler;
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553,
+            publicAlternatives = "Use {@code Context#getResources()#getConfiguration()#densityDpi} "
+                    + "instead.")
     int mCurDefaultDisplayDpi;
     @UnsupportedAppUsage
     boolean mDensityCompatMode;
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 176961850, maxTargetSdk = Build.VERSION_CODES.R,
+            publicAlternatives = "Use {@code Context#getResources()#getConfiguration()} instead.")
     Configuration mConfiguration;
-    Configuration mCompatConfiguration;
     @UnsupportedAppUsage
     Application mInitialApplication;
     @UnsupportedAppUsage
@@ -419,7 +422,8 @@ public final class ActivityThread extends ClientTransactionHandler {
     @GuardedBy("mResourcesManager")
     final ArrayList<ActivityClientRecord> mRelaunchingActivities = new ArrayList<>();
     @GuardedBy("mResourcesManager")
-    @UnsupportedAppUsage
+    @UnsupportedAppUsage(trackingBug = 176961850, maxTargetSdk = Build.VERSION_CODES.R,
+            publicAlternatives = "Use {@code Context#getResources()#getConfiguration()} instead.")
     Configuration mPendingConfiguration = null;
     // An executor that performs multi-step transactions.
     private final TransactionExecutor mTransactionExecutor = new TransactionExecutor(this);
@@ -513,11 +517,19 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     boolean mHasImeComponent = false;
 
+    private IContentCaptureOptionsCallback.Stub mContentCaptureOptionsCallback = null;
+
+    /** A client side controller to handle process level configuration changes. */
+    private ConfigurationController mConfigurationController;
+
     /** Activity client record, used for bookkeeping for the real {@link Activity} instance. */
     public static final class ActivityClientRecord {
         @UnsupportedAppUsage
         public IBinder token;
         public IBinder assistToken;
+        // A reusable token for other purposes, e.g. content capture, translation. It shouldn't be
+        // used without security checks
+        public IBinder shareableActivityToken;
         int ident;
         @UnsupportedAppUsage
         Intent intent;
@@ -592,6 +604,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         @LifecycleState
         private int mLifecycleState = PRE_ON_CREATE;
 
+        private SizeConfigurationBuckets mSizeConfigurations;
+
         @VisibleForTesting
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public ActivityClientRecord() {
@@ -605,9 +619,11 @@ public final class ActivityThread extends ClientTransactionHandler {
                 PersistableBundle persistentState, List<ResultInfo> pendingResults,
                 List<ReferrerIntent> pendingNewIntents, ActivityOptions activityOptions,
                 boolean isForward, ProfilerInfo profilerInfo, ClientTransactionHandler client,
-                IBinder assistToken, FixedRotationAdjustments fixedRotationAdjustments) {
+                IBinder assistToken, FixedRotationAdjustments fixedRotationAdjustments,
+                IBinder shareableActivityToken) {
             this.token = token;
             this.assistToken = assistToken;
+            this.shareableActivityToken = shareableActivityToken;
             this.ident = ident;
             this.intent = intent;
             this.referrer = referrer;
@@ -1935,11 +1951,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         public static final int PURGE_RESOURCES = 161;
         public static final int ATTACH_STARTUP_AGENTS = 162;
         public static final int UPDATE_UI_TRANSLATION_STATE = 163;
+        public static final int SET_CONTENT_CAPTURE_OPTIONS_CALLBACK = 164;
 
         public static final int INSTRUMENT_WITHOUT_RESTART = 170;
         public static final int FINISH_INSTRUMENTATION_WITHOUT_RESTART = 171;
-
-        public static final int REMOVE_SPLASH_SCREEN_VIEW = 172;
 
         String codeToString(int code) {
             if (DEBUG_MESSAGES) {
@@ -1984,11 +1999,11 @@ public final class ActivityThread extends ClientTransactionHandler {
                     case PURGE_RESOURCES: return "PURGE_RESOURCES";
                     case ATTACH_STARTUP_AGENTS: return "ATTACH_STARTUP_AGENTS";
                     case UPDATE_UI_TRANSLATION_STATE: return "UPDATE_UI_TRANSLATION_STATE";
+                    case SET_CONTENT_CAPTURE_OPTIONS_CALLBACK:
+                        return "SET_CONTENT_CAPTURE_OPTIONS_CALLBACK";
                     case INSTRUMENT_WITHOUT_RESTART: return "INSTRUMENT_WITHOUT_RESTART";
                     case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                         return "FINISH_INSTRUMENTATION_WITHOUT_RESTART";
-                    case REMOVE_SPLASH_SCREEN_VIEW:
-                        return "REMOVE_SPLASH_SCREEN_VIEW";
                 }
             }
             return Integer.toString(code);
@@ -2047,7 +2062,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case CONFIGURATION_CHANGED:
-                    handleConfigurationChanged((Configuration) msg.obj);
+                    mConfigurationController.handleConfigurationChanged((Configuration) msg.obj);
                     break;
                 case CLEAN_UP_CONTEXT:
                     ContextCleanupInfo cci = (ContextCleanupInfo)msg.obj;
@@ -2176,14 +2191,14 @@ public final class ActivityThread extends ClientTransactionHandler {
                             (TranslationSpec) args.arg3, (TranslationSpec) args.arg4,
                             (List<AutofillId>) args.arg5);
                     break;
+                case SET_CONTENT_CAPTURE_OPTIONS_CALLBACK:
+                    handleSetContentCaptureOptionsCallback((String) msg.obj);
+                    break;
                 case INSTRUMENT_WITHOUT_RESTART:
                     handleInstrumentWithoutRestart((AppBindData) msg.obj);
                     break;
                 case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                     handleFinishInstrumentationWithoutRestart();
-                    break;
-                case REMOVE_SPLASH_SCREEN_VIEW:
-                    handleRemoveSplashScreenView((ActivityClientRecord) msg.obj);
                     break;
             }
             Object obj = msg.obj;
@@ -2314,7 +2329,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     @UnsupportedAppUsage
-    final Handler getHandler() {
+    public Handler getHandler() {
         return mH;
     }
 
@@ -2525,6 +2540,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         return mExecutor;
     }
 
+    @Override
     @UnsupportedAppUsage
     public Application getApplication() {
         return mInitialApplication;
@@ -2535,6 +2551,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         return mBoundApplication.processName;
     }
 
+    @Override
     @UnsupportedAppUsage
     public ContextImpl getSystemContext() {
         synchronized (this) {
@@ -2545,6 +2562,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
+    @Override
     public ContextImpl getSystemUiContext() {
         synchronized (this) {
             if (mSystemUiContext == null) {
@@ -3158,11 +3176,13 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public final Activity startActivityNow(Activity parent, String id,
-        Intent intent, ActivityInfo activityInfo, IBinder token, Bundle state,
-        Activity.NonConfigurationInstances lastNonConfigurationInstances, IBinder assistToken) {
+            Intent intent, ActivityInfo activityInfo, IBinder token, Bundle state,
+            Activity.NonConfigurationInstances lastNonConfigurationInstances, IBinder assistToken,
+            IBinder shareableActivityToken) {
         ActivityClientRecord r = new ActivityClientRecord();
             r.token = token;
             r.assistToken = assistToken;
+            r.shareableActivityToken = shareableActivityToken;
             r.ident = 0;
             r.intent = intent;
             r.state = state;
@@ -3201,15 +3221,16 @@ public final class ActivityThread extends ClientTransactionHandler {
 
     @VisibleForTesting(visibility = PACKAGE)
     public Configuration getConfiguration() {
-        return mConfiguration;
+        return mConfigurationController.getConfiguration();
     }
 
     @Override
     public void updatePendingConfiguration(Configuration config) {
-        synchronized (mResourcesManager) {
-            if (mPendingConfiguration == null || mPendingConfiguration.isOtherSeqNewer(config)) {
-                mPendingConfiguration = config;
-            }
+        final Configuration updatedConfig =
+                mConfigurationController.updatePendingConfiguration(config);
+        // This is only done to maintain @UnsupportedAppUsage and should be removed someday.
+        if (updatedConfig != null) {
+            mPendingConfiguration = updatedConfig;
         }
     }
 
@@ -3217,6 +3238,7 @@ public final class ActivityThread extends ClientTransactionHandler {
      * Returns {@code true} if the {@link android.app.ActivityManager.ProcessState} of the current
      * process is cached.
      */
+    @Override
     @VisibleForTesting
     public boolean isCachedProcessState() {
         synchronized (mAppThread) {
@@ -3253,10 +3275,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         // non-cached. Except the case where there is a launching activity because the
         // LaunchActivityItem will handle it.
         if (wasCached && !isCachedProcessState() && mNumLaunchingActivities.get() == 0) {
-            final Configuration pendingConfig;
-            synchronized (mResourcesManager) {
-                pendingConfig = mPendingConfiguration;
-            }
+            final Configuration pendingConfig =
+                    mConfigurationController.getPendingConfiguration(false /* clearPending */);
             if (pendingConfig == null) {
                 return;
             }
@@ -3482,7 +3502,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             if (activity != null) {
                 CharSequence title = r.activityInfo.loadLabel(appContext.getPackageManager());
-                Configuration config = new Configuration(mCompatConfiguration);
+                Configuration config =
+                        new Configuration(mConfigurationController.getCompatConfiguration());
                 if (r.overrideConfig != null) {
                     config.updateFrom(r.overrideConfig);
                 }
@@ -3505,7 +3526,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                         r.ident, app, r.intent, r.activityInfo, title, r.parent,
                         r.embeddedID, r.lastNonConfigurationInstances, config,
                         r.referrer, r.voiceInteractor, window, r.configCallback,
-                        r.assistToken);
+                        r.assistToken, r.shareableActivityToken);
 
                 if (customIntent != null) {
                     activity.mIntent = customIntent;
@@ -3695,7 +3716,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         // Make sure we are running with the most recent config.
-        handleConfigurationChanged(null, null);
+        mConfigurationController.handleConfigurationChanged(null, null);
 
         if (localLOGV) Slog.v(
             TAG, "Handling launch of " + r);
@@ -3713,7 +3734,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         final Activity a = performLaunchActivity(r, customIntent);
 
         if (a != null) {
-            r.createdConfig = new Configuration(mConfiguration);
+            r.createdConfig = new Configuration(mConfigurationController.getConfiguration());
             reportSizeConfigurations(r);
             if (!r.activity.mFinished && pendingActions != null) {
                 pendingActions.setOldState(r.state);
@@ -3738,23 +3759,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (configurations == null) {
             return;
         }
-        SparseIntArray horizontal = new SparseIntArray();
-        SparseIntArray vertical = new SparseIntArray();
-        SparseIntArray smallest = new SparseIntArray();
-        for (int i = configurations.length - 1; i >= 0; i--) {
-            Configuration config = configurations[i];
-            if (config.screenHeightDp != Configuration.SCREEN_HEIGHT_DP_UNDEFINED) {
-                vertical.put(config.screenHeightDp, 0);
-            }
-            if (config.screenWidthDp != Configuration.SCREEN_WIDTH_DP_UNDEFINED) {
-                horizontal.put(config.screenWidthDp, 0);
-            }
-            if (config.smallestScreenWidthDp != Configuration.SMALLEST_SCREEN_WIDTH_DP_UNDEFINED) {
-                smallest.put(config.smallestScreenWidthDp, 0);
-            }
-        }
-        ActivityClient.getInstance().reportSizeConfigurations(r.token, horizontal.copyKeys(),
-                vertical.copyKeys(), smallest.copyKeys());
+        r.mSizeConfigurations = new SizeConfigurationBuckets(configurations);
+        ActivityClient.getInstance().reportSizeConfigurations(r.token, r.mSizeConfigurations);
     }
 
     private void deliverNewIntents(ActivityClientRecord r, List<ReferrerIntent> intents) {
@@ -4007,6 +4013,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         view.cacheRootWindow(r.window);
         view.makeSystemUIColorsTransparent();
         r.activity.mSplashScreenView = view;
+        view.attachHostActivity(r.activity);
         view.requestLayout();
         // Ensure splash screen view is shown before remove the splash screen window.
         final ViewRootImpl impl = decorView.getViewRootImpl();
@@ -4049,24 +4056,12 @@ public final class ActivityThread extends ClientTransactionHandler {
     @Override
     public void handOverSplashScreenView(@NonNull ActivityClientRecord r) {
         if (r.activity.mSplashScreenView != null) {
-            Message msg = mH.obtainMessage(H.REMOVE_SPLASH_SCREEN_VIEW, r);
-            mH.sendMessageDelayed(msg, REMOVE_SPLASH_SCREEN_VIEW_TIMEOUT);
             synchronized (this) {
                 if (mSplashScreenGlobal != null) {
                     mSplashScreenGlobal.dispatchOnExitAnimation(r.token,
                             r.activity.mSplashScreenView);
                 }
             }
-        }
-    }
-
-    /**
-     * Force remove splash screen view.
-     */
-    private void handleRemoveSplashScreenView(@NonNull ActivityClientRecord r) {
-        if (r.activity.mSplashScreenView != null) {
-            r.activity.mSplashScreenView.remove();
-            r.activity.mSplashScreenView = null;
         }
     }
 
@@ -4946,10 +4941,10 @@ public final class ActivityThread extends ClientTransactionHandler {
         r.setState(ON_PAUSE);
     }
 
-    // TODO(b/127877792): Make LocalActivityManager call performStopActivityInner. We cannot remove
+    // TODO(b/176961850): Make LocalActivityManager call performStopActivityInner. We cannot remove
     // this since it's a high usage hidden API.
     /** Called from {@link LocalActivityManager}. */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 127877792,
+    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 176961850,
             publicAlternatives = "{@code N/A}")
     final void performStopActivity(IBinder token, boolean saveState, String reason) {
         ActivityClientRecord r = mActivities.get(token);
@@ -5142,7 +5137,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     private void onCoreSettingsChange() {
         if (updateDebugViewAttributeState()) {
             // request all activities to relaunch for the changes to take place
-            relaunchAllActivities(false /* preserveWindows */);
+            relaunchAllActivities(false /* preserveWindows */, "onCoreSettingsChange");
         }
     }
 
@@ -5161,7 +5156,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         return previousState != View.sDebugViewAttributes;
     }
 
-    private void relaunchAllActivities(boolean preserveWindows) {
+    private void relaunchAllActivities(boolean preserveWindows, String reason) {
+        Log.i(TAG, "Relaunch all activities: " + reason);
         for (int i = mActivities.size() - 1; i >= 0; i--) {
             scheduleRelaunchActivityIfPossible(mActivities.valueAt(i), preserveWindows);
         }
@@ -5176,8 +5172,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         if (apk != null) {
             apk.setCompatibilityInfo(data.info);
         }
-        handleConfigurationChanged(mConfiguration, data.info);
-        WindowManagerGlobal.getInstance().reportNewConfiguration(mConfiguration);
+        mConfigurationController.handleConfigurationChanged(data.info);
     }
 
     private void deliverResults(ActivityClientRecord r, List<ResultInfo> results, String reason) {
@@ -5434,7 +5429,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         unscheduleGcIdler();
         mSomeActivitiesChanged = true;
 
-        Configuration changedConfig = null;
         int configChanges = 0;
 
         // First: make sure we have the most recent configuration and most
@@ -5463,20 +5457,20 @@ public final class ActivityThread extends ClientTransactionHandler {
             if (DEBUG_CONFIGURATION) Slog.v(TAG, "Relaunching activity "
                     + tmp.token + " with configChanges=0x"
                     + Integer.toHexString(configChanges));
-
-            if (mPendingConfiguration != null) {
-                changedConfig = mPendingConfiguration;
-                mPendingConfiguration = null;
-            }
         }
+
+        Configuration changedConfig = mConfigurationController.getPendingConfiguration(
+                true /* clearPending */);
+        mPendingConfiguration = null;
 
         if (tmp.createdConfig != null) {
             // If the activity manager is passing us its current config,
             // assume that is really what we want regardless of what we
             // may have pending.
-            if (mConfiguration == null
-                    || (tmp.createdConfig.isOtherSeqNewer(mConfiguration)
-                            && mConfiguration.diff(tmp.createdConfig) != 0)) {
+            final Configuration config = mConfigurationController.getConfiguration();
+            if (config == null
+                    || (tmp.createdConfig.isOtherSeqNewer(config)
+                            && config.diff(tmp.createdConfig) != 0)) {
                 if (changedConfig == null
                         || tmp.createdConfig.isOtherSeqNewer(changedConfig)) {
                     changedConfig = tmp.createdConfig;
@@ -5489,9 +5483,12 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         // If there was a pending configuration change, execute it first.
         if (changedConfig != null) {
-            mCurDefaultDisplayDpi = changedConfig.densityDpi;
-            updateDefaultDensity();
-            handleConfigurationChanged(changedConfig, null);
+            mConfigurationController.updateDefaultDensity(changedConfig.densityDpi);
+            mConfigurationController.handleConfigurationChanged(changedConfig, null);
+
+            // These are only done to maintain @UnsupportedAppUsage and should be removed someday.
+            mCurDefaultDisplayDpi = mConfigurationController.getCurDefaultDisplayDpi();
+            mConfiguration = mConfigurationController.getConfiguration();
         }
 
         ActivityClientRecord r = mActivities.get(tmp.token);
@@ -5536,6 +5533,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     void scheduleRelaunchActivity(IBinder token) {
         final ActivityClientRecord r = mActivities.get(token);
         if (r != null) {
+            Log.i(TAG, "Schedule relaunch activity: " + r.activityInfo.name);
             scheduleRelaunchActivityIfPossible(r, !r.stopped /* preserveWindow */);
         }
     }
@@ -5578,7 +5576,8 @@ public final class ActivityThread extends ClientTransactionHandler {
 
         // Initialize a relaunch request.
         final MergedConfiguration mergedConfiguration = new MergedConfiguration(
-                r.createdConfig != null ? r.createdConfig : mConfiguration,
+                r.createdConfig != null
+                        ? r.createdConfig : mConfigurationController.getConfiguration(),
                 r.overrideConfig);
         final ActivityRelaunchItem activityRelaunchItem = ActivityRelaunchItem.obtain(
                 null /* pendingResults */, null /* pendingIntents */, 0 /* configChanges */,
@@ -5654,7 +5653,8 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    ArrayList<ComponentCallbacks2> collectComponentCallbacks(boolean includeActivities) {
+    @Override
+    public ArrayList<ComponentCallbacks2> collectComponentCallbacks(boolean includeActivities) {
         ArrayList<ComponentCallbacks2> callbacks
                 = new ArrayList<ComponentCallbacks2>();
 
@@ -5714,44 +5714,6 @@ public final class ActivityThread extends ClientTransactionHandler {
     }
 
     /**
-     * Creates a new Configuration only if override would modify base. Otherwise returns base.
-     * @param base The base configuration.
-     * @param override The update to apply to the base configuration. Can be null.
-     * @return A Configuration representing base with override applied.
-     */
-    private static Configuration createNewConfigAndUpdateIfNotNull(@NonNull Configuration base,
-            @Nullable Configuration override) {
-        if (override == null) {
-            return base;
-        }
-        Configuration newConfig = new Configuration(base);
-        newConfig.updateFrom(override);
-        return newConfig;
-    }
-
-    /**
-     * Decides whether to update a component's configuration and whether to inform it.
-     * @param cb The component callback to notify of configuration change.
-     * @param newConfig The new configuration.
-     */
-    private void performConfigurationChanged(ComponentCallbacks2 cb, Configuration newConfig) {
-        // ContextThemeWrappers may override the configuration for that context. We must check and
-        // apply any overrides defined.
-        Configuration contextThemeWrapperOverrideConfig = null;
-        if (cb instanceof ContextThemeWrapper) {
-            final ContextThemeWrapper contextThemeWrapper = (ContextThemeWrapper) cb;
-            contextThemeWrapperOverrideConfig = contextThemeWrapper.getOverrideConfiguration();
-        }
-
-        // Apply the ContextThemeWrapper override if necessary.
-        // NOTE: Make sure the configurations are not modified, as they are treated as immutable
-        // in many places.
-        final Configuration configToReport = createNewConfigAndUpdateIfNotNull(
-                newConfig, contextThemeWrapperOverrideConfig);
-        cb.onConfigurationChanged(configToReport);
-    }
-
-    /**
      * Decides whether to update an Activity's configuration and whether to inform it.
      * @param activity The activity to notify of configuration change.
      * @param newConfig The new configuration.
@@ -5780,13 +5742,19 @@ public final class ActivityThread extends ClientTransactionHandler {
             // onConfigurationChanged.
             // TODO(b/173090263): Use diff instead after the improvement of AssetManager and
             // ResourcesImpl constructions.
-            final int diff = activity.mCurrentConfig.diffPublicOnly(newConfig);
+            int diff = activity.mCurrentConfig.diffPublicOnly(newConfig);
+            final ActivityClientRecord cr = getActivityClient(activityToken);
+            diff = SizeConfigurationBuckets.filterDiff(diff, activity.mCurrentConfig, newConfig,
+                    cr != null ? cr.mSizeConfigurations : null);
 
-            if (diff == 0 && !shouldUpdateWindowMetricsBounds(activity.mCurrentConfig, newConfig)
-                    && !movedToDifferentDisplay && mResourcesManager.isSameResourcesOverrideConfig(
-                            activityToken, amOverrideConfig)) {
-                // Nothing significant, don't proceed with updating and reporting.
-                return null;
+            if (diff == 0) {
+                if (!shouldUpdateWindowMetricsBounds(activity.mCurrentConfig, newConfig)
+                        && !movedToDifferentDisplay
+                        && mResourcesManager.isSameResourcesOverrideConfig(
+                                activityToken, amOverrideConfig)) {
+                    // Nothing significant, don't proceed with updating and reporting.
+                    return null;
+                }
             } else if ((~activity.mActivityInfo.getRealConfigChanged() & diff) == 0) {
                 // If this activity doesn't handle any of the config changes, then don't bother
                 // calling onConfigurationChanged. Otherwise, report to the activity for the
@@ -5869,128 +5837,15 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
     }
 
-    final Configuration applyCompatConfiguration(int displayDensity) {
-        Configuration config = mConfiguration;
-        if (mCompatConfiguration == null) {
-            mCompatConfiguration = new Configuration();
-        }
-        mCompatConfiguration.setTo(mConfiguration);
-        if (mResourcesManager.applyCompatConfigurationLocked(displayDensity,
-                mCompatConfiguration)) {
-            config = mCompatConfiguration;
-        }
-        return config;
-    }
-
     @Override
     public void handleConfigurationChanged(Configuration config) {
-        if (isCachedProcessState()) {
-            updatePendingConfiguration(config);
-            // If the process is in a cached state, delay the handling until the process is no
-            // longer cached.
-            return;
-        }
-        Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "configChanged");
-        mCurDefaultDisplayDpi = config.densityDpi;
-        handleConfigurationChanged(config, null /* compat */);
-        Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-    }
+        mConfigurationController.handleConfigurationChanged(config);
 
-    private void handleConfigurationChanged(Configuration config, CompatibilityInfo compat) {
-
-        int configDiff;
-        boolean equivalent;
-
-        final Theme systemTheme = getSystemContext().getTheme();
-        final Theme systemUiTheme = getSystemUiContext().getTheme();
-
-        synchronized (mResourcesManager) {
-            if (mPendingConfiguration != null) {
-                if (!mPendingConfiguration.isOtherSeqNewer(config)) {
-                    config = mPendingConfiguration;
-                    mCurDefaultDisplayDpi = config.densityDpi;
-                    updateDefaultDensity();
-                }
-                mPendingConfiguration = null;
-            }
-
-            if (config == null) {
-                // TODO (b/135719017): Temporary log for debugging IME service.
-                if (Build.IS_DEBUGGABLE && mHasImeComponent) {
-                    Log.w(TAG, "handleConfigurationChanged for IME app but config is null");
-                }
-                return;
-            }
-
-            // This flag tracks whether the new configuration is fundamentally equivalent to the
-            // existing configuration. This is necessary to determine whether non-activity callbacks
-            // should receive notice when the only changes are related to non-public fields.
-            // We do not gate calling {@link #performActivityConfigurationChanged} based on this
-            // flag as that method uses the same check on the activity config override as well.
-            equivalent = mConfiguration != null && (0 == mConfiguration.diffPublicOnly(config));
-
-            if (DEBUG_CONFIGURATION) Slog.v(TAG, "Handle configuration changed: "
-                    + config);
-
-            final Resources appResources = mInitialApplication.getResources();
-            if (appResources.hasOverrideDisplayAdjustments()) {
-                // The value of Display#getRealSize will be adjusted by FixedRotationAdjustments,
-                // but Display#getSize refers to DisplayAdjustments#mConfiguration. So the rotated
-                // configuration also needs to set to the adjustments for consistency.
-                appResources.getDisplayAdjustments().getConfiguration().updateFrom(config);
-            }
-            mResourcesManager.applyConfigurationToResourcesLocked(config, compat,
-                    appResources.getDisplayAdjustments());
-            updateLocaleListFromAppContext(mInitialApplication.getApplicationContext(),
-                    mResourcesManager.getConfiguration().getLocales());
-
-            if (mConfiguration == null) {
-                mConfiguration = new Configuration();
-            }
-            if (!mConfiguration.isOtherSeqNewer(config) && compat == null) {
-                // TODO (b/135719017): Temporary log for debugging IME service.
-                if (Build.IS_DEBUGGABLE && mHasImeComponent) {
-                    Log.w(TAG, "handleConfigurationChanged for IME app but config seq is obsolete "
-                            + ", config=" + config
-                            + ", mConfiguration=" + mConfiguration);
-                }
-                return;
-            }
-
-            configDiff = mConfiguration.updateFrom(config);
-            config = applyCompatConfiguration(mCurDefaultDisplayDpi);
-            HardwareRenderer.sendDeviceConfigurationForDebugging(config);
-
-            if ((systemTheme.getChangingConfigurations() & configDiff) != 0) {
-                systemTheme.rebase();
-            }
-
-            if ((systemUiTheme.getChangingConfigurations() & configDiff) != 0) {
-                systemUiTheme.rebase();
-            }
-        }
-
-        final ArrayList<ComponentCallbacks2> callbacks =
-                collectComponentCallbacks(false /* includeActivities */);
-
-        freeTextLayoutCachesIfNeeded(configDiff);
-
-        if (callbacks != null) {
-            final int N = callbacks.size();
-            for (int i=0; i<N; i++) {
-                ComponentCallbacks2 cb = callbacks.get(i);
-                if (!equivalent) {
-                    performConfigurationChanged(cb, config);
-                } else {
-                    // TODO (b/135719017): Temporary log for debugging IME service.
-                    if (Build.IS_DEBUGGABLE && cb instanceof InputMethodService) {
-                        Log.w(TAG, "performConfigurationChanged didn't callback to IME "
-                                + ", configDiff=" + configDiff
-                                + ", mConfiguration=" + mConfiguration);
-                    }
-                }
-            }
-        }
+        // These are only done to maintain @UnsupportedAppUsage and should be removed someday.
+        mCurDefaultDisplayDpi = mConfigurationController.getCurDefaultDisplayDpi();
+        mConfiguration = mConfigurationController.getConfiguration();
+        mPendingConfiguration = mConfigurationController.getPendingConfiguration(
+                false /* clearPending */);
     }
 
     /**
@@ -6075,23 +5930,13 @@ public final class ActivityThread extends ClientTransactionHandler {
         // so that we actually call through to all components.
         // TODO(adamlesinski): Change this to make use of ActivityManager's upcoming ability to
         // store configurations per-process.
+        final Configuration config = mConfigurationController.getConfiguration();
         Configuration newConfig = new Configuration();
-        newConfig.assetsSeq = (mConfiguration != null ? mConfiguration.assetsSeq : 0) + 1;
-        handleConfigurationChanged(newConfig, null);
+        newConfig.assetsSeq = (config != null ? config.assetsSeq : 0) + 1;
+        mConfigurationController.handleConfigurationChanged(newConfig, null /* compat */);
 
         // Preserve windows to avoid black flickers when overlays change.
-        relaunchAllActivities(true /* preserveWindows */);
-    }
-
-    static void freeTextLayoutCachesIfNeeded(int configDiff) {
-        if (configDiff != 0) {
-            // Ask text layout engine to free its caches if there is a locale change
-            boolean hasLocaleConfigChange = ((configDiff & ActivityInfo.CONFIG_LOCALE) != 0);
-            if (hasLocaleConfigChange) {
-                Canvas.freeTextLayoutCaches();
-                if (DEBUG_CONFIGURATION) Slog.v(TAG, "Cleared TextLayout Caches");
-            }
-        }
+        relaunchAllActivities(true /* preserveWindows */, "handleApplicationInfoChanged");
     }
 
     /**
@@ -6170,7 +6015,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                     + ", config=" + overrideConfig);
         }
         final Configuration reportedConfig = performConfigurationChangedForActivity(r,
-                mCompatConfiguration,
+                mConfigurationController.getCompatConfiguration(),
                 movedToDifferentDisplay ? displayId : r.activity.getDisplayId());
         // Notify the ViewRootImpl instance about configuration changes. It may have initiated this
         // update to make sure that resources are updated before updating itself.
@@ -6465,16 +6310,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
     }
 
-    private void updateDefaultDensity() {
-        final int densityDpi = mCurDefaultDisplayDpi;
-        if (!mDensityCompatMode
-                && densityDpi != Configuration.DENSITY_DPI_UNDEFINED
-                && densityDpi != DisplayMetrics.DENSITY_DEVICE) {
-            DisplayMetrics.DENSITY_DEVICE = densityDpi;
-            Bitmap.setDefaultDensity(densityDpi);
-        }
-    }
-
     /**
      * Returns the correct library directory for the current ABI.
      * <p>
@@ -6501,27 +6336,6 @@ public final class ActivityThread extends ClientTransactionHandler {
         return insInfo.nativeLibraryDir;
     }
 
-    /**
-     * The LocaleList set for the app's resources may have been shuffled so that the preferred
-     * Locale is at position 0. We must find the index of this preferred Locale in the
-     * original LocaleList.
-     */
-    private void updateLocaleListFromAppContext(Context context, LocaleList newLocaleList) {
-        final Locale bestLocale = context.getResources().getConfiguration().getLocales().get(0);
-        final int newLocaleListSize = newLocaleList.size();
-        for (int i = 0; i < newLocaleListSize; i++) {
-            if (bestLocale.equals(newLocaleList.get(i))) {
-                LocaleList.setDefault(newLocaleList, i);
-                return;
-            }
-        }
-
-        // The app may have overridden the LocaleList with its own Locale
-        // (not present in the available list). Push the chosen Locale
-        // to the front of the list.
-        LocaleList.setDefault(new LocaleList(bestLocale, newLocaleList));
-    }
-
     @UnsupportedAppUsage
     private void handleBindApplication(AppBindData data) {
         long st_bindApp = SystemClock.uptimeMillis();
@@ -6544,8 +6358,9 @@ public final class ActivityThread extends ClientTransactionHandler {
         AppSpecializationHooks.handleCompatChangesBeforeBindingApplication();
 
         mBoundApplication = data;
-        mConfiguration = new Configuration(data.config);
-        mCompatConfiguration = new Configuration(data.config);
+        mConfigurationController.setConfiguration(data.config);
+        mConfigurationController.setCompatConfiguration(data.config);
+        mConfiguration = mConfigurationController.getConfiguration();
 
         mProfiler = new Profiler();
         String agent = null;
@@ -6625,7 +6440,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             mCurDefaultDisplayDpi = data.config.densityDpi;
 
             // This calls mResourcesManager so keep it within the synchronized block.
-            applyCompatConfiguration(mCurDefaultDisplayDpi);
+            mConfigurationController.applyCompatConfiguration();
         }
 
         data.info = getPackageInfoNoCheck(data.appInfo, data.compatInfo);
@@ -6649,7 +6464,7 @@ public final class ActivityThread extends ClientTransactionHandler {
                 Bitmap.setDefaultDensity(overrideDensity);
             }
         }
-        updateDefaultDensity();
+        mConfigurationController.updateDefaultDensity(data.config.densityDpi);
 
         // mCoreSettings is only updated from the main thread, while this function is only called
         // from main thread as well, so no need to lock here.
@@ -6726,8 +6541,7 @@ public final class ActivityThread extends ClientTransactionHandler {
         }
 
         final ContextImpl appContext = ContextImpl.createAppContext(this, data.info);
-        updateLocaleListFromAppContext(appContext,
-                mResourcesManager.getConfiguration().getLocales());
+        mConfigurationController.updateLocaleListFromAppContext(appContext);
 
         // Initialize the default http proxy in this process.
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "Setup proxies");
@@ -6805,6 +6619,7 @@ public final class ActivityThread extends ClientTransactionHandler {
 
             // Propagate Content Capture options
             app.setContentCaptureOptions(data.contentCaptureOptions);
+            sendMessage(H.SET_CONTENT_CAPTURE_OPTIONS_CALLBACK, data.appInfo.packageName);
 
             mInitialApplication = app;
 
@@ -6885,6 +6700,36 @@ public final class ActivityThread extends ClientTransactionHandler {
                                            pkg_name,
                                            bindApp_dur,
                                            pkgDir);
+        }
+    }
+
+    private void handleSetContentCaptureOptionsCallback(String packageName) {
+        if (mContentCaptureOptionsCallback != null) {
+            return;
+        }
+
+        IBinder b = ServiceManager.getService(Context.CONTENT_CAPTURE_MANAGER_SERVICE);
+        if (b == null) {
+            return;
+        }
+
+        IContentCaptureManager service = IContentCaptureManager.Stub.asInterface(b);
+        mContentCaptureOptionsCallback = new IContentCaptureOptionsCallback.Stub() {
+            @Override
+            public void setContentCaptureOptions(ContentCaptureOptions options)
+                    throws RemoteException {
+                if (mInitialApplication != null) {
+                    mInitialApplication.setContentCaptureOptions(options);
+                }
+            }
+        };
+        try {
+            service.registerContentCaptureOptionsCallback(packageName,
+                    mContentCaptureOptionsCallback);
+        } catch (RemoteException e)  {
+            Slog.w(TAG, "registerContentCaptureOptionsCallback() failed: "
+                    + packageName, e);
+            mContentCaptureOptionsCallback = null;
         }
     }
 
@@ -7602,6 +7447,7 @@ public final class ActivityThread extends ClientTransactionHandler {
     @UnsupportedAppUsage
     private void attach(boolean system, long startSeq) {
         sCurrentActivityThread = this;
+        mConfigurationController = new ConfigurationController(this);
         mSystemThread = system;
         if (!system) {
             android.ddm.DdmHandleAppName.setAppName("<pre-initialized>",
@@ -7653,8 +7499,7 @@ public final class ActivityThread extends ClientTransactionHandler {
             }
         }
 
-        ViewRootImpl.ConfigChangedCallback configChangedCallback
-                = (Configuration globalConfig) -> {
+        ViewRootImpl.ConfigChangedCallback configChangedCallback = (Configuration globalConfig) -> {
             synchronized (mResourcesManager) {
                 // TODO (b/135719017): Temporary log for debugging IME service.
                 if (Build.IS_DEBUGGABLE && mHasImeComponent) {
@@ -7667,14 +7512,15 @@ public final class ActivityThread extends ClientTransactionHandler {
                 if (mResourcesManager.applyConfigurationToResourcesLocked(globalConfig,
                         null /* compat */,
                         mInitialApplication.getResources().getDisplayAdjustments())) {
-                    updateLocaleListFromAppContext(mInitialApplication.getApplicationContext(),
-                            mResourcesManager.getConfiguration().getLocales());
+                    mConfigurationController.updateLocaleListFromAppContext(
+                            mInitialApplication.getApplicationContext());
 
                     // This actually changed the resources! Tell everyone about it.
-                    if (mPendingConfiguration == null
-                            || mPendingConfiguration.isOtherSeqNewer(globalConfig)) {
-                        mPendingConfiguration = globalConfig;
+                    final Configuration updatedConfig =
+                            mConfigurationController.updatePendingConfiguration(globalConfig);
+                    if (updatedConfig != null) {
                         sendMessage(H.CONFIGURATION_CHANGED, globalConfig);
+                        mPendingConfiguration = updatedConfig;
                     }
                 }
             }
@@ -8008,6 +7854,16 @@ public final class ActivityThread extends ClientTransactionHandler {
         } catch (RemoteException ignored) {
         }
         return false;
+    }
+
+    @Override
+    public boolean isInDensityCompatMode() {
+        return mDensityCompatMode;
+    }
+
+    @Override
+    public boolean hasImeComponent() {
+        return mHasImeComponent;
     }
 
     // ------------------ Regular JNI ------------------------

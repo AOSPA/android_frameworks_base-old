@@ -20,6 +20,8 @@ import static android.app.Notification.EXTRA_TITLE;
 import static android.app.admin.DevicePolicyManager.ACTION_CHECK_POLICY_COMPLIANCE;
 import static android.app.admin.DevicePolicyManager.DELEGATION_APP_RESTRICTIONS;
 import static android.app.admin.DevicePolicyManager.DELEGATION_CERT_INSTALL;
+import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_DEFAULT;
+import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_FINANCED;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_BASE_INFO;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_IMEI;
 import static android.app.admin.DevicePolicyManager.ID_TYPE_MEID;
@@ -90,6 +92,7 @@ import android.content.pm.StringParceledListSlice;
 import android.content.pm.UserInfo;
 import android.graphics.Color;
 import android.hardware.usb.UsbManager;
+import android.net.ConnectivityManager;
 import android.net.Uri;
 import android.os.Build.VERSION_CODES;
 import android.os.Bundle;
@@ -105,6 +108,7 @@ import android.telephony.TelephonyManager;
 import android.telephony.data.ApnSetting;
 import android.test.MoreAsserts; // TODO(b/171932723): replace by Truth
 import android.util.ArraySet;
+import android.util.Log;
 import android.util.Pair;
 
 import androidx.test.filters.SmallTest;
@@ -121,9 +125,7 @@ import org.hamcrest.BaseMatcher;
 import org.hamcrest.Description;
 import org.hamcrest.Matcher;
 import org.junit.After;
-import org.junit.AfterClass;
 import org.junit.Before;
-import org.junit.BeforeClass;
 import org.junit.Test;
 import org.mockito.Mockito;
 import org.mockito.internal.util.collections.Sets;
@@ -152,6 +154,9 @@ import java.util.concurrent.TimeUnit;
 @SmallTest
 @Presubmit
 public class DevicePolicyManagerTest extends DpmTestBase {
+
+    private static final String TAG = DevicePolicyManagerTest.class.getSimpleName();
+
     private static final List<String> OWNER_SETUP_PERMISSIONS = Arrays.asList(
             permission.MANAGE_DEVICE_ADMINS, permission.MANAGE_PROFILE_AND_DEVICE_OWNERS,
             permission.MANAGE_USERS, permission.INTERACT_ACROSS_USERS_FULL);
@@ -214,16 +219,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     private static final String PROFILE_OFF_SUSPENSION_TITLE = "suspension_title";
     private static final String PROFILE_OFF_SUSPENSION_TEXT = "suspension_text";
     private static final String PROFILE_OFF_SUSPENSION_SOON_TEXT = "suspension_tomorrow_text";
-
-    @BeforeClass
-    public static void setUpClass() {
-        Notification.DevFlags.sForceDefaults = true;
-    }
-
-    @AfterClass
-    public static void tearDownClass() {
-        Notification.DevFlags.sForceDefaults = false;
-    }
 
     @Before
     public void setUp() throws Exception {
@@ -826,7 +821,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
      * {@link DevicePolicyManager#forceRemoveActiveAdmin(ComponentName, int)}
      */
     @Test
-    public void testForceRemoveActiveAdmin() throws Exception {
+    public void testForceRemoveActiveAdmin_nonShellCaller() throws Exception {
         mContext.callerPermissions.add(android.Manifest.permission.MANAGE_DEVICE_ADMINS);
 
         // Add admin.
@@ -840,8 +835,53 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         // Calling from a non-shell uid should fail with a SecurityException
         mContext.binder.callingUid = 123456;
         assertExpectException(SecurityException.class,
-                /* messageRegex =*/ "Non-shell user attempted to call",
+                /* messageRegex = */ null,
                 () -> dpms.forceRemoveActiveAdmin(admin1, CALLER_USER_HANDLE));
+    }
+
+    /**
+     * Test for:
+     * {@link DevicePolicyManager#forceRemoveActiveAdmin(ComponentName, int)}
+     */
+    @Test
+    public void testForceRemoveActiveAdmin_nonShellCallerWithPermission() throws Exception {
+        mContext.callerPermissions.add(android.Manifest.permission.MANAGE_DEVICE_ADMINS);
+
+        // Add admin.
+        setupPackageInPackageManager(admin1.getPackageName(),
+                /* userId= */ CALLER_USER_HANDLE,
+                /* appId= */ 10138,
+                /* flags= */ ApplicationInfo.FLAG_TEST_ONLY);
+        dpm.setActiveAdmin(admin1, /* replace =*/ false);
+        assertThat(dpm.isAdminActive(admin1)).isTrue();
+
+        mContext.binder.callingUid = 123456;
+        mContext.callerPermissions.add(
+                android.Manifest.permission.MANAGE_PROFILE_AND_DEVICE_OWNERS);
+        dpms.forceRemoveActiveAdmin(admin1, CALLER_USER_HANDLE);
+
+        mContext.callerPermissions.add(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL);
+        // Verify
+        assertThat(dpm.isAdminActiveAsUser(admin1, CALLER_USER_HANDLE)).isFalse();
+        verify(getServices().usageStatsManagerInternal).setActiveAdminApps(
+                null, CALLER_USER_HANDLE);
+    }
+
+    /**
+     * Test for:
+     * {@link DevicePolicyManager#forceRemoveActiveAdmin(ComponentName, int)}
+     */
+    @Test
+    public void testForceRemoveActiveAdmin_ShellCaller() throws Exception {
+        mContext.callerPermissions.add(android.Manifest.permission.MANAGE_DEVICE_ADMINS);
+
+        // Add admin.
+        setupPackageInPackageManager(admin1.getPackageName(),
+                /* userId= */ CALLER_USER_HANDLE,
+                /* appId= */ 10138,
+                /* flags= */ ApplicationInfo.FLAG_TEST_ONLY);
+        dpm.setActiveAdmin(admin1, /* replace =*/ false);
+        assertThat(dpm.isAdminActive(admin1)).isTrue();
 
         mContext.binder.callingUid = Process.SHELL_UID;
         dpms.forceRemoveActiveAdmin(admin1, CALLER_USER_HANDLE);
@@ -3828,7 +3868,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
-    public void testForceUpdateUserSetupComplete_userbuild() {
+    public void testForceUpdateUserSetupComplete_forcesUpdate() {
         mContext.callerPermissions.add(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS);
         mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
 
@@ -3840,34 +3880,6 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         DevicePolicyData userData = new DevicePolicyData(userId);
         userData.mUserSetupComplete = true;
         dpms.mUserData.put(UserHandle.USER_SYSTEM, userData);
-
-        // GIVEN it's user build
-        getServices().buildMock.isDebuggable = false;
-
-        assertThat(dpms.hasUserSetupCompleted()).isTrue();
-
-        dpm.forceUpdateUserSetupComplete();
-
-        // THEN the state in dpms is not changed
-        assertThat(dpms.hasUserSetupCompleted()).isTrue();
-    }
-
-    @Test
-    public void testForceUpdateUserSetupComplete_userDebugbuild() {
-        mContext.callerPermissions.add(permission.MANAGE_PROFILE_AND_DEVICE_OWNERS);
-        mContext.binder.callingUid = DpmMockContext.CALLER_SYSTEM_USER_UID;
-
-        final int userId = UserHandle.USER_SYSTEM;
-        // GIVEN userComplete is false in SettingsProvider
-        setUserSetupCompleteForUser(false, userId);
-
-        // GIVEN userComplete is true in DPM
-        DevicePolicyData userData = new DevicePolicyData(userId);
-        userData.mUserSetupComplete = true;
-        dpms.mUserData.put(UserHandle.USER_SYSTEM, userData);
-
-        // GIVEN it's userdebug build
-        getServices().buildMock.isDebuggable = true;
 
         assertThat(dpms.hasUserSetupCompleted()).isTrue();
 
@@ -3993,27 +4005,60 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
-    public void testGetSetNetworkSlicing() throws Exception {
+    public void testUpdateNetworkPreferenceOnStartOnStopUser() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+        mServiceContext.permissions.add(permission.INTERACT_ACROSS_USERS_FULL);
+
+        dpms.handleStartUser(managedProfileUserId);
+        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
+                eq(UserHandle.of(managedProfileUserId)),
+                anyInt(),
+                any(),
+                any()
+        );
+
+        dpms.handleStopUser(managedProfileUserId);
+        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
+                eq(UserHandle.of(managedProfileUserId)),
+                eq(ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT),
+                any(),
+                any()
+        );
+    }
+
+    @Test
+    public void testGetSetEnterpriseNetworkPreference() throws Exception {
         assertExpectException(SecurityException.class, null,
-                () -> dpm.setNetworkSlicingEnabled(false));
+                () -> dpm.setEnterpriseNetworkPreferenceEnabled(false));
 
         assertExpectException(SecurityException.class, null,
-                () -> dpm.isNetworkSlicingEnabled());
+                () -> dpm.isEnterpriseNetworkPreferenceEnabled());
 
-        assertExpectException(SecurityException.class, null,
-                () -> dpm.isNetworkSlicingEnabledForUser(UserHandle.of(CALLER_USER_HANDLE)));
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
 
-        mContext.callerPermissions.add(permission.READ_NETWORK_DEVICE_CONFIG);
-        mContext.callerPermissions.add(permission.INTERACT_ACROSS_USERS_FULL);
-        try {
-            dpm.isNetworkSlicingEnabledForUser(UserHandle.of(CALLER_USER_HANDLE));
-        } catch (SecurityException se) {
-            fail("Threw SecurityException with right permission");
-        }
+        dpm.setEnterpriseNetworkPreferenceEnabled(false);
+        assertThat(dpm.isEnterpriseNetworkPreferenceEnabled()).isFalse();
+        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
+                eq(UserHandle.of(managedProfileUserId)),
+                eq(ConnectivityManager.PROFILE_NETWORK_PREFERENCE_DEFAULT),
+                any(),
+                any()
+        );
 
-        setupProfileOwner();
-        dpm.setNetworkSlicingEnabled(false);
-        assertThat(dpm.isNetworkSlicingEnabled()).isFalse();
+        dpm.setEnterpriseNetworkPreferenceEnabled(true);
+        assertThat(dpm.isEnterpriseNetworkPreferenceEnabled()).isTrue();
+        verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
+                eq(UserHandle.of(managedProfileUserId)),
+                eq(ConnectivityManager.PROFILE_NETWORK_PREFERENCE_ENTERPRISE),
+                any(),
+                any()
+        );
     }
 
     @Test
@@ -7028,6 +7073,71 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
+    public void testSetDeviceOwnerType_throwsExceptionWhenCallerNotAuthorized() {
+        assertThrows(SecurityException.class,
+                () -> dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_DEFAULT));
+    }
+
+    @Test
+    public void testSetDeviceOwnerType_throwsExceptionWhenThereIsNoDeviceOwner() {
+        mContext.binder.clearCallingIdentity();
+        assertThrows(IllegalStateException.class,
+                () -> dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_DEFAULT));
+    }
+
+    @Test
+    public void testSetDeviceOwnerType_throwsExceptionWhenNotAsDeviceOwnerAdmin() throws Exception {
+        setDeviceOwner();
+
+        assertThrows(IllegalStateException.class,
+                () -> dpm.setDeviceOwnerType(admin2, DEVICE_OWNER_TYPE_FINANCED));
+    }
+
+    @Test
+    public void testSetDeviceOwnerType_asDeviceOwner_toFinancedDevice() throws Exception {
+        setDeviceOwner();
+
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        int returnedDeviceOwnerType = dpm.getDeviceOwnerType(admin1);
+        assertThat(dpms.mOwners.hasDeviceOwner()).isTrue();
+        assertThat(returnedDeviceOwnerType).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+
+        initializeDpms();
+
+        returnedDeviceOwnerType = dpm.getDeviceOwnerType(admin1);
+        assertThat(dpms.mOwners.hasDeviceOwner()).isTrue();
+        assertThat(returnedDeviceOwnerType).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+    }
+
+    @Test
+    public void testSetDeviceOwnerType_asDeviceOwner_throwsExceptionWhenSetDeviceOwnerTypeAgain()
+            throws Exception {
+        setDeviceOwner();
+
+        dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_FINANCED);
+
+        int returnedDeviceOwnerType = dpm.getDeviceOwnerType(admin1);
+        assertThat(dpms.mOwners.hasDeviceOwner()).isTrue();
+        assertThat(returnedDeviceOwnerType).isEqualTo(DEVICE_OWNER_TYPE_FINANCED);
+
+        assertThrows(IllegalStateException.class,
+                () -> dpm.setDeviceOwnerType(admin1, DEVICE_OWNER_TYPE_DEFAULT));
+    }
+
+    @Test
+    public void testGetDeviceOwnerType_throwsExceptionWhenThereIsNoDeviceOwner() {
+        assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin1));
+    }
+
+    @Test
+    public void testGetDeviceOwnerType_throwsExceptionWhenNotAsDeviceOwnerAdmin() throws Exception {
+        setDeviceOwner();
+
+        assertThrows(IllegalStateException.class, () -> dpm.getDeviceOwnerType(admin2));
+    }
+
+    @Test
     public void testSetUsbDataSignalingEnabled_noDeviceOwnerOrPoOfOrgOwnedDevice() {
         assertThrows(SecurityException.class,
                 () -> dpm.setUsbDataSignalingEnabled(true));
@@ -7101,6 +7211,47 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         dpm.setUsbDataSignalingEnabled(true);
 
         assertThat(dpm.isUsbDataSignalingEnabled()).isEqualTo(enabled);
+    }
+
+    @Test
+    public void testGetPolicyExemptApps_noPermission() {
+        assertThrows(SecurityException.class, () -> dpm.getPolicyExemptApps());
+    }
+
+    @Test
+    public void testGetPolicyExemptApps_empty() {
+        grantManageDeviceAdmins();
+        mockPolicyExemptApps();
+        mockVendorPolicyExemptApps();
+
+        assertThat(dpm.getPolicyExemptApps()).isEmpty();
+    }
+
+    @Test
+    public void testGetPolicyExemptApps_baseOnly() {
+        grantManageDeviceAdmins();
+        mockPolicyExemptApps("foo");
+        mockVendorPolicyExemptApps();
+
+        assertThat(dpm.getPolicyExemptApps()).containsExactly("foo");
+    }
+
+    @Test
+    public void testGetPolicyExemptApps_vendorOnly() {
+        grantManageDeviceAdmins();
+        mockPolicyExemptApps();
+        mockVendorPolicyExemptApps("bar");
+
+        assertThat(dpm.getPolicyExemptApps()).containsExactly("bar");
+    }
+
+    @Test
+    public void testGetPolicyExemptApps_baseAndVendor() {
+        grantManageDeviceAdmins();
+        mockPolicyExemptApps("4", "23", "15", "42", "8");
+        mockVendorPolicyExemptApps("16", "15", "4");
+
+        assertThat(dpm.getPolicyExemptApps()).containsExactly("4", "8", "15", "16", "23", "42");
     }
 
     private void setUserUnlocked(int userHandle, boolean unlocked) {
@@ -7324,4 +7475,18 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         return new StringParceledListSlice(Arrays.asList(s));
     }
 
+    private void grantManageDeviceAdmins() {
+        Log.d(TAG, "Granting " + permission.MANAGE_DEVICE_ADMINS);
+        mContext.callerPermissions.add(permission.MANAGE_DEVICE_ADMINS);
+    }
+
+    private void mockPolicyExemptApps(String... apps) {
+        Log.d(TAG, "Mocking R.array.policy_exempt_apps to return " + Arrays.toString(apps));
+        when(mContext.resources.getStringArray(R.array.policy_exempt_apps)).thenReturn(apps);
+    }
+
+    private void mockVendorPolicyExemptApps(String... apps) {
+        Log.d(TAG, "Mocking R.array.vendor_policy_exempt_apps to return " + Arrays.toString(apps));
+        when(mContext.resources.getStringArray(R.array.vendor_policy_exempt_apps)).thenReturn(apps);
+    }
 }

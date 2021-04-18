@@ -204,6 +204,7 @@
     <string name="twilight_service" msgid="8964898045693187224">"شفقی سروس"</string>
     <string name="offline_location_time_zone_detection_service_attribution" msgid="303754195048744816">"ٹائم زون ڈیٹیکٹر (کوئی کنیکٹوٹی نہیں ہے)"</string>
     <string name="gnss_time_update_service" msgid="9039489496037616095">"‏GNSS کی ٹائم اپ ڈیٹ سروس"</string>
+    <string name="music_recognition_manager_service" msgid="7481956037950276359">"میوزک ریکگنیشن مینیجر سروس"</string>
     <string name="factory_reset_warning" msgid="6858705527798047809">"آپ کا آلہ صاف کر دیا جائے گا"</string>
     <string name="factory_reset_message" msgid="2657049595153992213">"منتظم کی ایپ استعمال نہیں کی جا سکتی۔ آپ کا آلہ اب مٹا دیا جائے گا۔\n\nاگر آپ کے سوالات ہیں تو اپنی تنظیم کے منتظم سے رابطہ کریں۔"</string>
     <string name="printing_disabled_by" msgid="3517499806528864633">"<xliff:g id="OWNER_APP">%s</xliff:g> نے پرنٹنگ کو غیر فعال کر دیا ہے۔"</string>
@@ -293,6 +294,7 @@
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"ایپ چل رہی ہے"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"ایپس بیٹری خرچ کر رہی ہیں"</string>
     <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"میگنیفکیشن"</string>
+    <string name="notification_channel_accessibility_security_policy" msgid="3350443906017624270">"ایکسیسبیلٹی سیکیورٹی کی پالیسی"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> بیٹری کا استعمال کر رہی ہے"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> ایپس بیٹری کا استعمال کر رہی ہیں"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"بیٹری اور ڈیٹا استعمال کے بارے میں تفصیلات کے لیے تھپتھپائیں"</string>
@@ -343,6 +345,8 @@
     <string name="permdesc_statusBarService" msgid="6652917399085712557">"ایپ کو اسٹیٹس بار بننے کی اجازت دیتا ہے۔"</string>
     <string name="permlab_expandStatusBar" msgid="1184232794782141698">"حیثیت بار پھیلائیں/سکیڑیں"</string>
     <string name="permdesc_expandStatusBar" msgid="7180756900448498536">"ایپ کو اسٹیٹس بار پھیلانے یا سکیڑنے کی اجازت دیتا ہے۔"</string>
+    <string name="permlab_fullScreenIntent" msgid="4310888199502509104">"مقفل آلے پر فُل اسکرین سرگرمیوں کے بطور اطلاعات کو ڈسپلے کریں"</string>
+    <string name="permdesc_fullScreenIntent" msgid="1100721419406643997">"ایپ کو مقفل آلے پر فُل اسکرین سرگرمیوں کے بطور اطلاعات کو ڈسپلے کرنے کی اجازت دیتا ہے"</string>
     <string name="permlab_install_shortcut" msgid="7451554307502256221">"شارٹ کٹس انسٹال کریں"</string>
     <string name="permdesc_install_shortcut" msgid="4476328467240212503">"کسی ایپلیکیشن کو صارف کی مداخلت کے بغیر ہوم اسکرین شارٹ کٹس شامل کرنے کی اجازت دیتا ہے۔"</string>
     <string name="permlab_uninstall_shortcut" msgid="295263654781900390">"شارٹ کٹس کو اَن انسٹال کریں"</string>
@@ -550,13 +554,19 @@
     <string name="permdesc_imagesWrite" msgid="5195054463269193317">"ایپ کو آپ کی تصویر کے مجموعے میں ترمیم کی اجازت دیتا ہے۔"</string>
     <string name="permlab_mediaLocation" msgid="7368098373378598066">"اپنی میڈيا کے مجموعے سے مقامات پڑھیں"</string>
     <string name="permdesc_mediaLocation" msgid="597912899423578138">"ایپ کو آپ کی میڈيا کے مجموعے سے مقامات پڑھنے کی اجازت دیتا ہے۔"</string>
+    <string name="biometric_app_setting_name" msgid="3339209978734534457">"بایو میٹرکس استعمال کریں"</string>
+    <string name="biometric_or_screen_lock_app_setting_name" msgid="5348462421758257752">"بایو میٹرکس یا اسکرین لاک استعمال کریں"</string>
     <string name="biometric_dialog_default_title" msgid="55026799173208210">"توثیق کریں کہ یہ آپ ہیں"</string>
+    <string name="biometric_dialog_default_subtitle" msgid="8457232339298571992">"جاری رکھنے کیلئے اپنا بایو میٹرک استعمال کریں"</string>
+    <string name="biometric_or_screen_lock_dialog_default_subtitle" msgid="159539678371552009">"جاری رکھنے کے لیے اپنے بایو میٹرک اور اسکرین لاک کا استعمال کریں"</string>
     <string name="biometric_error_hw_unavailable" msgid="2494077380540615216">"بایومیٹرک ہارڈ ویئر دستیاب نہیں ہے"</string>
     <string name="biometric_error_user_canceled" msgid="6732303949695293730">"تصدیق کا عمل منسوخ ہو گیا"</string>
     <string name="biometric_not_recognized" msgid="5106687642694635888">"تسلیم شدہ نہیں ہے"</string>
     <string name="biometric_error_canceled" msgid="8266582404844179778">"تصدیق کا عمل منسوخ ہو گیا"</string>
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"کوئی پن، پیٹرن، یا پاس ورڈ سیٹ نہیں ہے"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"خرابی کی توثیق ہو رہی ہے"</string>
+    <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"اسکرین لاک استعمال کریں"</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"جاری رکھنے کیلئے اپنے آلے کی سند درج کریں"</string>
     <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"جزوی فنگر پرنٹ کی شناخت ہوئی۔ براہ کرم دوبارہ کوشش کریں۔"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"فنگر پرنٹ پر کارروائی نہیں کی جا سکی۔ براہ کرم دوبارہ کوشش کریں۔"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"فنگر پرنٹ سینسر گندا ہے۔ براہ کرم صاف کریں اور دوبارہ کوشش کریں۔"</string>
@@ -579,7 +589,10 @@
     <string name="fingerprint_error_hw_not_present" msgid="578914350967423382">"اس آلہ میں فنگر پرنٹ سینسر نہیں ہے۔"</string>
     <string name="fingerprint_error_security_update_required" msgid="7750187320640856433">"سینسر عارضی طور غیر فعال ہے۔"</string>
     <string name="fingerprint_name_template" msgid="8941662088160289778">"انگلی <xliff:g id="FINGERID">%d</xliff:g>"</string>
+    <string name="fingerprint_app_setting_name" msgid="4253767877095495844">"فنگر پرنٹ استعمال کریں"</string>
+    <string name="fingerprint_or_screen_lock_app_setting_name" msgid="3501743523487644907">"فنگر پرنٹ یا اسکرین لاک استعمال کریں"</string>
     <string name="fingerprint_dialog_default_subtitle" msgid="3879832845486835905">"جاری رکھنے کیلئے اپنا فنگر پرنٹ استعمال کریں"</string>
+    <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"جاری رکھنے کے لیے اپنے فنگر پرنٹ یا اسکرین لاک کا استعمال کریں"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"فنگر پرنٹ آئیکن"</string>
@@ -606,7 +619,7 @@
     <string name="face_acquired_too_different" msgid="4699657338753282542">"اب چہرے کی شناخت نہیں کر سکتے۔ پھر آزمائيں۔"</string>
     <string name="face_acquired_too_similar" msgid="7684650785108399370">"کافی ملتا جلتا ہے، براہ کرم اپنا پوز بدلیں۔"</string>
     <string name="face_acquired_pan_too_extreme" msgid="7822191262299152527">"اپنا سر تھوڑا کم کریں۔"</string>
-    <string name="face_acquired_tilt_too_extreme" msgid="8119978324129248059">"اپنا سر تھوڑا کم کریں۔"</string>
+    <string name="face_acquired_tilt_too_extreme" msgid="8618210742620248049">"اپنا سر تھوڑا کم جھکائیں۔"</string>
     <string name="face_acquired_roll_too_extreme" msgid="1442830503572636825">"اپنا سر تھوڑا کم کریں۔"</string>
     <string name="face_acquired_obscured" msgid="4917643294953326639">"آپ کے چہرہ کو چھپانے والی ہر چیز کو ہٹائیں۔"</string>
     <string name="face_acquired_sensor_dirty" msgid="8968391891086721678">"سیاہ بار سمیت، اپنی اسکرین کے اوپری حصے کو صاف کریں"</string>
@@ -624,6 +637,10 @@
     <string name="face_error_hw_not_present" msgid="1070600921591729944">"اس آلہ پر چہرے کے ذریعے غیر مقفل کرنا تعاون یافتہ نہیں ہے۔"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"سینسر عارضی طور غیر فعال ہے۔"</string>
     <string name="face_name_template" msgid="3877037340223318119">"چہرہ <xliff:g id="FACEID">%d</xliff:g>"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"چہرے کے ذریعے غیر مقفل کرنا استعمال کریں"</string>
+    <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"چہرہ یا اسکرین لاک استعمال کریں"</string>
+    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"جاری رکھنے کیلئے چہرے کے ذریعے غیر مقفل کرنا استعمال کریں"</string>
+    <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"جاری رکھنے کے لیے اپنے چہرے یا اسکرین لاک کا استعمال کریں"</string>
   <string-array name="face_error_vendor">
   </string-array>
     <string name="face_icon_content_description" msgid="465030547475916280">"چہرے کا آئیکن"</string>
@@ -685,10 +702,8 @@
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"ایپ کو ڈسٹرب نہ کریں کنفیگریشن لکھنے اور پڑھنے کے قابل کرتا ہے۔"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"اجازت کی استعمال کا ملاحظہ شروع کریں"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"حامل کو ایپ کی اجازت کے استعمال کو شروع کرنے کی اجازت دیتا ہے۔ عام ایپس کے لیے کبھی بھی درکار نہیں ہونا چاہیے۔"</string>
-    <!-- no translation found for permlab_highSamplingRateSensors (3941068435726317070) -->
-    <skip />
-    <!-- no translation found for permdesc_highSamplingRateSensors (8430061978931155995) -->
-    <skip />
+    <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"نمونہ کاری کی اعلی شرح پر سینسر کے ڈیٹا تک رسائی حاصل کریں"</string>
+    <string name="permdesc_highSamplingRateSensors" msgid="8430061978931155995">"‏ایپ کو Hz‏200 سے زیادہ شرح پر سینسر ڈیٹا کا نمونہ لینے کی اجازت دیتی ہے"</string>
     <string name="policylab_limitPassword" msgid="4851829918814422199">"پاس ورڈ کے اصول سیٹ کریں"</string>
     <string name="policydesc_limitPassword" msgid="4105491021115793793">"‏اسکرین لاک پاس ورڈز اور PINs میں اجازت یافتہ لمبائی اور حروف کو کنٹرول کریں۔"</string>
     <string name="policylab_watchLogin" msgid="7599669460083719504">"اسکرین غیر مقفل کرنے کی کوششیں مانیٹر کریں"</string>
@@ -989,6 +1004,8 @@
     <string name="open_permission_deny" msgid="5136793905306987251">"آپ کے پاس یہ صفحہ کھولنے کی اجازت نہیں ہے۔"</string>
     <string name="text_copied" msgid="2531420577879738860">"متن کو کلپ بورڈ پر کاپی کیا گیا۔"</string>
     <string name="copied" msgid="4675902854553014676">"کاپی ہو گیا"</string>
+    <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g> سے <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> میں پیسٹ کیا گیا"</string>
+    <string name="pasted_from_clipboard" msgid="6295556725844421812">"کلپ بورڈ سے <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> میں پیسٹ کیا گیا"</string>
     <string name="more_item_label" msgid="7419249600215749115">"مزید"</string>
     <string name="prepend_shortcut_label" msgid="1743716737502867951">"مینو+"</string>
     <string name="menu_meta_shortcut_label" msgid="1623390163674762478">"Meta+‎"</string>
@@ -1362,11 +1379,14 @@
     <string name="alert_windows_notification_turn_off_action" msgid="7805857234839123780">"آف کریں"</string>
     <string name="ext_media_checking_notification_title" msgid="8299199995416510094">"<xliff:g id="NAME">%s</xliff:g> کو چیک کیا جا رہا ہے…"</string>
     <string name="ext_media_checking_notification_message" msgid="2231566971425375542">"موجودہ مواد کا جائزہ لیا جا رہا ہے"</string>
+    <string name="ext_media_checking_notification_message" product="tv" msgid="7986154434946021415">"میڈیا اسٹوریج کا تجزیہ کیا جا رہا ہے"</string>
     <string name="ext_media_new_notification_title" msgid="3517407571407687677">"نیا <xliff:g id="NAME">%s</xliff:g>"</string>
     <string name="ext_media_new_notification_title" product="automotive" msgid="9085349544984742727">"<xliff:g id="NAME">%s</xliff:g> کام نہیں کر رہا ہے"</string>
     <string name="ext_media_new_notification_message" msgid="6095403121990786986">"سیٹ اپ کرنے کیلئے تھپتھپائیں"</string>
+    <string name="ext_media_new_notification_message" product="tv" msgid="216863352100263668">"سیٹ اپ کرنے کے لیے منتخب کریں"</string>
     <string name="ext_media_new_notification_message" product="automotive" msgid="5140127881613227162">"آپ کو آلے کو پھر سے فارمیٹ کرنے کی ضرورت پیش آ سکتی ہے۔ خارج کرنے کے لیے تھپتھپائیں۔"</string>
     <string name="ext_media_ready_notification_message" msgid="777258143284919261">"تصاویر اور میڈیا منتقل کرنے کیلئے"</string>
+    <string name="ext_media_ready_notification_message" product="tv" msgid="8847134811163165935">"میڈیا فائلز کو براؤز کریں"</string>
     <string name="ext_media_unmountable_notification_title" msgid="4895444667278979910">"<xliff:g id="NAME">%s</xliff:g> کے ساتھ مسئلہ"</string>
     <string name="ext_media_unmountable_notification_title" product="automotive" msgid="3142723758949023280">"<xliff:g id="NAME">%s</xliff:g> کام نہیں کر رہا ہے"</string>
     <string name="ext_media_unmountable_notification_message" msgid="3256290114063126205">"درست کرنے کیلئے تھپتھپائیں"</string>
@@ -1375,7 +1395,7 @@
     <string name="ext_media_unsupported_notification_title" msgid="4358280700537030333">"غیر تعاون یافتہ <xliff:g id="NAME">%s</xliff:g>"</string>
     <string name="ext_media_unsupported_notification_title" product="automotive" msgid="6004193172658722381">"<xliff:g id="NAME">%s</xliff:g> کام نہیں کر رہا ہے"</string>
     <string name="ext_media_unsupported_notification_message" msgid="917738524888367560">"یہ آلہ <xliff:g id="NAME">%s</xliff:g> کو سپورٹ نہیں کرتا۔ ایک سپورٹ یافتہ فارمیٹ میں سیٹ اپ کرنے کیلئے تھپتھپائیں۔"</string>
-    <string name="ext_media_unsupported_notification_message" product="tv" msgid="7744945987775645685">"یہ آلہ اس <xliff:g id="NAME">%s</xliff:g> کو سپورٹ نہیں کرتا ہے۔ ایک سپورٹ یافتہ فارمیٹ میں سیٹ اپ کرنے کیلئے منتخب کریں۔"</string>
+    <string name="ext_media_unsupported_notification_message" product="tv" msgid="1595482802187036532">"سپورٹ یافتہ فارمیٹ میں <xliff:g id="NAME">%s</xliff:g> سیٹ اپ کرنے کے لیے منتخب کریں۔"</string>
     <string name="ext_media_unsupported_notification_message" product="automotive" msgid="3412494732736336330">"آپ کو آلے کو پھر سے فارمیٹ کرنے کی ضرورت پیش آ سکتی ہے"</string>
     <string name="ext_media_badremoval_notification_title" msgid="4114625551266196872">"<xliff:g id="NAME">%s</xliff:g> غیر متوقع طور پر ہٹا دیا گیا"</string>
     <string name="ext_media_badremoval_notification_message" msgid="1986514704499809244">"مواد کھونے سے بچنے کے لئے ہٹانے سے پہلے میڈیا خارج کریں"</string>
@@ -1669,7 +1689,8 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"شارٹ کٹ استعمال کریں"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"رنگوں کی تقلیب"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"رنگ کی تصحیح"</string>
-    <string name="reduce_bright_colors_feature_name" msgid="6222956501418407642">"چمک کم کریں"</string>
+    <!-- no translation found for reduce_bright_colors_feature_name (3222994553174604132) -->
+    <skip />
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"والیوم کی کلیدوں کو دبائے رکھا گیا۔ <xliff:g id="SERVICE_NAME">%1$s</xliff:g> آن ہے۔"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"والیوم کی کلیدوں کو دبائے رکھا گیا۔ <xliff:g id="SERVICE_NAME">%1$s</xliff:g> آف ہے۔"</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"<xliff:g id="SERVICE_NAME">%1$s</xliff:g> کا استعمال کرنے کے لیے 3 سیکنڈ تک والیوم کی دونوں کلیدوں کو چھوئیں اور دبائے رکھیں"</string>
@@ -1873,8 +1894,10 @@
     <string name="stk_cc_ss_to_dial_video" msgid="1324194624384312664">"‏SS درخواست کو ویڈیو کال میں تبدیل کر دیا گیا"</string>
     <string name="stk_cc_ss_to_ussd" msgid="8417905193112944760">"‏SS درخواست کو USSD درخواست میں تبدیل کر دیا گیا"</string>
     <string name="stk_cc_ss_to_ss" msgid="132040645206514450">"‏نئی SS درخواست میں تبدیل کر دیا گیا"</string>
+    <string name="notification_phishing_alert_content_description" msgid="494227305355958790">"فریب دہی کا الرٹ"</string>
     <string name="notification_work_profile_content_description" msgid="5296477955677725799">"دفتری پروفائل"</string>
     <string name="notification_alerted_content_description" msgid="6139691253611265992">"الرٹ کیا گیا"</string>
+    <string name="notification_verified_content_description" msgid="6401483602782359391">"توثیق شدہ"</string>
     <string name="expand_button_content_description_collapsed" msgid="3873368935659010279">"پھیلائیں"</string>
     <string name="expand_button_content_description_expanded" msgid="7484217944948667489">"سکیڑیں"</string>
     <string name="expand_action_accessibility" msgid="1947657036871746627">"پھیلاؤ کو ٹوگل کریں"</string>
@@ -1946,6 +1969,7 @@
     <string name="app_category_news" msgid="1172762719574964544">"خبریں اور میگزین"</string>
     <string name="app_category_maps" msgid="6395725487922533156">"نقشے اور نیویگیشن"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"پروڈکٹیوٹی"</string>
+    <string name="app_category_accessibility" msgid="6643521607848547683">"ایکسیسبیلٹی"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"آلہ کی اسٹوریج"</string>
     <string name="adb_debugging_notification_channel_tv" msgid="4764046459631031496">"‏USB ڈیبگ کرنا"</string>
     <string name="time_picker_hour_label" msgid="4208590187662336864">"گھنٹہ"</string>
@@ -2075,6 +2099,7 @@
     <string name="accessibility_system_action_on_screen_a11y_shortcut_label" msgid="8488701469459210309">"آن اسکرین ایکسیسبیلٹی شارٹ کٹ"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_chooser_label" msgid="1057878690209817886">"آن اسکرین ایکسیسبیلٹی شارٹ کٹ منتخب کنندہ"</string>
     <string name="accessibility_system_action_hardware_a11y_shortcut_label" msgid="5764644187715255107">"ایکسیسبیلٹی کا شارٹ کٹ"</string>
+    <string name="accessibility_system_action_dismiss_notification_shade" msgid="8931637495533770352">"اطلاعاتی شیڈ برخاست کریں"</string>
     <string name="accessibility_freeform_caption" msgid="8377519323496290122">"<xliff:g id="APP_NAME">%1$s</xliff:g> کی کیپشن بار۔"</string>
     <string name="as_app_forced_to_restricted_bucket" msgid="8233871289353898964">"<xliff:g id="PACKAGE_NAME">%1$s</xliff:g> کو پابند کردہ بکٹ میں رکھ دیا گیا ہے"</string>
     <string name="conversation_single_line_name_display" msgid="8958948312915255999">"<xliff:g id="SENDER_NAME">%1$s</xliff:g>:"</string>
@@ -2212,12 +2237,16 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <string name="window_magnification_prompt_title" msgid="8197528399699536320">"نیا: ونڈو میگنیفائر"</string>
-    <string name="window_magnification_prompt_content" msgid="4166711383253283838">"اب آپ اپنی تمام یا کچھ اسکرین کو بڑا کر سکتے ہیں"</string>
+    <string name="window_magnification_prompt_title" msgid="4657040468055863672">"اپنی اسکرین کے کسی حصے کو بڑا کریں"</string>
+    <string name="window_magnification_prompt_content" msgid="3549230303326142349">"آپ اپنی فُل اسکرین، کسی مخصوص حصے کو بڑا کر سکتے ہیں یا دونوں اختیارات کے درمیان سوئچ کر سکتے ہیں۔"</string>
     <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"ترتیبات میں آن کریں"</string>
     <string name="dismiss_action" msgid="1728820550388704784">"برخاست کریں"</string>
     <string name="sensor_privacy_start_use_mic_notification_content" msgid="8063355861118105607">"‏جاری رکھنے کیلئے ‎<xliff:g id="APP">%s</xliff:g>&lt;b&gt;‎‏‎‎‏‏‎&lt;b&gt;‎ کو آپ کے آلے کے مائیکروفون تک رسائی درکار ہے۔"</string>
     <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"‏جاری رکھنے کیلئے ‎&lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt;‎ کو آپ کے آلے کے کیمرے تک رسائی درکار ہے۔"</string>
     <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"آن کریں"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"سینسر کی رازداری"</string>
+    <string name="splash_screen_view_icon_description" msgid="180638751260598187">"ایپلیکیشن کا آئیکن"</string>
+    <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"ایپلیکیشن کی برانڈنگ تصویر"</string>
+    <string name="view_and_control_notification_title" msgid="4300765399209912240">"رسائی کی ترتیبات چیک کریں"</string>
+    <string name="view_and_control_notification_content" msgid="8003766498562604034">"<xliff:g id="SERVICE_NAME">%s</xliff:g> آپ کی اسکرین کو دیکھ اور کنٹرول کر سکتی ہیں۔ جائزے کے لیے تھپتھپائیں۔"</string>
 </resources>

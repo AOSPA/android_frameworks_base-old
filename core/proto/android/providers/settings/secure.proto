@@ -123,6 +123,8 @@ message SecureSettingsProto {
         optional SettingProto gesture_silence_alerts_enabled = 7 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto gesture_wake_enabled = 8 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto gesture_setup_complete = 9 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        optional SettingProto touch_gesture_enabled = 10 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        optional SettingProto long_press_home_enabled = 11 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional Assist assist = 7;
 
@@ -192,6 +194,12 @@ message SecureSettingsProto {
     optional Camera camera = 12;
 
     optional SettingProto carrier_apps_handled = 13 [ (android.privacy).dest = DEST_AUTOMATIC ];
+
+    message Clipboard {
+        optional SettingProto show_access_notifications = 1 [ (android.privacy).dest = DEST_AUTOMATIC ];
+    }
+    optional Clipboard clipboard = 89;
+
     optional SettingProto cmas_additional_broadcast_pkg = 14 [ (android.privacy).dest = DEST_AUTOMATIC ];
     repeated SettingProto completed_categories = 15;
     optional SettingProto connectivity_release_pending_intent_delay_ms = 16 [ (android.privacy).dest = DEST_AUTOMATIC ];
@@ -290,6 +298,7 @@ message SecureSettingsProto {
         optional SettingProto subtype_history = 5 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto selected_input_method_subtype = 6 [ (android.privacy).dest = DEST_AUTOMATIC ];
         optional SettingProto show_ime_with_hard_keyboard = 7 [ (android.privacy).dest = DEST_AUTOMATIC ];
+        optional SettingProto default_voice_input_method = 8 [ (android.privacy).dest = DEST_AUTOMATIC ];
     }
     optional InputMethods input_methods = 26;
 
@@ -647,5 +656,5 @@ message SecureSettingsProto {
 
     // Please insert fields in alphabetical order and group them into messages
     // if possible (to avoid reaching the method limit).
-    // Next tag = 89;
+    // Next tag = 90;
 }

@@ -451,7 +451,7 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
 
     void sendDisplayAreaVanished(IDisplayAreaOrganizer organizer) {
         if (organizer == null) return;
-        migrateToNewSurfaceControl();
+        migrateToNewSurfaceControl(getSyncTransaction());
         mOrganizerController.onDisplayAreaVanished(organizer, this);
     }
 
@@ -493,6 +493,21 @@ public class DisplayArea<T extends WindowContainer> extends WindowContainer<T> {
                 getDisplayContent().getDisplayId(), mFeatureId);
         info.configuration.setTo(getConfiguration());
         return info;
+    }
+
+    /**
+     * Gets the stable bounds of the DisplayArea, which is the bounds excluding insets for
+     * navigation bar, cutout, and status bar.
+     */
+    void getStableRect(Rect out) {
+        if (mDisplayContent == null) {
+            getBounds(out);
+            return;
+        }
+
+        // Intersect with the display stable bounds to get the DisplayArea stable bounds.
+        mDisplayContent.getStableRect(out);
+        out.intersect(getBounds());
     }
 
     @Override

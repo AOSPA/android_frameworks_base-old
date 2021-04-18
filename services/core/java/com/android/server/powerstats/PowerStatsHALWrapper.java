@@ -16,6 +16,7 @@
 
 package com.android.server.powerstats;
 
+import android.annotation.Nullable;
 import android.hardware.power.stats.Channel;
 import android.hardware.power.stats.EnergyMeasurement;
 import android.hardware.power.stats.IPowerStats;
@@ -51,6 +52,7 @@ public final class PowerStatsHALWrapper {
          *
          * @return List of information on each PowerEntity.
          */
+        @Nullable
         android.hardware.power.stats.PowerEntity[] getPowerEntityInfo();
 
         /**
@@ -70,6 +72,7 @@ public final class PowerStatsHALWrapper {
          *
          * @return StateResidency since boot for each requested PowerEntity
          */
+        @Nullable
         android.hardware.power.stats.StateResidencyResult[] getStateResidency(int[] powerEntityIds);
 
         /**
@@ -81,6 +84,7 @@ public final class PowerStatsHALWrapper {
          *
          * @return List of EnergyConsumers all available energy consumers.
          */
+        @Nullable
         android.hardware.power.stats.EnergyConsumer[] getEnergyConsumerInfo();
 
         /**
@@ -96,6 +100,7 @@ public final class PowerStatsHALWrapper {
          * @return List of EnergyConsumerResult objects containing energy consumer results for all
          *         available energy consumers (power models).
          */
+        @Nullable
         android.hardware.power.stats.EnergyConsumerResult[] getEnergyConsumed(
                 int[] energyConsumerIds);
 
@@ -105,6 +110,7 @@ public final class PowerStatsHALWrapper {
          * @return List of Channel objects containing channel info for all available energy
          *         meters.
          */
+        @Nullable
         android.hardware.power.stats.Channel[] getEnergyMeterInfo();
 
         /**
@@ -120,6 +126,7 @@ public final class PowerStatsHALWrapper {
          * @return List of EnergyMeasurement objects containing energy measurements for all
          *         available energy meters.
          */
+        @Nullable
         android.hardware.power.stats.EnergyMeasurement[] readEnergyMeter(int[] channelIds);
 
         /**
@@ -159,7 +166,7 @@ public final class PowerStatsHALWrapper {
                 try {
                     powerEntityHAL = sVintfPowerStats.get().getPowerEntityInfo();
                 } catch (RemoteException e) {
-                    if (DEBUG) Slog.d(TAG, "Failed to get power entity info from PowerStats HAL");
+                    Slog.w(TAG, "Failed to get power entity info: ", e);
                 }
             }
 
@@ -176,7 +183,7 @@ public final class PowerStatsHALWrapper {
                     stateResidencyResultHAL =
                         sVintfPowerStats.get().getStateResidency(powerEntityIds);
                 } catch (RemoteException e) {
-                    if (DEBUG) Slog.d(TAG, "Failed to get state residency from PowerStats HAL");
+                    Slog.w(TAG, "Failed to get state residency: ", e);
                 }
             }
 
@@ -191,9 +198,7 @@ public final class PowerStatsHALWrapper {
                 try {
                     energyConsumerHAL = sVintfPowerStats.get().getEnergyConsumerInfo();
                 } catch (RemoteException e) {
-                    if (DEBUG) {
-                        Slog.d(TAG, "Failed to get energy consumer info from PowerStats HAL");
-                    }
+                    Slog.w(TAG, "Failed to get energy consumer info: ", e);
                 }
             }
 
@@ -210,9 +215,7 @@ public final class PowerStatsHALWrapper {
                     energyConsumedHAL =
                         sVintfPowerStats.get().getEnergyConsumed(energyConsumerIds);
                 } catch (RemoteException e) {
-                    if (DEBUG) {
-                        Slog.d(TAG, "Failed to get energy consumer results from PowerStats HAL");
-                    }
+                    Slog.w(TAG, "Failed to get energy consumer results: ", e);
                 }
             }
 
@@ -227,7 +230,7 @@ public final class PowerStatsHALWrapper {
                 try {
                     energyMeterInfoHAL = sVintfPowerStats.get().getEnergyMeterInfo();
                 } catch (RemoteException e) {
-                    if (DEBUG) Slog.d(TAG, "Failed to get energy meter info from PowerStats HAL");
+                    Slog.w(TAG, "Failed to get energy meter info: ", e);
                 }
             }
 
@@ -243,7 +246,7 @@ public final class PowerStatsHALWrapper {
                     energyMeasurementHAL =
                         sVintfPowerStats.get().readEnergyMeter(channelIds);
                 } catch (RemoteException e) {
-                    if (DEBUG) Slog.d(TAG, "Failed to get energy measurements from PowerStats HAL");
+                    Slog.w(TAG, "Failed to get energy measurements: ", e);
                 }
             }
 
@@ -360,6 +363,7 @@ public final class PowerStatsHALWrapper {
 
         @Override
         public synchronized void binderDied() {
+            Slog.w(TAG, "PowerStats HAL died");
             mInstance = null;
         }
     }

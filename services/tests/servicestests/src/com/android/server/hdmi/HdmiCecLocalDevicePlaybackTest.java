@@ -61,6 +61,12 @@ import java.util.concurrent.TimeUnit;
 /** Tests for {@link HdmiCecLocalDevicePlayback} class. */
 public class HdmiCecLocalDevicePlaybackTest {
 
+    private static final int PORT_1 = 1;
+    private static final HdmiDeviceInfo INFO_TV = new HdmiDeviceInfo(
+            ADDR_TV, 0x0000, PORT_1, HdmiDeviceInfo.DEVICE_TV,
+            0x1234, "TV",
+            HdmiControlManager.POWER_STATUS_ON, HdmiControlManager.HDMI_CEC_VERSION_1_4_B);
+
     private HdmiControlService mHdmiControlService;
     private HdmiCecController mHdmiCecController;
     private HdmiCecLocalDevicePlayback mHdmiCecLocalDevicePlayback;
@@ -87,7 +93,6 @@ public class HdmiCecLocalDevicePlaybackTest {
         mMyLooper = mTestLooper.getLooper();
         PowerManager powerManager = new PowerManager(context, mIPowerManagerMock,
                 mIThermalServiceMock, new Handler(mMyLooper));
-        HdmiCecConfig hdmiCecConfig = new FakeHdmiCecConfig(context);
 
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext()) {
@@ -108,7 +113,7 @@ public class HdmiCecLocalDevicePlaybackTest {
                     }
 
                     @Override
-                    boolean isStandbyMessageReceived() {
+                    protected boolean isStandbyMessageReceived() {
                         return mStandby;
                     }
 
@@ -136,15 +141,11 @@ public class HdmiCecLocalDevicePlaybackTest {
                     protected PowerManager getPowerManager() {
                         return powerManager;
                     }
-
-                    @Override
-                    protected HdmiCecConfig getHdmiCecConfig() {
-                        return hdmiCecConfig;
-                    }
                 };
 
         mHdmiCecLocalDevicePlayback = new HdmiCecLocalDevicePlayback(mHdmiControlService);
         mHdmiCecLocalDevicePlayback.init();
+        mHdmiControlService.setHdmiCecConfig(new FakeHdmiCecConfig(context));
         mHdmiControlService.setIoLooper(mMyLooper);
         mNativeWrapper = new FakeNativeWrapper();
         mHdmiCecController = HdmiCecController.createWithNativeWrapper(
@@ -164,6 +165,7 @@ public class HdmiCecLocalDevicePlaybackTest {
         mNativeWrapper.setPhysicalAddress(mPlaybackPhysicalAddress);
         mTestLooper.dispatchAll();
         mPlaybackLogicalAddress = mHdmiCecLocalDevicePlayback.getDeviceInfo().getLogicalAddress();
+        mHdmiControlService.getHdmiCecNetwork().addCecDevice(INFO_TV);
         mNativeWrapper.clearResultMessages();
     }
 
@@ -182,7 +184,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                         mPlaybackPhysicalAddress);
 
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isFalse();
         assertThat(mNativeWrapper.getResultMessages().contains(expectedMessage)).isFalse();
@@ -203,7 +206,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                         mPlaybackPhysicalAddress);
 
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isFalse();
         assertThat(mNativeWrapper.getResultMessages().contains(expectedMessage)).isFalse();
@@ -224,7 +228,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                         mPlaybackPhysicalAddress);
 
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isTrue();
         assertThat(mNativeWrapper.getResultMessages().contains(expectedMessage)).isFalse();
@@ -245,7 +250,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                         mPlaybackPhysicalAddress);
 
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isTrue();
         assertThat(mNativeWrapper.getResultMessages().contains(expectedMessage)).isFalse();
@@ -268,7 +274,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                         mPlaybackPhysicalAddress);
 
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isTrue();
         assertThat(mNativeWrapper.getResultMessages()).contains(expectedMessage);
@@ -291,7 +298,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                         mPlaybackPhysicalAddress);
 
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mWokenUp).isTrue();
         assertThat(mNativeWrapper.getResultMessages()).contains(expectedMessage);
@@ -307,7 +315,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingChange(ADDR_TV, 0x0000, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 0x5000);
@@ -327,7 +336,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingChange(ADDR_TV, 0x0000,
                         mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 mPlaybackPhysicalAddress);
@@ -347,7 +357,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingChange(ADDR_TV, 0x0000,
                         mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 mPlaybackPhysicalAddress);
@@ -366,7 +377,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingChange(ADDR_TV, 0x0000, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isTrue();
     }
@@ -381,7 +393,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingChange(ADDR_TV, 0x0000, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isFalse();
     }
@@ -397,7 +410,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingChange(ADDR_TV, 0x0000,
                         mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingChange(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
         assertThat(mStandby).isFalse();
     }
@@ -459,7 +473,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 mPlaybackPhysicalAddress, "HdmiCecLocalDevicePlaybackTest");
         mStandby = false;
         HdmiCecMessage message = HdmiCecMessageBuilder.buildRoutingInformation(ADDR_TV, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 0x5000);
@@ -479,7 +494,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingInformation(ADDR_TV,
                         mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 mPlaybackPhysicalAddress);
@@ -499,7 +515,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingInformation(ADDR_TV,
                         mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 mPlaybackPhysicalAddress);
@@ -518,7 +535,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingInformation(ADDR_TV, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isTrue();
     }
@@ -533,7 +551,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingInformation(ADDR_TV, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isFalse();
     }
@@ -549,7 +568,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildRoutingInformation(ADDR_TV,
                         mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleRoutingInformation(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
         assertThat(mStandby).isFalse();
     }
@@ -604,7 +624,8 @@ public class HdmiCecLocalDevicePlaybackTest {
     public void handleSetStreamPath() {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildSetStreamPath(ADDR_TV, 0x2100);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message))
+                .isEqualTo(Constants.HANDLED);
     }
 
     @Test
@@ -614,7 +635,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildSetSystemAudioMode(
                         Constants.ADDR_AUDIO_SYSTEM, Constants.ADDR_BROADCAST, true);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSetSystemAudioMode(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSetSystemAudioMode(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.mService.isSystemAudioActivated()).isTrue();
     }
 
@@ -627,7 +649,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildSetSystemAudioMode(
                         Constants.ADDR_AUDIO_SYSTEM, mHdmiCecLocalDevicePlayback.mAddress, false);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSetSystemAudioMode(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSetSystemAudioMode(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.mService.isSystemAudioActivated()).isTrue();
     }
 
@@ -638,7 +661,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildReportSystemAudioMode(
                         Constants.ADDR_AUDIO_SYSTEM, mHdmiCecLocalDevicePlayback.mAddress, true);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSystemAudioModeStatus(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSystemAudioModeStatus(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.mService.isSystemAudioActivated()).isTrue();
     }
 
@@ -881,7 +905,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message = HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                 mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mStandby).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
@@ -898,7 +923,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiControlManager.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST_NONE);
         mStandby = false;
         HdmiCecMessage message = HdmiCecMessageBuilder.buildActiveSource(ADDR_TV, 0x0000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mStandby).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
@@ -916,7 +942,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message = HdmiCecMessageBuilder.buildActiveSource(mPlaybackLogicalAddress,
                 mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mStandby).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
@@ -929,7 +956,8 @@ public class HdmiCecLocalDevicePlaybackTest {
                 HdmiControlManager.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST_STANDBY_NOW);
         mStandby = false;
         HdmiCecMessage message = HdmiCecMessageBuilder.buildActiveSource(ADDR_TV, 0x0000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
         assertThat(mStandby).isTrue();
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
@@ -994,12 +1022,14 @@ public class HdmiCecLocalDevicePlaybackTest {
         // 1. DUT is <AS>.
         HdmiCecMessage message1 = HdmiCecMessageBuilder.buildActiveSource(
                 mHdmiCecLocalDevicePlayback.mAddress, mPlaybackPhysicalAddress);
-        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message1)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message1))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
         assertThat(mStandby).isFalse();
         // 2. DUT loses <AS> and goes to sleep.
         HdmiCecMessage message2 = HdmiCecMessageBuilder.buildActiveSource(ADDR_TV, 0x0000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message2)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleActiveSource(message2))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isTrue();
         // 3. DUT becomes <AS> again.
@@ -1269,7 +1299,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildSetStreamPath(ADDR_TV, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mHdmiCecLocalDevicePlayback.getActiveSource().physicalAddress).isEqualTo(
                 0x5000);
@@ -1288,7 +1319,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildSetStreamPath(ADDR_TV, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isTrue();
     }
@@ -1303,7 +1335,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mStandby = false;
         HdmiCecMessage message =
                 HdmiCecMessageBuilder.buildSetStreamPath(ADDR_TV, 0x5000);
-        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.handleSetStreamPath(message))
+                .isEqualTo(Constants.HANDLED);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();
         assertThat(mStandby).isFalse();
     }
@@ -1490,7 +1523,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mHdmiControlService.toggleAndFollowTvPower();
         HdmiCecMessage tvPowerStatus = HdmiCecMessageBuilder.buildReportPowerStatus(ADDR_TV,
                 mPlaybackLogicalAddress, HdmiControlManager.POWER_STATUS_ON);
-        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
 
         HdmiCecMessage expectedMessage = HdmiCecMessageBuilder.buildStandby(
@@ -1508,7 +1542,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mHdmiControlService.toggleAndFollowTvPower();
         HdmiCecMessage tvPowerStatus = HdmiCecMessageBuilder.buildReportPowerStatus(ADDR_TV,
                 mPlaybackLogicalAddress, HdmiControlManager.POWER_STATUS_ON);
-        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
 
         HdmiCecMessage expectedMessage = HdmiCecMessageBuilder.buildStandby(
@@ -1523,7 +1558,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mHdmiControlService.toggleAndFollowTvPower();
         HdmiCecMessage tvPowerStatus = HdmiCecMessageBuilder.buildReportPowerStatus(ADDR_TV,
                 mPlaybackLogicalAddress, HdmiControlManager.POWER_STATUS_STANDBY);
-        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
 
         HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(mPlaybackLogicalAddress,
@@ -1541,7 +1577,8 @@ public class HdmiCecLocalDevicePlaybackTest {
         mHdmiControlService.toggleAndFollowTvPower();
         HdmiCecMessage tvPowerStatus = HdmiCecMessageBuilder.buildReportPowerStatus(ADDR_TV,
                 mPlaybackLogicalAddress, HdmiControlManager.POWER_STATUS_UNKNOWN);
-        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus)).isTrue();
+        assertThat(mHdmiCecLocalDevicePlayback.dispatchMessage(tvPowerStatus))
+                .isEqualTo(Constants.HANDLED);
         mTestLooper.dispatchAll();
 
         HdmiCecMessage userControlPressed = HdmiCecMessageBuilder.buildUserControlPressed(

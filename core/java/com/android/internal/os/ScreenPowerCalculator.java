@@ -66,11 +66,7 @@ public class ScreenPowerCalculator extends PowerCalculator {
                 batteryStats, rawRealtimeUs, BatteryStats.STATS_SINCE_CHARGED,
                 query.shouldForceUsePowerProfileModel());
 
-        builder.getOrCreateSystemBatteryConsumerBuilder(SystemBatteryConsumer.DRAIN_TYPE_SCREEN)
-                .setUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_USAGE,
-                        totalPowerAndDuration.durationMs)
-                .setConsumedPower(BatteryConsumer.POWER_COMPONENT_USAGE,
-                        totalPowerAndDuration.powerMah);
+        double totalAppPower = 0;
 
         // Now deal with each app's UidBatteryConsumer. The results are stored in the
         // BatteryConsumer.POWER_COMPONENT_SCREEN power component, which is considered smeared,
@@ -87,11 +83,20 @@ public class ScreenPowerCalculator extends PowerCalculator {
                                 appPowerAndDuration.durationMs)
                         .setConsumedPower(BatteryConsumer.POWER_COMPONENT_SCREEN,
                                 appPowerAndDuration.powerMah);
+                totalAppPower += appPowerAndDuration.powerMah;
             }
         } else {
             smearScreenBatteryDrain(uidBatteryConsumerBuilders, totalPowerAndDuration,
                     rawRealtimeUs);
+            totalAppPower = totalPowerAndDuration.powerMah;
         }
+
+        builder.getOrCreateSystemBatteryConsumerBuilder(SystemBatteryConsumer.DRAIN_TYPE_SCREEN)
+                .setUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_USAGE,
+                        totalPowerAndDuration.durationMs)
+                .setConsumedPower(BatteryConsumer.POWER_COMPONENT_USAGE,
+                        Math.max(totalPowerAndDuration.powerMah, totalAppPower))
+                .setPowerConsumedByApps(totalAppPower);
     }
 
     /**
@@ -141,9 +146,9 @@ public class ScreenPowerCalculator extends PowerCalculator {
                 statsType);
 
         if (!forceUsePowerProfileModel) {
-            final long energyUJ = batteryStats.getScreenOnEnergy();
-            if (energyUJ != BatteryStats.ENERGY_DATA_UNAVAILABLE) {
-                totalPowerAndDuration.powerMah = uJtoMah(energyUJ);
+            final long chargeUC = batteryStats.getScreenOnMeasuredBatteryConsumptionUC();
+            if (chargeUC != BatteryStats.POWER_DATA_UNAVAILABLE) {
+                totalPowerAndDuration.powerMah = uCtoMah(chargeUC);
                 return true;
             }
         }
@@ -157,14 +162,14 @@ public class ScreenPowerCalculator extends PowerCalculator {
             BatteryStats.Uid u, long rawRealtimeUs) {
         appPowerAndDuration.durationMs = getProcessForegroundTimeMs(u, rawRealtimeUs);
 
-        final long energyUJ = u.getScreenOnEnergy();
-        if (energyUJ < 0) {
+        final long chargeUC = u.getScreenOnMeasuredBatteryConsumptionUC();
+        if (chargeUC < 0) {
             Slog.wtf(TAG, "Screen energy not supported, so calculateApp shouldn't de called");
             appPowerAndDuration.powerMah = 0;
             return;
         }
 
-        appPowerAndDuration.powerMah = uJtoMah(energyUJ);
+        appPowerAndDuration.powerMah = uCtoMah(chargeUC);
     }
 
     private long calculateDuration(BatteryStats batteryStats, long rawRealtimeUs, int statsType) {

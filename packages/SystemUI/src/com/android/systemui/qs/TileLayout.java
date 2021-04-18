@@ -25,6 +25,7 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
 
     protected int mColumns;
     protected int mCellWidth;
+    protected int mCellHeightResId = R.dimen.qs_tile_height;
     protected int mCellHeight;
     protected int mMaxCellHeight;
     protected int mCellMarginHorizontal;
@@ -36,7 +37,6 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
     private int mCellMarginTop;
     protected boolean mListening;
     protected int mMaxAllowedRows = 3;
-    private boolean mShowLabels = true;
 
     // Prototyping with less rows
     private final boolean mLessRows;
@@ -53,12 +53,6 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
         setFocusableInTouchMode(true);
         mLessRows = ((Settings.System.getInt(context.getContentResolver(), "qs_less_rows", 0) != 0)
                 || useQsMediaPlayer(context));
-        updateResources();
-    }
-
-    @Override
-    public void setShowLabels(boolean show) {
-        mShowLabels = show;
         updateResources();
     }
 
@@ -124,20 +118,23 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
     public boolean updateResources() {
         final Resources res = mContext.getResources();
         mResourceColumns = Math.max(1, res.getInteger(R.integer.quick_settings_num_columns));
-        mMaxCellHeight = mContext.getResources().getDimensionPixelSize(R.dimen.qs_tile_height);
+        updateColumns();
+        mMaxCellHeight = mContext.getResources().getDimensionPixelSize(mCellHeightResId);
         mCellMarginHorizontal = res.getDimensionPixelSize(R.dimen.qs_tile_margin_horizontal);
+        mSidePadding = useSidePadding() ? mCellMarginHorizontal / 2 : 0;
         mCellMarginVertical= res.getDimensionPixelSize(R.dimen.qs_tile_margin_vertical);
-        if (!mShowLabels && mCellMarginVertical == 0) {
-            mCellMarginVertical = mCellMarginHorizontal;
-        }
         mCellMarginTop = res.getDimensionPixelSize(R.dimen.qs_tile_margin_top);
         mMaxAllowedRows = Math.max(1, getResources().getInteger(R.integer.quick_settings_max_rows));
-        if (mLessRows && mShowLabels) mMaxAllowedRows = Math.max(mMinRows, mMaxAllowedRows - 1);
+        if (mLessRows) mMaxAllowedRows = Math.max(mMinRows, mMaxAllowedRows - 1);
         if (updateColumns()) {
             requestLayout();
             return true;
         }
         return false;
+    }
+
+    protected boolean useSidePadding() {
+        return true;
     }
 
     private boolean updateColumns() {
@@ -158,8 +155,9 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
         if (heightMode == MeasureSpec.UNSPECIFIED) {
             mRows = (numTiles + mColumns - 1) / mColumns;
         }
+        final int gaps = mColumns - 1;
         mCellWidth =
-                (availableWidth - (mCellMarginHorizontal * mColumns)) / mColumns;
+                (availableWidth - (mCellMarginHorizontal * gaps) - mSidePadding * 2) / mColumns;
 
         // Measure each QS tile.
         View previousView = this;
@@ -193,9 +191,8 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
                 + mCellMarginVertical;
         final int previousRows = mRows;
         mRows = availableHeight / (getCellHeight() + mCellMarginVertical);
-        final int minRows = mShowLabels ? mMinRows : mMinRows + 1;
-        if (mRows < minRows) {
-            mRows = minRows;
+        if (mRows < mMinRows) {
+            mRows = mMinRows;
         } else if (mRows >= mMaxAllowedRows) {
             mRows = mMaxAllowedRows;
         }
@@ -215,7 +212,7 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
     }
 
     protected int getCellHeight() {
-        return mShowLabels ? mMaxCellHeight : mMaxCellHeight / 2;
+        return mMaxCellHeight;
     }
 
     protected void layoutTileRecords(int numRecords) {
@@ -245,13 +242,13 @@ public class TileLayout extends ViewGroup implements QSTileLayout {
         layoutTileRecords(mRecords.size());
     }
 
-    private int getRowTop(int row) {
+    protected int getRowTop(int row) {
         return row * (mCellHeight + mCellMarginVertical) + mCellMarginTop;
     }
 
     protected int getColumnStart(int column) {
-        return getPaddingStart() + mCellMarginHorizontal / 2 +
-                column *  (mCellWidth + mCellMarginHorizontal);
+        return getPaddingStart() + mSidePadding
+                + column *  (mCellWidth + mCellMarginHorizontal);
     }
 
     @Override

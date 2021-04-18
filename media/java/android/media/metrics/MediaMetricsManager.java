@@ -94,8 +94,22 @@ public class MediaMetricsManager {
     @NonNull
     public PlaybackSession createPlaybackSession() {
         try {
-            String id = mService.getSessionId(mUserId);
+            String id = mService.getPlaybackSessionId(mUserId);
             PlaybackSession session = new PlaybackSession(id, this);
+            return session;
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Creates a recording session.
+     */
+    @NonNull
+    public RecordingSession createRecordingSession() {
+        try {
+            String id = mService.getRecordingSessionId(mUserId);
+            RecordingSession session = new RecordingSession(id, this);
             return session;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();

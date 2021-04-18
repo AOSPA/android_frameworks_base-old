@@ -142,9 +142,16 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
                     mMergedOverrideConfiguration);
         }
         for (int i = getChildCount() - 1; i >= 0; --i) {
-            final ConfigurationContainer child = getChildAt(i);
-            child.onConfigurationChanged(mFullConfiguration);
+            dispatchConfigurationToChild(getChildAt(i), mFullConfiguration);
         }
+    }
+
+    /**
+     * Dispatches the configuration to child when {@link #onConfigurationChanged(Configuration)} is
+     * called. This allows the derived classes to override how to dispatch the configuration.
+     */
+    void dispatchConfigurationToChild(E child, Configuration config) {
+        child.onConfigurationChanged(config);
     }
 
     /**
@@ -360,8 +367,7 @@ public abstract class ConfigurationContainer<E extends ConfigurationContainer> {
      * Returns {@code true} if this {@link ConfigurationContainer} provides the maximum bounds to
      * its child {@link ConfigurationContainer}s. Returns {@code false}, otherwise.
      * <p>
-     * The maximum bounds is how large a window can be expanded. Currently only
-     * {@link DisplayContent} and {@link DisplayArea} effect this property.
+     * The maximum bounds is how large a window can be expanded.
      * </p>
      */
     protected boolean providesMaxBounds() {

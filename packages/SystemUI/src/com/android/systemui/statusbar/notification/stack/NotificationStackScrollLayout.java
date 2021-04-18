@@ -21,6 +21,7 @@ import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator
 import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManagerKt.BUCKET_SILENT;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_SWIPE;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
+import static com.android.systemui.util.Utils.shouldUseSplitNotificationShade;
 
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
@@ -83,6 +84,7 @@ import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper.DragDownCallback;
 import com.android.systemui.statusbar.EmptyShadeView;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.NotificationShelfController;
@@ -453,6 +455,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private NotificationEntry mTopHeadsUpEntry;
     private long mNumHeadsUp;
     private NotificationStackScrollLayoutController.TouchHandler mTouchHandler;
+    private final FeatureFlags mFeatureFlags;
+    private boolean mShouldUseSplitNotificationShade;
 
     private final ExpandableView.OnHeightChangedListener mOnChildHeightChangedListener =
             new ExpandableView.OnHeightChangedListener() {
@@ -492,12 +496,13 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             GroupMembershipManager groupMembershipManager,
             GroupExpansionManager groupExpansionManager,
             SysuiStatusBarStateController statusbarStateController,
-            AmbientState ambientState
-    ) {
+            AmbientState ambientState,
+            FeatureFlags featureFlags) {
         super(context, attrs, 0, 0);
         Resources res = getResources();
         mSectionsManager = notificationSectionsManager;
-
+        mFeatureFlags = featureFlags;
+        mShouldUseSplitNotificationShade = shouldUseSplitNotificationShade(mFeatureFlags, res);
         mSectionsManager.initialize(this, LayoutInflater.from(context));
         mSections = mSectionsManager.createSectionsForBuckets();
 
@@ -622,7 +627,12 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mBgColor = Utils.getColorAttr(mContext, android.R.attr.colorBackgroundFloating)
                 .getDefaultColor();
         updateBackgroundDimming();
-        mShelf.onUiModeChanged();
+        for (int i = 0; i < getChildCount(); i++) {
+            View child = getChildAt(i);
+            if (child instanceof ActivatableNotificationView) {
+                ((ActivatableNotificationView) child).updateBackgroundColors();
+            }
+        }
     }
 
     @ShadeViewRefactor(RefactorComponent.DECORATOR)
@@ -1016,8 +1026,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             boolean clip = clipStart > start && clipStart < end
                     || clipEnd >= start && clipEnd <= end;
             clip &= !(first && mScrollAdapter.isScrolledToTop());
-            child.setDistanceToTopRoundness(clip ? Math.max(start - clipStart, 0)
-                    : ExpandableView.NO_ROUNDNESS);
+            child.setDistanceToTopRoundness(ExpandableView.NO_ROUNDNESS);
             first = false;
         }
     }
@@ -1156,8 +1165,13 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 if (stackStartPosition <= stackEndPosition) {
                     stackHeight = stackEndPosition;
                 } else {
-                    stackHeight = (int) NotificationUtils.interpolate(stackStartPosition,
-                            stackEndPosition, mQsExpansionFraction);
+                    if (mShouldUseSplitNotificationShade) {
+                        // This prevents notifications from being collapsed when QS is expanded.
+                        stackHeight = (int) height;
+                    } else {
+                        stackHeight = (int) NotificationUtils.interpolate(stackStartPosition,
+                                stackEndPosition, mQsExpansionFraction);
+                    }
                 }
             } else {
                 stackHeight = (int) height;
@@ -1539,8 +1553,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        mStatusBarHeight = getResources().getDimensionPixelOffset(R.dimen.status_bar_height);
-        float densityScale = getResources().getDisplayMetrics().density;
+        Resources res = getResources();
+        mShouldUseSplitNotificationShade = shouldUseSplitNotificationShade(mFeatureFlags, res);
+        mStatusBarHeight = res.getDimensionPixelOffset(R.dimen.status_bar_height);
+        float densityScale = res.getDisplayMetrics().density;
         mSwipeHelper.setDensityScale(densityScale);
         float pagingTouchSlop = ViewConfiguration.get(getContext()).getScaledPagingTouchSlop();
         mSwipeHelper.setPagingTouchSlop(pagingTouchSlop);
@@ -2278,9 +2294,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             ExpandableView child = (ExpandableView) getChildAt(i);
             if (child.getVisibility() != View.GONE
                     && !(child instanceof StackScrollerDecorView)
-                    && child != mShelf
-                    && (mSwipeHelper.getSwipedView() != child
-                        || !child.getResources().getBoolean(R.bool.flag_notif_updates))) {
+                    && child != mShelf) {
                 children.add(child);
             }
         }
@@ -4979,28 +4993,48 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mSwipedOutViews.add(v);
     }
 
-    void onSwipeBegin(View v) {
-        if (v instanceof ExpandableView) {
-            ExpandableView ev = (ExpandableView) v;
-            ev.setIsBeingSwiped(true);
-            mController.getNoticationRoundessManager()
-                    .updateViewWithoutCallback(ev, true /* animate */);
+    void onSwipeBegin(View viewSwiped) {
+        if (!(viewSwiped instanceof ExpandableNotificationRow)) {
+            return;
         }
-        requestDisallowInterceptTouchEvent(true);
+        final int indexOfSwipedView = indexOfChild(viewSwiped);
+        if (indexOfSwipedView < 0) {
+            return;
+        }
+        mSectionsManager.updateFirstAndLastViewsForAllSections(
+                mSections, getChildrenWithBackground());
+        View viewBefore = null;
+        if (indexOfSwipedView > 0) {
+            viewBefore = getChildAt(indexOfSwipedView - 1);
+            if (mSectionsManager.beginsSection(viewSwiped, viewBefore)) {
+                viewBefore = null;
+            }
+        }
+        View viewAfter = null;
+        if (indexOfSwipedView < getChildCount()) {
+            viewAfter = getChildAt(indexOfSwipedView + 1);
+            if (mSectionsManager.beginsSection(viewAfter, viewSwiped)) {
+                viewAfter = null;
+            }
+        }
+        mController.getNoticationRoundessManager()
+                .setViewsAffectedBySwipe((ExpandableView) viewBefore,
+                        (ExpandableView) viewSwiped,
+                        (ExpandableView) viewAfter,
+                        getResources().getBoolean(R.bool.flag_notif_updates));
+
         updateFirstAndLastBackgroundViews();
+        requestDisallowInterceptTouchEvent(true);
         updateContinuousShadowDrawing();
         updateContinuousBackgroundDrawing();
         requestChildrenUpdate();
     }
 
-    void onSwipeEnd(View v) {
-        if (v instanceof ExpandableView) {
-            ExpandableView ev = (ExpandableView) v;
-            ev.setIsBeingSwiped(false);
-            mController.getNoticationRoundessManager()
-                    .updateViewWithoutCallback(ev, true /* animate */);
-        }
+    void onSwipeEnd() {
         updateFirstAndLastBackgroundViews();
+        mController.getNoticationRoundessManager()
+                .setViewsAffectedBySwipe(null, null, null,
+                        getResources().getBoolean(R.bool.flag_notif_updates));
     }
 
     void setTopHeadsUpEntry(NotificationEntry topEntry) {

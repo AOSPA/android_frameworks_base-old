@@ -35,6 +35,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.INetd;
 import android.net.IpSecAlgorithm;
 import android.net.IpSecConfig;
@@ -42,12 +43,12 @@ import android.net.IpSecManager;
 import android.net.IpSecSpiResponse;
 import android.net.IpSecUdpEncapResponse;
 import android.os.Binder;
-import android.os.INetworkManagementService;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.system.StructStat;
+import android.util.Range;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
@@ -116,7 +117,6 @@ public class IpSecServiceTest {
     }
 
     Context mMockContext;
-    INetworkManagementService mMockNetworkManager;
     INetd mMockNetd;
     IpSecService.IpSecServiceConfiguration mMockIpSecSrvConfig;
     IpSecService mIpSecService;
@@ -124,10 +124,9 @@ public class IpSecServiceTest {
     @Before
     public void setUp() throws Exception {
         mMockContext = mock(Context.class);
-        mMockNetworkManager = mock(INetworkManagementService.class);
         mMockNetd = mock(INetd.class);
         mMockIpSecSrvConfig = mock(IpSecService.IpSecServiceConfiguration.class);
-        mIpSecService = new IpSecService(mMockContext, mMockNetworkManager, mMockIpSecSrvConfig);
+        mIpSecService = new IpSecService(mMockContext, mMockIpSecSrvConfig);
 
         // Injecting mock netd
         when(mMockIpSecSrvConfig.getNetdInstance()).thenReturn(mMockNetd);
@@ -135,7 +134,7 @@ public class IpSecServiceTest {
 
     @Test
     public void testIpSecServiceCreate() throws InterruptedException {
-        IpSecService ipSecSrv = IpSecService.create(mMockContext, mMockNetworkManager);
+        IpSecService ipSecSrv = IpSecService.create(mMockContext);
         assertNotNull(ipSecSrv);
     }
 
@@ -608,7 +607,7 @@ public class IpSecServiceTest {
     public void testOpenUdpEncapSocketTagsSocket() throws Exception {
         IpSecService.UidFdTagger mockTagger = mock(IpSecService.UidFdTagger.class);
         IpSecService testIpSecService = new IpSecService(
-                mMockContext, mMockNetworkManager, mMockIpSecSrvConfig, mockTagger);
+                mMockContext, mMockIpSecSrvConfig, mockTagger);
 
         IpSecUdpEncapResponse udpEncapResp =
                 testIpSecService.openUdpEncapsulationSocket(0, new Binder());
@@ -650,9 +649,9 @@ public class IpSecServiceTest {
 
     @Test
     public void testReserveNetId() {
-        int start = mIpSecService.TUN_INTF_NETID_START;
-        for (int i = 0; i < mIpSecService.TUN_INTF_NETID_RANGE; i++) {
-            assertEquals(start + i, mIpSecService.reserveNetId());
+        final Range<Integer> netIdRange = ConnectivityManager.getIpSecNetIdRange();
+        for (int netId = netIdRange.getLower(); netId <= netIdRange.getUpper(); netId++) {
+            assertEquals(netId, mIpSecService.reserveNetId());
         }
 
         // Check that resource exhaustion triggers an exception
@@ -664,7 +663,7 @@ public class IpSecServiceTest {
 
         // Now release one and try again
         int releasedNetId =
-                mIpSecService.TUN_INTF_NETID_START + mIpSecService.TUN_INTF_NETID_RANGE / 2;
+                netIdRange.getLower() + (netIdRange.getUpper() - netIdRange.getLower()) / 2;
         mIpSecService.releaseNetId(releasedNetId);
         assertEquals(releasedNetId, mIpSecService.reserveNetId());
     }

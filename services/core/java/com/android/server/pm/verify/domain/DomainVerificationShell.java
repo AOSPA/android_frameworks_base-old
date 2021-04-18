@@ -24,7 +24,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
 import android.content.pm.verify.domain.DomainVerificationManager;
 import android.content.pm.verify.domain.DomainVerificationState;
-import android.content.pm.verify.domain.DomainVerificationUserSelection;
+import android.content.pm.verify.domain.DomainVerificationUserState;
 import android.os.Binder;
 import android.os.UserHandle;
 import android.text.TextUtils;
@@ -38,6 +38,8 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
+import java.util.function.Function;
 
 public class DomainVerificationShell {
 
@@ -118,7 +120,7 @@ public class DomainVerificationShell {
             case "set-app-links":
                 return runSetAppLinks(commandHandler);
             case "set-app-links-user-selection":
-                return runSetAppLinksUserSelection(commandHandler);
+                return runSetAppLinksUserState(commandHandler);
             case "set-app-links-allowed":
                 return runSetAppLinksAllowed(commandHandler);
         }
@@ -193,7 +195,7 @@ public class DomainVerificationShell {
     }
 
     // pm set-app-links-user-selection --user <USER_ID> [--package <PACKAGE>] <ENABLED> <DOMAINS>...
-    private boolean runSetAppLinksUserSelection(@NonNull BasicShellCommandHandler commandHandler) {
+    private boolean runSetAppLinksUserState(@NonNull BasicShellCommandHandler commandHandler) {
         Integer userId = null;
         String packageName = null;
 
@@ -224,24 +226,21 @@ public class DomainVerificationShell {
             return false;
         }
 
-        userId = translateUserId(userId, "runSetAppLinksUserSelection");
+        userId = translateUserId(userId, "runSetAppLinksUserState");
 
-        String enabledString = commandHandler.getNextArgRequired();
+        String enabledArg = commandHandler.getNextArg();
+        if (TextUtils.isEmpty(enabledArg)) {
+            commandHandler.getErrPrintWriter().println("Error: enabled param not specified");
+            return false;
+        }
 
-        // Manually ensure that "true" and "false" are the only options, to ensure a domain isn't
-        // accidentally parsed as a boolean
         boolean enabled;
-        switch (enabledString) {
-            case "true":
-                enabled = true;
-                break;
-            case "false":
-                enabled = false;
-                break;
-            default:
-                commandHandler.getErrPrintWriter().println(
-                        "Invalid enabled param: " + enabledString);
-                return false;
+        try {
+            enabled = parseEnabled(enabledArg);
+        } catch (IllegalArgumentException e) {
+            commandHandler.getErrPrintWriter()
+                    .println("Error: invalid enabled param: " + e.getMessage());
+            return false;
         }
 
         ArraySet<String> domains = new ArraySet<>(getRemainingArgs(commandHandler));
@@ -250,9 +249,13 @@ public class DomainVerificationShell {
             return false;
         }
 
+        if (domains.size() == 1 && domains.contains("all")) {
+            domains = null;
+        }
+
         try {
-            mCallback.setDomainVerificationUserSelectionInternal(userId,
-                    packageName, enabled, domains);
+            mCallback.setDomainVerificationUserSelectionInternal(userId, packageName, enabled,
+                    domains);
         } catch (NameNotFoundException e) {
             commandHandler.getErrPrintWriter().println("Package not found: " + packageName);
             return false;
@@ -322,7 +325,7 @@ public class DomainVerificationShell {
         }
 
         if (userId != null) {
-            mCallback.clearUserSelections(packageNames, userId);
+            mCallback.clearUserStates(packageNames, userId);
         } else {
             mCallback.clearDomainVerificationState(packageNames);
         }
@@ -358,15 +361,12 @@ public class DomainVerificationShell {
     private boolean runSetAppLinksAllowed(@NonNull BasicShellCommandHandler commandHandler) {
         String packageName = null;
         Integer userId = null;
-        Boolean allowed = null;
         String option;
         while ((option = commandHandler.getNextOption()) != null) {
             if (option.equals("--package")) {
-                packageName = commandHandler.getNextArgRequired();
-            } if (option.equals("--user")) {
+                packageName = commandHandler.getNextArg();
+            } else if (option.equals("--user")) {
                 userId = UserHandle.parseUserArg(commandHandler.getNextArgRequired());
-            } else if (allowed == null) {
-                allowed = Boolean.valueOf(option);
             } else {
                 commandHandler.getErrPrintWriter().println("Error: unexpected option: " + option);
                 return false;
@@ -385,8 +385,18 @@ public class DomainVerificationShell {
             return false;
         }
 
-        if (allowed == null) {
+        String allowedArg = commandHandler.getNextArg();
+        if (TextUtils.isEmpty(allowedArg)) {
             commandHandler.getErrPrintWriter().println("Error: allowed setting not specified");
+            return false;
+        }
+
+        boolean allowed;
+        try {
+            allowed = parseEnabled(allowedArg);
+        } catch (IllegalArgumentException e) {
+            commandHandler.getErrPrintWriter()
+                    .println("Error: invalid allowed setting: " + e.getMessage());
             return false;
         }
 
@@ -418,6 +428,22 @@ public class DomainVerificationShell {
     }
 
     /**
+     * Manually ensure that "true" and "false" are the only options, to ensure a domain isn't
+     * accidentally parsed as a boolean.
+     */
+    @NonNull
+    private boolean parseEnabled(@NonNull String arg) throws IllegalArgumentException {
+        switch (arg.toLowerCase(Locale.US)) {
+            case "true":
+                return true;
+            case "false":
+                return false;
+            default:
+                throw new IllegalArgumentException(arg + " is not a valid boolean");
+        }
+    }
+
+    /**
      * Separated interface from {@link DomainVerificationManagerInternal} to hide methods that are
      * even more internal, and so that testing is easier.
      */
@@ -446,17 +472,17 @@ public class DomainVerificationShell {
          * @param packageName the package whose state to change, or all packages if non is
          *                    specified
          * @param enabled     whether the domain is now approved by the user
-         * @param domains     the set of domains to change
+         * @param domains     the set of domains to change, or null to affect all domains
          */
         void setDomainVerificationUserSelectionInternal(@UserIdInt int userId,
-                @Nullable String packageName, boolean enabled, @NonNull ArraySet<String> domains)
+                @Nullable String packageName, boolean enabled, @Nullable ArraySet<String> domains)
                 throws PackageManager.NameNotFoundException;
 
         /**
-         * @see DomainVerificationManager#getDomainVerificationUserSelection(String)
+         * @see DomainVerificationManager#getDomainVerificationUserState(String)
          */
         @Nullable
-        DomainVerificationUserSelection getDomainVerificationUserSelection(
+        DomainVerificationUserState getDomainVerificationUserState(
                 @NonNull String packageName, @UserIdInt int userId)
                 throws PackageManager.NameNotFoundException;
 
@@ -482,7 +508,7 @@ public class DomainVerificationShell {
          * Reset all the user selections for the given package names, or all package names if null
          * is provided.
          */
-        void clearUserSelections(@Nullable List<String> packageNames, @UserIdInt int userId);
+        void clearUserStates(@Nullable List<String> packageNames, @UserIdInt int userId);
 
         /**
          * Broadcast a verification request for the given package names, or all package names if
@@ -494,7 +520,8 @@ public class DomainVerificationShell {
         void verifyPackages(@Nullable List<String> packageNames, boolean reVerify);
 
         /**
-         * @see DomainVerificationManagerInternal#printState(IndentingPrintWriter, String, Integer)
+         * @see DomainVerificationManagerInternal#printState(IndentingPrintWriter, String, Integer,
+         * Function)
          */
         void printState(@NonNull IndentingPrintWriter writer, @Nullable String packageName,
                 @Nullable @UserIdInt Integer userId) throws NameNotFoundException;

@@ -36,6 +36,7 @@ import android.sysprop.InitProperties;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.proto.ProtoOutputStream;
+import android.view.Display;
 
 import com.android.internal.util.Preconditions;
 
@@ -197,6 +198,9 @@ public final class PowerManager {
      * application as the normal behavior.  Notifications that pop up and want
      * the device to be on are the exception; use this flag to be like them.
      * </p><p>
+     * Android TV playback devices attempt to turn on the HDMI-connected TV via HDMI-CEC on any
+     * wake-up, including wake-ups triggered by wake locks.
+     * </p><p>
      * Cannot be used with {@link #PARTIAL_WAKE_LOCK}.
      * </p>
      */
@@ -321,6 +325,13 @@ public final class PowerManager {
      * @hide
      */
     public static final int USER_ACTIVITY_EVENT_ATTENTION = 4;
+
+    /**
+     * User activity event type: {@link com.android.server.power.FaceDownDetector} taking action
+     * on behalf of user.
+     * @hide
+     */
+    public static final int USER_ACTIVITY_EVENT_FACE_DOWN = 5;
 
     /**
      * User activity flag: If already dimmed, extend the dim timeout
@@ -1133,8 +1144,7 @@ public final class PowerManager {
      * wake lock, and {@link WakeLock#release release()} when you are done.
      * </p><p>
      * {@samplecode
-     * PowerManager pm = (PowerManager)mContext.getSystemService(
-     *                                          Context.POWER_SERVICE);
+     * PowerManager pm = mContext.getSystemService(PowerManager.class);
      * PowerManager.WakeLock wl = pm.newWakeLock(
      *                                      PowerManager.SCREEN_DIM_WAKE_LOCK
      *                                      | PowerManager.ON_AFTER_RELEASE,
@@ -1152,6 +1162,8 @@ public final class PowerManager {
      * {@link android.view.WindowManager.LayoutParams#FLAG_KEEP_SCREEN_ON} instead.
      * This window flag will be correctly managed by the platform
      * as the user moves between applications and doesn't require a special permission.
+     * Additionally using the flag will keep only the appropriate screen on in a
+     * multi-display scenario while using a wake lock will keep every screen powered on.
      * </p>
      *
      * <p>
@@ -1169,7 +1181,7 @@ public final class PowerManager {
      * can be transformed by java optimizer and obfuscator tools.
      * <li>avoid wrapping the tag or a prefix to avoid collision with wake lock
      * tags from the platform (e.g. *alarm*).
-     * <li>never include personnally identifiable information for privacy
+     * <li>never include personally identifiable information for privacy
      * reasons.
      * </ul>
      * </p>
@@ -1190,7 +1202,27 @@ public final class PowerManager {
      */
     public WakeLock newWakeLock(int levelAndFlags, String tag) {
         validateWakeLockParameters(levelAndFlags, tag);
-        return new WakeLock(levelAndFlags, tag, mContext.getOpPackageName());
+        return new WakeLock(levelAndFlags, tag, mContext.getOpPackageName(),
+                Display.INVALID_DISPLAY);
+    }
+
+    /**
+     * Creates a new wake lock with the specified level and flags.
+     * <p>
+     * The wakelock will only apply to the {@link com.android.server.display.DisplayGroup} of the
+     * provided {@code displayId}. If {@code displayId} is {@link Display#INVALID_DISPLAY} then it
+     * will apply to all {@link com.android.server.display.DisplayGroup DisplayGroups}.
+     *
+     * @param levelAndFlags Combination of wake lock level and flag values defining
+     * the requested behavior of the WakeLock.
+     * @param tag Your class name (or other tag) for debugging purposes.
+     * @param displayId The display id to which this wake lock is tied.
+     *
+     * @hide
+     */
+    public WakeLock newWakeLock(int levelAndFlags, String tag, int displayId) {
+        validateWakeLockParameters(levelAndFlags, tag);
+        return new WakeLock(levelAndFlags, tag, mContext.getOpPackageName(), displayId);
     }
 
     /** @hide */
@@ -1277,7 +1309,7 @@ public final class PowerManager {
     })
     public void userActivity(long when, int event, int flags) {
         try {
-            mService.userActivity(when, event, flags);
+            mService.userActivity(mContext.getDisplayId(), when, event, flags);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1291,6 +1323,9 @@ public final class PowerManager {
      * turned on it will be turned off. If all displays are off as a result of this action the
      * device will be put to sleep. If the {@link com.android.server.display.DisplayGroup#DEFAULT
      * default display group} is already off then nothing will happen.
+     *
+     * <p>If the device is an Android TV playback device and the current active source on the
+     * HDMI-connected TV, it will attempt to turn off that TV via HDMI-CEC.
      *
      * <p>
      * Overrides all the wake locks that are held.
@@ -1422,6 +1457,10 @@ public final class PowerManager {
      * <p>If the {@link android.view.Display#DEFAULT_DISPLAY default display} is turned off it will
      * be turned on. Additionally, if the device is asleep it will be awoken. If the {@link
      * android.view.Display#DEFAULT_DISPLAY default display} is already on then nothing will happen.
+     *
+     * <p>If the device is an Android TV playback device, it will attempt to turn on the
+     * HDMI-connected TV and become the current active source via the HDMI-CEC One Touch Play
+     * feature.
      *
      * <p>
      * This is what happens when the power key is pressed to turn on the screen.
@@ -1881,6 +1920,10 @@ public final class PowerManager {
      * Returns the current battery saver control mode. Values it may return are defined in
      * AutoPowerSaveModeTriggers. Note that this is a global device state, not a per user setting.
      *
+     * <p>Note: Prior to Android version {@link Build.VERSION_CODES#S}, any app calling this method
+     * was required to hold the {@link android.Manifest.permission#POWER_SAVER} permission. Starting
+     * from Android version {@link Build.VERSION_CODES#S}, that permission is no longer required.
+     *
      * @return The current value power saver mode for the system.
      *
      * @see AutoPowerSaveModeTriggers
@@ -1889,7 +1932,6 @@ public final class PowerManager {
      */
     @AutoPowerSaveModeTriggers
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.POWER_SAVER)
     public int getPowerSaveModeTrigger() {
         try {
             return mService.getPowerSaveModeTrigger();
@@ -2583,19 +2625,17 @@ public final class PowerManager {
         private WorkSource mWorkSource;
         private String mHistoryTag;
         private final String mTraceName;
+        private final int mDisplayId;
 
-        private final Runnable mReleaser = new Runnable() {
-            public void run() {
-                release(RELEASE_FLAG_TIMEOUT);
-            }
-        };
+        private final Runnable mReleaser = () -> release(RELEASE_FLAG_TIMEOUT);
 
-        WakeLock(int flags, String tag, String packageName) {
+        WakeLock(int flags, String tag, String packageName, int displayId) {
             mFlags = flags;
             mTag = tag;
             mPackageName = packageName;
             mToken = new Binder();
             mTraceName = "WakeLock (" + mTag + ")";
+            mDisplayId = displayId;
         }
 
         @Override
@@ -2676,7 +2716,7 @@ public final class PowerManager {
                 Trace.asyncTraceBegin(Trace.TRACE_TAG_POWER, mTraceName, 0);
                 try {
                     mService.acquireWakeLock(mToken, mFlags, mTag, mPackageName, mWorkSource,
-                            mHistoryTag);
+                            mHistoryTag, mDisplayId);
                 } catch (RemoteException e) {
                     throw e.rethrowFromSystemServer();
                 }

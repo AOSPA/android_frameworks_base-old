@@ -21,14 +21,13 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.StringDef;
-import android.annotation.TestApi;
 import android.app.ActivityThread;
 import android.app.Application;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.Signature;
-import android.media.metrics.PlaybackComponent;
+import android.media.metrics.LogSessionId;
 import android.os.Handler;
 import android.os.HandlerExecutor;
 import android.os.Looper;
@@ -51,6 +50,7 @@ import java.util.HashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -558,12 +558,20 @@ public final class MediaDrm implements AutoCloseable {
         public static final int ERROR_PROVISIONING_PARSE = 26;
 
         /**
+         * The provisioning server detected an error in the provisioning
+         * request.
+         * <p>
+         * Check for errors on the provisioning server.
+         */
+        public static final int ERROR_PROVISIONING_REQUEST_REJECTED = 27;
+
+        /**
          * Provisioning failed in a way that is likely to succeed on a
          * subsequent attempt.
          * <p>
          * The app should retry the operation.
          */
-        public static final int ERROR_PROVISIONING_RETRY = 27;
+        public static final int ERROR_PROVISIONING_RETRY = 28;
 
         /**
          * This indicates that apps using MediaDrm sessions are
@@ -572,7 +580,7 @@ public final class MediaDrm implements AutoCloseable {
          * <p>
          * The app should retry the operation later.
          */
-        public static final int ERROR_RESOURCE_CONTENTION = 28;
+        public static final int ERROR_RESOURCE_CONTENTION = 29;
 
         /**
          * Failed to generate a secure stop request because a field in the
@@ -581,7 +589,7 @@ public final class MediaDrm implements AutoCloseable {
          * The secure stop can't be released on the server, but the app may
          * remove it explicitly using {@link MediaDrm#removeSecureStop}.
          */
-        public static final int ERROR_SECURE_STOP_RELEASE = 29;
+        public static final int ERROR_SECURE_STOP_RELEASE = 30;
 
         /**
          * The plugin was unable to read data from the filesystem.
@@ -589,7 +597,7 @@ public final class MediaDrm implements AutoCloseable {
          * Please see the general error handling strategy for unexpected errors
          * described in {@link ErrorCodes}.
          */
-        public static final int ERROR_STORAGE_READ = 30;
+        public static final int ERROR_STORAGE_READ = 31;
 
         /**
          * The plugin was unable to write data to the filesystem.
@@ -597,7 +605,7 @@ public final class MediaDrm implements AutoCloseable {
          * Please see the general error handling strategy for unexpected errors
          * described in {@link ErrorCodes}.
          */
-        public static final int ERROR_STORAGE_WRITE = 31;
+        public static final int ERROR_STORAGE_WRITE = 32;
 
         /**
          * {@link MediaCodec#queueSecureInputBuffer} called with 0 subsamples.
@@ -605,7 +613,7 @@ public final class MediaDrm implements AutoCloseable {
          * Check the {@link MediaCodec.CryptoInfo} object passed to {@link
          * MediaCodec#queueSecureInputBuffer}.
          */
-        public static final int ERROR_ZERO_SUBSAMPLES = 32;
+        public static final int ERROR_ZERO_SUBSAMPLES = 33;
 
     }
 
@@ -637,6 +645,7 @@ public final class MediaDrm implements AutoCloseable {
         ErrorCodes.ERROR_PROVISIONING_CERTIFICATE,
         ErrorCodes.ERROR_PROVISIONING_CONFIG,
         ErrorCodes.ERROR_PROVISIONING_PARSE,
+        ErrorCodes.ERROR_PROVISIONING_REQUEST_REJECTED,
         ErrorCodes.ERROR_PROVISIONING_RETRY,
         ErrorCodes.ERROR_SECURE_STOP_RELEASE,
         ErrorCodes.ERROR_STORAGE_READ,
@@ -1371,7 +1380,7 @@ public final class MediaDrm implements AutoCloseable {
     public byte[] openSession(@SecurityLevel int level) throws
             NotProvisionedException, ResourceBusyException {
         byte[] sessionId = openSessionNative(level);
-        mPlaybackComponentMap.put(ByteBuffer.wrap(sessionId), new PlaybackComponentImpl(sessionId));
+        mPlaybackComponentMap.put(ByteBuffer.wrap(sessionId), new PlaybackComponent(sessionId));
         return sessionId;
     }
 
@@ -2921,16 +2930,14 @@ public final class MediaDrm implements AutoCloseable {
 
     /**
      * Obtain a {@link PlaybackComponent} associated with a DRM session.
-     * Call {@link PlaybackComponent#setPlaybackId(String)} on the returned object
-     * to associate a playback session with the DRM session.
+     * Call {@link PlaybackComponent#setLogSessionId(LogSessionId)} on
+     * the returned object to associate a playback session with the DRM session.
      *
      * @param sessionId a DRM session ID obtained from {@link #openSession()}
      * @return a {@link PlaybackComponent} associated with the session,
      * or {@code null} if the session is closed or does not exist.
      * @see PlaybackComponent
-     * @hide
      */
-    @TestApi
     @Nullable
     public PlaybackComponent getPlaybackComponent(@NonNull byte[] sessionId) {
         if (sessionId == null) {
@@ -2939,28 +2946,37 @@ public final class MediaDrm implements AutoCloseable {
         return mPlaybackComponentMap.get(ByteBuffer.wrap(sessionId));
     }
 
-    private native void setPlaybackId(byte[] sessionId, String playbackId);
+    private native void setPlaybackId(byte[] sessionId, String logSessionId);
 
-    private final class PlaybackComponentImpl implements PlaybackComponent {
+    /** This class contains the Drm session ID and log session ID */
+    public final class PlaybackComponent {
         private final byte[] mSessionId;
-        private String mPlaybackId = "";
+        @NonNull private LogSessionId mLogSessionId = LogSessionId.LOG_SESSION_ID_NONE;
 
-        public PlaybackComponentImpl(byte[] sessionId) {
+        /** @hide */
+        public PlaybackComponent(byte[] sessionId) {
             mSessionId = sessionId;
         }
 
-        @Override
-        public void setPlaybackId(@NonNull String playbackId) {
-            if (playbackId == null) {
+
+        /**
+         * Gets the {@link LogSessionId}.
+         */
+        public void setLogSessionId(@NonNull LogSessionId logSessionId) {
+            Objects.requireNonNull(logSessionId);
+            if (logSessionId.getStringId() == null) {
                 throw new IllegalArgumentException("playbackId is null");
             }
-            MediaDrm.this.setPlaybackId(mSessionId, playbackId);
-            mPlaybackId = playbackId;
+            MediaDrm.this.setPlaybackId(mSessionId, logSessionId.getStringId());
+            mLogSessionId = logSessionId;
         }
 
-        @Override
-        @NonNull public String getPlaybackId() {
-            return mPlaybackId;
+
+        /**
+         * Returns the {@link LogSessionId}.
+         */
+        @NonNull public LogSessionId getLogSessionId() {
+            return mLogSessionId;
         }
     }
 

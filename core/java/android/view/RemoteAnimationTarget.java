@@ -31,6 +31,7 @@ import static android.view.RemoteAnimationTargetProto.START_BOUNDS;
 import static android.view.RemoteAnimationTargetProto.START_LEASH;
 import static android.view.RemoteAnimationTargetProto.TASK_ID;
 import static android.view.RemoteAnimationTargetProto.WINDOW_CONFIGURATION;
+import static android.view.WindowManager.LayoutParams.INVALID_WINDOW_TYPE;
 
 import android.annotation.IntDef;
 import android.app.PictureInPictureParams;
@@ -195,12 +196,30 @@ public class RemoteAnimationTarget implements Parcelable {
      */
     public PictureInPictureParams pictureInPictureParams;
 
+    /**
+     * The {@link android.view.WindowManager.LayoutParams.WindowType} of this window. It's only used
+     * for non-app window.
+     */
+    public final @WindowManager.LayoutParams.WindowType int windowType;
+
     public RemoteAnimationTarget(int taskId, int mode, SurfaceControl leash, boolean isTranslucent,
             Rect clipRect, Rect contentInsets, int prefixOrderIndex, Point position,
             Rect localBounds, Rect screenSpaceBounds,
             WindowConfiguration windowConfig, boolean isNotInRecents,
             SurfaceControl startLeash, Rect startBounds,
             PictureInPictureParams pictureInPictureParams) {
+        this(taskId, mode, leash, isTranslucent, clipRect, contentInsets, prefixOrderIndex,
+                position, localBounds, screenSpaceBounds, windowConfig, isNotInRecents, startLeash,
+                startBounds, pictureInPictureParams, INVALID_WINDOW_TYPE);
+    }
+
+    public RemoteAnimationTarget(int taskId, int mode, SurfaceControl leash, boolean isTranslucent,
+            Rect clipRect, Rect contentInsets, int prefixOrderIndex, Point position,
+            Rect localBounds, Rect screenSpaceBounds,
+            WindowConfiguration windowConfig, boolean isNotInRecents,
+            SurfaceControl startLeash, Rect startBounds,
+            PictureInPictureParams pictureInPictureParams,
+            @WindowManager.LayoutParams.WindowType int windowType) {
         this.mode = mode;
         this.taskId = taskId;
         this.leash = leash;
@@ -217,25 +236,27 @@ public class RemoteAnimationTarget implements Parcelable {
         this.startLeash = startLeash;
         this.startBounds = startBounds == null ? null : new Rect(startBounds);
         this.pictureInPictureParams = pictureInPictureParams;
+        this.windowType = windowType;
     }
 
     public RemoteAnimationTarget(Parcel in) {
         taskId = in.readInt();
         mode = in.readInt();
-        leash = in.readParcelable(null);
+        leash = in.readTypedObject(SurfaceControl.CREATOR);
         isTranslucent = in.readBoolean();
-        clipRect = in.readParcelable(null);
-        contentInsets = in.readParcelable(null);
+        clipRect = in.readTypedObject(Rect.CREATOR);
+        contentInsets = in.readTypedObject(Rect.CREATOR);
         prefixOrderIndex = in.readInt();
-        position = in.readParcelable(null);
-        localBounds = in.readParcelable(null);
-        sourceContainerBounds = in.readParcelable(null);
-        screenSpaceBounds = in.readParcelable(null);
-        windowConfiguration = in.readParcelable(null);
+        position = in.readTypedObject(Point.CREATOR);
+        localBounds = in.readTypedObject(Rect.CREATOR);
+        sourceContainerBounds = in.readTypedObject(Rect.CREATOR);
+        screenSpaceBounds = in.readTypedObject(Rect.CREATOR);
+        windowConfiguration = in.readTypedObject(WindowConfiguration.CREATOR);
         isNotInRecents = in.readBoolean();
-        startLeash = in.readParcelable(null);
-        startBounds = in.readParcelable(null);
-        pictureInPictureParams = in.readParcelable(null);
+        startLeash = in.readTypedObject(SurfaceControl.CREATOR);
+        startBounds = in.readTypedObject(Rect.CREATOR);
+        pictureInPictureParams = in.readTypedObject(PictureInPictureParams.CREATOR);
+        windowType = in.readInt();
     }
 
     @Override
@@ -247,20 +268,21 @@ public class RemoteAnimationTarget implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeInt(taskId);
         dest.writeInt(mode);
-        dest.writeParcelable(leash, 0 /* flags */);
+        dest.writeTypedObject(leash, 0 /* flags */);
         dest.writeBoolean(isTranslucent);
-        dest.writeParcelable(clipRect, 0 /* flags */);
-        dest.writeParcelable(contentInsets, 0 /* flags */);
+        dest.writeTypedObject(clipRect, 0 /* flags */);
+        dest.writeTypedObject(contentInsets, 0 /* flags */);
         dest.writeInt(prefixOrderIndex);
-        dest.writeParcelable(position, 0 /* flags */);
-        dest.writeParcelable(localBounds, 0 /* flags */);
-        dest.writeParcelable(sourceContainerBounds, 0 /* flags */);
-        dest.writeParcelable(screenSpaceBounds, 0 /* flags */);
-        dest.writeParcelable(windowConfiguration, 0 /* flags */);
+        dest.writeTypedObject(position, 0 /* flags */);
+        dest.writeTypedObject(localBounds, 0 /* flags */);
+        dest.writeTypedObject(sourceContainerBounds, 0 /* flags */);
+        dest.writeTypedObject(screenSpaceBounds, 0 /* flags */);
+        dest.writeTypedObject(windowConfiguration, 0 /* flags */);
         dest.writeBoolean(isNotInRecents);
-        dest.writeParcelable(startLeash, 0 /* flags */);
-        dest.writeParcelable(startBounds, 0 /* flags */);
-        dest.writeParcelable(pictureInPictureParams, 0 /* flags */);
+        dest.writeTypedObject(startLeash, 0 /* flags */);
+        dest.writeTypedObject(startBounds, 0 /* flags */);
+        dest.writeTypedObject(pictureInPictureParams, 0 /* flags */);
+        dest.writeInt(windowType);
     }
 
     public void dump(PrintWriter pw, String prefix) {
@@ -278,6 +300,7 @@ public class RemoteAnimationTarget implements Parcelable {
         pw.print(prefix); pw.print("windowConfiguration="); pw.println(windowConfiguration);
         pw.print(prefix); pw.print("leash="); pw.println(leash);
         pw.print(prefix); pw.print("pictureInPictureParams="); pw.println(pictureInPictureParams);
+        pw.print(prefix); pw.print("windowType="); pw.print(windowType);
     }
 
     public void dumpDebug(ProtoOutputStream proto, long fieldId) {

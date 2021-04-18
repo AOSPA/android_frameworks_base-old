@@ -22,7 +22,6 @@ import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_IN
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_INOUT;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_NONE;
 import static android.net.wifi.WifiManager.TrafficStateCallback.DATA_ACTIVITY_OUT;
-import static android.telephony.PhoneStateListener.LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE;
 
 import android.annotation.Nullable;
 import android.content.BroadcastReceiver;
@@ -31,6 +30,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.net.ConnectivityManager;
+import android.net.ConnectivityManager.NetworkCallback;
 import android.net.Network;
 import android.net.NetworkCapabilities;
 import android.net.NetworkScoreManager;
@@ -44,11 +44,11 @@ import android.os.SystemProperties;
 import android.provider.Settings;
 import android.telephony.CarrierConfigManager;
 import android.telephony.CellSignalStrength;
-import android.telephony.PhoneStateListener;
 import android.telephony.ServiceState;
 import android.telephony.SubscriptionInfo;
 import android.telephony.SubscriptionManager;
 import android.telephony.SubscriptionManager.OnSubscriptionsChangedListener;
+import android.telephony.TelephonyCallback;
 import android.telephony.TelephonyManager;
 import android.text.TextUtils;
 import android.util.FeatureFlagUtils;
@@ -75,11 +75,13 @@ import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.demomode.DemoModeController;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
+import com.android.systemui.telephony.TelephonyListenerManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.BitSet;
 import java.util.Collections;
 import java.util.Comparator;
@@ -108,6 +110,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
     private final Context mContext;
     private final TelephonyManager mPhone;
+    private final TelephonyListenerManager mTelephonyListenerManager;
     private final WifiManager mWifiManager;
     private final ConnectivityManager mConnectivityManager;
     private final SubscriptionManager mSubscriptionManager;
@@ -121,7 +124,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private final boolean mProviderModel;
     private Config mConfig;
 
-    private PhoneStateListener mPhoneStateListener;
+    private TelephonyCallback.ActiveDataSubscriptionIdListener mPhoneStateListener;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
 
     // Subcontrollers.
@@ -167,7 +170,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private int mCurrentUserId;
 
     private OnSubscriptionsChangedListener mSubscriptionListener;
-
+    private NetworkCapabilities mLastDefaultNetworkCapabilities;
     // Handler that all broadcasts are received on.
     private final Handler mReceiverHandler;
     // Handler that all callbacks are made on.
@@ -204,12 +207,14 @@ public class NetworkControllerImpl extends BroadcastReceiver
             BroadcastDispatcher broadcastDispatcher,
             ConnectivityManager connectivityManager,
             TelephonyManager telephonyManager,
+            TelephonyListenerManager telephonyListenerManager,
             @Nullable WifiManager wifiManager,
             NetworkScoreManager networkScoreManager,
             AccessPointControllerImpl accessPointController,
             DemoModeController demoModeController) {
         this(context, connectivityManager,
                 telephonyManager,
+                telephonyListenerManager,
                 wifiManager,
                 networkScoreManager,
                 SubscriptionManager.from(context), Config.readConfig(context), bgLooper,
@@ -225,7 +230,9 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
     @VisibleForTesting
     NetworkControllerImpl(Context context, ConnectivityManager connectivityManager,
-            TelephonyManager telephonyManager, WifiManager wifiManager,
+            TelephonyManager telephonyManager,
+            TelephonyListenerManager telephonyListenerManager,
+            WifiManager wifiManager,
             NetworkScoreManager networkScoreManager,
             SubscriptionManager subManager, Config config, Looper bgLooper,
             CallbackHandler callbackHandler,
@@ -236,6 +243,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             BroadcastDispatcher broadcastDispatcher,
             DemoModeController demoModeController) {
         mContext = context;
+        mTelephonyListenerManager = telephonyListenerManager;
         mConfig = config;
         mReceiverHandler = new Handler(bgLooper);
         mCallbackHandler = callbackHandler;
@@ -245,8 +253,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mSubscriptionManager = subManager;
         mSubDefaults = defaultsHandler;
         mConnectivityManager = connectivityManager;
-        mHasMobileDataFeature =
-                mConnectivityManager.isNetworkSupported(ConnectivityManager.TYPE_MOBILE);
+        mHasMobileDataFeature = telephonyManager.isDataCapable();
         mDemoModeController = demoModeController;
 
         // telephony
@@ -314,7 +321,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
         mFiveGServiceClient = FiveGServiceClient.getInstance(context);
 
-        ConnectivityManager.NetworkCallback callback = new ConnectivityManager.NetworkCallback(){
+        NetworkCallback callback =
+                new NetworkCallback(NetworkCallback.FLAG_INCLUDE_LOCATION_INFO){
             private Network mLastNetwork;
             private NetworkCapabilities mLastNetworkCapabilities;
 
@@ -322,6 +330,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             public void onLost(Network network) {
                 mLastNetwork = null;
                 mLastNetworkCapabilities = null;
+                mLastDefaultNetworkCapabilities = null;
                 String callback = new StringBuilder()
                         .append(SSDF.format(System.currentTimeMillis())).append(",")
                         .append("onLost: ")
@@ -341,13 +350,23 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
                 // This callback is invoked a lot (i.e. when RSSI changes), so avoid updating
                 // icons when connectivity state has remained the same.
-                if (network.equals(mLastNetwork) &&
-                    networkCapabilities.equalsTransportTypes(mLastNetworkCapabilities) &&
-                    validated == lastValidated) {
-                    return;
+                if (network.equals(mLastNetwork) && validated == lastValidated) {
+                    // Should not rely on getTransportTypes() returning the same order of transport
+                    // types. So sort the array before comparing.
+                    int[] newTypes = networkCapabilities.getTransportTypes();
+                    Arrays.sort(newTypes);
+
+                    int[] lastTypes = (mLastNetworkCapabilities != null)
+                            ? mLastNetworkCapabilities.getTransportTypes() : null;
+                    if (lastTypes != null) Arrays.sort(lastTypes);
+
+                    if (Arrays.equals(newTypes, lastTypes)) {
+                        return;
+                    }
                 }
                 mLastNetwork = network;
                 mLastNetworkCapabilities = networkCapabilities;
+                mLastDefaultNetworkCapabilities = networkCapabilities;
                 String callback = new StringBuilder()
                         .append(SSDF.format(System.currentTimeMillis())).append(",")
                         .append("onCapabilitiesChanged: ")
@@ -366,23 +385,20 @@ public class NetworkControllerImpl extends BroadcastReceiver
         // exclusively for status bar icons.
         mConnectivityManager.registerDefaultNetworkCallback(callback, mReceiverHandler);
         // Register the listener on our bg looper
-        mPhoneStateListener = new PhoneStateListener(mReceiverHandler::post) {
-            @Override
-            public void onActiveDataSubscriptionIdChanged(int subId) {
-                // For data switching from A to B, we assume B is validated for up to 2 seconds iff:
-                // 1) A and B are in the same subscription group e.g. CBRS data switch. And
-                // 2) A was validated before the switch.
-                // This is to provide smooth transition for UI without showing cross during data
-                // switch.
-                if (keepCellularValidationBitInSwitch(mActiveMobileDataSubscription, subId)) {
-                    if (DEBUG) Log.d(TAG, ": mForceCellularValidated to true.");
-                    mForceCellularValidated = true;
-                    mReceiverHandler.removeCallbacks(mClearForceValidated);
-                    mReceiverHandler.postDelayed(mClearForceValidated, 2000);
-                }
-                mActiveMobileDataSubscription = subId;
-                doUpdateMobileControllers();
+        mPhoneStateListener = subId -> {
+            // For data switching from A to B, we assume B is validated for up to 2 seconds iff:
+            // 1) A and B are in the same subscription group e.g. CBRS data switch. And
+            // 2) A was validated before the switch.
+            // This is to provide smooth transition for UI without showing cross during data
+            // switch.
+            if (keepCellularValidationBitInSwitch(mActiveMobileDataSubscription, subId)) {
+                if (DEBUG) Log.d(TAG, ": mForceCellularValidated to true.");
+                mForceCellularValidated = true;
+                mReceiverHandler.removeCallbacks(mClearForceValidated);
+                mReceiverHandler.postDelayed(mClearForceValidated, 2000);
             }
+            mActiveMobileDataSubscription = subId;
+            doUpdateMobileControllers();
         };
 
         mDemoModeController.addCallback(this);
@@ -423,7 +439,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
             mSubscriptionListener = new SubListener();
         }
         mSubscriptionManager.addOnSubscriptionsChangedListener(mSubscriptionListener);
-        mPhone.listen(mPhoneStateListener, LISTEN_ACTIVE_DATA_SUBSCRIPTION_ID_CHANGE);
+        mTelephonyListenerManager.addActiveDataSubscriptionIdListener(mPhoneStateListener);
 
         // broadcasts
         IntentFilter filter = new IntentFilter();
@@ -434,7 +450,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         filter.addAction(Intent.ACTION_SERVICE_STATE);
         filter.addAction(TelephonyManager.ACTION_SERVICE_PROVIDERS_UPDATED);
         filter.addAction(ConnectivityManager.CONNECTIVITY_ACTION);
-        filter.addAction(ConnectivityManager.INET_CONDITION_ACTION);
         filter.addAction(Intent.ACTION_AIRPLANE_MODE_CHANGED);
         filter.addAction(CarrierConfigManager.ACTION_CARRIER_CONFIG_CHANGED);
         filter.addAction(TelephonyIntents.ACTION_ANY_DATA_CONNECTION_STATE_CHANGED);
@@ -442,7 +457,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mListening = true;
 
         // Initial setup of connectivity. Handled as if we had received a sticky broadcast of
-        // ConnectivityManager.CONNECTIVITY_ACTION or ConnectivityManager.INET_CONDITION_ACTION.
+        // ConnectivityManager.CONNECTIVITY_ACTION.
         mReceiverHandler.post(this::updateConnectivity);
 
         // Initial setup of WifiSignalController. Handled as if we had received a sticky broadcast
@@ -553,6 +568,10 @@ public class NetworkControllerImpl extends BroadcastReceiver
 
     boolean isCarrierMergedWifi(int subId) {
         return mWifiSignalController.isCarrierMergedWifi(subId);
+    }
+
+    boolean isNonCarrierWifiNetworkAvailable() {
+        return !mNoNetworksAvailable;
     }
 
     boolean isEthernetDefault() {
@@ -684,7 +703,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         final String action = intent.getAction();
         switch (action) {
             case ConnectivityManager.CONNECTIVITY_ACTION:
-            case ConnectivityManager.INET_CONDITION_ACTION:
                 updateConnectivity();
                 break;
             case Intent.ACTION_AIRPLANE_MODE_CHANGED:
@@ -918,6 +936,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
         return true;
     }
 
+    @VisibleForTesting
+    void setNoNetworksAvailable(boolean noNetworksAvailable) {
+        mNoNetworksAvailable = noNetworksAvailable;
+    }
+
     private void updateAirplaneMode(boolean force) {
         boolean airplaneMode = (Settings.Global.getInt(mContext.getContentResolver(),
                 Settings.Global.AIRPLANE_MODE_ON, 0) == 1);
@@ -971,18 +994,17 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private void updateConnectivity() {
         mConnectedTransports.clear();
         mValidatedTransports.clear();
-        for (NetworkCapabilities nc :
-                mConnectivityManager.getDefaultNetworkCapabilitiesForUser(mCurrentUserId)) {
-            for (int transportType : nc.getTransportTypes()) {
+        if (mLastDefaultNetworkCapabilities != null) {
+            for (int transportType : mLastDefaultNetworkCapabilities.getTransportTypes()) {
                 if (transportType == NetworkCapabilities.TRANSPORT_CELLULAR
-                        && Utils.tryGetWifiInfoForVcn(nc) != null) {
+                        && Utils.tryGetWifiInfoForVcn(mLastDefaultNetworkCapabilities) != null) {
                     mConnectedTransports.set(NetworkCapabilities.TRANSPORT_WIFI);
-                    if (nc.hasCapability(NET_CAPABILITY_VALIDATED)) {
+                    if (mLastDefaultNetworkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) {
                         mValidatedTransports.set(NetworkCapabilities.TRANSPORT_WIFI);
                     }
                 } else {
                     mConnectedTransports.set(transportType);
-                    if (nc.hasCapability(NET_CAPABILITY_VALIDATED)) {
+                    if (mLastDefaultNetworkCapabilities.hasCapability(NET_CAPABILITY_VALIDATED)) {
                         mValidatedTransports.set(transportType);
                     }
                 }

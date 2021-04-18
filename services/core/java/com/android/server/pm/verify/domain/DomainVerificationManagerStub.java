@@ -20,31 +20,31 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.content.pm.PackageManager.NameNotFoundException;
-import android.content.pm.verify.domain.DomainVerificationManager.InvalidDomainSetException;
-import android.content.pm.verify.domain.DomainVerificationManagerImpl;
+import android.content.pm.verify.domain.DomainOwner;
+import android.content.pm.verify.domain.DomainSet;
 import android.content.pm.verify.domain.DomainVerificationInfo;
-import android.content.pm.verify.domain.DomainVerificationUserSelection;
+import android.content.pm.verify.domain.DomainVerificationManager;
+import android.content.pm.verify.domain.DomainVerificationUserState;
 import android.content.pm.verify.domain.IDomainVerificationManager;
 import android.os.ServiceSpecificException;
-import android.util.ArraySet;
 
 import java.util.List;
 import java.util.UUID;
 
-class DomainVerificationManagerStub extends IDomainVerificationManager.Stub {
+public class DomainVerificationManagerStub extends IDomainVerificationManager.Stub {
 
     @NonNull
-    private DomainVerificationService mService;
+    private final DomainVerificationService mService;
 
-    DomainVerificationManagerStub(DomainVerificationService service) {
+    public DomainVerificationManagerStub(DomainVerificationService service) {
         mService = service;
     }
 
     @NonNull
     @Override
-    public List<String> getValidVerificationPackageNames() {
+    public List<String> queryValidVerificationPackageNames() {
         try {
-            return mService.getValidVerificationPackageNames();
+            return mService.queryValidVerificationPackageNames();
         } catch (Exception e) {
             throw rethrow(e);
         }
@@ -60,12 +60,13 @@ class DomainVerificationManagerStub extends IDomainVerificationManager.Stub {
         }
     }
 
+    @DomainVerificationManager.Error
     @Override
-    public void setDomainVerificationStatus(String domainSetId, List<String> domains,
+    public int setDomainVerificationStatus(String domainSetId, @NonNull DomainSet domainSet,
             int state) {
         try {
-            mService.setDomainVerificationStatus(UUID.fromString(domainSetId),
-                            new ArraySet<>(domains), state);
+            return mService.setDomainVerificationStatus(UUID.fromString(domainSetId),
+                    domainSet.getDomains(), state);
         } catch (Exception e) {
             throw rethrow(e);
         }
@@ -81,12 +82,13 @@ class DomainVerificationManagerStub extends IDomainVerificationManager.Stub {
         }
     }
 
+    @DomainVerificationManager.Error
     @Override
-    public void setDomainVerificationUserSelection(String domainSetId, List<String> domains,
+    public int setDomainVerificationUserSelection(String domainSetId, @NonNull DomainSet domainSet,
             boolean enabled, @UserIdInt int userId) {
         try {
-            mService.setDomainVerificationUserSelection(UUID.fromString(domainSetId),
-                            new ArraySet<>(domains), enabled, userId);
+            return mService.setDomainVerificationUserSelection(UUID.fromString(domainSetId),
+                    domainSet.getDomains(), enabled, userId);
         } catch (Exception e) {
             throw rethrow(e);
         }
@@ -94,24 +96,30 @@ class DomainVerificationManagerStub extends IDomainVerificationManager.Stub {
 
     @Nullable
     @Override
-    public DomainVerificationUserSelection getDomainVerificationUserSelection(
+    public DomainVerificationUserState getDomainVerificationUserState(
             String packageName, @UserIdInt int userId) {
         try {
-            return mService.getDomainVerificationUserSelection(packageName, userId);
+            return mService.getDomainVerificationUserState(packageName, userId);
+        } catch (Exception e) {
+            throw rethrow(e);
+        }
+    }
+
+    @Nullable
+    @Override
+    public List<DomainOwner> getOwnersForDomain(@NonNull String domain,
+            @UserIdInt int userId) {
+        try {
+            return mService.getOwnersForDomain(domain, userId);
         } catch (Exception e) {
             throw rethrow(e);
         }
     }
 
     private RuntimeException rethrow(Exception exception) throws RuntimeException {
-        if (exception instanceof InvalidDomainSetException) {
-            int packedErrorCode = DomainVerificationManagerImpl.ERROR_INVALID_DOMAIN_SET;
-            packedErrorCode |= ((InvalidDomainSetException) exception).getReason() << 16;
-            return new ServiceSpecificException(packedErrorCode,
-                    ((InvalidDomainSetException) exception).getPackageName());
-        } else if (exception instanceof NameNotFoundException) {
+        if (exception instanceof NameNotFoundException) {
             return new ServiceSpecificException(
-                    DomainVerificationManagerImpl.ERROR_NAME_NOT_FOUND);
+                    DomainVerificationManager.INTERNAL_ERROR_NAME_NOT_FOUND);
         } else if (exception instanceof RuntimeException) {
             return (RuntimeException) exception;
         } else {

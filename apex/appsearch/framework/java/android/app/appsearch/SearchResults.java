@@ -33,12 +33,16 @@ import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 /**
- * SearchResults are a returned object from a query API.
+ * Encapsulates results of a search operation.
  *
- * <p>Each {@link SearchResult} contains a document and may contain other fields like snippets based
- * on request.
+ * <p>Each {@link AppSearchSession#search} operation returns a list of {@link SearchResult} objects,
+ * referred to as a "page", limited by the size configured by {@link
+ * SearchSpec.Builder#setResultCountPerPage}.
  *
- * <p>Should close this object after finish fetching results.
+ * <p>To fetch a page of results, call {@link #getNextPage}.
+ *
+ * <p>All instances of {@link SearchResults} must call {@link SearchResults#close()} after the
+ * results are fetched.
  *
  * <p>This class is not thread safe.
  */
@@ -61,8 +65,6 @@ public class SearchResults implements Closeable {
     @UserIdInt
     private final int mUserId;
 
-    private final Executor mExecutor;
-
     private long mNextPageToken;
 
     private boolean mIsFirstLoad = true;
@@ -75,28 +77,31 @@ public class SearchResults implements Closeable {
             @Nullable String databaseName,
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec,
-            @UserIdInt int userId,
-            @NonNull @CallbackExecutor Executor executor) {
+            @UserIdInt int userId) {
         mService = Objects.requireNonNull(service);
         mPackageName = packageName;
         mDatabaseName = databaseName;
         mQueryExpression = Objects.requireNonNull(queryExpression);
         mSearchSpec = Objects.requireNonNull(searchSpec);
         mUserId = userId;
-        mExecutor = Objects.requireNonNull(executor);
     }
 
     /**
-     * Gets a whole page of {@link SearchResult}s.
+     * Retrieves the next page of {@link SearchResult} objects.
      *
-     * <p>Re-call this method to get next page of {@link SearchResult}, until it returns an empty
-     * list.
+     * <p>The page size is configured by {@link SearchSpec.Builder#setResultCountPerPage}.
      *
-     * <p>The page size is set by {@link SearchSpec.Builder#setResultCountPerPage}.
+     * <p>Continue calling this method to access results until it returns an empty list, signifying
+     * there are no more results.
      *
+     * @param executor Executor on which to invoke the callback.
      * @param callback Callback to receive the pending result of performing this operation.
      */
-    public void getNextPage(@NonNull Consumer<AppSearchResult<List<SearchResult>>> callback) {
+    public void getNextPage(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<AppSearchResult<List<SearchResult>>> callback) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(callback);
         Preconditions.checkState(!mIsClosed, "SearchResults has already been closed");
         try {
             if (mIsFirstLoad) {
@@ -104,14 +109,14 @@ public class SearchResults implements Closeable {
                 if (mDatabaseName == null) {
                     // Global query, there's no one package-database combination to check.
                     mService.globalQuery(mPackageName, mQueryExpression,
-                            mSearchSpec.getBundle(), mUserId, wrapCallback(callback));
+                            mSearchSpec.getBundle(), mUserId, wrapCallback(executor, callback));
                 } else {
                     // Normal local query, pass in specified database.
                     mService.query(mPackageName, mDatabaseName, mQueryExpression,
-                            mSearchSpec.getBundle(), mUserId, wrapCallback(callback));
+                            mSearchSpec.getBundle(), mUserId, wrapCallback(executor, callback));
                 }
             } else {
-                mService.getNextPage(mNextPageToken, mUserId, wrapCallback(callback));
+                mService.getNextPage(mNextPageToken, mUserId, wrapCallback(executor, callback));
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -131,10 +136,11 @@ public class SearchResults implements Closeable {
     }
 
     private IAppSearchResultCallback wrapCallback(
+            @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<List<SearchResult>>> callback) {
         return new IAppSearchResultCallback.Stub() {
             public void onResult(AppSearchResult result) {
-                mExecutor.execute(() -> invokeCallback(result, callback));
+                executor.execute(() -> invokeCallback(result, callback));
             }
         };
     }

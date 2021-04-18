@@ -172,6 +172,11 @@ public class ContextWrapper extends Context {
     }
 
     @Override
+    public @Nullable ContextParams getParams() {
+        return mBase.getParams();
+    }
+
+    @Override
     public ApplicationInfo getApplicationInfo() {
         return mBase.getApplicationInfo();
     }
@@ -1045,8 +1050,20 @@ public class ContextWrapper extends Context {
     }
 
     @Override
+    @NonNull
+    public Context createContext(@NonNull ContextParams contextParams) {
+        return mBase.createContext(contextParams);
+    }
+
+    @Override
     public @NonNull Context createAttributionContext(@Nullable String attributionTag) {
         return mBase.createAttributionContext(attributionTag);
+    }
+
+    @NonNull
+    @Override
+    public AttributionSource getAttributionSource() {
+        return mBase.getAttributionSource();
     }
 
     @Override

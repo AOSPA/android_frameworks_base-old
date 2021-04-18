@@ -16,8 +16,8 @@
 
 package com.android.systemui.appops;
 
-import static android.hardware.SensorPrivacyManager.INDIVIDUAL_SENSOR_CAMERA;
-import static android.hardware.SensorPrivacyManager.INDIVIDUAL_SENSOR_MICROPHONE;
+import static android.hardware.SensorPrivacyManager.Sensors.CAMERA;
+import static android.hardware.SensorPrivacyManager.Sensors.MICROPHONE;
 
 import static junit.framework.TestCase.assertFalse;
 
@@ -53,6 +53,7 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.statusbar.policy.IndividualSensorPrivacyController;
+import com.android.systemui.util.time.FakeSystemClock;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -69,6 +70,7 @@ import java.util.List;
 @TestableLooper.RunWithLooper
 public class AppOpsControllerTest extends SysuiTestCase {
     private static final String TEST_PACKAGE_NAME = "test";
+    private static final String TEST_ATTRIBUTION_NAME = "attribution";
     private static final int TEST_UID = UserHandle.getUid(0, 0);
     private static final int TEST_UID_OTHER = UserHandle.getUid(1, 0);
     private static final int TEST_UID_NON_USER_SENSITIVE = UserHandle.getUid(2, 0);
@@ -124,9 +126,9 @@ public class AppOpsControllerTest extends SysuiTestCase {
         when(mAudioManager.getActiveRecordingConfigurations())
                 .thenReturn(List.of(mPausedMockRecording));
 
-        when(mSensorPrivacyController.isSensorBlocked(INDIVIDUAL_SENSOR_CAMERA))
+        when(mSensorPrivacyController.isSensorBlocked(CAMERA))
                 .thenReturn(false);
-        when(mSensorPrivacyController.isSensorBlocked(INDIVIDUAL_SENSOR_CAMERA))
+        when(mSensorPrivacyController.isSensorBlocked(CAMERA))
                 .thenReturn(false);
 
         mController = new AppOpsControllerImpl(
@@ -136,7 +138,8 @@ public class AppOpsControllerTest extends SysuiTestCase {
                 mFlagsCache,
                 mAudioManager,
                 mSensorPrivacyController,
-                mDispatcher
+                mDispatcher,
+                new FakeSystemClock()
         );
     }
 
@@ -164,7 +167,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.onOpActiveChanged(
                 AppOpsManager.OP_RECORD_AUDIO, TEST_UID, TEST_PACKAGE_NAME, true);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         mTestableLooper.processAllMessages();
         verify(mCallback).onActiveStateChanged(AppOpsManager.OP_RECORD_AUDIO,
                 TEST_UID, TEST_PACKAGE_NAME, true);
@@ -218,8 +221,8 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.onOpActiveChanged(AppOpsManager.OP_CAMERA,
                 TEST_UID, TEST_PACKAGE_NAME, true);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION,
-                TEST_UID, TEST_PACKAGE_NAME, AppOpsManager.OP_FLAG_SELF,
-                AppOpsManager.MODE_ALLOWED);
+                TEST_UID, TEST_PACKAGE_NAME, TEST_ATTRIBUTION_NAME,
+                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         assertEquals(3, mController.getActiveAppOps().size());
     }
 
@@ -230,8 +233,8 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.onOpActiveChanged(AppOpsManager.OP_CAMERA,
                 TEST_UID_OTHER, TEST_PACKAGE_NAME, true);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION,
-                TEST_UID, TEST_PACKAGE_NAME, AppOpsManager.OP_FLAG_SELF,
-                AppOpsManager.MODE_ALLOWED);
+                TEST_UID, TEST_PACKAGE_NAME, TEST_ATTRIBUTION_NAME,
+                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         assertEquals(2,
                 mController.getActiveAppOpsForUser(UserHandle.getUserId(TEST_UID)).size());
         assertEquals(1,
@@ -262,7 +265,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
     public void opNotedScheduledForRemoval() {
         mController.setBGHandler(mMockHandler);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         verify(mMockHandler).scheduleRemoval(any(AppOpItem.class), anyLong());
     }
 
@@ -274,7 +277,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.onOpActiveChanged(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
                 true);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         assertFalse(mController.getActiveAppOps().isEmpty());
 
         mController.setListening(false);
@@ -288,9 +291,9 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.setBGHandler(mMockHandler);
 
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
 
         // Only one post to notify subscribers
         verify(mMockHandler, times(1)).post(any());
@@ -304,9 +307,9 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.setBGHandler(mMockHandler);
 
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
 
         // Only one post to notify subscribers
         verify(mMockHandler, times(2)).scheduleRemoval(any(), anyLong());
@@ -324,7 +327,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
                 AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true);
 
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
 
         // Check that we "scheduled" the removal. Don't actually schedule until we are ready to
         // process messages at a later time.
@@ -353,7 +356,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.addCallback(new int[]{AppOpsManager.OP_FINE_LOCATION}, mCallback);
 
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
 
         mController.onOpActiveChanged(
                 AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true);
@@ -382,7 +385,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         mController.addCallback(new int[]{AppOpsManager.OP_FINE_LOCATION}, mCallback);
 
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
 
         mController.onOpActiveChanged(
                 AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true);
@@ -400,7 +403,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
                 AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME, true);
 
         mController.onOpNoted(AppOpsManager.OP_FINE_LOCATION, TEST_UID, TEST_PACKAGE_NAME,
-                AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
+                TEST_ATTRIBUTION_NAME, AppOpsManager.OP_FLAG_SELF, AppOpsManager.MODE_ALLOWED);
 
         mTestableLooper.processAllMessages();
         verify(mCallback).onActiveStateChanged(
@@ -504,7 +507,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         assertFalse(list.get(0).isDisabled());
 
         // Add a camera op, and disable the microphone. The camera op should be the only op returned
-        mController.onSensorBlockedChanged(INDIVIDUAL_SENSOR_MICROPHONE, true);
+        mController.onSensorBlockedChanged(MICROPHONE, true);
         mController.onOpActiveChanged(
                 AppOpsManager.OP_CAMERA, TEST_UID_OTHER, TEST_PACKAGE_NAME, true);
         mTestableLooper.processAllMessages();
@@ -514,7 +517,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
 
 
         // Re enable the microphone, and verify the op returns
-        mController.onSensorBlockedChanged(INDIVIDUAL_SENSOR_MICROPHONE, false);
+        mController.onSensorBlockedChanged(MICROPHONE, false);
         mTestableLooper.processAllMessages();
 
         list = mController.getActiveAppOps();
@@ -537,7 +540,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         assertFalse(list.get(0).isDisabled());
 
         // Add an audio op, and disable the camera. The audio op should be the only op returned
-        mController.onSensorBlockedChanged(INDIVIDUAL_SENSOR_CAMERA, true);
+        mController.onSensorBlockedChanged(CAMERA, true);
         mController.onOpActiveChanged(
                 AppOpsManager.OP_RECORD_AUDIO, TEST_UID_OTHER, TEST_PACKAGE_NAME, true);
         mTestableLooper.processAllMessages();
@@ -546,7 +549,7 @@ public class AppOpsControllerTest extends SysuiTestCase {
         assertEquals(AppOpsManager.OP_RECORD_AUDIO, list.get(0).getCode());
 
         // Re enable the camera, and verify the op returns
-        mController.onSensorBlockedChanged(INDIVIDUAL_SENSOR_CAMERA, false);
+        mController.onSensorBlockedChanged(CAMERA, false);
         mTestableLooper.processAllMessages();
 
         list = mController.getActiveAppOps();

@@ -37,8 +37,6 @@ interface IKeyChainService {
     void setUserSelectable(String alias, boolean isUserSelectable);
 
     int generateKeyPair(in String algorithm, in ParcelableKeyGenParameterSpec spec);
-    int attestKey(in String alias, in byte[] challenge, in int[] idAttestationFlags,
-            out KeymasterCertificateChain chain);
     boolean setKeyPairCertificate(String alias, in byte[] userCert, in byte[] certChain);
 
     // APIs used by CertInstaller and DevicePolicyManager
@@ -65,8 +63,12 @@ interface IKeyChainService {
     AppUriAuthenticationPolicy getCredentialManagementAppPolicy();
     String getPredefinedAliasForPackageAndUri(String packageName, in Uri uri);
     void removeCredentialManagementApp();
+    boolean isCredentialManagementApp(String packageName);
 
     // APIs used by KeyChainActivity
     void setGrant(int uid, String alias, boolean value);
     boolean hasGrant(int uid, String alias);
+
+    // API used by Wifi
+    String getWifiKeyGrantAsUser(String alias);
 }

@@ -181,16 +181,16 @@ public class RoundedCorners implements Parcelable {
         boolean hasRoundedCorner;
         switch (position) {
             case POSITION_TOP_LEFT:
-                hasRoundedCorner = radius > insetTop || radius > insetLeft;
+                hasRoundedCorner = radius > insetTop && radius > insetLeft;
                 break;
             case POSITION_TOP_RIGHT:
-                hasRoundedCorner = radius > insetTop || radius > insetRight;
+                hasRoundedCorner = radius > insetTop && radius > insetRight;
                 break;
             case POSITION_BOTTOM_RIGHT:
-                hasRoundedCorner = radius > insetBottom || radius > insetRight;
+                hasRoundedCorner = radius > insetBottom && radius > insetRight;
                 break;
             case POSITION_BOTTOM_LEFT:
-                hasRoundedCorner = radius > insetBottom || radius > insetLeft;
+                hasRoundedCorner = radius > insetBottom && radius > insetLeft;
                 break;
             default:
                 throw new IllegalArgumentException(
@@ -335,7 +335,7 @@ public class RoundedCorners implements Parcelable {
         }
         if (o instanceof RoundedCorners) {
             RoundedCorners r = (RoundedCorners) o;
-            return Arrays.deepEquals(mRoundedCorners, ((RoundedCorners) o).mRoundedCorners);
+            return Arrays.deepEquals(mRoundedCorners, r.mRoundedCorners);
         }
         return false;
     }

@@ -16,6 +16,8 @@
 
 package com.android.systemui.statusbar.notification;
 
+import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR;
+
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_APP_START;
 
 import android.animation.Animator;
@@ -34,6 +36,8 @@ import android.view.SyncRtSurfaceTransactionApplier;
 import android.view.SyncRtSurfaceTransactionApplier.SurfaceParams;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.policy.ScreenDecorationsUtils;
@@ -59,6 +63,14 @@ public class ActivityLaunchAnimator {
     public static final long ANIMATION_DELAY_ICON_FADE_IN = ANIMATION_DURATION -
             CollapsedStatusBarFragment.FADE_IN_DURATION - CollapsedStatusBarFragment.FADE_IN_DELAY
             - 16;
+    private static final int ANIMATION_DURATION_NAV_FADE_IN = 266;
+    private static final int ANIMATION_DURATION_NAV_FADE_OUT = 133;
+    private static final long ANIMATION_DELAY_NAV_FADE_IN =
+            ANIMATION_DURATION - ANIMATION_DURATION_NAV_FADE_IN;
+    private static final Interpolator NAV_FADE_IN_INTERPOLATOR =
+            new PathInterpolator(0f, 0f, 0f, 1f);
+    private static final Interpolator NAV_FADE_OUT_INTERPOLATOR =
+            new PathInterpolator(0.2f, 0f, 1f, 1f);
     private static final long LAUNCH_TIMEOUT = 500;
     private final NotificationPanelViewController mNotificationPanel;
     private final NotificationListContainer mNotificationContainer;
@@ -146,17 +158,19 @@ public class ActivityLaunchAnimator {
         private final ExpandableNotificationRow mSourceNotification;
         private final ExpandAnimationParameters mParams;
         private final Rect mWindowCrop = new Rect();
-        private final float mNotificationCornerRadius;
-        private float mCornerRadius;
         private boolean mIsFullScreenLaunch = true;
         private final SyncRtSurfaceTransactionApplier mSyncRtTransactionApplier;
 
-        public AnimationRunner(ExpandableNotificationRow sourceNofitication) {
-            mSourceNotification = sourceNofitication;
+        private final float mNotificationStartTopCornerRadius;
+        private final float mNotificationStartBottomCornerRadius;
+
+        AnimationRunner(ExpandableNotificationRow sourceNotification) {
+            mSourceNotification = sourceNotification;
             mParams = new ExpandAnimationParameters();
             mSyncRtTransactionApplier = new SyncRtSurfaceTransactionApplier(mSourceNotification);
-            mNotificationCornerRadius = Math.max(mSourceNotification.getCurrentTopRoundness(),
-                    mSourceNotification.getCurrentBottomRoundness());
+            mNotificationStartTopCornerRadius = mSourceNotification.getCurrentBackgroundRadiusTop();
+            mNotificationStartBottomCornerRadius =
+                    mSourceNotification.getCurrentBackgroundRadiusBottom();
         }
 
         @Override
@@ -206,6 +220,8 @@ public class ActivityLaunchAnimator {
                 int notificationHeight = Math.max(mSourceNotification.getActualHeight()
                         - mSourceNotification.getClipBottomAmount(), 0);
                 int notificationWidth = mSourceNotification.getWidth();
+                final RemoteAnimationTarget navigationBarTarget =
+                        getNavBarRemoteAnimationTarget(remoteAnimationNonAppTargets);
                 anim.setDuration(ANIMATION_DURATION);
                 anim.setInterpolator(Interpolators.LINEAR);
                 anim.addUpdateListener(new ValueAnimator.AnimatorUpdateListener() {
@@ -224,11 +240,15 @@ public class ActivityLaunchAnimator {
                                         + notificationHeight,
                                 primary.position.y + primary.sourceContainerBounds.bottom,
                                 progress);
-                        mCornerRadius = MathUtils.lerp(mNotificationCornerRadius,
+                        mParams.topCornerRadius = MathUtils.lerp(mNotificationStartTopCornerRadius,
+                                mWindowCornerRadius, progress);
+                        mParams.bottomCornerRadius = MathUtils.lerp(
+                                mNotificationStartBottomCornerRadius,
                                 mWindowCornerRadius, progress);
                         applyParamsToWindow(primary);
                         applyParamsToNotification(mParams);
                         applyParamsToNotificationShade(mParams);
+                        applyNavigationBarParamsToWindow(navigationBarTarget);
                     }
                 });
                 anim.addListener(new AnimatorListenerAdapter() {
@@ -281,6 +301,18 @@ public class ActivityLaunchAnimator {
             return primary;
         }
 
+        private RemoteAnimationTarget getNavBarRemoteAnimationTarget(
+                RemoteAnimationTarget[] remoteAnimationTargets) {
+            RemoteAnimationTarget navBar = null;
+            for (RemoteAnimationTarget target : remoteAnimationTargets) {
+                if (target.windowType == TYPE_NAVIGATION_BAR) {
+                    navBar = target;
+                    break;
+                }
+            }
+            return navBar;
+        }
+
         private void setExpandAnimationRunning(boolean running) {
             mNotificationPanel.setLaunchingNotification(running);
             mSourceNotification.setExpandAnimationRunning(running);
@@ -309,15 +341,44 @@ public class ActivityLaunchAnimator {
             Matrix m = new Matrix();
             m.postTranslate(0, (float) (mParams.top - app.position.y));
             mWindowCrop.set(mParams.left, 0, mParams.right, mParams.getHeight());
+            float cornerRadius = Math.min(mParams.topCornerRadius, mParams.bottomCornerRadius);
             SurfaceParams params = new SurfaceParams.Builder(app.leash)
                     .withAlpha(1f)
                     .withMatrix(m)
                     .withWindowCrop(mWindowCrop)
                     .withLayer(app.prefixOrderIndex)
-                    .withCornerRadius(mCornerRadius)
+                    .withCornerRadius(cornerRadius)
                     .withVisibility(true)
                     .build();
             mSyncRtTransactionApplier.scheduleApply(params);
+        }
+
+        private void applyNavigationBarParamsToWindow(RemoteAnimationTarget navBarTarget) {
+            if (navBarTarget == null) {
+                return;
+            }
+
+            // calculate navigation bar fade-out progress
+            final float fadeOutProgress = mParams.getProgress(0,
+                    ANIMATION_DURATION_NAV_FADE_OUT);
+
+            // calculate navigation bar fade-in progress
+            final float fadeInProgress = mParams.getProgress(ANIMATION_DELAY_NAV_FADE_IN,
+                    ANIMATION_DURATION_NAV_FADE_OUT);
+
+            final SurfaceParams.Builder builder = new SurfaceParams.Builder(navBarTarget.leash);
+            if (fadeInProgress > 0) {
+                Matrix m = new Matrix();
+                m.postTranslate(0, (float) (mParams.top - navBarTarget.position.y));
+                mWindowCrop.set(mParams.left, 0, mParams.right, mParams.getHeight());
+                builder.withMatrix(m)
+                        .withWindowCrop(mWindowCrop)
+                        .withVisibility(true);
+                builder.withAlpha(NAV_FADE_IN_INTERPOLATOR.getInterpolation(fadeInProgress));
+            } else {
+                builder.withAlpha(1f - NAV_FADE_OUT_INTERPOLATOR.getInterpolation(fadeOutProgress));
+            }
+            mSyncRtTransactionApplier.scheduleApply(builder.build());
         }
 
         @Override
@@ -339,6 +400,8 @@ public class ActivityLaunchAnimator {
         int bottom;
         int startClipTopAmount;
         int parentStartClipTopAmount;
+        float topCornerRadius;
+        float bottomCornerRadius;
 
         public ExpandAnimationParameters() {
         }
@@ -388,6 +451,14 @@ public class ActivityLaunchAnimator {
 
         public float getStartTranslationZ() {
             return startTranslationZ;
+        }
+
+        public float getTopCornerRadius() {
+            return topCornerRadius;
+        }
+
+        public float getBottomCornerRadius() {
+            return bottomCornerRadius;
         }
     }
 

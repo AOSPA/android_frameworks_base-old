@@ -290,7 +290,6 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
 
     /**
      * Broadcast action: notify that a new batch of security logs is ready to be collected.
-     * @hide
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     @BroadcastBehavior(explicitOnly = true)
@@ -525,6 +524,16 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
             "android.app.action.OPERATION_SAFETY_STATE_CHANGED";
 
     /**
+     * Broadcast action: notify the profile owner on an organization-owned device that it needs to
+     * acknowledge device compliance.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_COMPLIANCE_ACKNOWLEDGEMENT_REQUIRED =
+            "android.app.action.COMPLIANCE_ACKNOWLEDGEMENT_REQUIRED";
+
+    /**
      * An {@code int} extra specifying an {@link OperationSafetyReason}.
      *
      * @hide
@@ -585,6 +594,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      * @param intent The received intent as per {@link #onReceive}.
      */
     public void onEnabled(@NonNull Context context, @NonNull Intent intent) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onEnabled() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -600,6 +612,10 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      */
     public @Nullable CharSequence onDisableRequested(@NonNull Context context,
             @NonNull Intent intent) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onDisableRequested() on user "
+                    + context.getUserId());
+        }
         return null;
     }
 
@@ -612,6 +628,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      * @param intent The received intent as per {@link #onReceive}.
      */
     public void onDisabled(@NonNull Context context, @NonNull Intent intent) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onDisabled() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -786,6 +805,10 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      * @param intent The received intent as per {@link #onReceive}.
      */
     public void onProfileProvisioningComplete(@NonNull Context context, @NonNull Intent intent) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onProfileProvisioningComplete() on user "
+                    + context.getUserId());
+        }
     }
 
     /**
@@ -961,6 +984,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      */
     public void onUserAdded(@NonNull Context context, @NonNull Intent intent,
             @NonNull UserHandle addedUser) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onUserAdded() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -974,6 +1000,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      */
     public void onUserRemoved(@NonNull Context context, @NonNull Intent intent,
             @NonNull UserHandle removedUser) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onUserRemoved() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -987,6 +1016,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      */
     public void onUserStarted(@NonNull Context context, @NonNull Intent intent,
             @NonNull UserHandle startedUser) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onUserStarted() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -1000,6 +1032,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      */
     public void onUserStopped(@NonNull Context context, @NonNull Intent intent,
             @NonNull UserHandle stoppedUser) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onUserStopped() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -1013,6 +1048,9 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
      */
     public void onUserSwitched(@NonNull Context context, @NonNull Intent intent,
             @NonNull UserHandle switchedUser) {
+        if (LOCAL_LOGV) {
+            Log.v(TAG, getClass().getName() + ".onUserSwitched() on user " + context.getUserId());
+        }
     }
 
     /**
@@ -1073,6 +1111,7 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
     private void onOperationSafetyStateChanged(Context context, Intent intent) {
         if (!hasRequiredExtra(intent, EXTRA_OPERATION_SAFETY_REASON)
                 || !hasRequiredExtra(intent, EXTRA_OPERATION_SAFETY_STATE)) {
+            Log.w(TAG, "Igoring intent that's missing required extras");
             return;
         }
 
@@ -1084,8 +1123,30 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
         }
         boolean isSafe = intent.getBooleanExtra(EXTRA_OPERATION_SAFETY_STATE,
                 /* defaultValue=*/ false);
-
         onOperationSafetyStateChanged(context, reason, isSafe);
+    }
+
+    /**
+     * Called to notify a profile owner of an organization-owned device that it needs to acknowledge
+     * device compliance to allow the user to turn the profile off if needed according to the
+     * maximum profile time off policy.
+     *
+     * Default implementation acknowledges compliance immediately. DPC may prefer to override this
+     * implementation to delay acknowledgement until a successful policy sync. Until compliance is
+     * acknowledged the user is still free to turn the profile off, but the timer won't be reset,
+     * so personal apps will be suspended sooner. This callback is delivered using a foreground
+     * broadcast and should be handled quickly.
+     *
+     * @param context the running context as per {@link #onReceive}
+     * @param intent The received intent as per {@link #onReceive}.
+     *
+     * @see DevicePolicyManager#acknowledgeDeviceCompliant()
+     * @see DevicePolicyManager#isComplianceAcknowledgementRequired()
+     * @see DevicePolicyManager#setManagedProfileMaximumTimeOff(ComponentName, long)
+     */
+    public void onComplianceAcknowledgementRequired(
+            @NonNull Context context, @NonNull Intent intent) {
+        getManager(context).acknowledgeDeviceCompliant();
     }
 
     private boolean hasRequiredExtra(Intent intent, String extra) {
@@ -1104,7 +1165,8 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
     public void onReceive(@NonNull Context context, @NonNull Intent intent) {
         String action = intent.getAction();
         if (LOCAL_LOGV) {
-            Log.v(TAG, "onReceive(): received " + action + " on user " + context.getUserId());
+            Log.v(TAG, getClass().getName() + ".onReceive(): received " + action + " on user "
+                    + context.getUserId());
         }
 
         if (ACTION_PASSWORD_CHANGED.equals(action)) {
@@ -1175,6 +1237,8 @@ public class DeviceAdminReceiver extends BroadcastReceiver {
                     intent.getParcelableExtra(Intent.EXTRA_USER));
         } else if (ACTION_OPERATION_SAFETY_STATE_CHANGED.equals(action)) {
             onOperationSafetyStateChanged(context, intent);
+        } else if (ACTION_COMPLIANCE_ACKNOWLEDGEMENT_REQUIRED.equals(action)) {
+            onComplianceAcknowledgementRequired(context, intent);
         }
     }
 }

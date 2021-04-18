@@ -43,19 +43,14 @@ import android.os.Handler;
 import android.os.RemoteException;
 import android.os.UserManager;
 import android.service.dreams.IDreamManager;
-import android.telephony.TelephonyManager;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
-import android.util.FeatureFlagUtils;
 import android.view.IWindowManager;
 import android.view.View;
 import android.view.WindowManagerPolicyConstants;
 import android.widget.FrameLayout;
 
 import androidx.test.filters.SmallTest;
-import androidx.test.uiautomator.By;
-import androidx.test.uiautomator.UiObject2;
-import androidx.test.uiautomator.Until;
 
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.logging.MetricsLogger;
@@ -79,6 +74,7 @@ import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.telephony.TelephonyListenerManager;
 import com.android.systemui.util.RingerModeLiveData;
 import com.android.systemui.util.RingerModeTracker;
 import com.android.systemui.util.settings.SecureSettings;
@@ -110,7 +106,7 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
     @Mock private LockPatternUtils mLockPatternUtils;
     @Mock private BroadcastDispatcher mBroadcastDispatcher;
     @Mock private ConnectivityManager mConnectivityManager;
-    @Mock private TelephonyManager mTelephonyManager;
+    @Mock private TelephonyListenerManager mTelephonyListenerManager;
     @Mock private ContentResolver mContentResolver;
     @Mock private Resources mResources;
     @Mock private ConfigurationController mConfigurationController;
@@ -171,7 +167,7 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
                 mLockPatternUtils,
                 mBroadcastDispatcher,
                 mConnectivityManager,
-                mTelephonyManager,
+                mTelephonyListenerManager,
                 mContentResolver,
                 null,
                 mResources,
@@ -248,22 +244,6 @@ public class GlobalActionsDialogTest extends SysuiTestCase {
                 mGlobalActionsDialog.makeScreenshotActionForTesting();
         screenshotAction.onPress();
         verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_SCREENSHOT_PRESS);
-    }
-
-    @Test
-    public void testShouldLogScreenshotLongPress() {
-        FeatureFlagUtils.setEnabled(mContext, FeatureFlagUtils.SCREENRECORD_LONG_PRESS, true);
-        GlobalActionsDialog.ScreenshotAction screenshotAction =
-                mGlobalActionsDialog.makeScreenshotActionForTesting();
-        screenshotAction.onLongPress();
-        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_SCREENSHOT_LONG_PRESS);
-
-        // Dismiss ScreenRecordDialog opened by the long press above.
-        final UiObject2 cancelButton = getUiDevice().wait(
-                Until.findObject(By.text(CANCEL_BUTTON)), UI_TIMEOUT_MILLIS);
-        if (cancelButton != null) {
-            cancelButton.click();
-        }
     }
 
     @Test

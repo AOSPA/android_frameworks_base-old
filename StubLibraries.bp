@@ -42,13 +42,7 @@ packages_to_document = [
 
 stubs_defaults {
     name: "metalava-non-updatable-api-stubs-default",
-    srcs: [
-        ":framework-non-updatable-sources",
-        "core/java/**/*.logtags",
-        ":opt-telephony-srcs",
-        ":opt-net-voip-srcs",
-        "**/package.html",
-    ],
+    srcs: [":framework-non-updatable-stub-sources"],
     sdk_version: "none",
     system_modules: "none",
     java_version: "1.8",
@@ -58,6 +52,9 @@ stubs_defaults {
         local_include_dirs: [
             "apex/media/aidl/stable",
             "media/aidl",
+            // TODO: move to include-dirs for packages/modules/Connectivity when this moves out of
+            // frameworks/base
+            "packages/Connectivity/framework/aidl-export",
             "telephony/java",
         ],
         include_dirs: ["frameworks/av/aidl"],
@@ -310,6 +307,7 @@ java_library_static {
         "art.module.public.api.stubs",
         "conscrypt.module.public.api.stubs",
         "framework-appsearch.stubs",
+        "framework-connectivity.stubs",
         "framework-graphics.stubs",
         "framework-media.stubs",
         "framework-mediaprovider.stubs",
@@ -334,6 +332,7 @@ java_library_static {
         "art.module.public.api.stubs",
         "conscrypt.module.public.api.stubs",
         "framework-appsearch.stubs.system",
+        "framework-connectivity.stubs.system",
         "framework-graphics.stubs.system",
         "framework-media.stubs.system",
         "framework-mediaprovider.stubs.system",
@@ -374,6 +373,7 @@ java_library_static {
         "art.module.public.api.stubs",
         "conscrypt.module.public.api.stubs",
         "framework-appsearch.stubs.system",
+        "framework-connectivity.stubs.system",
         "framework-graphics.stubs.system",
         "framework-media.stubs.system",
         "framework-mediaprovider.stubs.system",
@@ -431,10 +431,6 @@ droidstubs {
     name: "hwbinder-stubs-docs",
     srcs: [
         "core/java/android/os/HidlSupport.java",
-        "core/java/android/annotation/IntDef.java",
-        "core/java/android/annotation/IntRange.java",
-        "core/java/android/annotation/NonNull.java",
-        "core/java/android/annotation/SystemApi.java",
         "core/java/android/os/HidlMemory.java",
         "core/java/android/os/HwBinder.java",
         "core/java/android/os/HwBlob.java",
@@ -447,6 +443,7 @@ droidstubs {
         "core/java/android/os/RemoteException.java",
         "core/java/android/util/AndroidException.java",
     ],
+    libs: ["framework-annotations-lib"],
     installable: false,
     sdk_version: "core_platform",
     annotations_enabled: true,
@@ -460,6 +457,7 @@ droidstubs {
 java_library_static {
     name: "hwbinder.stubs",
     sdk_version: "core_current",
+    libs: ["framework-annotations-lib"],
     srcs: [
         ":hwbinder-stubs-docs",
     ],

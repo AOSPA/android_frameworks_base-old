@@ -20,6 +20,9 @@ import android.annotation.NonNull;
 import android.util.Range;
 import android.util.SparseArray;
 
+import com.android.internal.os.BatteryStatsHistory;
+import com.android.internal.os.BatteryStatsHistoryIterator;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -31,18 +34,26 @@ import java.util.List;
 public final class BatteryUsageStats implements Parcelable {
     private final double mConsumedPower;
     private final int mDischargePercentage;
-    private final long mStatsStartRealtimeMs;
+    private final long mStatsStartTimestampMs;
     private final double mDischargedPowerLowerBound;
     private final double mDischargedPowerUpperBound;
+    private final long mBatteryTimeRemainingMs;
+    private final long mChargeTimeRemainingMs;
     private final ArrayList<UidBatteryConsumer> mUidBatteryConsumers;
     private final ArrayList<SystemBatteryConsumer> mSystemBatteryConsumers;
     private final ArrayList<UserBatteryConsumer> mUserBatteryConsumers;
+    private final Parcel mHistoryBuffer;
+    private final List<BatteryStats.HistoryTag> mHistoryTagPool;
 
     private BatteryUsageStats(@NonNull Builder builder) {
-        mStatsStartRealtimeMs = builder.mStatsStartRealtimeMs;
+        mStatsStartTimestampMs = builder.mStatsStartTimestampMs;
         mDischargePercentage = builder.mDischargePercentage;
         mDischargedPowerLowerBound = builder.mDischargedPowerLowerBoundMah;
         mDischargedPowerUpperBound = builder.mDischargedPowerUpperBoundMah;
+        mHistoryBuffer = builder.mHistoryBuffer;
+        mHistoryTagPool = builder.mHistoryTagPool;
+        mBatteryTimeRemainingMs = builder.mBatteryTimeRemainingMs;
+        mChargeTimeRemainingMs = builder.mChargeTimeRemainingMs;
 
         double totalPower = 0;
 
@@ -80,10 +91,11 @@ public final class BatteryUsageStats implements Parcelable {
     }
 
     /**
-     * Timestamp of the latest battery stats reset, in milliseconds.
+     * Timestamp (as returned by System.currentTimeMillis()) of the latest battery stats reset, in
+     * milliseconds.
      */
-    public long getStatsStartRealtime() {
-        return mStatsStartRealtimeMs;
+    public long getStatsStartTimestamp() {
+        return mStatsStartTimestampMs;
     }
 
     /**
@@ -100,6 +112,25 @@ public final class BatteryUsageStats implements Parcelable {
      */
     public Range<Double> getDischargedPowerRange() {
         return Range.create(mDischargedPowerLowerBound, mDischargedPowerUpperBound);
+    }
+
+    /**
+     * Returns an approximation for how much run time (in milliseconds) is remaining on
+     * the battery.  Returns -1 if no time can be computed: either there is not
+     * enough current data to make a decision, or the battery is currently
+     * charging.
+     */
+    public long getBatteryTimeRemainingMs() {
+        return mBatteryTimeRemainingMs;
+    }
+
+    /**
+     * Returns an approximation for how much time (in milliseconds) remains until the battery
+     * is fully charged.  Returns -1 if no time can be computed: either there is not
+     * enough current data to make a decision, or the battery is currently discharging.
+     */
+    public long getChargeTimeRemainingMs() {
+        return mChargeTimeRemainingMs;
     }
 
     /**
@@ -125,35 +156,92 @@ public final class BatteryUsageStats implements Parcelable {
         return mUserBatteryConsumers;
     }
 
+    /**
+     * Returns an iterator for {@link android.os.BatteryStats.HistoryItem}'s.
+     */
+    @NonNull
+    public BatteryStatsHistoryIterator iterateBatteryStatsHistory() {
+        if (mHistoryBuffer == null) {
+            throw new IllegalStateException(
+                    "Battery history was not requested in the BatteryUsageStatsQuery");
+        }
+        return new BatteryStatsHistoryIterator(new BatteryStatsHistory(mHistoryBuffer),
+                mHistoryTagPool);
+    }
+
     @Override
     public int describeContents() {
         return 0;
     }
 
     private BatteryUsageStats(@NonNull Parcel source) {
-        mStatsStartRealtimeMs = source.readLong();
+        mStatsStartTimestampMs = source.readLong();
         mConsumedPower = source.readDouble();
         mDischargePercentage = source.readInt();
         mDischargedPowerLowerBound = source.readDouble();
         mDischargedPowerUpperBound = source.readDouble();
+        mBatteryTimeRemainingMs = source.readLong();
+        mChargeTimeRemainingMs = source.readLong();
         mUidBatteryConsumers = new ArrayList<>();
         source.readParcelableList(mUidBatteryConsumers, getClass().getClassLoader());
         mSystemBatteryConsumers = new ArrayList<>();
         source.readParcelableList(mSystemBatteryConsumers, getClass().getClassLoader());
         mUserBatteryConsumers = new ArrayList<>();
         source.readParcelableList(mUserBatteryConsumers, getClass().getClassLoader());
+        if (source.readBoolean()) {
+            mHistoryBuffer = Parcel.obtain();
+            mHistoryBuffer.setDataSize(0);
+            mHistoryBuffer.setDataPosition(0);
+
+            int historyBufferSize = source.readInt();
+            int curPos = source.dataPosition();
+            mHistoryBuffer.appendFrom(source, curPos, historyBufferSize);
+            source.setDataPosition(curPos + historyBufferSize);
+
+            int historyTagCount = source.readInt();
+            mHistoryTagPool = new ArrayList<>(historyTagCount);
+            for (int i = 0; i < historyTagCount; i++) {
+                BatteryStats.HistoryTag tag = new BatteryStats.HistoryTag();
+                tag.string = source.readString();
+                tag.uid = source.readInt();
+                tag.poolIdx = source.readInt();
+                mHistoryTagPool.add(tag);
+            }
+        } else {
+            mHistoryBuffer = null;
+            mHistoryTagPool = null;
+        }
     }
 
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
-        dest.writeLong(mStatsStartRealtimeMs);
+        dest.writeLong(mStatsStartTimestampMs);
         dest.writeDouble(mConsumedPower);
         dest.writeInt(mDischargePercentage);
         dest.writeDouble(mDischargedPowerLowerBound);
         dest.writeDouble(mDischargedPowerUpperBound);
+        dest.writeLong(mBatteryTimeRemainingMs);
+        dest.writeLong(mChargeTimeRemainingMs);
         dest.writeParcelableList(mUidBatteryConsumers, flags);
         dest.writeParcelableList(mSystemBatteryConsumers, flags);
         dest.writeParcelableList(mUserBatteryConsumers, flags);
+        if (mHistoryBuffer != null) {
+            dest.writeBoolean(true);
+
+            final int historyBufferSize = mHistoryBuffer.dataSize();
+            dest.writeInt(historyBufferSize);
+            dest.appendFrom(mHistoryBuffer, 0, historyBufferSize);
+
+            dest.writeInt(mHistoryTagPool.size());
+            for (int i = mHistoryTagPool.size() - 1; i >= 0; i--) {
+                final BatteryStats.HistoryTag tag = mHistoryTagPool.get(i);
+                dest.writeString(tag.string);
+                dest.writeInt(tag.uid);
+                dest.writeInt(tag.poolIdx);
+            }
+        } else {
+            dest.writeBoolean(false);
+        }
     }
 
     @NonNull
@@ -173,16 +261,20 @@ public final class BatteryUsageStats implements Parcelable {
     public static final class Builder {
         private final int mCustomPowerComponentCount;
         private final int mCustomTimeComponentCount;
-        private long mStatsStartRealtimeMs;
+        private long mStatsStartTimestampMs;
         private int mDischargePercentage;
         private double mDischargedPowerLowerBoundMah;
         private double mDischargedPowerUpperBoundMah;
+        private long mBatteryTimeRemainingMs = -1;
+        private long mChargeTimeRemainingMs = -1;
         private final SparseArray<UidBatteryConsumer.Builder> mUidBatteryConsumerBuilders =
                 new SparseArray<>();
         private final SparseArray<SystemBatteryConsumer.Builder> mSystemBatteryConsumerBuilders =
                 new SparseArray<>();
         private final SparseArray<UserBatteryConsumer.Builder> mUserBatteryConsumerBuilders =
                 new SparseArray<>();
+        private Parcel mHistoryBuffer;
+        private List<BatteryStats.HistoryTag> mHistoryTagPool;
 
         public Builder(int customPowerComponentCount, int customTimeComponentCount) {
             mCustomPowerComponentCount = customPowerComponentCount;
@@ -200,8 +292,8 @@ public final class BatteryUsageStats implements Parcelable {
         /**
          * Sets the timestamp of the latest battery stats reset, in milliseconds.
          */
-        public Builder setStatsStartRealtime(long statsStartRealtimeMs) {
-            mStatsStartRealtimeMs = statsStartRealtimeMs;
+        public Builder setStatsStartTimestamp(long statsStartTimestampMs) {
+            mStatsStartTimestampMs = statsStartTimestampMs;
             return this;
         }
 
@@ -223,6 +315,37 @@ public final class BatteryUsageStats implements Parcelable {
                 double dischargedPowerUpperBoundMah) {
             mDischargedPowerLowerBoundMah = dischargedPowerLowerBoundMah;
             mDischargedPowerUpperBoundMah = dischargedPowerUpperBoundMah;
+            return this;
+        }
+
+        /**
+         * Sets an approximation for how much time (in milliseconds) remains until the battery
+         * is fully discharged.
+         */
+        @NonNull
+        public Builder setBatteryTimeRemainingMs(long batteryTimeRemainingMs) {
+            mBatteryTimeRemainingMs = batteryTimeRemainingMs;
+            return this;
+        }
+
+        /**
+         * Sets an approximation for how much time (in milliseconds) remains until the battery
+         * is fully charged.
+         */
+        @NonNull
+        public Builder setChargeTimeRemainingMs(long chargeTimeRemainingMs) {
+            mChargeTimeRemainingMs = chargeTimeRemainingMs;
+            return this;
+        }
+
+        /**
+         * Sets the parceled recent history.
+         */
+        @NonNull
+        public Builder setBatteryHistory(Parcel historyBuffer,
+                List<BatteryStats.HistoryTag> historyTagPool) {
+            mHistoryBuffer = historyBuffer;
+            mHistoryTagPool = historyTagPool;
             return this;
         }
 

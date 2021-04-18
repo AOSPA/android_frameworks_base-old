@@ -24,6 +24,7 @@ import static android.view.DisplayInfoProto.LOGICAL_WIDTH;
 import static android.view.DisplayInfoProto.NAME;
 
 import android.annotation.Nullable;
+import android.app.WindowConfiguration;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
@@ -197,6 +198,9 @@ public final class DisplayInfo implements Parcelable {
     /** The display's HDR capabilities */
     public Display.HdrCapabilities hdrCapabilities;
 
+    /** The formats disabled by user **/
+    public int[] userDisabledHdrTypes = {};
+
     /**
      * Indicates whether the display can be switched into a mode with minimal post
      * processing.
@@ -362,6 +366,7 @@ public final class DisplayInfo implements Parcelable {
                 && colorMode == other.colorMode
                 && Arrays.equals(supportedColorModes, other.supportedColorModes)
                 && Objects.equals(hdrCapabilities, other.hdrCapabilities)
+                && Arrays.equals(userDisabledHdrTypes, other.userDisabledHdrTypes)
                 && minimalPostProcessingSupported == other.minimalPostProcessingSupported
                 && logicalDensityDpi == other.logicalDensityDpi
                 && physicalXDpi == other.physicalXDpi
@@ -411,6 +416,7 @@ public final class DisplayInfo implements Parcelable {
         supportedColorModes = Arrays.copyOf(
                 other.supportedColorModes, other.supportedColorModes.length);
         hdrCapabilities = other.hdrCapabilities;
+        userDisabledHdrTypes = other.userDisabledHdrTypes;
         minimalPostProcessingSupported = other.minimalPostProcessingSupported;
         logicalDensityDpi = other.logicalDensityDpi;
         physicalXDpi = other.physicalXDpi;
@@ -477,6 +483,11 @@ public final class DisplayInfo implements Parcelable {
         brightnessMaximum = source.readFloat();
         brightnessDefault = source.readFloat();
         roundedCorners = source.readTypedObject(RoundedCorners.CREATOR);
+        int numUserDisabledFormats = source.readInt();
+        userDisabledHdrTypes = new int[numUserDisabledFormats];
+        for (int i = 0; i < numUserDisabledFormats; i++) {
+            userDisabledHdrTypes[i] = source.readInt();
+        }
     }
 
     @Override
@@ -527,6 +538,10 @@ public final class DisplayInfo implements Parcelable {
         dest.writeFloat(brightnessMaximum);
         dest.writeFloat(brightnessDefault);
         dest.writeTypedObject(roundedCorners, flags);
+        dest.writeInt(userDisabledHdrTypes.length);
+        for (int i = 0; i < userDisabledHdrTypes.length; i++) {
+            dest.writeInt(userDisabledHdrTypes[i]);
+        }
     }
 
     @Override
@@ -615,9 +630,29 @@ public final class DisplayInfo implements Parcelable {
         getMetricsWithSize(outMetrics, ci, configuration, appWidth, appHeight);
     }
 
+    /**
+     * Populates {@code outMetrics} with details of the logical display. Bounds are limited
+     * by the logical size of the display.
+     *
+     * @param outMetrics the {@link DisplayMetrics} to be populated
+     * @param compatInfo the {@link CompatibilityInfo} to be applied
+     * @param configuration the {@link Configuration}
+     */
     public void getLogicalMetrics(DisplayMetrics outMetrics, CompatibilityInfo compatInfo,
             Configuration configuration) {
         getMetricsWithSize(outMetrics, compatInfo, configuration, logicalWidth, logicalHeight);
+    }
+
+    /**
+     * Similar to {@link #getLogicalMetrics}, but the limiting bounds are determined from
+     * {@link WindowConfiguration#getMaxBounds()}
+     */
+    public void getMaxBoundsMetrics(DisplayMetrics outMetrics, CompatibilityInfo compatInfo,
+            Configuration configuration) {
+        Rect bounds = configuration.windowConfiguration.getMaxBounds();
+        // Pass in null configuration to ensure width and height are not overridden to app bounds.
+        getMetricsWithSize(outMetrics, compatInfo, /* configuration= */ null,
+                bounds.width(), bounds.height());
     }
 
     public int getNaturalWidth() {
@@ -708,6 +743,8 @@ public final class DisplayInfo implements Parcelable {
         sb.append(Arrays.toString(supportedModes));
         sb.append(", hdrCapabilities ");
         sb.append(hdrCapabilities);
+        sb.append(", userDisabledHdrTypes ");
+        sb.append(Arrays.toString(userDisabledHdrTypes));
         sb.append(", minimalPostProcessingSupported ");
         sb.append(minimalPostProcessingSupported);
         sb.append(", rotation ");
@@ -809,6 +846,9 @@ public final class DisplayInfo implements Parcelable {
         }
         if ((flags & Display.FLAG_TRUSTED) != 0) {
             result.append(", FLAG_TRUSTED");
+        }
+        if ((flags & Display.FLAG_OWN_DISPLAY_GROUP) != 0) {
+            result.append(", FLAG_OWN_DISPLAY_GROUP");
         }
         return result.toString();
     }
