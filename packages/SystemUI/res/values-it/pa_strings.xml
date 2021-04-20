@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2021 Paranoid Android
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<resources>
+    <string name="global_action_reboot">Riavvia</string>
+    <string name="global_action_reboot_more">Riavvia\u2026</string>
+    <string name="global_action_reboot_sub">Sistema</string>
+    <string name="global_action_reboot_recovery">Recovery</string>
+    <string name="global_action_reboot_bootloader">Bootloader</string>
+    <string name="global_action_settings">Imostazioni</string>
+    <string name="quick_settings_caffeine_label">Caffeina</string>
+    <string name="accessibility_quick_settings_caffeine_off">Caffeina off</string>
+    <string name="accessibility_quick_settings_caffeine_on">Caffeina on</string>
+    <string name="quick_settings_dc_brightness_mode">Modalità di luminosità</string>
+    <string name="quick_settings_dc_full_auto">Modalità automatica</string>
+    <string name="applock_locked"> è bloccato</string>
+    <string name="applock_fingerprint_face">, l\'impronta digitale o la tua faccia per sbloccare</string>
+    <string name="applock_face"> o la tua faccia per sbloccare </string>
+    <string name="applock_fingerprint"> o la tua impronta digitale per sbloccare</string>
+    <string name="applock_credential"> per sbloccare</string>
+    <string name="applock_unlock">Sblocca</string>
+</resources>

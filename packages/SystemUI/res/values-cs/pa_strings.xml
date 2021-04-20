@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+     Copyright (C) 2021 Paranoid Android
+
+     Licensed under the Apache License, Version 2.0 (the "License");
+     you may not use this file except in compliance with the License.
+     You may obtain a copy of the License at
+
+          http://www.apache.org/licenses/LICENSE-2.0
+
+     Unless required by applicable law or agreed to in writing, software
+     distributed under the License is distributed on an "AS IS" BASIS,
+     WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+     See the License for the specific language governing permissions and
+     limitations under the License.
+-->
+<resources>
+    <string name="global_action_reboot">Restartovat</string>
+    <string name="global_action_reboot_more">Restartování\u2026</string>
+    <string name="global_action_reboot_sub">Systém</string>
+    <string name="global_action_reboot_recovery">Recovery</string>
+    <string name="global_action_reboot_bootloader">Bootloader</string>
+    <string name="global_action_settings">Nastavení</string>
+    <string name="quick_settings_caffeine_label">Kofein</string>
+    <string name="accessibility_quick_settings_caffeine_off">Kofein vyp.</string>
+    <string name="accessibility_quick_settings_caffeine_on">Kofein zap.</string>
+    <string name="quick_settings_dc_dimming_label">DC tlumení</string>
+    <string name="quick_settings_dc_brightness_mode">Režim jasu</string>
+    <string name="quick_settings_dc_full_auto">Automaticky</string>
+    <string name="applock_locked"> je uzamčena</string>
+    <string name="applock_fingerprint_face">, odemkněte otiskem prstu nebo obličejem</string>
+    <string name="applock_face"> nebo odemkněte obličejem</string>
+    <string name="applock_fingerprint"> nebo odemkněte otiskem prstu</string>
+    <string name="applock_credential"> odemknout</string>
+    <string name="applock_unlock">Odemknout</string>
+</resources>
