@@ -6191,6 +6191,9 @@ class Task extends WindowContainer<WindowContainer> {
         // appropriate for it.
         mTaskSupervisor.mStoppingActivities.remove(next);
 
+        if (!next.translucentWindowLaunch)
+            next.launching = true;
+
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
 
         if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
