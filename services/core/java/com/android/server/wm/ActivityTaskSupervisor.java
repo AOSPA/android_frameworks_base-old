@@ -587,6 +587,15 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void reportActivityLaunched(boolean timeout, ActivityRecord r, long totalTime,
             @WaitResult.LaunchState int launchState) {
         boolean changed = false;
+        if (totalTime > 0) {
+            if (mPerfBoost != null) {
+                if (r.app != null) {
+                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW,
+                        r.packageName, r.app.getPid(),
+                        BoostFramework.Draw.EVENT_TYPE_V1);
+                }
+            }
+        }
         for (int i = mWaitingActivityLaunched.size() - 1; i >= 0; i--) {
             final WaitInfo info = mWaitingActivityLaunched.get(i);
             if (!info.matches(r)) {

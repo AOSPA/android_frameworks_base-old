@@ -47,7 +47,6 @@ import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.content.Intent;
 import android.os.UserHandle;
-import android.util.BoostFramework;
 import android.util.IntArray;
 import android.util.Slog;
 import android.view.RemoteAnimationTarget;
@@ -163,12 +162,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      * on it to be finished before removing this object.
      */
     private boolean mRemoved;
-
-    public static boolean mPerfSendTapHint = false;
-    public static boolean mIsPerfBoostAcquired = false;
-    public static int mPerfHandle = -1;
-    public BoostFramework mPerfBoost = null;
-    public BoostFramework mUxPerf = null;
 
     /**
      * The id of a leaf task that most recently being moved to front.
@@ -1394,47 +1387,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             }
         }, true /* traverseTopToBottom */);
         return someActivityPaused[0] > 0;
-    }
-
-    void acquireAppLaunchPerfLock(ActivityRecord r) {
-       /* Acquire perf lock during new app launch */
-       if (mPerfBoost == null) {
-           mPerfBoost = new BoostFramework();
-       }
-       if (mPerfBoost != null) {
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
-           mPerfSendTapHint = true;
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
-           if (mAtmService != null && r != null && r.info != null && r.info.applicationInfo != null) {
-               final WindowProcessController wpc =
-                       mAtmService.getProcessController(r.processName, r.info.applicationInfo.uid);
-               if (wpc != null && wpc.hasThread()) {
-                   //If target process didn't start yet, this operation will be done when app call attach
-                   mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, wpc.getPid(), BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
-               }
-           }
-
-           if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
-           {
-               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
-           } else {
-               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V3);
-           }
-           if (mPerfHandle > 0)
-               mIsPerfBoostAcquired = true;
-           // Start IOP
-           if(r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
-               mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                   r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
-           }
-       }
-   }
-
-   void acquireUxPerfLock(int opcode, String packageName) {
-        mUxPerf = new BoostFramework();
-        if (mUxPerf != null) {
-            mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
-        }
     }
 
     void onSplitScreenModeDismissed() {
