@@ -95,8 +95,8 @@ import com.android.keyguard.KeyguardViewController;
 import com.android.keyguard.ViewMediatorCallback;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
-import com.android.systemui.Interpolators;
 import com.android.systemui.SystemUI;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dagger.qualifiers.UiBackground;
@@ -2299,18 +2299,16 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
      * @param container
      * @param panelView
      * @param biometricUnlockController
-     * @param lockIconContainer
      * @param notificationContainer
      * @param bypassController
      * @return the View Controller for the Keyguard View this class is mediating.
      */
     public KeyguardViewController registerStatusBar(StatusBar statusBar,
             ViewGroup container, NotificationPanelViewController panelView,
-            BiometricUnlockController biometricUnlockController, ViewGroup lockIconContainer,
+            BiometricUnlockController biometricUnlockController,
             View notificationContainer, KeyguardBypassController bypassController) {
         mKeyguardViewControllerLazy.get().registerStatusBar(statusBar, container, panelView,
-                biometricUnlockController, lockIconContainer,
-                notificationContainer, bypassController);
+                biometricUnlockController, notificationContainer, bypassController);
         return mKeyguardViewControllerLazy.get();
     }
 

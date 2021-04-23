@@ -49,6 +49,7 @@ cc_library_static {
         "com_android_server_net_NetworkStatsService.cpp",
         "com_android_server_power_PowerManagerService.cpp",
         "com_android_server_powerstats_PowerStatsService.cpp",
+        "com_android_server_hint_HintManagerService.cpp",
         "com_android_server_SerialService.cpp",
         "com_android_server_soundtrigger_middleware_AudioSessionProviderImpl.cpp",
         "com_android_server_soundtrigger_middleware_ExternalCaptureStateTracker.cpp",
@@ -96,8 +97,8 @@ cc_defaults {
         "libaudioclient",
         "libbase",
         "libappfuse",
-        "libbinder",
         "libbinder_ndk",
+        "libbinder",
         "libcutils",
         "libcrypto",
         "liblog",
@@ -106,6 +107,7 @@ cc_defaults {
         "libhardware_legacy",
         "libhidlbase",
         "libmeminfo",
+        "libmemtrackproxy",
         "libmtp",
         "libnativehelper",
         "libnativewindow",
@@ -155,9 +157,10 @@ cc_defaults {
         "android.hardware.input.classifier@1.0",
         "android.hardware.ir@1.0",
         "android.hardware.light@2.0",
+        "android.hardware.memtrack-V1-ndk_platform",
         "android.hardware.power@1.0",
         "android.hardware.power@1.1",
-        "android.hardware.power-V1-cpp",
+        "android.hardware.power-V2-cpp",
         "android.hardware.power.stats@1.0",
         "android.hardware.power.stats-V1-ndk_platform",
         "android.hardware.thermal@1.0",
@@ -194,8 +197,8 @@ cc_defaults {
                 "libchrome",
                 "libmojo",
             ],
-        }
-    }
+        },
+    },
 }
 
 filegroup {

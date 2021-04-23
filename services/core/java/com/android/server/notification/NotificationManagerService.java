@@ -685,6 +685,21 @@ public class NotificationManagerService extends SystemService {
                 }
             }
         }
+
+        // Remove notifications with the specified user & channel ID.
+        public void removeChannelNotifications(String pkg, @UserIdInt int userId,
+                String channelId) {
+            for (int i = 0; i < mBuffer.size(); i++) {
+                final Pair<StatusBarNotification, Integer> pair = mBuffer.get(i);
+                if (pair.first != null
+                        && userId == pair.first.getNormalizedUserId()
+                        && pkg != null && pkg.equals(pair.first.getPackageName())
+                        && pair.first.getNotification() != null
+                        && Objects.equals(channelId, pair.first.getNotification().getChannelId())) {
+                    mBuffer.remove(i);
+                }
+            }
+        }
     }
 
     void loadDefaultApprovedServices(int userId) {
@@ -1317,26 +1332,16 @@ public class NotificationManagerService extends SystemService {
                         return;
                     }
 
-                    int flags = data.getFlags();
                     boolean flagChanged = false;
                     if (data.isNotificationSuppressed() != isNotifSuppressed) {
                         flagChanged = true;
-                        if (isNotifSuppressed) {
-                            flags |= Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
-                        } else {
-                            flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
-                        }
+                        data.setSuppressNotification(isNotifSuppressed);
                     }
                     if (data.isBubbleSuppressed() != isBubbleSuppressed) {
                         flagChanged = true;
-                        if (isBubbleSuppressed) {
-                            flags |= Notification.BubbleMetadata.FLAG_SUPPRESS_BUBBLE;
-                        } else {
-                            flags &= ~Notification.BubbleMetadata.FLAG_SUPPRESS_BUBBLE;
-                        }
+                        data.setSuppressBubble(isBubbleSuppressed);
                     }
                     if (flagChanged) {
-                        data.setFlags(flags);
                         r.getNotification().flags |= FLAG_ONLY_ALERT_ONCE;
                         mHandler.post(
                                 new EnqueueNotificationRunnable(r.getUser().getIdentifier(), r,
@@ -3623,6 +3628,8 @@ public class NotificationManagerService extends SystemService {
             cancelAllNotificationsInt(MY_UID, MY_PID, pkg, channelId, 0, 0, true,
                     callingUser, REASON_CHANNEL_REMOVED, null);
             mPreferencesHelper.deleteNotificationChannel(pkg, callingUid, channelId);
+            // Remove from both recent notification archive and notification history
+            mArchive.removeChannelNotifications(pkg, callingUser, channelId);
             mHistoryManager.deleteNotificationChannel(pkg, callingUid, channelId);
             mListeners.notifyNotificationChannelChanged(pkg,
                     UserHandle.getUserHandleForUid(callingUid),
@@ -8179,8 +8186,10 @@ public class NotificationManagerService extends SystemService {
             summaries.remove(r.getSbn().getPackageName());
         }
 
-        // Save it for users of getHistoricalNotifications()
-        mArchive.record(r.getSbn(), reason);
+        // Save it for users of getHistoricalNotifications(), unless the whole channel was deleted
+        if (reason != REASON_CHANNEL_REMOVED) {
+            mArchive.record(r.getSbn(), reason);
+        }
 
         final long now = System.currentTimeMillis();
         final LogMaker logMaker = r.getItemLogMaker()

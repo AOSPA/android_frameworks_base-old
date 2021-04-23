@@ -316,7 +316,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean mLogoutEnabled;
     // cached value to avoid IPCs
     private boolean mIsUdfpsEnrolled;
-    private boolean mKeyguardQsUserSwitchEnabled;
+    private boolean mIsFaceEnrolled;
     // If the user long pressed the lock icon, disabling face auth for the current session.
     private boolean mLockIconPressed;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -361,10 +361,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 @Override
                 public void onChanged(BiometricSourceType type, boolean enabled, int userId)
                         throws RemoteException {
-                    if (type == BiometricSourceType.FACE) {
-                        mFaceSettingEnabledForUser.put(userId, enabled);
-                        updateFaceListeningState();
-                    }
+                    mHandler.post(() -> {
+                        if (type == BiometricSourceType.FACE) {
+                            mFaceSettingEnabledForUser.put(userId, enabled);
+                            updateFaceListeningState();
+                        }
+                    });
                 }
             };
 
@@ -1946,15 +1948,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mIsUdfpsEnrolled = mAuthController.isUdfpsEnrolled(userId);
     }
 
-    /**
-     * Whether to show the lock icon on lock screen and bouncer.
-     */
-    public boolean canShowLockIcon() {
-        if (mLockScreenMode == LOCK_SCREEN_MODE_LAYOUT_1) {
-            return isFaceAuthEnabledForUser(KeyguardUpdateMonitor.getCurrentUser())
-                    && !isUdfpsEnrolled();
-        }
-        return !isKeyguardQsUserSwitchEnabled();
+    private void updateFaceEnrolled(int userId) {
+        mIsFaceEnrolled = whitelistIpcs(
+                () -> mFaceManager != null && mFaceManager.isHardwareDetected()
+                        && mFaceManager.hasEnrolledTemplates(userId)
+                        && mFaceSettingEnabledForUser.get(userId));
     }
 
     /**
@@ -1965,14 +1963,10 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     }
 
     /**
-     * @return true if the keyguard qs user switcher shortcut is enabled
+     * @return true if there's at least one face enrolled
      */
-    public boolean isKeyguardQsUserSwitchEnabled() {
-        return mKeyguardQsUserSwitchEnabled;
-    }
-
-    public void setKeyguardQsUserSwitchEnabled(boolean enabled) {
-        mKeyguardQsUserSwitchEnabled = enabled;
+    public boolean isFaceEnrolled() {
+        return mIsFaceEnrolled;
     }
 
     private final UserSwitchObserver mUserSwitchObserver = new UserSwitchObserver() {
@@ -2246,8 +2240,11 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         if (mFaceRunningState == BIOMETRIC_STATE_CANCELLING) {
             setFaceRunningState(BIOMETRIC_STATE_CANCELLING_RESTARTING);
             return;
+        } else if (mFaceRunningState == BIOMETRIC_STATE_CANCELLING_RESTARTING) {
+            // Waiting for ERROR_CANCELED before requesting auth again
+            return;
         }
-        if (DEBUG) Log.v(TAG, "startListeningForFace()");
+        if (DEBUG) Log.v(TAG, "startListeningForFace(): " + mFaceRunningState);
         int userId = getCurrentUser();
         if (isUnlockWithFacePossible(userId)) {
             if (mFaceCancelSignal != null) {
@@ -2292,10 +2289,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
      * If face hardware is available, user has enrolled and enabled auth via setting.
      */
     public boolean isFaceAuthEnabledForUser(int userId) {
-        // TODO(b/140034352)
-        return whitelistIpcs(() -> mFaceManager != null && mFaceManager.isHardwareDetected()
-                && mFaceManager.hasEnrolledTemplates(userId)
-                && mFaceSettingEnabledForUser.get(userId));
+        updateFaceEnrolled(userId);
+        return mIsFaceEnrolled;
     }
 
     private void stopListeningForFingerprint() {

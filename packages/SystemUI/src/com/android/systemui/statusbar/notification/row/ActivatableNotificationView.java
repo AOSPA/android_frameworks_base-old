@@ -36,8 +36,8 @@ import android.view.animation.PathInterpolator;
 import com.android.internal.jank.InteractionJankMonitor;
 import com.android.settingslib.Utils;
 import com.android.systemui.Gefingerpoken;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationUtils;
@@ -720,6 +720,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
             mCurrentAppearInterpolator = mSlowOutFastInInterpolator;
             mCurrentAlphaInterpolator = Interpolators.LINEAR_OUT_SLOW_IN;
             targetValue = 1.0f;
+            if (!mIsHeadsUpAnimation && isChildInGroup()) {
+                // slower fade in of children to avoid visibly overlapping with other children
+                mCurrentAlphaInterpolator = Interpolators.SLOW_OUT_LINEAR_IN;
+            }
         } else {
             mCurrentAppearInterpolator = Interpolators.FAST_OUT_SLOW_IN;
             mCurrentAlphaInterpolator = mSlowOutLinearInInterpolator;
@@ -818,6 +822,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         float startWidthFraction = HORIZONTAL_COLLAPSED_REST_PARTIAL;
         if (mIsHeadsUpAnimation && !mIsAppearing) {
             startWidthFraction = 0;
+        }
+        if (mIsAppearing && !mIsHeadsUpAnimation && isChildInGroup()) {
+            // Children in a group (when not heads up) should simply fade in.
+            startWidthFraction = 1;
         }
         float width = MathUtils.lerp(startWidthFraction, 1.0f, 1.0f - widthFraction)
                         * getWidth();

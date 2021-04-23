@@ -38,6 +38,10 @@ public abstract class Classifier {
     public static final int BOUNCER_UNLOCK = 8;
     public static final int PULSE_EXPAND = 9;
     public static final int BRIGHTNESS_SLIDER = 10;
+    public static final int SHADE_DRAG = 11;
+    public static final int QS_COLLAPSE = 12;
+    public static final int UDFPS_AUTHENTICATION = 13;
+    public static final int DISABLED_UDFPS_AFFORDANCE = 14;
 
     @IntDef({
             QUICK_SETTINGS,
@@ -50,7 +54,12 @@ public abstract class Classifier {
             GENERIC,
             BOUNCER_UNLOCK,
             PULSE_EXPAND,
-            BRIGHTNESS_SLIDER
+            BRIGHTNESS_SLIDER,
+            SHADE_DRAG,
+            QS_COLLAPSE,
+            BRIGHTNESS_SLIDER,
+            UDFPS_AUTHENTICATION,
+            DISABLED_UDFPS_AFFORDANCE
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface InteractionType {}

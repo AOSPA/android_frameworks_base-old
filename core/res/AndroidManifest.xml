@@ -331,7 +331,6 @@
     <protected-broadcast android:name="android.se.omapi.action.SECURE_ELEMENT_STATE_CHANGED" />
 
     <protected-broadcast android:name="android.nfc.action.ADAPTER_STATE_CHANGED" />
-    <protected-broadcast android:name="android.nfc.action.ALWAYS_ON_STATE_CHANGED" />
     <protected-broadcast android:name="android.nfc.action.PREFERRED_PAYMENT_CHANGED" />
     <protected-broadcast android:name="android.nfc.action.TRANSACTION_DETECTED" />
     <protected-broadcast android:name="android.nfc.action.REQUIRE_UNLOCK_FOR_NFC" />
@@ -351,7 +350,7 @@
     <protected-broadcast android:name="android.nfc.handover.intent.action.HANDOVER_SEND_MULTIPLE" />
     <protected-broadcast android:name="com.android.nfc.handover.action.CANCEL_HANDOVER_TRANSFER" />
 
-    <protected-broadcast android:name="android.intent.action.CLEAR_DNS_CACHE" />
+    <protected-broadcast android:name="android.net.action.CLEAR_DNS_CACHE" />
     <protected-broadcast android:name="android.intent.action.PROXY_CHANGE" />
 
     <protected-broadcast android:name="android.os.UpdateLock.UPDATE_LOCK_CHANGED" />
@@ -726,7 +725,7 @@
     <protected-broadcast android:name="com.android.internal.intent.action.BUGREPORT_REQUESTED" />
 
     <!-- Added in S -->
-    <protected-broadcast android:name="android.intent.action.REBOOT_READY" />
+    <protected-broadcast android:name="android.scheduling.action.REBOOT_READY" />
     <protected-broadcast android:name="android.app.action.DEVICE_POLICY_CONSTANTS_CHANGED" />
 
     <!-- ====================================================================== -->
@@ -1424,7 +1423,7 @@
     <!-- Required to be able to discover and connect to nearby Bluetooth devices.
          <p>Protection level: dangerous -->
     <permission-group android:name="android.permission-group.NEARBY_DEVICES"
-        android:icon="@drawable/ic_qs_bluetooth"
+        android:icon="@drawable/perm_group_nearby_devices"
         android:label="@string/permgrouplab_nearby_devices"
         android:description="@string/permgroupdesc_nearby_devices"
         android:priority="750" />
@@ -1992,7 +1991,15 @@
         android:label="@string/permlab_bluetooth_connect"
         android:protectionLevel="dangerous" />
 
-    <!-- Required to be able to range to devices using uwb.
+    <!-- Required to be able to advertise to nearby Bluetooth devices.
+         <p>Protection level: dangerous -->
+    <permission android:name="android.permission.BLUETOOTH_ADVERTISE"
+        android:permissionGroup="android.permission-group.UNDEFINED"
+        android:description="@string/permdesc_bluetooth_advertise"
+        android:label="@string/permlab_bluetooth_advertise"
+        android:protectionLevel="dangerous" />
+
+    <!-- Required to be able to range to devices using ultra-wideband.
          <p>Protection level: dangerous -->
     <permission android:name="android.permission.UWB_RANGING"
         android:permissionGroup="android.permission-group.UNDEFINED"
@@ -4279,6 +4286,15 @@
     <permission android:name="android.permission.MANAGE_ROLE_HOLDERS"
                 android:protectionLevel="signature|installer" />
 
+    <!-- @SystemApi Allows an application to bypass role qualification. This allows switching role
+         holders to otherwise non eligible holders. Only the shell is allowed to do this, the
+         qualification for the shell role itself cannot be bypassed, and each role needs to
+         explicitly allow bypassing qualification in its definition. The bypass state will not be
+         persisted across reboot.
+     @hide -->
+    <permission android:name="android.permission.BYPASS_ROLE_QUALIFICATION"
+                android:protectionLevel="internal|role" />
+
     <!-- @SystemApi Allows an application to observe role holder changes.
          @hide -->
     <permission android:name="android.permission.OBSERVE_ROLE_HOLDERS"
@@ -4296,6 +4312,7 @@
                 android:protectionLevel="normal" />
 
     <!-- Allows an application to create new companion device associations.
+         @SystemApi
          @hide -->
     <permission android:name="android.permission.ASSOCIATE_COMPANION_DEVICES"
         android:protectionLevel="internal|role" />

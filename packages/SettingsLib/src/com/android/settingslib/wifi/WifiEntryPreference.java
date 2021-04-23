@@ -211,6 +211,10 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
         // TODO(b/70983952): Fill this method in
     }
 
+    protected int getIconColorAttr() {
+        return (mWifiEntry.getConnectedState() == WifiEntry.CONNECTED_STATE_CONNECTED)
+                ? android.R.attr.colorAccent : android.R.attr.colorControlNormal;
+    }
 
     private void updateIcon(boolean showX, int level, int standard, boolean isReady) {
         if (level == -1) {
@@ -220,8 +224,7 @@ public class WifiEntryPreference extends Preference implements WifiEntry.WifiEnt
 
         final Drawable drawable = mIconInjector.getIcon(showX, level, standard, isReady);
         if (drawable != null) {
-            drawable.setTintList(Utils.getColorAttr(getContext(),
-                    android.R.attr.colorControlNormal));
+            drawable.setTint(Utils.getColorAttrDefaultColor(getContext(), getIconColorAttr()));
             setIcon(drawable);
         } else {
             setIcon(null);

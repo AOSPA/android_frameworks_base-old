@@ -577,7 +577,6 @@ public class SystemSensorManager extends SensorManager {
                 && rate > CAPPED_SAMPLING_RATE_LEVEL
                 && mIsPackageDebuggable
                 && !mHasHighSamplingRateSensorsPermission) {
-            Compatibility.reportChange(CHANGE_ID_SAMPLING_RATE_SENSORS_PERMISSION);
             throw new SecurityException("To use the sampling rate level " + rate
                     + ", app needs to declare the normal permission"
                     + " HIGH_SAMPLING_RATE_SENSORS.");
@@ -789,7 +788,6 @@ public class SystemSensorManager extends SensorManager {
                     && rateUs < CAPPED_SAMPLING_PERIOD_US
                     && mManager.mIsPackageDebuggable
                     && !mManager.mHasHighSamplingRateSensorsPermission) {
-                Compatibility.reportChange(CHANGE_ID_SAMPLING_RATE_SENSORS_PERMISSION);
                 throw new SecurityException("To use the sampling rate of " + rateUs
                         + " microseconds, app needs to declare the normal permission"
                         + " HIGH_SAMPLING_RATE_SENSORS.");

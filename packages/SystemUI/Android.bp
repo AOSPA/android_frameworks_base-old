@@ -70,8 +70,8 @@ android_library {
         "res",
     ],
     static_libs: [
-        "bcsmartspace",
         "WindowManager-Shell",
+        "SystemUIAnimationLib",
         "SystemUIPluginLib",
         "SystemUISharedLib",
         "SystemUI-statsd",
@@ -152,6 +152,7 @@ android_library {
         "src/**/I*.aidl",
     ],
     static_libs: [
+        "SystemUIAnimationLib",
         "SystemUIPluginLib",
         "SystemUISharedLib",
         "SystemUI-statsd",

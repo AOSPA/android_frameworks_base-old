@@ -48,8 +48,8 @@ import android.widget.ScrollView;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.Dependency;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 
 import java.lang.annotation.Retention;
@@ -589,7 +589,7 @@ public class AuthContainerView extends LinearLayout
 
     @Override
     public void dismissFromSystemServer() {
-        removeWindowIfAttached();
+        animateAway(false /* sendReason */, 0 /* reason */);
     }
 
     @Override

@@ -19,7 +19,7 @@
     <!-- Recommended minimum clickable element dimension -->
     <dimen name="min_clickable_item_size">48dp</dimen>
 
-    <dimen name="remote_input_view_text_stroke">3dp</dimen>
+    <dimen name="remote_input_view_text_stroke">2dp</dimen>
 
     <!-- Amount to offset bottom of notification peek window from top of status bar. -->
     <dimen name="peek_window_y_offset">-12dp</dimen>
@@ -718,6 +718,7 @@
     <item name="keyguard_clock_line_spacing_scale_burmese" type="dimen" format="float">1</item>
 
     <item name="scrim_behind_alpha" format="float" type="dimen">0.62</item>
+    <dimen name="notification_scrim_corner_radius">32dp</dimen>
 
     <!-- The minimum amount the user needs to swipe to go to the camera / phone. -->
     <dimen name="keyguard_min_swipe_amount">110dp</dimen>
@@ -1231,6 +1232,7 @@
     <dimen name="qs_media_padding">16dp</dimen>
     <dimen name="qs_media_panel_outer_padding">16dp</dimen>
     <dimen name="qs_media_album_size">120dp</dimen>
+    <dimen name="qs_media_album_radius">14dp</dimen>
     <dimen name="qs_media_icon_size">16dp</dimen>
     <dimen name="qs_center_guideline_padding">10dp</dimen>
     <dimen name="qs_seamless_icon_size">@dimen/qs_media_icon_size</dimen>
@@ -1243,6 +1245,11 @@
     <dimen name="qs_media_enabled_seekbar_vertical_padding">15dp</dimen>
     <dimen name="qs_media_disabled_seekbar_vertical_padding">16dp</dimen>
 
+    <!-- Size of Smartspace media recommendations cards in the QSPanel carousel -->
+    <dimen name="qs_aa_media_rec_album_size">80dp</dimen>
+    <dimen name="qs_aa_media_rec_icon_size">20dp</dimen>
+
+
     <!-- Window magnification -->
     <dimen name="magnification_border_drag_size">35dp</dimen>
     <dimen name="magnification_outer_border_margin">15dp</dimen>
@@ -1253,11 +1260,13 @@
     <dimen name="magnification_drag_view_size">38dp</dimen>
     <dimen name="magnification_controls_size">90dp</dimen>
     <dimen name="magnification_switch_button_size">60dp</dimen>
-    <dimen name="magnification_switch_button_padding">12dp</dimen>
+    <dimen name="magnification_switch_button_padding">6dp</dimen>
     <dimen name="magnifier_left_right_controls_width">35dp</dimen>
     <dimen name="magnifier_left_right_controls_height">45dp</dimen>
     <dimen name="magnifier_up_down_controls_width">45dp</dimen>
     <dimen name="magnifier_up_down_controls_height">40dp</dimen>
+    <!-- The extra padding to show the whole outer border -->
+    <dimen name="magnifier_drag_handle_padding">3dp</dimen>
 
     <!-- Home Controls -->
     <dimen name="controls_header_side_margin">4dp</dimen>
@@ -1439,4 +1448,11 @@
     <dimen name="wallet_empty_state_corner_radius">24dp</dimen>
     <dimen name="wallet_tile_card_view_height">32dp</dimen>
     <dimen name="wallet_tile_card_view_width">50dp</dimen>
+
+    <!-- Ongoing call chip -->
+    <dimen name="ongoing_call_chip_side_padding">12dp</dimen>
+    <dimen name="ongoing_call_chip_icon_size">16dp</dimen>
+    <!-- The padding between the icon and the text. -->
+    <dimen name="ongoing_call_chip_icon_text_padding">4dp</dimen>
+    <dimen name="ongoing_call_chip_corner_radius">28dp</dimen>
 </resources>
