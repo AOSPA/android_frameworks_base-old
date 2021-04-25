@@ -24,6 +24,7 @@ import android.util.ArraySet;
 import com.android.internal.util.Preconditions;
 
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Set;
 
 /** The response class of {@link AppSearchSession#getSchema} */
@@ -34,7 +35,7 @@ public class GetSchemaResponse {
     private final Bundle mBundle;
 
     GetSchemaResponse(@NonNull Bundle bundle) {
-        mBundle = Preconditions.checkNotNull(bundle);
+        mBundle = Objects.requireNonNull(bundle);
     }
 
     /**
@@ -74,7 +75,7 @@ public class GetSchemaResponse {
 
     /** Builder for {@link GetSchemaResponse} objects. */
     public static final class Builder {
-        private int mVersion;
+        private int mVersion = 0;
         private boolean mBuilt = false;
         private final ArrayList<Bundle> mSchemaBundles = new ArrayList<>();
 

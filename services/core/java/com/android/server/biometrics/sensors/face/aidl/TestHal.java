@@ -17,6 +17,7 @@
 package com.android.server.biometrics.sensors.face.aidl;
 
 import android.hardware.biometrics.common.ICancellationSignal;
+import android.hardware.biometrics.face.EnrollmentStageConfig;
 import android.hardware.biometrics.face.Error;
 import android.hardware.biometrics.face.IFace;
 import android.hardware.biometrics.face.ISession;
@@ -32,6 +33,7 @@ import android.util.Slog;
  */
 public class TestHal extends IFace.Stub {
     private static final String TAG = "face.aidl.TestHal";
+
     @Override
     public SensorProps[] getSensorProps() {
         Slog.w(TAG, "getSensorProps");
@@ -53,6 +55,11 @@ public class TestHal extends IFace.Stub {
             public void revokeChallenge(long challenge) throws RemoteException {
                 Slog.w(TAG, "revokeChallenge: " + challenge);
                 cb.onChallengeRevoked(challenge);
+            }
+
+            @Override
+            public EnrollmentStageConfig[] getEnrollmentConfig(byte enrollmentType) {
+                return new EnrollmentStageConfig[0];
             }
 
             @Override
@@ -102,16 +109,16 @@ public class TestHal extends IFace.Stub {
             }
 
             @Override
-            public void getFeatures(int enrollmentId) throws RemoteException {
+            public void getFeatures() throws RemoteException {
                 Slog.w(TAG, "getFeatures");
-                cb.onFeaturesRetrieved(new byte[0], enrollmentId);
+                cb.onFeaturesRetrieved(new byte[0]);
             }
 
             @Override
-            public void setFeature(HardwareAuthToken hat, int enrollmentId,
-                    byte feature, boolean enabled) throws RemoteException {
+            public void setFeature(HardwareAuthToken hat, byte feature, boolean enabled)
+                    throws RemoteException {
                 Slog.w(TAG, "setFeature");
-                cb.onFeatureSet(enrollmentId, feature);
+                cb.onFeatureSet(feature);
             }
 
             @Override

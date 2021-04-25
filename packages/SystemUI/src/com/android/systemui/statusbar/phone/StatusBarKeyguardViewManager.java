@@ -29,6 +29,7 @@ import android.content.res.ColorStateList;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewRootImpl;
@@ -119,6 +120,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
         @Override
         public void onFullyHidden() {
+        }
+
+        @Override
+        public void onExpansionChanged(float expansion) {
+            if (mAlternateAuthInterceptor != null) {
+                mAlternateAuthInterceptor.setBouncerExpansionChanged(expansion);
+            }
             updateStates();
         }
     };
@@ -251,7 +259,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     public void setAlternateAuthInterceptor(@Nullable AlternateAuthInterceptor authInterceptor) {
+        final boolean newlyNull = authInterceptor == null && mAlternateAuthInterceptor != null;
         mAlternateAuthInterceptor = authInterceptor;
+        resetAlternateAuth(newlyNull);
     }
 
     private void registerListeners() {
@@ -432,7 +442,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             } else {
                 showBouncerOrKeyguard(hideBouncerWhenShowing);
             }
-            resetAlternateAuth();
+            resetAlternateAuth(false);
             mKeyguardUpdateManager.sendKeyguardReset();
             updateStates();
         }
@@ -441,9 +451,10 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     /**
      * Stop showing any alternate auth methods
      */
-    public void resetAlternateAuth() {
-        if (mAlternateAuthInterceptor != null
-                && mAlternateAuthInterceptor.hideAlternateAuthBouncer()) {
+    public void resetAlternateAuth(boolean forceUpdateScrim) {
+        if ((mAlternateAuthInterceptor != null
+                && mAlternateAuthInterceptor.hideAlternateAuthBouncer())
+                || forceUpdateScrim) {
             mStatusBar.updateScrimController();
         }
     }
@@ -957,6 +968,12 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
      */
     public void notifyKeyguardAuthenticated(boolean strongAuth) {
         mBouncer.notifyKeyguardAuthenticated(strongAuth);
+
+        if (mAlternateAuthInterceptor != null && isShowingAlternateAuthOrAnimating()) {
+            resetAlternateAuth(false);
+            executeAfterKeyguardGoneAction();
+        }
+
     }
 
     public void showBouncerMessage(String message, ColorStateList colorState) {
@@ -1063,6 +1080,17 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 || mAlternateAuthInterceptor.isAnimating());
     }
 
+    /**
+     * Forward touches to any alternate authentication affordances.
+     */
+    public boolean onTouch(MotionEvent event) {
+        if (mAlternateAuthInterceptor == null) {
+            return false;
+        }
+
+        return mAlternateAuthInterceptor.onTouch(event);
+    }
+
     /** Update keyguard position based on a tapped X coordinate. */
     public void updateKeyguardPosition(float x) {
         if (mBouncer != null) {
@@ -1121,5 +1149,18 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
          * Set whether qs is currently expanded.
          */
         void setQsExpanded(boolean expanded);
+
+        /**
+         * Forward potential touches to authentication interceptor
+         * @return true if event was handled
+         */
+        boolean onTouch(MotionEvent event);
+
+        /**
+         * Update pin/pattern/password bouncer expansion amount where 0 is visible and 1 is fully
+         * hidden
+         */
+        void setBouncerExpansionChanged(float expansion);
+
     }
 }

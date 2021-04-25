@@ -2569,6 +2569,32 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGE_REMOVED = "android.intent.action.PACKAGE_REMOVED";
     /**
+     * Broadcast Action: An existing application package has been removed from
+     * the device. The data contains the name of the package and the visibility
+     * allow list. The package that is being removed does <em>not</em> receive
+     * this Intent.
+     * <ul>
+     * <li> {@link #EXTRA_UID} containing the integer uid previously assigned
+     * to the package.
+     * <li> {@link #EXTRA_DATA_REMOVED} is set to true if the entire
+     * application -- data and code -- is being removed.
+     * <li> {@link #EXTRA_REPLACING} is set to true if this will be followed
+     * by an {@link #ACTION_PACKAGE_ADDED} broadcast for the same package.
+     * <li> {@link #EXTRA_USER_INITIATED} containing boolean field to signal
+     * that the application was removed with the user-initiated action.
+     * <li> {@link #EXTRA_VISIBILITY_ALLOW_LIST} containing an int array to
+     * indicate the visibility allow list.
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system.
+     *
+     * @hide This broadcast is used internally by the system.
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGE_REMOVED_INTERNAL =
+            "android.intent.action.PACKAGE_REMOVED_INTERNAL";
+    /**
      * Broadcast Action: An existing application package has been completely
      * removed from the device.  The data contains the name of the package.
      * This is like {@link #ACTION_PACKAGE_REMOVED}, but only set when
@@ -2827,54 +2853,6 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_MY_PACKAGE_UNSUSPENDED = "android.intent.action.MY_PACKAGE_UNSUSPENDED";
-
-    /**
-     * Broadcast Action: Sent to indicate that the package becomes startable.
-     * The intent will have the following extra values:
-     * <ul>
-     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. </li>
-     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name. </li>
-     * </li>
-     * </ul>
-     *
-     * <p class="note">This is a protected intent that can only be sent by the system.
-     * @hide
-     */
-    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_PACKAGE_STARTABLE = "android.intent.action.PACKAGE_STARTABLE";
-
-    /**
-     * Broadcast Action: Sent to indicate that the package becomes unstartable.
-     * The intent will have the following extra values:
-     * <ul>
-     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. </li>
-     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name. </li>
-     * <li> {@link #EXTRA_UNSTARTABLE_REASON} containing the integer indicating the reason for
-     * the state change,
-     * @see PackageManager.UnstartableReason
-     * </li>
-     * </ul>
-     *
-     * <p class="note">This is a protected intent that can only be sent by the system.
-     * @hide
-     */
-    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_PACKAGE_UNSTARTABLE =
-            "android.intent.action.PACKAGE_UNSTARTABLE";
-
-    /**
-     * Broadcast Action: Sent to indicate that the package is fully loaded.
-     * <ul>
-     * <li> {@link #EXTRA_UID} containing the integer uid assigned to the package. </li>
-     * <li> {@link #EXTRA_PACKAGE_NAME} containing the package name. </li>
-     * </li>
-     * </ul>
-     *
-     * <p class="note">This is a protected intent that can only be sent by the system.
-     */
-    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
-    public static final String ACTION_PACKAGE_FULLY_LOADED =
-            "android.intent.action.PACKAGE_FULLY_LOADED";
 
     /**
      * Broadcast Action: A user ID has been removed from the system.  The user
@@ -5379,8 +5357,8 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_ATTRIBUTION_TAGS = "android.intent.extra.ATTRIBUTION_TAGS";
 
     /**
-     * A long representing the start timestamp (in millis) of the permission usage when used with
-     * {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
+     * A long representing the start timestamp (epoch time in millis) of the permission usage
+     * when used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
      *
      * @hide
      */
@@ -5388,8 +5366,8 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_START_TIME = "android.intent.extra.START_TIME";
 
     /**
-     * A long representing the end timestamp (in millis) of the permission usage when used with
-     * {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
+     * A long representing the end timestamp (epoch time in millis) of the permission usage when
+     * used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
      *
      * @hide
      */
@@ -6183,21 +6161,14 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_LOCUS_ID = "android.intent.extra.LOCUS_ID";
 
     /**
-     * Intent extra: the reason that the package associated with this intent has become unstartable.
+     * Used as an int array extra field in
+     * {@link android.content.Intent#ACTION_PACKAGE_REMOVED_INTERNAL}
+     * intents to indicate that visibility allow list of this removed package.
      *
-     * <p>Type: String
+     * @hide
      */
-    public static final String EXTRA_UNSTARTABLE_REASON = "android.intent.extra.UNSTARTABLE_REASON";
-
-    /**
-     * A boolean extra indicating whether an activity is bubbled. Set on the shortcut or
-     * pending intent provided for the bubble. If the extra is not present or false, then it is not
-     * bubbled.
-     *
-     * @see android.app.Notification.Builder#setBubbleMetadata(Notification.BubbleMetadata)
-     * @see android.app.Notification.BubbleMetadata.Builder#Builder(String)
-     */
-    public static final String EXTRA_IS_BUBBLED = "android.intent.extra.IS_BUBBLED";
+    public static final String EXTRA_VISIBILITY_ALLOW_LIST =
+            "android.intent.extra.VISIBILITY_ALLOW_LIST";
 
     // ---------------------------------------------------------------------
     // ---------------------------------------------------------------------

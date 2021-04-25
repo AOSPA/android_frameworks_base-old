@@ -273,8 +273,8 @@ public final class AudioFormat implements Parcelable {
 
     /** Audio data format: compressed audio wrapped in PCM for HDMI
      * or S/PDIF passthrough.
-     * IEC61937 uses a stereo stream of 16-bit samples as the wrapper.
-     * So the channel mask for the track must be {@link #CHANNEL_OUT_STEREO}.
+     * For devices whose SDK version is less than {@link android.os.Build.VERSION_CODES#S}, the
+     * channel mask of IEC61937 track must be {@link #CHANNEL_OUT_STEREO}.
      * Data should be written to the stream in a short[] array.
      * If the data is written in a byte[] array then there may be endian problems
      * on some platforms when converting to short internally.
@@ -326,6 +326,8 @@ public final class AudioFormat implements Parcelable {
     public static final int ENCODING_MPEGH_LC_L4 = 26;
     /** Audio data format: DTS UHD compressed */
     public static final int ENCODING_DTS_UHD = 27;
+    /** Audio data format: DRA compressed */
+    public static final int ENCODING_DRA = 28;
 
     /** Audio data format: AMRNB
      * @hide
@@ -409,6 +411,8 @@ public final class AudioFormat implements Parcelable {
                 return "ENCODING_MPEGH_LC_L4";
             case ENCODING_DTS_UHD:
                 return "ENCODING_DTS_UHD";
+            case ENCODING_DRA:
+                return "ENCODING_DRA";
             default :
                 return "invalid encoding " + enc;
         }
@@ -459,6 +463,18 @@ public final class AudioFormat implements Parcelable {
     public static final int CHANNEL_OUT_TOP_BACK_CENTER = 0x40000;
     /** @hide */
     public static final int CHANNEL_OUT_TOP_BACK_RIGHT =  0x80000;
+    /** @hide */
+    public static final int CHANNEL_OUT_TOP_SIDE_LEFT = 0x100000;
+    /** @hide */
+    public static final int CHANNEL_OUT_TOP_SIDE_RIGHT = 0x200000;
+    /** @hide */
+    public static final int CHANNEL_OUT_BOTTOM_FRONT_LEFT = 0x400000;
+    /** @hide */
+    public static final int CHANNEL_OUT_BOTTOM_FRONT_CENTER = 0x800000;
+    /** @hide */
+    public static final int CHANNEL_OUT_BOTTOM_FRONT_RIGHT = 0x1000000;
+    /** @hide */
+    public static final int CHANNEL_OUT_LOW_FREQUENCY_2 = 0x2000000;
 
     public static final int CHANNEL_OUT_MONO = CHANNEL_OUT_FRONT_LEFT;
     public static final int CHANNEL_OUT_STEREO = (CHANNEL_OUT_FRONT_LEFT | CHANNEL_OUT_FRONT_RIGHT);
@@ -488,6 +504,38 @@ public final class AudioFormat implements Parcelable {
             CHANNEL_OUT_SIDE_LEFT | CHANNEL_OUT_SIDE_RIGHT |
             CHANNEL_OUT_BACK_LEFT | CHANNEL_OUT_BACK_RIGHT |
             CHANNEL_OUT_LOW_FREQUENCY);
+    /** @hide */
+    public static final int CHANNEL_OUT_5POINT1POINT2 = (CHANNEL_OUT_5POINT1 |
+            CHANNEL_OUT_TOP_SIDE_LEFT | CHANNEL_OUT_TOP_SIDE_RIGHT);
+    /** @hide */
+    public static final int CHANNEL_OUT_5POINT1POINT4 = (CHANNEL_OUT_5POINT1 |
+            CHANNEL_OUT_TOP_FRONT_LEFT | CHANNEL_OUT_TOP_FRONT_RIGHT |
+            CHANNEL_OUT_TOP_BACK_LEFT | CHANNEL_OUT_TOP_BACK_RIGHT);
+    /** @hide */
+    public static final int CHANNEL_OUT_7POINT1POINT2 = (CHANNEL_OUT_7POINT1_SURROUND |
+            CHANNEL_OUT_TOP_SIDE_LEFT | CHANNEL_OUT_TOP_SIDE_RIGHT);
+    /** @hide */
+    public static final int CHANNEL_OUT_7POINT1POINT4 = (CHANNEL_OUT_7POINT1_SURROUND |
+            CHANNEL_OUT_TOP_FRONT_LEFT | CHANNEL_OUT_TOP_FRONT_RIGHT |
+            CHANNEL_OUT_TOP_BACK_LEFT | CHANNEL_OUT_TOP_BACK_RIGHT);
+    /** @hide */
+    public static final int CHANNEL_OUT_13POINT_360RA = (
+            CHANNEL_OUT_FRONT_LEFT | CHANNEL_OUT_FRONT_CENTER | CHANNEL_OUT_FRONT_RIGHT |
+            CHANNEL_OUT_SIDE_LEFT | CHANNEL_OUT_SIDE_RIGHT |
+            CHANNEL_OUT_TOP_FRONT_LEFT | CHANNEL_OUT_TOP_FRONT_CENTER |
+            CHANNEL_OUT_TOP_FRONT_RIGHT |
+            CHANNEL_OUT_TOP_BACK_LEFT | CHANNEL_OUT_TOP_BACK_RIGHT |
+            CHANNEL_OUT_BOTTOM_FRONT_LEFT | CHANNEL_OUT_BOTTOM_FRONT_CENTER |
+            CHANNEL_OUT_BOTTOM_FRONT_RIGHT);
+    /** @hide */
+    public static final int CHANNEL_OUT_22POINT2 = (CHANNEL_OUT_7POINT1POINT4 |
+            CHANNEL_OUT_FRONT_LEFT_OF_CENTER | CHANNEL_OUT_FRONT_RIGHT_OF_CENTER |
+            CHANNEL_OUT_BACK_CENTER | CHANNEL_OUT_TOP_CENTER |
+            CHANNEL_OUT_TOP_FRONT_CENTER | CHANNEL_OUT_TOP_BACK_CENTER |
+            CHANNEL_OUT_TOP_SIDE_LEFT | CHANNEL_OUT_TOP_SIDE_RIGHT |
+            CHANNEL_OUT_BOTTOM_FRONT_LEFT | CHANNEL_OUT_BOTTOM_FRONT_RIGHT |
+            CHANNEL_OUT_BOTTOM_FRONT_CENTER |
+            CHANNEL_OUT_LOW_FREQUENCY_2);
     // CHANNEL_OUT_ALL is not yet defined; if added then it should match AUDIO_CHANNEL_OUT_ALL
 
     /** Minimum value for sample rate,
@@ -665,6 +713,7 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_MPEGH_LC_L3:
             case ENCODING_MPEGH_LC_L4:
             case ENCODING_DTS_UHD:
+            case ENCODING_DRA:
                 return true;
             default:
                 return false;
@@ -701,6 +750,7 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_MPEGH_LC_L3:
             case ENCODING_MPEGH_LC_L4:
             case ENCODING_DTS_UHD:
+            case ENCODING_DRA:
                 return true;
             default:
                 return false;
@@ -746,6 +796,7 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_MPEGH_LC_L3:
             case ENCODING_MPEGH_LC_L4:
             case ENCODING_DTS_UHD:
+            case ENCODING_DRA:
                 return false;
             case ENCODING_INVALID:
             default:
@@ -785,6 +836,7 @@ public final class AudioFormat implements Parcelable {
             case ENCODING_MPEGH_LC_L3:
             case ENCODING_MPEGH_LC_L4:
             case ENCODING_DTS_UHD:
+            case ENCODING_DRA:
                 return false;
             case ENCODING_INVALID:
             default:
@@ -1078,6 +1130,7 @@ public final class AudioFormat implements Parcelable {
                 case ENCODING_MPEGH_LC_L3:
                 case ENCODING_MPEGH_LC_L4:
                 case ENCODING_DTS_UHD:
+                case ENCODING_DRA:
                     mEncoding = encoding;
                     break;
                 case ENCODING_INVALID:
@@ -1311,7 +1364,8 @@ public final class AudioFormat implements Parcelable {
         ENCODING_MPEGH_BL_L4,
         ENCODING_MPEGH_LC_L3,
         ENCODING_MPEGH_LC_L4,
-        ENCODING_DTS_UHD }
+        ENCODING_DTS_UHD,
+        ENCODING_DRA }
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface Encoding {}
@@ -1331,7 +1385,8 @@ public final class AudioFormat implements Parcelable {
             ENCODING_MPEGH_BL_L4,
             ENCODING_MPEGH_LC_L3,
             ENCODING_MPEGH_LC_L4,
-            ENCODING_DTS_UHD
+            ENCODING_DTS_UHD,
+            ENCODING_DRA
     };
 
     /** @hide */
@@ -1349,7 +1404,8 @@ public final class AudioFormat implements Parcelable {
             ENCODING_MPEGH_BL_L4,
             ENCODING_MPEGH_LC_L3,
             ENCODING_MPEGH_LC_L4,
-            ENCODING_DTS_UHD }
+            ENCODING_DTS_UHD,
+            ENCODING_DRA }
     )
     @Retention(RetentionPolicy.SOURCE)
     public @interface SurroundSoundEncoding {}
@@ -1393,6 +1449,8 @@ public final class AudioFormat implements Parcelable {
                 return "MPEG-H 3D Audio low complexity profile level 4";
             case ENCODING_DTS_UHD:
                 return "DTS UHD";
+            case ENCODING_DRA:
+                return "DRA";
             default:
                 return "Unknown surround sound format";
         }

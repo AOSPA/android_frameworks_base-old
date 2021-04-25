@@ -367,7 +367,7 @@ public class HardwareRenderer {
         public @NonNull FrameRenderRequest setVsyncTime(long vsyncTime) {
             // TODO(b/168552873): populate vsync Id once available to Choreographer public API
             mFrameInfo.setVsync(vsyncTime, vsyncTime, FrameInfo.INVALID_VSYNC_ID, Long.MAX_VALUE,
-                    vsyncTime);
+                    vsyncTime, -1);
             mFrameInfo.addFlags(FrameInfo.FLAG_SURFACE_CANVAS);
             return this;
         }
@@ -754,6 +754,11 @@ public class HardwareRenderer {
     }
 
     /** @hide */
+    public void setASurfaceTransactionCallback(ASurfaceTransactionCallback callback) {
+        nSetASurfaceTransactionCallback(mNativeProxy, callback);
+    }
+
+    /** @hide */
     public void setFrameCallback(FrameDrawingCallback callback) {
         nSetFrameCallback(mNativeProxy, callback);
     }
@@ -865,6 +870,23 @@ public class HardwareRenderer {
     /** called by native */
     static void closeHintSession(PerformanceHintManager.Session session) {
         session.close();
+    }
+
+    /**
+     * Interface used to receive callbacks when a transaction needs to be merged.
+     *
+     * @hide
+     */
+    public interface ASurfaceTransactionCallback {
+        /**
+         * Invoked during a frame drawing.
+         *
+         * @param aSurfaceTranactionNativeObj the ASurfaceTransaction native object handle
+         * @param aSurfaceControlNativeObj ASurfaceControl native object handle
+         * @param frame The id of the frame being drawn.
+         */
+        void onMergeTransaction(long aSurfaceTranactionNativeObj,
+                                long aSurfaceControlNativeObj, long frame);
     }
 
     /**
@@ -1341,6 +1363,9 @@ public class HardwareRenderer {
 
     private static native void nSetPictureCaptureCallback(long nativeProxy,
             PictureCapturedCallback callback);
+
+    private static native void nSetASurfaceTransactionCallback(long nativeProxy,
+            ASurfaceTransactionCallback callback);
 
     private static native void nSetFrameCallback(long nativeProxy, FrameDrawingCallback callback);
 

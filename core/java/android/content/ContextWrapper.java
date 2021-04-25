@@ -493,6 +493,20 @@ public class ContextWrapper extends Context {
 
     /** @hide */
     @Override
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions, @Nullable String[] excludedPermissions) {
+        mBase.sendBroadcastMultiplePermissions(intent, receiverPermissions, excludedPermissions);
+    }
+
+    /** @hide */
+    @Override
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions, @Nullable Bundle options) {
+        mBase.sendBroadcastMultiplePermissions(intent, receiverPermissions, options);
+    }
+
+    /** @hide */
+    @Override
     public void sendBroadcastAsUserMultiplePermissions(Intent intent, UserHandle user,
             String[] receiverPermissions) {
         mBase.sendBroadcastAsUserMultiplePermissions(intent, user, receiverPermissions);

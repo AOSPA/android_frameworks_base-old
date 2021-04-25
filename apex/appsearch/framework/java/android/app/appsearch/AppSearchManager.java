@@ -29,14 +29,16 @@ import java.util.function.Consumer;
 /**
  * Provides access to the centralized AppSearch index maintained by the system.
  *
- * <p>AppSearch is a search library for managing structured data featuring:
+ * <p>AppSearch is an offline, on-device search library for managing structured data featuring:
  *
  * <ul>
- *   <li>A fully offline on-device solution
- *   <li>A set of APIs for applications to index documents and retrieve them via full-text search
- *   <li>APIs for applications to allow the System to display their content on system UI surfaces
- *   <li>Similarly, APIs for applications to allow the System to share their content with other
- *       specified applications.
+ *   <li>APIs to index and retrieve data via full-text search.
+ *   <li>An API for applications to explicitly grant read-access permission of their data to other
+ *   applications.
+ *   <b>See: {@link SetSchemaRequest.Builder#setSchemaTypeVisibilityForPackage}</b>
+ *   <li>An API for applications to opt into or out of having their data displayed on System UI
+ *   surfaces by the System-designated global querier.
+ *   <b>See: {@link SetSchemaRequest.Builder#setSchemaTypeDisplayedBySystem}</b>
  * </ul>
  *
  * <p>Applications create a database by opening an {@link AppSearchSession}.
@@ -76,10 +78,10 @@ import java.util.function.Consumer;
  * });</pre>
  *
  * <p>The basic unit of data in AppSearch is represented as a {@link GenericDocument} object,
- * containing a URI, namespace, time-to-live, score, and properties. A namespace organizes a logical
+ * containing an ID, namespace, time-to-live, score, and properties. A namespace organizes a logical
  * group of documents. For example, a namespace can be created to group documents on a per-account
- * basis. A URI identifies a single document within a namespace. The combination of URI and
- * namespace uniquely identifies a {@link GenericDocument} in the database.
+ * basis. An ID identifies a single document within a namespace. The combination of namespace and ID
+ * uniquely identifies a {@link GenericDocument} in the database.
  *
  * <p>Once the schema has been set, {@link GenericDocument} objects can be put into the database and
  * indexed by calling {@link AppSearchSession#put}.
@@ -89,8 +91,7 @@ import java.util.function.Consumer;
  * <pre>
  * // Although for this example we use GenericDocument directly, we recommend extending
  * // GenericDocument to create specific types (i.e. Email) with specific setters/getters.
- * GenericDocument email = new GenericDocument.Builder<>(URI, EMAIL_SCHEMA_TYPE)
- *     .setNamespace(NAMESPACE)
+ * GenericDocument email = new GenericDocument.Builder<>(NAMESPACE, ID, EMAIL_SCHEMA_TYPE)
  *     .setPropertyString(“subject”, EMAIL_SUBJECT)
  *     .setScore(EMAIL_SCORE)
  *     .build();
@@ -106,13 +107,13 @@ import java.util.function.Consumer;
  * <p>Searching within the database is done by calling {@link AppSearchSession#search} and providing
  * the query string to search for, as well as a {@link SearchSpec}.
  *
- * <p>Alternatively, {@link AppSearchSession#getByUri} can be called to retrieve documents by URI
- * and namespace.
+ * <p>Alternatively, {@link AppSearchSession#getByDocumentId} can be called to retrieve documents by
+ * namespace and ID.
  *
  * <p>Document removal is done either by time-to-live expiration, or explicitly calling a remove
- * operation. Remove operations can be done by URI and namespace via {@link
- * AppSearchSession#remove(RemoveByUriRequest, Executor, BatchResultCallback)}, or by query via
- * {@link AppSearchSession#remove(String, SearchSpec, Executor, Consumer)}.
+ * operation. Remove operations can be done by namespace and ID via {@link
+ * AppSearchSession#remove(RemoveByDocumentIdRequest, Executor, BatchResultCallback)}, or by query
+ * via {@link AppSearchSession#remove(String, SearchSpec, Executor, Consumer)}.
  */
 @SystemService(Context.APP_SEARCH_SERVICE)
 public class AppSearchManager {

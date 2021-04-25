@@ -2639,8 +2639,12 @@ public abstract class PackageManager {
     public static final String FEATURE_SE_OMAPI_SD = "android.hardware.se.omapi.sd";
 
     /**
-     * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: The device is compatible with Android’s security model.
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device is
+     * compatible with Android’s security model.
+     *
+     * <p>See sections 2 and 9 in the
+     * <a href="https://source.android.com/compatibility/android-cdd">Android CDD</a> for more
+     * details.
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_SECURITY_MODEL_COMPATIBLE =
@@ -3497,14 +3501,6 @@ public abstract class PackageManager {
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
-     * The device supports translation of text-to-text in multiple languages via integration with
-     * the system {@link android.service.translation.TranslationService translation provider}.
-     */
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_TRANSLATION = "android.software.translation";
-
-    /**
-     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}:
      * The device implements headtracking suitable for a VR device.
      */
     @SdkConstant(SdkConstantType.FEATURE)
@@ -3656,32 +3652,6 @@ public abstract class PackageManager {
      */
     @SdkConstant(SdkConstantType.FEATURE)
     public static final String FEATURE_TUNER = "android.hardware.tv.tuner";
-
-    /**
-     * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: The device supports a enabling/disabling sensor privacy for
-     * microphone. When sensory privacy for the microphone is enabled no microphone data is sent to
-     * clients, e.g. all audio data is silent.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_MICROPHONE_TOGGLE = "android.hardware.microphone.toggle";
-
-    /**
-     * Feature for {@link #getSystemAvailableFeatures} and
-     * {@link #hasSystemFeature}: The device supports a enabling/disabling sensor privacy for
-     * camera. When sensory privacy for the camera is enabled no camera data is sent to clients,
-     * e.g. the view finder in a camera app would appear blank.
-     *
-     * @hide
-     */
-    @SystemApi
-    @TestApi
-    @SdkConstant(SdkConstantType.FEATURE)
-    public static final String FEATURE_CAMERA_TOGGLE = "android.hardware.camera.toggle";
 
     /**
      * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device has
@@ -4372,39 +4342,6 @@ public abstract class PackageManager {
      */
     @SystemApi
     public static final int SYSTEM_APP_STATE_UNINSTALLED = 3;
-
-    /**
-     * Reasons for why a package is unstartable.
-     * @hide
-     */
-    @IntDef({UNSTARTABLE_REASON_UNKNOWN,
-            UNSTARTABLE_REASON_CONNECTION_ERROR,
-            UNSTARTABLE_REASON_INSUFFICIENT_STORAGE
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface UnstartableReason {}
-
-    /**
-     * Unstartable state with no root cause specified. E.g., data loader seeing missing pages but
-     * unclear about the cause. This corresponds to a generic alert window shown to the user when
-     * the user attempts to launch the app.
-     * @hide
-     */
-    public static final int UNSTARTABLE_REASON_UNKNOWN = 0;
-
-    /**
-     * Unstartable state due to connection issues that interrupt package loading.
-     * This corresponds to an alert window shown to the user indicating connection errors.
-     * @hide
-     */
-    public static final int UNSTARTABLE_REASON_CONNECTION_ERROR = 1;
-
-    /**
-     * Unstartable state after encountering storage limitations.
-     * This corresponds to an alert window indicating limited storage.
-     * @hide
-     */
-    public static final int UNSTARTABLE_REASON_INSUFFICIENT_STORAGE = 2;
 
     /**
      * A manifest property to control app's participation in {@code adb backup}. Should only
@@ -7778,6 +7715,9 @@ public abstract class PackageManager {
      * {@link #SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_HIDDEN} and
      * {@link #SYSTEM_APP_STATE_HIDDEN_UNTIL_INSTALLED_VISIBLE} or its installation state (via
      * {@link #SYSTEM_APP_STATE_INSTALLED} and {@link #SYSTEM_APP_STATE_UNINSTALLED}.
+     *
+     * This API may only be called from {@link android.os.Process#SYSTEM_UID} or
+     * {@link android.os.Process#PHONE_UID}.
      *
      * @param packageName Package name of the app.
      * @param state State of the app.

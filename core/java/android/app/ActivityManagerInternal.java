@@ -561,6 +561,14 @@ public abstract class ActivityManagerInternal {
     public abstract Intent getIntentForIntentSender(IIntentSender sender);
 
     /**
+     * Effectively PendingIntent.getActivityForUser(), but the PendingIntent is
+     * owned by the given uid rather than by the caller (i.e. the system).
+     */
+    public abstract PendingIntent getPendingIntentActivityAsApp(
+            int requestCode, @NonNull Intent intent, int flags, Bundle options,
+            String ownerPkgName, int ownerUid);
+
+    /**
      * @return mBootTimeTempAllowlistDuration of ActivityManagerConstants.
      */
     public abstract long getBootTimeTempAllowListDuration();
@@ -570,6 +578,11 @@ public abstract class ActivityManagerInternal {
 
     /** Unregister an {@link AnrController} */
     public abstract void unregisterAnrController(AnrController controller);
+
+    /**
+     * Is the FGS started from an uid temporarily allowed to have while-in-use permission?
+     */
+    public abstract boolean isTempAllowlistedForFgsWhileInUse(int uid);
 
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);

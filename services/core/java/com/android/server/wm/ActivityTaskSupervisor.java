@@ -873,7 +873,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         r.getSavedState(), r.getPersistentSavedState(), results, newIntents,
                         r.takeOptions(), dc.isNextTransitionForward(),
                         proc.createProfilerInfoIfNeeded(), r.assistToken, activityClientController,
-                        r.createFixedRotationAdjustmentsIfNeeded(), r.shareableActivityToken));
+                        r.createFixedRotationAdjustmentsIfNeeded(), r.shareableActivityToken,
+                        r.getLaunchedFromBubble()));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -2131,7 +2132,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     final void scheduleIdle() {
-        mHandler.sendEmptyMessage(IDLE_NOW_MSG);
+        if (!mHandler.hasMessages(IDLE_NOW_MSG)) {
+            mHandler.sendEmptyMessage(IDLE_NOW_MSG);
+        }
     }
 
     /**
@@ -2219,8 +2222,16 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    void scheduleProcessStoppingAndFinishingActivities() {
-        if (!mHandler.hasMessages(PROCESS_STOPPING_AND_FINISHING_MSG)) {
+    void scheduleProcessStoppingAndFinishingActivitiesIfNeeded() {
+        if (mStoppingActivities.isEmpty() && mFinishingActivities.isEmpty()) {
+            return;
+        }
+        if (mRootWindowContainer.allResumedActivitiesIdle()) {
+            scheduleIdle();
+            return;
+        }
+        if (!mHandler.hasMessages(PROCESS_STOPPING_AND_FINISHING_MSG)
+                && mRootWindowContainer.allResumedActivitiesVisible()) {
             mHandler.sendEmptyMessage(PROCESS_STOPPING_AND_FINISHING_MSG);
         }
     }

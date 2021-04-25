@@ -114,6 +114,7 @@ public class ScreenshotController {
         public Bitmap image;
         public Consumer<Uri> finisher;
         public ScreenshotController.ActionsReadyListener mActionsReadyListener;
+        public ScreenshotController.QuickShareActionReadyListener mQuickShareActionsReadyListener;
 
         void clearImage() {
             image = null;
@@ -129,6 +130,7 @@ public class ScreenshotController {
         public Supplier<ActionTransition> editTransition;
         public Notification.Action deleteAction;
         public List<Notification.Action> smartActions;
+        public Notification.Action quickShareAction;
 
         /**
          * POD for shared element transition.
@@ -148,11 +150,30 @@ public class ScreenshotController {
             editTransition = null;
             deleteAction = null;
             smartActions = null;
+            quickShareAction = null;
+        }
+    }
+
+    /**
+     * Structure returned by the QueryQuickShareInBackgroundTask
+     */
+    static class QuickShareData {
+        public Notification.Action quickShareAction;
+
+        /**
+         * Used to reset the return data on error
+         */
+        public void reset() {
+            quickShareAction = null;
         }
     }
 
     interface ActionsReadyListener {
         void onActionsReady(ScreenshotController.SavedImageData imageData);
+    }
+
+    interface QuickShareActionReadyListener {
+        void onActionsReady(ScreenshotController.QuickShareData quickShareData);
     }
 
     // These strings are used for communicating the action invoked to
@@ -191,6 +212,8 @@ public class ScreenshotController {
     private final ScrollCaptureClient mScrollCaptureClient;
     private final PhoneWindow mWindow;
     private final DisplayManager mDisplayManager;
+    private final ScrollCaptureController mScrollCaptureController;
+    private final LongScreenshotHolder mLongScreenshotHolder;
 
     private ScreenshotView mScreenshotView;
     private Bitmap mScreenBitmap;
@@ -233,13 +256,17 @@ public class ScreenshotController {
             ScrollCaptureClient scrollCaptureClient,
             UiEventLogger uiEventLogger,
             ImageExporter imageExporter,
-            @Main Executor mainExecutor) {
+            @Main Executor mainExecutor,
+            ScrollCaptureController scrollCaptureController,
+            LongScreenshotHolder longScreenshotHolder) {
         mScreenshotSmartActions = screenshotSmartActions;
         mNotificationsController = screenshotNotificationsController;
         mScrollCaptureClient = scrollCaptureClient;
         mUiEventLogger = uiEventLogger;
         mImageExporter = imageExporter;
         mMainExecutor = mainExecutor;
+        mScrollCaptureController = scrollCaptureController;
+        mLongScreenshotHolder = longScreenshotHolder;
         mBgExecutor = Executors.newSingleThreadExecutor();
 
         mDisplayManager = requireNonNull(context.getSystemService(DisplayManager.class));
@@ -513,7 +540,8 @@ public class ScreenshotController {
         mScreenBitmap.setHasAlpha(false);
         mScreenBitmap.prepareToDraw();
 
-        saveScreenshotInWorkerThread(finisher, this::showUiOnActionsReady);
+        saveScreenshotInWorkerThread(finisher, this::showUiOnActionsReady,
+                this::showUiOnQuickShareActionReady);
 
         // The window is focusable by default
         setWindowFocusable(true);
@@ -569,15 +597,30 @@ public class ScreenshotController {
             }
             Log.d(TAG, "ScrollCapture: connected to window ["
                     + mLastScrollCaptureResponse.getWindowTitle() + "]");
-            final Intent intent = new Intent(mContext, LongScreenshotActivity.class);
-            intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            intent.putExtra(LongScreenshotActivity.EXTRA_CAPTURE_RESPONSE,
-                    mLastScrollCaptureResponse);
+
+            final ScrollCaptureResponse response = mLastScrollCaptureResponse;
             mScreenshotView.showScrollChip(/* onClick */ () -> {
                 // Clear the reference to prevent close() in dismissScreenshot
                 mLastScrollCaptureResponse = null;
-                mContext.startActivity(intent);
-                dismissScreenshot(false);
+                final ListenableFuture<ScrollCaptureController.LongScreenshot> future =
+                        mScrollCaptureController.run(response);
+                future.addListener(() -> {
+                    ScrollCaptureController.LongScreenshot longScreenshot;
+                    try {
+                        longScreenshot = future.get();
+                    } catch (CancellationException | InterruptedException | ExecutionException e) {
+                        Log.e(TAG, "Exception", e);
+                        return;
+                    }
+
+                    mLongScreenshotHolder.setLongScreenshot(longScreenshot);
+
+                    final Intent intent = new Intent(mContext, LongScreenshotActivity.class);
+                    intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TOP);
+                    mContext.startActivity(intent);
+
+                    dismissScreenshot(false);
+                }, mMainExecutor);
             });
         } catch (CancellationException e) {
             // Ignore
@@ -643,20 +686,21 @@ public class ScreenshotController {
         saveScreenshotInWorkerThread(
                 /* onComplete */ finisher,
                 /* actionsReadyListener */ imageData -> {
-            if (DEBUG_CALLBACK) {
-                Log.d(TAG, "returning URI to finisher (Consumer<URI>): " + imageData.uri);
-            }
-            finisher.accept(imageData.uri);
-            if (imageData.uri == null) {
-                mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_NOT_SAVED);
-                mNotificationsController.notifyScreenshotError(
-                        R.string.screenshot_failed_to_save_text);
-            } else {
-                mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_SAVED);
-                mScreenshotHandler.post(() -> Toast.makeText(mContext,
-                        R.string.screenshot_saved_title, Toast.LENGTH_SHORT).show());
-            }
-        });
+                    if (DEBUG_CALLBACK) {
+                        Log.d(TAG, "returning URI to finisher (Consumer<URI>): " + imageData.uri);
+                    }
+                    finisher.accept(imageData.uri);
+                    if (imageData.uri == null) {
+                        mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_NOT_SAVED);
+                        mNotificationsController.notifyScreenshotError(
+                                R.string.screenshot_failed_to_save_text);
+                    } else {
+                        mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_SAVED);
+                        mScreenshotHandler.post(() -> Toast.makeText(mContext,
+                                R.string.screenshot_saved_title, Toast.LENGTH_SHORT).show());
+                    }
+                },
+                null);
     }
 
     /**
@@ -697,12 +741,15 @@ public class ScreenshotController {
      * Creates a new worker thread and saves the screenshot to the media store.
      */
     private void saveScreenshotInWorkerThread(Consumer<Uri> finisher,
-            @Nullable ScreenshotController.ActionsReadyListener actionsReadyListener) {
+            @Nullable ScreenshotController.ActionsReadyListener actionsReadyListener,
+            @Nullable ScreenshotController.QuickShareActionReadyListener
+                    quickShareActionsReadyListener) {
         ScreenshotController.SaveImageInBackgroundData
                 data = new ScreenshotController.SaveImageInBackgroundData();
         data.image = mScreenBitmap;
         data.finisher = finisher;
         data.mActionsReadyListener = actionsReadyListener;
+        data.mQuickShareActionsReadyListener = quickShareActionsReadyListener;
 
         if (mSaveInBgTask != null) {
             // just log success/failure for the pre-existing screenshot
@@ -759,6 +806,30 @@ public class ScreenshotController {
                     });
                 } else {
                     mScreenshotView.setChipIntents(imageData);
+                }
+            });
+        }
+    }
+
+    /**
+     * Sets up the action shade and its entrance animation, once we get the Quick Share action data.
+     */
+    private void showUiOnQuickShareActionReady(ScreenshotController.QuickShareData quickShareData) {
+        if (DEBUG_UI) {
+            Log.d(TAG, "Showing UI for Quick Share action");
+        }
+        if (quickShareData.quickShareAction != null) {
+            mScreenshotHandler.post(() -> {
+                if (mScreenshotAnimation != null && mScreenshotAnimation.isRunning()) {
+                    mScreenshotAnimation.addListener(new AnimatorListenerAdapter() {
+                        @Override
+                        public void onAnimationEnd(Animator animation) {
+                            super.onAnimationEnd(animation);
+                            mScreenshotView.addQuickShareChip(quickShareData.quickShareAction);
+                        }
+                    });
+                } else {
+                    mScreenshotView.addQuickShareChip(quickShareData.quickShareAction);
                 }
             });
         }

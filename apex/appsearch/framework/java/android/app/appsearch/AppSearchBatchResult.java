@@ -26,6 +26,7 @@ import com.android.internal.util.Preconditions;
 
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * Provides results for AppSearch batch operations which encompass multiple documents.
@@ -39,7 +40,7 @@ import java.util.Map;
  * both successes and failures.
  *
  * @see AppSearchSession#put
- * @see AppSearchSession#getByUri
+ * @see AppSearchSession#getByDocumentId
  * @see AppSearchSession#remove
  */
 public final class AppSearchBatchResult<KeyType, ValueType> implements Parcelable {
@@ -86,8 +87,9 @@ public final class AppSearchBatchResult<KeyType, ValueType> implements Parcelabl
      * Returns a {@link Map} of keys mapped to instances of the value type for all successful
      * individual results.
      *
-     * <p>Example: {@link AppSearchSession#getByUri} returns an {@link AppSearchBatchResult}. Each
-     * key (a URI of {@code String} type) will map to a {@link GenericDocument} object.
+     * <p>Example: {@link AppSearchSession#getByDocumentId} returns an {@link AppSearchBatchResult}.
+     * Each key (the document ID, of {@code String} type) will map to a {@link GenericDocument}
+     * object.
      *
      * <p>The values of the {@link Map} will not be {@code null}.
      */
@@ -180,7 +182,7 @@ public final class AppSearchBatchResult<KeyType, ValueType> implements Parcelabl
         public Builder<KeyType, ValueType> setSuccess(
                 @NonNull KeyType key, @Nullable ValueType result) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(key);
+            Objects.requireNonNull(key);
             return setResult(key, AppSearchResult.newSuccessfulResult(result));
         }
 
@@ -198,7 +200,7 @@ public final class AppSearchBatchResult<KeyType, ValueType> implements Parcelabl
                 @AppSearchResult.ResultCode int resultCode,
                 @Nullable String errorMessage) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(key);
+            Objects.requireNonNull(key);
             return setResult(key, AppSearchResult.newFailedResult(resultCode, errorMessage));
         }
 
@@ -214,8 +216,8 @@ public final class AppSearchBatchResult<KeyType, ValueType> implements Parcelabl
         public Builder<KeyType, ValueType> setResult(
                 @NonNull KeyType key, @NonNull AppSearchResult<ValueType> result) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(key);
-            Preconditions.checkNotNull(result);
+            Objects.requireNonNull(key);
+            Objects.requireNonNull(result);
             if (result.isSuccess()) {
                 mSuccesses.put(key, result.getResultValue());
                 mFailures.remove(key);

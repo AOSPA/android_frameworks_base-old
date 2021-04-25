@@ -24,6 +24,10 @@ import android.bluetooth.BluetoothProfile;
 import android.bluetooth.BluetoothUuid;
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.res.Resources;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
+import android.net.Uri;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -32,6 +36,8 @@ import android.os.SystemClock;
 import android.text.TextUtils;
 import android.util.EventLog;
 import android.util.Log;
+import android.util.LruCache;
+import android.util.Pair;
 
 import android.os.SystemProperties;
 import androidx.annotation.VisibleForTesting;
@@ -39,6 +45,8 @@ import androidx.annotation.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.settingslib.R;
 import com.android.settingslib.Utils;
+import com.android.settingslib.utils.ThreadUtils;
+import com.android.settingslib.widget.AdaptiveOutlineDrawable;
 
 import java.util.ArrayList;
 import java.util.Collection;
@@ -107,6 +115,8 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     private boolean mIsHearingAidProfileConnectedFail = false;
     // Group second device for Hearing Aid
     private CachedBluetoothDevice mSubDevice;
+    @VisibleForTesting
+    LruCache<String, BitmapDrawable> mDrawableCache;
 
     private int mGroupId = -1;
 
@@ -149,6 +159,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mDevice = device;
         fillData();
         mHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
+        initDrawableCache();
         mTwspBatteryState = -1;
         mTwspBatteryLevel = -1;
     }
@@ -160,8 +171,21 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mDevice = cachedDevice.mDevice;
         fillData();
         mHiSyncId = BluetoothHearingAid.HI_SYNC_ID_INVALID;
+        initDrawableCache();
         mTwspBatteryState = -1;
         mTwspBatteryLevel = -1;
+    }
+
+    private void initDrawableCache() {
+        int maxMemory = (int) (Runtime.getRuntime().maxMemory() / 1024);
+        int cacheSize = maxMemory / 8;
+
+        mDrawableCache = new LruCache<String, BitmapDrawable>(cacheSize) {
+            @Override
+            protected int sizeOf(String key, BitmapDrawable bitmap) {
+                return bitmap.getBitmap().getByteCount() / 1024;
+            }
+        };
     }
 
     /* Gets Device for seondary TWS device
@@ -451,6 +475,7 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
             if (dev != null) {
                 final boolean successful = dev.removeBond();
                 if (successful) {
+                    releaseLruCache();
                     if (BluetoothUtils.D) {
                         Log.d(TAG, "Command sent successfully:REMOVE_BOND " + describe(null));
                     }
@@ -570,7 +595,21 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
     }
 
     void refresh() {
-        dispatchAttributesChanged();
+        ThreadUtils.postOnBackgroundThread(() -> {
+            if (BluetoothUtils.isAdvancedDetailsHeader(mDevice)) {
+                Uri uri = BluetoothUtils.getUriMetaData(getDevice(),
+                        BluetoothDevice.METADATA_MAIN_ICON);
+                if (uri != null && mDrawableCache.get(uri.toString()) == null) {
+                    mDrawableCache.put(uri.toString(),
+                            (BitmapDrawable) BluetoothUtils.getBtDrawableWithDescription(
+                                    mContext, this).first);
+                }
+            }
+
+            ThreadUtils.postOnMainThread(() -> {
+                dispatchAttributesChanged();
+            });
+        });
     }
 
     public void setJustDiscovered(boolean justDiscovered) {
@@ -1317,6 +1356,30 @@ public class CachedBluetoothDevice implements Comparable<CachedBluetoothDevice> 
         mSubDevice.mRssi = tmpRssi;
         mSubDevice.mJustDiscovered = tmpJustDiscovered;
         fetchActiveDevices();
+    }
+
+    /**
+     * Get cached bluetooth icon with description
+     */
+    public Pair<Drawable, String> getDrawableWithDescription() {
+        Uri uri = BluetoothUtils.getUriMetaData(mDevice, BluetoothDevice.METADATA_MAIN_ICON);
+        if (BluetoothUtils.isAdvancedDetailsHeader(mDevice) && uri != null) {
+            BitmapDrawable drawable = mDrawableCache.get(uri.toString());
+            if (drawable != null) {
+                Resources resources = mContext.getResources();
+                return new Pair<>(new AdaptiveOutlineDrawable(
+                        resources, drawable.getBitmap()),
+                        BluetoothUtils.getBtClassDrawableWithDescription(mContext, this).second);
+            }
+
+            refresh();
+        }
+
+        return BluetoothUtils.getBtRainbowDrawableWithDescription(mContext, this);
+    }
+
+    void releaseLruCache() {
+        mDrawableCache.evictAll();
     }
 
     public int getGroupId(){

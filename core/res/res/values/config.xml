@@ -59,6 +59,7 @@
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_no_calling</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_call_strength</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_sensors_off</xliff:g></item>
     </string-array>
@@ -96,6 +97,7 @@
     <string translatable="false" name="status_bar_camera">camera</string>
     <string translatable="false" name="status_bar_airplane">airplane</string>
     <string translatable="false" name="status_bar_no_calling">no_calling</string>
+    <string translatable="false" name="status_bar_call_strength">call_strength</string>
     <string translatable="false" name="status_bar_sensors_off">sensors_off</string>
     <string translatable="false" name="status_bar_screen_record">screen_record</string>
 
@@ -960,6 +962,13 @@
     -->
     <integer name="config_veryLongPressOnPowerBehavior">0</integer>
 
+    <!-- Control the behavior when the user presses the power and volume up buttons together.
+            0 - Nothing
+            1 - Mute toggle
+            2 - Global actions menu
+    -->
+    <integer name="config_keyChordPowerVolumeUp">1</integer>
+
     <!-- Control the behavior when the user long presses the back button.  Non-zero values are only
          valid for watches as part of CDD/CTS.
             0 - Nothing
@@ -1765,6 +1774,9 @@
         <!-- Add algorithm here -->
     </string-array>
 
+    <!-- Boolean indicating if placing the phone face down will result in a screen off. -->
+    <bool name="config_flipToScreenOffEnabled">true</bool>
+
     <!-- Component name of the combo network location provider. -->
     <string name="config_comboNetworkLocationProvider" translatable="false">com.qualcomm.location</string>
 
@@ -1942,9 +1954,11 @@
     <string name="config_systemTelevisionNotificationHandler" translatable="false"></string>
     <!-- The name of the package that will hold the system activity recognizer role. -->
     <string name="config_systemActivityRecognizer" translatable="false"></string>
+    <!-- The name of the package that will hold the system ui role -->
+    <string name="config_systemUi" translatable="false">com.android.systemui</string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
-    <string name="config_overrideComponentUiPackage" translatable="false"></string>
+    <string name="config_overrideComponentUiPackage" translatable="false">com.android.stk</string>
 
     <!-- Enable/disable default bluetooth profiles:
         HSP_AG, ObexObjectPush, Audio, NAP -->
@@ -3720,13 +3734,6 @@
      -->
     <string name="config_defaultWellbeingPackage" translatable="false"></string>
 
-    <!-- The package name for the companion provider app.
-         This package must be trusted, as it has the permissions to associate apps with devices
-         without a UI prompt.
-         Example: "com.google.android.gms"
-     -->
-    <string name="config_companionProviderPackage" translatable="false"></string>
-
     <!-- The component name for the default system attention service.
          This service must be trusted, as it can be activated without explicit consent of the user.
          See android.attention.AttentionManagerService.
@@ -4716,6 +4723,11 @@
      -->
     <color name="config_letterboxBackgroundColor">#000</color>
 
+    <!-- Horizonal position of a center of the letterboxed app window.
+        0 corresponds to the left side of the screen and 1 to the right side. If given value < 0
+        or > 1, it is ignored and central positionis used (0.5). -->
+    <item name="config_letterboxHorizontalPositionMultiplier" format="float" type="dimen">0.5</item>
+
     <!-- If true, hide the display cutout with display area -->
     <bool name="config_hideDisplayCutoutWithDisplayArea">false</bool>
 
@@ -4778,7 +4790,7 @@
     <bool name="config_cecHdmiCecVersion20_allowed">true</bool>
     <bool name="config_cecHdmiCecVersion20_default">false</bool>
 
-    <bool name="config_cecSendStandbyOnSleep_userConfigurable">true</bool>
+    <bool name="config_cecPowerControlMode_userConfigurable">true</bool>
     <bool name="config_cecPowerControlModeTv_allowed">true</bool>
     <bool name="config_cecPowerControlModeTv_default">true</bool>
     <bool name="config_cecPowerControlModeBroadcast_allowed">true</bool>
@@ -4873,4 +4885,11 @@
     <string name="config_systemTextIntelligence" translatable="false"></string>
     <!-- On-device intelligent processor for visual features. -->
     <string name="config_systemVisualIntelligence" translatable="false"></string>
+    <!-- On-device package for providing companion device associations. -->
+    <string name="config_systemCompanionDeviceProvider" translatable="false"></string>
+
+    <!-- Whether this device is supporting the microphone toggle -->
+    <bool name="config_supportsMicToggle">false</bool>
+    <!-- Whether this device is supporting the camera toggle -->
+    <bool name="config_supportsCamToggle">false</bool>
 </resources>

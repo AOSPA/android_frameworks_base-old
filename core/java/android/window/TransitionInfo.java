@@ -23,6 +23,7 @@ import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
+import static android.view.WindowManager.transitTypeToString;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -76,8 +77,11 @@ public final class TransitionInfo implements Parcelable {
     /** The container is the recipient of a transferred starting-window */
     public static final int FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT = 1 << 3;
 
+    /** The container has voice session. */
+    public static final int FLAG_IS_VOICE_INTERACTION = 1 << 4;
+
     /** The first unused bit. This can be used by remotes to attach custom flags to this change. */
-    public static final int FLAG_FIRST_CUSTOM = 1 << 4;
+    public static final int FLAG_FIRST_CUSTOM = 1 << 5;
 
     /** @hide */
     @IntDef(prefix = { "FLAG_" }, value = {
@@ -85,7 +89,9 @@ public final class TransitionInfo implements Parcelable {
             FLAG_SHOW_WALLPAPER,
             FLAG_IS_WALLPAPER,
             FLAG_TRANSLUCENT,
-            FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT
+            FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT,
+            FLAG_IS_VOICE_INTERACTION,
+            FLAG_FIRST_CUSTOM
     })
     public @interface ChangeFlags {}
 
@@ -205,7 +211,7 @@ public final class TransitionInfo implements Parcelable {
     @Override
     public String toString() {
         StringBuilder sb = new StringBuilder();
-        sb.append("{t=" + mType + " f=" + Integer.toHexString(mFlags)
+        sb.append("{t=" + transitTypeToString(mType) + " f=" + Integer.toHexString(mFlags)
                 + " ro=" + mRootOffset + " c=[");
         for (int i = 0; i < mChanges.size(); ++i) {
             if (i > 0) {
@@ -247,6 +253,12 @@ public final class TransitionInfo implements Parcelable {
         }
         if ((flags & FLAG_STARTING_WINDOW_TRANSFER_RECIPIENT) != 0) {
             sb.append((sb.length() == 0 ? "" : "|") + "STARTING_WINDOW_TRANSFER");
+        }
+        if ((flags & FLAG_IS_VOICE_INTERACTION) != 0) {
+            sb.append((sb.length() == 0 ? "" : "|") + "IS_VOICE_INTERACTION");
+        }
+        if ((flags & FLAG_FIRST_CUSTOM) != 0) {
+            sb.append((sb.length() == 0 ? "" : "|") + "FIRST_CUSTOM");
         }
         return sb.toString();
     }

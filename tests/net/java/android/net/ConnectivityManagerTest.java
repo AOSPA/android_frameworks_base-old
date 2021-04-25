@@ -379,12 +379,12 @@ public class ConnectivityManagerTest {
                 eq(testPkgName), eq(testAttributionTag));
         reset(mService);
 
-        manager.registerDefaultNetworkCallbackAsUid(42, callback, handler);
+        manager.registerDefaultNetworkCallbackForUid(42, callback, handler);
         verify(mService).requestNetwork(eq(42), eq(null),
                 eq(TRACK_DEFAULT.ordinal()), any(), anyInt(), any(), eq(TYPE_NONE), anyInt(),
                 eq(testPkgName), eq(testAttributionTag));
 
-        manager.requestBackgroundNetwork(request, handler, callback);
+        manager.requestBackgroundNetwork(request, callback, handler);
         verify(mService).requestNetwork(eq(Process.INVALID_UID), eq(request.networkCapabilities),
                 eq(BACKGROUND_REQUEST.ordinal()), any(), anyInt(), any(), eq(TYPE_NONE), anyInt(),
                 eq(testPkgName), eq(testAttributionTag));

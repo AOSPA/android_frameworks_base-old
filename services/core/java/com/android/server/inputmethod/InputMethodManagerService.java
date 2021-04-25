@@ -248,6 +248,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     static final int MSG_CREATE_SESSION = 1050;
     static final int MSG_REMOVE_IME_SURFACE = 1060;
     static final int MSG_REMOVE_IME_SURFACE_FROM_WINDOW = 1061;
+    static final int MSG_UPDATE_IME_WINDOW_STATUS = 1070;
 
     static final int MSG_START_INPUT = 2000;
 
@@ -2940,6 +2941,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
+    private void updateImeWindowStatus() {
+        synchronized (mMethodMap) {
+            updateSystemUiLocked();
+        }
+    }
+
     void updateSystemUiLocked() {
         updateSystemUiLocked(mImeWindowVis, mBackDisposition);
     }
@@ -3177,7 +3184,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @BinderThread
     @Override
-    public void reportPerceptible(IBinder windowToken, boolean perceptible) {
+    public void reportPerceptibleAsync(IBinder windowToken, boolean perceptible) {
         Objects.requireNonNull(windowToken, "windowToken must not be null");
         int uid = Binder.getCallingUid();
         synchronized (mMethodMap) {
@@ -4100,13 +4107,10 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public void removeImeSurfaceFromWindow(IBinder windowToken,
-            IVoidResultCallback resultCallback) {
-        CallbackUtils.onResult(resultCallback, () -> {
-            // No permission check, because we'll only execute the request if the calling window is
-            // also the current IME client.
-            mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE_FROM_WINDOW, windowToken).sendToTarget();
-        });
+    public void removeImeSurfaceFromWindowAsync(IBinder windowToken) {
+        // No permission check, because we'll only execute the request if the calling window is
+        // also the current IME client.
+        mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE_FROM_WINDOW, windowToken).sendToTarget();
     }
 
     /**
@@ -4537,6 +4541,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         }
                     } catch (RemoteException e) {
                     }
+                }
+                return true;
+            }
+            case MSG_UPDATE_IME_WINDOW_STATUS: {
+                synchronized (mMethodMap) {
+                    updateSystemUiLocked();
                 }
                 return true;
             }
@@ -5204,6 +5214,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @Override
         public void removeImeSurface() {
             mService.mHandler.sendMessage(mService.mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE));
+        }
+
+        @Override
+        public void updateImeWindowStatus() {
+            mService.mHandler.sendMessage(
+                    mService.mHandler.obtainMessage(MSG_UPDATE_IME_WINDOW_STATUS));
         }
     }
 
@@ -5995,9 +6011,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         @BinderThread
         @Override
-        public void reportStartInput(IBinder startInputToken, IVoidResultCallback resultCallback) {
-            CallbackUtils.onResult(resultCallback,
-                    () -> mImms.reportStartInput(mToken, startInputToken));
+        public void reportStartInputAsync(IBinder startInputToken) {
+            mImms.reportStartInput(mToken, startInputToken);
         }
 
         @BinderThread
@@ -6010,9 +6025,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         @BinderThread
         @Override
-        public void reportFullscreenMode(boolean fullscreen, IVoidResultCallback resultCallback) {
-            CallbackUtils.onResult(resultCallback,
-                    () -> mImms.reportFullscreenMode(mToken, fullscreen));
+        public void reportFullscreenModeAsync(boolean fullscreen) {
+            mImms.reportFullscreenMode(mToken, fullscreen);
         }
 
         @BinderThread

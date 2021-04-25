@@ -1303,7 +1303,8 @@ public class LockSettingsService extends ILockSettings.Stub {
        return mSavePassword;
     }
 
-    private void setKeystorePassword(byte[] password, int userHandle) {
+    @VisibleForTesting /** Note: this method is overridden in unit tests */
+    void setKeystorePassword(byte[] password, int userHandle) {
         AndroidKeyStoreMaintenance.onUserPasswordChanged(userHandle, password);
     }
 
@@ -1815,7 +1816,7 @@ public class LockSettingsService extends ILockSettings.Stub {
         } else {
             final byte[] hashFactor = getHashFactor(password, userHandle);
             final byte[] salt = getSalt(userHandle).getBytes();
-            String hash = password.passwordToHistoryHash(hashFactor, salt);
+            String hash = password.passwordToHistoryHash(salt, hashFactor);
             if (hash == null) {
                 Slog.e(TAG, "Compute new style password hash failed, fallback to legacy style");
                 hash = password.legacyPasswordToHash(salt);
@@ -3686,11 +3687,12 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         @Override
-        public void prepareRebootEscrow() {
+        public boolean prepareRebootEscrow() {
             if (!mRebootEscrowManager.prepareRebootEscrow()) {
-                return;
+                return false;
             }
             mStrongAuth.requireStrongAuth(STRONG_AUTH_REQUIRED_FOR_UNATTENDED_UPDATE, USER_ALL);
+            return true;
         }
 
         @Override
@@ -3699,16 +3701,17 @@ public class LockSettingsService extends ILockSettings.Stub {
         }
 
         @Override
-        public void clearRebootEscrow() {
+        public boolean clearRebootEscrow() {
             if (!mRebootEscrowManager.clearRebootEscrow()) {
-                return;
+                return false;
             }
             mStrongAuth.noLongerRequireStrongAuth(STRONG_AUTH_REQUIRED_FOR_UNATTENDED_UPDATE,
                     USER_ALL);
+            return true;
         }
 
         @Override
-        public boolean armRebootEscrow() {
+        public @ArmRebootEscrowErrorCode int armRebootEscrow() {
             return mRebootEscrowManager.armRebootEscrowIfNeeded();
         }
 

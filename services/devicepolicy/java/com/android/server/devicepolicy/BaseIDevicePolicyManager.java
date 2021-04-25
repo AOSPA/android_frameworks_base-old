@@ -163,9 +163,4 @@ abstract class BaseIDevicePolicyManager extends IDevicePolicyManager.Stub {
     public boolean isKeyPairGrantedToWifiAuth(String callerPackage, String alias) {
         return false;
     }
-
-    public List<String> getKeyPairGrants(String callerPackage, String alias) {
-        // STOPSHIP: implement delegation code in ArcDevicePolicyManagerWrapperService & nuke this.
-        return null;
-    }
 }

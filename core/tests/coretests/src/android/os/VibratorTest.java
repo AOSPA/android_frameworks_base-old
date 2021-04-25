@@ -55,6 +55,11 @@ public class VibratorTest {
     }
 
     @Test
+    public void getId_returnsDefaultId() {
+        assertEquals(-1, mVibratorSpy.getId());
+    }
+
+    @Test
     public void areEffectsSupported_returnsArrayOfSameSize() {
         assertEquals(0, mVibratorSpy.areEffectsSupported(new int[0]).length);
         assertEquals(1,
@@ -70,6 +75,16 @@ public class VibratorTest {
         assertEquals(1, mVibratorSpy.arePrimitivesSupported(
                 new int[]{VibrationEffect.Composition.PRIMITIVE_CLICK}).length);
         assertEquals(2, mVibratorSpy.arePrimitivesSupported(
+                new int[]{VibrationEffect.Composition.PRIMITIVE_CLICK,
+                        VibrationEffect.Composition.PRIMITIVE_QUICK_RISE}).length);
+    }
+
+    @Test
+    public void getPrimitivesDurations_returnsArrayOfSameSize() {
+        assertEquals(0, mVibratorSpy.getPrimitiveDurations(new int[0]).length);
+        assertEquals(1, mVibratorSpy.getPrimitiveDurations(
+                new int[]{VibrationEffect.Composition.PRIMITIVE_CLICK}).length);
+        assertEquals(2, mVibratorSpy.getPrimitiveDurations(
                 new int[]{VibrationEffect.Composition.PRIMITIVE_CLICK,
                         VibrationEffect.Composition.PRIMITIVE_QUICK_RISE}).length);
     }

@@ -19,6 +19,11 @@ package android.bluetooth;
 import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.RequiresPermission;
+import android.annotation.SdkConstant;
+import android.annotation.SuppressLint;
+import android.annotation.SdkConstant.SdkConstantType;
+import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
+import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
 import android.os.IBinder;
@@ -39,6 +44,9 @@ public final class BluetoothPbapClient implements BluetoothProfile {
     private static final boolean DBG = false;
     private static final boolean VDBG = false;
 
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CONNECTION_STATE_CHANGED =
             "android.bluetooth.pbapclient.profile.action.CONNECTION_STATE_CHANGED";
 
@@ -50,7 +58,8 @@ public final class BluetoothPbapClient implements BluetoothProfile {
     /** Connection canceled before completion. */
     public static final int RESULT_CANCELED = 2;
 
-    private BluetoothAdapter mAdapter;
+    private final BluetoothAdapter mAdapter;
+    private final AttributionSource mAttributionSource;
     private final BluetoothProfileConnector<IBluetoothPbapClient> mProfileConnector =
             new BluetoothProfileConnector(this, BluetoothProfile.PBAP_CLIENT,
                     "BluetoothPbapClient", IBluetoothPbapClient.class.getName()) {
@@ -63,11 +72,12 @@ public final class BluetoothPbapClient implements BluetoothProfile {
     /**
      * Create a BluetoothPbapClient proxy object.
      */
-    BluetoothPbapClient(Context context, ServiceListener listener) {
+    BluetoothPbapClient(Context context, ServiceListener listener, BluetoothAdapter adapter) {
         if (DBG) {
             Log.d(TAG, "Create BluetoothPbapClient proxy object");
         }
-        mAdapter = BluetoothAdapter.getDefaultAdapter();
+        mAdapter = adapter;
+        mAttributionSource = adapter.getAttributionSource();
         mProfileConnector.connect(context, listener);
     }
 
@@ -160,6 +170,8 @@ public final class BluetoothPbapClient implements BluetoothProfile {
      * @return list of connected devices
      */
     @Override
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getConnectedDevices() {
         if (DBG) {
             log("getConnectedDevices()");
@@ -167,7 +179,8 @@ public final class BluetoothPbapClient implements BluetoothProfile {
         final IBluetoothPbapClient service = getService();
         if (service != null && isEnabled()) {
             try {
-                return service.getConnectedDevices();
+                return BluetoothDevice.setAttributionSource(
+                        service.getConnectedDevices(), mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return new ArrayList<BluetoothDevice>();
@@ -185,6 +198,8 @@ public final class BluetoothPbapClient implements BluetoothProfile {
      * @return list of matching devices
      */
     @Override
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         if (DBG) {
             log("getDevicesMatchingStates()");
@@ -192,7 +207,8 @@ public final class BluetoothPbapClient implements BluetoothProfile {
         final IBluetoothPbapClient service = getService();
         if (service != null && isEnabled()) {
             try {
-                return service.getDevicesMatchingConnectionStates(states);
+                return BluetoothDevice.setAttributionSource(
+                        service.getDevicesMatchingConnectionStates(states), mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return new ArrayList<BluetoothDevice>();
@@ -210,6 +226,8 @@ public final class BluetoothPbapClient implements BluetoothProfile {
      * @return device connection state
      */
     @Override
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(Manifest.permission.BLUETOOTH_CONNECT)
     public int getConnectionState(BluetoothDevice device) {
         if (DBG) {
             log("getConnectionState(" + device + ")");
@@ -234,12 +252,7 @@ public final class BluetoothPbapClient implements BluetoothProfile {
     }
 
     private boolean isEnabled() {
-        BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter != null && adapter.getState() == BluetoothAdapter.STATE_ON) {
-            return true;
-        }
-        log("Bluetooth is Not enabled");
-        return false;
+        return mAdapter.isEnabled();
     }
 
     private static boolean isValidDevice(BluetoothDevice device) {

@@ -18,11 +18,12 @@ package android.net.vcn;
 
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import android.net.NetworkCapabilities;
+import android.net.TunnelConnectionParams;
+import android.net.vcn.persistablebundleutils.TunnelConnectionParamsUtilsTest;
 
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
@@ -59,8 +60,8 @@ public class VcnGatewayConnectionConfigTest {
             };
     public static final int MAX_MTU = 1360;
 
-    public static final VcnControlPlaneConfig CONTROL_PLANE_CONFIG =
-            VcnControlPlaneIkeConfigTest.buildTestConfig();
+    public static final TunnelConnectionParams TUNNEL_CONNECTION_PARAMS =
+            TunnelConnectionParamsUtilsTest.buildTestParams();
 
     public static final String GATEWAY_CONNECTION_NAME_PREFIX = "gatewayConnectionName-";
     private static int sGatewayConnectionConfigCount = 0;
@@ -75,13 +76,13 @@ public class VcnGatewayConnectionConfigTest {
         // VcnGatewayConnectionConfigs have a unique name (required by VcnConfig).
         return new VcnGatewayConnectionConfig.Builder(
                 GATEWAY_CONNECTION_NAME_PREFIX + sGatewayConnectionConfigCount++,
-                CONTROL_PLANE_CONFIG);
+                TUNNEL_CONNECTION_PARAMS);
     }
 
     // Public for use in VcnGatewayConnectionTest
     public static VcnGatewayConnectionConfig buildTestConfigWithExposedCaps(int... exposedCaps) {
         final VcnGatewayConnectionConfig.Builder builder =
-                newBuilder().setRetryInterval(RETRY_INTERVALS_MS).setMaxMtu(MAX_MTU);
+                newBuilder().setRetryIntervalsMs(RETRY_INTERVALS_MS).setMaxMtu(MAX_MTU);
 
         for (int caps : exposedCaps) {
             builder.addExposedCapability(caps);
@@ -98,7 +99,7 @@ public class VcnGatewayConnectionConfigTest {
     public void testBuilderRequiresNonNullGatewayConnectionName() {
         try {
             new VcnGatewayConnectionConfig.Builder(
-                            null /* gatewayConnectionName */, CONTROL_PLANE_CONFIG)
+                            null /* gatewayConnectionName */, TUNNEL_CONNECTION_PARAMS)
                     .build();
 
             fail("Expected exception due to invalid gateway connection name");
@@ -107,13 +108,13 @@ public class VcnGatewayConnectionConfigTest {
     }
 
     @Test
-    public void testBuilderRequiresNonNullControlPlaneConfig() {
+    public void testBuilderRequiresNonNullTunnelConnectionParams() {
         try {
             new VcnGatewayConnectionConfig.Builder(
-                            GATEWAY_CONNECTION_NAME_PREFIX, null /* ctrlPlaneConfig */)
+                            GATEWAY_CONNECTION_NAME_PREFIX, null /* tunnelConnectionParams */)
                     .build();
 
-            fail("Expected exception due to invalid control plane config");
+            fail("Expected exception due to the absence of tunnel connection parameters");
         } catch (NullPointerException e) {
         }
     }
@@ -133,7 +134,7 @@ public class VcnGatewayConnectionConfigTest {
     @Test
     public void testBuilderRequiresNonNullRetryInterval() {
         try {
-            newBuilder().setRetryInterval(null);
+            newBuilder().setRetryIntervalsMs(null);
             fail("Expected exception due to invalid retryIntervalMs");
         } catch (IllegalArgumentException e) {
         }
@@ -142,7 +143,7 @@ public class VcnGatewayConnectionConfigTest {
     @Test
     public void testBuilderRequiresNonEmptyRetryInterval() {
         try {
-            newBuilder().setRetryInterval(new long[0]);
+            newBuilder().setRetryIntervalsMs(new long[0]);
             fail("Expected exception due to invalid retryIntervalMs");
         } catch (IllegalArgumentException e) {
         }
@@ -171,8 +172,7 @@ public class VcnGatewayConnectionConfigTest {
         Arrays.sort(underlyingCaps);
         assertArrayEquals(UNDERLYING_CAPS, underlyingCaps);
 
-        assertEquals(CONTROL_PLANE_CONFIG, config.getControlPlaneConfig());
-        assertFalse(CONTROL_PLANE_CONFIG == config.getControlPlaneConfig());
+        assertEquals(TUNNEL_CONNECTION_PARAMS, config.getTunnelConnectionParams());
 
         assertArrayEquals(RETRY_INTERVALS_MS, config.getRetryIntervalsMs());
         assertEquals(MAX_MTU, config.getMaxMtu());

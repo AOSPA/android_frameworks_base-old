@@ -265,7 +265,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     /**
      * @return where the UDFPS exists on the screen in pixels in portrait mode.
      */
-    public RectF getUdfpsRegion() {
+    @Nullable public RectF getUdfpsRegion() {
         return mUdfpsController == null
                 ? null
                 : mUdfpsController.getSensorLocation();
@@ -274,7 +274,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     /**
      * @return where the UDFPS exists on the screen in pixels in portrait mode.
      */
-    public PointF getUdfpsSensorLocation() {
+    @Nullable public PointF getUdfpsSensorLocation() {
         if (mUdfpsController == null) {
             return null;
         }
@@ -286,7 +286,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
      * @return where the face authentication sensor exists relative to the screen in pixels in
      * portrait mode.
      */
-    public PointF getFaceAuthSensorLocation() {
+    @Nullable public PointF getFaceAuthSensorLocation() {
         if (mFaceProps == null || mFaceAuthSensorLocation == null) {
             return null;
         }
@@ -309,18 +309,14 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     }
 
     /**
-     * Cancel a fingerprint scan.
-     *
-     * The sensor that triggers an AOD interrupt for fingerprint doesn't give
-     * ACTION_UP/ACTION_CANCEL events, so the scan needs to be cancelled manually. This should be
-     * called when authentication either succeeds or fails. Failing to cancel the scan will leave
-     * the screen in high brightness mode.
+     * Cancel a fingerprint scan manually. This will get rid of the white circle on the udfps
+     * sensor area even if the user hasn't explicitly lifted their finger yet.
      */
-    public void onCancelAodInterrupt() {
+    public void onCancelUdfps() {
         if (mUdfpsController == null) {
             return;
         }
-        mUdfpsController.onCancelAodInterrupt();
+        mUdfpsController.onCancelUdfps();
     }
 
     private void sendResultAndCleanUp(@DismissedReason int reason,
@@ -499,6 +495,8 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
             if (DEBUG) Log.d(TAG, "onBiometricError, hard error: " + errorMessage);
             mCurrentDialog.onError(errorMessage);
         }
+
+        onCancelUdfps();
     }
 
     @Override

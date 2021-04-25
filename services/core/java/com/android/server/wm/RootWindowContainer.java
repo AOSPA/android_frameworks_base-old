@@ -1694,6 +1694,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return false;
         }
 
+        if (!taskDisplayArea.canHostHomeTask()) {
+            // Can't launch home on a TaskDisplayArea that does not support root home task
+            return false;
+        }
+
         if (taskDisplayArea.getDisplayId() != DEFAULT_DISPLAY && !mService.mSupportsMultiDisplay) {
             // Can't launch home on secondary display if device does not support multi-display.
             return false;
@@ -2132,15 +2137,20 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                         .setDeferTaskAppear(true)
                         .setHasBeenVisible(true)
                         .build();
+                // Establish bi-directional link between the original and pinned task.
+                r.setLastParentBeforePip();
                 // It's possible the task entering PIP is in freeform, so save the last
                 // non-fullscreen bounds. Then when this new PIP task exits PIP, it can restore
                 // to its previous freeform bounds.
                 rootTask.setLastNonFullscreenBounds(task.mLastNonFullscreenBounds);
                 rootTask.setBounds(task.getBounds());
 
-                // Move reparent bounds from original task to the new one.
-                rootTask.mLastRecentsAnimationBounds.set(task.mLastRecentsAnimationBounds);
-                task.mLastRecentsAnimationBounds.setEmpty();
+                // Move the last recents animation transaction from original task to the new one.
+                if (task.mLastRecentsAnimationTransaction != null) {
+                    rootTask.setLastRecentsAnimationTransaction(
+                            task.mLastRecentsAnimationTransaction);
+                    task.clearLastRecentsAnimationTransaction();
+                }
 
                 // There are multiple activities in the task and moving the top activity should
                 // reveal/leave the other activities in their original task.
@@ -2149,7 +2159,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 r.reparent(rootTask, MAX_VALUE, reason);
 
                 // Ensure the leash of new task is in sync with its current bounds after reparent.
-                rootTask.maybeApplyLastRecentsAnimationBounds();
+                rootTask.maybeApplyLastRecentsAnimationTransaction();
 
                 // In the case of this activity entering PIP due to it being moved to the back,
                 // the old activity would have a TRANSIT_TASK_TO_BACK transition that needs to be
@@ -3553,10 +3563,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @VisibleForTesting
     void getRunningTasks(int maxNum, List<ActivityManager.RunningTaskInfo> list,
-            boolean filterOnlyVisibleRecents, int callingUid, boolean allowed, boolean crossUser,
-            ArraySet<Integer> profileIds) {
-        mTaskSupervisor.getRunningTasks().getTasks(maxNum, list, filterOnlyVisibleRecents, this,
-                callingUid, allowed, crossUser, profileIds);
+            int flags, int callingUid, ArraySet<Integer> profileIds) {
+        mTaskSupervisor.getRunningTasks().getTasks(maxNum, list, flags, this, callingUid,
+                profileIds);
     }
 
     void startPowerModeLaunchIfNeeded(boolean forceSend, ActivityRecord targetActivity) {
