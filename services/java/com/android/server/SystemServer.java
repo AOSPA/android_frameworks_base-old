@@ -171,6 +171,7 @@ import com.android.server.policy.role.RoleServicePlatformHelperImpl;
 import com.android.server.power.PowerManagerService;
 import com.android.server.power.ShutdownThread;
 import com.android.server.power.ThermalManagerService;
+import com.android.server.power.hint.HintManagerService;
 import com.android.server.powerstats.PowerStatsService;
 import com.android.server.profcollect.ProfcollectForwardingService;
 import com.android.server.recoverysystem.RecoverySystemService;
@@ -446,16 +447,21 @@ public final class SystemServer implements Dumpable {
 
     private final SystemServerDumper mDumper = new SystemServerDumper();
 
-
     /**
      * The pending WTF to be logged into dropbox.
      */
     private static LinkedList<Pair<String, ApplicationErrorReport.CrashInfo>> sPendingWtfs;
 
-    /**
-     * Start the sensor service. This is a blocking call and can take time.
-     */
+    /** Start the IStats services. This is a blocking call and can take time. */
+    private static native void startIStatsService();
+
+    /** Start the sensor service. This is a blocking call and can take time. */
     private static native void startSensorService();
+
+    /**
+     * Start the memtrack proxy service.
+     */
+    private static native void startMemtrackProxyService();
 
     /**
      * Start all HIDL services that are run inside the system server. This may take some time.
@@ -1028,6 +1034,16 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(PowerStatsService.class);
         t.traceEnd();
 
+        t.traceBegin("StartIStatsService");
+        startIStatsService();
+        t.traceEnd();
+
+        // Start MemtrackProxyService before ActivityManager, so that early calls
+        // to Memtrack::getMemory() don't fail.
+        t.traceBegin("MemtrackProxyService");
+        startMemtrackProxyService();
+        t.traceEnd();
+
         // Activity manager runs the show.
         t.traceBegin("StartActivityManager");
         // TODO: Might need to move after migration to WM.
@@ -1061,6 +1077,10 @@ public final class SystemServer implements Dumpable {
 
         t.traceBegin("StartThermalManager");
         mSystemServiceManager.startService(ThermalManagerService.class);
+        t.traceEnd();
+
+        t.traceBegin("StartHintManager");
+        mSystemServiceManager.startService(HintManagerService.class);
         t.traceEnd();
 
         // Now that the power manager has been started, let the activity manager
@@ -2723,7 +2743,7 @@ public final class SystemServer implements Dumpable {
 
             t.traceBegin("RegisterAppOpsPolicy");
             try {
-                mActivityManagerService.setAppOpsPolicy(new AppOpsPolicy());
+                mActivityManagerService.setAppOpsPolicy(new AppOpsPolicy(mSystemContext));
             } catch (Throwable e) {
                 reportWtf("registering app ops policy", e);
             }

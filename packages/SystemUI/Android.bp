@@ -71,6 +71,7 @@ android_library {
     ],
     static_libs: [
         "WindowManager-Shell",
+        "SystemUIAnimationLib",
         "SystemUIPluginLib",
         "SystemUISharedLib",
         "SystemUI-statsd",
@@ -151,6 +152,7 @@ android_library {
         "src/**/I*.aidl",
     ],
     static_libs: [
+        "SystemUIAnimationLib",
         "SystemUIPluginLib",
         "SystemUISharedLib",
         "SystemUI-statsd",

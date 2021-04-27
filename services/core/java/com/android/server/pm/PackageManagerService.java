@@ -357,6 +357,7 @@ import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.internal.util.FunctionalUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.permission.persistence.RuntimePermissionsPersistence;
@@ -1451,21 +1452,21 @@ public class PackageManagerService extends IPackageManager.Stub
     /** Token for keys in mPendingEnableRollback. */
     private int mPendingEnableRollbackToken = 0;
 
-    @Watched
+    @Watched(manual = true)
     volatile boolean mSystemReady;
-    @Watched
+    @Watched(manual = true)
     private volatile boolean mSafeMode;
     volatile boolean mHasSystemUidErrors;
     @Watched
     private final WatchedSparseBooleanArray mWebInstantAppsDisabled =
             new WatchedSparseBooleanArray();
 
-    @Watched
+    @Watched(manual = true)
     private ApplicationInfo mAndroidApplication;
-    @Watched
+    @Watched(manual = true)
     final ActivityInfo mResolveActivity = new ActivityInfo();
     final ResolveInfo mResolveInfo = new ResolveInfo();
-    @Watched
+    @Watched(manual = true)
     private ComponentName mResolveComponentName;
     AndroidPackage mPlatformPackage;
     ComponentName mCustomResolverComponentName;
@@ -1481,9 +1482,9 @@ public class PackageManagerService extends IPackageManager.Stub
     final ComponentName mInstantAppResolverSettingsComponent;
 
     /** Activity used to install instant applications */
-    @Watched
+    @Watched(manual = true)
     private ActivityInfo mInstantAppInstallerActivity;
-    @Watched
+    @Watched(manual = true)
     private final ResolveInfo mInstantAppInstallerInfo = new ResolveInfo();
 
     private final Map<String, Pair<PackageInstalledInfo, IPackageInstallObserver2>>
@@ -1689,9 +1690,8 @@ public class PackageManagerService extends IPackageManager.Stub
     private final DomainVerificationConnection mDomainVerificationConnection =
             new DomainVerificationConnection();
 
-    private class DomainVerificationConnection implements
-            DomainVerificationService.Connection, DomainVerificationProxyV1.Connection,
-            DomainVerificationProxyV2.Connection {
+    private class DomainVerificationConnection implements DomainVerificationService.Connection,
+            DomainVerificationProxyV1.Connection, DomainVerificationProxyV2.Connection {
 
         @Override
         public void scheduleWriteSettings() {
@@ -1737,20 +1737,75 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Nullable
         @Override
-        public PackageSetting getPackageSettingLocked(@NonNull String pkgName) {
-            return PackageManagerService.this.getPackageSetting(pkgName);
-        }
-
-        @Nullable
-        @Override
-        public AndroidPackage getPackageLocked(@NonNull String pkgName) {
-            return PackageManagerService.this.getPackage(pkgName);
-        }
-
-        @Nullable
-        @Override
         public AndroidPackage getPackage(@NonNull String packageName) {
-            return getPackageLocked(packageName);
+            return PackageManagerService.this.getPackage(packageName);
+        }
+
+        @NonNull
+        @Override
+        public void withPackageSettings(@NonNull Consumer<Function<String, PackageSetting>> block) {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    block.accept(snapshot::getPackageSetting);
+                }
+            } else {
+                block.accept(snapshot::getPackageSetting);
+            }
+        }
+
+        @Override
+        public <Output> Output withPackageSettingsReturning(
+                @NonNull FunctionalUtils.ThrowingFunction<Function<String, PackageSetting>, Output>
+                        block) {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    return block.apply(snapshot::getPackageSetting);
+                }
+            } else {
+                return block.apply(snapshot::getPackageSetting);
+            }
+        }
+
+        @Override
+        public <ExceptionType extends Exception> void withPackageSettingsThrowing(
+                @NonNull ThrowingConsumer<Function<String, PackageSetting>, ExceptionType> block)
+                throws ExceptionType {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    block.accept(snapshot::getPackageSetting);
+                }
+            } else {
+                block.accept(snapshot::getPackageSetting);
+            }
+        }
+
+        @Override
+        public <Output, ExceptionType extends Exception> Output
+                withPackageSettingsReturningThrowing(@NonNull ThrowingFunction<Function<String,
+                PackageSetting>, Output, ExceptionType> block) throws ExceptionType {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    return block.apply(snapshot::getPackageSetting);
+                }
+            } else {
+                return block.apply(snapshot::getPackageSetting);
+            }
         }
 
         @Override
@@ -2015,7 +2070,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
         // Cached attributes.  The names in this class are the same as the
         // names in PackageManagerService; see that class for documentation.
-        private final Settings mSettings;
+        protected final Settings mSettings;
         private final WatchedSparseIntArray mIsolatedOwners;
         private final WatchedArrayMap<String, AndroidPackage> mPackages;
         private final WatchedArrayMap<ComponentName, ParsedInstrumentation>
@@ -4672,6 +4727,17 @@ public class PackageManagerService extends IPackageManager.Stub
             mLock = mService.mLock;
         }
 
+        /**
+         * Explicilty snapshot {@link Settings#mPackages} for cases where the caller must not lock
+         * in order to get package data. It is expected that the caller locks itself to be able
+         * to block on changes to the package data and bring itself up to date once the change
+         * propagates to it. Use with heavy caution.
+         * @return
+         */
+        private Map<String, PackageSetting> snapshotPackageSettings() {
+            return mSettings.snapshot().mPackages;
+        }
+
         public @NonNull List<ResolveInfo> queryIntentServicesInternalBody(Intent intent,
                 String resolvedType, int flags, int userId, int callingUid,
                 String instantAppPkgName) {
@@ -4803,7 +4869,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     // Compute read-only functions, based on live data.  This attribute may be modified multiple
     // times during the PackageManagerService constructor but it should not be modified thereafter.
-    private Computer mLiveComputer;
+    private ComputerLocked mLiveComputer;
     // A lock-free cache for frequently called functions.
     private volatile Computer mSnapshotComputer;
     // If true, the snapshot is invalid (stale).  The attribute is static since it may be
@@ -5969,7 +6035,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 backgroundHandler,
                 SYSTEM_PARTITIONS,
                 (i, pm) -> new ComponentResolver(i.getUserManagerService(), pm.mPmInternal, lock),
-                (i, pm) -> PermissionManagerService.create(context),
+                (i, pm) -> PermissionManagerService.create(context,
+                        i.getSystemConfig().getAvailableFeatures()),
                 (i, pm) -> new UserManagerService(context, pm,
                         new UserDataPreparer(installer, installLock, context, onlyCore),
                         lock),
@@ -11698,7 +11765,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         new IncrementalHealthListener(parsedPackage.getPackageName()));
                 final IncrementalStatesCallback incrementalStatesCallback =
                         new IncrementalStatesCallback(parsedPackage.getPackageName(),
-                                UserHandle.getUid(UserHandle.ALL, pkgSetting.appId),
+                                UserHandle.getUid(UserHandle.USER_ALL, pkgSetting.appId),
                                 getInstalledUsers(pkgSetting, UserHandle.USER_ALL));
                 pkgSetting.setIncrementalStatesCallback(incrementalStatesCallback);
                 mIncrementalManager.registerLoadingProgressCallback(parsedPackage.getPath(),
@@ -12304,18 +12371,17 @@ public class PackageManagerService extends IPackageManager.Stub
 
     public ArraySet<String> getOptimizablePackages() {
         ArraySet<String> pkgs = new ArraySet<>();
-        final boolean hibernationEnabled = AppHibernationService.isAppHibernationEnabled();
-        AppHibernationManagerInternal appHibernationManager =
-                mInjector.getLocalService(AppHibernationManagerInternal.class);
         synchronized (mLock) {
             for (AndroidPackage p : mPackages.values()) {
-                // Checking hibernation state is an inexpensive call.
-                boolean isHibernating = hibernationEnabled
-                        && appHibernationManager.isHibernatingGlobally(p.getPackageName());
-                if (PackageDexOptimizer.canOptimizePackage(p) && !isHibernating) {
+                if (PackageDexOptimizer.canOptimizePackage(p)) {
                     pkgs.add(p.getPackageName());
                 }
             }
+        }
+        if (AppHibernationService.isAppHibernationEnabled()) {
+            AppHibernationManagerInternal appHibernationManager =
+                    mInjector.getLocalService(AppHibernationManagerInternal.class);
+            pkgs.removeIf(pkgName -> appHibernationManager.isHibernatingGlobally(pkgName));
         }
         return pkgs;
     }
@@ -21537,6 +21603,8 @@ public class PackageManagerService extends IPackageManager.Stub
         synchronized (mLock) {
             if (outInfo != null) {
                 outInfo.uid = ps.appId;
+                outInfo.broadcastAllowList = mAppsFilter.getVisibilityAllowList(ps,
+                        allUserHandles, mSettings.getPackagesLocked());
             }
         }
 
@@ -21839,6 +21907,7 @@ public class PackageManagerService extends IPackageManager.Stub
             clearPackagePreferredActivities(ps.name, nextUserId);
             mPermissionManager.onPackageUninstalled(ps.name, ps.appId, pkg, sharedUserPkgs,
                     nextUserId);
+            mDomainVerificationManager.clearPackageForUser(ps.name, nextUserId);
         }
 
         if (outInfo != null) {
@@ -23545,10 +23614,12 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         if (shouldUnhibernate) {
-            AppHibernationManagerInternal ah =
-                    mInjector.getLocalService(AppHibernationManagerInternal.class);
-            ah.setHibernatingForUser(packageName, userId, false);
-            ah.setHibernatingGlobally(packageName, false);
+            mHandler.post(() -> {
+                AppHibernationManagerInternal ah =
+                        mInjector.getLocalService(AppHibernationManagerInternal.class);
+                ah.setHibernatingForUser(packageName, userId, false);
+                ah.setHibernatingGlobally(packageName, false);
+            });
         }
     }
 

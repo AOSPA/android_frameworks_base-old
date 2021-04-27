@@ -18,6 +18,7 @@ package com.android.systemui.biometrics;
 
 import static com.android.internal.util.Preconditions.checkArgument;
 import static com.android.internal.util.Preconditions.checkNotNull;
+import static com.android.systemui.classifier.Classifier.UDFPS_AUTHENTICATION;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -36,6 +37,7 @@ import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.hardware.fingerprint.IUdfpsOverlayControllerCallback;
 import android.os.RemoteException;
 import android.os.SystemClock;
+import android.os.Trace;
 import android.util.Log;
 import android.view.Gravity;
 import android.view.LayoutInflater;
@@ -53,6 +55,7 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.DozeReceiver;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
@@ -89,9 +92,9 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
     @NonNull private final StatusBarStateController mStatusBarStateController;
     @NonNull private final StatusBarKeyguardViewManager mKeyguardViewManager;
     @NonNull private final DumpManager mDumpManager;
-    @NonNull private final AuthRippleController mAuthRippleController;
     @NonNull private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @NonNull private final KeyguardViewMediator mKeyguardViewMediator;
+    @NonNull private FalsingManager mFalsingManager;
     // Currently the UdfpsController supports a single UDFPS sensor. If devices have multiple
     // sensors, this, in addition to a lot of the code here, will be updated.
     @VisibleForTesting final FingerprintSensorPropertiesInternal mSensorProps;
@@ -241,6 +244,8 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
                 }
                 // TODO: move isWithinSensorArea to UdfpsController.
                 if (udfpsView.isWithinSensorArea(event.getX(), event.getY())) {
+                    Trace.beginAsyncSection(
+                            "UdfpsController.mOnTouchListener#isWithinSensorArea", 1);
                     // The pointer that causes ACTION_DOWN is always at index 0.
                     // We need to persist its ID to track it during ACTION_MOVE that could include
                     // data for many other pointers because of multi-touch support.
@@ -267,6 +272,8 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
                                 minor, major, v);
                         final long sinceLastLog = SystemClock.elapsedRealtime() - mTouchLogTime;
                         if (!isFingerDown) {
+                            Trace.endAsyncSection(
+                                    "UdfpsController.mOnTouchListener#isWithinSensorArea", 1);
                             onFingerDown((int) x, (int) y, minor, major);
                             Log.v(TAG, "onTouch | finger down: " + touchInfo);
                             mTouchLogTime = SystemClock.elapsedRealtime();
@@ -292,6 +299,8 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
                     Log.v(TAG, "onTouch | finger up");
                     onFingerUp();
                 }
+                mFalsingManager.isFalseTouch(UDFPS_AUTHENTICATION);
+
                 break;
 
             default:
@@ -311,9 +320,9 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
             @NonNull StatusBar statusBar,
             @NonNull StatusBarKeyguardViewManager statusBarKeyguardViewManager,
             @NonNull DumpManager dumpManager,
-            @NonNull AuthRippleController authRippleController,
             @NonNull KeyguardUpdateMonitor keyguardUpdateMonitor,
-            @NonNull KeyguardViewMediator keyguardViewMediator) {
+            @NonNull KeyguardViewMediator keyguardViewMediator,
+            @NonNull FalsingManager falsingManager) {
         mContext = context;
         mInflater = inflater;
         // The fingerprint manager is queried for UDFPS before this class is constructed, so the
@@ -325,9 +334,9 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
         mStatusBarStateController = statusBarStateController;
         mKeyguardViewManager = statusBarKeyguardViewManager;
         mDumpManager = dumpManager;
-        mAuthRippleController = authRippleController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mKeyguardViewMediator = keyguardViewMediator;
+        mFalsingManager = falsingManager;
 
         mSensorProps = findFirstUdfps();
         // At least one UDFPS sensor exists
@@ -353,10 +362,6 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
         context.registerReceiver(mBroadcastReceiver, filter);
-
-        mAuthRippleController.setViewHost(mStatusBar.getNotificationShadeWindowView());
-        mAuthRippleController.setSensorLocation(getSensorLocation().centerX(),
-                getSensorLocation().centerY());
     }
 
     @Nullable
@@ -584,8 +589,11 @@ public class UdfpsController implements DozeReceiver, HbmCallback {
             Log.w(TAG, "Null view in onFingerDown");
             return;
         }
-        mView.startIllumination(() ->
-                mFingerprintManager.onPointerDown(mSensorProps.sensorId, x, y, minor, major));
+        Trace.beginAsyncSection("UdfpsController#startIllumination", 1);
+        mView.startIllumination(() -> {
+            Trace.endAsyncSection("UdfpsController#startIllumination", 1);
+            mFingerprintManager.onPointerDown(mSensorProps.sensorId, x, y, minor, major);
+        });
     }
 
     // This method can be called from the UI thread.

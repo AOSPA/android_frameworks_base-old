@@ -350,7 +350,6 @@
   <java-symbol type="bool" name="config_camera_sound_forced" />
   <java-symbol type="bool" name="config_dontPreferApn" />
   <java-symbol type="bool" name="config_restartRadioAfterProvisioning" />
-  <java-symbol type="bool" name="config_requireRadioPowerOffOnSimRefreshReset" />
   <java-symbol type="bool" name="config_speed_up_audio_on_mt_calls" />
   <java-symbol type="bool" name="config_useFixedVolume" />
   <java-symbol type="bool" name="config_enableMultiUserUI"/>
@@ -2197,10 +2196,8 @@
   <java-symbol type="bool" name="config_enableGnssTimeUpdateService" />
   <java-symbol type="bool" name="config_enableGeolocationTimeZoneDetection" />
   <java-symbol type="bool" name="config_enablePrimaryLocationTimeZoneProvider" />
-  <java-symbol type="bool" name="config_enablePrimaryLocationTimeZoneOverlay" />
   <java-symbol type="string" name="config_primaryLocationTimeZoneProviderPackageName" />
   <java-symbol type="bool" name="config_enableSecondaryLocationTimeZoneProvider" />
-  <java-symbol type="bool" name="config_enableSecondaryLocationTimeZoneOverlay" />
   <java-symbol type="string" name="config_secondaryLocationTimeZoneProviderPackageName" />
   <java-symbol type="string" name="config_optionalPackageVerifierName" />
 
@@ -4199,7 +4196,9 @@
   <java-symbol type="dimen" name="controls_thumbnail_image_max_width" />
 
   <java-symbol type="dimen" name="config_fixedOrientationLetterboxAspectRatio" />
+  <java-symbol type="dimen" name="config_letterboxBackgroundWallpaperBlurRadius" />
   <java-symbol type="integer" name="config_letterboxActivityCornersRadius" />
+  <java-symbol type="dimen" name="config_letterboxBackgroundWallaperDarkScrimAlpha" />
   <java-symbol type="integer" name="config_letterboxBackgroundType" />
   <java-symbol type="color" name="config_letterboxBackgroundColor" />
 
@@ -4231,8 +4230,11 @@
 
   <java-symbol type="drawable" name="ic_camera_blocked" />
   <java-symbol type="drawable" name="ic_mic_blocked" />
-  <java-symbol type="string" name="sensor_privacy_start_use_mic_notification_content" />
-  <java-symbol type="string" name="sensor_privacy_start_use_camera_notification_content" />
+  <java-symbol type="drawable" name="ic_camera_allowed" />
+  <java-symbol type="drawable" name="ic_mic_allowed" />
+  <java-symbol type="string" name="sensor_privacy_start_use_mic_notification_content_title" />
+  <java-symbol type="string" name="sensor_privacy_start_use_camera_notification_content_title" />
+  <java-symbol type="string" name="sensor_privacy_start_use_notification_content_text" />
   <java-symbol type="string" name="sensor_privacy_start_use_dialog_turn_on_button" />
   <java-symbol type="string" name="sensor_privacy_notification_channel_label" />
 
@@ -4246,6 +4248,10 @@
   <java-symbol type="attr" name="colorAccentPrimary" />
   <java-symbol type="attr" name="colorAccentSecondary" />
   <java-symbol type="attr" name="colorAccentTertiary" />
+  <java-symbol type="attr" name="colorSurface" format="color" />
+  <java-symbol type="attr" name="colorSurfaceHighlight" format="color" />
+  <java-symbol type="attr" name="colorSurfaceVariant" format="color" />
+  <java-symbol type="attr" name="colorSurfaceHeader" format="color" />
 
   <!-- CEC Configuration -->
   <java-symbol type="bool" name="config_cecHdmiCecEnabled_userConfigurable" />

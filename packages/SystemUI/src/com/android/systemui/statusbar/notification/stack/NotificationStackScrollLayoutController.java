@@ -59,10 +59,12 @@ import com.android.systemui.ExpandHelper;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
 import com.android.systemui.SwipeHelper;
+import com.android.systemui.classifier.Classifier;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.KeyguardMediaController;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin;
 import com.android.systemui.plugins.statusbar.NotificationMenuRowPlugin.OnMenuEventListener;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
@@ -75,8 +77,8 @@ import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
-import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
+import com.android.systemui.statusbar.notification.ExpandAnimationParameters;
 import com.android.systemui.statusbar.notification.ForegroundServiceDismissalFeatureController;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
@@ -143,6 +145,7 @@ public class NotificationStackScrollLayoutController {
     private final ZenModeController mZenModeController;
     private final MetricsLogger mMetricsLogger;
     private final FalsingCollector mFalsingCollector;
+    private final FalsingManager mFalsingManager;
     private final Resources mResources;
     private final NotificationSwipeHelper.Builder mNotificationSwipeHelperBuilder;
     private final ScrimController mScrimController;
@@ -556,6 +559,7 @@ public class NotificationStackScrollLayoutController {
             NotificationLockscreenUserManager lockscreenUserManager,
             MetricsLogger metricsLogger,
             FalsingCollector falsingCollector,
+            FalsingManager falsingManager,
             @Main Resources resources,
             NotificationSwipeHelper.Builder notificationSwipeHelperBuilder,
             StatusBar statusBar,
@@ -589,6 +593,7 @@ public class NotificationStackScrollLayoutController {
         mLockscreenUserManager = lockscreenUserManager;
         mMetricsLogger = metricsLogger;
         mFalsingCollector = falsingCollector;
+        mFalsingManager = falsingManager;
         mResources = resources;
         mNotificationSwipeHelperBuilder = notificationSwipeHelperBuilder;
         mStatusBar = statusBar;
@@ -1497,8 +1502,7 @@ public class NotificationStackScrollLayoutController {
         }
 
         @Override
-        public void applyExpandAnimationParams(
-                ActivityLaunchAnimator.ExpandAnimationParameters params) {
+        public void applyExpandAnimationParams(ExpandAnimationParameters params) {
             mView.applyExpandAnimationParams(params);
         }
 
@@ -1615,6 +1619,9 @@ public class NotificationStackScrollLayoutController {
                 }
             }
             if (ev.getActionMasked() == MotionEvent.ACTION_UP) {
+                // Ensure the falsing manager records the touch. we don't do anything with it
+                // at the moment.
+                mFalsingManager.isFalseTouch(Classifier.SHADE_DRAG);
                 mView.setCheckForLeaveBehind(true);
             }
             traceJankOnTouchEvent(ev.getActionMasked(), scrollerWantsIt);

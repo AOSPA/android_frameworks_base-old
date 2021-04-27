@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.notification.stack;
 
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_SCROLL_FLING;
-import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
 import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManagerKt.BUCKET_SILENT;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_SWIPE;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
@@ -78,8 +77,8 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.ExpandHelper;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper.DragDownCallback;
@@ -91,6 +90,7 @@ import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
+import com.android.systemui.statusbar.notification.ExpandAnimationParameters;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationUtils;
@@ -5499,9 +5499,16 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.INPUT)
     private final DragDownCallback mDragDownCallback = new DragDownCallback() {
 
+        @Override
+        public boolean canDragDown() {
+            return mStatusBarState == StatusBarState.KEYGUARD
+                    && (mController.hasActiveNotifications() || mKeyguardMediaControllorVisible)
+                    || mController.isInLockedDownShade();
+        }
+
         /* Only ever called as a consequence of a lockscreen expansion gesture. */
         @Override
-        public boolean onDraggedDown(View startingChild, int dragLengthY) {
+        public void onDraggedDown(View startingChild, int dragLengthY) {
             boolean canDragDown =
                     mController.hasActiveNotifications() || mKeyguardMediaControllorVisible;
             if (mStatusBarState == StatusBarState.KEYGUARD && canDragDown) {
@@ -5519,16 +5526,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                         row.onExpandedByGesture(true /* drag down is always an open */);
                     }
                 }
-
-                return true;
             } else if (mController.isInLockedDownShade()) {
                 mStatusbarStateController.setLeaveOpenOnKeyguardHide(true);
                 mStatusBar.dismissKeyguardThenExecute(() -> false /* dismissAction */,
                         null /* cancelRunnable */, false /* afterKeyguardGone */);
-                return true;
-            } else {
-                // abort gesture.
-                return false;
             }
         }
 
