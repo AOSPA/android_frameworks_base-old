@@ -561,3 +561,7 @@ build = [
     "ApiDocs.bp",
     "ProtoLibraries.bp",
 ]
+filegroup {
+    name: "framework-jarjar-rules",
+    srcs: ["framework-jarjar-rules.txt"],
+}
