@@ -108,6 +108,8 @@ public class FaceService extends BiometricServiceBase {
     private static final String SKIP_KEYGUARD_ACQUIRE_IGNORE_LIST =
             "com.android.server.biometrics.face.skip_keyguard_acquire_ignore_list";
 
+    private static final String sensePackageName = "co.aospa.facesense";
+
     /**
      * Events for bugreports.
      */
@@ -232,9 +234,6 @@ public class FaceService extends BiometricServiceBase {
 
         @Override
         public boolean wasUserDetected() {
-            if (mSenseManager.isEnabled()) {
-                return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED;
-            }
             return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED
                     && mLastAcquire != FaceManager.FACE_ACQUIRED_SENSOR_DIRTY;
         }
@@ -383,14 +382,13 @@ public class FaceService extends BiometricServiceBase {
         public void enroll(int userId, final IBinder token, final byte[] cryptoToken,
                 final IFaceServiceReceiver receiver, final String opPackageName,
                 final int[] disabledFeatures) {
-            checkPermission(MANAGE_BIOMETRIC);
-
-            if (!mSenseManager.isEnabled()) {
-                mHandler.post(() -> {
-                    mNotificationManager.cancelAsUser(NOTIFICATION_TAG, NOTIFICATION_ID,
-                            UserHandle.CURRENT);
-                });
+            if (!mSenseManager.isEnabled() || !opPackageName.equals(sensePackageName)) {
+                checkPermission(MANAGE_BIOMETRIC);
             }
+            updateActiveGroup(userId, opPackageName);
+
+            mHandler.post(() -> mNotificationManager.cancelAsUser(NOTIFICATION_TAG, NOTIFICATION_ID,
+                    UserHandle.CURRENT));
 
             final boolean restricted = isRestricted();
             final EnrollClientImpl client = new EnrollClientImpl(getContext(), mDaemonWrapper,
@@ -594,7 +592,9 @@ public class FaceService extends BiometricServiceBase {
 
         @Override // Binder call
         public List<Face> getEnrolledFaces(int userId, String opPackageName) {
-            checkPermission(MANAGE_BIOMETRIC);
+            if (!mSenseManager.isEnabled() || !opPackageName.equals(sensePackageName)) {
+                 checkPermission(MANAGE_BIOMETRIC);
+            }
             if (!canUseBiometric(opPackageName, false /* foregroundOnly */,
                     Binder.getCallingUid(), Binder.getCallingPid(),
                     UserHandle.getCallingUserId())) {
@@ -606,7 +606,9 @@ public class FaceService extends BiometricServiceBase {
 
         @Override // Binder call
         public boolean hasEnrolledFaces(int userId, String opPackageName) {
-            checkPermission(USE_BIOMETRIC_INTERNAL);
+            if (!mSenseManager.isEnabled() || !opPackageName.equals(sensePackageName)) {
+                checkPermission(USE_BIOMETRIC_INTERNAl);
+            }
             if (!canUseBiometric(opPackageName, false /* foregroundOnly */,
                     Binder.getCallingUid(), Binder.getCallingPid(),
                     UserHandle.getCallingUserId())) {
@@ -1196,6 +1198,9 @@ public class FaceService extends BiometricServiceBase {
                     authId = (long) mSenseManager.getAuthenticatorId();
                 }
                 map.put(valueOf, Long.valueOf(authId));
+            } else {
+                mSenseManager.callForBind(userId);
+                Slog.w(TAG, "updateActiveGroup(): sense service not started!");
             }
             return;
         }
