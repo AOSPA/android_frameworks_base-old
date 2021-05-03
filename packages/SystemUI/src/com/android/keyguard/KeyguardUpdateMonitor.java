@@ -16,6 +16,7 @@
 
 package com.android.keyguard;
 
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_BIOMETRIC_WEAK;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.ACTION_USER_REMOVED;
@@ -66,6 +67,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
 import android.os.ServiceManager;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
@@ -226,6 +228,8 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
             throw e.rethrowFromSystemServer();
         }
     }
+
+    private static final boolean sSenseEnabled = SystemProperties.getBoolean("ro.face.sense_service", false);
 
     private final Context mContext;
     private final boolean mIsPrimaryUser;
@@ -975,6 +979,15 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     private boolean isFaceDisabled(int userId) {
         final DevicePolicyManager dpm =
                 (DevicePolicyManager) mContext.getSystemService(Context.DEVICE_POLICY_SERVICE);
+        if (sSenseEnabled && dpm != null) {
+            try {
+                if (dpm.getPasswordQuality(null, userId) > PASSWORD_QUALITY_BIOMETRIC_WEAK) {
+                    return true;
+                }
+            } catch (SecurityException e) {
+                Log.e("KeyguardUpdateMonitor", "isFaceDisabled error:", e);
+            }
+        }
         // TODO(b/140035044)
         return whitelistIpcs(() -> dpm != null && (dpm.getKeyguardDisabledFeatures(null, userId)
                 & DevicePolicyManager.KEYGUARD_DISABLE_FACE) != 0
