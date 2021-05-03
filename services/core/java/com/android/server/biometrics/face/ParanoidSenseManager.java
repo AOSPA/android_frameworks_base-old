@@ -93,12 +93,20 @@ public class ParanoidSenseManager {
         @Override
         public void onAuthenticated(int faceId, int userId, byte[] token) {
             mHandler.post(() -> {
+                final boolean authenticated = faceId != 0;
+                if (token == null || faceId <= 0) {
+                    if (token == null && faceId > 0) {
+                        Slog.e("FaceService", "token should not be null for authentication success");
+                    }
+                    Slog.w("FaceService", "onAuthenticated failure");
+                    mFaceService.handleAuthenticated(authenticated, new Face("", 0, HAL_DEVICE_ID), null);
+                    return;
+                }
                 Face face = new Face("", faceId, SENSE_ID);
                 ArrayList<Byte> token_AL = new ArrayList<>(token.length);
                 for (byte b : token) {
                     token_AL.add(new Byte(b));
                 }
-                final boolean authenticated = faceId != 0;
                 mFaceService.handleAuthenticated(authenticated, face, token_AL);
             });
         }
@@ -219,7 +227,9 @@ public class ParanoidSenseManager {
                     service.enumerate();
                 } catch (RemoteException e) {
                     Slog.e(TAG, "enumerate failed", e);
-                    mFaceService.handleError(SENSE_ID, 8, 0);
+                    mHandler.post(() -> {
+                        mFaceService.handleError(SENSE_ID, 8, 0);
+                    }
                 }
             });
             return BIOMETRIC_SUCCESS;
@@ -404,17 +414,6 @@ public class ParanoidSenseManager {
                 synchronized (mServices) {
                     try {
                         senseService.setCallback(mReceiver);
-                        senseService.asBinder().linkToDeath(new IBinder.DeathRecipient() {
-                            @Override
-                            public void binderDied() {
-                                Slog.e(TAG, "Sense service binder died");
-                                mServices.remove(mUserId);
-                                if (mUserId == mCurrentUserId) {
-                                    bind(mUserId);
-                                }
-                            }
-                        }, 0);
-                        mServices.put(mUserId, senseService);
                         mHandler.post(() -> {
                             if (mServices.size() == 1) {
                                 mFaceService.loadAuthenticatorIds();
@@ -436,7 +435,11 @@ public class ParanoidSenseManager {
             mServices.remove(mUserId);
             mBound = false;
             if (mUserId == mCurrentUserId) {
-                bind(mUserId);
+                mHandler.postDelayed(() -> {
+                    mFaceService.handleError(SENSE_ID, 8, 0);
+                    bind(mUserId);
+                }, 100);
+                mContext.unbindService(this);
             }
         }
     }
