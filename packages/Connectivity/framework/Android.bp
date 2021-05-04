@@ -111,6 +111,9 @@ java_sdk_library {
         "//packages/modules/Connectivity/tests:__subpackages__",
         "//packages/modules/NetworkStack/tests:__subpackages__",
         "//packages/modules/Wifi/service/tests/wifitests",
+
+        // Vendor libs using hidden APIs
+        "//vendor:__subpackages__",
     ],
     apex_available: [
         "com.android.tethering",
