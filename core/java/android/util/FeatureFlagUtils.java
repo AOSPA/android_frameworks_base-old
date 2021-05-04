@@ -70,7 +70,7 @@ public class FeatureFlagUtils {
         DEFAULT_FLAGS.put("settings_tether_all_in_one", "false");
         DEFAULT_FLAGS.put("settings_silky_home", "true");
         DEFAULT_FLAGS.put("settings_contextual_home", "false");
-        DEFAULT_FLAGS.put(SETTINGS_PROVIDER_MODEL, "true");
+        DEFAULT_FLAGS.put(SETTINGS_PROVIDER_MODEL, "false");
         DEFAULT_FLAGS.put(SETTINGS_USE_NEW_BACKUP_ELIGIBILITY_RULES, "true");
         DEFAULT_FLAGS.put(SETTINGS_ENABLE_SECURITY_HUB, "false");
     }
@@ -88,6 +88,11 @@ public class FeatureFlagUtils {
      * @return true if the flag is enabled (either by default in system, or override by user)
      */
     public static boolean isEnabled(Context context, String feature) {
+        // Hide feature in SC Developer Preview
+        if (SETTINGS_PROVIDER_MODEL.equals(feature)) {
+            return false;
+        }
+
         // Override precedence:
         // Settings.Global -> sys.fflag.override.* -> static list
 
