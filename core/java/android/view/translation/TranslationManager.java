@@ -18,14 +18,16 @@ package android.view.translation;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.annotation.RequiresFeature;
 import android.annotation.SystemService;
 import android.annotation.WorkerThread;
 import android.app.PendingIntent;
 import android.content.Context;
-import android.content.pm.PackageManager;
+import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
+import android.os.IRemoteCallback;
 import android.os.Looper;
+import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.SynchronousResultReceiver;
 import android.util.ArrayMap;
@@ -42,6 +44,7 @@ import java.util.Collections;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
+import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -53,7 +56,6 @@ import java.util.concurrent.atomic.AtomicInteger;
  * the server {@link android.service.translation.TranslationService} </p>
  */
 @SystemService(Context.TRANSLATION_MANAGER_SERVICE)
-@RequiresFeature(PackageManager.FEATURE_TRANSLATION)
 public final class TranslationManager {
 
     private static final String TAG = "TranslationManager";
@@ -203,8 +205,14 @@ public final class TranslationManager {
             if (result.resultCode != STATUS_SYNC_CALL_SUCCESS) {
                 return Collections.emptySet();
             }
-            return new ArraySet<>(
-                    (TranslationCapability[]) result.bundle.getParcelableArray(EXTRA_CAPABILITIES));
+            Parcelable[] parcelables = result.bundle.getParcelableArray(EXTRA_CAPABILITIES);
+            ArraySet<TranslationCapability> capabilities = new ArraySet();
+            for (Parcelable obj : parcelables) {
+                if (obj instanceof TranslationCapability) {
+                    capabilities.add((TranslationCapability) obj);
+                }
+            }
+            return capabilities;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         } catch (TimeoutException e) {
@@ -304,8 +312,6 @@ public final class TranslationManager {
                 sourceFormat, targetFormat, pendingIntent);
     }
 
-    //TODO: Add method to propagate updates to mTCapabilityUpdateListeners
-
     /**
      * Returns an immutable PendingIntent which can be used to launch an activity to view/edit
      * on-device translation settings.
@@ -354,6 +360,27 @@ public final class TranslationManager {
     AtomicInteger getAvailableRequestId() {
         synchronized (mLock) {
             return sAvailableRequestId;
+        }
+    }
+
+    private static class TranslationCapabilityRemoteCallback extends
+            IRemoteCallback.Stub {
+        private final Executor mExecutor;
+
+        TranslationCapabilityRemoteCallback(Executor executor) {
+            mExecutor = executor;
+        }
+
+        @Override
+        public void sendResult(Bundle bundle) {
+            Binder.withCleanCallingIdentity(
+                    () -> mExecutor.execute(() -> onTranslationCapabilityUpdate(bundle)));
+        }
+
+        private void onTranslationCapabilityUpdate(Bundle bundle) {
+            TranslationCapability capability = (TranslationCapability) bundle.getParcelable(
+                    EXTRA_CAPABILITIES);
+            //TODO: Implement after deciding how capability listeners are implemented.
         }
     }
 }

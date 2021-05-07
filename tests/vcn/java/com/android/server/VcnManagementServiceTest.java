@@ -39,6 +39,7 @@ import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.CALLS_REAL_METHODS;
 import static org.mockito.Mockito.any;
 import static org.mockito.Mockito.argThat;
 import static org.mockito.Mockito.doAnswer;
@@ -59,7 +60,6 @@ import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.NetworkCapabilities.Transport;
 import android.net.NetworkRequest;
 import android.net.TelephonyNetworkSpecifier;
 import android.net.vcn.IVcnStatusCallback;
@@ -96,6 +96,7 @@ import org.mockito.ArgumentCaptor;
 
 import java.io.FileNotFoundException;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
@@ -617,6 +618,43 @@ public class VcnManagementServiceTest {
     }
 
     @Test
+    public void testGetConfiguredSubscriptionGroupsRequiresSystemUser() throws Exception {
+        doReturn(UserHandle.getUid(UserHandle.MIN_SECONDARY_USER_ID, TEST_UID))
+                .when(mMockDeps)
+                .getBinderCallingUid();
+
+        try {
+            mVcnMgmtSvc.getConfiguredSubscriptionGroups(TEST_PACKAGE_NAME);
+            fail("Expected security exception for non system user");
+        } catch (SecurityException expected) {
+        }
+    }
+
+    @Test
+    public void testGetConfiguredSubscriptionGroupsMismatchedPackages() throws Exception {
+        final String badPackage = "IncorrectPackage";
+        doThrow(new SecurityException()).when(mAppOpsMgr).checkPackage(TEST_UID, badPackage);
+
+        try {
+            mVcnMgmtSvc.getConfiguredSubscriptionGroups(badPackage);
+            fail("Expected security exception due to mismatched packages");
+        } catch (SecurityException expected) {
+        }
+    }
+
+    @Test
+    public void testGetConfiguredSubscriptionGroups() throws Exception {
+        mVcnMgmtSvc.setVcnConfig(TEST_UUID_2, TEST_VCN_CONFIG, TEST_PACKAGE_NAME);
+
+        // Assert that if both UUID 1 and 2 are provisioned, the caller only gets ones that they are
+        // privileged for.
+        triggerSubscriptionTrackerCbAndGetSnapshot(Collections.singleton(TEST_UUID_1));
+        final List<ParcelUuid> subGrps =
+                mVcnMgmtSvc.getConfiguredSubscriptionGroups(TEST_PACKAGE_NAME);
+        assertEquals(Collections.singletonList(TEST_UUID_1), subGrps);
+    }
+
+    @Test
     public void testAddVcnUnderlyingNetworkPolicyListener() throws Exception {
         mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
 
@@ -657,7 +695,7 @@ public class VcnManagementServiceTest {
 
     private void verifyMergedNetworkCapabilities(
             NetworkCapabilities mergedCapabilities,
-            @Transport int transportType,
+            int transportType,
             boolean isVcnManaged,
             boolean isRestricted) {
         assertTrue(mergedCapabilities.hasTransport(transportType));
@@ -696,7 +734,7 @@ public class VcnManagementServiceTest {
                         .addCapability(NET_CAPABILITY_NOT_VCN_MANAGED)
                         .addTransportType(transport);
         if (subId != SubscriptionManager.INVALID_SUBSCRIPTION_ID) {
-            ncBuilder.setSubIds(Collections.singleton(subId));
+            ncBuilder.setSubscriptionIds(Collections.singleton(subId));
         }
 
         return ncBuilder;
@@ -779,7 +817,7 @@ public class VcnManagementServiceTest {
                 .registerNetworkCallback(
                         eq(new NetworkRequest.Builder().clearCapabilities().build()),
                         captor.capture());
-        captor.getValue().onCapabilitiesChanged(new Network(0), caps);
+        captor.getValue().onCapabilitiesChanged(mock(Network.class, CALLS_REAL_METHODS), caps);
     }
 
     @Test

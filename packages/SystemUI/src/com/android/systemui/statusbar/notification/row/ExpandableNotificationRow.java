@@ -71,7 +71,6 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ContrastColorUtil;
 import com.android.internal.widget.CachingIconView;
 import com.android.internal.widget.CallLayout;
-import com.android.internal.widget.MessagingLayout;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.animation.ActivityLaunchAnimator;
@@ -631,17 +630,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mSecureStateProvider = secureStateProvider;
     }
 
-    @Override
-    public boolean isDimmable() {
-        if (!getShowingLayout().isDimmable()) {
-            return false;
-        }
-        if (showingPulsing()) {
-            return false;
-        }
-        return super.isDimmable();
-    }
-
     private void updateLimits() {
         for (NotificationContentView l : mLayouts) {
             updateLimitsForView(l);
@@ -658,10 +646,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean beforeS = mEntry.targetSdk < Build.VERSION_CODES.S;
         int smallHeight;
 
-        View expandedView = layout.getExpandedChild();
-        boolean isMediaLayout = expandedView != null
-                && expandedView.findViewById(com.android.internal.R.id.media_actions) != null;
-        boolean isMessagingLayout = contractedView instanceof MessagingLayout;
         boolean isCallLayout = contractedView instanceof CallLayout;
 
         if (customView && beforeS && !mIsSummaryWithChildren) {
@@ -672,12 +656,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             } else {
                 smallHeight = mMaxSmallHeightBeforeS;
             }
-        } else if (isMessagingLayout) {
-            // TODO(b/173204301): MessagingStyle notifications currently look broken when we enforce
-            //  the standard notification height, so we have to afford them more vertical space to
-            //  make sure we don't crop them terribly.  We actually need to revisit this and give
-            //  them a headerless design, then remove this hack.
-            smallHeight = mMaxSmallHeightLarge;
         } else if (isCallLayout) {
             smallHeight = mMaxExpandedHeight;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
@@ -864,7 +842,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationParent = isChildInGroup ? parent : null;
         mPrivateLayout.setIsChildInGroup(isChildInGroup);
 
-        resetBackgroundAlpha();
         updateBackgroundForGroupState();
         updateClickAndFocus();
         if (mNotificationParent != null) {
@@ -903,11 +880,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return true;
         }
         return false;
-    }
-
-    @Override
-    protected boolean shouldHideBackground() {
-        return super.shouldHideBackground() || mShowNoBackground;
     }
 
     @Override
@@ -2096,7 +2068,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             contentView.animate()
                     .alpha(0f)
                     .setDuration(ActivityLaunchAnimator.ANIMATION_DURATION_FADE_OUT_CONTENT)
-                    .setInterpolator(Interpolators.ALPHA_OUT);
+                    .setInterpolator(ActivityLaunchAnimator.CONTENT_FADE_OUT_INTERPOLATOR);
             setAboveShelf(true);
             mExpandAnimationRunning = true;
             getViewState().cancelAnimations(this);
@@ -2884,7 +2856,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             mShowNoBackground = false;
         }
         updateOutline();
-        updateBackground();
     }
 
     public int getPositionOfChild(ExpandableNotificationRow childRow) {

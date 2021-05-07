@@ -17,6 +17,7 @@
 package android.view;
 
 import static android.Manifest.permission.CONFIGURE_DISPLAY_COLOR_MODE;
+import static android.Manifest.permission.CONTROL_DISPLAY_BRIGHTNESS;
 
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -36,6 +37,7 @@ import android.graphics.ColorSpace;
 import android.graphics.PixelFormat;
 import android.graphics.Point;
 import android.graphics.Rect;
+import android.hardware.display.BrightnessInfo;
 import android.hardware.display.DeviceProductInfo;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayManagerGlobal;
@@ -730,6 +732,15 @@ public final class Display {
     }
 
     /**
+     * @return Brightness information about the display.
+     * @hide
+     */
+    @RequiresPermission(CONTROL_DISPLAY_BRIGHTNESS)
+    public @Nullable BrightnessInfo getBrightnessInfo() {
+        return mGlobal.getBrightnessInfo(mDisplayId);
+    }
+
+    /**
      * Gets the size of the display, in pixels.
      * Value returned by this method does not necessarily represent the actual raw size
      * (native resolution) of the display.
@@ -1070,6 +1081,11 @@ public final class Display {
             if (mDisplayInfo.userDisabledHdrTypes.length == 0) {
                 return mDisplayInfo.hdrCapabilities;
             }
+
+            if (mDisplayInfo.hdrCapabilities == null) {
+                return null;
+            }
+
             ArraySet<Integer> enabledTypesSet = new ArraySet<>();
             for (int supportedType : mDisplayInfo.hdrCapabilities.getSupportedHdrTypes()) {
                 boolean typeDisabled = false;
@@ -1083,6 +1099,7 @@ public final class Display {
                     enabledTypesSet.add(supportedType);
                 }
             }
+
             int[] enabledTypes = new int[enabledTypesSet.size()];
             int index = 0;
             for (int enabledType : enabledTypesSet) {
@@ -1107,6 +1124,9 @@ public final class Display {
     public int[] getReportedHdrTypes() {
         synchronized (mLock) {
             updateDisplayInfoLocked();
+            if (mDisplayInfo.hdrCapabilities == null) {
+                return new int[0];
+            }
             return mDisplayInfo.hdrCapabilities.getSupportedHdrTypes();
         }
     }
@@ -1120,7 +1140,11 @@ public final class Display {
     public boolean isHdr() {
         synchronized (mLock) {
             updateDisplayInfoLocked();
-            return !(getHdrCapabilities().getSupportedHdrTypes().length == 0);
+            HdrCapabilities hdrCapabilities = getHdrCapabilities();
+            if (hdrCapabilities == null) {
+                return false;
+            }
+            return !(hdrCapabilities.getSupportedHdrTypes().length == 0);
         }
     }
 

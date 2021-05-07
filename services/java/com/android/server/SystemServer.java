@@ -388,6 +388,7 @@ public final class SystemServer implements Dumpable {
     private static final String ROLE_SERVICE_CLASS = "com.android.role.RoleService";
     private static final String GAME_MANAGER_SERVICE_CLASS =
             "com.android.server.app.GameManagerService$Lifecycle";
+    private static final String UWB_SERVICE_CLASS = "com.android.server.uwb.UwbService";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
 
@@ -2545,10 +2546,12 @@ public final class SystemServer implements Dumpable {
         }
 
         // Translation manager service
-        if (mPackageManager.hasSystemFeature(PackageManager.FEATURE_TRANSLATION)) {
+        if (deviceHasConfigString(context, R.string.config_defaultTranslationService)) {
             t.traceBegin("StartTranslationManagerService");
             mSystemServiceManager.startService(TRANSLATION_MANAGER_SERVICE_CLASS);
             t.traceEnd();
+        } else {
+            Slog.d(TAG, "TranslationService not defined by OEM");
         }
 
         // NOTE: ClipboardService depends on ContentCapture and Autofill
@@ -2691,6 +2694,12 @@ public final class SystemServer implements Dumpable {
         LocalManagerRegistry.addManager(ArtManagerLocal.class, new ArtManagerLocal());
         t.traceEnd();
 
+        if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_UWB)) {
+            t.traceBegin("UwbService");
+            mSystemServiceManager.startService(UWB_SERVICE_CLASS);
+            t.traceEnd();
+        }
+
         t.traceBegin("StartBootPhaseDeviceSpecificServicesReady");
         mSystemServiceManager.startBootPhase(t, SystemService.PHASE_DEVICE_SPECIFIC_SERVICES_READY);
         t.traceEnd();
@@ -2778,13 +2787,6 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
             }
 
-            t.traceBegin("StartSystemUI");
-            try {
-                startSystemUi(context, windowManagerF);
-            } catch (Throwable e) {
-                reportWtf("starting System UI", e);
-            }
-            t.traceEnd();
             // Enable airplane mode in safe mode. setAirplaneMode() cannot be called
             // earlier as it sends broadcasts to other services.
             // TODO: This may actually be too late if radio firmware already started leaking
@@ -2985,6 +2987,14 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
             }
         }, t);
+
+        t.traceBegin("StartSystemUI");
+        try {
+            startSystemUi(context, windowManagerF);
+        } catch (Throwable e) {
+            reportWtf("starting System UI", e);
+        }
+        t.traceEnd();
 
         t.traceEnd(); // startOtherServices
     }

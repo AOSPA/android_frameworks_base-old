@@ -50,6 +50,7 @@ import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.policy.IKeyguardDismissCallback;
+import com.android.server.inputmethod.InputMethodManagerInternal;
 import com.android.server.policy.WindowManagerPolicy;
 
 import java.io.PrintWriter;
@@ -191,6 +192,7 @@ class KeyguardController {
         // state when evaluating visibilities.
         updateKeyguardSleepToken();
         mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
+        InputMethodManagerInternal.get().updateImeWindowStatus();
     }
 
     /**
@@ -341,11 +343,10 @@ class KeyguardController {
     /**
      * Called when occluded state changed.
      *
-     * @param currentTaskControllingOcclusion the task that controls the state whether keyguard
-     *      should be occluded. That is the task to be shown on top of keyguard if it requests so.
+     * @param topActivity the activity that controls the state whether keyguard should
+     *      be occluded. That is the activity to be shown on top of keyguard if it requests so.
      */
-    private void handleOccludedChanged(
-            int displayId, @Nullable Task currentTaskControllingOcclusion) {
+    private void handleOccludedChanged(int displayId, @Nullable ActivityRecord topActivity) {
         // TODO(b/113840485): Handle app transition for individual display, and apply occluded
         // state change to secondary displays.
         // For now, only default display fully supports occluded change. Other displays only
@@ -364,6 +365,13 @@ class KeyguardController {
                                 isDisplayOccluded(DEFAULT_DISPLAY)
                                         ? TRANSIT_KEYGUARD_OCCLUDE
                                         : TRANSIT_KEYGUARD_UNOCCLUDE);
+                // When the occluding activity also turns on the display, visibility of the activity
+                // can be committed before KEYGUARD_OCCLUDE transition is handled.
+                // Set mRequestForceTransition flag to make sure that the app transition animation
+                // is applied for such case.
+                if (topActivity != null) {
+                    topActivity.mRequestForceTransition = true;
+                }
                 updateKeyguardSleepToken(DEFAULT_DISPLAY);
                 mWindowManager.executeAppTransition();
             } finally {
@@ -580,7 +588,7 @@ class KeyguardController {
 
             if (lastOccluded != mOccluded) {
                 occludingChange = true;
-                controller.handleOccludedChanged(mDisplayId, task);
+                controller.handleOccludedChanged(mDisplayId, mTopOccludesActivity);
             }
 
             if (occludingChange || turningScreenOn) {

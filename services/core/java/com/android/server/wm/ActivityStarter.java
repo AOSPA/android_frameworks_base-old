@@ -1279,7 +1279,11 @@ class ActivityStarter {
                 || callingUidProcState == ActivityManager.PROCESS_STATE_BOUND_TOP;
         final boolean isCallingUidPersistentSystemProcess =
                 callingUidProcState <= ActivityManager.PROCESS_STATE_PERSISTENT_UI;
-        if ((appSwitchAllowed && callingUidHasAnyVisibleWindow)
+
+        // Normal apps with visible app window will be allowed to start activity if app switching
+        // is allowed, or apps like live wallpaper with non app visible window will be allowed.
+        if (((appSwitchAllowed || mService.mActiveUids.hasNonAppVisibleWindow(callingUid))
+                && callingUidHasAnyVisibleWindow)
                 || isCallingUidPersistentSystemProcess) {
             if (DEBUG_ACTIVITY_STARTS) {
                 Slog.d(TAG, "Activity start allowed: callingUidHasAnyVisibleWindow = " + callingUid
@@ -2643,6 +2647,17 @@ class ActivityStarter {
                 mOptions = null;
             }
         }
+
+        if (mPreferredWindowingMode != WINDOWING_MODE_UNDEFINED
+                && intentTask.getWindowingMode() != mPreferredWindowingMode) {
+            intentTask.setWindowingMode(mPreferredWindowingMode);
+        }
+
+        // Update the target's launch cookie to those specified in the options if set
+        if (mStartActivity.mLaunchCookie != null) {
+            intentActivity.mLaunchCookie = mStartActivity.mLaunchCookie;
+        }
+
         // Need to update mTargetRootTask because if task was moved out of it, the original root
         // task may be destroyed.
         mTargetRootTask = intentActivity.getRootTask();
@@ -2731,8 +2746,22 @@ class ActivityStarter {
                     launchFlags |= Intent.FLAG_ACTIVITY_NEW_DOCUMENT;
                     break;
                 case ActivityInfo.DOCUMENT_LAUNCH_NEVER:
-                    launchFlags &=
-                            ~(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | FLAG_ACTIVITY_MULTIPLE_TASK);
+                    if (mLaunchMode == LAUNCH_SINGLE_INSTANCE_PER_TASK) {
+                        // Remove MULTIPLE_TASK flag along with NEW_DOCUMENT only if NEW_DOCUMENT
+                        // is set, otherwise we still want to keep the MULTIPLE_TASK flag (if
+                        // any) for singleInstancePerTask that the multiple tasks can be created,
+                        // or a singleInstancePerTask activity is basically the same as a
+                        // singleTask activity when documentLaunchMode set to never.
+                        if ((launchFlags & Intent.FLAG_ACTIVITY_NEW_DOCUMENT) != 0) {
+                            launchFlags &= ~(Intent.FLAG_ACTIVITY_NEW_DOCUMENT
+                                    | FLAG_ACTIVITY_MULTIPLE_TASK);
+                        }
+                    } else {
+                        // TODO(b/184903976): Should FLAG_ACTIVITY_MULTIPLE_TASK always be
+                        // removed for document-never activity?
+                        launchFlags &=
+                                ~(Intent.FLAG_ACTIVITY_NEW_DOCUMENT | FLAG_ACTIVITY_MULTIPLE_TASK);
+                    }
                     break;
             }
         }

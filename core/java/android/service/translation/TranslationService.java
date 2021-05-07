@@ -16,6 +16,8 @@
 
 package android.service.translation;
 
+import static android.view.translation.TranslationManager.STATUS_SYNC_CALL_FAIL;
+import static android.view.translation.TranslationManager.STATUS_SYNC_CALL_SUCCESS;
 import static android.view.translation.Translator.EXTRA_SERVICE_BINDER;
 import static android.view.translation.Translator.EXTRA_SESSION_ID;
 
@@ -32,12 +34,14 @@ import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.ICancellationSignal;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.os.ResultReceiver;
 import android.util.ArraySet;
 import android.util.Log;
 import android.view.translation.ITranslationDirectManager;
+import android.view.translation.ITranslationServiceCallback;
 import android.view.translation.TranslationCapability;
 import android.view.translation.TranslationContext;
 import android.view.translation.TranslationManager;
@@ -47,6 +51,7 @@ import android.view.translation.TranslationSpec;
 
 import com.android.internal.os.IResultReceiver;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.function.Consumer;
 
@@ -81,15 +86,17 @@ public abstract class TranslationService extends Service {
     public static final String SERVICE_META_DATA = "android.translation_service";
 
     private Handler mHandler;
+    private ITranslationServiceCallback mCallback;
+
 
     /**
      * Binder to receive calls from system server.
      */
     private final ITranslationService mInterface = new ITranslationService.Stub() {
         @Override
-        public void onConnected() {
-            mHandler.sendMessage(obtainMessage(TranslationService::onConnected,
-                    TranslationService.this));
+        public void onConnected(IBinder callback) {
+            mHandler.sendMessage(obtainMessage(TranslationService::handleOnConnected,
+                    TranslationService.this, callback));
         }
 
         @Override
@@ -140,7 +147,9 @@ public abstract class TranslationService extends Service {
 
         /**
          * TODO: implement javadoc
+         * @deprecated use {@link #onTranslationSuccess} with an error response instead.
          */
+        @Deprecated
         void onError();
     }
 
@@ -149,18 +158,15 @@ public abstract class TranslationService extends Service {
      */
     private final ITranslationDirectManager mClientInterface =
             new ITranslationDirectManager.Stub() {
-                // TODO: Implement cancellation signal
-                @NonNull
-                private final CancellationSignal mCancellationSignal = new CancellationSignal();
-
                 @Override
                 public void onTranslationRequest(TranslationRequest request, int sessionId,
-                        ITranslationCallback callback)
+                        ICancellationSignal transport, ITranslationCallback callback)
                         throws RemoteException {
                     final OnTranslationResultCallback translationResultCallback =
                             new OnTranslationResultCallbackWrapper(callback);
                     mHandler.sendMessage(obtainMessage(TranslationService::onTranslationRequest,
-                            TranslationService.this, request, sessionId, mCancellationSignal,
+                            TranslationService.this, request, sessionId,
+                            CancellationSignal.fromTransport(transport),
                             translationResultCallback));
                 }
 
@@ -209,13 +215,33 @@ public abstract class TranslationService extends Service {
     }
 
     /**
-     * TODO: fill in javadoc.
+     * Called to notify the service that a session was created
+     * (see {@link android.view.translation.Translator}).
      *
-     * @param translationContext
-     * @param sessionId
+     * <p>The service must call {@code callback.accept()} to acknowledge whether the session is
+     * supported and created successfully. If the translation context is not supported, the service
+     * should call back with {@code false}.</p>
+     *
+     * @param translationContext the {@link TranslationContext} of the session being created.
+     * @param sessionId the int id of the session.
+     * @param callback {@link Consumer} to notify whether the session was successfully created.
      */
     // TODO(b/176464808): the session id won't be unique cross client/server process. Need to find
     // solution to make it's safe.
+    // TODO: make abstract once aiai is implemented.
+    public void onCreateTranslationSession(@NonNull TranslationContext translationContext,
+            int sessionId, @NonNull Consumer<Boolean> callback) {
+        onCreateTranslationSession(translationContext, sessionId);
+        callback.accept(true);
+    }
+
+    /**
+     * TODO: fill in javadoc.
+     *
+     * @deprecated use {@link #onCreateTranslationSession(TranslationContext, int, Consumer)}
+     * instead.
+     */
+    @Deprecated
     public abstract void onCreateTranslationSession(@NonNull TranslationContext translationContext,
             int sessionId);
 
@@ -235,7 +261,7 @@ public abstract class TranslationService extends Service {
      * @param cancellationSignal
      */
     public abstract void onTranslationRequest(@NonNull TranslationRequest request, int sessionId,
-            @NonNull CancellationSignal cancellationSignal,
+            @Nullable CancellationSignal cancellationSignal,
             @NonNull OnTranslationResultCallback callback);
 
     /**
@@ -253,21 +279,58 @@ public abstract class TranslationService extends Service {
             @TranslationSpec.DataFormat int targetFormat,
             @NonNull Consumer<Set<TranslationCapability>> callback);
 
-    // TODO(b/176464808): Need to handle client dying case
+    /**
+     * Called by the service to notify an update in existing {@link TranslationCapability}s.
+     *
+     * @param capability the updated {@link TranslationCapability} with its new states and flags.
+     */
+    public final void updateTranslationCapability(@NonNull TranslationCapability capability) {
+        Objects.requireNonNull(capability, "translation capability should not be null");
 
-    // TODO(b/176464808): Need to handle the failure case. e.g. if the context is not supported.
+        final ITranslationServiceCallback callback = mCallback;
+        if (callback == null) {
+            Log.w(TAG, "updateTranslationCapability(): no server callback");
+            return;
+        }
+
+        try {
+            callback.updateTranslationCapability(capability);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
+    private void handleOnConnected(@NonNull IBinder callback) {
+        mCallback = ITranslationServiceCallback.Stub.asInterface(callback);
+        onConnected();
+    }
+
+    // TODO(b/176464808): Need to handle client dying case
 
     private void handleOnCreateTranslationSession(@NonNull TranslationContext translationContext,
             int sessionId, IResultReceiver resultReceiver) {
-        try {
-            final Bundle extras = new Bundle();
-            extras.putBinder(EXTRA_SERVICE_BINDER, mClientInterface.asBinder());
-            extras.putInt(EXTRA_SESSION_ID, sessionId);
-            resultReceiver.send(0, extras);
-        } catch (RemoteException e) {
-            Log.w(TAG, "RemoteException sending client interface: " + e);
-        }
-        onCreateTranslationSession(translationContext, sessionId);
+        onCreateTranslationSession(translationContext, sessionId,
+                new Consumer<Boolean>() {
+                    @Override
+                    public void accept(Boolean created) {
+                        try {
+                            if (!created) {
+                                Log.w(TAG, "handleOnCreateTranslationSession(): context="
+                                        + translationContext + " not supported by service.");
+                                resultReceiver.send(STATUS_SYNC_CALL_FAIL, null);
+                                return;
+                            }
+
+                            final Bundle extras = new Bundle();
+                            extras.putBinder(EXTRA_SERVICE_BINDER, mClientInterface.asBinder());
+                            extras.putInt(EXTRA_SESSION_ID, sessionId);
+                            resultReceiver.send(STATUS_SYNC_CALL_SUCCESS, extras);
+                        } catch (RemoteException e) {
+                            Log.w(TAG, "RemoteException sending client interface: " + e);
+                        }
+                    }
+                });
+
     }
 
     private void handleOnTranslationCapabilitiesRequest(
@@ -282,9 +345,8 @@ public abstract class TranslationService extends Service {
                         final Bundle bundle = new Bundle();
                         bundle.putParcelableArray(TranslationManager.EXTRA_CAPABILITIES,
                                 capabilities.toArray(new TranslationCapability[0]));
-                        resultReceiver.send(TranslationManager.STATUS_SYNC_CALL_SUCCESS, bundle);
+                        resultReceiver.send(STATUS_SYNC_CALL_SUCCESS, bundle);
                     }
                 });
-
     }
 }

@@ -115,6 +115,8 @@ public:
      */
     GrDirectContext* getGrContext() const { return mRenderThread.getGrContext(); }
 
+    ASurfaceControl* getSurfaceControl() const { return mSurfaceControl; }
+
     // Won't take effect until next EGLSurface creation
     void setSwapBehavior(SwapBehavior swapBehavior);
 
@@ -206,6 +208,15 @@ public:
     // Called when SurfaceStats are available.
     static void onSurfaceStatsAvailable(void* context, ASurfaceControl* control,
             ASurfaceControlStats* stats);
+
+    void setASurfaceTransactionCallback(
+            const std::function<void(int64_t, int64_t, int64_t)>& callback) {
+        mASurfaceTransactionCallback = callback;
+    }
+
+    bool mergeTransaction(ASurfaceTransaction* transaction, ASurfaceControl* control);
+
+    static CanvasContext* getActiveContext();
 
 private:
     CanvasContext(RenderThread& thread, bool translucent, RenderNode* rootRenderNode,
@@ -302,6 +313,8 @@ private:
 
     // If set to true, we expect that callbacks into onSurfaceStatsAvailable
     bool mExpectSurfaceStats = false;
+
+    std::function<void(int64_t, int64_t, int64_t)> mASurfaceTransactionCallback;
 };
 
 } /* namespace renderthread */

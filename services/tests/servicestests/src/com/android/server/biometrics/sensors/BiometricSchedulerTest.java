@@ -37,6 +37,7 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
+import android.testing.TestableContext;
 
 import androidx.annotation.NonNull;
 import androidx.test.InstrumentationRegistry;
@@ -47,6 +48,7 @@ import com.android.server.biometrics.nano.BiometricsProto;
 import com.android.server.biometrics.sensors.BiometricScheduler.Operation;
 
 import org.junit.Before;
+import org.junit.Rule;
 import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
@@ -63,9 +65,11 @@ public class BiometricSchedulerTest {
     private IBinder mToken;
 
     @Mock
-    private Context mContext;
-    @Mock
     private IBiometricService mBiometricService;
+
+    @Rule
+    public final TestableContext mContext =
+            new TestableContext(InstrumentationRegistry.getContext(), null);
 
     @Before
     public void setUp() {
@@ -188,7 +192,7 @@ public class BiometricSchedulerTest {
         // Request it to be canceled. The operation can be canceled immediately, and the scheduler
         // should go back to idle, since in this case the framework has not even requested the HAL
         // to authenticate yet.
-        mScheduler.cancelAuthentication(mToken);
+        mScheduler.cancelAuthenticationOrDetection(mToken);
         assertNull(mScheduler.mCurrentOperation);
     }
 
@@ -298,7 +302,7 @@ public class BiometricSchedulerTest {
                 mScheduler.mPendingOperations.getFirst().mState);
 
         // Request cancel before the authentication client has started
-        mScheduler.cancelAuthentication(mToken);
+        mScheduler.cancelAuthenticationOrDetection(mToken);
         waitForIdle();
         assertEquals(Operation.STATE_WAITING_IN_QUEUE_CANCELING,
                 mScheduler.mPendingOperations.getFirst().mState);
