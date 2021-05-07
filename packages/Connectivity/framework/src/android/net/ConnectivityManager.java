@@ -424,6 +424,9 @@ public class ConnectivityManager {
      * Action used to display a dialog that asks the user whether to connect to a network that is
      * not validated. This intent is used to start the dialog in settings via startActivity.
      *
+     * This action includes a {@link Network} typed extra which is called
+     * {@link ConnectivityManager#EXTRA_NETWORK} that represents the network which is unvalidated.
+     *
      * @hide
      */
     @SystemApi(client = MODULE_LIBRARIES)
@@ -432,6 +435,10 @@ public class ConnectivityManager {
     /**
      * Action used to display a dialog that asks the user whether to avoid a network that is no
      * longer validated. This intent is used to start the dialog in settings via startActivity.
+     *
+     * This action includes a {@link Network} typed extra which is called
+     * {@link ConnectivityManager#EXTRA_NETWORK} that represents the network which is no longer
+     * validated.
      *
      * @hide
      */
@@ -443,6 +450,10 @@ public class ConnectivityManager {
      * Action used to display a dialog that asks the user whether to stay connected to a network
      * that has not validated. This intent is used to start the dialog in settings via
      * startActivity.
+     *
+     * This action includes a {@link Network} typed extra which is called
+     * {@link ConnectivityManager#EXTRA_NETWORK} that represents the network which has partial
+     * connectivity.
      *
      * @hide
      */
@@ -1425,9 +1436,9 @@ public class ConnectivityManager {
             android.Manifest.permission.NETWORK_STACK,
             android.Manifest.permission.NETWORK_SETTINGS})
     @NonNull
-    public List<NetworkStateSnapshot> getAllNetworkStateSnapshot() {
+    public List<NetworkStateSnapshot> getAllNetworkStateSnapshots() {
         try {
-            return mService.getAllNetworkStateSnapshot();
+            return mService.getAllNetworkStateSnapshots();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -4462,7 +4473,7 @@ public class ConnectivityManager {
     @RequiresPermission(android.Manifest.permission.ACCESS_NETWORK_STATE)
     public void registerDefaultNetworkCallback(@NonNull NetworkCallback networkCallback,
             @NonNull Handler handler) {
-        registerDefaultNetworkCallbackAsUid(Process.INVALID_UID, networkCallback, handler);
+        registerDefaultNetworkCallbackForUid(Process.INVALID_UID, networkCallback, handler);
     }
 
     /**
@@ -4492,7 +4503,7 @@ public class ConnectivityManager {
     @RequiresPermission(anyOf = {
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
             android.Manifest.permission.NETWORK_SETTINGS})
-    public void registerDefaultNetworkCallbackAsUid(int uid,
+    public void registerDefaultNetworkCallbackForUid(int uid,
             @NonNull NetworkCallback networkCallback, @NonNull Handler handler) {
         CallbackHandler cbHandler = new CallbackHandler(handler);
         sendRequestForNetwork(uid, null /* need */, networkCallback, 0 /* timeoutMs */,
@@ -5362,10 +5373,10 @@ public class ConnectivityManager {
      * {@link #unregisterNetworkCallback(NetworkCallback)}.
      *
      * @param request {@link NetworkRequest} describing this request.
-     * @param handler {@link Handler} to specify the thread upon which the callback will be invoked.
-     *                If null, the callback is invoked on the default internal Handler.
      * @param networkCallback The {@link NetworkCallback} to be utilized for this request. Note
      *                        the callback must not be shared - it uniquely specifies this request.
+     * @param handler {@link Handler} to specify the thread upon which the callback will be invoked.
+     *                If null, the callback is invoked on the default internal Handler.
      * @throws IllegalArgumentException if {@code request} contains invalid network capabilities.
      * @throws SecurityException if missing the appropriate permissions.
      * @throws RuntimeException if the app already has too many callbacks registered.
@@ -5380,7 +5391,8 @@ public class ConnectivityManager {
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
     })
     public void requestBackgroundNetwork(@NonNull NetworkRequest request,
-            @NonNull Handler handler, @NonNull NetworkCallback networkCallback) {
+            @NonNull NetworkCallback networkCallback,
+            @SuppressLint("ListenerLast") @NonNull Handler handler) {
         final NetworkCapabilities nc = request.networkCapabilities;
         sendRequestForNetwork(nc, networkCallback, 0, BACKGROUND_REQUEST,
                 TYPE_NONE, new CallbackHandler(handler));

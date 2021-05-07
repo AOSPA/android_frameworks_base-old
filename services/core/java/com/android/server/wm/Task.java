@@ -131,6 +131,7 @@ import static com.android.server.wm.TaskProto.BOUNDS;
 import static com.android.server.wm.TaskProto.CREATED_BY_ORGANIZER;
 import static com.android.server.wm.TaskProto.DISPLAY_ID;
 import static com.android.server.wm.TaskProto.FILLS_PARENT;
+import static com.android.server.wm.TaskProto.HAS_CHILD_PIP_ACTIVITY;
 import static com.android.server.wm.TaskProto.LAST_NON_FULLSCREEN_BOUNDS;
 import static com.android.server.wm.TaskProto.MIN_HEIGHT;
 import static com.android.server.wm.TaskProto.MIN_WIDTH;
@@ -181,6 +182,7 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -211,6 +213,7 @@ import android.view.SurfaceControl;
 import android.view.WindowManager;
 import android.view.WindowManager.TransitionOldType;
 import android.window.ITaskOrganizer;
+import android.window.PictureInPictureSurfaceTransaction;
 import android.window.StartingWindowInfo;
 import android.window.TaskSnapshot;
 import android.window.WindowContainerToken;
@@ -472,14 +475,14 @@ class Task extends WindowContainer<WindowContainer> {
     int mMinWidth;
     int mMinHeight;
 
-    // The bounds of the target when recents animation is finished.
+    // The surface transition of the target when recents animation is finished.
     // This is originally introduced to carry out the current surface control position and window
     // crop when a multi-activity task enters pip with autoEnterPip enabled. In such case,
     // the surface control of the task will be animated in Launcher and then the top activity is
     // reparented to pinned root task.
-    // Do not forget to reset this to null after reparenting.
+    // Do not forget to reset this after reparenting.
     // TODO: remove this once the recents animation is moved to the Shell
-    final Rect mLastRecentsAnimationBounds = new Rect();
+    PictureInPictureSurfaceTransaction mLastRecentsAnimationTransaction;
 
     static final int LAYER_RANK_INVISIBLE = -1;
     // Ranking (from top) of this task among all visible tasks. (-1 means it's not visible)
@@ -841,6 +844,14 @@ class Task extends WindowContainer<WindowContainer> {
 
     // The task will be removed when TaskOrganizer, which is managing the task, is destroyed.
     boolean mRemoveWithTaskOrganizer;
+
+    /**
+     * Reference to the pinned activity that is logically parented to this task, ie.
+     * the previous top activity within this task is put into pinned mode.
+     * This always gets cleared in pair with the ActivityRecord-to-Task link as seen in
+     * {@link ActivityRecord#clearLastParentBeforePip()}.
+     */
+    ActivityRecord mChildPipActivity;
 
     private Task(ActivityTaskManagerService atmService, int _taskId, Intent _intent,
             Intent _affinityIntent, String _affinity, String _rootAffinity,
@@ -1847,6 +1858,10 @@ class Task extends WindowContainer<WindowContainer> {
 
     /** Completely remove all activities associated with an existing task. */
     void performClearTask(String reason) {
+        // The original task is to be removed, try remove also the pinned task.
+        if (mChildPipActivity != null && mChildPipActivity.getTask() != null) {
+            mTaskSupervisor.removeRootTask(mChildPipActivity.getTask());
+        }
         // Broken down into to cases to avoid object create due to capturing mStack.
         if (getRootTask() == null) {
             forAllActivities((r) -> {
@@ -4455,6 +4470,7 @@ class Task extends WindowContainer<WindowContainer> {
         }
         pw.print(prefix); pw.print("taskId=" + mTaskId);
         pw.println(" rootTaskId=" + getRootTaskId());
+        pw.print(prefix); pw.println("hasChildPipActivity=" + (mChildPipActivity != null));
         pw.print(prefix); pw.print("mHasBeenVisible="); pw.println(getHasBeenVisible());
         pw.print(prefix); pw.print("mResizeMode=");
         pw.print(ActivityInfo.resizeModeToString(mResizeMode));
@@ -5283,6 +5299,13 @@ class Task extends WindowContainer<WindowContainer> {
     }
 
     /**
+     * @return whether this task is always on top without taking visibility into account.
+     */
+    public boolean isAlwaysOnTopWhenVisible() {
+        return super.isAlwaysOnTop();
+    }
+
+    /**
      * Returns whether this task is currently forced to be hidden for any reason.
      */
     protected boolean isForceHidden() {
@@ -5327,7 +5350,6 @@ class Task extends WindowContainer<WindowContainer> {
             return;
         }
         final int currentMode = getWindowingMode();
-        final int currentOverrideMode = getRequestedOverrideWindowingMode();
         final Task topTask = getTopMostTask();
         int windowingMode = preferredWindowingMode;
 
@@ -5396,23 +5418,30 @@ class Task extends WindowContainer<WindowContainer> {
                 mTaskSupervisor.mNoAnimActivities.add(topActivity);
             }
             super.setWindowingMode(windowingMode);
-            // setWindowingMode triggers an onConfigurationChanged cascade which can result in a
-            // different resolved windowing mode (usually when preferredWindowingMode is UNDEFINED).
-            windowingMode = getWindowingMode();
+
+            // Try reparent pinned activity back to its original task after onConfigurationChanged
+            // cascade finishes. This is done on Task level instead of
+            // {@link ActivityRecord#onConfigurationChanged(Configuration)} since when we exit PiP,
+            // we set final windowing mode on the ActivityRecord first and then on its Task when
+            // the exit PiP transition finishes. Meanwhile, the exit transition is always
+            // performed on its original task, reparent immediately in ActivityRecord breaks it.
+            if (currentMode == WINDOWING_MODE_PINNED) {
+                if (topActivity != null && topActivity.getLastParentBeforePip() != null) {
+                    // Do not reparent if the pinned task is in removal, indicated by the
+                    // force hidden flag.
+                    if (!isForceHidden()) {
+                        final Task lastParentBeforePip = topActivity.getLastParentBeforePip();
+                        topActivity.reparent(lastParentBeforePip,
+                                lastParentBeforePip.getChildCount() /* top */,
+                                "movePinnedActivityToOriginalTask");
+                        lastParentBeforePip.moveToFront("movePinnedActivityToOriginalTask");
+                    }
+                }
+            }
 
             if (creating) {
                 // Nothing else to do if we don't have a window container yet. E.g. call from ctor.
                 return;
-            }
-
-            if (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY && alreadyInSplitScreenMode) {
-                // We already have a root split-screen task in this display, so just move the
-                // tasks over.
-                // TODO: Figure-out how to do all the stuff in
-                // AMS.setTaskWindowingModeSplitScreenPrimary
-                throw new IllegalArgumentException("Setting primary split-screen windowing mode"
-                        + " while there is already one isn't currently supported");
-                //return;
             }
         } finally {
             mAtmService.continueWindowLayout();
@@ -5540,7 +5569,7 @@ class Task extends WindowContainer<WindowContainer> {
         mCurrentUser = userId;
 
         super.switchUser(userId);
-        if (isLeafTask() && showToCurrentUser()) {
+        if (!isRootTask() && showToCurrentUser()) {
             getParent().positionChildAt(POSITION_TOP, this, false /*includeParents*/);
         }
     }
@@ -6300,6 +6329,8 @@ class Task extends WindowContainer<WindowContainer> {
         // Launching this app's activity, make sure the app is no longer
         // considered stopped.
         try {
+            mTaskSupervisor.getActivityMetricsLogger()
+                    .notifyBeforePackageUnstopped(next.packageName);
             mAtmService.getPackageManager().setPackageStoppedState(
                     next.packageName, false, next.mUserId); /* TODO: Verify if correct userid */
         } catch (RemoteException e1) {
@@ -7567,7 +7598,11 @@ class Task extends WindowContainer<WindowContainer> {
             final Task task = getBottomMostTask();
             setWindowingMode(WINDOWING_MODE_UNDEFINED);
 
-            getDisplayArea().positionChildAt(POSITION_TOP, this, false /* includingParents */);
+            // Task could have been removed from the hierarchy due to windowing mode change
+            // where its only child is reparented back to their original parent task.
+            if (isAttached()) {
+                getDisplayArea().positionChildAt(POSITION_TOP, this, false /* includingParents */);
+            }
 
             mTaskSupervisor.scheduleUpdatePictureInPictureModeIfNeeded(task, this);
         });
@@ -7666,14 +7701,22 @@ class Task extends WindowContainer<WindowContainer> {
         reparent(newParent, onTop ? POSITION_TOP : POSITION_BOTTOM);
     }
 
-    void maybeApplyLastRecentsAnimationBounds() {
-        if (!mLastRecentsAnimationBounds.isEmpty()) {
-            getPendingTransaction()
-                    .setPosition(mSurfaceControl, mLastRecentsAnimationBounds.left,
-                            mLastRecentsAnimationBounds.top)
-                    .setWindowCrop(mSurfaceControl, mLastRecentsAnimationBounds.width(),
-                            mLastRecentsAnimationBounds.height());
-            mLastRecentsAnimationBounds.setEmpty();
+    void setLastRecentsAnimationTransaction(
+            @NonNull PictureInPictureSurfaceTransaction transaction) {
+        mLastRecentsAnimationTransaction = new PictureInPictureSurfaceTransaction(transaction);
+    }
+
+    void clearLastRecentsAnimationTransaction() {
+        mLastRecentsAnimationTransaction = null;
+        // reset also the transform introduced by mLastRecentsAnimationTransaction
+        getPendingTransaction().setMatrix(mSurfaceControl, Matrix.IDENTITY_MATRIX, new float[9]);
+    }
+
+    void maybeApplyLastRecentsAnimationTransaction() {
+        if (mLastRecentsAnimationTransaction != null) {
+            PictureInPictureSurfaceTransaction.apply(mLastRecentsAnimationTransaction,
+                    mSurfaceControl, getPendingTransaction());
+            mLastRecentsAnimationTransaction = null;
         }
     }
 
@@ -7875,6 +7918,7 @@ class Task extends WindowContainer<WindowContainer> {
 
         proto.write(CREATED_BY_ORGANIZER, mCreatedByOrganizer);
         proto.write(AFFINITY, affinity);
+        proto.write(HAS_CHILD_PIP_ACTIVITY, mChildPipActivity != null);
 
         proto.end(token);
     }

@@ -2208,6 +2208,37 @@ public abstract class Context {
     }
 
     /**
+     * Like {@link #sendBroadcastMultiplePermissions(Intent, String[])}, but also allows
+     * specification of a list of excluded permissions. This allows sending a broadcast to an
+     * app that has the permissions in `receiverPermissions` but not `excludedPermissions`.
+     * @hide
+     */
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions, @Nullable String[] excludedPermissions) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
+     * Version of {@link #sendBroadcastMultiplePermissions(Intent, String[])} that allows you to
+     * specify the {@link android.app.BroadcastOptions}.
+     *
+     * @param intent The Intent to broadcast; all receivers matching this
+     *               Intent will receive the broadcast.
+     * @param receiverPermissions Array of names of permissions that a receiver must hold
+     *                            in order to receive your broadcast.
+     *                            If empty, no permissions are required.
+     * @param options Additional sending options, generated from a
+     *                {@link android.app.BroadcastOptions}.
+     * @see #sendBroadcastMultiplePermissions(Intent, String[])
+     * @see android.app.BroadcastOptions
+     * @hide
+     */
+    public void sendBroadcastMultiplePermissions(@NonNull Intent intent,
+            @NonNull String[] receiverPermissions, @Nullable Bundle options) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * Broadcast the given intent to all interested BroadcastReceivers, allowing
      * an array of required permissions to be enforced.  This call is asynchronous; it returns
      * immediately, and you will continue executing while the receivers are run.  No results are
@@ -4128,9 +4159,11 @@ public abstract class Context {
      * Use with {@link #getSystemService(String)} to retrieve a {@link android.os.Vibrator} for
      * interacting with the vibration hardware.
      *
+     * @deprecated Use {@link android.os.VibratorManager} to retrieve the default system vibrator.
      * @see #getSystemService(String)
      * @see android.os.Vibrator
      */
+    @Deprecated
     public static final String VIBRATOR_SERVICE = "vibrator";
 
     /**
@@ -4692,10 +4725,9 @@ public abstract class Context {
      * @hide
      * @see #getSystemService(String)
      */
-    // TODO(b/176208267): change it back to translation before S release.
     @SystemApi
     @SuppressLint("ServiceName")
-    public static final String TRANSLATION_MANAGER_SERVICE = "transformer";
+    public static final String TRANSLATION_MANAGER_SERVICE = "translation";
 
     /**
      * Official published name of the translation service which supports ui translation function.
@@ -4802,6 +4834,7 @@ public abstract class Context {
      * @see #getSystemService(String)
      * @hide
      */
+    @SystemApi
     public static final String PERMISSION_CONTROLLER_SERVICE = "permission_controller";
 
     /**

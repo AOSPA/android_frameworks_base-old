@@ -1488,11 +1488,17 @@ final class SettingsState {
         if (sSystemPackages.contains(packageName)) {
             return true;
         }
+
         ApplicationInfo aInfo = null;
+        final long identity = Binder.clearCallingIdentity();
         try {
-            // Notice that this makes a call to package manager inside the lock
-            aInfo = context.getPackageManager().getApplicationInfo(packageName, 0);
-        } catch (PackageManager.NameNotFoundException ignored) {
+            try {
+                // Notice that this makes a call to package manager inside the lock
+                aInfo = context.getPackageManager().getApplicationInfo(packageName, 0);
+            } catch (PackageManager.NameNotFoundException ignored) {
+            }
+        } finally {
+            Binder.restoreCallingIdentity(identity);
         }
         return isSystemPackage(aInfo);
     }

@@ -21,6 +21,7 @@ import static android.os.BatteryStatsManager.NUM_WIFI_STATES;
 import static android.os.BatteryStatsManager.NUM_WIFI_SUPPL_STATES;
 
 import android.annotation.IntDef;
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.job.JobParameters;
@@ -2621,6 +2622,15 @@ public abstract class BatteryStats implements Parcelable {
      * {@hide}
      */
     public abstract @Nullable long[] getCustomConsumerMeasuredBatteryConsumptionUC();
+
+    /**
+     * Returns the names of all {@link android.hardware.power.stats.EnergyConsumer}'s
+     * of (custom) energy consumer type
+     * {@link android.hardware.power.stats.EnergyConsumerType#OTHER}).
+     *
+     * {@hide}
+     */
+    public abstract @NonNull String[] getCustomEnergyConsumerNames();
 
     public static final BitDescription[] HISTORY_STATE_DESCRIPTIONS = new BitDescription[] {
         new BitDescription(HistoryItem.STATE_CPU_RUNNING_FLAG, "running", "r"),
@@ -6066,7 +6076,7 @@ public abstract class BatteryStats implements Parcelable {
                     pw.print(":");
                     for (int it=0; it<types.size(); it++) {
                         pw.print(" ");
-                        pw.print(JobParameters.getLegacyReasonCodeDescription(types.keyAt(it)));
+                        pw.print(JobParameters.getInternalReasonCodeDescription(types.keyAt(it)));
                         pw.print("(");
                         pw.print(types.valueAt(it));
                         pw.print("x)");

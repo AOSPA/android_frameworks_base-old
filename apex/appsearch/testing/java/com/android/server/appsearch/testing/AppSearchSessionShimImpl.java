@@ -24,10 +24,10 @@ import android.app.appsearch.AppSearchSession;
 import android.app.appsearch.AppSearchSessionShim;
 import android.app.appsearch.BatchResultCallback;
 import android.app.appsearch.GenericDocument;
-import android.app.appsearch.GetByUriRequest;
+import android.app.appsearch.GetByDocumentIdRequest;
 import android.app.appsearch.GetSchemaResponse;
 import android.app.appsearch.PutDocumentsRequest;
-import android.app.appsearch.RemoveByUriRequest;
+import android.app.appsearch.RemoveByDocumentIdRequest;
 import android.app.appsearch.ReportUsageRequest;
 import android.app.appsearch.SearchResults;
 import android.app.appsearch.SearchResultsShim;
@@ -40,11 +40,11 @@ import android.content.Context;
 
 import androidx.test.core.app.ApplicationProvider;
 
-import com.google.common.base.Preconditions;
 import com.google.common.util.concurrent.Futures;
 import com.google.common.util.concurrent.ListenableFuture;
 import com.google.common.util.concurrent.SettableFuture;
 
+import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -81,8 +81,8 @@ public class AppSearchSessionShimImpl implements AppSearchSessionShim {
 
     private AppSearchSessionShimImpl(
             @NonNull AppSearchSession session, @NonNull ExecutorService executor) {
-        mAppSearchSession = Preconditions.checkNotNull(session);
-        mExecutor = Preconditions.checkNotNull(executor);
+        mAppSearchSession = Objects.requireNonNull(session);
+        mExecutor = Objects.requireNonNull(executor);
     }
 
     @Override
@@ -121,11 +121,12 @@ public class AppSearchSessionShimImpl implements AppSearchSessionShim {
 
     @Override
     @NonNull
-    public ListenableFuture<AppSearchBatchResult<String, GenericDocument>> getByUri(
-            @NonNull GetByUriRequest request) {
+    public ListenableFuture<AppSearchBatchResult<String, GenericDocument>> getByDocumentId(
+            @NonNull GetByDocumentIdRequest request) {
         SettableFuture<AppSearchBatchResult<String, GenericDocument>> future =
                 SettableFuture.create();
-        mAppSearchSession.getByUri(request, mExecutor, new BatchResultCallbackAdapter<>(future));
+        mAppSearchSession.getByDocumentId(
+                request, mExecutor, new BatchResultCallbackAdapter<>(future));
         return future;
     }
 
@@ -148,7 +149,7 @@ public class AppSearchSessionShimImpl implements AppSearchSessionShim {
     @Override
     @NonNull
     public ListenableFuture<AppSearchBatchResult<String, Void>> remove(
-            @NonNull RemoveByUriRequest request) {
+            @NonNull RemoveByDocumentIdRequest request) {
         SettableFuture<AppSearchBatchResult<String, Void>> future = SettableFuture.create();
         mAppSearchSession.remove(request, mExecutor, new BatchResultCallbackAdapter<>(future));
         return future;

@@ -936,7 +936,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         final boolean forcePermissionPrompt =
                 (params.installFlags & PackageManager.INSTALL_FORCE_PERMISSION_PROMPT) != 0
-                        || params.requireUserAction == SessionInfo.USER_ACTION_REQUIRED;
+                        || params.requireUserAction == SessionParams.USER_ACTION_REQUIRED;
         if (forcePermissionPrompt) {
             return USER_ACTION_REQUIRED;
         }
@@ -985,7 +985,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return USER_ACTION_REQUIRED;
         }
 
-        if (params.requireUserAction == SessionInfo.USER_ACTION_NOT_REQUIRED
+        if (params.requireUserAction == SessionParams.USER_ACTION_NOT_REQUIRED
                 && isUpdateWithoutUserActionPermissionGranted
                 && (isInstallerOfRecord || isSelfUpdate)) {
             return USER_ACTION_PENDING_APK_PARSING;
@@ -3661,12 +3661,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public DataLoaderParamsParcel getDataLoaderParams() {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         return params.dataLoaderParams != null ? params.dataLoaderParams.getData() : null;
     }
 
     @Override
     public void addFile(int location, String name, long lengthBytes, byte[] metadata,
             byte[] signature) {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         if (!isDataLoaderInstallation()) {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
@@ -3699,6 +3701,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public void removeFile(int location, String name) {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         if (!isDataLoaderInstallation()) {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
@@ -3859,13 +3862,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     }
                     sendPendingStreaming(mContext, statusReceiver, sessionId, e.getMessage());
                 }
-            }
-            @Override
-            public void reportStreamHealth(int dataLoaderId, int streamStatus) {
-                // Currently the stream status is not used during package installation. It is
-                // technically possible for the data loader to report stream status via this
-                // callback, but if something is wrong with the streaming, it is more likely that
-                // prepareDataLoaderLocked will return false and the installation will be aborted.
             }
         };
 

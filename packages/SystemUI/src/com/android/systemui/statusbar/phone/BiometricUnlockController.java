@@ -411,8 +411,18 @@ public class BiometricUnlockController extends KeyguardUpdateMonitorCallback imp
                 Trace.endSection();
                 break;
             case MODE_UNLOCK_COLLAPSING:
+                Trace.beginSection("MODE_UNLOCK_COLLAPSING");
+                if (!wasDeviceInteractive) {
+                    mPendingShowBouncer = true;
+                } else {
+                    showBouncer();
+                    mKeyguardViewController.notifyKeyguardAuthenticated(
+                            false /* strongAuth */);
+                }
+                Trace.endSection();
+                break;
             case MODE_SHOW_BOUNCER:
-                Trace.beginSection("MODE_UNLOCK_COLLAPSING or MODE_SHOW_BOUNCER");
+                Trace.beginSection("MODE_SHOW_BOUNCER");
                 if (!wasDeviceInteractive) {
                     mPendingShowBouncer = true;
                 } else {

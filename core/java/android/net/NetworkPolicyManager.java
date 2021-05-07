@@ -479,7 +479,8 @@ public class NetworkPolicyManager {
      * @param overrideMask the bitmask that specifies which of the overrides is being
      *            set or cleared.
      * @param overrideValue the override values to set or clear.
-     * @param networkTypes the network types this override applies to.
+     * @param networkTypes the network types this override applies to. If no
+     *            network types are specified, override values will be ignored.
      *            {@see TelephonyManager#getAllNetworkTypes()}
      * @param timeoutMillis the timeout after which the requested override will
      *            be automatically cleared, or {@code 0} to leave in the
@@ -766,7 +767,6 @@ public class NetworkPolicyManager {
      *                       blocked.
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @NonNull
     public static String blockedReasonsToString(int blockedReasons) {
         return DebugUtils.flagsToString(ConnectivityManager.class, "BLOCKED_", blockedReasons);

@@ -4667,19 +4667,20 @@ public final class Settings {
         public static final String AUTO_TIME_ZONE = Global.AUTO_TIME_ZONE;
 
         /**
-         * Display times as 12 or 24 hours
-         *   12
-         *   24
+         * Display the user's times, e.g. in the status bar, as 12 or 24 hours.
+         * <ul>
+         *    <li>24 = 24 hour</li>
+         *    <li>12 = 12 hour</li>
+         *    <li>[unset] = use the device locale's default</li>
+         * </ul>
          */
         @Readable
         public static final String TIME_12_24 = "time_12_24";
 
         /**
-         * Date format string
-         *   mm/dd/yyyy
-         *   dd/mm/yyyy
-         *   yyyy/mm/dd
+         * @deprecated No longer used. Use {@link #TIME_12_24} instead.
          */
+        @Deprecated
         @Readable
         public static final String DATE_FORMAT = "date_format";
 
@@ -8550,13 +8551,16 @@ public final class Settings {
                 "one_handed_tutorial_show_count";
 
         /**
-         * Indicates whether transform is enabled.
+         * Indicates whether ui translation is enabled.
          * <p>
          * Type: int (0 for false, 1 for true)
          *
          * @hide
          */
-        public static final String TRANSFORM_ENABLED = "transform_enabled";
+        @SystemApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String UI_TRANSLATION_ENABLED = "ui_translation_enabled";
 
         /**
          * The current night mode that has been selected by the user.  Owned
@@ -9144,6 +9148,20 @@ public final class Settings {
                 "biometric_debug_enabled";
 
         /**
+         * Whether or not biometric is allowed on Keyguard.
+         * @hide
+         */
+        @Readable
+        public static final String BIOMETRIC_KEYGUARD_ENABLED = "biometric_keyguard_enabled";
+
+        /**
+         * Whether or not biometric is allowed for apps (through BiometricPrompt).
+         * @hide
+         */
+        @Readable
+        public static final String BIOMETRIC_APP_ENABLED = "biometric_app_enabled";
+
+        /**
          * Whether the assist gesture should be enabled.
          *
          * @hide
@@ -9422,9 +9440,12 @@ public final class Settings {
          * 0 indicates disabled and 1 indicates enabled. A non existent value should be treated as
          * enabled.
          *
+         * @deprecated Controls are migrated to Quick Settings, rendering this unnecessary and will
+         *             be removed in a future release.
          * @hide
          */
         @Readable
+        @Deprecated
         public static final String CONTROLS_ENABLED = "controls_enabled";
 
         /**
@@ -9490,6 +9511,18 @@ public final class Settings {
         @Readable
         public static final String BUBBLE_IMPORTANT_CONVERSATIONS
                 = "bubble_important_conversations";
+
+        /**
+         * When enabled, notifications able to bubble will display an affordance allowing the user
+         * to bubble them.
+         * The value is boolean (1 to enable or 0 to disable).
+         *
+         * @hide
+         */
+        @TestApi
+        @SuppressLint("NoSettingsProvider")
+        @Readable
+        public static final String NOTIFICATION_BUBBLES = "notification_bubbles";
 
         /**
          * Whether notifications are dismissed by a right-to-left swipe (instead of a left-to-right
@@ -9940,6 +9973,14 @@ public final class Settings {
                 "clipboard_show_access_notifications";
 
         /**
+         * If nonzero, nas has not been updated to reflect new changes.
+         * @hide
+         */
+        @Readable
+        public static final String NAS_SETTINGS_UPDATED = "nas_settings_updated";
+
+
+        /**
          * These entries are considered common between the personal and the managed profile,
          * since the managed profile doesn't get to change them.
          */
@@ -9954,6 +9995,7 @@ public final class Settings {
             CLONE_TO_MANAGED_PROFILE.add(LOCATION_CHANGER);
             CLONE_TO_MANAGED_PROFILE.add(LOCATION_MODE);
             CLONE_TO_MANAGED_PROFILE.add(SHOW_IME_WITH_HARD_KEYBOARD);
+            CLONE_TO_MANAGED_PROFILE.add(NOTIFICATION_BUBBLES);
         }
 
         /** @hide */
@@ -10047,7 +10089,9 @@ public final class Settings {
          * Whether the notification bubbles are globally enabled
          * The value is boolean (1 or 0).
          * @hide
+         * @deprecated moved to secure settings.
          */
+        @Deprecated
         @TestApi
         @Readable
         public static final String NOTIFICATION_BUBBLES = "notification_bubbles";
@@ -10213,15 +10257,16 @@ public final class Settings {
         public static final int WIFI_SLEEP_POLICY_NEVER = 2;
 
         /**
-         * Value to specify if the user prefers the date, time and time zone
-         * to be automatically fetched from the network (NITZ). 1=yes, 0=no
+         * Value to specify if the device's UTC system clock should be set automatically, e.g. using
+         * telephony signals like NITZ, or other sources like GNSS or NTP. 1=yes, 0=no (manual)
          */
         @Readable
         public static final String AUTO_TIME = "auto_time";
 
         /**
-         * Value to specify if the user prefers the time zone
-         * to be automatically fetched from the network (NITZ). 1=yes, 0=no
+         * Value to specify if the device's time zone system property should be set automatically,
+         * e.g. using telephony signals like MCC and NITZ, or other mechanisms like the location.
+         * 1=yes, 0=no (manual).
          */
         @Readable
         public static final String AUTO_TIME_ZONE = "auto_time_zone";
@@ -13333,23 +13378,27 @@ public final class Settings {
                 "adb_allowed_connection_time";
 
         /**
-         * Scaling factor for normal window animations. Setting to 0 will
-         * disable window animations.
+         * Scaling factor for normal window animations.
+         *
+         * The value is a float. Setting to 0.0f will disable window animations.
          */
         @Readable
         public static final String WINDOW_ANIMATION_SCALE = "window_animation_scale";
 
         /**
-         * Scaling factor for activity transition animations. Setting to 0 will
-         * disable window animations.
+         * Scaling factor for activity transition animations.
+         *
+         * The value is a float. Setting to 0.0f will disable window animations.
          */
         @Readable
         public static final String TRANSITION_ANIMATION_SCALE = "transition_animation_scale";
 
         /**
          * Scaling factor for Animator-based animations. This affects both the
-         * start delay and duration of all such animations. Setting to 0 will
-         * cause animations to end immediately. The default value is 1.
+         * start delay and duration of all such animations.
+         *
+         * The value is a float. Setting to 0.0f will cause animations to end immediately.
+         * The default value is 1.0f.
          */
         @Readable
         public static final String ANIMATOR_DURATION_SCALE = "animator_duration_scale";
@@ -14726,6 +14775,15 @@ public final class Settings {
         public static final String POWER_BUTTON_VERY_LONG_PRESS =
                 "power_button_very_long_press";
 
+        /**
+         * Overrides internal R.integer.config_keyChordPowerVolumeUp.
+         * Allowable values detailed in frameworks/base/core/res/res/values/config.xml.
+         * Used by PhoneWindowManager.
+         * @hide
+         */
+        @Readable
+        public static final String KEY_CHORD_POWER_VOLUME_UP =
+                "key_chord_power_volume_up";
 
         /**
          * Keyguard should be on the left hand side of the screen, for wide screen layouts.
@@ -14786,7 +14844,7 @@ public final class Settings {
             MOVED_TO_SECURE.add(Global.ZEN_SETTINGS_SUGGESTION_VIEWED);
             MOVED_TO_SECURE.add(Global.CHARGING_SOUNDS_ENABLED);
             MOVED_TO_SECURE.add(Global.CHARGING_VIBRATION_ENABLED);
-
+            MOVED_TO_SECURE.add(Global.NOTIFICATION_BUBBLES);
         }
 
         /** @hide */

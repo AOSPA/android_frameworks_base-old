@@ -27,6 +27,7 @@ import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.Set;
 
 /** The response class of {@link AppSearchSession#setSchema} */
@@ -61,8 +62,8 @@ public class SetSchemaResponse {
     @Nullable private Set<String> mIncompatibleTypes;
 
     SetSchemaResponse(@NonNull Bundle bundle, @NonNull List<MigrationFailure> migrationFailures) {
-        mBundle = Preconditions.checkNotNull(bundle);
-        mMigrationFailures = Preconditions.checkNotNull(migrationFailures);
+        mBundle = Objects.requireNonNull(bundle);
+        mMigrationFailures = Objects.requireNonNull(migrationFailures);
     }
 
     SetSchemaResponse(@NonNull Bundle bundle) {
@@ -85,7 +86,7 @@ public class SetSchemaResponse {
      * <p>A {@link MigrationFailure} will be generated if the system trying to save a post-migrated
      * {@link GenericDocument} but fail.
      *
-     * <p>{@link MigrationFailure} contains the uri, namespace and schemaType of the post-migrated
+     * <p>{@link MigrationFailure} contains the namespace, id and schemaType of the post-migrated
      * {@link GenericDocument} and the error reason. Mostly it will be mismatch the schema it
      * migrated to.
      */
@@ -103,7 +104,7 @@ public class SetSchemaResponse {
         if (mDeletedTypes == null) {
             mDeletedTypes =
                     new ArraySet<>(
-                            Preconditions.checkNotNull(
+                            Objects.requireNonNull(
                                     mBundle.getStringArrayList(DELETED_TYPES_FIELD)));
         }
         return Collections.unmodifiableSet(mDeletedTypes);
@@ -118,7 +119,7 @@ public class SetSchemaResponse {
         if (mMigratedTypes == null) {
             mMigratedTypes =
                     new ArraySet<>(
-                            Preconditions.checkNotNull(
+                            Objects.requireNonNull(
                                     mBundle.getStringArrayList(MIGRATED_TYPES_FIELD)));
         }
         return Collections.unmodifiableSet(mMigratedTypes);
@@ -139,7 +140,7 @@ public class SetSchemaResponse {
         if (mIncompatibleTypes == null) {
             mIncompatibleTypes =
                     new ArraySet<>(
-                            Preconditions.checkNotNull(
+                            Objects.requireNonNull(
                                     mBundle.getStringArrayList(INCOMPATIBLE_TYPES_FIELD)));
         }
         return Collections.unmodifiableSet(mIncompatibleTypes);
@@ -173,7 +174,7 @@ public class SetSchemaResponse {
         public Builder addMigrationFailures(
                 @NonNull Collection<MigrationFailure> migrationFailures) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mMigrationFailures.addAll(Preconditions.checkNotNull(migrationFailures));
+            mMigrationFailures.addAll(Objects.requireNonNull(migrationFailures));
             return this;
         }
 
@@ -181,7 +182,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addMigrationFailure(@NonNull MigrationFailure migrationFailure) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mMigrationFailures.add(Preconditions.checkNotNull(migrationFailure));
+            mMigrationFailures.add(Objects.requireNonNull(migrationFailure));
             return this;
         }
 
@@ -189,7 +190,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addDeletedTypes(@NonNull Collection<String> deletedTypes) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mDeletedTypes.addAll(Preconditions.checkNotNull(deletedTypes));
+            mDeletedTypes.addAll(Objects.requireNonNull(deletedTypes));
             return this;
         }
 
@@ -197,7 +198,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addDeletedType(@NonNull String deletedType) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mDeletedTypes.add(Preconditions.checkNotNull(deletedType));
+            mDeletedTypes.add(Objects.requireNonNull(deletedType));
             return this;
         }
 
@@ -205,7 +206,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addIncompatibleTypes(@NonNull Collection<String> incompatibleTypes) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mIncompatibleTypes.addAll(Preconditions.checkNotNull(incompatibleTypes));
+            mIncompatibleTypes.addAll(Objects.requireNonNull(incompatibleTypes));
             return this;
         }
 
@@ -213,7 +214,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addIncompatibleType(@NonNull String incompatibleType) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mIncompatibleTypes.add(Preconditions.checkNotNull(incompatibleType));
+            mIncompatibleTypes.add(Objects.requireNonNull(incompatibleType));
             return this;
         }
 
@@ -221,7 +222,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addMigratedTypes(@NonNull Collection<String> migratedTypes) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mMigratedTypes.addAll(Preconditions.checkNotNull(migratedTypes));
+            mMigratedTypes.addAll(Objects.requireNonNull(migratedTypes));
             return this;
         }
 
@@ -229,7 +230,7 @@ public class SetSchemaResponse {
         @NonNull
         public Builder addMigratedType(@NonNull String migratedType) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mMigratedTypes.add(Preconditions.checkNotNull(migratedType));
+            mMigratedTypes.add(Objects.requireNonNull(migratedType));
             return this;
         }
 
@@ -256,14 +257,40 @@ public class SetSchemaResponse {
     public static class MigrationFailure {
         private static final String SCHEMA_TYPE_FIELD = "schemaType";
         private static final String NAMESPACE_FIELD = "namespace";
-        private static final String URI_FIELD = "uri";
+        private static final String DOCUMENT_ID_FIELD = "id";
         private static final String ERROR_MESSAGE_FIELD = "errorMessage";
         private static final String RESULT_CODE_FIELD = "resultCode";
 
         private final Bundle mBundle;
 
+        /**
+         * Constructs a new {@link MigrationFailure}.
+         *
+         * @param namespace The namespace of the document which failed to be migrated.
+         * @param documentId The id of the document which failed to be migrated.
+         * @param schemaType The type of the document which failed to be migrated.
+         * @param failedResult The reason why the document failed to be indexed.
+         * @throws IllegalArgumentException if the provided {@code failedResult} was not a failure.
+         */
+        public MigrationFailure(
+                @NonNull String namespace,
+                @NonNull String documentId,
+                @NonNull String schemaType,
+                @NonNull AppSearchResult<?> failedResult) {
+            mBundle = new Bundle();
+            mBundle.putString(NAMESPACE_FIELD, Objects.requireNonNull(namespace));
+            mBundle.putString(DOCUMENT_ID_FIELD, Objects.requireNonNull(documentId));
+            mBundle.putString(SCHEMA_TYPE_FIELD, Objects.requireNonNull(schemaType));
+
+            Objects.requireNonNull(failedResult);
+            Preconditions.checkArgument(
+                    !failedResult.isSuccess(), "failedResult was actually successful");
+            mBundle.putString(ERROR_MESSAGE_FIELD, failedResult.getErrorMessage());
+            mBundle.putInt(RESULT_CODE_FIELD, failedResult.getResultCode());
+        }
+
         MigrationFailure(@NonNull Bundle bundle) {
-            mBundle = bundle;
+            mBundle = Objects.requireNonNull(bundle);
         }
 
         /**
@@ -276,89 +303,33 @@ public class SetSchemaResponse {
             return mBundle;
         }
 
-        /** Returns the schema type of the {@link GenericDocument} that fails to be migrated. */
-        @NonNull
-        public String getSchemaType() {
-            return mBundle.getString(SCHEMA_TYPE_FIELD, /*defaultValue=*/ "");
-        }
-
-        /** Returns the namespace of the {@link GenericDocument} that fails to be migrated. */
+        /** Returns the namespace of the {@link GenericDocument} that failed to be migrated. */
         @NonNull
         public String getNamespace() {
             return mBundle.getString(NAMESPACE_FIELD, /*defaultValue=*/ "");
         }
 
-        /** Returns the uri of the {@link GenericDocument} that fails to be migrated. */
+        /** Returns the id of the {@link GenericDocument} that failed to be migrated. */
         @NonNull
-        public String getUri() {
-            return mBundle.getString(URI_FIELD, /*defaultValue=*/ "");
+        public String getDocumentId() {
+            return mBundle.getString(DOCUMENT_ID_FIELD, /*defaultValue=*/ "");
+        }
+
+        /** Returns the schema type of the {@link GenericDocument} that failed to be migrated. */
+        @NonNull
+        public String getSchemaType() {
+            return mBundle.getString(SCHEMA_TYPE_FIELD, /*defaultValue=*/ "");
         }
 
         /**
-         * Returns the {@link AppSearchResult} that indicates why the post-migrated {@link
-         * GenericDocument} fails to be saved.
+         * Returns the {@link AppSearchResult} that indicates why the post-migration {@link
+         * GenericDocument} failed to be indexed.
          */
         @NonNull
         public AppSearchResult<Void> getAppSearchResult() {
             return AppSearchResult.newFailedResult(
                     mBundle.getInt(RESULT_CODE_FIELD),
                     mBundle.getString(ERROR_MESSAGE_FIELD, /*defaultValue=*/ ""));
-        }
-
-        /** Builder for {@link MigrationFailure} objects. */
-        public static final class Builder {
-            private String mSchemaType;
-            private String mNamespace;
-            private String mUri;
-            private final Bundle mBundle = new Bundle();
-            private AppSearchResult<Void> mFailureResult;
-            private boolean mBuilt = false;
-
-            /** Sets the schema type for the {@link MigrationFailure}. */
-            @NonNull
-            public Builder setSchemaType(@NonNull String schemaType) {
-                Preconditions.checkState(!mBuilt, "Builder has already been used");
-                mSchemaType = Preconditions.checkNotNull(schemaType);
-                return this;
-            }
-
-            /** Sets the namespace for the {@link MigrationFailure}. */
-            @NonNull
-            public Builder setNamespace(@NonNull String namespace) {
-                Preconditions.checkState(!mBuilt, "Builder has already been used");
-                mNamespace = Preconditions.checkNotNull(namespace);
-                return this;
-            }
-
-            /** Sets the uri for the {@link MigrationFailure}. */
-            @NonNull
-            public Builder setUri(@NonNull String uri) {
-                Preconditions.checkState(!mBuilt, "Builder has already been used");
-                mUri = Preconditions.checkNotNull(uri);
-                return this;
-            }
-
-            /** Sets the failure {@link AppSearchResult} for the {@link MigrationFailure}. */
-            @NonNull
-            public Builder setAppSearchResult(@NonNull AppSearchResult<Void> appSearchResult) {
-                Preconditions.checkState(!mBuilt, "Builder has already been used");
-                Preconditions.checkState(!appSearchResult.isSuccess(), "Input a success result");
-                mFailureResult = Preconditions.checkNotNull(appSearchResult);
-                return this;
-            }
-
-            /** Builds a {@link MigrationFailure} object. */
-            @NonNull
-            public MigrationFailure build() {
-                Preconditions.checkState(!mBuilt, "Builder has already been used");
-                mBundle.putString(SCHEMA_TYPE_FIELD, mSchemaType);
-                mBundle.putString(NAMESPACE_FIELD, mNamespace);
-                mBundle.putString(URI_FIELD, mUri);
-                mBundle.putString(ERROR_MESSAGE_FIELD, mFailureResult.getErrorMessage());
-                mBundle.putInt(RESULT_CODE_FIELD, mFailureResult.getResultCode());
-                mBuilt = true;
-                return new MigrationFailure(mBundle);
-            }
         }
     }
 }

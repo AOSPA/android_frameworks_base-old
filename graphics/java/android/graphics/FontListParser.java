@@ -56,6 +56,7 @@ public class FontListParser {
     // XML constants for Font.
     public static final String ATTR_INDEX = "index";
     public static final String ATTR_WEIGHT = "weight";
+    public static final String ATTR_POSTSCRIPT_NAME = "postScriptName";
     public static final String ATTR_STYLE = "style";
     public static final String ATTR_FALLBACK_FOR = "fallbackFor";
     public static final String STYLE_ITALIC = "italic";
@@ -209,6 +210,7 @@ public class FontListParser {
         int weight = weightStr == null ? FontStyle.FONT_WEIGHT_NORMAL : Integer.parseInt(weightStr);
         boolean isItalic = STYLE_ITALIC.equals(parser.getAttributeValue(null, ATTR_STYLE));
         String fallbackFor = parser.getAttributeValue(null, ATTR_FALLBACK_FOR);
+        String postScriptName = parser.getAttributeValue(null, ATTR_POSTSCRIPT_NAME);
         StringBuilder filename = new StringBuilder();
         while (keepReading(parser)) {
             if (parser.getEventType() == XmlPullParser.TEXT) {
@@ -223,7 +225,14 @@ public class FontListParser {
             }
         }
         String sanitizedName = FILENAME_WHITESPACE_PATTERN.matcher(filename).replaceAll("");
-        String updatedName = findUpdatedFontFile(sanitizedName, updatableFontMap);
+
+        if (postScriptName == null) {
+            // If post script name was not provided, assume the file name is same to PostScript
+            // name.
+            postScriptName = sanitizedName.substring(0, sanitizedName.length() - 4);
+        }
+
+        String updatedName = findUpdatedFontFile(postScriptName, updatableFontMap);
         String filePath;
         String originalPath;
         if (updatedName != null) {
@@ -242,8 +251,13 @@ public class FontListParser {
                     axes.toArray(new FontVariationAxis[0]));
         }
 
-        return new FontConfig.Font(new File(filePath),
+        File file = new File(filePath);
+
+
+
+        return new FontConfig.Font(file,
                 originalPath == null ? null : new File(originalPath),
+                postScriptName,
                 new FontStyle(
                         weight,
                         isItalic ? FontStyle.FONT_SLANT_ITALIC : FontStyle.FONT_SLANT_UPRIGHT
@@ -253,10 +267,10 @@ public class FontListParser {
                 fallbackFor);
     }
 
-    private static String findUpdatedFontFile(String name,
+    private static String findUpdatedFontFile(String psName,
             @Nullable Map<String, File> updatableFontMap) {
         if (updatableFontMap != null) {
-            File updatedFile = updatableFontMap.get(name);
+            File updatedFile = updatableFontMap.get(psName);
             if (updatedFile != null) {
                 return updatedFile.getAbsolutePath();
             }

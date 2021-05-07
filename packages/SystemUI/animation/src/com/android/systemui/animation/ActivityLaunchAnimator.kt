@@ -31,14 +31,16 @@ class ActivityLaunchAnimator(context: Context) {
     companion object {
         const val ANIMATION_DURATION = 500L
         const val ANIMATION_DURATION_FADE_OUT_CONTENT = 183L
-        const val ANIMATION_DURATION_FADE_IN_WINDOW = 216L
-        const val ANIMATION_DELAY_FADE_IN_WINDOW = 166L
+        const val ANIMATION_DURATION_FADE_IN_WINDOW = 217L
+        const val ANIMATION_DELAY_FADE_IN_WINDOW = 167L
         private const val ANIMATION_DURATION_NAV_FADE_IN = 266L
         private const val ANIMATION_DURATION_NAV_FADE_OUT = 133L
         private const val ANIMATION_DELAY_NAV_FADE_IN =
                 ANIMATION_DURATION - ANIMATION_DURATION_NAV_FADE_IN
         private const val LAUNCH_TIMEOUT = 1000L
 
+        @JvmField val CONTENT_FADE_OUT_INTERPOLATOR = PathInterpolator(0f, 0f, 0.2f, 1f)
+        private val WINDOW_FADE_IN_INTERPOLATOR = PathInterpolator(0f, 0f, 0.6f, 1f)
         private val NAV_FADE_IN_INTERPOLATOR = PathInterpolator(0f, 0f, 0f, 1f)
         private val NAV_FADE_OUT_INTERPOLATOR = PathInterpolator(0.2f, 0f, 1f, 1f)
 
@@ -223,8 +225,13 @@ class ActivityLaunchAnimator(context: Context) {
         var backgroundAlpha: Float = 1f
     ) {
         private val startTop = top
+        private val startBottom = bottom
         private val startLeft = left
         private val startRight = right
+        private val startWidth = width
+        private val startHeight = height
+        val startCenterX = centerX
+        val startCenterY = centerY
 
         val width: Int
             get() = right - left
@@ -235,11 +242,26 @@ class ActivityLaunchAnimator(context: Context) {
         open val topChange: Int
             get() = top - startTop
 
+        open val bottomChange: Int
+            get() = bottom - startBottom
+
         val leftChange: Int
             get() = left - startLeft
 
         val rightChange: Int
             get() = right - startRight
+
+        val widthRatio: Float
+            get() = width.toFloat() / startWidth
+
+        val heightRatio: Float
+            get() = height.toFloat() / startHeight
+
+        val centerX: Float
+            get() = left + width / 2f
+
+        val centerY: Float
+            get() = top + height / 2f
     }
 
     @VisibleForTesting
@@ -293,12 +315,14 @@ class ActivityLaunchAnimator(context: Context) {
             }
 
             context.mainExecutor.execute {
-                startAnimation(remoteAnimationTargets, iRemoteAnimationFinishedCallback)
+                startAnimation(remoteAnimationTargets, remoteAnimationNonAppTargets,
+                        iRemoteAnimationFinishedCallback)
             }
         }
 
         private fun startAnimation(
             remoteAnimationTargets: Array<out RemoteAnimationTarget>,
+            remoteAnimationNonAppTargets: Array<out RemoteAnimationTarget>,
             iCallback: IRemoteAnimationFinishedCallback
         ) {
             val window = remoteAnimationTargets.firstOrNull {
@@ -312,7 +336,7 @@ class ActivityLaunchAnimator(context: Context) {
                 return
             }
 
-            val navigationBar = remoteAnimationTargets.firstOrNull {
+            val navigationBar = remoteAnimationNonAppTargets.firstOrNull {
                 it.windowType == WindowManager.LayoutParams.TYPE_NAVIGATION_BAR
             }
 
@@ -396,12 +420,12 @@ class ActivityLaunchAnimator(context: Context) {
                 val contentAlphaProgress = getProgress(linearProgress, 0,
                         ANIMATION_DURATION_FADE_OUT_CONTENT)
                 state.contentAlpha =
-                        1 - Interpolators.ALPHA_OUT.getInterpolation(contentAlphaProgress)
+                        1 - CONTENT_FADE_OUT_INTERPOLATOR.getInterpolation(contentAlphaProgress)
 
                 val backgroundAlphaProgress = getProgress(linearProgress,
                         ANIMATION_DELAY_FADE_IN_WINDOW, ANIMATION_DURATION_FADE_IN_WINDOW)
                 state.backgroundAlpha =
-                        1 - Interpolators.ALPHA_IN.getInterpolation(backgroundAlphaProgress)
+                        1 - WINDOW_FADE_IN_INTERPOLATOR.getInterpolation(backgroundAlphaProgress)
 
                 applyStateToWindow(window, state)
                 navigationBar?.let { applyStateToNavigationBar(it, state, linearProgress) }
