@@ -26,7 +26,9 @@ import android.os.PowerManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.telecom.TelecomManager;
+import android.telephony.CellInfo;
 import android.telephony.ServiceState;
+import android.telephony.SubscriptionManager;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 
@@ -40,6 +42,7 @@ import com.android.systemui.statusbar.policy.ConfigurationController.Configurati
 import com.android.systemui.util.EmergencyDialerConstants;
 import com.android.systemui.util.ViewController;
 
+import java.util.List;
 import javax.inject.Inject;
 
 /** View Controller for {@link com.android.keyguard.EmergencyButton}. */
@@ -55,22 +58,28 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
     private final MetricsLogger mMetricsLogger;
 
     private EmergencyButtonCallback mEmergencyButtonCallback;
+    private boolean mIsCellAvailable;
+    private ServiceState mServiceState;
 
     private final KeyguardUpdateMonitorCallback mInfoCallback =
             new KeyguardUpdateMonitorCallback() {
         @Override
         public void onSimStateChanged(int subId, int slotId, int simState) {
             updateEmergencyCallButton();
+            requestCellInfoUpdate();
         }
 
         @Override
         public void onPhoneStateChanged(int phoneState) {
             updateEmergencyCallButton();
+            requestCellInfoUpdate();
         }
 
         @Override
         public void onServiceStateChanged(int subId, ServiceState state) {
+            mServiceState = state;
             updateEmergencyCallButton();
+            requestCellInfoUpdate();
         }
     };
 
@@ -119,7 +128,8 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
             mView.updateEmergencyCallButton(
                     mTelecomManager != null && mTelecomManager.isInCall(),
                     mTelephonyManager.isVoiceCapable(),
-                    mKeyguardUpdateMonitor.isSimPinVoiceSecure());
+                    mKeyguardUpdateMonitor.isSimPinVoiceSecure(),
+                    isEmergencyCapable());
         }
     }
 
@@ -158,6 +168,33 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
                     ActivityOptions.makeCustomAnimation(getContext(), 0, 0).toBundle(),
                     new UserHandle(KeyguardUpdateMonitor.getCurrentUser()));
         }
+    }
+
+    private void requestCellInfoUpdate(){
+        TelephonyManager tmWithoutSim = mTelephonyManager
+                .createForSubscriptionId(SubscriptionManager.INVALID_SUBSCRIPTION_ID);
+        tmWithoutSim.requestCellInfoUpdate(getContext().getMainExecutor(),
+                new TelephonyManager.CellInfoCallback() {
+                    @Override
+                    public void onCellInfo(List<CellInfo> cellInfo) {
+                        if (KeyguardConstants.DEBUG_SIM_STATES) {
+                            Log.d(LOG_TAG, "requestCellInfoUpdate.onCellInfo cellInfoList.size="
+                                    + (cellInfo == null ? 0 : cellInfo.size()));
+                        }
+                        if ( cellInfo == null || cellInfo.isEmpty()) {
+                            mIsCellAvailable = false;
+                        }else{
+                            mIsCellAvailable = true;
+                        }
+                        updateEmergencyCallButton();
+                    }
+                });
+    }
+
+    private boolean isEmergencyCapable() {
+        return (!mKeyguardUpdateMonitor.isOOS()
+                || mIsCellAvailable
+                || (mServiceState !=null && mServiceState.isEmergencyOnly()));
     }
 
     /** */
