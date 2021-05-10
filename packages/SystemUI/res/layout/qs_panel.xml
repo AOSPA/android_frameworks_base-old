@@ -59,16 +59,17 @@
             android:id="@+id/quick_settings_panel"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
+            android:layout_marginBottom="10dp"
             android:background="@android:color/transparent"
             android:focusable="true"
             android:accessibilityTraversalBefore="@android:id/edit">
             <include layout="@layout/qs_footer_impl" />
-            <include layout="@layout/qs_media_divider"
-                android:id="@+id/divider"/>
         </com.android.systemui.qs.QSPanel>
     </com.android.systemui.qs.NonInterceptingScrollView>
 
     <include layout="@layout/quick_status_bar_expanded_header" />
+
+    <include layout="@layout/op_qs_footer_layout" />
 
     <include android:id="@+id/qs_detail" layout="@layout/qs_detail" />
 
