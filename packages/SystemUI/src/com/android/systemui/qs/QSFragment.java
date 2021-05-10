@@ -77,6 +77,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private QSContainerImpl mContainer;
     private int mLayoutDirection;
     private QSFooter mFooter;
+    private OPQSFooter mOPFooter;
     private float mLastQSExpansion = -1;
     private boolean mQsDisabled;
 
@@ -137,6 +138,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mHeader = view.findViewById(R.id.header);
         mQSPanel.setHeaderContainer(view.findViewById(R.id.header_text_container));
         mFooter = view.findViewById(R.id.qs_footer);
+        mOPFooter = view.findViewById(R.id.op_qs_footer);
         mContainer = view.findViewById(id.quick_settings_container);
 
         mQSContainerImplController = mQSContainerImplControllerBuilder
@@ -146,7 +148,6 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
         mQSDetail.setQsPanel(mQSPanel, mHeader, (View) mFooter);
         mQSAnimator = new QSAnimator(this, mHeader.findViewById(R.id.quick_qs_panel), mQSPanel);
-
 
         mQSCustomizer = view.findViewById(R.id.qs_customize);
         mQSCustomizer.setQs(this);
@@ -177,6 +178,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mStatusBarStateController.removeCallback(this);
         if (mListening) {
             setListening(false);
+            mQSPanel.setBrightnessListening(false);
         }
         mQSCustomizer.setQs(null);
     }
@@ -339,6 +341,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setExpanded(boolean expanded) {
         if (DEBUG) Log.d(TAG, "setExpanded " + expanded);
         mQsExpanded = expanded;
+        mOPFooter.setExpanded(mQsExpanded);
         mQSPanel.setListening(mListening, mQsExpanded);
         updateQsState();
     }
@@ -376,6 +379,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setHeaderListening(boolean listening) {
         mHeader.setListening(listening);
         mFooter.setListening(listening);
+        mQSPanel.setBrightnessListening(listening);
     }
 
     @Override
@@ -391,6 +395,9 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                             : headerTranslation);
         }
         int currentHeight = getView().getHeight();
+        if (mLastHeaderTranslation != headerTranslation || mLastQSExpansion != expansion) {
+            mQSPanel.notifyExpansion();
+        }
         mLastHeaderTranslation = headerTranslation;
         if (expansion == mLastQSExpansion && mLastKeyguardAndExpanded == onKeyguardAndExpanded
                 && mLastViewHeight == currentHeight) {
@@ -410,6 +417,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mHeader.setExpansion(onKeyguardAndExpanded, expansion,
                 panelTranslationY);
         mFooter.setExpansion(onKeyguardAndExpanded ? 1 : expansion);
+        mOPFooter.setExpansion(onKeyguardAndExpanded ? 1 : expansion);
         mQSPanel.getQsTileRevealController().setExpansion(expansion);
         mQSPanel.getTileLayout().setExpansion(expansion);
         mQSPanelScrollView.setTranslationY(translationScaleY * heightDiff);
