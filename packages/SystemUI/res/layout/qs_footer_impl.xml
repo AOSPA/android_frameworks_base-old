@@ -20,20 +20,29 @@
     xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/qs_footer"
     android:layout_width="match_parent"
-    android:layout_height="@dimen/qs_footer_height"
+    android:layout_height="@dimen/qs_page_indicator_height"
     android:layout_marginStart="@dimen/qs_footer_margin"
     android:layout_marginEnd="@dimen/qs_footer_margin"
+    android:layout_marginBottom="@dimen/op_qs_footer_bottom_margin"
     android:background="@android:color/transparent"
     android:baselineAligned="false"
     android:clickable="false"
     android:clipChildren="false"
     android:clipToPadding="false">
 
+    <com.android.systemui.qs.PageIndicator
+        android:id="@+id/footer_page_indicator"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center"
+        android:visibility="gone" />
+
     <LinearLayout
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_gravity="center_vertical"
-        android:gravity="end" >
+        android:gravity="end"
+        android:visibility="gone" >
 
         <com.android.keyguard.AlphaOptimizedLinearLayout
             android:id="@+id/qs_footer_actions_edit_container"
@@ -67,13 +76,6 @@
                 android:layout_marginEnd="4dp"
                 android:visibility="gone"/>
          </com.android.keyguard.AlphaOptimizedLinearLayout>
-
-        <com.android.systemui.qs.PageIndicator
-            android:id="@+id/footer_page_indicator"
-            android:layout_width="wrap_content"
-            android:layout_height="match_parent"
-            android:layout_gravity="center_vertical"
-            android:visibility="gone" />
 
         <com.android.keyguard.AlphaOptimizedLinearLayout
             android:id="@+id/qs_footer_actions_container"

@@ -63,6 +63,9 @@ public class QSContainerImpl extends FrameLayout {
     private QSCustomizer mQSCustomizer;
     private View mDragHandle;
     private View mQSPanelContainer;
+    private OPQSFooter mOPFooter;
+    private boolean mIsLandscape;
+    private boolean mQQSMediaVisible;
 
     private View mBackground;
     private View mBackgroundGradient;
@@ -87,6 +90,7 @@ public class QSContainerImpl extends FrameLayout {
         mHeader = findViewById(R.id.header);
         mQSCustomizer = findViewById(R.id.qs_customize);
         mDragHandle = findViewById(R.id.qs_drag_handle_view);
+        mOPFooter = findViewById(R.id.op_qs_footer);
         mBackground = findViewById(R.id.quick_settings_background);
         mStatusBarBackground = findViewById(R.id.quick_settings_status_bar_background);
         mBackgroundGradient = findViewById(R.id.quick_settings_gradient_view);
@@ -95,6 +99,7 @@ public class QSContainerImpl extends FrameLayout {
             if (mHeader.getHeaderQsPanel().isShown()) {
                 mAnimateBottomOnNextLayout = true;
             }
+            mQQSMediaVisible = visible;
         });
         mQSPanel.setMediaVisibilityChangedListener((visible) -> {
             if (mQSPanel.isShown()) {
@@ -102,6 +107,7 @@ public class QSContainerImpl extends FrameLayout {
             }
         });
 
+        mQSPanel.setOPFooter(mOPFooter);
 
         setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
     }
@@ -124,6 +130,7 @@ public class QSContainerImpl extends FrameLayout {
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         setBackgroundGradientVisibility(newConfig);
+        mIsLandscape = (newConfig.orientation == ORIENTATION_LANDSCAPE);
         updateResources();
         mSizePoint.set(0, 0); // Will be retrieved on next measure pass.
     }
@@ -163,12 +170,16 @@ public class QSContainerImpl extends FrameLayout {
                 + mQSPanelContainer.getMeasuredHeight() + getPaddingBottom();
         super.onMeasure(MeasureSpec.makeMeasureSpec(width, MeasureSpec.EXACTLY),
                 MeasureSpec.makeMeasureSpec(height, MeasureSpec.EXACTLY));
+
+        // Make QS header accomodate the brightness slider
+        mHeader.measure(widthMeasureSpec, MeasureSpec.makeMeasureSpec(mHeader.getMeasuredHeight()
+                + mQSPanel.getFooterHeight(mIsLandscape && !mQQSMediaVisible), MeasureSpec.EXACTLY));
+
         // QSCustomizer will always be the height of the screen, but do this after
         // other measuring to avoid changing the height of the QS.
         mQSCustomizer.measure(widthMeasureSpec,
                 MeasureSpec.makeMeasureSpec(getDisplayHeight(), MeasureSpec.EXACTLY));
     }
-
 
     @Override
     protected void measureChildWithMargins(View child, int parentWidthMeasureSpec, int widthUsed,
@@ -187,6 +198,7 @@ public class QSContainerImpl extends FrameLayout {
         super.onLayout(changed, left, top, right, bottom);
         updateExpansion(mAnimateBottomOnNextLayout /* animate */);
         mAnimateBottomOnNextLayout = false;
+        mOPFooter.updateAnimators();
     }
 
     public void disable(int state1, int state2, boolean animate) {
@@ -236,6 +248,10 @@ public class QSContainerImpl extends FrameLayout {
         mQSDetail.setBottom(getTop() + height);
         // Pin the drag handle to the bottom of the panel.
         mDragHandle.setTranslationY(height - mDragHandle.getHeight());
+
+        if (!mQSCustomizer.isCustomizing()) {
+            mOPFooter.setTranslationY(height - mOPFooter.getMeasuredHeight());
+        }
         mBackground.setTop(mQSPanelContainer.getTop());
         updateBackgroundBottom(height, animate);
     }
@@ -295,6 +311,8 @@ public class QSContainerImpl extends FrameLayout {
                 // The header contains the QQS panel which needs to have special padding, to
                 // visually align them.
                 mHeader.setContentMargins(mContentPaddingStart, mContentPaddingEnd);
+            } else if (view == mOPFooter) {
+                continue;
             } else {
                 view.setPaddingRelative(
                         mContentPaddingStart,
