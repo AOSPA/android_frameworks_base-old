@@ -1121,7 +1121,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             // Need to stay at BLE ON. Disconnect all Gatt connections
             try {
                 if (mBluetoothGatt != null) {
-                    mBluetoothGatt.unregAll(attributionSource());
+                    mBluetoothGatt.unregAll(attributionSource);
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Unable to disconnect all apps.", e);
@@ -1250,7 +1250,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     if (mBluetooth != null) {
                         if(mBluetooth.getState() == BluetoothAdapter.STATE_BLE_ON) {
                             mEnable = false;
-                            mBluetooth.onBrEdrDown();
+                            mBluetooth.onBrEdrDown(attributionSource);
                         } else {
                             sendDisableMsg(BluetoothProtoEnums.ENABLE_DISABLE_REASON_SYSTEM_BOOT,
                                     packageName);
@@ -1884,20 +1884,20 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 handleEnable(mQuietEnable);
             } else if (state == BluetoothAdapter.STATE_OFF) {
                 mEnable = true;
-                mBluetooth.factoryReset();
+                mBluetooth.factoryReset(mContext.getAttributionSource());
                 handleEnable(mQuietEnable);
             } else if (state == BluetoothAdapter.STATE_BLE_ON) {
                 addActiveLog(
                 BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
                 mContext.getPackageName(), false);
-                mBluetooth.onBrEdrDown();
-                return mBluetooth.factoryReset();
+                mBluetooth.onBrEdrDown(mContext.getAttributionSource());
+                return mBluetooth.factoryReset(mContext.getAttributionSource());
             } else if (state == BluetoothAdapter.STATE_ON) {
                 addActiveLog(
                 BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
                 mContext.getPackageName(), false);
                 mBluetooth.disable(mContext.getAttributionSource());
-                return mBluetooth.factoryReset();
+                return mBluetooth.factoryReset(mContext.getAttributionSource());
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "factoryReset(): Unable to do factoryReset.", e);
@@ -2175,7 +2175,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                 mBluetoothLock.readLock().lock();
                                 if (mBluetooth != null) {
                                     mBluetooth.updateQuietModeStatus(mQuietEnable);
-                                    mBluetooth.onLeServiceUp();
+                                    mBluetooth.onLeServiceUp(mContext.getAttributionSource());
                                 }
                            } catch (RemoteException e) {
                                 Slog.e(TAG, "", e);
