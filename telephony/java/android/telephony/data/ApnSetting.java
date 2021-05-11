@@ -2224,7 +2224,7 @@ public class ApnSetting implements Parcelable {
         /**
          * Builds {@link ApnSetting} from this builder.
          *
-         * @return {@code null} if {@link #setApnName(String)} or {@link #setEntryName(String)}
+         * @return {@code null} if {@link #setEntryName(String)}
          * is empty, or {@link #setApnTypeBitmask(int)} doesn't contain a valid bit,
          * {@link ApnSetting} built from this builder otherwise.
          */
@@ -2232,7 +2232,7 @@ public class ApnSetting implements Parcelable {
             if ((mApnTypeBitmask & (TYPE_DEFAULT | TYPE_MMS | TYPE_SUPL | TYPE_DUN | TYPE_HIPRI
                     | TYPE_FOTA | TYPE_IMS | TYPE_CBS | TYPE_IA | TYPE_EMERGENCY | TYPE_MCX
                     | TYPE_XCAP | TYPE_VSIM | TYPE_BIP | TYPE_ENTERPRISE)) == 0
-                || TextUtils.isEmpty(mApnName) || TextUtils.isEmpty(mEntryName)) {
+                || TextUtils.isEmpty(mEntryName)) {
                 return null;
             }
             return new ApnSetting(this);

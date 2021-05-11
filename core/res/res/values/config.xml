@@ -4892,4 +4892,7 @@
     <bool name="config_supportsMicToggle">false</bool>
     <!-- Whether this device is supporting the camera toggle -->
     <bool name="config_supportsCamToggle">false</bool>
+
+    <!-- Configure emergency apn -->
+    <string name="config_emergency_apn" translatable="false">sos</string>
 </resources>
