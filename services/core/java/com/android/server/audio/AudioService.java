@@ -254,6 +254,9 @@ public class AudioService extends IAudioService.Stub
     // indicates whether the system maps all streams to a single stream.
     private final boolean mIsSingleVolume;
 
+    private static HashMap<String, String> mCachedParams =
+        new HashMap<String, String>();
+
     /*package*/ boolean isPlatformVoice() {
         return mPlatformType == AudioSystem.PLATFORM_VOICE;
     }
@@ -1001,6 +1004,15 @@ public class AudioService extends IAudioService.Stub
         // done with service initialization, continue additional work in our Handler thread
         queueMsgUnderWakeLock(mAudioHandler, MSG_INIT_STREAMS_VOLUMES,
                 0 /* arg1 */,  0 /* arg2 */, null /* obj */,  0 /* delay */);
+
+        mCachedParams.put("hdr_record_on", "false");
+        mCachedParams.put("wnr_on", "false");
+        mCachedParams.put("ans_on", "false");
+        mCachedParams.put("orientation", "landscape");
+        mCachedParams.put("inverted", "false");
+        mCachedParams.put("facing", "none");
+        mCachedParams.put("hdr_audio_channel_count", "0");
+        mCachedParams.put("hdr_audio_sampling_rate", "0");
     }
 
     /**
@@ -1259,6 +1271,26 @@ public class AudioService extends IAudioService.Stub
         // Note that we only execute this when the media server
         // process restarts after a crash, not the first time it is started.
         AudioSystem.setParameters("restarting=true");
+
+        // Restore cached parameters
+        String params = new String("");
+        Log.i(TAG, "Cached params " + mCachedParams.toString());
+        for (HashMap.Entry<String, String> parm : mCachedParams.entrySet()) {
+            if (!params.isEmpty()) {
+                params += ";";
+            }
+            Log.i(TAG, "Key " + parm.getKey() + " Value " + parm.getValue());
+            params += parm.getKey();
+            params += "=";
+            params += parm.getValue();
+            Log.i(TAG, "Params " + params);
+        }
+        if (!params.isEmpty()) {
+            Log.i(TAG, "Restore params " + params);
+            AudioSystem.setParameters(params);
+        } else {
+            Log.i(TAG, "Empty cached params " + params);
+        }
 
         readAndSetLowRamDevice();
 
@@ -10249,6 +10281,17 @@ public class AudioService extends IAudioService.Stub
                 if (!enabled) {
                     mDeviceBroker.postBroadcastBecomingNoisy();
                 }
+            }
+        }
+    }
+
+    public void cacheParameters(String keyValuePairs) {
+        String[] kvpairs = keyValuePairs.split(";");
+        for (String pair : kvpairs) {
+            String[] kv = pair.split("=");
+            if (mCachedParams.containsKey(kv[0])) {
+                String oldVal = mCachedParams.put(kv[0], kv[1]);
+                Slog.w(TAG, "Updated cached param " + kv[0] + " from " + oldVal + " to " +  kv[1]);
             }
         }
     }

@@ -3266,6 +3266,12 @@ public class AudioManager {
      */
     public void setParameters(String keyValuePairs) {
         AudioSystem.setParameters(keyValuePairs);
+        final IAudioService service = getService();
+        try {
+            service.cacheParameters(keyValuePairs);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 
     /**
