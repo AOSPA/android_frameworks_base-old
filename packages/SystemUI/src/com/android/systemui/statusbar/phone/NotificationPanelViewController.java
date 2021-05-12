@@ -77,6 +77,8 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.LatencyTracker;
+import com.android.keyguard.EmergencyButton;
+import com.android.keyguard.EmergencyButtonController;
 import com.android.keyguard.KeyguardStatusView;
 import com.android.keyguard.KeyguardStatusViewController;
 import com.android.keyguard.KeyguardUpdateMonitor;
@@ -322,6 +324,9 @@ public class NotificationPanelViewController extends PanelViewController {
     private LockIconViewController mLockIconViewController;
     private NotificationsQuickSettingsContainer mNotificationContainerParent;
     private boolean mAnimateNextPositionUpdate;
+
+    private final EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
+    private EmergencyButtonController mEmergencyButtonController;
 
     private int mTrackingPointer;
     private VelocityTracker mQsVelocityTracker;
@@ -584,7 +589,8 @@ public class NotificationPanelViewController extends PanelViewController {
             LockIconViewController lockIconViewController,
             FeatureFlags featureFlags,
             QuickAccessWalletClient quickAccessWalletClient,
-            @Main Executor uiExecutor) {
+            @Main Executor uiExecutor,
+            EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         super(view, falsingManager, dozeLog, keyguardStateController,
                 (SysuiStatusBarStateController) statusBarStateController, vibratorHelper,
                 statusBarKeyguardViewManager, latencyTracker, flingAnimationUtilsBuilder.get(),
@@ -605,6 +611,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mFeatureFlags = featureFlags;
         mKeyguardQsUserSwitchComponentFactory = keyguardQsUserSwitchComponentFactory;
         mKeyguardUserSwitcherComponentFactory = keyguardUserSwitcherComponentFactory;
+        mEmergencyButtonControllerFactory = emergencyButtonControllerFactory;
         mQSDetailDisplayer = qsDetailDisplayer;
         mKeyguardUserSwitcherEnabled = mResources.getBoolean(
                 com.android.internal.R.bool.config_keyguardUserSwitcher);
@@ -986,6 +993,10 @@ public class NotificationPanelViewController extends PanelViewController {
         mKeyguardBottomArea.setFalsingManager(mFalsingManager);
         mKeyguardBottomArea.initWallet(mQuickAccessWalletClient, mUiExecutor,
                 mFeatureFlags.isQuickAccessWalletEnabled());
+        EmergencyButton emergencyButton =
+                mKeyguardBottomArea.findViewById(R.id.emergency_call_button);
+        mEmergencyButtonController = mEmergencyButtonControllerFactory.create(emergencyButton);
+        mEmergencyButtonController.init();
     }
 
     private void updateMaxDisplayedNotifications(boolean recompute) {
