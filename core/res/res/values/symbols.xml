@@ -4386,4 +4386,6 @@
 
   <java-symbol type="bool" name="config_supportsMicToggle" />
   <java-symbol type="bool" name="config_supportsCamToggle" />
+
+  <java-symbol type="string" name="config_emergency_apn" />
 </resources>
