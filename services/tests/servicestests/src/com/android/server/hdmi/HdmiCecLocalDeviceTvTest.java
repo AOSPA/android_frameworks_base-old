@@ -61,6 +61,7 @@ import java.util.ArrayList;
 @RunWith(JUnit4.class)
 /** Tests for {@link HdmiCecLocalDeviceTv} class. */
 public class HdmiCecLocalDeviceTvTest {
+    private static final int TIMEOUT_MS = HdmiConfig.TIMEOUT_MS + 1;
 
     private HdmiControlService mHdmiControlService;
     private HdmiCecController mHdmiCecController;

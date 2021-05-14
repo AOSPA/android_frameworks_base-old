@@ -116,18 +116,20 @@ public class ConversationLayout extends FrameLayout
     private ViewGroup mExpandButtonAndContentContainer;
     private NotificationExpandButton mExpandButton;
     private MessagingLinearLayout mImageMessageContainer;
-    private int mBadgedSideMargins;
+    private int mBadgeProtrusion;
     private int mConversationAvatarSize;
     private int mConversationAvatarSizeExpanded;
     private CachingIconView mIcon;
     private CachingIconView mImportanceRingView;
-    private int mExpandedGroupSideMargin;
-    private int mExpandedGroupSideMarginFacePile;
+    private int mExpandedGroupBadgeProtrusion;
+    private int mExpandedGroupBadgeProtrusionFacePile;
     private View mConversationFacePile;
     private int mNotificationBackgroundColor;
     private CharSequence mFallbackChatName;
     private CharSequence mFallbackGroupChatName;
     private CharSequence mConversationTitle;
+    private int mMessageSpacingStandard;
+    private int mMessageSpacingGroup;
     private int mNotificationHeaderExpandedPadding;
     private View mConversationHeader;
     private View mContentContainer;
@@ -241,12 +243,16 @@ public class ConversationLayout extends FrameLayout
         mContentContainer = findViewById(R.id.notification_action_list_margin_target);
         mExpandButtonAndContentContainer = findViewById(R.id.expand_button_and_content_container);
         mExpandButton = findViewById(R.id.expand_button);
+        mMessageSpacingStandard = getResources().getDimensionPixelSize(
+                R.dimen.notification_messaging_spacing);
+        mMessageSpacingGroup = getResources().getDimensionPixelSize(
+                R.dimen.notification_messaging_spacing_conversation_group);
         mNotificationHeaderExpandedPadding = getResources().getDimensionPixelSize(
                 R.dimen.conversation_header_expanded_padding_end);
         mContentMarginEnd = getResources().getDimensionPixelSize(
                 R.dimen.notification_content_margin_end);
-        mBadgedSideMargins = getResources().getDimensionPixelSize(
-                R.dimen.conversation_badge_side_margin);
+        mBadgeProtrusion = getResources().getDimensionPixelSize(
+                R.dimen.conversation_badge_protrusion);
         mConversationAvatarSize = getResources().getDimensionPixelSize(
                 R.dimen.conversation_avatar_size);
         mConversationAvatarSizeExpanded = getResources().getDimensionPixelSize(
@@ -257,10 +263,10 @@ public class ConversationLayout extends FrameLayout
                 R.dimen.conversation_icon_container_top_padding);
         mExpandedGroupMessagePadding = getResources().getDimensionPixelSize(
                 R.dimen.expanded_group_conversation_message_padding);
-        mExpandedGroupSideMargin = getResources().getDimensionPixelSize(
-                R.dimen.conversation_badge_side_margin_group_expanded);
-        mExpandedGroupSideMarginFacePile = getResources().getDimensionPixelSize(
-                R.dimen.conversation_badge_side_margin_group_expanded_face_pile);
+        mExpandedGroupBadgeProtrusion = getResources().getDimensionPixelSize(
+                R.dimen.conversation_badge_protrusion_group_expanded);
+        mExpandedGroupBadgeProtrusionFacePile = getResources().getDimensionPixelSize(
+                R.dimen.conversation_badge_protrusion_group_expanded_face_pile);
         mConversationFacePile = findViewById(R.id.conversation_face_pile);
         mFacePileAvatarSize = getResources().getDimensionPixelSize(
                 R.dimen.conversation_face_pile_avatar_size);
@@ -640,7 +646,7 @@ public class ConversationLayout extends FrameLayout
             facepileAvatarSize = mFacePileAvatarSizeExpandedGroup;
             facePileBackgroundSize = facepileAvatarSize + 2 * mFacePileProtectionWidthExpanded;
         }
-        LayoutParams layoutParams = (LayoutParams) mConversationIconView.getLayoutParams();
+        LayoutParams layoutParams = (LayoutParams) mConversationFacePile.getLayoutParams();
         layoutParams.width = conversationAvatarSize;
         layoutParams.height = conversationAvatarSize;
         mConversationFacePile.setLayoutParams(layoutParams);
@@ -673,32 +679,42 @@ public class ConversationLayout extends FrameLayout
      * update the icon position and sizing
      */
     private void updateIconPositionAndSize() {
-        int sidemargin;
+        int badgeProtrusion;
         int conversationAvatarSize;
         if (mIsOneToOne || mIsCollapsed) {
-            sidemargin = mBadgedSideMargins;
+            badgeProtrusion = mBadgeProtrusion;
             conversationAvatarSize = mConversationAvatarSize;
         } else {
-            sidemargin = mConversationFacePile.getVisibility() == VISIBLE
-                    ? mExpandedGroupSideMarginFacePile
-                    : mExpandedGroupSideMargin;
+            badgeProtrusion = mConversationFacePile.getVisibility() == VISIBLE
+                    ? mExpandedGroupBadgeProtrusionFacePile
+                    : mExpandedGroupBadgeProtrusion;
             conversationAvatarSize = mConversationAvatarSizeExpanded;
         }
-        LayoutParams layoutParams =
-                (LayoutParams) mConversationIconBadge.getLayoutParams();
-        layoutParams.topMargin = sidemargin;
-        layoutParams.setMarginStart(sidemargin);
-        mConversationIconBadge.setLayoutParams(layoutParams);
 
         if (mConversationIconView.getVisibility() == VISIBLE) {
-            layoutParams = (LayoutParams) mConversationIconView.getLayoutParams();
+            LayoutParams layoutParams = (LayoutParams) mConversationIconView.getLayoutParams();
             layoutParams.width = conversationAvatarSize;
             layoutParams.height = conversationAvatarSize;
+            layoutParams.leftMargin = badgeProtrusion;
+            layoutParams.rightMargin = badgeProtrusion;
+            layoutParams.bottomMargin = badgeProtrusion;
             mConversationIconView.setLayoutParams(layoutParams);
+        }
+
+        if (mConversationFacePile.getVisibility() == VISIBLE) {
+            LayoutParams layoutParams = (LayoutParams) mConversationFacePile.getLayoutParams();
+            layoutParams.leftMargin = badgeProtrusion;
+            layoutParams.rightMargin = badgeProtrusion;
+            layoutParams.bottomMargin = badgeProtrusion;
+            mConversationFacePile.setLayoutParams(layoutParams);
         }
     }
 
     private void updatePaddingsBasedOnContentAvailability() {
+        // groups have avatars that need more spacing
+        mMessagingLinearLayout.setSpacing(
+                mIsOneToOne ? mMessageSpacingStandard : mMessageSpacingGroup);
+
         int messagingPadding = mIsOneToOne || mIsCollapsed
                 ? 0
                 // Add some extra padding to the messages, since otherwise it will overlap with the
@@ -1082,15 +1098,18 @@ public class ConversationLayout extends FrameLayout
 
     private void updateExpandButton() {
         int buttonGravity;
-        int containerHeight;
         ViewGroup newContainer;
         if (mIsCollapsed) {
             buttonGravity = Gravity.CENTER;
-            containerHeight = ViewGroup.LayoutParams.WRAP_CONTENT;
+            // NOTE(b/182474419): In order for the touch target of the expand button to be the full
+            // height of the notification, we would want the mExpandButtonContainer's height to be
+            // set to WRAP_CONTENT (or 88dp) when in the collapsed state.  Unfortunately, that
+            // causes an unstable remeasuring infinite loop when the unread count is visible,
+            // causing the layout to occasionally hide the messages.  As an aside, that naive
+            // solution also causes an undesirably large gap between content and smart replies.
             newContainer = mExpandButtonAndContentContainer;
         } else {
             buttonGravity = Gravity.CENTER_HORIZONTAL | Gravity.TOP;
-            containerHeight = ViewGroup.LayoutParams.MATCH_PARENT;
             newContainer = this;
         }
         mExpandButton.setExpanded(!mIsCollapsed);
@@ -1099,7 +1118,6 @@ public class ConversationLayout extends FrameLayout
         // content when collapsed, but allows the content to flow under it when expanded.
         if (newContainer != mExpandButtonContainer.getParent()) {
             ((ViewGroup) mExpandButtonContainer.getParent()).removeView(mExpandButtonContainer);
-            mExpandButtonContainer.getLayoutParams().height = containerHeight;
             newContainer.addView(mExpandButtonContainer);
         }
 

@@ -252,16 +252,30 @@ class MediaViewController @Inject constructor(
      * [TransitionViewState].
      */
     private fun setGutsViewState(viewState: TransitionViewState) {
-        PlayerViewHolder.controlsIds.forEach { id ->
-            viewState.widgetStates.get(id)?.let { state ->
-                // Make sure to use the unmodified state if guts are not visible
-                state.alpha = if (isGutsVisible) 0f else state.alpha
-                state.gone = if (isGutsVisible) true else state.gone
+        if (type == TYPE.PLAYER) {
+            PlayerViewHolder.controlsIds.forEach { id ->
+                viewState.widgetStates.get(id)?.let { state ->
+                    // Make sure to use the unmodified state if guts are not visible.
+                    state.alpha = if (isGutsVisible) 0f else state.alpha
+                    state.gone = if (isGutsVisible) true else state.gone
+                }
             }
-        }
-        PlayerViewHolder.gutsIds.forEach { id ->
-            viewState.widgetStates.get(id)?.alpha = if (isGutsVisible) 1f else 0f
-            viewState.widgetStates.get(id)?.gone = !isGutsVisible
+            PlayerViewHolder.gutsIds.forEach { id ->
+                viewState.widgetStates.get(id)?.alpha = if (isGutsVisible) 1f else 0f
+                viewState.widgetStates.get(id)?.gone = !isGutsVisible
+            }
+        } else {
+            RecommendationViewHolder.controlsIds.forEach { id ->
+                viewState.widgetStates.get(id)?.let { state ->
+                    // Make sure to use the unmodified state if guts are not visible.
+                    state.alpha = if (isGutsVisible) 0f else state.alpha
+                    state.gone = if (isGutsVisible) true else state.gone
+                }
+            }
+            RecommendationViewHolder.gutsIds.forEach { id ->
+                viewState.widgetStates.get(id)?.alpha = if (isGutsVisible) 1f else 0f
+                viewState.widgetStates.get(id)?.gone = !isGutsVisible
+            }
         }
     }
 
@@ -452,8 +466,8 @@ class MediaViewController @Inject constructor(
             collapsedLayout.load(context, R.xml.media_collapsed)
             expandedLayout.load(context, R.xml.media_expanded)
         } else {
-            collapsedLayout.load(context, R.xml.media_recommendation)
-            expandedLayout.load(context, R.xml.media_recommendation)
+            collapsedLayout.load(context, R.xml.media_recommendation_collapsed)
+            expandedLayout.load(context, R.xml.media_recommendation_expanded)
         }
         refreshState()
     }

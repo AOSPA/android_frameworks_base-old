@@ -55,9 +55,13 @@ public class QuickStatusBarHeader extends FrameLayout {
 
     private TouchAnimator mAlphaAnimator;
     private TouchAnimator mTranslationAnimator;
+    private TouchAnimator mIconsAlphaAnimator;
+    private TouchAnimator mIconsAlphaAnimatorFixed;
 
     protected QuickQSPanel mHeaderQsPanel;
     private View mDatePrivacyView;
+    private View mDateView;
+    private View mSecurityHeaderView;
     private View mClockIconsView;
     private View mContainer;
 
@@ -66,20 +70,17 @@ public class QuickStatusBarHeader extends FrameLayout {
     private Space mSpace;
     private BatteryMeterView mBatteryRemainingIcon;
     private StatusIconContainer mIconContainer;
-
+    private View mPrivacyChip;
 
     private TintedIconManager mTintedIconManager;
     private QSExpansionPathInterpolator mQSExpansionPathInterpolator;
 
     private int mStatusBarPaddingTop = 0;
     private int mRoundedCornerPadding = 0;
-    private int mContentMarginStart;
-    private int mContentMarginEnd;
     private int mWaterfallTopInset;
     private int mCutOutPaddingLeft;
     private int mCutOutPaddingRight;
     private float mClockIconsAlpha = 1.0f;
-    private float mDatePrivacyAlpha = 1.0f;
     private float mKeyguardExpansionFraction;
     private int mTextColorPrimary = Color.TRANSPARENT;
     private int mTopViewMeasureHeight;
@@ -111,8 +112,11 @@ public class QuickStatusBarHeader extends FrameLayout {
         mDatePrivacyView = findViewById(R.id.quick_status_bar_date_privacy);
         mClockIconsView = findViewById(R.id.quick_qs_status_icons);
         mQSCarriers = findViewById(R.id.carrier_group);
-        mContainer = findViewById(R.id.container);
+        mContainer = findViewById(R.id.qs_container);
         mIconContainer = findViewById(R.id.statusIcons);
+        mPrivacyChip = findViewById(R.id.privacy_chip);
+        mDateView = findViewById(R.id.date);
+        mSecurityHeaderView = findViewById(R.id.header_text_container);
 
         mClockView = findViewById(R.id.clock);
         mSpace = findViewById(R.id.space);
@@ -126,6 +130,11 @@ public class QuickStatusBarHeader extends FrameLayout {
         // QS will always show the estimate, and BatteryMeterView handles the case where
         // it's unavailable or charging
         mBatteryRemainingIcon.setPercentShowMode(BatteryMeterView.MODE_ESTIMATE);
+
+        mIconsAlphaAnimatorFixed = new TouchAnimator.Builder()
+                .addFloat(mIconContainer, "alpha", 0, 1)
+                .addFloat(mBatteryRemainingIcon, "alpha", 0, 1)
+                .build();
     }
 
     void onAttach(TintedIconManager iconManager,
@@ -226,37 +235,46 @@ public class QuickStatusBarHeader extends FrameLayout {
         StatusBarIconView callStrengthIcon =
                 ((StatusBarIconView) mIconContainer.getViewForSlot(mCallStrengthSlotName));
         TouchAnimator.Builder builder = new TouchAnimator.Builder()
-                .addFloat(mQSCarriers, "alpha", 0, 1)
-                .addFloat(mDatePrivacyView, "alpha", 0, mDatePrivacyAlpha);
-        if (noCallingIcon != null || callStrengthIcon != null) {
-            if (noCallingIcon != null) {
-                builder.addFloat(noCallingIcon, "alpha", 1, 0);
+                // The following two views have to be hidden manually, so as not to hide the
+                // Privacy chip in QQS
+                .addFloat(mDateView, "alpha", 0, 1)
+                .addFloat(mSecurityHeaderView, "alpha", 0, 1)
+                .addFloat(mQSCarriers, "alpha", 0, 1);
+        builder.setListener(new TouchAnimator.ListenerAdapter() {
+            @Override
+            public void onAnimationAtEnd() {
+                mIconContainer.addIgnoredSlot(mMobileSlotName);
+                mIconContainer.addIgnoredSlot(mCallStrengthSlotName);
             }
-            if (callStrengthIcon != null) {
-                builder.addFloat(callStrengthIcon, "alpha", 1, 0);
+
+            @Override
+            public void onAnimationStarted() {
+                mIconContainer.addIgnoredSlot(mMobileSlotName);
+                mIconContainer.addIgnoredSlot(mCallStrengthSlotName);
             }
-            builder.setListener(new TouchAnimator.ListenerAdapter() {
-                @Override
-                public void onAnimationAtEnd() {
-                    mIconContainer.addIgnoredSlot(mMobileSlotName);
-                    mIconContainer.addIgnoredSlot(mCallStrengthSlotName);
-                }
 
-                @Override
-                public void onAnimationStarted() {
-                    mIconContainer.removeIgnoredSlot(mMobileSlotName);
-                    mIconContainer.removeIgnoredSlot(mCallStrengthSlotName);
-                }
-
-                @Override
-                public void onAnimationAtStart() {
-                    super.onAnimationAtStart();
-                    mIconContainer.removeIgnoredSlot(mMobileSlotName);
-                    mIconContainer.removeIgnoredSlot(mCallStrengthSlotName);
-                }
-            });
-        }
+            @Override
+            public void onAnimationAtStart() {
+                super.onAnimationAtStart();
+                mIconContainer.removeIgnoredSlot(mMobileSlotName);
+                mIconContainer.removeIgnoredSlot(mCallStrengthSlotName);
+            }
+        });
         mAlphaAnimator = builder.build();
+    }
+
+    void setChipVisibility(boolean visibility) {
+        mPrivacyChip.setVisibility(visibility ? View.VISIBLE : View.GONE);
+        if (visibility) {
+            // Animates the icons and battery indicator from alpha 0 to 1, when the chip is visible
+            mIconsAlphaAnimator = mIconsAlphaAnimatorFixed;
+            mIconsAlphaAnimator.setPosition(mKeyguardExpansionFraction);
+        } else {
+            mIconsAlphaAnimator = null;
+            mIconContainer.setAlpha(1);
+            mBatteryRemainingIcon.setAlpha(1);
+        }
+
     }
 
     /** */
@@ -284,6 +302,9 @@ public class QuickStatusBarHeader extends FrameLayout {
         }
         if (mTranslationAnimator != null) {
             mTranslationAnimator.setPosition(keyguardExpansionFraction);
+        }
+        if (mIconsAlphaAnimator != null) {
+            mIconsAlphaAnimator.setPosition(keyguardExpansionFraction);
         }
         // If forceExpanded (we are opening QS from lockscreen), the animators have been set to
         // position = 1f.
@@ -338,6 +359,8 @@ public class QuickStatusBarHeader extends FrameLayout {
     }
 
     private void updateHeadersPadding() {
+        setContentMargins(mDatePrivacyView, 0, 0);
+        setContentMargins(mClockIconsView, 0, 0);
         int paddingLeft = 0;
         int paddingRight = 0;
 
@@ -351,14 +374,12 @@ public class QuickStatusBarHeader extends FrameLayout {
         if (mCutOutPaddingLeft > 0) {
             // if there's a cutout, let's use at least the rounded corner inset
             int cutoutPadding = Math.max(mCutOutPaddingLeft, mRoundedCornerPadding);
-            int contentMarginLeft = isLayoutRtl() ? mContentMarginEnd : mContentMarginStart;
-            paddingLeft = Math.max(cutoutPadding - contentMarginLeft - leftMargin, 0);
+            paddingLeft = Math.max(cutoutPadding - leftMargin, 0);
         }
         if (mCutOutPaddingRight > 0) {
             // if there's a cutout, let's use at least the rounded corner inset
             int cutoutPadding = Math.max(mCutOutPaddingRight, mRoundedCornerPadding);
-            int contentMarginRight = isLayoutRtl() ? mContentMarginStart : mContentMarginEnd;
-            paddingRight = Math.max(cutoutPadding - contentMarginRight - rightMargin, 0);
+            paddingRight = Math.max(cutoutPadding - rightMargin, 0);
         }
 
         mDatePrivacyView.setPadding(paddingLeft,
@@ -377,19 +398,6 @@ public class QuickStatusBarHeader extends FrameLayout {
 
     public void setCallback(Callback qsPanelCallback) {
         mHeaderQsPanel.setCallback(qsPanelCallback);
-    }
-
-    /** */
-    public void setContentMargins(int marginStart, int marginEnd,
-            QuickQSPanelController quickQSPanelController) {
-        mContentMarginStart = marginStart;
-        mContentMarginEnd = marginEnd;
-        // The clock and QQS are not direct children, but the container should be just a wrapper to
-        // be able to move them together. So we set the margins to the actual views.
-        quickQSPanelController.setContentMargins(0, 0);
-        setContentMargins(mDatePrivacyView, marginStart, marginEnd);
-        setContentMargins(mClockIconsView, marginStart, marginEnd);
-        updateHeadersPadding();
     }
 
     private void setContentMargins(View view, int marginStart, int marginEnd) {

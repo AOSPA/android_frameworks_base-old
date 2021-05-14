@@ -17,6 +17,7 @@ package com.android.internal.os;
 
 import android.os.BatteryConsumer;
 import android.os.BatteryStats;
+import android.os.BatteryUsageStats;
 import android.os.BatteryUsageStatsQuery;
 import android.os.UidBatteryConsumer;
 
@@ -34,12 +35,30 @@ public class FlashlightPowerCalculator extends PowerCalculator {
     }
 
     @Override
+    public void calculate(BatteryUsageStats.Builder builder, BatteryStats batteryStats,
+            long rawRealtimeUs, long rawUptimeUs, BatteryUsageStatsQuery query) {
+        super.calculate(builder, batteryStats, rawRealtimeUs, rawUptimeUs, query);
+
+        final long durationMs = batteryStats.getFlashlightOnTime(rawRealtimeUs,
+                BatteryStats.STATS_SINCE_CHARGED) / 1000;
+        final double powerMah = mPowerEstimator.calculatePower(durationMs);
+        builder.getAggregateBatteryConsumerBuilder(
+                BatteryUsageStats.AGGREGATE_BATTERY_CONSUMER_SCOPE_DEVICE)
+                .setUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT, durationMs)
+                .setConsumedPower(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT, powerMah);
+        builder.getAggregateBatteryConsumerBuilder(
+                BatteryUsageStats.AGGREGATE_BATTERY_CONSUMER_SCOPE_ALL_APPS)
+                .setUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT, durationMs)
+                .setConsumedPower(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT, powerMah);
+    }
+
+    @Override
     protected void calculateApp(UidBatteryConsumer.Builder app, BatteryStats.Uid u,
             long rawRealtimeUs, long rawUptimeUs, BatteryUsageStatsQuery query) {
         final long durationMs = mPowerEstimator.calculateDuration(u.getFlashlightTurnedOnTimer(),
                 rawRealtimeUs, BatteryStats.STATS_SINCE_CHARGED);
         final double powerMah = mPowerEstimator.calculatePower(durationMs);
-        app.setUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_FLASHLIGHT, durationMs)
+        app.setUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT, durationMs)
                 .setConsumedPower(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT, powerMah);
     }
 

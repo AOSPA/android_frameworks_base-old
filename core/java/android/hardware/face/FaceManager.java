@@ -133,11 +133,11 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         @Override
-        public void onFeatureGet(boolean success, int feature, boolean value) {
+        public void onFeatureGet(boolean success, int[] features, boolean[] featureState) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = success;
-            args.argi1 = feature;
-            args.arg2 = value;
+            args.arg2 = features;
+            args.arg3 = featureState;
             mHandler.obtainMessage(MSG_GET_FEATURE_COMPLETED, args).sendToTarget();
         }
 
@@ -1023,6 +1023,34 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         /**
+         * Called each time a single frame is captured during enrollment.
+         *
+         * <p>For older, non-AIDL implementations, only {@code helpCode} and {@code helpMessage} are
+         * supported. Sensible default values will be provided for all other arguments.
+         *
+         * @param helpCode    An integer identifying the capture status for this frame.
+         * @param helpMessage A human-readable help string that can be shown in UI.
+         * @param cell        The cell captured during this frame of enrollment, if any.
+         * @param stage       An integer representing the current stage of enrollment.
+         * @param pan         The horizontal pan of the detected face. Values in the range [-1, 1]
+         *                    indicate a good capture.
+         * @param tilt        The vertical tilt of the detected face. Values in the range [-1, 1]
+         *                    indicate a good capture.
+         * @param distance    The distance of the detected face from the device. Values in
+         *                    the range [-1, 1] indicate a good capture.
+         */
+        public void onEnrollmentFrame(
+                int helpCode,
+                @Nullable CharSequence helpMessage,
+                @Nullable FaceEnrollCell cell,
+                @FaceEnrollStages.FaceEnrollStage int stage,
+                float pan,
+                float tilt,
+                float distance) {
+            onEnrollmentHelp(helpCode, helpMessage);
+        }
+
+        /**
          * Called as each enrollment step progresses. Enrollment is considered complete when
          * remaining reaches 0. This function will not be called if enrollment fails. See
          * {@link EnrollmentCallback#onEnrollmentError(int, CharSequence)}
@@ -1088,7 +1116,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * @hide
      */
     public abstract static class GetFeatureCallback {
-        public abstract void onCompleted(boolean success, int feature, boolean value);
+        public abstract void onCompleted(boolean success, int[] features, boolean[] featureState);
     }
 
     /**
@@ -1179,8 +1207,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 case MSG_GET_FEATURE_COMPLETED:
                     SomeArgs args = (SomeArgs) msg.obj;
                     sendGetFeatureCompleted((boolean) args.arg1 /* success */,
-                            args.argi1 /* feature */,
-                            (boolean) args.arg2 /* value */);
+                            (int[]) args.arg2 /* features */,
+                            (boolean[]) args.arg3 /* featureState */);
                     args.recycle();
                     break;
                 case MSG_CHALLENGE_GENERATED:
@@ -1216,11 +1244,11 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         mSetFeatureCallback.onCompleted(success, feature);
     }
 
-    private void sendGetFeatureCompleted(boolean success, int feature, boolean value) {
+    private void sendGetFeatureCompleted(boolean success, int[] features, boolean[] featureState) {
         if (mGetFeatureCallback == null) {
             return;
         }
-        mGetFeatureCallback.onCompleted(success, feature, value);
+        mGetFeatureCallback.onCompleted(success, features, featureState);
     }
 
     private void sendChallengeGenerated(int sensorId, long challenge) {
@@ -1305,7 +1333,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         } else if (mEnrollmentCallback != null) {
             final FaceEnrollFrame frame = new FaceEnrollFrame(
                     null /* cell */,
-                    FaceEnrollStage.UNKNOWN,
+                    FaceEnrollStages.UNKNOWN,
                     new FaceDataFrame(acquireInfo, vendorCode));
             sendEnrollmentFrame(frame);
         }
@@ -1333,12 +1361,19 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         if (frame == null) {
             Slog.w(TAG, "Received null enrollment frame");
         } else if (mEnrollmentCallback != null) {
-            // TODO(b/178414967): Send additional frame data to callback
-            final int acquireInfo = frame.getData().getAcquiredInfo();
-            final int vendorCode = frame.getData().getVendorCode();
+            final FaceDataFrame data = frame.getData();
+            final int acquireInfo = data.getAcquiredInfo();
+            final int vendorCode = data.getVendorCode();
             final int helpCode = getHelpCode(acquireInfo, vendorCode);
             final String helpMessage = getEnrollHelpMessage(mContext, acquireInfo, vendorCode);
-            mEnrollmentCallback.onEnrollmentHelp(helpCode, helpMessage);
+            mEnrollmentCallback.onEnrollmentFrame(
+                    helpCode,
+                    helpMessage,
+                    frame.getCell(),
+                    frame.getStage(),
+                    data.getPan(),
+                    data.getTilt(),
+                    data.getDistance());
         }
     }
 

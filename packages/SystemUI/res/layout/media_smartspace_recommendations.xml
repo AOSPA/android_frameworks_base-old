@@ -18,15 +18,48 @@
 <!-- Layout for media recommendations inside QSPanel carousel -->
 <com.android.systemui.util.animation.TransitionLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/media_recommendations"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:paddingTop="8dp"
-    android:paddingBottom="8dp"
+    android:paddingStart="@dimen/qs_media_padding"
+    android:paddingEnd="@dimen/qs_media_padding"
     android:clipChildren="false"
     android:clipToPadding="false"
     android:forceHasOverlappingRendering="false"
-    android:background="@drawable/qs_media_background">
+    android:background="@drawable/qs_media_background"
+    android:theme="@style/MediaPlayer">
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/media_vertical_start_guideline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        app:layout_constraintGuide_percent="0.25" />
+
+    <androidx.constraintlayout.widget.Guideline
+        android:id="@+id/media_horizontal_center_guideline"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        app:layout_constraintGuide_percent="0.5" />
+
+    <com.android.internal.widget.CachingIconView
+        android:id="@+id/recommendation_card_icon"
+        android:layout_width="@dimen/qs_aa_media_rec_header_icon_size"
+        android:layout_height="@dimen/qs_aa_media_rec_header_icon_size"
+        android:src="@drawable/ic_headset"
+        android:tint="?android:attr/textColor" />
+
+    <TextView
+        android:id="@+id/recommendation_card_text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:text="@string/controls_media_smartspace_rec_title"
+        android:fontFamily="google-sans-medium"
+        android:textDirection="locale"
+        android:textSize="@dimen/qq_aa_media_rec_header_text_size" />
 
     <ImageView
         android:id="@+id/media_cover1"
@@ -34,13 +67,15 @@
         android:layout_height="@dimen/qs_aa_media_rec_album_size"
         android:adjustViewBounds="true"
         android:background="@drawable/bg_smartspace_media_item"
+        style="@style/MediaPlayer.Album"
         android:clipToOutline="true"
         android:scaleType="centerCrop"/>
 
-    <ImageView
+    <com.android.internal.widget.CachingIconView
         android:id="@+id/media_logo1"
-        android:layout_width="@dimen/qs_aa_media_rec_icon_size"
-        android:layout_height="@dimen/qs_aa_media_rec_icon_size" />
+        android:layout_width="@dimen/qs_media_icon_size"
+        android:layout_height="@dimen/qs_media_icon_size"
+        style="@style/MediaPlayer.AppIcon" />
 
     <ImageView
         android:id="@+id/media_cover2"
@@ -48,13 +83,15 @@
         android:layout_height="@dimen/qs_aa_media_rec_album_size"
         android:adjustViewBounds="true"
         android:background="@drawable/bg_smartspace_media_item"
+        style="@style/MediaPlayer.Album"
         android:clipToOutline="true"
         android:scaleType="centerCrop"/>
 
-    <ImageView
+    <com.android.internal.widget.CachingIconView
         android:id="@+id/media_logo2"
-        android:layout_width="@dimen/qs_aa_media_rec_icon_size"
-        android:layout_height="@dimen/qs_aa_media_rec_icon_size" />
+        android:layout_width="@dimen/qs_media_icon_size"
+        android:layout_height="@dimen/qs_media_icon_size"
+        style="@style/MediaPlayer.AppIcon" />
 
     <ImageView
         android:id="@+id/media_cover3"
@@ -62,13 +99,15 @@
         android:layout_height="@dimen/qs_aa_media_rec_album_size"
         android:adjustViewBounds="true"
         android:background="@drawable/bg_smartspace_media_item"
+        style="@style/MediaPlayer.Album"
         android:clipToOutline="true"
         android:scaleType="centerCrop"/>
 
-    <ImageView
+    <com.android.internal.widget.CachingIconView
         android:id="@+id/media_logo3"
-        android:layout_width="@dimen/qs_aa_media_rec_icon_size"
-        android:layout_height="@dimen/qs_aa_media_rec_icon_size" />
+        android:layout_width="@dimen/qs_media_icon_size"
+        android:layout_height="@dimen/qs_media_icon_size"
+        style="@style/MediaPlayer.AppIcon" />
 
     <ImageView
         android:id="@+id/media_cover4"
@@ -76,12 +115,127 @@
         android:layout_height="@dimen/qs_aa_media_rec_album_size"
         android:adjustViewBounds="true"
         android:background="@drawable/bg_smartspace_media_item"
+        style="@style/MediaPlayer.Album"
         android:clipToOutline="true"
         android:scaleType="centerCrop"/>
 
-    <ImageView
+    <com.android.internal.widget.CachingIconView
         android:id="@+id/media_logo4"
-        android:layout_width="@dimen/qs_aa_media_rec_icon_size"
-        android:layout_height="@dimen/qs_aa_media_rec_icon_size" />
+        android:layout_width="@dimen/qs_media_icon_size"
+        android:layout_height="@dimen/qs_media_icon_size"
+        style="@style/MediaPlayer.AppIcon" />
+
+    <ImageView
+        android:id="@+id/media_cover5"
+        android:layout_width="@dimen/qs_aa_media_rec_album_size"
+        android:layout_height="@dimen/qs_aa_media_rec_album_size"
+        android:adjustViewBounds="true"
+        android:background="@drawable/bg_smartspace_media_item"
+        style="@style/MediaPlayer.Album"
+        android:clipToOutline="true"
+        android:scaleType="centerCrop"/>
+
+    <com.android.internal.widget.CachingIconView
+        android:id="@+id/media_logo5"
+        android:layout_width="@dimen/qs_media_icon_size"
+        android:layout_height="@dimen/qs_media_icon_size"
+        style="@style/MediaPlayer.AppIcon" />
+
+    <ImageView
+        android:id="@+id/media_cover6"
+        android:layout_width="@dimen/qs_aa_media_rec_album_size"
+        android:layout_height="@dimen/qs_aa_media_rec_album_size"
+        android:adjustViewBounds="true"
+        android:background="@drawable/bg_smartspace_media_item"
+        style="@style/MediaPlayer.Album"
+        android:clipToOutline="true"
+        android:scaleType="centerCrop"/>
+
+    <com.android.internal.widget.CachingIconView
+        android:id="@+id/media_logo6"
+        android:layout_width="@dimen/qs_media_icon_size"
+        android:layout_height="@dimen/qs_media_icon_size"
+        style="@style/MediaPlayer.AppIcon" />
+
+    <!-- Long press menu -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="@dimen/qs_media_padding"
+        android:layout_marginStart="@dimen/qs_media_padding"
+        android:layout_marginEnd="@dimen/qs_media_padding"
+        android:id="@+id/remove_text"
+        android:fontFamily="@*android:string/config_headlineFontFamily"
+        android:singleLine="true"
+        android:text="@string/controls_media_close_session"
+        android:gravity="center_horizontal|top"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintBottom_toTopOf="@id/settings"/>
+
+    <FrameLayout
+        android:id="@+id/settings"
+        android:background="@drawable/qs_media_light_source"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="@dimen/qs_media_padding"
+        android:paddingBottom="@dimen/qs_media_padding"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/remove_text">
+
+        <TextView
+            android:layout_gravity="bottom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/MediaPlayer.OutlineButton"
+            android:text="@string/controls_media_settings_button" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/cancel"
+        android:background="@drawable/qs_media_light_source"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="8dp"
+        android:paddingBottom="@dimen/qs_media_padding"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toStartOf="@id/dismiss"
+        app:layout_constraintTop_toBottomOf="@id/remove_text">
+
+        <TextView
+            android:layout_gravity="bottom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/MediaPlayer.OutlineButton"
+            android:text="@string/cancel" />
+    </FrameLayout>
+
+    <FrameLayout
+        android:id="@+id/dismiss"
+        android:background="@drawable/qs_media_light_source"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginEnd="@dimen/qs_media_padding"
+        android:paddingBottom="@dimen/qs_media_padding"
+        android:minWidth="48dp"
+        android:minHeight="48dp"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toBottomOf="@id/remove_text">
+
+        <TextView
+            android:layout_gravity="bottom"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            style="@style/MediaPlayer.OutlineButton"
+            android:text="@string/controls_media_dismiss_button"
+            />
+    </FrameLayout>
 
 </com.android.systemui.util.animation.TransitionLayout>
