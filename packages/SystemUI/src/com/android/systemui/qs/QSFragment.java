@@ -107,6 +107,11 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private QuickQSPanelController mQuickQSPanelController;
     private QSCustomizerController mQSCustomizerController;
     private FeatureFlags mFeatureFlags;
+    /**
+     * When true, QS will translate from outside the screen. It will be clipped with parallax
+     * otherwise.
+     */
+    private boolean mTranslateWhileExpanding;
 
     @Inject
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
@@ -167,7 +172,6 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mQSContainerImplController = qsFragmentComponent.getQSContainerImplController();
         mQSContainerImplController.init();
         mContainer = mQSContainerImplController.getView();
-        mContainer.setBackgroundVisible(!mFeatureFlags.isShadeOpaque());
 
         mQSDetail.setQsPanel(mQSPanelController, mHeader, mFooter);
         mQSAnimator = qsFragmentComponent.getQSAnimator();
@@ -251,6 +255,13 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             if (mQSAnimator != null) {
                 mQSAnimator.onRtlChanged();
             }
+        }
+    }
+
+    @Override
+    public void setFancyClipping(int top, int bottom, int cornerRadius, boolean visible) {
+        if (getView() instanceof QSContainerImpl) {
+            ((QSContainerImpl) getView()).setFancyClipping(top, bottom, cornerRadius, visible);
         }
     }
 
@@ -394,16 +405,23 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     }
 
     @Override
+    public void setTranslateWhileExpanding(boolean shouldTranslate) {
+        mTranslateWhileExpanding = shouldTranslate;
+        mQSAnimator.setTranslateWhileExpanding(shouldTranslate);
+    }
+
+    @Override
     public void setQsExpansion(float expansion, float headerTranslation) {
         if (DEBUG) Log.d(TAG, "setQSExpansion " + expansion + " " + headerTranslation);
 
         if (mQSAnimator != null) {
             final boolean showQSOnLockscreen = expansion > 0;
-            final boolean showQSUnlocked = headerTranslation == 0;
+            final boolean showQSUnlocked = headerTranslation == 0 || !mTranslateWhileExpanding;
             mQSAnimator.startAlphaAnimation(showQSOnLockscreen || showQSUnlocked);
         }
         mContainer.setExpansion(expansion);
-        final float translationScaleY = expansion - 1;
+        final float translationScaleY = (mTranslateWhileExpanding
+                ? 1 : QSAnimator.SHORT_PARALLAX_AMOUNT) * (expansion - 1);
         boolean onKeyguardAndExpanded = isKeyguardShowing() && !mShowCollapsedOnKeyguard;
         if (!mHeaderAnimating && !headerWillBeAnimating()) {
             getView().setTranslationY(
@@ -461,8 +479,12 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private void updateQsBounds() {
         if (mLastQSExpansion == 1.0f) {
             // Fully expanded, let's set the layout bounds as clip bounds. This is necessary because
-            // it's a scrollview and otherwise wouldn't be clipped.
-            mQsBounds.set(0, 0, mQSPanelScrollView.getWidth(), mQSPanelScrollView.getHeight());
+            // it's a scrollview and otherwise wouldn't be clipped. However, we set the horizontal
+            // bounds so the pages go to the ends of QSContainerImpl
+            ViewGroup.MarginLayoutParams lp =
+                    (ViewGroup.MarginLayoutParams) mQSPanelScrollView.getLayoutParams();
+            mQsBounds.set(-lp.leftMargin, 0, mQSPanelScrollView.getWidth() + lp.rightMargin,
+                    mQSPanelScrollView.getHeight());
         }
         mQSPanelScrollView.setClipBounds(mQsBounds);
     }

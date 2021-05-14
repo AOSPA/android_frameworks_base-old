@@ -1525,9 +1525,7 @@ public final class BluetoothDevice implements Parcelable {
             return false;
         }
         try {
-            return service.setRemoteAlias(this, alias,
-                    mAttributionSource.getPackageName(),
-                    mAttributionSource);
+            return service.setRemoteAlias(this, alias, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -1811,7 +1809,10 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean canBondWithoutDialog() {
         final IBluetooth service = sService;
         if (service == null) {
@@ -1820,7 +1821,7 @@ public final class BluetoothDevice implements Parcelable {
         }
         try {
             if (DBG) Log.d(TAG, "canBondWithoutDialog, device: " + this);
-            return service.canBondWithoutDialog(this);
+            return service.canBondWithoutDialog(this, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -2076,7 +2077,10 @@ public final class BluetoothDevice implements Parcelable {
      *
      * @return true confirmation has been sent out false for error
      */
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setPairingConfirmation(boolean confirm) {
         final IBluetooth service = sService;
         if (service == null) {
@@ -2084,7 +2088,7 @@ public final class BluetoothDevice implements Parcelable {
             return false;
         }
         try {
-            return service.setPairingConfirmation(this, confirm);
+            return service.setPairingConfirmation(this, confirm, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -2173,14 +2177,17 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setSilenceMode(boolean silence) {
         final IBluetooth service = sService;
         if (service == null) {
             throw new IllegalStateException("Bluetooth is not turned ON");
         }
         try {
-            return service.setSilenceMode(this, silence);
+            return service.setSilenceMode(this, silence, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "setSilenceMode fail", e);
             return false;
@@ -2195,14 +2202,17 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean isInSilenceMode() {
         final IBluetooth service = sService;
         if (service == null) {
             throw new IllegalStateException("Bluetooth is not turned ON");
         }
         try {
-            return service.getSilenceMode(this);
+            return service.getSilenceMode(this, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "isInSilenceMode fail", e);
             return false;
@@ -2218,14 +2228,17 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setPhonebookAccessPermission(@AccessPermission int value) {
         final IBluetooth service = sService;
         if (service == null) {
             return false;
         }
         try {
-            return service.setPhonebookAccessPermission(this, value);
+            return service.setPhonebookAccessPermission(this, value, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -2265,7 +2278,10 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setMessageAccessPermission(@AccessPermission int value) {
         // Validates param value is one of the accepted constants
         if (value != ACCESS_ALLOWED && value != ACCESS_REJECTED && value != ACCESS_UNKNOWN) {
@@ -2276,7 +2292,7 @@ public final class BluetoothDevice implements Parcelable {
             return false;
         }
         try {
-            return service.setMessageAccessPermission(this, value);
+            return service.setMessageAccessPermission(this, value, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -2316,14 +2332,17 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setSimAccessPermission(int value) {
         final IBluetooth service = sService;
         if (service == null) {
             return false;
         }
         try {
-            return service.setSimAccessPermission(this, value);
+            return service.setSimAccessPermission(this, value, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         }
@@ -2860,7 +2879,10 @@ public final class BluetoothDevice implements Parcelable {
      * @hide
     */
     @SystemApi
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setMetadata(@MetadataKey int key, @NonNull byte[] value) {
         final IBluetooth service = sService;
         if (service == null) {
@@ -2872,7 +2894,7 @@ public final class BluetoothDevice implements Parcelable {
                     + ", should not over " + METADATA_MAX_LENGTH);
         }
         try {
-            return service.setMetadata(this, key, value);
+            return service.setMetadata(this, key, value, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "setMetadata fail", e);
             return false;
@@ -2888,7 +2910,10 @@ public final class BluetoothDevice implements Parcelable {
      */
     @SystemApi
     @Nullable
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public byte[] getMetadata(@MetadataKey int key) {
         final IBluetooth service = sService;
         if (service == null) {
@@ -2896,7 +2921,7 @@ public final class BluetoothDevice implements Parcelable {
             return null;
         }
         try {
-            return service.getMetadata(this, key);
+            return service.getMetadata(this, key, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "getMetadata fail", e);
             return null;

@@ -20,7 +20,6 @@ import android.net.Uri;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.plugins.FalsingManager;
-import com.android.systemui.util.sensors.ThresholdSensor;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -133,7 +132,7 @@ public class FalsingManagerFake implements FalsingManager {
     }
 
     @Override
-    public void onProximityEvent(ThresholdSensor.ThresholdSensorEvent proximityEvent) {
+    public void onProximityEvent(ProximityEvent proximityEvent) {
 
     }
 
@@ -145,5 +144,15 @@ public class FalsingManagerFake implements FalsingManager {
     @Override
     public void removeFalsingBeliefListener(FalsingBeliefListener listener) {
         mFalsingBeliefListeners.remove(listener);
+    }
+
+    @Override
+    public void addTapListener(FalsingTapListener falsingTapListener) {
+
+    }
+
+    @Override
+    public void removeTapListener(FalsingTapListener falsingTapListener) {
+
     }
 }

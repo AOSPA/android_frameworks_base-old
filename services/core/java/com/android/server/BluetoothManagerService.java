@@ -18,6 +18,7 @@ package com.android.server;
 
 import static android.Manifest.permission.BLUETOOTH_CONNECT;
 import static android.content.PermissionChecker.PERMISSION_HARD_DENIED;
+import static android.content.PermissionChecker.PID_UNKNOWN;
 import static android.content.pm.PackageManager.MATCH_SYSTEM_ONLY;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.PowerExemptionManager.TEMPORARY_ALLOW_LIST_TYPE_FOREGROUND_SERVICE_ALLOWED;
@@ -45,6 +46,7 @@ import android.bluetooth.IBluetoothManagerCallback;
 import android.bluetooth.IBluetoothProfileServiceConnection;
 import android.bluetooth.IBluetoothStateChangeCallback;
 import android.content.ActivityNotFoundException;
+import android.content.AttributionSource;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentResolver;
@@ -309,23 +311,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 DELAY_BEFORE_RESTART_DUE_TO_INIT_FLAGS_CHANGED_MS);
     }
 
-    public boolean onFactoryReset() {
+    public boolean onFactoryReset(AttributionSource attributionSource) {
         mContext.enforceCallingOrSelfPermission(BLUETOOTH_PRIVILEGED,
                 "Need BLUETOOTH_PRIVILEGED permission");
 
-        final long token = Binder.clearCallingIdentity();
-        try {
-            return onFactoryResetInternal();
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    @RequiresPermission(allOf = {
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-    })
-    private boolean onFactoryResetInternal() {
         // Wait for stable state if bluetooth is temporary state.
         int state = getState();
         if (state == BluetoothAdapter.STATE_BLE_TURNING_ON
@@ -348,13 +337,13 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 addActiveLog(
                         BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
                         mContext.getPackageName(), false);
-                mBluetooth.onBrEdrDown();
+                mBluetooth.onBrEdrDown(attributionSource);
                 return true;
             } else if (state == BluetoothAdapter.STATE_ON) {
                 addActiveLog(
                         BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
                         mContext.getPackageName(), false);
-                mBluetooth.disable(mContext.getAttributionSource());
+                mBluetooth.disable(attributionSource);
                 return true;
             }
         } catch (RemoteException e) {
@@ -405,7 +394,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                             addActiveLog(
                                     BluetoothProtoEnums.ENABLE_DISABLE_REASON_AIRPLANE_MODE,
                                     mContext.getPackageName(), false);
-                            mBluetooth.onBrEdrDown();
+                            mBluetooth.onBrEdrDown(mContext.getAttributionSource());
                             mEnable = false;
                         }
                     } catch (RemoteException e) {
@@ -893,7 +882,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     if (mBluetooth != null) {
                         addActiveLog(BluetoothProtoEnums.ENABLE_DISABLE_REASON_APPLICATION_REQUEST,
                                 mContext.getPackageName(), false);
-                        mBluetooth.onBrEdrDown();
+                        mBluetooth.onBrEdrDown(mContext.getAttributionSource());
                     }
                 } catch (RemoteException e) {
                     Slog.e(TAG, "error when disabling bluetooth", e);
@@ -958,7 +947,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    private boolean checkBluetoothPermissions(String packageName, boolean requireForeground) {
+    private boolean checkBluetoothPermissions(AttributionSource attributionSource, String message,
+            boolean requireForeground) {
         if (isBluetoothDisallowed()) {
             if (DBG) {
                 Slog.d(TAG, "checkBluetoothPermissions: bluetooth disallowed");
@@ -969,22 +959,24 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         final int callingUid = Binder.getCallingUid();
         final boolean isCallerSystem = UserHandle.getAppId(callingUid) == Process.SYSTEM_UID;
         if (!isCallerSystem) {
-            checkPackage(callingUid, packageName);
+            checkPackage(callingUid, attributionSource.getPackageName());
 
             if (requireForeground && !checkIfCallerIsForegroundUser()) {
                 Slog.w(TAG, "Not allowed for non-active and non system user");
                 return false;
             }
 
-            if (!checkConnectPermissionForPreflight(mContext)) {
+            if (!checkConnectPermissionForDataDelivery(mContext, attributionSource, message)) {
                 return false;
             }
         }
         return true;
     }
 
-    public boolean enableBle(String packageName, IBinder token) throws RemoteException {
-        if (!checkBluetoothPermissions(packageName, false)) {
+    public boolean enableBle(AttributionSource attributionSource, IBinder token)
+            throws RemoteException {
+        final String packageName = attributionSource.getPackageName();
+        if (!checkBluetoothPermissions(attributionSource, "enableBle", false)) {
             if (DBG) {
                 Slog.d(TAG, "enableBle(): bluetooth disallowed");
             }
@@ -1014,8 +1006,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
     }
 
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_PRIVILEGED)
-    public boolean disableBle(String packageName, IBinder token) throws RemoteException {
-        if (!checkBluetoothPermissions(packageName, false)) {
+    public boolean disableBle(AttributionSource attributionSource, IBinder token)
+            throws RemoteException {
+        final String packageName = attributionSource.getPackageName();
+        if (!checkBluetoothPermissions(attributionSource, "disableBle", false)) {
             if (DBG) {
                 Slog.d(TAG, "disableBLE(): bluetooth disallowed");
             }
@@ -1044,7 +1038,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             if (!mEnableExternal) {
                 addActiveLog(BluetoothProtoEnums.ENABLE_DISABLE_REASON_APPLICATION_REQUEST,
                         packageName, false);
-                sendBrEdrDownCallback();
+                sendBrEdrDownCallback(attributionSource);
             }
         }
         return true;
@@ -1088,14 +1082,14 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 !isBluetoothPersistedStateOnBluetooth()) {
                 Slog.i(TAG, "Bluetooth was disabled while enabling BLE, disable BLE now");
                 mEnable = false;
-                mBluetooth.onBrEdrDown();
+                mBluetooth.onBrEdrDown(mContext.getAttributionSource());
                 return;
             }
             if (isBluetoothPersistedStateOnBluetooth() ||
                  mEnableExternal) {
                 // This triggers transition to STATE_ON
                 mBluetooth.updateQuietModeStatus(mQuietEnable);
-                mBluetooth.onLeServiceUp();
+                mBluetooth.onLeServiceUp(mContext.getAttributionSource());
                 persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
             }
         } catch (RemoteException e) {
@@ -1113,7 +1107,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
     })
-    private void sendBrEdrDownCallback() {
+    private void sendBrEdrDownCallback(AttributionSource attributionSource) {
         if (DBG) {
             Slog.d(TAG, "Calling sendBrEdrDownCallback callbacks");
         }
@@ -1127,7 +1121,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             // Need to stay at BLE ON. Disconnect all Gatt connections
             try {
                 if (mBluetoothGatt != null) {
-                    mBluetoothGatt.unregAll(mContext.getAttributionSource());
+                    mBluetoothGatt.unregAll(attributionSource);
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Unable to disconnect all apps.", e);
@@ -1136,7 +1130,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             try {
                 mBluetoothLock.readLock().lock();
                 if (mBluetooth != null) {
-                    mBluetooth.onBrEdrDown();
+                    mBluetooth.onBrEdrDown(attributionSource);
                 }
             } catch (RemoteException e) {
                 Slog.e(TAG, "Call to onBrEdrDown() failed.", e);
@@ -1147,8 +1141,9 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
     }
 
-    public boolean enableNoAutoConnect(String packageName) {
-        if (!checkBluetoothPermissions(packageName, false)) {
+    public boolean enableNoAutoConnect(AttributionSource attributionSource) {
+        final String packageName = attributionSource.getPackageName();
+        if (!checkBluetoothPermissions(attributionSource, "enableNoAutoConnect", false)) {
             if (DBG) {
                 Slog.d(TAG, "enableNoAutoConnect(): not enabling - bluetooth disallowed");
             }
@@ -1174,8 +1169,9 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         return true;
     }
 
-    public boolean enable(String packageName) throws RemoteException {
-        if (!checkBluetoothPermissions(packageName, true)) {
+    public boolean enable(AttributionSource attributionSource) throws RemoteException {
+        final String packageName = attributionSource.getPackageName();
+        if (!checkBluetoothPermissions(attributionSource, "enable", true)) {
             if (DBG) {
                 Slog.d(TAG, "enable(): not enabling - bluetooth disallowed");
             }
@@ -1209,8 +1205,10 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         return true;
     }
 
-    public boolean disable(String packageName, boolean persist) throws RemoteException {
-        if (!checkBluetoothPermissions(packageName, true)) {
+    public boolean disable(AttributionSource attributionSource, boolean persist)
+            throws RemoteException {
+        final String packageName = attributionSource.getPackageName();
+        if (!checkBluetoothPermissions(attributionSource, "disable", true)) {
             if (DBG) {
                 Slog.d(TAG, "disable(): not disabling - bluetooth disallowed");
             }
@@ -1252,7 +1250,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     if (mBluetooth != null) {
                         if(mBluetooth.getState() == BluetoothAdapter.STATE_BLE_ON) {
                             mEnable = false;
-                            mBluetooth.onBrEdrDown();
+                            mBluetooth.onBrEdrDown(attributionSource);
                         } else {
                             sendDisableMsg(BluetoothProtoEnums.ENABLE_DISABLE_REASON_SYSTEM_BOOT,
                                     packageName);
@@ -1360,7 +1358,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             if (mBluetooth != null) {
                 //Unregister callback object
                 try {
-                    mBluetooth.unregisterCallback(mBluetoothCallback);
+                    mBluetooth.unregisterCallback(mBluetoothCallback,
+                            mContext.getAttributionSource());
                 } catch (RemoteException re) {
                     Slog.e(TAG, "Unable to unregister BluetoothCallback", re);
                 }
@@ -1790,8 +1789,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
     }
 
-    public String getAddress() {
-        if (!checkConnectPermissionForPreflight(mContext)) {
+    public String getAddress(AttributionSource attributionSource) {
+        if (!checkConnectPermissionForDataDelivery(mContext, attributionSource, "getAddress")) {
             return null;
         }
 
@@ -1808,7 +1807,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         try {
             mBluetoothLock.readLock().lock();
             if (mBluetooth != null) {
-                return mBluetooth.getAddressWithAttribution(mContext.getAttributionSource());
+                return mBluetooth.getAddressWithAttribution(attributionSource);
             }
         } catch (RemoteException e) {
             Slog.e(TAG,
@@ -1824,8 +1823,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         return mAddress;
     }
 
-    public String getName() {
-        if (!checkConnectPermissionForPreflight(mContext)) {
+    public String getName(AttributionSource attributionSource) {
+        if (!checkConnectPermissionForDataDelivery(mContext, attributionSource, "getName")) {
             return null;
         }
 
@@ -1837,7 +1836,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         try {
             mBluetoothLock.readLock().lock();
             if (mBluetooth != null) {
-                return mBluetooth.getName(mContext.getAttributionSource());
+                return mBluetooth.getName(attributionSource);
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "getName(): Unable to retrieve name remotely. Returning cached name", e);
@@ -1885,20 +1884,20 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 handleEnable(mQuietEnable);
             } else if (state == BluetoothAdapter.STATE_OFF) {
                 mEnable = true;
-                mBluetooth.factoryReset();
+                mBluetooth.factoryReset(mContext.getAttributionSource());
                 handleEnable(mQuietEnable);
             } else if (state == BluetoothAdapter.STATE_BLE_ON) {
                 addActiveLog(
                 BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
                 mContext.getPackageName(), false);
-                mBluetooth.onBrEdrDown();
-                return mBluetooth.factoryReset();
+                mBluetooth.onBrEdrDown(mContext.getAttributionSource());
+                return mBluetooth.factoryReset(mContext.getAttributionSource());
             } else if (state == BluetoothAdapter.STATE_ON) {
                 addActiveLog(
                 BluetoothProtoEnums.ENABLE_DISABLE_REASON_FACTORY_RESET,
                 mContext.getPackageName(), false);
                 mBluetooth.disable(mContext.getAttributionSource());
-                return mBluetooth.factoryReset();
+                return mBluetooth.factoryReset(mContext.getAttributionSource());
             }
         } catch (RemoteException e) {
             Slog.e(TAG, "factoryReset(): Unable to do factoryReset.", e);
@@ -2057,7 +2056,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                             if (state == BluetoothAdapter.STATE_BLE_ON) {
                                 Slog.w(TAG, "BT Enable in BLE_ON State, going to ON");
                                 mBluetooth.updateQuietModeStatus(mQuietEnable);
-                                mBluetooth.onLeServiceUp();
+                                mBluetooth.onLeServiceUp(mContext.getAttributionSource());
 
                                 // waive WRITE_SECURE_SETTINGS permission check
                                 long callingIdentity = Binder.clearCallingIdentity();
@@ -2176,7 +2175,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                 mBluetoothLock.readLock().lock();
                                 if (mBluetooth != null) {
                                     mBluetooth.updateQuietModeStatus(mQuietEnable);
-                                    mBluetooth.onLeServiceUp();
+                                    mBluetooth.onLeServiceUp(mContext.getAttributionSource());
                                 }
                            } catch (RemoteException e) {
                                 Slog.e(TAG, "", e);
@@ -2362,7 +2361,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
 
                         //Register callback object
                         try {
-                            mBluetooth.registerCallback(mBluetoothCallback);
+                            mBluetooth.registerCallback(mBluetoothCallback,
+                                    mContext.getAttributionSource());
                         } catch (RemoteException re) {
                             Slog.e(TAG, "Unable to register BluetoothCallback", re);
                         }
@@ -2646,7 +2646,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             try {
                 mBluetoothLock.readLock().lock();
                 if (mBluetooth != null) {
-                    mBluetooth.unregisterCallback(mBluetoothCallback);
+                    mBluetooth.unregisterCallback(mBluetoothCallback,
+                            mContext.getAttributionSource());
                 }
             } catch (RemoteException re) {
                 Slog.e(TAG, "Unable to unregister", re);
@@ -2903,7 +2904,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                 sendBluetoothStateCallback(false); // BT is OFF for general users
                 // Broadcast as STATE_OFF
                 newState = BluetoothAdapter.STATE_OFF;
-                sendBrEdrDownCallback();
+                sendBrEdrDownCallback(mContext.getAttributionSource());
             }
         } else if (newState == BluetoothAdapter.STATE_ON) {
             boolean isUp = (newState == BluetoothAdapter.STATE_ON);
@@ -3051,7 +3052,7 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             mBluetoothLock.readLock().lock();
             if (mBluetooth != null) {
                 //Unregister callback object
-                mBluetooth.unregisterCallback(mBluetoothCallback);
+                mBluetooth.unregisterCallback(mBluetoothCallback, mContext.getAttributionSource());
             }
         } catch (RemoteException re) {
             Slog.e(TAG, "Unable to unregister", re);
@@ -3252,6 +3253,26 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
         }
     }
 
+    @SuppressLint("AndroidFrameworkRequiresPermission")
+    private static boolean checkPermissionForDataDelivery(Context context, String permission,
+            AttributionSource attributionSource, String message) {
+        final int result = PermissionChecker.checkPermissionForDataDeliveryFromDataSource(
+                context, permission, PID_UNKNOWN,
+                new AttributionSource(context.getAttributionSource(), attributionSource), message);
+        if (result == PERMISSION_GRANTED) {
+            return true;
+        }
+
+        final String msg = "Need " + permission + " permission for " + attributionSource + ": "
+                + message;
+        if (result == PERMISSION_HARD_DENIED) {
+            throw new SecurityException(msg);
+        } else {
+            Log.w(TAG, msg);
+            return false;
+        }
+    }
+
     /**
      * Returns true if the BLUETOOTH_CONNECT permission is granted for the calling app. Returns
      * false if the result is a soft denial. Throws SecurityException if the result is a hard
@@ -3259,14 +3280,12 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
      *
      * <p>Should be used in situations where the app op should not be noted.
      */
+    @SuppressLint("AndroidFrameworkRequiresPermission")
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    private static boolean checkConnectPermissionForPreflight(Context context) {
-        int permissionCheckResult = PermissionChecker.checkCallingOrSelfPermissionForPreflight(
-                context, BLUETOOTH_CONNECT);
-        if (permissionCheckResult == PERMISSION_HARD_DENIED) {
-            throw new SecurityException("Need BLUETOOTH_CONNECT permission");
-        }
-        return permissionCheckResult == PERMISSION_GRANTED;
+    public static boolean checkConnectPermissionForDataDelivery(
+            Context context, AttributionSource attributionSource, String message) {
+        return checkPermissionForDataDelivery(context, BLUETOOTH_CONNECT,
+                attributionSource, message);
     }
 
     static @NonNull Bundle getTempAllowlistBroadcastOptions() {

@@ -38,6 +38,7 @@ import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import com.android.systemui.util.animation.UniqueObjectHostView
 import javax.inject.Inject
+import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager
 
 /**
  * Similarly to isShown but also excludes views that have 0 alpha
@@ -73,7 +74,8 @@ class MediaHierarchyManager @Inject constructor(
     private val bypassController: KeyguardBypassController,
     private val mediaCarouselController: MediaCarouselController,
     private val notifLockscreenUserManager: NotificationLockscreenUserManager,
-    wakefulnessLifecycle: WakefulnessLifecycle
+    wakefulnessLifecycle: WakefulnessLifecycle,
+    private val statusBarKeyguardViewManager: StatusBarKeyguardViewManager
 ) {
     /**
      * The root overlay of the hierarchy. This is where the media notification is attached to
@@ -162,6 +164,25 @@ class MediaHierarchyManager @Inject constructor(
         }
 
     /**
+     * Is quick setting expanded?
+     */
+    var qsExpanded: Boolean = false
+        set(value) {
+            if (field != value) {
+                field = value
+            }
+            // qs is expanded on LS shade and HS shade
+            if (value && (isLockScreenShadeVisibleToUser() || isHomeScreenShadeVisibleToUser())) {
+                mediaCarouselController.logSmartspaceImpression()
+            }
+            // Release shade and back to lock screen
+            if (isLockScreenVisibleToUser()) {
+                mediaCarouselController.logSmartspaceImpression()
+            }
+            mediaCarouselController.mediaCarouselScrollHandler.visibleToUser = isVisibleToUser()
+        }
+
+    /**
      * Is the shade currently collapsing from the expanded qs? If we're on the lockscreen and in qs,
      * we wouldn't want to transition in that case.
      */
@@ -231,6 +252,11 @@ class MediaHierarchyManager @Inject constructor(
 
             override fun onStateChanged(newState: Int) {
                 updateTargetState()
+                // Enters shade from lock screen
+                if (newState == StatusBarState.SHADE_LOCKED && isLockScreenShadeVisibleToUser()) {
+                    mediaCarouselController.logSmartspaceImpression()
+                }
+                mediaCarouselController.mediaCarouselScrollHandler.visibleToUser = isVisibleToUser()
             }
 
             override fun onDozeAmountChanged(linear: Float, eased: Float) {
@@ -240,9 +266,27 @@ class MediaHierarchyManager @Inject constructor(
             override fun onDozingChanged(isDozing: Boolean) {
                 if (!isDozing) {
                     dozeAnimationRunning = false
+                    // Enters lock screen from screen off
+                    if (isLockScreenVisibleToUser()) {
+                        mediaCarouselController.logSmartspaceImpression()
+                    }
                 } else {
                     updateDesiredLocation()
+                    qsExpanded = false
                 }
+                mediaCarouselController.mediaCarouselScrollHandler.visibleToUser = isVisibleToUser()
+            }
+
+            override fun onExpandedChanged(isExpanded: Boolean) {
+                // Enters shade from home screen
+                if (isHomeScreenShadeVisibleToUser()) {
+                    mediaCarouselController.logSmartspaceImpression()
+                }
+                // Back to lock screen from bouncer
+                if (isLockScreenVisibleToUser()) {
+                    mediaCarouselController.logSmartspaceImpression()
+                }
+                mediaCarouselController.mediaCarouselScrollHandler.visibleToUser = isVisibleToUser()
             }
         })
 
@@ -620,6 +664,36 @@ class MediaHierarchyManager @Inject constructor(
             return LOCATION_LOCKSCREEN
         }
         return location
+    }
+
+    /**
+     * Returns true when the media card could be visible to the user if existed.
+     */
+    private fun isVisibleToUser(): Boolean {
+        return isLockScreenVisibleToUser() || isLockScreenShadeVisibleToUser() ||
+                isHomeScreenShadeVisibleToUser()
+    }
+
+    private fun isLockScreenVisibleToUser(): Boolean {
+        return !statusBarStateController.isDozing &&
+                !statusBarKeyguardViewManager.isBouncerShowing &&
+                statusBarStateController.state == StatusBarState.KEYGUARD &&
+                notifLockscreenUserManager.shouldShowLockscreenNotifications() &&
+                statusBarStateController.isExpanded &&
+                !qsExpanded
+    }
+
+    private fun isLockScreenShadeVisibleToUser(): Boolean {
+        return !statusBarStateController.isDozing &&
+                !statusBarKeyguardViewManager.isBouncerShowing &&
+                (statusBarStateController.state == StatusBarState.SHADE_LOCKED ||
+                        (statusBarStateController.state == StatusBarState.KEYGUARD && qsExpanded))
+    }
+
+    private fun isHomeScreenShadeVisibleToUser(): Boolean {
+        return !statusBarStateController.isDozing &&
+                statusBarStateController.state == StatusBarState.SHADE &&
+                statusBarStateController.isExpanded
     }
 
     companion object {

@@ -258,7 +258,8 @@ public final class DisplayManagerService extends SystemService {
     private final DisplayBlanker mDisplayBlanker = new DisplayBlanker() {
         // Synchronized to avoid race conditions when updating multiple display states.
         @Override
-        public synchronized void requestDisplayState(int displayId, int state, float brightness) {
+        public synchronized void requestDisplayState(int displayId, int state, float brightness,
+                float sdrBrightness) {
             boolean allInactive = true;
             boolean allOff = true;
             final boolean stateChanged;
@@ -289,7 +290,7 @@ public final class DisplayManagerService extends SystemService {
 
             // The order of operations is important for legacy reasons.
             if (state == Display.STATE_OFF) {
-                requestDisplayStateInternal(displayId, state, brightness);
+                requestDisplayStateInternal(displayId, state, brightness, sdrBrightness);
             }
 
             if (stateChanged) {
@@ -297,7 +298,7 @@ public final class DisplayManagerService extends SystemService {
             }
 
             if (state != Display.STATE_OFF) {
-                requestDisplayStateInternal(displayId, state, brightness);
+                requestDisplayStateInternal(displayId, state, brightness, sdrBrightness);
             }
         }
     };
@@ -317,7 +318,7 @@ public final class DisplayManagerService extends SystemService {
 
     // A map from LogicalDisplay ID to display brightness.
     @GuardedBy("mSyncRoot")
-    private final SparseArray<Float> mDisplayBrightnesses = new SparseArray<>();
+    private final SparseArray<BrightnessPair> mDisplayBrightnesses = new SparseArray<>();
 
     // Set to true when there are pending display changes that have yet to be applied
     // to the surface flinger state.
@@ -439,8 +440,8 @@ public final class DisplayManagerService extends SystemService {
         mHandler = new DisplayManagerHandler(DisplayThread.get().getLooper());
         mUiHandler = UiThread.getHandler();
         mDisplayDeviceRepo = new DisplayDeviceRepository(mSyncRoot, mPersistentDataStore);
-        mLogicalDisplayMapper = new LogicalDisplayMapper(mDisplayDeviceRepo,
-                new LogicalDisplayListener());
+        mLogicalDisplayMapper = new LogicalDisplayMapper(mContext, mDisplayDeviceRepo,
+                new LogicalDisplayListener(), mSyncRoot, mHandler);
         mDisplayModeDirector = new DisplayModeDirector(context, mHandler);
         mBrightnessSynchronizer = new BrightnessSynchronizer(mContext);
         Resources resources = mContext.getResources();
@@ -676,11 +677,8 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
-    private void requestDisplayStateInternal(int displayId, int state, float brightnessState) {
-        if (state == Display.STATE_UNKNOWN) {
-            state = Display.STATE_ON;
-        }
-        if (state == Display.STATE_OFF) {
+    private float clampBrightness(int displayState, float brightnessState) {
+        if (displayState == Display.STATE_OFF) {
             brightnessState = PowerManager.BRIGHTNESS_OFF_FLOAT;
         } else if (brightnessState != PowerManager.BRIGHTNESS_OFF_FLOAT
                 && brightnessState < PowerManager.BRIGHTNESS_MIN) {
@@ -688,6 +686,17 @@ public final class DisplayManagerService extends SystemService {
         } else if (brightnessState > PowerManager.BRIGHTNESS_MAX) {
             brightnessState = PowerManager.BRIGHTNESS_MAX;
         }
+        return brightnessState;
+    }
+
+    private void requestDisplayStateInternal(int displayId, int state, float brightnessState,
+            float sdrBrightnessState) {
+        if (state == Display.STATE_UNKNOWN) {
+            state = Display.STATE_ON;
+        }
+
+        brightnessState = clampBrightness(state, brightnessState);
+        sdrBrightnessState = clampBrightness(state, sdrBrightnessState);
 
         // Update the display state within the lock.
         // Note that we do not need to schedule traversals here although it
@@ -697,20 +706,26 @@ public final class DisplayManagerService extends SystemService {
         synchronized (mSyncRoot) {
             final int index = mDisplayStates.indexOfKey(displayId);
 
+            final BrightnessPair brightnessPair =
+                    index < 0 ? null : mDisplayBrightnesses.valueAt(index);
             if (index < 0 || (mDisplayStates.valueAt(index) == state
-                    && BrightnessSynchronizer.floatEquals(mDisplayBrightnesses.valueAt(index),
-                    brightnessState))) {
+                    && BrightnessSynchronizer.floatEquals(
+                            brightnessPair.brightness, brightnessState)
+                    && BrightnessSynchronizer.floatEquals(
+                            brightnessPair.sdrBrightness, sdrBrightnessState))) {
                 return; // Display no longer exists or no change.
             }
 
             traceMessage = "requestDisplayStateInternal("
                     + displayId + ", "
                     + Display.stateToString(state)
-                    + ", brightness=" + brightnessState + ")";
+                    + ", brightness=" + brightnessState
+                    + ", sdrBrightness=" + sdrBrightnessState + ")";
             Trace.asyncTraceBegin(Trace.TRACE_TAG_POWER, traceMessage, displayId);
 
             mDisplayStates.setValueAt(index, state);
-            mDisplayBrightnesses.setValueAt(index, brightnessState);
+            brightnessPair.brightness = brightnessState;
+            brightnessPair.sdrBrightness = sdrBrightnessState;
             runnable = updateDisplayStateLocked(mLogicalDisplayMapper.getDisplayLocked(displayId)
                     .getPrimaryDisplayDeviceLocked());
         }
@@ -1244,7 +1259,9 @@ public final class DisplayManagerService extends SystemService {
         addDisplayPowerControllerLocked(display);
         mDisplayStates.append(displayId, Display.STATE_OFF);
 
-        mDisplayBrightnesses.append(displayId, display.getDisplayInfoLocked().brightnessDefault);
+        final float brightnessDefault = display.getDisplayInfoLocked().brightnessDefault;
+        mDisplayBrightnesses.append(displayId,
+                new BrightnessPair(brightnessDefault, brightnessDefault));
 
         DisplayManagerGlobal.invalidateLocalDisplayInfoCaches();
 
@@ -1274,11 +1291,6 @@ public final class DisplayManagerService extends SystemService {
         // this point.
         sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
         scheduleTraversalLocked(false);
-
-        DisplayPowerController dpc = mDisplayPowerControllers.get(displayId);
-        if (dpc != null) {
-            dpc.onDisplayChangedLocked();
-        }
     }
 
     private void handleLogicalDisplayFrameRateOverridesChangedLocked(
@@ -1310,7 +1322,20 @@ public final class DisplayManagerService extends SystemService {
         if (work != null) {
             mHandler.post(work);
         }
+        final int displayId = display.getDisplayIdLocked();
+        DisplayPowerController dpc = mDisplayPowerControllers.get(displayId);
+        if (dpc != null) {
+            dpc.onDisplayChanged();
+        }
         handleLogicalDisplayChangedLocked(display);
+    }
+
+    private void handleLogicalDisplayDeviceStateTransitionLocked(@NonNull LogicalDisplay display) {
+        final int displayId = display.getDisplayIdLocked();
+        final DisplayPowerController dpc = mDisplayPowerControllers.get(displayId);
+        if (dpc != null) {
+            dpc.onDeviceStateTransition();
+        }
     }
 
     private Runnable updateDisplayStateLocked(DisplayDevice device) {
@@ -1319,13 +1344,17 @@ public final class DisplayManagerService extends SystemService {
         DisplayDeviceInfo info = device.getDisplayDeviceInfoLocked();
         if ((info.flags & DisplayDeviceInfo.FLAG_NEVER_BLANK) == 0) {
             final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
+            if (display == null) {
+                return null;
+            }
             final int displayId = display.getDisplayIdLocked();
             final int state = mDisplayStates.get(displayId);
 
             // Only send a request for display state if display state has already been initialized.
             if (state != Display.STATE_UNKNOWN) {
-                final float brightness = mDisplayBrightnesses.get(displayId);
-                return device.requestDisplayStateLocked(state, brightness);
+                final BrightnessPair brightnessPair = mDisplayBrightnesses.get(displayId);
+                return device.requestDisplayStateLocked(state, brightnessPair.brightness,
+                        brightnessPair.sdrBrightness);
             }
         }
         return null;
@@ -1462,9 +1491,12 @@ public final class DisplayManagerService extends SystemService {
         clearViewportsLocked();
 
         // Configure each display device.
-        mDisplayDeviceRepo.forEachLocked((DisplayDevice device) -> {
-            configureDisplayLocked(t, device);
-            device.performTraversalLocked(t);
+        mLogicalDisplayMapper.forEachLocked((LogicalDisplay display) -> {
+            final DisplayDevice device = display.getPrimaryDisplayDeviceLocked();
+            if (device != null) {
+                configureDisplayLocked(t, device);
+                device.performTraversalLocked(t);
+            }
         });
 
         // Tell the input system about these new viewports.
@@ -1938,10 +1970,11 @@ public final class DisplayManagerService extends SystemService {
             for (int i = 0; i < displayStateCount; i++) {
                 final int displayId = mDisplayStates.keyAt(i);
                 final int displayState = mDisplayStates.valueAt(i);
-                final float brightness = mDisplayBrightnesses.valueAt(i);
+                final BrightnessPair brightnessPair = mDisplayBrightnesses.valueAt(i);
                 pw.println("  Display Id=" + displayId);
                 pw.println("  Display State=" + Display.stateToString(displayState));
-                pw.println("  Display Brightness=" + brightness);
+                pw.println("  Display Brightness=" + brightnessPair.brightness);
+                pw.println("  Display SdrBrightness=" + brightnessPair.sdrBrightness);
             }
 
             IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "    ");
@@ -2178,6 +2211,10 @@ public final class DisplayManagerService extends SystemService {
 
                 case LogicalDisplayMapper.LOGICAL_DISPLAY_EVENT_FRAME_RATE_OVERRIDES_CHANGED:
                     handleLogicalDisplayFrameRateOverridesChangedLocked(display);
+                    break;
+
+                case LogicalDisplayMapper.LOGICAL_DISPLAY_EVENT_DEVICE_STATE_TRANSITION:
+                    handleLogicalDisplayDeviceStateTransitionLocked(display);
                     break;
             }
         }
@@ -3279,6 +3316,16 @@ public final class DisplayManagerService extends SystemService {
         }
     };
 
+    private class BrightnessPair {
+        public float brightness;
+        public float sdrBrightness;
+
+        BrightnessPair(float brightness, float sdrBrightness) {
+            this.brightness = brightness;
+            this.sdrBrightness = sdrBrightness;
+        }
+    }
+
     /**
      * Functional interface for providing time.
      * TODO(b/184781936): merge with PowerManagerService.Clock
@@ -3290,5 +3337,4 @@ public final class DisplayManagerService extends SystemService {
          */
         long uptimeMillis();
     }
-
 }

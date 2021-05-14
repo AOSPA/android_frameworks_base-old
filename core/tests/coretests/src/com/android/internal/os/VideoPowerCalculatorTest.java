@@ -52,9 +52,23 @@ public class VideoPowerCalculatorTest {
         mStatsRule.apply(calculator);
 
         UidBatteryConsumer consumer = mStatsRule.getUidBatteryConsumer(APP_UID);
-        assertThat(consumer.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_VIDEO))
+        assertThat(consumer.getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_VIDEO))
                 .isEqualTo(1000);
         assertThat(consumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_VIDEO))
+                .isWithin(PRECISION).of(0.1);
+
+        final BatteryConsumer deviceBatteryConsumer = mStatsRule.getDeviceBatteryConsumer();
+        assertThat(deviceBatteryConsumer
+                .getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_VIDEO))
+                .isEqualTo(1000);
+        assertThat(deviceBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_VIDEO))
+                .isWithin(PRECISION).of(0.1);
+
+        final BatteryConsumer appsBatteryConsumer = mStatsRule.getDeviceBatteryConsumer();
+        assertThat(appsBatteryConsumer
+                .getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_VIDEO))
+                .isEqualTo(1000);
+        assertThat(appsBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_VIDEO))
                 .isWithin(PRECISION).of(0.1);
     }
 }

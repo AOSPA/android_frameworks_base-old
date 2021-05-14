@@ -450,7 +450,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         return;
                     }
                     mPendingInlineSuggestionsRequest = inlineSuggestionsRequest;
-                    maybeRequestFillLocked();
+                    maybeRequestFillFromServiceLocked();
                     viewState.resetState(ViewState.STATE_PENDING_CREATE_INLINE_REQUEST);
                 }
             } : null;
@@ -462,7 +462,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             mPendingInlineSuggestionsRequest = inlineRequest;
         }
 
-        void maybeRequestFillLocked() {
+        void maybeRequestFillFromServiceLocked() {
             if (mPendingFillRequest == null) {
                 return;
             }
@@ -472,9 +472,12 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     return;
                 }
 
-                mPendingFillRequest = new FillRequest(mPendingFillRequest.getId(),
-                        mPendingFillRequest.getFillContexts(), mPendingFillRequest.getClientState(),
-                        mPendingFillRequest.getFlags(), mPendingInlineSuggestionsRequest);
+                if (mPendingInlineSuggestionsRequest.isServiceSupported()) {
+                    mPendingFillRequest = new FillRequest(mPendingFillRequest.getId(),
+                            mPendingFillRequest.getFillContexts(),
+                            mPendingFillRequest.getClientState(),
+                            mPendingFillRequest.getFlags(), mPendingInlineSuggestionsRequest);
+                }
             }
 
             mRemoteFillService.onFillRequest(mPendingFillRequest);
@@ -581,7 +584,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                         /*inlineSuggestionsRequest=*/null);
 
                 mPendingFillRequest = request;
-                maybeRequestFillLocked();
+                maybeRequestFillFromServiceLocked();
             }
 
             if (mActivityToken != null) {
@@ -1686,7 +1689,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         if (content != null) {
             final AutofillUriGrantsManager autofillUgm =
                     remoteAugmentedAutofillService.getAutofillUriGrantsManager();
-            autofillUgm.grantUriPermissions(mComponentName, userId, content);
+            autofillUgm.grantUriPermissions(mComponentName, mActivityToken, userId, content);
         }
 
         // Fill the value into the field.
@@ -3188,6 +3191,17 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
             return false;
         }
 
+        final InlineSuggestionsRequest request = inlineSuggestionsRequest.get();
+        if (mSessionFlags.mClientSuggestionsEnabled && !request.isClientSupported()
+                || !mSessionFlags.mClientSuggestionsEnabled && !request.isServiceSupported()) {
+            if (sDebug) {
+                Slog.d(TAG, "Inline suggestions not supported for "
+                        + (mSessionFlags.mClientSuggestionsEnabled ? "client" : "service")
+                        + ". Falling back to dropdown.");
+            }
+            return false;
+        }
+
         final RemoteInlineSuggestionRenderService remoteRenderService =
                 mService.getRemoteInlineSuggestionRenderServiceLocked();
         if (remoteRenderService == null) {
@@ -3196,7 +3210,7 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
         }
 
         final InlineFillUi.InlineFillUiInfo inlineFillUiInfo =
-                new InlineFillUi.InlineFillUiInfo(inlineSuggestionsRequest.get(), focusedId,
+                new InlineFillUi.InlineFillUiInfo(request, focusedId,
                         filterText, remoteRenderService, userId, id);
         InlineFillUi inlineFillUi = InlineFillUi.forAutofill(inlineFillUiInfo, response,
                 new InlineFillUi.InlineSuggestionUiCallback() {
@@ -3523,7 +3537,8 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                     synchronized (mLock) {
                         logAugmentedAutofillRequestLocked(mode, remoteService.getComponentName(),
                                 focusedId, isWhitelisted, inlineSuggestionsRequest != null);
-                        remoteService.onRequestAutofillLocked(id, mClient, taskId, mComponentName,
+                        remoteService.onRequestAutofillLocked(id, mClient,
+                                taskId, mComponentName, mActivityToken,
                                 AutofillId.withoutSession(focusedId), currentValue,
                                 inlineSuggestionsRequest, inlineSuggestionsResponseCallback,
                                 /*onErrorCallback=*/ () -> {
@@ -3807,6 +3822,10 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
 
         if (mContexts == null) {
             mContexts = new ArrayList<>(1);
+        }
+
+        if (inlineSuggestionsRequest != null && !inlineSuggestionsRequest.isClientSupported()) {
+            inlineSuggestionsRequest = null;
         }
 
         mClientSuggestionsSession.onFillRequest(requestId, inlineSuggestionsRequest, mFlags);
@@ -4148,13 +4167,6 @@ final class Session implements RemoteFillService.FillServiceCallbacks, ViewState
                 mService.getRemoteInlineSuggestionRenderServiceLocked();
         if (remoteRenderService != null) {
             remoteRenderService.destroySuggestionViews(userId, id);
-        }
-        final RemoteAugmentedAutofillService remoteAugmentedAutofillService =
-                mService.getRemoteAugmentedAutofillServiceIfCreatedLocked();
-        if (remoteAugmentedAutofillService != null) {
-            final AutofillUriGrantsManager autofillUgm =
-                    remoteAugmentedAutofillService.getAutofillUriGrantsManager();
-            autofillUgm.revokeUriPermissions(mComponentName, userId);
         }
 
         mDestroyed = true;

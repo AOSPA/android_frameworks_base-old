@@ -453,8 +453,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     private static final int ANIMATION_COMPLETED_TIMEOUT_MS = 5000;
 
-    @VisibleForTesting
-    WindowManagerConstants mConstants;
+    final WindowManagerConstants mConstants;
 
     final WindowTracing mWindowTracing;
 
@@ -782,7 +781,7 @@ public class WindowManagerService extends IWindowManager.Stub
                 Settings.Global.DEVELOPMENT_ENABLE_FREEFORM_WINDOWS_SUPPORT);
         private final Uri mForceResizableUri = Settings.Global.getUriFor(
                 DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES);
-        private final Uri mSupportsNonResizableMultiWindowUri = Settings.Global.getUriFor(
+        private final Uri mDevEnableNonResizableMultiWindowUri = Settings.Global.getUriFor(
                 DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW);
         private final Uri mRenderShadowsInCompositorUri = Settings.Global.getUriFor(
                 DEVELOPMENT_RENDER_SHADOWS_IN_COMPOSITOR);
@@ -808,7 +807,7 @@ public class WindowManagerService extends IWindowManager.Stub
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mFreeformWindowUri, false, this, UserHandle.USER_ALL);
             resolver.registerContentObserver(mForceResizableUri, false, this, UserHandle.USER_ALL);
-            resolver.registerContentObserver(mSupportsNonResizableMultiWindowUri, false, this,
+            resolver.registerContentObserver(mDevEnableNonResizableMultiWindowUri, false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(mRenderShadowsInCompositorUri, false, this,
                     UserHandle.USER_ALL);
@@ -823,7 +822,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
 
             if (mImmersiveModeConfirmationsUri.equals(uri) || mPolicyControlUri.equals(uri)) {
-                updateSystemUiSettings();
+                updateSystemUiSettings(true /* handleChange */);
                 return;
             }
 
@@ -847,8 +846,8 @@ public class WindowManagerService extends IWindowManager.Stub
                 return;
             }
 
-            if (mSupportsNonResizableMultiWindowUri.equals(uri)) {
-                updateSupportsNonResizableMultiWindow();
+            if (mDevEnableNonResizableMultiWindowUri.equals(uri)) {
+                updateDevEnableNonResizableMultiWindow();
                 return;
             }
 
@@ -879,17 +878,22 @@ public class WindowManagerService extends IWindowManager.Stub
         }
 
         void loadSettings() {
-            updateSystemUiSettings();
+            updateSystemUiSettings(false /* handleChange */);
             updatePointerLocation();
         }
 
-        void updateSystemUiSettings() {
-            boolean changed;
+        void updateSystemUiSettings(boolean handleChange) {
             synchronized (mGlobalLock) {
-                changed = ImmersiveModeConfirmation.loadSetting(mCurrentUserId, mContext);
-            }
-            if (changed) {
-                updateRotation(false /* alwaysSendConfiguration */, false /* forceRelayout */);
+                boolean changed = false;
+                if (handleChange) {
+                    changed = getDefaultDisplayContentLocked().getDisplayPolicy()
+                            .onSystemUiSettingsChanged();
+                } else {
+                    ImmersiveModeConfirmation.loadSetting(mCurrentUserId, mContext);
+                }
+                if (changed) {
+                    mWindowPlacerLocked.requestTraversal();
+                }
             }
         }
 
@@ -944,12 +948,12 @@ public class WindowManagerService extends IWindowManager.Stub
             mAtmService.mForceResizableActivities = forceResizable;
         }
 
-        void updateSupportsNonResizableMultiWindow() {
+        void updateDevEnableNonResizableMultiWindow() {
             ContentResolver resolver = mContext.getContentResolver();
-            final boolean supportsNonResizableMultiWindow = Settings.Global.getInt(resolver,
+            final boolean devEnableNonResizableMultiWindow = Settings.Global.getInt(resolver,
                     DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1) != 0;
 
-            mAtmService.mSupportsNonResizableMultiWindow = supportsNonResizableMultiWindow;
+            mAtmService.mDevEnableNonResizableMultiWindow = devEnableNonResizableMultiWindow;
         }
 
         void updateDisplaySettingsLocation() {
@@ -2995,7 +2999,7 @@ public class WindowManagerService extends IWindowManager.Stub
 
     @Override
     public void onUserSwitched() {
-        mSettingsObserver.updateSystemUiSettings();
+        mSettingsObserver.updateSystemUiSettings(true /* handleChange */);
         synchronized (mGlobalLock) {
             // force a re-application of focused window sysui visibility on each display.
             mRoot.forAllDisplayPolicies(DisplayPolicy::resetSystemUiVisibilityLw);
@@ -5574,11 +5578,6 @@ public class WindowManagerService extends IWindowManager.Stub
         mBlurController.unregisterCrossWindowBlurEnabledListener(listener);
     }
 
-    @Override
-    public void setForceCrossWindowBlurDisabled(boolean disable) {
-        mBlurController.setForceCrossWindowBlurDisabled(disable);
-    }
-
     // -------------------------------------------------------------
     // Internals
     // -------------------------------------------------------------
@@ -6327,7 +6326,7 @@ public class WindowManagerService extends IWindowManager.Stub
             }
         });
         pw.print("  mInTouchMode="); pw.println(mInTouchMode);
-        pw.print("  mBlurEnabled="); pw.println(mBlurController.mBlurEnabled);
+        pw.print("  mBlurEnabled="); pw.println(mBlurController.getBlurEnabled());
         pw.print("  mLastDisplayFreezeDuration=");
                 TimeUtils.formatDuration(mLastDisplayFreezeDuration, pw);
                 if ( mLastFinishedFreezeSource != null) {
@@ -8155,6 +8154,16 @@ public class WindowManagerService extends IWindowManager.Stub
         if (touchedWindow == null || !touchedWindow.canReceiveKeys(true /* fromUserTouch */)) {
             // If the window that received the input event cannot receive keys, don't move the
             // display it's on to the top since that window won't be able to get focus anyway.
+            return;
+        }
+
+        if (mRecentsAnimationController != null
+                && mRecentsAnimationController.getTargetAppMainWindow() == touchedWindow) {
+            // If there is an active recents animation and touched window is the target, then ignore
+            // the touch. The target already handles touches using its own input monitor and we
+            // don't want to trigger any lifecycle changes from focusing another window.
+            // TODO(b/186770026): We should remove this once we support multiple resumed activities
+            //                    while in overview
             return;
         }
 

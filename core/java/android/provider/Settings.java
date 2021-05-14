@@ -83,6 +83,7 @@ import android.util.ArraySet;
 import android.util.Log;
 import android.util.MemoryIntArray;
 import android.view.Display;
+import android.view.Window;
 import android.view.WindowManager.LayoutParams;
 
 import com.android.internal.annotations.GuardedBy;
@@ -2659,7 +2660,6 @@ public final class Settings {
     private static final class ContentProviderHolder {
         private final Object mLock = new Object();
 
-        @GuardedBy("mLock")
         private final Uri mUri;
         @GuardedBy("mLock")
         @UnsupportedAppUsage
@@ -6617,7 +6617,6 @@ public final class Settings {
          *
          * @hide
          */
-        @Readable
         public static final String ALWAYS_ON_VPN_APP = "always_on_vpn_app";
 
         /**
@@ -8524,6 +8523,12 @@ public final class Settings {
          */
         public static final String SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED =
                 "swipe_bottom_to_notification_enabled";
+
+        /**
+         * Controls whether One-Handed mode is currently activated.
+         * @hide
+         */
+        public static final String ONE_HANDED_MODE_ACTIVATED = "one_handed_mode_activated";
 
         /**
          * For user preference if One-Handed Mode enabled.
@@ -13384,6 +13389,19 @@ public final class Settings {
          */
         @Readable
         public static final String WINDOW_ANIMATION_SCALE = "window_animation_scale";
+
+        /**
+         * Setting to disable cross-window blurs. This includes window blur behind, (see
+         *  {@link LayoutParams#setBlurBehindRadius}) and window background blur (see
+         *  {@link Window#setBackgroundBlurRadius}).
+         *
+         * The value is a boolean (1 or 0).
+         * @hide
+         */
+        @TestApi
+        @Readable
+        @SuppressLint("NoSettingsProvider")
+        public static final String DISABLE_WINDOW_BLURS = "disable_window_blurs";
 
         /**
          * Scaling factor for activity transition animations.
