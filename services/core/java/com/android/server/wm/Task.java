@@ -220,6 +220,7 @@ import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.ActivityTrigger;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.XmlUtils;
@@ -313,6 +314,9 @@ class Task extends WindowContainer<WindowContainer> {
     // Current version of the task record we persist. Used to check if we need to run any upgrade
     // code.
     static final int PERSIST_TASK_VERSION = 1;
+
+    //ActivityTrigger
+    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
     static final int INVALID_MIN_SIZE = -1;
     private float mShadowRadius = 0;
@@ -5721,6 +5725,12 @@ class Task extends WindowContainer<WindowContainer> {
             return false;
         }
 
+        //Trigger Activity Pause
+        if (mActivityTrigger != null) {
+            mActivityTrigger.activityPauseTrigger(prev.intent, prev.info,
+                                                  prev.info.applicationInfo);
+        }
+
         if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activitySuspendNotification
                 (prev.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
@@ -6224,6 +6234,13 @@ class Task extends WindowContainer<WindowContainer> {
             next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
+
+        //Trigger Activity Resume
+        if (mActivityTrigger != null) {
+            mActivityTrigger.activityResumeTrigger(next.intent, next.info,
+                                                   next.info.applicationInfo,
+                                                   next.occludesParent());
+        }
 
         if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activityInvokeNotification
