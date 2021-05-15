@@ -138,6 +138,7 @@ public class DevicePowerStatusActionTest {
         mDevicePowerStatusAction = DevicePowerStatusAction.create(mPlaybackDevice, ADDR_TV,
                 mCallbackMock);
         mTestLooper.dispatchAll();
+        mNativeWrapper.clearResultMessages();
     }
 
     @Test
@@ -280,5 +281,18 @@ public class DevicePowerStatusActionTest {
         mTestLooper.dispatchAll();
 
         verify(mCallbackMock).onComplete(HdmiControlManager.POWER_STATUS_STANDBY);
+    }
+
+    @Test
+    public void pendingActionDoesNotBlockSendingStandby() throws Exception {
+        mPlaybackDevice.addAndStartAction(mDevicePowerStatusAction);
+        mTestLooper.dispatchAll();
+        mNativeWrapper.clearResultMessages();
+
+        mHdmiControlService.onStandby(HdmiControlService.STANDBY_SCREEN_OFF);
+        mTestLooper.dispatchAll();
+        HdmiCecMessage standbyMessage = HdmiCecMessageBuilder.buildStandby(
+                mPlaybackDevice.mAddress, ADDR_TV);
+        assertThat(mNativeWrapper.getResultMessages()).contains(standbyMessage);
     }
 }

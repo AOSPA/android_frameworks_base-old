@@ -88,7 +88,6 @@ interface IDevicePolicyManager {
 
     boolean isActivePasswordSufficient(int userHandle, boolean parent);
     boolean isActivePasswordSufficientForDeviceRequirement();
-    boolean isProfileActivePasswordSufficientForParent(int userHandle);
     boolean isPasswordSufficientAfterProfileUnification(int userHandle, int profileUser);
     int getPasswordComplexity(boolean parent);
     void setRequiredPasswordComplexity(int passwordComplexity, boolean parent);
@@ -134,10 +133,10 @@ interface IDevicePolicyManager {
     boolean getScreenCaptureDisabled(in ComponentName who, int userHandle, boolean parent);
 
     void setNearbyNotificationStreamingPolicy(int policy);
-    int getNearbyNotificationStreamingPolicy();
+    int getNearbyNotificationStreamingPolicy(int userId);
 
     void setNearbyAppStreamingPolicy(int policy);
-    int getNearbyAppStreamingPolicy();
+    int getNearbyAppStreamingPolicy(int userId);
 
     void setKeyguardDisabledFeatures(in ComponentName who, int which, boolean parent);
     int getKeyguardDisabledFeatures(in ComponentName who, int userHandle, boolean parent);

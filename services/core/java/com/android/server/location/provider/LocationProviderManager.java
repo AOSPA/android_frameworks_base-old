@@ -462,6 +462,12 @@ public class LocationProviderManager extends
         }
 
         @GuardedBy("mLock")
+        final boolean onProviderPropertiesChanged() {
+            onHighPowerUsageChanged();
+            return false;
+        }
+
+        @GuardedBy("mLock")
         private void onHighPowerUsageChanged() {
             boolean isUsingHighPower = isUsingHighPower();
             if (isUsingHighPower != mIsUsingHighPower) {
@@ -485,9 +491,14 @@ public class LocationProviderManager extends
                 Preconditions.checkState(Thread.holdsLock(mLock));
             }
 
+            ProviderProperties properties = getProperties();
+            if (properties == null) {
+                return false;
+            }
+
             return isActive()
                     && getRequest().getIntervalMillis() < MAX_HIGH_POWER_INTERVAL_MS
-                    && getProperties().getPowerUsage() == ProviderProperties.POWER_USAGE_HIGH;
+                    && properties.getPowerUsage() == ProviderProperties.POWER_USAGE_HIGH;
         }
 
         @GuardedBy("mLock")
@@ -523,6 +534,13 @@ public class LocationProviderManager extends
                 }
 
                 mPermitted = permitted;
+
+                if (mForeground) {
+                    EVENT_LOG.logProviderClientPermitted(mName, getIdentity());
+                } else {
+                    EVENT_LOG.logProviderClientUnpermitted(mName, getIdentity());
+                }
+
                 return true;
             }
 
@@ -2270,23 +2288,33 @@ public class LocationProviderManager extends
             onEnabledChanged(UserHandle.USER_ALL);
         }
 
+        if (!Objects.equals(oldState.properties, newState.properties)) {
+            updateRegistrations(Registration::onProviderPropertiesChanged);
+        }
+
         if (mOnLocationTagsChangeListener != null) {
-            if (!oldState.extraAttributionTags.equals(newState.extraAttributionTags)) {
+            if (!oldState.extraAttributionTags.equals(newState.extraAttributionTags)
+                    || !Objects.equals(oldState.identity, newState.identity)) {
                 if (oldState.identity != null) {
                     FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                             OnProviderLocationTagsChangeListener::onLocationTagsChanged,
                             mOnLocationTagsChangeListener, new LocationTagInfo(
                                     oldState.identity.getUid(), oldState.identity.getPackageName(),
                                     Collections.emptySet())
-                            ));
+                    ));
                 }
                 if (newState.identity != null) {
+                    ArraySet<String> attributionTags = new ArraySet<>(
+                            newState.extraAttributionTags.size() + 1);
+                    attributionTags.addAll(newState.extraAttributionTags);
+                    attributionTags.add(newState.identity.getAttributionTag());
+
                     FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                             OnProviderLocationTagsChangeListener::onLocationTagsChanged,
                             mOnLocationTagsChangeListener, new LocationTagInfo(
                                     newState.identity.getUid(), newState.identity.getPackageName(),
-                                    newState.extraAttributionTags)
-                            ));
+                                    attributionTags)
+                    ));
                 }
             }
         }

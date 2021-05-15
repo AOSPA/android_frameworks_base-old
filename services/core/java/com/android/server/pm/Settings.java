@@ -340,6 +340,7 @@ public final class Settings implements Watchable, Snappable {
     private static final String ATTR_INSTANT_APP = "instant-app";
     private static final String ATTR_VIRTUAL_PRELOAD = "virtual-preload";
     private static final String ATTR_HARMFUL_APP_WARNING = "harmful-app-warning";
+    private static final String ATTR_SPLASH_SCREEN_THEME = "splash-screen-theme";
 
     private static final String ATTR_PACKAGE_NAME = "packageName";
     private static final String ATTR_FINGERPRINT = "fingerprint";
@@ -939,7 +940,9 @@ public final class Settings implements Watchable, Snappable {
                                 null /*disabledComponents*/,
                                 PackageManager.INSTALL_REASON_UNKNOWN,
                                 PackageManager.UNINSTALL_REASON_UNKNOWN,
-                                null /*harmfulAppWarning*/);
+                                null, /*harmfulAppWarning*/
+                                null /*splashscreenTheme*/
+                        );
                     }
                 }
             }
@@ -1578,7 +1581,8 @@ public final class Settings implements Watchable, Snappable {
                                 null /*disabledComponents*/,
                                 PackageManager.INSTALL_REASON_UNKNOWN,
                                 PackageManager.UNINSTALL_REASON_UNKNOWN,
-                                null /*harmfulAppWarning*/);
+                                null /*harmfulAppWarning*/,
+                                null /* splashScreenTheme*/);
                     }
                     return;
                 }
@@ -1666,6 +1670,8 @@ public final class Settings implements Watchable, Snappable {
                             PackageManager.INSTALL_REASON_UNKNOWN);
                     final int uninstallReason = parser.getAttributeInt(null, ATTR_UNINSTALL_REASON,
                             PackageManager.UNINSTALL_REASON_UNKNOWN);
+                    final String splashScreenTheme = parser.getAttributeValue(null,
+                            ATTR_SPLASH_SCREEN_THEME);
 
                     ArraySet<String> enabledComponents = null;
                     ArraySet<String> disabledComponents = null;
@@ -1738,7 +1744,8 @@ public final class Settings implements Watchable, Snappable {
                     ps.setUserState(userId, ceDataInode, enabled, installed, stopped, notLaunched,
                             hidden, distractionFlags, suspended, suspendParamsMap,
                             instantApp, virtualPreload, enabledCaller, enabledComponents,
-                            disabledComponents, installReason, uninstallReason, harmfulAppWarning);
+                            disabledComponents, installReason, uninstallReason, harmfulAppWarning,
+                            splashScreenTheme);
 
                     mDomainVerificationManager.setLegacyUserState(name, userId, verifState);
                 } else if (tagName.equals("preferred-activities")) {
@@ -1994,6 +2001,10 @@ public final class Settings implements Watchable, Snappable {
                 if (ustate.harmfulAppWarning != null) {
                     serializer.attribute(null, ATTR_HARMFUL_APP_WARNING,
                             ustate.harmfulAppWarning);
+                }
+                if (ustate.splashScreenTheme != null) {
+                    serializer.attribute(null, ATTR_SPLASH_SCREEN_THEME,
+                            ustate.splashScreenTheme);
                 }
                 if (ustate.suspended) {
                     for (int i = 0; i < ustate.suspendParams.size(); i++) {
@@ -2328,7 +2339,8 @@ public final class Settings implements Watchable, Snappable {
                 }
             }
 
-            mDomainVerificationManager.writeSettings(serializer);
+            mDomainVerificationManager.writeSettings(serializer, false /* includeSignatures */,
+                    UserHandle.USER_ALL);
 
             mKeySetManagerService.writeKeySetManagerServiceLPr(serializer);
 
@@ -2548,6 +2560,9 @@ public final class Settings implements Watchable, Snappable {
                 // gids       - supplementary gids this app launches with
                 // profileableFromShellFlag  - 0 or 1 if the package is profileable from shell.
                 // longVersionCode - integer version of the package.
+                // profileable - 0 or 1 if the package is profileable by the platform.
+                // packageInstaller - the package that installed this app, or @system, @product or
+                //                    @null.
                 //
                 // NOTE: We prefer not to expose all ApplicationInfo flags for now.
                 //
@@ -2578,6 +2593,19 @@ public final class Settings implements Watchable, Snappable {
                 sb.append(pkg.pkg.isProfileableByShell() ? "1" : "0");
                 sb.append(" ");
                 sb.append(pkg.pkg.getLongVersionCode());
+                sb.append(" ");
+                sb.append(pkg.pkg.isProfileable() ? "1" : "0");
+                sb.append(" ");
+                if (pkg.isSystem()) {
+                    sb.append("@system");
+                } else if (pkg.isProduct()) {
+                    sb.append("@product");
+                } else if (pkg.installSource.installerPackageName != null
+                           && !pkg.installSource.installerPackageName.isEmpty()) {
+                    sb.append(pkg.installSource.installerPackageName);
+                } else {
+                    sb.append("@null");
+                }
                 sb.append("\n");
                 writer.append(sb);
             }
@@ -2902,13 +2930,7 @@ public final class Settings implements Watchable, Snappable {
             }
 
             str.close();
-
-        } catch (XmlPullParserException e) {
-            mReadMessages.append("Error reading: " + e.toString());
-            PackageManagerService.reportSettingsProblem(Log.ERROR, "Error reading settings: " + e);
-            Slog.wtf(PackageManagerService.TAG, "Error reading package manager settings", e);
-
-        } catch (java.io.IOException e) {
+        } catch (IOException | XmlPullParserException e) {
             mReadMessages.append("Error reading: " + e.toString());
             PackageManagerService.reportSettingsProblem(Log.ERROR, "Error reading settings: " + e);
             Slog.wtf(PackageManagerService.TAG, "Error reading package manager settings", e);
@@ -3004,8 +3026,9 @@ public final class Settings implements Watchable, Snappable {
                         = ps.pkg.getPreferredActivityFilters();
                 for (int i=0; i<intents.size(); i++) {
                     Pair<String, ParsedIntentInfo> pair = intents.get(i);
-                    applyDefaultPreferredActivityLPw(pmInternal, pair.second, new ComponentName(
-                            ps.name, pair.first), userId);
+                    applyDefaultPreferredActivityLPw(pmInternal,
+                            new WatchedIntentFilter(pair.second),
+                            new ComponentName(ps.name, pair.first), userId);
                 }
             }
         }
@@ -3075,7 +3098,7 @@ public final class Settings implements Watchable, Snappable {
     }
 
     static void removeFilters(@NonNull PreferredIntentResolver pir,
-            @NonNull IntentFilter filter, @NonNull List<PreferredActivity> existing) {
+            @NonNull WatchedIntentFilter filter, @NonNull List<PreferredActivity> existing) {
         if (PackageManagerService.DEBUG_PREFERRED) {
             Slog.i(TAG, existing.size() + " preferred matches for:");
             filter.dump(new LogPrinter(Log.INFO, TAG), "  ");
@@ -3090,8 +3113,8 @@ public final class Settings implements Watchable, Snappable {
         }
     }
 
-    private void applyDefaultPreferredActivityLPw(
-            PackageManagerInternal pmInternal, IntentFilter tmpPa, ComponentName cn, int userId) {
+    private void applyDefaultPreferredActivityLPw(PackageManagerInternal pmInternal,
+            WatchedIntentFilter tmpPa, ComponentName cn, int userId) {
         // The initial preferences only specify the target activity
         // component and intent-filter, not the set of matches.  So we
         // now need to query for the matches to build the correct
@@ -3262,7 +3285,7 @@ public final class Settings implements Watchable, Snappable {
             haveNonSys = null;
         }
         if (haveAct && haveNonSys == null) {
-            IntentFilter filter = new IntentFilter();
+            WatchedIntentFilter filter = new WatchedIntentFilter();
             if (intent.getAction() != null) {
                 filter.addAction(intent.getAction());
             }

@@ -16,6 +16,7 @@
 
 package android.view.translation;
 
+import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemService;
@@ -41,12 +42,14 @@ import com.android.internal.util.SyncResultReceiver;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Map;
 import java.util.Objects;
 import java.util.Random;
 import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.Consumer;
 
 /**
  * The {@link TranslationManager} class provides ways for apps to integrate and use the
@@ -81,10 +84,13 @@ public final class TranslationManager {
      */
     public static final String EXTRA_CAPABILITIES = "translation_capabilities";
 
-    // TODO: implement update listeners and propagate updates.
     @GuardedBy("mLock")
     private final ArrayMap<Pair<Integer, Integer>, ArrayList<PendingIntent>>
             mTranslationCapabilityUpdateListeners = new ArrayMap<>();
+
+    @GuardedBy("mLock")
+    private final Map<Consumer<TranslationCapability>, IRemoteCallback> mCapabilityCallbacks =
+            new ArrayMap<>();
 
     private static final Random ID_GENERATOR = new Random();
     private final Object mLock = new Object();
@@ -93,10 +99,6 @@ public final class TranslationManager {
     private final Context mContext;
 
     private final ITranslationManager mService;
-
-    @Nullable
-    @GuardedBy("mLock")
-    private ITranslationDirectManager mDirectServiceBinder;
 
     @NonNull
     @GuardedBy("mLock")
@@ -125,11 +127,72 @@ public final class TranslationManager {
     /**
      * Creates an on-device Translator for natural language translation.
      *
+     * @param translationContext {@link TranslationContext} containing the specs for creating the
+     *                                                     Translator.
+     * @param executor Executor to run callback operations
+     * @param callback {@link Consumer} to receive the translator. A {@code null} value is returned
+     *                                 if the service could not create the translator.
+     */
+    public void createOnDeviceTranslator(@NonNull TranslationContext translationContext,
+            @NonNull @CallbackExecutor Executor executor, @NonNull Consumer<Translator> callback) {
+        Objects.requireNonNull(translationContext, "translationContext cannot be null");
+        Objects.requireNonNull(executor, "executor cannot be null");
+        Objects.requireNonNull(callback, "callback cannot be null");
+
+        synchronized (mLock) {
+            // TODO(b/176464808): Disallow multiple Translator now, it will throw
+            //  IllegalStateException. Need to discuss if we can allow multiple Translators.
+            if (mTranslatorIds.containsKey(translationContext)) {
+                executor.execute(() -> callback.accept(
+                        mTranslators.get(mTranslatorIds.get(translationContext))));
+                return;
+            }
+
+            int translatorId;
+            do {
+                translatorId = Math.abs(ID_GENERATOR.nextInt());
+            } while (translatorId == 0 || mTranslators.indexOfKey(translatorId) >= 0);
+            final int tId = translatorId;
+
+            new Translator(mContext, translationContext, translatorId, this, mHandler, mService,
+                    new Consumer<Translator>() {
+                        @Override
+                        public void accept(Translator translator) {
+                            if (translator == null) {
+                                final long token = Binder.clearCallingIdentity();
+                                try {
+                                    executor.execute(() -> callback.accept(null));
+                                } finally {
+                                    Binder.restoreCallingIdentity(token);
+                                }
+                                return;
+                            }
+
+                            mTranslators.put(tId, translator);
+                            mTranslatorIds.put(translationContext, tId);
+                            final long token = Binder.clearCallingIdentity();
+                            try {
+                                executor.execute(() -> callback.accept(translator));
+                            } finally {
+                                Binder.restoreCallingIdentity(token);
+                            }
+                        }
+                    });
+        }
+    }
+
+    /**
+     * Creates an on-device Translator for natural language translation.
+     *
      * <p><strong>NOTE: </strong>Call on a worker thread.
+     *
+     * @deprecated use {@link #createOnDeviceTranslator(TranslationContext, Executor, Consumer)}
+     * instead.
      *
      * @param translationContext {@link TranslationContext} containing the specs for creating the
      *                                                     Translator.
      */
+    @Deprecated
     @Nullable
     @WorkerThread
     public Translator createOnDeviceTranslator(@NonNull TranslationContext translationContext) {
@@ -232,16 +295,42 @@ public final class TranslationManager {
     }
 
     /**
-     * Registers a {@link PendingIntent} to listen for updates on states of on-device
+     * Adds a {@link TranslationCapability} Consumer to listen for updates on states of on-device
      * {@link TranslationCapability}s.
      *
-     * <p>IMPORTANT: the pending intent must be called to start a service, or a broadcast if it is
-     * an explicit intent.</p>
-     *
-     * @param sourceFormat data format for the input data to be translated.
-     * @param targetFormat data format for the expected translated output data.
-     * @param pendingIntent the pending intent to invoke when updates are received.
+     * @param capabilityListener a {@link TranslationCapability} Consumer to receive the updated
+     * {@link TranslationCapability} from the on-device translation service.
      */
+    public void addOnDeviceTranslationCapabilityUpdateListener(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Consumer<TranslationCapability> capabilityListener) {
+        Objects.requireNonNull(executor, "executor should not be null");
+        Objects.requireNonNull(capabilityListener, "capability listener should not be null");
+
+        synchronized (mLock) {
+            if (mCapabilityCallbacks.containsKey(capabilityListener)) {
+                Log.w(TAG, "addOnDeviceTranslationCapabilityUpdateListener: the listener for "
+                        + capabilityListener + " already registered; ignoring.");
+                return;
+            }
+            final IRemoteCallback remoteCallback = new TranslationCapabilityRemoteCallback(executor,
+                    capabilityListener);
+            try {
+                mService.registerTranslationCapabilityCallback(remoteCallback,
+                        mContext.getUserId());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+            mCapabilityCallbacks.put(capabilityListener, remoteCallback);
+        }
+    }
+
+
+    /**
+     * @deprecated Use {@link TranslationManager#addOnDeviceTranslationCapabilityUpdateListener(
+     * java.util.concurrent.Executor, java.util.function.Consumer)}
+     */
+    @Deprecated
     public void addOnDeviceTranslationCapabilityUpdateListener(
             @TranslationSpec.DataFormat int sourceFormat,
             @TranslationSpec.DataFormat int targetFormat,
@@ -256,8 +345,8 @@ public final class TranslationManager {
     }
 
     /**
-     * @deprecated Use {@link #addOnDeviceTranslationCapabilityUpdateListener(int, int,
-     *  PendingIntent)}
+     * @deprecated Use {@link TranslationManager#addOnDeviceTranslationCapabilityUpdateListener(
+     * java.util.concurrent.Executor, java.util.function.Consumer)}
      */
     @Deprecated
     public void addTranslationCapabilityUpdateListener(
@@ -268,13 +357,37 @@ public final class TranslationManager {
     }
 
     /**
-     * Unregisters a {@link PendingIntent} to listen for updates on states of on-device
-     * {@link TranslationCapability}s.
+     * Removes a {@link TranslationCapability} Consumer to listen for updates on states of
+     * on-device {@link TranslationCapability}s.
      *
-     * @param sourceFormat data format for the input data to be translated.
-     * @param targetFormat data format for the expected translated output data.
-     * @param pendingIntent the pending intent to unregister
+     * @param capabilityListener the {@link TranslationCapability} Consumer to unregister
      */
+    public void removeOnDeviceTranslationCapabilityUpdateListener(
+            @NonNull Consumer<TranslationCapability> capabilityListener) {
+        Objects.requireNonNull(capabilityListener, "capability callback should not be null");
+
+        synchronized (mLock) {
+            final IRemoteCallback remoteCallback = mCapabilityCallbacks.get(capabilityListener);
+            if (remoteCallback == null) {
+                Log.w(TAG, "removeOnDeviceTranslationCapabilityUpdateListener: the capability "
+                        + "listener not found; ignoring.");
+                return;
+            }
+            try {
+                mService.unregisterTranslationCapabilityCallback(remoteCallback,
+                        mContext.getUserId());
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+            mCapabilityCallbacks.remove(capabilityListener);
+        }
+    }
+
+    /**
+     * @deprecated Use {@link #removeOnDeviceTranslationCapabilityUpdateListener(
+     * java.util.function.Consumer)}.
+     */
+    @Deprecated
     public void removeOnDeviceTranslationCapabilityUpdateListener(
             @TranslationSpec.DataFormat int sourceFormat,
             @TranslationSpec.DataFormat int targetFormat,
@@ -300,8 +413,8 @@ public final class TranslationManager {
     }
 
     /**
-     * @deprecated Use {@link #removeOnDeviceTranslationCapabilityUpdateListener(int, int,
-     *  PendingIntent)}
+     * @deprecated Use {@link #removeOnDeviceTranslationCapabilityUpdateListener(
+     * java.util.function.Consumer)}.
      */
     @Deprecated
     public void removeTranslationCapabilityUpdateListener(
@@ -366,9 +479,12 @@ public final class TranslationManager {
     private static class TranslationCapabilityRemoteCallback extends
             IRemoteCallback.Stub {
         private final Executor mExecutor;
+        private final Consumer<TranslationCapability> mListener;
 
-        TranslationCapabilityRemoteCallback(Executor executor) {
+        TranslationCapabilityRemoteCallback(Executor executor,
+                Consumer<TranslationCapability> listener) {
             mExecutor = executor;
+            mListener = listener;
         }
 
         @Override
@@ -378,9 +494,9 @@ public final class TranslationManager {
         }
 
         private void onTranslationCapabilityUpdate(Bundle bundle) {
-            TranslationCapability capability = (TranslationCapability) bundle.getParcelable(
-                    EXTRA_CAPABILITIES);
-            //TODO: Implement after deciding how capability listeners are implemented.
+            TranslationCapability capability =
+                    (TranslationCapability) bundle.getParcelable(EXTRA_CAPABILITIES);
+            mListener.accept(capability);
         }
     }
 }

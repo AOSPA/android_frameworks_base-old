@@ -21,7 +21,6 @@ import android.net.Uri;
 import android.view.MotionEvent;
 
 import com.android.systemui.plugins.annotations.ProvidesInterface;
-import com.android.systemui.util.sensors.ThresholdSensor;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -57,7 +56,6 @@ public interface FalsingManager {
 
     /** Returns true if the gesture should be rejected. */
     boolean isFalseTouch(int interactionType);
-
 
     /**
      * Does basic checking to see if gesture looks like a tap.
@@ -119,7 +117,7 @@ public interface FalsingManager {
     void cleanup();
 
     /** Call to report a ProximityEvent to the FalsingManager. */
-    void onProximityEvent(ThresholdSensor.ThresholdSensorEvent proximityEvent);
+    void onProximityEvent(ProximityEvent proximityEvent);
 
     /** Adds a {@link FalsingBeliefListener}. */
     void addFalsingBeliefListener(FalsingBeliefListener listener);
@@ -127,8 +125,28 @@ public interface FalsingManager {
     /** Removes a {@link FalsingBeliefListener}. */
     void removeFalsingBeliefListener(FalsingBeliefListener listener);
 
+    /** Adds a {@link FalsingTapListener}. */
+    void addTapListener(FalsingTapListener falsingTapListener);
+
+    /** Removes a {@link FalsingTapListener}. */
+    void removeTapListener(FalsingTapListener falsingTapListener);
+
     /** Listener that is alerted when falsing belief level crosses a predfined threshold. */
     interface FalsingBeliefListener {
         void onFalse();
+    }
+
+    /** Listener that is alerted when a double tap is required to confirm a single tap. */
+    interface FalsingTapListener {
+        void onDoubleTapRequired();
+    }
+
+    /** Passed to {@link FalsingManager#onProximityEvent}. */
+    interface ProximityEvent {
+        /** Returns true when the proximity sensor was covered. */
+        boolean getCovered();
+
+        /** Returns when the proximity sensor was covered in nanoseconds. */
+        long getTimestampNs();
     }
 }

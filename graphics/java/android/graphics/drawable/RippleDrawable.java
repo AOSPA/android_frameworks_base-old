@@ -864,7 +864,10 @@ public class RippleDrawable extends LayerDrawable {
         boolean shouldExit = mExitingAnimation;
         mRippleActive = false;
         mExitingAnimation = false;
-        getRipplePaint();
+        if (mRunningAnimations.size() > 0 && !shouldAnimate) {
+            // update paint when view is invalidated
+            getRipplePaint();
+        }
         drawContent(canvas);
         drawPatternedBackground(canvas, cx, cy);
         if (shouldAnimate && mRunningAnimations.size() <= MAX_RIPPLES) {
@@ -902,7 +905,7 @@ public class RippleDrawable extends LayerDrawable {
                     yProp = p.getY();
                 }
                 can.drawRipple(xProp, yProp, p.getMaxRadius(), p.getPaint(),
-                        p.getProgress(), p.getNoisePhase(), p.getShader());
+                        p.getProgress(), p.getNoisePhase(), p.getColor(), p.getShader());
             } else {
                 RippleAnimationSession.AnimationProperties<Float, Paint> p =
                         s.getProperties();
@@ -928,7 +931,7 @@ public class RippleDrawable extends LayerDrawable {
             startBackgroundAnimation();
         }
         if (mBackgroundOpacity == 0) return;
-        Paint p = mRipplePaint;
+        Paint p = getRipplePaint();
         float newOpacity = mBackgroundOpacity;
         final int origAlpha = p.getAlpha();
         final int alpha = Math.min((int) (origAlpha * newOpacity + 0.5f), 255);
@@ -957,7 +960,7 @@ public class RippleDrawable extends LayerDrawable {
     @NonNull
     private RippleAnimationSession.AnimationProperties<Float, Paint> createAnimationProperties(
             float x, float y, float cx, float cy, float w, float h) {
-        Paint p = new Paint(mRipplePaint);
+        Paint p = new Paint(getRipplePaint());
         float radius = getComputedRadius();
         RippleAnimationSession.AnimationProperties<Float, Paint> properties;
         RippleShader shader = new RippleShader();
@@ -975,7 +978,7 @@ public class RippleDrawable extends LayerDrawable {
         shader.setRadius(radius);
         shader.setProgress(.0f);
         properties = new RippleAnimationSession.AnimationProperties<>(
-                cx, cy, radius, 0f, p, 0f, shader);
+                cx, cy, radius, 0f, p, 0f, color, shader);
         if (mMaskShader == null) {
             shader.setShader(null);
         } else {

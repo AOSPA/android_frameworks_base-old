@@ -492,8 +492,12 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
         return UserHandle.USER_NULL;
     }
 
-    @VisibleForTesting
-    protected void setVisible(boolean visible) {
+    /**
+     * Sets the visibility of keyguard bottom area, and if the indications are updatable.
+     *
+     * @param visible true to make the area visible and update the indication, false otherwise.
+     */
+    public void setVisible(boolean visible) {
         mVisible = visible;
         mIndicationArea.setVisibility(visible ? VISIBLE : GONE);
         if (visible) {
@@ -888,7 +892,14 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
             if (msgId == FaceManager.FACE_ERROR_TIMEOUT) {
                 // The face timeout message is not very actionable, let's ask the user to
                 // manually retry.
-                showSwipeUpToUnlock();
+                if (!mStatusBarKeyguardViewManager.isBouncerShowing()
+                        && mKeyguardUpdateMonitor.isUdfpsEnrolled()) {
+                    // suggest trying fingerprint
+                    showTransientIndication(R.string.keyguard_try_fingerprint);
+                } else {
+                    // suggest swiping up to unlock (try face auth again or swipe up to bouncer)
+                    showSwipeUpToUnlock();
+                }
             } else if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
                 mStatusBarKeyguardViewManager.showBouncerMessage(errString, mInitialTextColorState);
             } else if (mKeyguardUpdateMonitor.isScreenOn()) {
@@ -917,7 +928,8 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
             // check of whether non-strong biometric is allowed
             return ((!updateMonitor.isUnlockingWithBiometricAllowed(true /* isStrongBiometric */)
                     && msgId != FingerprintManager.FINGERPRINT_ERROR_LOCKOUT_PERMANENT)
-                    || msgId == FingerprintManager.FINGERPRINT_ERROR_CANCELED);
+                    || msgId == FingerprintManager.FINGERPRINT_ERROR_CANCELED
+                    || msgId == FingerprintManager.FINGERPRINT_ERROR_USER_CANCELED);
         }
 
         private boolean shouldSuppressFaceError(int msgId, KeyguardUpdateMonitor updateMonitor) {

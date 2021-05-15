@@ -91,6 +91,7 @@ import static android.content.pm.ActivityInfo.SIZE_CHANGES_UNSUPPORTED_OVERRIDE;
 import static android.content.pm.ActivityInfo.isFixedOrientationLandscape;
 import static android.content.pm.ActivityInfo.isFixedOrientationPortrait;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
+import static android.content.res.Configuration.ASSETS_SEQ_UNDEFINED;
 import static android.content.res.Configuration.EMPTY;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
@@ -2484,8 +2485,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (windowingMode == WINDOWING_MODE_PINNED && info.supportsPictureInPicture()) {
             return false;
         }
-        if (WindowConfiguration.inMultiWindowMode(windowingMode)
-                && mAtmService.mSupportsNonResizableMultiWindow
+        if (WindowConfiguration.inMultiWindowMode(windowingMode) && supportsMultiWindow()
                 && !mAtmService.mForceResizableActivities) {
             // The non resizable app will be letterboxed instead of being forced resizable.
             return false;
@@ -2528,7 +2528,28 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     boolean supportsMultiWindow() {
         return mAtmService.mSupportsMultiWindow && !isActivityTypeHome()
-                && (isResizeable() || mAtmService.mSupportsNonResizableMultiWindow);
+                && (isResizeable() || mAtmService.mDevEnableNonResizableMultiWindow);
+    }
+
+    // TODO(b/176061101) replace supportsMultiWindow() after fixing tests.
+    boolean supportsMultiWindow2() {
+        if (!mAtmService.mSupportsMultiWindow) {
+            return false;
+        }
+        final TaskDisplayArea tda = getDisplayArea();
+        if (tda == null) {
+            return false;
+        }
+
+        if (!isResizeable() && !tda.supportsNonResizableMultiWindow()) {
+            // Not support non-resizable in multi window.
+            return false;
+        }
+
+        final ActivityInfo.WindowLayout windowLayout = info.windowLayout;
+        return windowLayout == null
+                || tda.supportsActivityMinWidthHeightMultiWindow(windowLayout.minWidth,
+                windowLayout.minHeight);
     }
 
     /**
@@ -3551,7 +3572,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         // Reset the last saved PiP snap fraction on removal.
-        mDisplayContent.mPinnedTaskControllerLocked.onActivityHidden(mActivityComponent);
+        mDisplayContent.mPinnedTaskController.onActivityHidden(mActivityComponent);
         mWmService.mEmbeddedWindowController.onActivityRemoved(this);
         mRemovingFromDisplay = false;
     }
@@ -4982,7 +5003,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         ProtoLog.v(WM_DEBUG_ADD_REMOVE, "notifyAppStopped: %s", this);
         mAppStopped = true;
         // Reset the last saved PiP snap fraction on app stop.
-        mDisplayContent.mPinnedTaskControllerLocked.onActivityHidden(mActivityComponent);
+        mDisplayContent.mPinnedTaskController.onActivityHidden(mActivityComponent);
         destroySurfaces();
         // Remove any starting window that was added for this app if they are still around.
         removeStartingWindow();
@@ -6722,12 +6743,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void onCancelFixedRotationTransform(int originalDisplayRotation) {
-        if (this != mDisplayContent.getLastOrientationSource()
-                || getRequestedConfigurationOrientation() != ORIENTATION_UNDEFINED) {
-            // Only need to handle the activity that should be rotated with display.
+        if (this != mDisplayContent.getLastOrientationSource()) {
+            // This activity doesn't affect display rotation.
+            return;
+        }
+        final int requestedOrientation = getRequestedConfigurationOrientation();
+        if (requestedOrientation != ORIENTATION_UNDEFINED
+                && requestedOrientation != mDisplayContent.getConfiguration().orientation) {
+            // Only need to handle the activity that can be rotated with display or the activity
+            // has requested the same orientation.
             return;
         }
 
+        mDisplayContent.mPinnedTaskController.onCancelFixedRotationTransform(task);
         // Perform rotation animation according to the rotation of this activity.
         startFreezingScreen(originalDisplayRotation);
         // This activity may relaunch or perform configuration change so once it has reported drawn,
@@ -6961,6 +6989,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
 
     @Override
     void resolveOverrideConfiguration(Configuration newParentConfiguration) {
+        final Configuration requestedOverrideConfig = getRequestedOverrideConfiguration();
+        if (requestedOverrideConfig.assetsSeq != ASSETS_SEQ_UNDEFINED
+                && newParentConfiguration.assetsSeq > requestedOverrideConfig.assetsSeq) {
+            requestedOverrideConfig.assetsSeq = ASSETS_SEQ_UNDEFINED;
+        }
         super.resolveOverrideConfiguration(newParentConfiguration);
         final Configuration resolvedConfig = getResolvedOverrideConfiguration();
         if (isFixedRotationTransforming()) {
@@ -7117,6 +7150,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (handlesOrientationChangeFromDescendant()) {
             // No need to letterbox because of fixed orientation. Display will handle
             // fixed-orientation requests.
+            return;
+        }
+        if (newParentConfig.windowConfiguration.getWindowingMode() == WINDOWING_MODE_PINNED) {
+            // PiP bounds have higher priority than the requested orientation. Otherwise the
+            // activity may be squeezed into a small piece.
             return;
         }
 
@@ -7510,8 +7548,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             }
         }
 
+        final boolean wasInPictureInPicture = inPinnedWindowingMode();
         final DisplayContent display = mDisplayContent;
-        if (inPinnedWindowingMode() && attachedToProcess() && display != null) {
+        if (wasInPictureInPicture && attachedToProcess() && display != null) {
             // If the PIP activity is changing to fullscreen with display orientation change, the
             // fixed rotation will take effect that requires to send fixed rotation adjustments
             // before the process configuration (if the process is a configuration listener of the
@@ -7541,6 +7580,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // configuration, but it's used to push configuration changes so explicitly update that.
         if (getMergedOverrideConfiguration().seq != getResolvedOverrideConfiguration().seq) {
             onMergedOverrideConfigurationChanged();
+        }
+
+        // Before PiP animation is done, th windowing mode of the activity is still the previous
+        // mode (see RootWindowContainer#moveActivityToPinnedRootTask). So once the windowing mode
+        // of activity is changed, it is the signal of the last step to update the PiP states.
+        if (!wasInPictureInPicture && inPinnedWindowingMode() && task != null) {
+            mTaskSupervisor.scheduleUpdatePictureInPictureModeIfNeeded(task, task.getBounds());
         }
 
         if (display == null) {

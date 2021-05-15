@@ -70,6 +70,7 @@ import static com.android.server.am.ActivityManagerDebugConfig.POSTFIX_SERVICE_E
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UptimeMillisLong;
@@ -322,11 +323,23 @@ public final class ActiveServices {
      * Watch for apps being put into forced app standby, so we can step their fg
      * services down.
      */
-    class ForcedStandbyListener implements AppStateTracker.ServiceStateListener {
+    class ForcedStandbyListener implements AppStateTracker.ForcedAppStandbyListener {
         @Override
-        public void stopForegroundServicesForUidPackage(final int uid, final String packageName) {
+        public void updateForceAppStandbyForUidPackage(int uid, String packageName,
+                boolean standby) {
             synchronized (mAm) {
-                stopAllForegroundServicesLocked(uid, packageName);
+                if (standby) {
+                    stopAllForegroundServicesLocked(uid, packageName);
+                }
+                mAm.mProcessList.updateForceAppStandbyForUidPackageLocked(
+                        uid, packageName, standby);
+            }
+        }
+
+        @Override
+        public void updateForcedAppStandbyForAllApps() {
+            synchronized (mAm) {
+                mAm.mProcessList.updateForcedAppStandbyForAllAppsLocked();
             }
         }
     }
@@ -515,7 +528,7 @@ public final class ActiveServices {
 
     void systemServicesReady() {
         AppStateTracker ast = LocalServices.getService(AppStateTracker.class);
-        ast.addServiceStateListener(new ForcedStandbyListener());
+        ast.addForcedAppStandbyListener(new ForcedStandbyListener());
         mAppWidgetManagerInternal = LocalServices.getService(AppWidgetManagerInternal.class);
         setAllowListWhileInUsePermissionInFgs();
     }
@@ -3160,6 +3173,18 @@ public final class ActiveServices {
                         + ", uid=" + callingUid
                         + " requires " + r.permission);
                 return new ServiceLookupResult(null, r.permission);
+            } else if (Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE.equals(r.permission)
+                    && callingUid != Process.SYSTEM_UID) {
+                // Hotword detection must run in its own sandbox, and we don't even trust
+                // its enclosing application to bind to it - only the system.
+                // TODO(b/185746653) remove this special case and generalize
+                Slog.w(TAG, "Permission Denial: Accessing service " + r.shortInstanceName
+                        + " from pid=" + callingPid
+                        + ", uid=" + callingUid
+                        + " requiring permission " + r.permission
+                        + " can only be bound to from the system.");
+                return new ServiceLookupResult(null, "can only be bound to "
+                        + "by the system.");
             } else if (r.permission != null && callingPackage != null) {
                 final int opCode = AppOpsManager.permissionToOpCode(r.permission);
                 if (opCode != AppOpsManager.OP_NONE && mAm.getAppOpsManager().checkOpNoThrow(
@@ -6105,6 +6130,10 @@ public final class ActiveServices {
      * @param durationMs Only meaningful for EXIT event, the duration from ENTER and EXIT state.
      */
     private void logForegroundServiceStateChanged(ServiceRecord r, int state, int durationMs) {
+        if (!ActivityManagerUtils.shouldSamplePackageForAtom(
+                r.packageName, mAm.mConstants.mFgsAtomSampleRate)) {
+            return;
+        }
         FrameworkStatsLog.write(FrameworkStatsLog.FOREGROUND_SERVICE_STATE_CHANGED,
                 r.appInfo.uid,
                 r.shortInstanceName,

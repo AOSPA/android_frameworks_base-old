@@ -409,10 +409,6 @@ public class StretchShaderActivity extends Activity {
             if (mStretchDistance > 0 && canvas instanceof RecordingCanvas) {
                 Rect bounds = getBounds();
                 ((RecordingCanvas) canvas).mNode.stretch(
-                        0,
-                        0,
-                        bounds.width(),
-                        bounds.height(),
                         mOverScrollX,
                         mOverScrollY,
                         mStretchDistance,
@@ -440,7 +436,7 @@ public class StretchShaderActivity extends Activity {
         }
     }
 
-    private static final String SKSL = "in shader uContentTexture;\n"
+    private static final String SKSL = "uniform shader uContentTexture;\n"
             + "uniform float uMaxStretchIntensity; // multiplier to apply to scale effect\n"
             + "uniform float uStretchAffectedDist; // Maximum percentage to stretch beyond bounds"
             + " of target\n"

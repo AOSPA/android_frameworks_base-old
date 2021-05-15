@@ -52,9 +52,9 @@ interface IInputMethodManager {
     oneway void getLastInputMethodSubtype(in IInputMethodSubtypeResultCallback resultCallback);
 
     oneway void showSoftInput(in IInputMethodClient client, IBinder windowToken, int flags,
-            in ResultReceiver resultReceiver, in IBooleanResultCallback resultCallback);
+            in ResultReceiver resultReceiver, int reason, in IBooleanResultCallback resultCallback);
     oneway void hideSoftInput(in IInputMethodClient client, IBinder windowToken, int flags,
-            in ResultReceiver resultReceiver, in IBooleanResultCallback resultCallback);
+            in ResultReceiver resultReceiver, int reason, in IBooleanResultCallback resultCallback);
     // If windowToken is null, this just does startInput().  Otherwise this reports that a window
     // has gained focus, and if 'attribute' is non-null then also does startInput.
     // @NonNull
@@ -67,6 +67,12 @@ interface IInputMethodManager {
             /* @InputConnectionInspector.MissingMethodFlags */ int missingMethodFlags,
             int unverifiedTargetSdkVersion,
             in IInputBindResultResultCallback inputBindResult);
+
+    oneway void reportWindowGainedFocusAsync(
+            boolean nextFocusHasConnection, in IInputMethodClient client, in IBinder windowToken,
+            /* @StartInputFlags */ int startInputFlags,
+            /* @android.view.WindowManager.LayoutParams.SoftInputModeFlags */ int softInputMode,
+            int windowFlags, int unverifiedTargetSdkVersion);
 
     oneway void showInputMethodPickerFromClient(in IInputMethodClient client,
             int auxiliarySubtypeMode, in IVoidResultCallback resultCallback);
@@ -82,8 +88,8 @@ interface IInputMethodManager {
     // TODO(Bug 113914148): Consider removing this.
     oneway void getInputMethodWindowVisibleHeight(IIntResultCallback resultCallback);
 
-    oneway void reportActivityView(in IInputMethodClient parentClient, int childDisplayId,
-            in float[] matrixValues, in IVoidResultCallback resultCallback);
+    oneway void reportActivityViewAsync(in IInputMethodClient parentClient, int childDisplayId,
+            in float[] matrixValues);
 
     oneway void reportPerceptibleAsync(in IBinder windowToken, boolean perceptible);
     /** Remove the IME surface. Requires INTERNAL_SYSTEM_WINDOW permission. */

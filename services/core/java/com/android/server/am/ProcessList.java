@@ -54,6 +54,7 @@ import static com.android.server.am.ActivityManagerService.TAG_NETWORK;
 import static com.android.server.am.ActivityManagerService.TAG_PROCESSES;
 import static com.android.server.am.ActivityManagerService.TAG_UID_OBSERVERS;
 
+import android.Manifest;
 import android.annotation.NonNull;
 import android.app.ActivityManager;
 import android.app.ActivityManager.ProcessCapability;
@@ -76,6 +77,7 @@ import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
+import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
 import android.content.res.Resources;
 import android.graphics.Point;
@@ -124,6 +126,7 @@ import com.android.internal.os.Zygote;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.MemInfoReader;
+import com.android.server.AppStateTracker;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
 import com.android.server.SystemConfig;
@@ -134,6 +137,7 @@ import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
 import com.android.server.wm.WindowManagerService;
+import com.android.server.wm.WindowProcessController;
 
 import dalvik.system.VMRuntime;
 
@@ -796,7 +800,7 @@ public final class ProcessList {
         mAppDataIsolationEnabled =
                 SystemProperties.getBoolean(ANDROID_APP_DATA_ISOLATION_ENABLED_PROPERTY, true);
         mVoldAppDataIsolationEnabled = SystemProperties.getBoolean(
-                ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY, false);
+                ANDROID_VOLD_APP_DATA_ISOLATION_ENABLED_PROPERTY, true);
         mAppDataIsolationAllowlistedApps = new ArrayList<>(
                 SystemConfig.getInstance().getAppDataIsolationWhitelistedApps());
 
@@ -1780,8 +1784,8 @@ public final class ProcessList {
         checkSlow(startTime, "startProcess: done updating cpu stats");
 
         try {
+            final int userId = UserHandle.getUserId(app.uid);
             try {
-                final int userId = UserHandle.getUserId(app.uid);
                 AppGlobals.getPackageManager().checkPackageStartable(app.info.packageName, userId);
             } catch (RemoteException e) {
                 throw e.rethrowAsRuntimeException();
@@ -1804,6 +1808,12 @@ public final class ProcessList {
                             app.info.packageName);
                     externalStorageAccess = storageManagerInternal.hasExternalStorageAccess(uid,
                             app.info.packageName);
+                    if (pm.checkPermission(Manifest.permission.INSTALL_PACKAGES,
+                            app.info.packageName, userId)
+                            == PackageManager.PERMISSION_GRANTED) {
+                        Slog.i(TAG, app.info.packageName + " is exempt from freezer");
+                        app.mOptRecord.setFreezeExempt(true);
+                    }
                 } catch (RemoteException e) {
                     throw e.rethrowAsRuntimeException();
                 }
@@ -1852,6 +1862,9 @@ public final class ProcessList {
             }
             if ((app.info.privateFlags & ApplicationInfo.PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0) {
                 runtimeFlags |= Zygote.PROFILE_FROM_SHELL;
+            }
+            if ((app.info.privateFlagsExt & ApplicationInfo.PRIVATE_FLAG_EXT_PROFILEABLE) != 0) {
+                runtimeFlags |= Zygote.PROFILEABLE;
             }
             if ("1".equals(SystemProperties.get("debug.checkjni"))) {
                 runtimeFlags |= Zygote.DEBUG_ENABLE_CHECKJNI;
@@ -2325,6 +2338,12 @@ public final class ProcessList {
             if (app.isolated) {
                 pkgDataInfoMap = null;
                 allowlistedAppDataInfoMap = null;
+            }
+
+            AppStateTracker ast = LocalServices.getService(AppStateTracker.class);
+            if (ast != null) {
+                app.mState.setForcedAppStandby(ast.isAppInForcedAppStandby(
+                        app.info.uid, app.info.packageName));
             }
 
             final Process.ProcessStartResult startResult;
@@ -3419,6 +3438,11 @@ public final class ProcessList {
             // to move it.  It should be kept in the front of the list with other
             // processes that have activities, and we don't want those to change their
             // order except due to activity operations.
+            return;
+        }
+
+        if (app.getPid() == 0 && !app.isPendingStart()) {
+            // This process has been killed and its cleanup is done, don't proceed the LRU update.
             return;
         }
 
@@ -4631,6 +4655,7 @@ public final class ProcessList {
     @GuardedBy(anyOf = {"mService", "mProcLock"})
     void updateApplicationInfoLOSP(List<String> packagesToUpdate, int userId,
             boolean updateFrameworkRes) {
+        final ArrayList<WindowProcessController> targetProcesses = new ArrayList<>();
         for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
             final ProcessRecord app = mLruProcesses.get(i);
             if (app.getThread() == null) {
@@ -4651,6 +4676,7 @@ public final class ProcessList {
                             if (ai.packageName.equals(app.info.packageName)) {
                                 app.info = ai;
                             }
+                            targetProcesses.add(app.getWindowProcessController());
                         }
                     } catch (RemoteException e) {
                         Slog.w(TAG, String.format("Failed to update %s ApplicationInfo for %s",
@@ -4659,6 +4685,9 @@ public final class ProcessList {
                 }
             });
         }
+
+        mService.mActivityTaskManager.updateAssetConfiguration(
+                updateFrameworkRes ? null : targetProcesses);
     }
 
     @GuardedBy("mService")
@@ -4951,6 +4980,54 @@ public final class ProcessList {
             }
         }
         return true;
+    }
+
+    @GuardedBy("mService")
+    void updateForceAppStandbyForUidPackageLocked(int uid, String packageName, boolean standby) {
+        final UidRecord uidRec = getUidRecordLOSP(uid);
+        if (uidRec != null) {
+            uidRec.forEachProcess(app -> {
+                if (TextUtils.equals(app.info.packageName, packageName)) {
+                    app.mState.setForcedAppStandby(standby);
+                    killAppIfForceStandbyAndCachedIdleLocked(app);
+                }
+            });
+        }
+    }
+
+    @GuardedBy("mService")
+    void updateForcedAppStandbyForAllAppsLocked() {
+        if (!mService.mConstants.mKillForceAppStandByAndCachedIdle) {
+            return;
+        }
+        final AppStateTracker ast = LocalServices.getService(AppStateTracker.class);
+        for (int i = mLruProcesses.size() - 1; i >= 0; i--) {
+            final ProcessRecord app = mLruProcesses.get(i);
+            final boolean standby = ast.isAppInForcedAppStandby(
+                    app.info.uid, app.info.packageName);
+            app.mState.setForcedAppStandby(standby);
+            if (standby) {
+                killAppIfForceStandbyAndCachedIdleLocked(app);
+            }
+        }
+    }
+
+    @GuardedBy("mService")
+    void killAppIfForceStandbyAndCachedIdleLocked(ProcessRecord app) {
+        final UidRecord uidRec = app.getUidRecord();
+        if (mService.mConstants.mKillForceAppStandByAndCachedIdle
+                && uidRec != null && uidRec.isIdle()
+                && app.isCached() && app.mState.isForcedAppStandby()) {
+            app.killLocked("cached idle & forced-app-standby",
+                    ApplicationExitInfo.REASON_OTHER,
+                    ApplicationExitInfo.SUBREASON_CACHED_IDLE_FORCED_APP_STANDBY,
+                    true);
+        }
+    }
+
+    @GuardedBy("mService")
+    void killAppIfForceStandbyAndCachedIdleLocked(UidRecord uidRec) {
+        uidRec.forEachProcess(app -> killAppIfForceStandbyAndCachedIdleLocked(app));
     }
 
     /**

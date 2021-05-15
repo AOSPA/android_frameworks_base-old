@@ -1033,7 +1033,8 @@ public class AccountManager {
         android.util.SeempLog.record(24);
         if (account == null) throw new IllegalArgumentException("account is null");
         try {
-            return mService.addAccountExplicitly(account, password, userdata);
+            return mService.addAccountExplicitly(
+                    account, password, userdata, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -1070,7 +1071,7 @@ public class AccountManager {
             throw new IllegalArgumentException("account is null");
         try {
             return mService.addAccountExplicitlyWithVisibility(account, password, extras,
-                    visibility);
+                    visibility, mContext.getOpPackageName());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

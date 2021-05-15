@@ -17,7 +17,6 @@
 package com.android.systemui.media
 
 import android.content.Intent
-import android.content.res.ColorStateList
 import android.graphics.Color
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.RippleDrawable
@@ -94,8 +93,8 @@ public class MediaControlPanelTest : SysuiTestCase() {
     @Mock private lateinit var expandedSet: ConstraintSet
     @Mock private lateinit var collapsedSet: ConstraintSet
     @Mock private lateinit var mediaOutputDialogFactory: MediaOutputDialogFactory
+    @Mock private lateinit var mediaCarouselController: MediaCarouselController
     private lateinit var appIcon: ImageView
-    private lateinit var appName: TextView
     private lateinit var albumView: ImageView
     private lateinit var titleText: TextView
     private lateinit var artistText: TextView
@@ -131,15 +130,13 @@ public class MediaControlPanelTest : SysuiTestCase() {
 
         player = MediaControlPanel(context, bgExecutor, activityStarter, mediaViewController,
                 seekBarViewModel, Lazy { mediaDataManager }, keyguardDismissUtil,
-                mediaOutputDialogFactory)
+                mediaOutputDialogFactory, mediaCarouselController)
         whenever(seekBarViewModel.progress).thenReturn(seekBarData)
 
         // Mock out a view holder for the player to attach to.
         whenever(holder.player).thenReturn(view)
         appIcon = ImageView(context)
         whenever(holder.appIcon).thenReturn(appIcon)
-        appName = TextView(context)
-        whenever(holder.appName).thenReturn(appName)
         albumView = ImageView(context)
         whenever(holder.albumView).thenReturn(albumView)
         titleText = TextView(context)
@@ -220,20 +217,8 @@ public class MediaControlPanelTest : SysuiTestCase() {
         val state = MediaData(USER_ID, true, BG_COLOR, APP, null, ARTIST, TITLE, null, emptyList(),
                 emptyList(), PACKAGE, session.getSessionToken(), null, device, true, null)
         player.bindPlayer(state, PACKAGE)
-        assertThat(appName.getText()).isEqualTo(APP)
         assertThat(titleText.getText()).isEqualTo(TITLE)
         assertThat(artistText.getText()).isEqualTo(ARTIST)
-    }
-
-    @Test
-    fun bindBackgroundColor() {
-        player.attachPlayer(holder)
-        val state = MediaData(USER_ID, true, BG_COLOR, APP, null, ARTIST, TITLE, null, emptyList(),
-                emptyList(), PACKAGE, session.getSessionToken(), null, device, true, null)
-        player.bindPlayer(state, PACKAGE)
-        val list = ArgumentCaptor.forClass(ColorStateList::class.java)
-        verify(view).setBackgroundTintList(list.capture())
-        assertThat(list.value).isEqualTo(ColorStateList.valueOf(BG_COLOR))
     }
 
     @Test

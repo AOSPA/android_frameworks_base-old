@@ -774,6 +774,19 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     public @interface ApplicationInfoPrivateFlags {}
 
     /**
+     * Value for {@link #privateFlagsExt}: whether this application can be profiled, either by the
+     * shell user or the system.
+     * @hide
+     */
+    public static final int PRIVATE_FLAG_EXT_PROFILEABLE = 1 << 0;
+
+    /** @hide */
+    @IntDef(flag = true, prefix = { "PRIVATE_FLAG_EXT_" }, value = {
+            PRIVATE_FLAG_EXT_PROFILEABLE,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ApplicationInfoPrivateFlagsExt {}
+    /**
      * Constant corresponding to <code>allowed</code> in the
      * {@link android.R.attr#autoRevokePermissions} attribute.
      *
@@ -804,6 +817,12 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     @UnsupportedAppUsage
     @TestApi
     public @ApplicationInfoPrivateFlags int privateFlags;
+
+    /**
+     * More private/hidden flags. See {@code PRIVATE_FLAG_EXT_...} constants.
+     * @hide
+     */
+    public @ApplicationInfoPrivateFlagsExt int privateFlagsExt;
 
     /**
      * @hide
@@ -1786,6 +1805,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         theme = orig.theme;
         flags = orig.flags;
         privateFlags = orig.privateFlags;
+        privateFlagsExt = orig.privateFlagsExt;
         overrideRes = orig.overrideRes;
         overrideDensity = orig.overrideDensity;
         requiresSmallestWidthDp = orig.requiresSmallestWidthDp;
@@ -1872,6 +1892,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         dest.writeInt(theme);
         dest.writeInt(flags);
         dest.writeInt(privateFlags);
+        dest.writeInt(privateFlagsExt);
         dest.writeInt(overrideRes);
         dest.writeInt(overrideDensity);
         dest.writeInt(requiresSmallestWidthDp);
@@ -1963,6 +1984,7 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
         theme = source.readInt();
         flags = source.readInt();
         privateFlags = source.readInt();
+        privateFlagsExt = source.readInt();
         overrideRes = source.readInt();
         overrideDensity = source.readInt();
         requiresSmallestWidthDp = source.readInt();
@@ -2140,22 +2162,57 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
     }
 
     /**
-     * @return
-     * <ul>
-     * <li>{@code true} if this app requested raw external storage access
-     * <li>{@code false} if this app requests to disable raw external storage access.
-     * <li>{@code null} if the app didn't specify
-     * {@link android.R.styleable#AndroidManifestApplication_requestRawExternalStorageAccess}
-     * in its manifest file.
-     * </ul>
-     *
+     * Use default value for
+     * {@link android.R.styleable#AndroidManifestApplication_requestRawExternalStorageAccess}.
+     */
+    public static final int RAW_EXTERNAL_STORAGE_ACCESS_DEFAULT = 0;
+
+    /**
+     * Raw external storage was requested by this app.
+     */
+    public static final int RAW_EXTERNAL_STORAGE_ACCESS_REQUESTED = 1;
+
+    /**
+     * Raw external storage was not requested by this app.
+     */
+    public static final int RAW_EXTERNAL_STORAGE_ACCESS_NOT_REQUESTED = 2;
+
+    /**
+     * These constants need to match the value of
+     * {@link android.R.styleable#AndroidManifestApplication_requestRawExternalStorageAccess}.
+     * in application manifest.
      * @hide
      */
-    @SuppressWarnings("AutoBoxing")
-    @SystemApi
-    @Nullable
-    public Boolean hasRequestRawExternalStorageAccess() {
-        return requestRawExternalStorageAccess;
+    @IntDef(prefix = {"RAW_EXTERNAL_STORAGE_"}, value = {
+            RAW_EXTERNAL_STORAGE_ACCESS_DEFAULT,
+            RAW_EXTERNAL_STORAGE_ACCESS_REQUESTED,
+            RAW_EXTERNAL_STORAGE_ACCESS_NOT_REQUESTED,
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface RawExternalStorage {}
+
+    /**
+     * @return
+     * <ul>
+     * <li>{@link ApplicationInfo#RAW_EXTERNAL_STORAGE_ACCESS_DEFAULT} if app didn't specify
+     * {@link android.R.styleable#AndroidManifestApplication_requestRawExternalStorageAccess}
+     * attribute in the manifest.
+     * <li>{@link ApplicationInfo#RAW_EXTERNAL_STORAGE_ACCESS_REQUESTED} if this app requested raw
+     * external storage access.
+     * <li>{@link ApplicationInfo#RAW_EXTERNAL_STORAGE_ACCESS_NOT_REQUESTED} if this app requests to
+     * disable raw external storage access
+     * </ul
+     * <p>
+     * Note that this doesn't give any hints on whether the app gets raw external storage access or
+     * not. Also, apps may get raw external storage access by default in some cases, see
+     * {@link android.R.styleable#AndroidManifestApplication_requestRawExternalStorageAccess}.
+     */
+    public @RawExternalStorage int getRequestRawExternalStorageAccess() {
+        if (requestRawExternalStorageAccess == null) {
+            return RAW_EXTERNAL_STORAGE_ACCESS_DEFAULT;
+        }
+        return requestRawExternalStorageAccess ? RAW_EXTERNAL_STORAGE_ACCESS_REQUESTED
+                : RAW_EXTERNAL_STORAGE_ACCESS_NOT_REQUESTED;
     }
 
     /**
@@ -2382,6 +2439,13 @@ public class ApplicationInfo extends PackageItemInfo implements Parcelable {
      */
     public boolean isProfileableByShell() {
         return (privateFlags & PRIVATE_FLAG_PROFILEABLE_BY_SHELL) != 0;
+    }
+
+    /**
+     * Returns whether this application can be profiled, either by the shell user or the system.
+     */
+    public boolean isProfileable() {
+        return (privateFlagsExt & PRIVATE_FLAG_EXT_PROFILEABLE) != 0;
     }
 
     /**

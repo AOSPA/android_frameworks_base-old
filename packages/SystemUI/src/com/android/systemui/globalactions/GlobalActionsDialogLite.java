@@ -98,7 +98,6 @@ import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.colorextraction.ColorExtractor.GradientColors;
-import com.android.internal.colorextraction.drawable.ScrimDrawable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
@@ -117,6 +116,7 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.GlobalActions.GlobalActionsManager;
 import com.android.systemui.plugins.GlobalActionsPanelPlugin;
+import com.android.systemui.scrim.ScrimDrawable;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -583,7 +583,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
                 mStatusBarService, mNotificationShadeWindowController,
                 mSysUiState, this::onRotate, mKeyguardShowing, mPowerAdapter);
 
-        dialog.setCanceledOnTouchOutside(true);
         dialog.setOnDismissListener(this);
         dialog.setOnShowListener(this);
 
@@ -2080,7 +2079,7 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             window.getDecorView();
             window.getAttributes().systemUiVisibility |= View.SYSTEM_UI_FLAG_LAYOUT_STABLE
                     | View.SYSTEM_UI_FLAG_LAYOUT_HIDE_NAVIGATION;
-            window.setLayout(MATCH_PARENT, WRAP_CONTENT);
+            window.setLayout(MATCH_PARENT, MATCH_PARENT);
             window.addFlags(
                     WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN
                             | WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR
@@ -2141,6 +2140,10 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
             mGlobalActionsLayout.setRotationListener(this::onRotate);
             mGlobalActionsLayout.setAdapter(mAdapter);
             mContainer = findViewById(com.android.systemui.R.id.global_actions_container);
+            mContainer.setOnClickListener(v -> {
+                // TODO: add logging (b/182830510)
+                cancel();
+            });
 
             View overflowButton = findViewById(
                     com.android.systemui.R.id.global_actions_overflow_button);
@@ -2178,7 +2181,6 @@ public class GlobalActionsDialogLite implements DialogInterface.OnDismissListene
 
         @Override
         protected void onStart() {
-            super.setCanceledOnTouchOutside(true);
             super.onStart();
             mGlobalActionsLayout.updateList();
 

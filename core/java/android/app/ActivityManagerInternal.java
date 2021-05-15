@@ -584,6 +584,11 @@ public abstract class ActivityManagerInternal {
      */
     public abstract boolean isTempAllowlistedForFgsWhileInUse(int uid);
 
+    /**
+     * Return the temp allowlist type when server push messaging is over the quota.
+     */
+    public abstract @TempAllowListType int getPushMessagingOverQuotaBehavior();
+
     // Starts a process as empty.
     public abstract int startActivityAsUserEmpty(Bundle options);
 }
