@@ -3341,6 +3341,14 @@ public class CarrierConfigManager {
     public static final String KEY_USE_CALLER_ID_USSD_BOOL = "use_caller_id_ussd_bool";
 
     /**
+     * Call waiting uses USSD command without SS command.
+     * When {@code true}, the call waiting query/set by ussd command.
+     * When {@code false}, doesn't use USSD to query/set call waiting.
+     * @hide
+     */
+    public static final String KEY_USE_CALL_WAITING_USSD_BOOL = "use_call_waiting_ussd_bool";
+
+    /**
      * Specifies the service class for call waiting service.
      * Default value is
      * {@link com.android.internal.telephony.CommandsInterface#SERVICE_CLASS_VOICE}.
@@ -3496,6 +3504,16 @@ public class CarrierConfigManager {
      */
     public static final String KEY_NR_TIMERS_RESET_IF_NON_ENDC_AND_RRC_IDLE_BOOL =
             "nr_timers_reset_if_non_endc_and_rrc_idle_bool";
+
+    /**
+     * A list of additional NR advanced band would map to
+     * {@link TelephonyDisplayInfo#OVERRIDE_NETWORK_TYPE_NR_ADVANCED} when the device is on that
+     * band.
+     *
+     * @hide
+     */
+    public static final String KEY_ADDITIONAL_NR_ADVANCED_BANDS_INT_ARRAY =
+            "additional_nr_advanced_bands_int_array";
 
     /**
      * Controls time in milliseconds until DcTracker reevaluates 5G connection state.
@@ -4241,7 +4259,6 @@ public class CarrierConfigManager {
          * it will override the framework default.
          * @hide
          */
-        @SystemApi
         public static final String KEY_PUBLISH_SERVICE_DESC_FEATURE_TAG_MAP_OVERRIDE_STRING_ARRAY =
                 KEY_PREFIX + "publish_service_desc_feature_tag_map_override_string_array";
 
@@ -4924,14 +4941,15 @@ public class CarrierConfigManager {
     /**
      * Determines whether or not to use (IP) data connectivity as a supplemental condition to
      * control the visibility of the no-calling indicator for this carrier in the System UI. Setting
-     * the configuration to true may make sense to a carrier which provides OTT calling.
+     * the configuration to true may make sense for carriers that provide OTT calling.
      *
-     * Config = true: do not show no-calling indication if (IP) data connectivity is available
-     *                or telephony has voice registration.
-     * Config = false: do not show no-calling indication if telephony has voice registration.
+     * Config = true: show no-calling indication only if telephony does not have voice registration
+     *                and if no (IP) data connectivity is available.
+     * Config = false: show no-calling indication only if telephony does not have voice
+     *                 registration.
      */
-    public static final String KEY_HIDE_NO_CALLING_INDICATOR_ON_DATA_NETWORK_BOOL =
-            "hide_no_calling_indicator_on_data_network_bool";
+    public static final String KEY_USE_IP_FOR_CALLING_INDICATOR_BOOL =
+            "use_ip_for_calling_indicator_bool";
 
     /**
      * Determine whether or not to display a call strength indicator for this carrier in the System
@@ -4953,6 +4971,14 @@ public class CarrierConfigManager {
      */
     public static final String KEY_DISPLAY_NO_DATA_NOTIFICATION_ON_PERMANENT_FAILURE_BOOL =
             "display_no_data_notification_on_permanent_failure_bool";
+
+    /**
+     * Determine whether unthrottle data retry when tracking area code (TAC/LAC) from cell changes
+     *
+     * @hide
+     */
+    public static final String KEY_UNTHROTTLE_DATA_RETRY_WHEN_TAC_CHANGES_BOOL =
+            "unthrottle_data_retry_when_tac_changes_bool";
 
      /**
      * Flag indicating whether carrier supports multianchor conference.
@@ -5136,6 +5162,7 @@ public class CarrierConfigManager {
                         + "320000:5000,640000:5000,1280000:5000,1800000:5000",
                 "mms:default_randomization=2000,5000,10000,20000,40000,80000:5000,160000:5000,"
                         + "320000:5000,640000:5000,1280000:5000,1800000:5000",
+                "ims:max_retries=10, 5000, 5000, 5000",
                 "others:max_retries=3, 5000, 5000, 5000"});
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_DEFAULT_LONG, 20000);
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_FASTER_LONG, 3000);
@@ -5463,6 +5490,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_EMERGENCY_DIALER_SHORTCUT_BOOL, true);
         sDefaults.putBoolean(KEY_USE_CALL_FORWARDING_USSD_BOOL, false);
         sDefaults.putBoolean(KEY_USE_CALLER_ID_USSD_BOOL, false);
+        sDefaults.putBoolean(KEY_USE_CALL_WAITING_USSD_BOOL, false);
         sDefaults.putInt(KEY_CALL_WAITING_SERVICE_CLASS_INT, 1 /* SERVICE_CLASS_VOICE */);
         sDefaults.putString(KEY_5G_ICON_CONFIGURATION_STRING,
                 "connected_mmwave:5G,connected:5G,not_restricted_rrc_idle:5G,"
@@ -5472,6 +5500,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_NR_TIMERS_RESET_IF_NON_ENDC_AND_RRC_IDLE_BOOL, false);
         /* Default value is 1 hour. */
         sDefaults.putLong(KEY_5G_WATCHDOG_TIME_MS_LONG, 3600000);
+        sDefaults.putIntArray(KEY_ADDITIONAL_NR_ADVANCED_BANDS_INT_ARRAY, new int[0]);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_MMWAVE_BOOL, false);
         sDefaults.putBoolean(KEY_UNMETERED_NR_NSA_SUB6_BOOL, false);
@@ -5554,7 +5583,7 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_ORIGINATOR_STRING_ARRAY,
                 new String[0]);
         sDefaults.putStringArray(KEY_APN_PRIORITY_STRING_ARRAY, new String[] {
-                "default:0", "enterprise:1", "mms:2", "supl:2", "dun:2", "hipri:3", "fota:2",
+                "enterprise:0", "default:1", "mms:2", "supl:2", "dun:2", "hipri:3", "fota:2",
                 "ims:2", "cbs:2", "ia:2", "emergency:2", "mcx:3", "xcap:3"
         });
         sDefaults.putStringArray(KEY_MISSED_INCOMING_CALL_SMS_PATTERN_STRING_ARRAY, new String[0]);
@@ -5571,10 +5600,11 @@ public class CarrierConfigManager {
         sDefaults.putStringArray(KEY_ALLOWED_INITIAL_ATTACH_APN_TYPES_STRING_ARRAY,
                 new String[]{"ia", "default", "ims", "mms", "dun", "emergency"});
         sDefaults.putBoolean(KEY_CARRIER_PROVISIONS_WIFI_MERGED_NETWORKS_BOOL, false);
-        sDefaults.putBoolean(KEY_HIDE_NO_CALLING_INDICATOR_ON_DATA_NETWORK_BOOL, false);
+        sDefaults.putBoolean(KEY_USE_IP_FOR_CALLING_INDICATOR_BOOL, false);
         sDefaults.putBoolean(KEY_DISPLAY_CALL_STRENGTH_INDICATOR_BOOL, true);
         sDefaults.putString(KEY_CARRIER_PROVISIONING_APP_STRING, "");
         sDefaults.putBoolean(KEY_DISPLAY_NO_DATA_NOTIFICATION_ON_PERMANENT_FAILURE_BOOL, false);
+        sDefaults.putBoolean(KEY_UNTHROTTLE_DATA_RETRY_WHEN_TAC_CHANGES_BOOL, false);
         sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_MULTIANCHOR_CONFERENCE, false);
         sDefaults.putStringArray(KEY_MULTI_APN_ARRAY_FOR_SAME_GID, new String[] {
                 "52FF:mms,supl,hipri,default,fota:SA:nrphone",

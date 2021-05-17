@@ -117,15 +117,20 @@ public class Build {
     public static final String HARDWARE = getString("ro.hardware");
 
     /**
-     * The SKU of the hardware (from the kernel command line). The SKU is reported by the bootloader
-     * to configure system software features.
+     * The SKU of the hardware (from the kernel command line).
+     *
+     * <p>The SKU is reported by the bootloader to configure system software features.
+     * If no value is supplied by the bootloader, this is reported as {@link #UNKNOWN}.
+
      */
     @NonNull
     public static final String SKU = getString("ro.boot.hardware.sku");
 
     /**
-     * The SKU of the device as set by the original design manufacturer (ODM). This is a
-     * runtime-initialized property set during startup to configure device services.
+     * The SKU of the device as set by the original design manufacturer (ODM).
+     *
+     * <p>This is a runtime-initialized property set during startup to configure device
+     * services. If no value is set, this is reported as {@link #UNKNOWN}.
      *
      * <p>The ODM SKU may have multiple variants for the same system SKU in case a manufacturer
      * produces variants of the same design. For example, the same build may be released with
@@ -343,7 +348,7 @@ public class Build {
          */
         @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
         @TestApi
-        public static final int FIRST_SDK_INT = SystemProperties
+        public static final int DEVICE_INITIAL_SDK_INT = SystemProperties
                 .getInt("ro.product.first_api_level", 0);
 
         /**
@@ -1319,9 +1324,24 @@ public class Build {
      * Debuggable builds allow users to gain root access via local shell, attach debuggers to any
      * application regardless of whether they have the "debuggable" attribute set, or downgrade
      * selinux into "permissive" mode in particular.
+     * @hide
      */
     public static final boolean IS_DEBUGGABLE =
             SystemProperties.getInt("ro.debuggable", 0) == 1;
+
+    /**
+     * Returns true if the device is running a debuggable build such as "userdebug" or "eng".
+     *
+     * Debuggable builds allow users to gain root access via local shell, attach debuggers to any
+     * application regardless of whether they have the "debuggable" attribute set, or downgrade
+     * selinux into "permissive" mode in particular.
+     * @hide
+     */
+    @TestApi
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public static boolean isDebuggable() {
+        return IS_DEBUGGABLE;
+    }
 
     /** {@hide} */
     public static final boolean IS_ENG = "eng".equals(TYPE);

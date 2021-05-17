@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_EXPAND_COLLAPSE;
 import static com.android.systemui.classifier.Classifier.BOUNCER_UNLOCK;
+import static com.android.systemui.classifier.Classifier.GENERIC;
 import static com.android.systemui.classifier.Classifier.QUICK_SETTINGS;
 import static com.android.systemui.classifier.Classifier.UNLOCK;
 
@@ -46,8 +47,8 @@ import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.LatencyTracker;
 import com.android.systemui.DejankUtils;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.classifier.Classifier;
 import com.android.systemui.doze.DozeLog;
 import com.android.systemui.plugins.FalsingManager;
@@ -83,7 +84,7 @@ public abstract class PanelViewController {
     private LockscreenGestureLogger mLockscreenGestureLogger = new LockscreenGestureLogger();
     private boolean mPanelUpdateWhenAnimatorEnds;
     private boolean mVibrateOnOpening;
-    protected boolean mLaunchingNotification;
+    protected boolean mIsLaunchAnimationRunning;
     private int mFixedDuration = NO_FIXED_DURATION;
     protected ArrayList<PanelExpansionListener> mExpansionListeners = new ArrayList<>();
 
@@ -438,9 +439,9 @@ public abstract class PanelViewController {
                 mLockscreenGestureLogger.write(MetricsEvent.ACTION_LS_UNLOCK, heightDp, velocityDp);
                 mLockscreenGestureLogger.log(LockscreenUiEvent.LOCKSCREEN_UNLOCK);
             }
-            @Classifier.InteractionType int interactionType = vel > 0
-                    ? QUICK_SETTINGS : (
-                            mKeyguardStateController.canDismissLockScreen()
+            @Classifier.InteractionType int interactionType = vel == 0 ? GENERIC
+                    : vel > 0 ? QUICK_SETTINGS
+                            : (mKeyguardStateController.canDismissLockScreen()
                                     ? UNLOCK : BOUNCER_UNLOCK);
 
             fling(vel, expand, isFalseTouch(x, y, interactionType));
@@ -847,7 +848,7 @@ public abstract class PanelViewController {
     }
 
     public boolean isCollapsing() {
-        return mClosing || mLaunchingNotification;
+        return mClosing || mIsLaunchAnimationRunning;
     }
 
     public boolean isTracking() {
@@ -1147,8 +1148,8 @@ public abstract class PanelViewController {
         mHeadsUpManager = headsUpManager;
     }
 
-    public void setLaunchingNotification(boolean launchingNotification) {
-        mLaunchingNotification = launchingNotification;
+    public void setIsLaunchAnimationRunning(boolean running) {
+        mIsLaunchAnimationRunning = running;
     }
 
     public void collapseWithDuration(int animationDuration) {

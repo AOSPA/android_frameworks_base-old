@@ -100,7 +100,7 @@ public class NotificationHistoryDatabase {
 
         IntentFilter deletionFilter = new IntentFilter(ACTION_HISTORY_DELETION);
         deletionFilter.addDataScheme(SCHEME_DELETION);
-        mContext.registerReceiver(mFileCleaupReceiver, deletionFilter);
+        mContext.registerReceiver(mFileCleanupReceiver, deletionFilter);
     }
 
     public void init() {
@@ -172,6 +172,11 @@ public class NotificationHistoryDatabase {
 
     public void deleteConversations(String pkg, Set<String> conversationIds) {
         RemoveConversationRunnable rcr = new RemoveConversationRunnable(pkg, conversationIds);
+        mFileWriteHandler.post(rcr);
+    }
+
+    public void deleteNotificationChannel(String pkg, String channelId) {
+        RemoveChannelRunnable rcr = new RemoveChannelRunnable(pkg, channelId);
         mFileWriteHandler.post(rcr);
     }
 
@@ -268,13 +273,36 @@ public class NotificationHistoryDatabase {
         }
     }
 
+    /**
+     * Remove the first entry from the list of history files whose file matches the given file path.
+     *
+     * This method is necessary for anything that only has an absolute file path rather than an
+     * AtomicFile object from the list of history files.
+     *
+     * filePath should be an absolute path.
+     */
+    void removeFilePathFromHistory(String filePath) {
+        if (filePath == null) {
+            return;
+        }
+
+        Iterator<AtomicFile> historyFileItr = mHistoryFiles.iterator();
+        while (historyFileItr.hasNext()) {
+            final AtomicFile af = historyFileItr.next();
+            if (af != null && filePath.equals(af.getBaseFile().getAbsolutePath())) {
+                historyFileItr.remove();
+                return;
+            }
+        }
+    }
+
     private void deleteFile(AtomicFile file) {
         if (DEBUG) {
             Slog.d(TAG, "Removed " + file.getBaseFile().getName());
         }
         file.delete();
         // TODO: delete all relevant bitmaps, once they exist
-        mHistoryFiles.remove(file);
+        removeFilePathFromHistory(file.getBaseFile().getAbsolutePath());
     }
 
     private void scheduleDeletion(File file, long creationTime, int retentionDays) {
@@ -337,7 +365,7 @@ public class NotificationHistoryDatabase {
         }
     }
 
-    private final BroadcastReceiver mFileCleaupReceiver = new BroadcastReceiver() {
+    private final BroadcastReceiver mFileCleanupReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
@@ -353,7 +381,7 @@ public class NotificationHistoryDatabase {
                             Slog.d(TAG, "Removed " + fileToDelete.getBaseFile().getName());
                         }
                         fileToDelete.delete();
-                        mHistoryFiles.remove(fileToDelete);
+                        removeFilePathFromHistory(filePath);
                     }
                 } catch (Exception e) {
                     Slog.e(TAG, "Failed to delete notification history file", e);
@@ -499,6 +527,49 @@ public class NotificationHistoryDatabase {
                         }
                     } catch (Exception e) {
                         Slog.e(TAG, "Cannot clean up file on conversation removal "
+                                + af.getBaseFile().getName(), e);
+                    }
+                }
+            }
+        }
+    }
+
+    final class RemoveChannelRunnable implements Runnable {
+        private String mPkg;
+        private String mChannelId;
+        private NotificationHistory mNotificationHistory;
+
+        RemoveChannelRunnable(String pkg, String channelId) {
+            mPkg = pkg;
+            mChannelId = channelId;
+        }
+
+        @VisibleForTesting
+        void setNotificationHistory(NotificationHistory nh) {
+            mNotificationHistory = nh;
+        }
+
+        @Override
+        public void run() {
+            if (DEBUG) Slog.d(TAG, "RemoveChannelRunnable");
+            synchronized (mLock) {
+                // Remove from pending history
+                mBuffer.removeChannelFromWrite(mPkg, mChannelId);
+
+                Iterator<AtomicFile> historyFileItr = mHistoryFiles.iterator();
+                while (historyFileItr.hasNext()) {
+                    final AtomicFile af = historyFileItr.next();
+                    try {
+                        NotificationHistory notificationHistory = mNotificationHistory != null
+                                ? mNotificationHistory
+                                : new NotificationHistory();
+                        readLocked(af, notificationHistory,
+                                new NotificationHistoryFilter.Builder().build());
+                        if (notificationHistory.removeChannelFromWrite(mPkg, mChannelId)) {
+                            writeLocked(af, notificationHistory);
+                        }
+                    } catch (Exception e) {
+                        Slog.e(TAG, "Cannot clean up file on channel removal "
                                 + af.getBaseFile().getName(), e);
                     }
                 }

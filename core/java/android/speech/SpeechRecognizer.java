@@ -16,8 +16,12 @@
 
 package android.speech;
 
+import android.Manifest;
+import android.annotation.IntDef;
+import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresPermission;
 import android.annotation.TestApi;
 import android.content.ComponentName;
 import android.content.Context;
@@ -36,6 +40,9 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
 
+import java.lang.annotation.Documented;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.List;
 import java.util.Queue;
 import java.util.concurrent.LinkedBlockingQueue;
@@ -83,6 +90,30 @@ public class SpeechRecognizer {
      */
     public static final String CONFIDENCE_SCORES = "confidence_scores";
 
+    /**
+     * The reason speech recognition failed.
+     *
+     * @hide
+     */
+    @Documented
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(prefix = {"ERROR_"}, value = {
+            ERROR_NETWORK_TIMEOUT,
+            ERROR_NETWORK,
+            ERROR_AUDIO,
+            ERROR_SERVER,
+            ERROR_CLIENT,
+            ERROR_SPEECH_TIMEOUT,
+            ERROR_NO_MATCH,
+            ERROR_RECOGNIZER_BUSY,
+            ERROR_INSUFFICIENT_PERMISSIONS,
+            ERROR_TOO_MANY_REQUESTS,
+            ERROR_SERVER_DISCONNECTED,
+            ERROR_LANGUAGE_NOT_SUPPORTED,
+            ERROR_LANGUAGE_UNAVAILABLE
+    })
+    public @interface RecognitionError {}
+
     /** Network operation timed out. */
     public static final int ERROR_NETWORK_TIMEOUT = 1;
 
@@ -115,6 +146,12 @@ public class SpeechRecognizer {
 
     /** Server has been disconnected, e.g. because the app has crashed. */
     public static final int ERROR_SERVER_DISCONNECTED = 11;
+
+    /** Requested language is not available to be used with the current recognizer. */
+    public static final int ERROR_LANGUAGE_NOT_SUPPORTED = 12;
+
+    /** Requested language is supported, but not available currently (e.g. not downloaded yet). */
+    public static final int ERROR_LANGUAGE_UNAVAILABLE = 13;
 
     /** action codes */
     private static final int MSG_START = 1;
@@ -214,9 +251,21 @@ public class SpeechRecognizer {
      * command to the created {@code SpeechRecognizer}, otherwise no notifications will be
      * received.
      *
+     * <p>For apps targeting Android 11 (API level 30) interaction with a speech recognition
+     * service requires <queries> element to be added to the manifest file:
+     * <pre>{@code
+     * <queries>
+     *   <intent>
+     *     <action
+     *        android:name="android.speech.RecognitionService" />
+     *   </intent>
+     * </queries>
+     * }</pre>
+     *
      * @param context in which to create {@code SpeechRecognizer}
      * @return a new {@code SpeechRecognizer}
      */
+    @MainThread
     public static SpeechRecognizer createSpeechRecognizer(final Context context) {
         return createSpeechRecognizer(context, null);
     }
@@ -231,12 +280,24 @@ public class SpeechRecognizer {
      * {@link SpeechRecognizer} to. Normally you would not use this; use
      * {@link #createSpeechRecognizer(Context)} instead to use the system default recognition
      * service.
-     * 
+     *
+     * <p>For apps targeting Android 11 (API level 30) interaction with a speech recognition
+     * service requires <queries> element to be added to the manifest file:
+     * <pre>{@code
+     * <queries>
+     *   <intent>
+     *     <action
+     *        android:name="android.speech.RecognitionService" />
+     *   </intent>
+     * </queries>
+     * }</pre>
+     *
      * @param context in which to create {@code SpeechRecognizer}
      * @param serviceComponent the {@link ComponentName} of a specific service to direct this
      *        {@code SpeechRecognizer} to
      * @return a new {@code SpeechRecognizer}
      */
+    @MainThread
     public static SpeechRecognizer createSpeechRecognizer(final Context context,
             final ComponentName serviceComponent) {
         if (context == null) {
@@ -257,6 +318,7 @@ public class SpeechRecognizer {
      * @return a new on-device {@code SpeechRecognizer}.
      */
     @NonNull
+    @MainThread
     public static SpeechRecognizer createOnDeviceSpeechRecognizer(@NonNull final Context context) {
         if (context == null) {
             throw new IllegalArgumentException("Context cannot be null");
@@ -273,6 +335,7 @@ public class SpeechRecognizer {
      * @param listener listener that will receive all the callbacks from the created
      *        {@link SpeechRecognizer}, this must not be null.
      */
+    @MainThread
     public void setRecognitionListener(RecognitionListener listener) {
         checkIsCalledFromMainThread();
         putMessage(Message.obtain(mHandler, MSG_CHANGE_LISTENER, listener));
@@ -287,6 +350,7 @@ public class SpeechRecognizer {
      *        may also contain optional extras, see {@link RecognizerIntent}. If these values are
      *        not set explicitly, default values will be used by the recognizer.
      */
+    @MainThread
     public void startListening(final Intent recognizerIntent) {
         android.util.SeempLog.record(72);
         if (recognizerIntent == null) {
@@ -327,6 +391,7 @@ public class SpeechRecognizer {
      * {@link #setRecognitionListener(RecognitionListener)} should be called beforehand, otherwise
      * no notifications will be received.
      */
+    @MainThread
     public void stopListening() {
         checkIsCalledFromMainThread();
 
@@ -345,6 +410,7 @@ public class SpeechRecognizer {
      * {@link #setRecognitionListener(RecognitionListener)} should be called beforehand, otherwise
      * no notifications will be received.
      */
+    @MainThread
     public void cancel() {
         checkIsCalledFromMainThread();
         putMessage(Message.obtain(mHandler, MSG_CANCEL));
@@ -361,6 +427,7 @@ public class SpeechRecognizer {
      * @hide
      */
     @TestApi
+    @RequiresPermission(Manifest.permission.MANAGE_SPEECH_RECOGNITION)
     public void setTemporaryOnDeviceRecognizer(@Nullable ComponentName componentName) {
         mHandler.sendMessage(
                 Message.obtain(mHandler, MSG_SET_TEMPORARY_ON_DEVICE_COMPONENT, componentName));

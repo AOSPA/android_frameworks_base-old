@@ -75,6 +75,7 @@ import static com.android.server.wm.Task.ActivityState.PAUSED;
 import static com.android.server.wm.Task.ActivityState.RESUMED;
 import static com.android.server.wm.Task.ActivityState.STOPPED;
 import static com.android.server.wm.Task.ActivityState.STOPPING;
+import static com.android.server.wm.Task.ActivityState.DESTROYED;
 import static com.android.server.wm.Task.REPARENT_LEAVE_ROOT_TASK_IN_PLACE;
 import static com.android.server.wm.Task.REPARENT_MOVE_ROOT_TASK_TO_FRONT;
 import static com.android.server.wm.Task.TASK_VISIBILITY_INVISIBLE;
@@ -133,6 +134,7 @@ import android.provider.Settings;
 import android.service.voice.IVoiceInteractionSession;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.BoostFramework;
 import android.util.DisplayMetrics;
 import android.util.IntArray;
 import android.util.Pair;
@@ -249,6 +251,12 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     WindowManagerService mWindowManager;
     DisplayManager mDisplayManager;
     private DisplayManagerInternal mDisplayManagerInternal;
+
+    public static boolean mPerfSendTapHint = false;
+    public static boolean mIsPerfBoostAcquired = false;
+    public static int mPerfHandle = -1;
+    public BoostFramework mPerfBoost = null;
+    public BoostFramework mUxPerf = null;
 
     /** Reference to default display so we can quickly look it up. */
     private DisplayContent mDefaultDisplay;
@@ -1686,6 +1694,11 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
             return false;
         }
 
+        if (!taskDisplayArea.canHostHomeTask()) {
+            // Can't launch home on a TaskDisplayArea that does not support root home task
+            return false;
+        }
+
         if (taskDisplayArea.getDisplayId() != DEFAULT_DISPLAY && !mService.mSupportsMultiDisplay) {
             // Can't launch home on secondary display if device does not support multi-display.
             return false;
@@ -2124,15 +2137,20 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                         .setDeferTaskAppear(true)
                         .setHasBeenVisible(true)
                         .build();
+                // Establish bi-directional link between the original and pinned task.
+                r.setLastParentBeforePip();
                 // It's possible the task entering PIP is in freeform, so save the last
                 // non-fullscreen bounds. Then when this new PIP task exits PIP, it can restore
                 // to its previous freeform bounds.
                 rootTask.setLastNonFullscreenBounds(task.mLastNonFullscreenBounds);
                 rootTask.setBounds(task.getBounds());
 
-                // Move reparent bounds from original task to the new one.
-                rootTask.mLastRecentsAnimationBounds.set(task.mLastRecentsAnimationBounds);
-                task.mLastRecentsAnimationBounds.setEmpty();
+                // Move the last recents animation transaction from original task to the new one.
+                if (task.mLastRecentsAnimationTransaction != null) {
+                    rootTask.setLastRecentsAnimationTransaction(
+                            task.mLastRecentsAnimationTransaction);
+                    task.clearLastRecentsAnimationTransaction();
+                }
 
                 // There are multiple activities in the task and moving the top activity should
                 // reveal/leave the other activities in their original task.
@@ -2141,7 +2159,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 r.reparent(rootTask, MAX_VALUE, reason);
 
                 // Ensure the leash of new task is in sync with its current bounds after reparent.
-                rootTask.maybeApplyLastRecentsAnimationBounds();
+                rootTask.maybeApplyLastRecentsAnimationTransaction();
 
                 // In the case of this activity entering PIP due to it being moved to the back,
                 // the old activity would have a TRANSIT_TASK_TO_BACK transition that needs to be
@@ -2211,15 +2229,72 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         }
     }
 
+    void acquireAppLaunchPerfLock(ActivityRecord r) {
+        /* Acquire perf lock during new app launch */
+        if (mPerfBoost == null) {
+            mPerfBoost = new BoostFramework();
+        }
+        if (mPerfBoost != null) {
+            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                r.packageName, -1, BoostFramework.Launch.BOOST_V1);
+            mPerfSendTapHint = true;
+            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                r.packageName, -1, BoostFramework.Launch.BOOST_V2);
+            if (mWmService.mAtmService != null && r != null && r.info != null
+                && r.info.applicationInfo != null) {
+                final WindowProcessController wpc =
+                    mWmService.mAtmService.getProcessController(r.processName,
+                        r.info.applicationInfo.uid);
+                if (wpc != null && wpc.hasThread()) {
+                    // If target process didn't start yet,
+                    // this operation will be done when app call attach
+                    mPerfBoost.perfHint(
+                        BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                            r.packageName, wpc.getPid(),
+                            BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
+                }
+            }
+
+            if(mPerfBoost.perfGetFeedback(
+                BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) ==
+                    BoostFramework.WorkloadType.GAME)
+            {
+                mPerfHandle = mPerfBoost.perfHint(
+                    BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
+            } else {
+                mPerfHandle = mPerfBoost.perfHint(
+                    BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST,
+                        r.packageName, -1, BoostFramework.Launch.BOOST_V3);
+            }
+            if (mPerfHandle > 0)
+                mIsPerfBoostAcquired = true;
+            // Start IOP
+            if(r.info.applicationInfo != null &&
+                r.info.applicationInfo.sourceDir != null) {
+                mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
+                    r.info.applicationInfo.sourceDir.substring(
+                        0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
+            }
+        }
+    }
+
+    void acquireUxPerfLock(int opcode, String packageName) {
+         mUxPerf = new BoostFramework();
+         if (mUxPerf != null) {
+             mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
+         }
+     }
+
     @Nullable
     ActivityRecord findTask(ActivityRecord r, TaskDisplayArea preferredTaskDisplayArea) {
         return findTask(r.getActivityType(), r.taskAffinity, r.intent, r.info,
-                preferredTaskDisplayArea);
+                preferredTaskDisplayArea, r);
     }
 
     @Nullable
     ActivityRecord findTask(int activityType, String taskAffinity, Intent intent, ActivityInfo info,
-            TaskDisplayArea preferredTaskDisplayArea) {
+            TaskDisplayArea preferredTaskDisplayArea, ActivityRecord r) {
         ProtoLog.d(WM_DEBUG_TASKS, "Looking for task of type=%s, taskAffinity=%s, intent=%s"
                         + ", info=%s, preferredTDA=%s", activityType, taskAffinity, intent, info,
                 preferredTaskDisplayArea);
@@ -2230,10 +2305,26 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         if (preferredTaskDisplayArea != null) {
             mTmpFindTaskResult.process(preferredTaskDisplayArea);
             if (mTmpFindTaskResult.mIdealRecord != null) {
+                if(mTmpFindTaskResult.mIdealRecord.getState() == DESTROYED) {
+                    /*It's a new app launch */
+                    acquireAppLaunchPerfLock(r);
+                }
+
+                if(mTmpFindTaskResult.mIdealRecord.getState() == STOPPED) {
+                     /*Warm launch */
+                     acquireUxPerfLock(BoostFramework.UXE_EVENT_SUB_LAUNCH,
+                         r.packageName);
+                }
                 return mTmpFindTaskResult.mIdealRecord;
             } else if (mTmpFindTaskResult.mCandidateRecord != null) {
                 candidateActivity = mTmpFindTaskResult.mCandidateRecord;
             }
+        }
+
+        /* Acquire perf lock *only* during new app launch */
+        if ((mTmpFindTaskResult.mIdealRecord == null) ||
+            (mTmpFindTaskResult.mIdealRecord.getState() == DESTROYED)) {
+            acquireAppLaunchPerfLock(r);
         }
 
         final ActivityRecord idealMatchActivity = getItemFromTaskDisplayAreas(taskDisplayArea -> {
@@ -3363,46 +3454,19 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
     }
 
     /**
-     * Find all visible tasks containing {@param userId} and intercept them with an activity
+     * Find all tasks containing {@param userId} and intercept them with an activity
      * to block out the contents and possibly start a credential-confirming intent.
      *
      * @param userId user handle for the locked managed profile.
      */
     void lockAllProfileTasks(@UserIdInt int userId) {
-        mService.deferWindowLayout();
-        try {
-            final PooledConsumer c = PooledLambda.obtainConsumer(
-                    RootWindowContainer::taskTopActivityIsUser, this, PooledLambda.__(Task.class),
-                    userId);
-            forAllLeafTasks(c, true /* traverseTopToBottom */);
-            c.recycle();
-        } finally {
-            mService.continueWindowLayout();
-        }
-    }
-
-    /**
-     * Detects whether we should show a lock screen in front of this task for a locked user.
-     * <p>
-     * We'll do this if either of the following holds:
-     * <ul>
-     *   <li>The top activity explicitly belongs to {@param userId}.</li>
-     *   <li>The top activity returns a result to an activity belonging to {@param userId}.</li>
-     * </ul>
-     */
-    private void taskTopActivityIsUser(Task task, @UserIdInt int userId) {
-        // To handle the case that work app is in the task but just is not the top one.
-        final ActivityRecord activityRecord = task.getTopNonFinishingActivity();
-        final ActivityRecord resultTo = (activityRecord != null ? activityRecord.resultTo : null);
-
-        // Check the task for a top activity belonging to userId, or returning a
-        // result to an activity belonging to userId. Example case: a document
-        // picker for personal files, opened by a work app, should still get locked.
-        if ((activityRecord != null && activityRecord.mUserId == userId)
-                || (resultTo != null && resultTo.mUserId == userId)) {
-            mService.getTaskChangeNotificationController().notifyTaskProfileLocked(
-                    task.mTaskId, userId);
-        }
+        forAllLeafTasks(task -> {
+            if (task.getActivity(activity -> !activity.finishing && activity.mUserId == userId)
+                    != null) {
+                mService.getTaskChangeNotificationController().notifyTaskProfileLocked(
+                        task.mTaskId, userId);
+            }
+        }, true /* traverseTopToBottom */);
     }
 
     void cancelInitializingActivities() {
@@ -3499,10 +3563,9 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     @VisibleForTesting
     void getRunningTasks(int maxNum, List<ActivityManager.RunningTaskInfo> list,
-            boolean filterOnlyVisibleRecents, int callingUid, boolean allowed, boolean crossUser,
-            ArraySet<Integer> profileIds) {
-        mTaskSupervisor.getRunningTasks().getTasks(maxNum, list, filterOnlyVisibleRecents, this,
-                callingUid, allowed, crossUser, profileIds);
+            int flags, int callingUid, ArraySet<Integer> profileIds) {
+        mTaskSupervisor.getRunningTasks().getTasks(maxNum, list, flags, this, callingUid,
+                profileIds);
     }
 
     void startPowerModeLaunchIfNeeded(boolean forceSend, ActivityRecord targetActivity) {

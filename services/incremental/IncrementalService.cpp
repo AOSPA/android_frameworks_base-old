@@ -100,6 +100,12 @@ static bool isPageAligned(IncFsSize s) {
     return (s & (Constants::blockSize - 1)) == 0;
 }
 
+static bool getAlwaysEnableReadTimeoutsForSystemDataLoaders() {
+    return android::base::
+            GetBoolProperty("debug.incremental.always_enable_read_timeouts_for_system_dataloaders",
+                            true);
+}
+
 static bool getEnforceReadLogsMaxIntervalForSystemDataLoaders() {
     return android::base::GetBoolProperty("debug.incremental.enforce_readlogs_max_interval_for_"
                                           "system_dataloaders",
@@ -315,19 +321,11 @@ void IncrementalService::IncFsMount::cleanupFilesystem(std::string_view root) {
     ::rmdir(path::c_str(root));
 }
 
-void IncrementalService::IncFsMount::setReadLogsEnabled(bool value) {
+void IncrementalService::IncFsMount::setFlag(StorageFlags flag, bool value) {
     if (value) {
-        flags |= StorageFlags::ReadLogsEnabled;
+        flags |= flag;
     } else {
-        flags &= ~StorageFlags::ReadLogsEnabled;
-    }
-}
-
-void IncrementalService::IncFsMount::setReadLogsRequested(bool value) {
-    if (value) {
-        flags |= StorageFlags::ReadLogsRequested;
-    } else {
-        flags &= ~StorageFlags::ReadLogsRequested;
+        flags &= ~flag;
     }
 }
 
@@ -392,6 +390,11 @@ static const char* toString(IncrementalService::BindKind kind) {
     }
 }
 
+template <class Duration>
+static long elapsedMcs(Duration start, Duration end) {
+    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+}
+
 void IncrementalService::onDump(int fd) {
     dprintf(fd, "Incremental is %s\n", incfs::enabled() ? "ENABLED" : "DISABLED");
     dprintf(fd, "Incremental dir: %s\n", mIncrementalDir.c_str());
@@ -409,6 +412,13 @@ void IncrementalService::onDump(int fd) {
             dprintf(fd, "    mountId: %d\n", mnt.mountId);
             dprintf(fd, "    root: %s\n", mnt.root.c_str());
             dprintf(fd, "    nextStorageDirNo: %d\n", mnt.nextStorageDirNo.load());
+            dprintf(fd, "    flags: %d\n", int(mnt.flags));
+            if (mnt.startLoadingTs.time_since_epoch() == Clock::duration::zero()) {
+                dprintf(fd, "    not loading\n");
+            } else {
+                dprintf(fd, "    startLoading: %llds\n",
+                        (long long)(elapsedMcs(mnt.startLoadingTs, Clock::now()) / 1000000));
+            }
             if (mnt.dataLoaderStub) {
                 mnt.dataLoaderStub->onDump(fd);
             } else {
@@ -728,10 +738,17 @@ bool IncrementalService::startLoading(StorageId storageId,
             LOG(INFO) << "Skipped data loader stub creation because it already exists";
             return false;
         }
+
         prepareDataLoaderLocked(*ifs, std::move(dataLoaderParams), std::move(statusListener),
                                 healthCheckParams, std::move(healthListener));
         CHECK(ifs->dataLoaderStub);
         dataLoaderStub = ifs->dataLoaderStub;
+
+        // Disable long read timeouts for non-system dataloaders.
+        // To be re-enabled after installation is complete.
+        ifs->setReadTimeoutsRequested(dataLoaderStub->isSystemDataLoader() &&
+                                      getAlwaysEnableReadTimeoutsForSystemDataLoaders());
+        applyStorageParamsLocked(*ifs);
     }
 
     if (dataLoaderStub->isSystemDataLoader() &&
@@ -763,6 +780,18 @@ bool IncrementalService::startLoading(StorageId storageId,
     }
 
     return dataLoaderStub->requestStart();
+}
+
+void IncrementalService::onInstallationComplete(StorageId storage) {
+    IfsMountPtr ifs = getIfs(storage);
+    if (!ifs) {
+        return;
+    }
+
+    // Always enable long read timeouts after installation is complete.
+    std::unique_lock l(ifs->lock);
+    ifs->setReadTimeoutsRequested(true);
+    applyStorageParamsLocked(*ifs);
 }
 
 IncrementalService::BindPathMap::const_iterator IncrementalService::findStorageLocked(
@@ -868,7 +897,7 @@ int IncrementalService::setStorageParams(StorageId storageId, bool enableReadLog
         if (!ifs->readLogsRequested()) {
             return 0;
         }
-        if (auto status = applyStorageParamsLocked(*ifs, /*enableReadLogs=*/true); status != 0) {
+        if (auto status = applyStorageParamsLocked(*ifs); status != 0) {
             return status;
         }
     }
@@ -880,10 +909,10 @@ int IncrementalService::setStorageParams(StorageId storageId, bool enableReadLog
 
 int IncrementalService::disableReadLogsLocked(IncFsMount& ifs) {
     ifs.setReadLogsRequested(false);
-    return applyStorageParamsLocked(ifs, /*enableReadLogs=*/false);
+    return applyStorageParamsLocked(ifs);
 }
 
-int IncrementalService::applyStorageParamsLocked(IncFsMount& ifs, bool enableReadLogs) {
+int IncrementalService::applyStorageParamsLocked(IncFsMount& ifs) {
     os::incremental::IncrementalFileSystemControlParcel control;
     control.cmd.reset(dup(ifs.control.cmd()));
     control.pendingReads.reset(dup(ifs.control.pendingReads()));
@@ -892,11 +921,15 @@ int IncrementalService::applyStorageParamsLocked(IncFsMount& ifs, bool enableRea
         control.log.reset(dup(logsFd));
     }
 
+    bool enableReadLogs = ifs.readLogsRequested();
+    bool enableReadTimeouts = ifs.readTimeoutsRequested();
+
     std::lock_guard l(mMountOperationLock);
-    auto status = mVold->setIncFsMountOptions(control, enableReadLogs);
+    auto status = mVold->setIncFsMountOptions(control, enableReadLogs, enableReadTimeouts);
     if (status.isOk()) {
-        // Store enabled state.
+        // Store states.
         ifs.setReadLogsEnabled(enableReadLogs);
+        ifs.setReadTimeoutsEnabled(enableReadTimeouts);
     } else {
         LOG(ERROR) << "applyStorageParams failed: " << status.toString8();
     }
@@ -1271,7 +1304,7 @@ void IncrementalService::setUidReadTimeouts(StorageId storage,
         maxPendingTimeUs = std::max(maxPendingTimeUs, microseconds(timeouts.maxPendingTimeUs));
     }
     if (maxPendingTimeUs < Constants::minPerUidTimeout) {
-        LOG(ERROR) << "Skip setting  read timeouts (maxPendingTime < Constants::minPerUidTimeout): "
+        LOG(ERROR) << "Skip setting read timeouts (maxPendingTime < Constants::minPerUidTimeout): "
                    << duration_cast<milliseconds>(maxPendingTimeUs).count() << "ms < "
                    << Constants::minPerUidTimeout.count() << "ms";
         return;
@@ -1746,11 +1779,6 @@ void IncrementalService::prepareDataLoaderLocked(IncFsMount& ifs, DataLoaderPara
 }
 
 template <class Duration>
-static long elapsedMcs(Duration start, Duration end) {
-    return std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
-}
-
-template <class Duration>
 static constexpr auto castToMs(Duration d) {
     return std::chrono::duration_cast<std::chrono::milliseconds>(d);
 }
@@ -2159,29 +2187,6 @@ bool IncrementalService::registerLoadingProgressListener(
 
 bool IncrementalService::unregisterLoadingProgressListener(StorageId storage) {
     return removeTimedJobs(*mProgressUpdateJobQueue, storage);
-}
-
-bool IncrementalService::registerStorageHealthListener(
-        StorageId storage, const StorageHealthCheckParams& healthCheckParams,
-        StorageHealthListener healthListener) {
-    DataLoaderStubPtr dataLoaderStub;
-    {
-        const auto& ifs = getIfs(storage);
-        if (!ifs) {
-            return false;
-        }
-        std::unique_lock l(ifs->lock);
-        dataLoaderStub = ifs->dataLoaderStub;
-        if (!dataLoaderStub) {
-            return false;
-        }
-    }
-    dataLoaderStub->setHealthListener(healthCheckParams, std::move(healthListener));
-    return true;
-}
-
-void IncrementalService::unregisterStorageHealthListener(StorageId storage) {
-    registerStorageHealthListener(storage, {}, {});
 }
 
 bool IncrementalService::perfLoggingEnabled() {
@@ -2751,25 +2756,6 @@ void IncrementalService::DataLoaderStub::setCurrentStatus(int newStatus) {
     mStatusCondition.notify_all();
 }
 
-binder::Status IncrementalService::DataLoaderStub::reportStreamHealth(MountId mountId,
-                                                                      int newStatus) {
-    if (!isValid()) {
-        return binder::Status::
-                fromServiceSpecificError(-EINVAL,
-                                         "reportStreamHealth came to invalid DataLoaderStub");
-    }
-    if (id() != mountId) {
-        LOG(ERROR) << "reportStreamHealth: mount ID mismatch: expected " << id()
-                   << ", but got: " << mountId;
-        return binder::Status::fromServiceSpecificError(-EPERM, "Mount ID mismatch.");
-    }
-    {
-        std::lock_guard lock(mMutex);
-        mStreamStatus = newStatus;
-    }
-    return binder::Status::ok();
-}
-
 bool IncrementalService::DataLoaderStub::isHealthParamsValid() const {
     return mHealthCheckParams.blockedTimeoutMs > 0 &&
             mHealthCheckParams.blockedTimeoutMs < mHealthCheckParams.unhealthyTimeoutMs;
@@ -2781,33 +2767,6 @@ void IncrementalService::DataLoaderStub::onHealthStatus(const StorageHealthListe
     if (healthListener) {
         healthListener->onHealthStatus(id(), healthStatus);
     }
-}
-
-static int adjustHealthStatus(int healthStatus, int streamStatus) {
-    if (healthStatus == IStorageHealthListener::HEALTH_STATUS_OK) {
-        // everything is good; no need to change status
-        return healthStatus;
-    }
-    int newHeathStatus = healthStatus;
-    switch (streamStatus) {
-        case IDataLoaderStatusListener::STREAM_STORAGE_ERROR:
-            // storage is limited and storage not healthy
-            newHeathStatus = IStorageHealthListener::HEALTH_STATUS_UNHEALTHY_STORAGE;
-            break;
-        case IDataLoaderStatusListener::STREAM_INTEGRITY_ERROR:
-            // fall through
-        case IDataLoaderStatusListener::STREAM_SOURCE_ERROR:
-            // fall through
-        case IDataLoaderStatusListener::STREAM_TRANSPORT_ERROR:
-            if (healthStatus == IStorageHealthListener::HEALTH_STATUS_UNHEALTHY) {
-                newHeathStatus = IStorageHealthListener::HEALTH_STATUS_UNHEALTHY_TRANSPORT;
-            }
-            // pending/blocked status due to transportation issues is not regarded as unhealthy
-            break;
-        default:
-            break;
-    }
-    return newHeathStatus;
 }
 
 void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
@@ -2887,8 +2846,6 @@ void IncrementalService::DataLoaderStub::updateHealthStatus(bool baseline) {
             checkBackAfter = unhealthyMonitoring;
             healthStatusToReport = IStorageHealthListener::HEALTH_STATUS_UNHEALTHY;
         }
-        // Adjust health status based on stream status
-        healthStatusToReport = adjustHealthStatus(healthStatusToReport, mStreamStatus);
         LOG(DEBUG) << id() << ": updateHealthStatus in " << double(checkBackAfter.count()) / 1000.0
                    << "secs";
         mService.addTimedJob(*mService.mTimedQueue, id(), checkBackAfter,
@@ -2946,8 +2903,10 @@ BootClockTsUs IncrementalService::DataLoaderStub::getOldestPendingReadTs() {
         return result;
     }
 
-    LOG(DEBUG) << id() << ": pendingReads: " << control.pendingReads() << ", "
-               << mLastPendingReads.size() << ": " << mLastPendingReads.front().bootClockTsUs;
+    LOG(DEBUG) << id() << ": pendingReads: fd(" << control.pendingReads() << "), count("
+               << mLastPendingReads.size() << "), block: " << mLastPendingReads.front().block
+               << ", time: " << mLastPendingReads.front().bootClockTsUs
+               << ", uid: " << mLastPendingReads.front().uid;
 
     return getOldestTsFromLastPendingReads();
 }

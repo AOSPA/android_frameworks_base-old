@@ -1684,7 +1684,6 @@ final public class MediaCodec {
     private MediaCodecInfo mCodecInfo;
     private final Object mCodecInfoLock = new Object();
     private MediaCrypto mCrypto;
-    private String mPlaybackId;
 
     private static final int EVENT_CALLBACK = 1;
     private static final int EVENT_SET_CALLBACK = 2;
@@ -4499,14 +4498,25 @@ final public class MediaCodec {
 
         int i = 0;
         for (final String key: params.keySet()) {
-            keys[i] = key;
-            Object value = params.get(key);
-
-            // Bundle's byte array is a byte[], JNI layer only takes ByteBuffer
-            if (value instanceof byte[]) {
-                values[i] = ByteBuffer.wrap((byte[])value);
+            if (key.equals(MediaFormat.KEY_AUDIO_SESSION_ID)) {
+                int sessionId = 0;
+                try {
+                    sessionId = (Integer)params.get(key);
+                } catch (Exception e) {
+                    throw new IllegalArgumentException("Wrong Session ID Parameter!");
+                }
+                keys[i] = "audio-hw-sync";
+                values[i] = AudioSystem.getAudioHwSyncForSession(sessionId);
             } else {
-                values[i] = value;
+                keys[i] = key;
+                Object value = params.get(key);
+
+                // Bundle's byte array is a byte[], JNI layer only takes ByteBuffer
+                if (value instanceof byte[]) {
+                    values[i] = ByteBuffer.wrap((byte[])value);
+                } else {
+                    values[i] = value;
+                }
             }
             ++i;
         }
@@ -4732,6 +4742,25 @@ final public class MediaCodec {
             return mType;
         }
 
+        @Override
+        public boolean equals(Object o) {
+            if (o == null) {
+                return false;
+            }
+            if (!(o instanceof ParameterDescriptor)) {
+                return false;
+            }
+            ParameterDescriptor other = (ParameterDescriptor) o;
+            return this.mName.equals(other.mName) && this.mType == other.mType;
+        }
+
+        @Override
+        public int hashCode() {
+            return Arrays.asList(
+                    (Object) mName,
+                    (Object) Integer.valueOf(mType)).hashCode();
+        }
+
         private String mName;
         private @MediaFormat.Type int mType;
     }
@@ -4756,7 +4785,8 @@ final public class MediaCodec {
     private native ParameterDescriptor native_getParameterDescriptor(@NonNull String name);
 
     /**
-     * Subscribe to vendor parameters, so that changes to these parameters generate
+     * Subscribe to vendor parameters, so that these parameters will be present in
+     * {@link #getOutputFormat} and changes to these parameters generate
      * output format change event.
      * <p>
      * Unrecognized parameter names or standard (non-vendor) parameter names will be ignored.
@@ -4785,8 +4815,9 @@ final public class MediaCodec {
     private native void native_subscribeToVendorParameters(@NonNull List<String> names);
 
     /**
-     * Unsubscribe from vendor parameters, so that changes to these parameters
-     * no longer generate output format change event.
+     * Unsubscribe from vendor parameters, so that these parameters will not be present in
+     * {@link #getOutputFormat} and changes to these parameters no longer generate
+     * output format change event.
      * <p>
      * Unrecognized parameter names, standard (non-vendor) parameter names will be ignored.
      * {@link #reset} also resets the list of subscribed parameters.
@@ -4794,7 +4825,8 @@ final public class MediaCodec {
      * <p>
      * This method can be called in any codec state except for released state. When called in
      * running state with newly unsubscribed parameters, it takes effect no later than the
-     * processing of the subsequently queued buffer.
+     * processing of the subsequently queued buffer. For the removed parameters, the codec will
+     * generate output format change event.
      * <p>
      * Note that any vendor parameters set in a {@link #configure} or
      * {@link #setParameters} call are automatically subscribed, and with this method

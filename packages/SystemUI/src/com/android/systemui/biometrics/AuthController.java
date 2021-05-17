@@ -29,6 +29,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.res.Configuration;
+import android.graphics.PointF;
 import android.graphics.RectF;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricPrompt;
@@ -82,6 +83,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     @Nullable private final List<FingerprintSensorPropertiesInternal> mFpProps;
     @Nullable private final List<FaceSensorPropertiesInternal> mFaceProps;
     @Nullable private final List<FingerprintSensorPropertiesInternal> mUdfpsProps;
+    @Nullable private final PointF mFaceAuthSensorLocation;
 
     // TODO: These should just be saved from onSaveState
     private SomeArgs mCurrentDialogArgs;
@@ -261,10 +263,34 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     }
 
     /**
-     * @return where the UDFPS exists on the screen in pixels.
+     * @return where the UDFPS exists on the screen in pixels in portrait mode.
      */
-    public RectF getUdfpsRegion() {
-        return mUdfpsController == null ? null : mUdfpsController.getSensorLocation();
+    @Nullable public RectF getUdfpsRegion() {
+        return mUdfpsController == null
+                ? null
+                : mUdfpsController.getSensorLocation();
+    }
+
+    /**
+     * @return where the UDFPS exists on the screen in pixels in portrait mode.
+     */
+    @Nullable public PointF getUdfpsSensorLocation() {
+        if (mUdfpsController == null) {
+            return null;
+        }
+        return new PointF(mUdfpsController.getSensorLocation().centerX(),
+                mUdfpsController.getSensorLocation().centerY());
+    }
+
+    /**
+     * @return where the face authentication sensor exists relative to the screen in pixels in
+     * portrait mode.
+     */
+    @Nullable public PointF getFaceAuthSensorLocation() {
+        if (mFaceProps == null || mFaceAuthSensorLocation == null) {
+            return null;
+        }
+        return new PointF(mFaceAuthSensorLocation.x, mFaceAuthSensorLocation.y);
     }
 
     /**
@@ -283,18 +309,14 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     }
 
     /**
-     * Cancel a fingerprint scan.
-     *
-     * The sensor that triggers an AOD interrupt for fingerprint doesn't give
-     * ACTION_UP/ACTION_CANCEL events, so the scan needs to be cancelled manually. This should be
-     * called when authentication either succeeds or fails. Failing to cancel the scan will leave
-     * the screen in high brightness mode.
+     * Cancel a fingerprint scan manually. This will get rid of the white circle on the udfps
+     * sensor area even if the user hasn't explicitly lifted their finger yet.
      */
-    public void onCancelAodInterrupt() {
+    public void onCancelUdfps() {
         if (mUdfpsController == null) {
             return;
         }
-        mUdfpsController.onCancelAodInterrupt();
+        mUdfpsController.onCancelUdfps();
     }
 
     private void sendResultAndCleanUp(@DismissedReason int reason,
@@ -339,6 +361,15 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
             }
         }
         mUdfpsProps = !udfpsProps.isEmpty() ? udfpsProps : null;
+        int[] faceAuthLocation = context.getResources().getIntArray(
+                com.android.systemui.R.array.config_face_auth_props);
+        if (faceAuthLocation == null || faceAuthLocation.length < 2) {
+            mFaceAuthSensorLocation = null;
+        } else {
+            mFaceAuthSensorLocation = new PointF(
+                    (float) faceAuthLocation[0],
+                    (float) faceAuthLocation[1]);
+        }
 
         IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_CLOSE_SYSTEM_DIALOGS);
@@ -464,6 +495,8 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
             if (DEBUG) Log.d(TAG, "onBiometricError, hard error: " + errorMessage);
             mCurrentDialog.onError(errorMessage);
         }
+
+        onCancelUdfps();
     }
 
     @Override
@@ -481,6 +514,17 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         // BiometricService will have already sent the callback to the client in this case.
         // This avoids a round trip to SystemUI. So, just dismiss the dialog and we're done.
         mCurrentDialog = null;
+    }
+
+    /**
+     * Whether the passed userId has enrolled face auth.
+     */
+    public boolean isFaceAuthEnrolled(int userId) {
+        if (mFaceProps == null) {
+            return false;
+        }
+
+        return mFaceManager.hasEnrolledTemplates(userId);
     }
 
    /**

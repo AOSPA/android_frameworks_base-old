@@ -78,7 +78,6 @@ import static android.net.NetworkCapabilities.REDACT_FOR_NETWORK_SETTINGS;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkCapabilities.TRANSPORT_TEST;
 import static android.net.NetworkCapabilities.TRANSPORT_VPN;
-import static android.net.NetworkPolicyManager.blockedReasonsToString;
 import static android.net.NetworkRequest.Type.LISTEN_FOR_BEST;
 import static android.net.shared.NetworkMonitorUtils.isPrivateDnsValidationRequired;
 import static android.os.Process.INVALID_UID;
@@ -327,7 +326,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private static final int MAX_NETWORK_REQUESTS_PER_UID = 100;
 
     // The maximum number of network request allowed for system UIDs before an exception is thrown.
-    private static final int MAX_NETWORK_REQUESTS_PER_SYSTEM_UID = 250;
+    @VisibleForTesting
+    static final int MAX_NETWORK_REQUESTS_PER_SYSTEM_UID = 250;
 
     @VisibleForTesting
     protected int mLingerDelayMs;  // Can't be final, or test subclass constructors can't change it.
@@ -347,7 +347,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     protected final PermissionMonitor mPermissionMonitor;
 
     private final PerUidCounter mNetworkRequestCounter;
-    private final PerUidCounter mSystemNetworkRequestCounter;
+    @VisibleForTesting
+    final PerUidCounter mSystemNetworkRequestCounter;
 
     private volatile boolean mLockdownEnabled;
 
@@ -645,7 +646,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     private static IDnsResolver getDnsResolver(Context context) {
-        return IDnsResolver.Stub.asInterface(DnsResolverServiceManager.getService(context));
+        final DnsResolverServiceManager dsm = context.getSystemService(
+                DnsResolverServiceManager.class);
+        return IDnsResolver.Stub.asInterface(dsm.getService());
     }
 
     private PhoneStateListener mPhoneStateListener = new PhoneStateListener() {
@@ -1085,8 +1088,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         private final int mMaxCountPerUid;
 
         // Map from UID to number of NetworkRequests that UID has filed.
+        @VisibleForTesting
         @GuardedBy("mUidToNetworkRequestCount")
-        private final SparseIntArray mUidToNetworkRequestCount = new SparseIntArray();
+        final SparseIntArray mUidToNetworkRequestCount = new SparseIntArray();
 
         /**
          * Constructor
@@ -1110,13 +1114,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
          */
         public void incrementCountOrThrow(final int uid) {
             synchronized (mUidToNetworkRequestCount) {
-                final int networkRequests = mUidToNetworkRequestCount.get(uid, 0) + 1;
-                if (networkRequests >= mMaxCountPerUid) {
-                    throw new ServiceSpecificException(
-                            ConnectivityManager.Errors.TOO_MANY_REQUESTS);
-                }
-                mUidToNetworkRequestCount.put(uid, networkRequests);
+                incrementCountOrThrow(uid, 1 /* numToIncrement */);
             }
+        }
+
+        private void incrementCountOrThrow(final int uid, final int numToIncrement) {
+            final int newRequestCount =
+                    mUidToNetworkRequestCount.get(uid, 0) + numToIncrement;
+            if (newRequestCount >= mMaxCountPerUid) {
+                throw new ServiceSpecificException(
+                        ConnectivityManager.Errors.TOO_MANY_REQUESTS);
+            }
+            mUidToNetworkRequestCount.put(uid, newRequestCount);
         }
 
         /**
@@ -1126,15 +1135,49 @@ public class ConnectivityService extends IConnectivityManager.Stub
          */
         public void decrementCount(final int uid) {
             synchronized (mUidToNetworkRequestCount) {
-                final int requests = mUidToNetworkRequestCount.get(uid, 0);
-                if (requests < 1) {
-                    logwtf("BUG: too small request count " + requests + " for UID " + uid);
-                } else if (requests == 1) {
-                    mUidToNetworkRequestCount.delete(uid);
-                } else {
-                    mUidToNetworkRequestCount.put(uid, requests - 1);
-                }
+                decrementCount(uid, 1 /* numToDecrement */);
             }
+        }
+
+        private void decrementCount(final int uid, final int numToDecrement) {
+            final int newRequestCount =
+                    mUidToNetworkRequestCount.get(uid, 0) - numToDecrement;
+            if (newRequestCount < 0) {
+                logwtf("BUG: too small request count " + newRequestCount + " for UID " + uid);
+            } else if (newRequestCount == 0) {
+                mUidToNetworkRequestCount.delete(uid);
+            } else {
+                mUidToNetworkRequestCount.put(uid, newRequestCount);
+            }
+        }
+
+        /**
+         * Used to adjust the request counter for the per-app API flows. Directly adjusting the
+         * counter is not ideal however in the per-app flows, the nris can't be removed until they
+         * are used to create the new nris upon set. Therefore the request count limit can be
+         * artificially hit. This method is used as a workaround for this particular case so that
+         * the request counts are accounted for correctly.
+         * @param uid the uid to adjust counts for
+         * @param numOfNewRequests the new request count to account for
+         * @param r the runnable to execute
+         */
+        public void transact(final int uid, final int numOfNewRequests, @NonNull final Runnable r) {
+            // This should only be used on the handler thread as per all current and foreseen
+            // use-cases. ensureRunningOnConnectivityServiceThread() can't be used because there is
+            // no ref to the outer ConnectivityService.
+            synchronized (mUidToNetworkRequestCount) {
+                final int reqCountOverage = getCallingUidRequestCountOverage(uid, numOfNewRequests);
+                decrementCount(uid, reqCountOverage);
+                r.run();
+                incrementCountOrThrow(uid, reqCountOverage);
+            }
+        }
+
+        private int getCallingUidRequestCountOverage(final int uid, final int numOfNewRequests) {
+            final int newUidRequestCount = mUidToNetworkRequestCount.get(uid, 0)
+                    + numOfNewRequests;
+            return newUidRequestCount >= MAX_NETWORK_REQUESTS_PER_SYSTEM_UID
+                    ? newUidRequestCount - (MAX_NETWORK_REQUESTS_PER_SYSTEM_UID - 1) : 0;
         }
     }
 
@@ -1324,14 +1367,22 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
         mPermissionMonitor = new PermissionMonitor(mContext, mNetd);
 
+        mUserAllContext = mContext.createContextAsUser(UserHandle.ALL, 0 /* flags */);
         // Listen for user add/removes to inform PermissionMonitor.
         // Should run on mHandler to avoid any races.
-        IntentFilter intentFilter = new IntentFilter();
-        intentFilter.addAction(Intent.ACTION_USER_ADDED);
-        intentFilter.addAction(Intent.ACTION_USER_REMOVED);
+        final IntentFilter userIntentFilter = new IntentFilter();
+        userIntentFilter.addAction(Intent.ACTION_USER_ADDED);
+        userIntentFilter.addAction(Intent.ACTION_USER_REMOVED);
+        mUserAllContext.registerReceiver(mUserIntentReceiver, userIntentFilter,
+                null /* broadcastPermission */, mHandler);
 
-        mUserAllContext = mContext.createContextAsUser(UserHandle.ALL, 0 /* flags */);
-        mUserAllContext.registerReceiver(mIntentReceiver, intentFilter,
+        // Listen to package add/removes for netd
+        final IntentFilter packageIntentFilter = new IntentFilter();
+        packageIntentFilter.addAction(Intent.ACTION_PACKAGE_ADDED);
+        packageIntentFilter.addAction(Intent.ACTION_PACKAGE_REMOVED);
+        packageIntentFilter.addAction(Intent.ACTION_PACKAGE_REPLACED);
+        packageIntentFilter.addDataScheme("package");
+        mUserAllContext.registerReceiver(mPackageIntentReceiver, packageIntentFilter,
                 null /* broadcastPermission */, mHandler);
 
         mNetworkActivityTracker = new LegacyNetworkActivityTracker(mContext, mHandler, mNetd);
@@ -1359,7 +1410,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         mLingerMonitor = new LingerMonitor(mContext, mNotifier, dailyLimit, rateLimit);
 
         mMultinetworkPolicyTracker = mDeps.makeMultinetworkPolicyTracker(
-                mContext, mHandler, () -> rematchForAvoidBadWifiUpdate());
+                mContext, mHandler, () -> updateAvoidBadWifi());
         mMultinetworkPolicyTracker.start();
 
         mDnsManager = new DnsManager(mContext, mDnsResolver);
@@ -1375,8 +1426,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 new NetworkInfo(TYPE_NONE, 0, "", ""),
                 new LinkProperties(), new NetworkCapabilities(),
                 new NetworkScore.Builder().setLegacyInt(0).build(), mContext, null,
-                new NetworkAgentConfig(), this, null, null, 0, INVALID_UID, mQosCallbackTracker,
-                mDeps);
+                new NetworkAgentConfig(), this, null, null, 0, INVALID_UID,
+                mLingerDelayMs, mQosCallbackTracker, mDeps);
     }
 
     private static NetworkCapabilities createDefaultNetworkCapabilitiesForUid(int uid) {
@@ -1614,7 +1665,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 ? nri.getActiveRequest().requestId : nri.mRequests.get(0).requestId;
         mNetworkInfoBlockingLogs.log(String.format(
                 "%s %d(%d) on netId %d: %s", action, nri.mAsUid, requestId, net.getNetId(),
-                blockedReasonsToString(blocked)));
+                Integer.toHexString(blocked)));
     }
 
     /**
@@ -1944,6 +1995,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
             newNc.setNetworkSpecifier(newNc.getNetworkSpecifier().redact());
         }
         newNc.setAdministratorUids(new int[0]);
+        if (!checkAnyPermissionOf(
+                callerPid, callerUid, android.Manifest.permission.NETWORK_FACTORY)) {
+            newNc.setSubscriptionIds(Collections.emptySet());
+        }
 
         return newNc;
     }
@@ -2165,14 +2220,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
         PermissionUtils.enforceNetworkStackPermission(mContext);
 
         final ArrayList<NetworkState> result = new ArrayList<>();
-        for (NetworkStateSnapshot snapshot : getAllNetworkStateSnapshot()) {
+        for (NetworkStateSnapshot snapshot : getAllNetworkStateSnapshots()) {
             // NetworkStateSnapshot doesn't contain NetworkInfo, so need to fetch it from the
             // NetworkAgentInfo.
-            final NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(snapshot.network);
+            final NetworkAgentInfo nai = getNetworkAgentInfoForNetwork(snapshot.getNetwork());
             if (nai != null && nai.networkInfo.isConnected()) {
                 result.add(new NetworkState(new NetworkInfo(nai.networkInfo),
-                        snapshot.linkProperties, snapshot.networkCapabilities, snapshot.network,
-                        snapshot.subscriberId));
+                        snapshot.getLinkProperties(), snapshot.getNetworkCapabilities(),
+                        snapshot.getNetwork(), snapshot.getSubscriberId()));
             }
         }
         return result.toArray(new NetworkState[result.size()]);
@@ -2180,7 +2235,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     @Override
     @NonNull
-    public List<NetworkStateSnapshot> getAllNetworkStateSnapshot() {
+    public List<NetworkStateSnapshot> getAllNetworkStateSnapshots() {
         // This contains IMSI details, so make sure the caller is privileged.
         PermissionUtils.enforceNetworkStackPermission(mContext);
 
@@ -2297,7 +2352,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 netId = nai.network.getNetId();
             }
             boolean ok = addLegacyRouteToHost(lp, addr, netId, uid);
-            if (DBG) log("requestRouteToHostAddress ok=" + ok);
+            if (DBG) {
+                log("requestRouteToHostAddress " + addr + nai.toShortString() + " ok=" + ok);
+            }
             return ok;
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -2832,6 +2889,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     protected void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter writer,
             @Nullable String[] args) {
+        if (!checkDumpPermission(mContext, TAG, writer)) return;
+
         mPriorityDumper.dump(fd, writer, args);
     }
 
@@ -2849,7 +2908,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
 
     private void doDump(FileDescriptor fd, PrintWriter writer, String[] args) {
         final IndentingPrintWriter pw = new IndentingPrintWriter(writer, "  ");
-        if (!checkDumpPermission(mContext, TAG, pw)) return;
 
         if (CollectionUtils.contains(args, DIAG_ARG)) {
             dumpNetworkDiagnostics(pw);
@@ -2899,7 +2957,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 final int uid = mUidBlockedReasons.keyAt(i);
                 final int blockedReasons = mUidBlockedReasons.valueAt(i);
                 pw.println("UID=" + uid + " blockedReasons="
-                        + blockedReasonsToString(blockedReasons));
+                        + Integer.toHexString(blockedReasons));
             } catch (ArrayIndexOutOfBoundsException e) {
                 pw.println("  ArrayIndexOutOfBoundsException");
             } catch (ConcurrentModificationException e) {
@@ -2929,13 +2987,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
             pw.println();
             pw.println("mNetworkRequestInfoLogs (most recent first):");
             pw.increaseIndent();
-            mNetworkRequestInfoLogs.reverseDump(fd, pw, args);
+            mNetworkRequestInfoLogs.reverseDump(pw);
             pw.decreaseIndent();
 
             pw.println();
             pw.println("mNetworkInfoBlockingLogs (most recent first):");
             pw.increaseIndent();
-            mNetworkInfoBlockingLogs.reverseDump(fd, pw, args);
+            mNetworkInfoBlockingLogs.reverseDump(pw);
             pw.decreaseIndent();
 
             pw.println();
@@ -2949,7 +3007,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 long duration = SystemClock.elapsedRealtime() - mLastWakeLockAcquireTimestamp;
                 pw.println("currently holding WakeLock for: " + (duration / 1000) + "s");
             }
-            mWakelockLogs.reverseDump(fd, pw, args);
+            mWakelockLogs.reverseDump(pw);
 
             pw.println();
             pw.println("bandwidth update requests (by uid):");
@@ -2961,7 +3019,12 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
             }
             pw.decreaseIndent();
+            pw.decreaseIndent();
 
+            pw.println();
+            pw.println("mOemNetworkPreferencesLogs (most recent first):");
+            pw.increaseIndent();
+            mOemNetworkPreferencesLogs.reverseDump(pw);
             pw.decreaseIndent();
         }
 
@@ -3186,6 +3249,11 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     } else {
                         logwtf(nai.toShortString() + " set invalid teardown delay " + msg.arg1);
                     }
+                    break;
+                }
+                case NetworkAgent.EVENT_LINGER_DURATION_CHANGED: {
+                    nai.setLingerDuration((int) arg.second);
+                    break;
                 }
             }
         }
@@ -3815,6 +3883,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
     private void destroyNativeNetwork(@NonNull NetworkAgentInfo networkAgent) {
         try {
             mNetd.networkDestroy(networkAgent.network.getNetId());
+        } catch (RemoteException | ServiceSpecificException e) {
+            loge("Exception destroying network(networkDestroy): " + e);
+        }
+        try {
             mDnsResolver.destroyNetworkCache(networkAgent.network.getNetId());
         } catch (RemoteException | ServiceSpecificException e) {
             loge("Exception destroying network: " + e);
@@ -3983,17 +4055,16 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 // multilayer requests, returning as soon as a NetworkAgentInfo satisfies a request
                 // is important so as to not evaluate lower priority requests further in
                 // nri.mRequests.
-                final boolean isNetworkNeeded = candidate.isSatisfyingRequest(req.requestId)
-                        // Note that this catches two important cases:
-                        // 1. Unvalidated cellular will not be reaped when unvalidated WiFi
-                        //    is currently satisfying the request.  This is desirable when
-                        //    cellular ends up validating but WiFi does not.
-                        // 2. Unvalidated WiFi will not be reaped when validated cellular
-                        //    is currently satisfying the request.  This is desirable when
-                        //    WiFi ends up validating and out scoring cellular.
-                        || nri.getSatisfier().getCurrentScore()
-                        < candidate.getCurrentScoreAsValidated();
-                return isNetworkNeeded;
+                final NetworkAgentInfo champion = req.equals(nri.getActiveRequest())
+                        ? nri.getSatisfier() : null;
+                // Note that this catches two important cases:
+                // 1. Unvalidated cellular will not be reaped when unvalidated WiFi
+                //    is currently satisfying the request.  This is desirable when
+                //    cellular ends up validating but WiFi does not.
+                // 2. Unvalidated WiFi will not be reaped when validated cellular
+                //    is currently satisfying the request.  This is desirable when
+                //    WiFi ends up validating and out scoring cellular.
+                return mNetworkRanker.mightBeat(req, champion, candidate.getValidatedScoreable());
             }
         }
 
@@ -4094,7 +4165,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
             }
         }
-        decrementRequestCount(nri);
+        nri.decrementRequestCount();
         mNetworkRequestInfoLogs.log("RELEASE " + nri);
 
         if (null != nri.getActiveRequest()) {
@@ -4205,14 +4276,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 ? mSystemNetworkRequestCounter : mNetworkRequestCounter;
     }
 
-    private void incrementRequestCountOrThrow(NetworkRequestInfo nri) {
-        getRequestCounter(nri).incrementCountOrThrow(nri.mUid);
-    }
-
-    private void decrementRequestCount(NetworkRequestInfo nri) {
-        getRequestCounter(nri).decrementCount(nri.mUid);
-    }
-
     @Override
     public void setAcceptUnvalidated(Network network, boolean accept, boolean always) {
         enforceNetworkStackSettingsOrSetup();
@@ -4258,7 +4321,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // network, we should respect the user's option and don't need to popup the
             // PARTIAL_CONNECTIVITY notification to user again.
             nai.networkAgentConfig.acceptPartialConnectivity = accept;
-            nai.updateScoreForNetworkAgentConfigUpdate();
+            nai.updateScoreForNetworkAgentUpdate();
             rematchAllNetworksAndRequests();
         }
 
@@ -4326,6 +4389,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
         if (!nai.avoidUnvalidated) {
             nai.avoidUnvalidated = true;
+            nai.updateScoreForNetworkAgentUpdate();
             rematchAllNetworksAndRequests();
         }
     }
@@ -4431,8 +4495,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
         return avoidBadWifi();
     }
 
-    // TODO : this function is now useless.
-    private void rematchForAvoidBadWifiUpdate() {
+    private void updateAvoidBadWifi() {
+        for (final NetworkAgentInfo nai : mNetworkAgentInfos) {
+            nai.updateScoreForNetworkAgentUpdate();
+        }
         rematchAllNetworksAndRequests();
     }
 
@@ -5024,7 +5090,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     }
 
     @Override
-    public void setGlobalProxy(final ProxyInfo proxyProperties) {
+    public void setGlobalProxy(@Nullable final ProxyInfo proxyProperties) {
         PermissionUtils.enforceNetworkStackPermission(mContext);
         mProxyTracker.setGlobalProxy(proxyProperties);
     }
@@ -5369,14 +5435,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    private void onUserAdded(UserHandle user) {
+    private void onUserAdded(@NonNull final UserHandle user) {
         mPermissionMonitor.onUserAdded(user);
         if (mOemNetworkPreferences.getNetworkPreferences().size() > 0) {
             handleSetOemNetworkPreference(mOemNetworkPreferences, null);
         }
     }
 
-    private void onUserRemoved(UserHandle user) {
+    private void onUserRemoved(@NonNull final UserHandle user) {
         mPermissionMonitor.onUserRemoved(user);
         // If there was a network preference for this user, remove it.
         handleSetProfileNetworkPreference(new ProfileNetworkPreferences.Preference(user, null),
@@ -5386,7 +5452,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
     }
 
-    private BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
+    private void onPackageChanged(@NonNull final String packageName) {
+        // This is necessary in case a package is added or removed, but also when it's replaced to
+        // run as a new UID by its manifest rules. Also, if a separate package shares the same UID
+        // as one in the preferences, then it should follow the same routing as that other package,
+        // which means updating the rules is never to be needed in this case (whether it joins or
+        // leaves a UID with a preference).
+        if (isMappedInOemNetworkPreference(packageName)) {
+            handleSetOemNetworkPreference(mOemNetworkPreferences, null);
+        }
+    }
+
+    private final BroadcastReceiver mUserIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             ensureRunningOnConnectivityServiceThread();
@@ -5405,6 +5482,22 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 onUserRemoved(user);
             }  else {
                 Log.wtf(TAG, "received unexpected intent: " + action);
+            }
+        }
+    };
+
+    private final BroadcastReceiver mPackageIntentReceiver = new BroadcastReceiver() {
+        @Override
+        public void onReceive(Context context, Intent intent) {
+            ensureRunningOnConnectivityServiceThread();
+            switch (intent.getAction()) {
+                case Intent.ACTION_PACKAGE_ADDED:
+                case Intent.ACTION_PACKAGE_REMOVED:
+                case Intent.ACTION_PACKAGE_REPLACED:
+                    onPackageChanged(intent.getData().getSchemeSpecificPart());
+                    break;
+                default:
+                    Log.wtf(TAG, "received unexpected intent: " + intent.getAction());
             }
         }
     };
@@ -5501,6 +5594,9 @@ public class ConnectivityService extends IConnectivityManager.Stub
         @Nullable
         final String mCallingAttributionTag;
 
+        // Counter keeping track of this NRI.
+        final PerUidCounter mPerUidCounter;
+
         // Effective UID of this request. This is different from mUid when a privileged process
         // files a request on behalf of another UID. This UID is used to determine blocked status,
         // UID matching, and so on. mUid above is used for permission checks and to enforce the
@@ -5551,7 +5647,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             mPid = getCallingPid();
             mUid = mDeps.getCallingUid();
             mAsUid = asUid;
-            incrementRequestCountOrThrow(this);
+            mPerUidCounter = getRequestCounter(this);
+            mPerUidCounter.incrementCountOrThrow(mUid);
             /**
              * Location sensitive data not included in pending intent. Only included in
              * {@link NetworkCallback}.
@@ -5583,7 +5680,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             mUid = mDeps.getCallingUid();
             mAsUid = asUid;
             mPendingIntent = null;
-            incrementRequestCountOrThrow(this);
+            mPerUidCounter = getRequestCounter(this);
+            mPerUidCounter.incrementCountOrThrow(mUid);
             mCallbackFlags = callbackFlags;
             mCallingAttributionTag = callingAttributionTag;
             linkDeathRecipient();
@@ -5621,7 +5719,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             mUid = nri.mUid;
             mAsUid = nri.mAsUid;
             mPendingIntent = nri.mPendingIntent;
-            incrementRequestCountOrThrow(this);
+            mPerUidCounter = getRequestCounter(this);
+            mPerUidCounter.incrementCountOrThrow(mUid);
             mCallbackFlags = nri.mCallbackFlags;
             mCallingAttributionTag = nri.mCallingAttributionTag;
             linkDeathRecipient();
@@ -5651,6 +5750,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // reflected in the return value of this method.
             final List<NetworkRequest> tempRequests = new ArrayList<>(r);
             return Collections.unmodifiableList(tempRequests);
+        }
+
+        void decrementRequestCount() {
+            mPerUidCounter.decrementCount(mUid);
         }
 
         void linkDeathRecipient() {
@@ -5685,7 +5788,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     + mNetworkRequestForCallback.requestId
                     + " " + mRequests
                     + (mPendingIntent == null ? "" : " to trigger " + mPendingIntent)
-                    + "callback flags: " + mCallbackFlags;
+                    + " callback flags: " + mCallbackFlags;
         }
     }
 
@@ -5710,6 +5813,10 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     "Insufficient permissions to request a specific signal strength");
         }
         mAppOpsManager.checkPackage(callerUid, callerPackageName);
+
+        if (!nc.getSubscriptionIds().isEmpty()) {
+            enforceNetworkFactoryPermission();
+        }
     }
 
     private int[] getSignalStrengthThresholds(@NonNull final NetworkAgentInfo nai) {
@@ -6129,6 +6236,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     public int registerNetworkProvider(Messenger messenger, String name) {
         enforceNetworkFactoryOrSettingsPermission();
+        Objects.requireNonNull(messenger, "messenger must be non-null");
         NetworkProviderInfo npi = new NetworkProviderInfo(name, messenger,
                 nextNetworkProviderId(), () -> unregisterNetworkProvider(messenger));
         mHandler.sendMessage(mHandler.obtainMessage(EVENT_REGISTER_NETWORK_PROVIDER, npi));
@@ -6231,6 +6339,21 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @NonNull
     private ProfileNetworkPreferences mProfileNetworkPreferences = new ProfileNetworkPreferences();
 
+    // OemNetworkPreferences activity String log entries.
+    private static final int MAX_OEM_NETWORK_PREFERENCE_LOGS = 20;
+    @NonNull
+    private final LocalLog mOemNetworkPreferencesLogs =
+            new LocalLog(MAX_OEM_NETWORK_PREFERENCE_LOGS);
+
+    /**
+     * Determine whether a given package has a mapping in the current OemNetworkPreferences.
+     * @param packageName the package name to check existence of a mapping for.
+     * @return true if a mapping exists, false otherwise
+     */
+    private boolean isMappedInOemNetworkPreference(@NonNull final String packageName) {
+        return mOemNetworkPreferences.getNetworkPreferences().containsKey(packageName);
+    }
+
     // The always-on request for an Internet-capable network that apps without a specific default
     // fall back to.
     @VisibleForTesting
@@ -6251,7 +6374,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
      * @return the NetworkRequestInfo tracking the given uid.
      */
     @NonNull
-    private NetworkRequestInfo getDefaultRequestTrackingUid(@NonNull final int uid) {
+    private NetworkRequestInfo getDefaultRequestTrackingUid(final int uid) {
         for (final NetworkRequestInfo nri : mDefaultNetworkRequests) {
             if (nri == mDefaultRequest) {
                 continue;
@@ -6377,8 +6500,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
     // Request used to optionally keep vehicle internal network always active
     private final NetworkRequest mDefaultVehicleRequest;
 
-    // TODO replace with INetd.DUMMY_NET_ID when available.
-    private static final int NO_SERVICE_NET_ID = 51;
+    // TODO replace with INetd.UNREACHABLE_NET_ID when available.
+    private static final int NO_SERVICE_NET_ID = 52;
     // Sentinel NAI used to direct apps with default networks that should have no connectivity to a
     // network with no service. This NAI should never be matched against, nor should any public API
     // ever return the associated network. For this reason, this NAI is not in the list of available
@@ -6487,7 +6610,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final NetworkAgentInfo nai = new NetworkAgentInfo(na,
                 new Network(mNetIdManager.reserveNetId()), new NetworkInfo(networkInfo), lp, nc,
                 currentScore, mContext, mTrackerHandler, new NetworkAgentConfig(networkAgentConfig),
-                this, mNetd, mDnsResolver, providerId, uid, mQosCallbackTracker, mDeps);
+                this, mNetd, mDnsResolver, providerId, uid, mLingerDelayMs,
+                mQosCallbackTracker, mDeps);
 
         // Make sure the LinkProperties and NetworkCapabilities reflect what the agent info says.
         processCapabilitiesFromAgent(nai, nc);
@@ -6586,7 +6710,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             @NonNull final INetworkOfferCallback callback) {
         ensureRunningOnConnectivityServiceThread();
         for (final NetworkOfferInfo noi : mNetworkOffers) {
-            if (noi.offer.callback.equals(callback)) return noi;
+            if (noi.offer.callback.asBinder().equals(callback.asBinder())) return noi;
         }
         return null;
     }
@@ -6769,7 +6893,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     mDeps.reportNetworkInterfaceForTransports(mContext, iface,
                             caps.getTransportTypes());
                 } catch (Exception e) {
-                    loge("Exception adding interface: " + e);
+                    logw("Exception adding interface: " + e);
                 }
             }
         }
@@ -7144,6 +7268,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final NetworkCapabilities prevNc = nai.getAndSetNetworkCapabilities(newNc);
 
         updateUids(nai, prevNc, newNc);
+        nai.updateScoreForNetworkAgentUpdate();
 
         if (nai.getCurrentScore() == oldScore && newNc.equalRequestableCapabilities(prevNc)) {
             // If the requestable capabilities haven't changed, and the score hasn't changed, then
@@ -7680,7 +7805,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         }
 
         void addRequestReassignment(@NonNull final RequestReassignment reassignment) {
-            if (Build.IS_DEBUGGABLE) {
+            if (Build.isDebuggable()) {
                 // The code is never supposed to add two reassignments of the same request. Make
                 // sure this stays true, but without imposing this expensive check on all
                 // reassignments on all user devices.
@@ -7740,7 +7865,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 }
                 previousSatisfier.removeRequest(previousRequest.requestId);
                 if (satisfiesMobileNetworkDataCheck(previousSatisfier.networkCapabilities)) {
-                    previousSatisfier.lingerRequest(previousRequest.requestId, now, mLingerDelayMs);
+                    previousSatisfier.lingerRequest(previousRequest.requestId, now);
                 } else {
                     previousSatisfier.lingerRequest(previousRequest.requestId, now,
                                     mNonDefaultSubscriptionLingerDelayMs);
@@ -7754,6 +7879,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // all networks except in the case of an underlying network for a VCN.
             if (newSatisfier.isNascent()) {
                 newSatisfier.unlingerRequest(NetworkRequest.REQUEST_ID_NONE);
+                newSatisfier.unsetInactive();
             }
 
             // if newSatisfier is not null, then newRequest may not be null.
@@ -7789,7 +7915,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             @NonNull final Collection<NetworkRequestInfo> networkRequests) {
         final NetworkReassignment changes = new NetworkReassignment();
 
-        // Gather the list of all relevant agents and sort them by score.
+        // Gather the list of all relevant agents.
         final ArrayList<NetworkAgentInfo> nais = new ArrayList<>();
         for (final NetworkAgentInfo nai : mNetworkAgentInfos) {
             if (!nai.everConnected) {
@@ -7806,7 +7932,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             NetworkAgentInfo bestNetwork = null;
             NetworkRequest bestRequest = null;
             for (final NetworkRequest req : nri.mRequests) {
-                bestNetwork = mNetworkRanker.getBestNetwork(req, nais);
+                bestNetwork = mNetworkRanker.getBestNetwork(req, nais, nri.getSatisfier());
                 // Stop evaluating as the highest possible priority request is satisfied.
                 if (null != bestNetwork) {
                     bestRequest = req;
@@ -8106,7 +8232,6 @@ public class ConnectivityService extends IConnectivityManager.Stub
             @NonNull final NetworkOffer offer, @NonNull final NetworkRanker networkRanker) {
         final NetworkRequest activeRequest = nri.isBeingSatisfied() ? nri.getActiveRequest() : null;
         final NetworkAgentInfo satisfier = null != activeRequest ? nri.getSatisfier() : null;
-        final FullScore satisfierScore = null != satisfier ? satisfier.getScore() : null;
 
         // Multi-layer requests have a currently active request, the one being satisfied.
         // Since the system will try to bring up a better network than is currently satisfying
@@ -8145,7 +8270,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     && satisfier.factorySerialNumber == offer.providerId;
             final boolean newNeeded = (currentlyServing
                     || (activeRequest.canBeSatisfiedBy(offer.caps)
-                            && networkRanker.mightBeat(activeRequest, satisfierScore, offer)));
+                            && networkRanker.mightBeat(activeRequest, satisfier, offer)));
             if (newNeeded != oldNeeded) {
                 if (newNeeded) {
                     offer.onNetworkNeeded(activeRequest);
@@ -8306,6 +8431,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // But it will be removed as soon as the network satisfies a request for the first time.
             networkAgent.lingerRequest(NetworkRequest.REQUEST_ID_NONE,
                     SystemClock.elapsedRealtime(), mNascentDelayMs);
+            networkAgent.setInactive();
 
             // Consider network even though it is not yet validated.
             rematchAllNetworksAndRequests();
@@ -8746,7 +8872,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         if (vpn == null) return VpnManager.TYPE_VPN_NONE;
         final TransportInfo ti = vpn.networkCapabilities.getTransportInfo();
         if (!(ti instanceof VpnTransportInfo)) return VpnManager.TYPE_VPN_NONE;
-        return ((VpnTransportInfo) ti).type;
+        return ((VpnTransportInfo) ti).getType();
     }
 
     /**
@@ -8981,7 +9107,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // Decrement the reference count for this NetworkRequestInfo. The reference count is
             // incremented when the NetworkRequestInfo is created as part of
             // enforceRequestCountLimit().
-            decrementRequestCount(nri);
+            nri.decrementRequestCount();
             return;
         }
 
@@ -9047,7 +9173,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
         // Decrement the reference count for this NetworkRequestInfo. The reference count is
         // incremented when the NetworkRequestInfo is created as part of
         // enforceRequestCountLimit().
-        decrementRequestCount(nri);
+        nri.decrementRequestCount();
 
         iCb.unlinkToDeath(cbInfo, 0);
     }
@@ -9211,6 +9337,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
     @Override
     public void unregisterConnectivityDiagnosticsCallback(
             @NonNull IConnectivityDiagnosticsCallback callback) {
+        Objects.requireNonNull(callback, "callback must be non-null");
         mConnectivityDiagnosticsHandler.sendMessage(
                 mConnectivityDiagnosticsHandler.obtainMessage(
                         ConnectivityDiagnosticsHandler
@@ -9581,6 +9708,7 @@ public class ConnectivityService extends IConnectivityManager.Stub
      */
     @Override
     public void unregisterQosCallback(@NonNull final IQosCallback callback) {
+        Objects.requireNonNull(callback, "callback must be non-null");
         mQosCallbackTracker.unregisterCallback(callback);
     }
 
@@ -9623,14 +9751,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             throw new IllegalArgumentException("Must explicitly specify a user handle ("
                     + "UserHandle.CURRENT not supported)");
         }
-        final UserManager um;
-        try {
-            um = mContext.createContextAsUser(profile, 0 /* flags */)
-                    .getSystemService(UserManager.class);
-        } catch (IllegalStateException e) {
-            throw new IllegalArgumentException("Profile does not exist");
-        }
-        if (!um.isManagedProfile()) {
+        final UserManager um = mContext.getSystemService(UserManager.class);
+        if (!um.isManagedProfile(profile.getIdentifier())) {
             throw new IllegalArgumentException("Profile must be a managed profile");
         }
         // Strictly speaking, mOemNetworkPreferences should only be touched on the
@@ -9679,7 +9801,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
             // request.
             final ArrayList<NetworkRequest> nrs = new ArrayList<>();
             nrs.add(createNetworkRequest(NetworkRequest.Type.REQUEST, pref.capabilities));
-            nrs.add(createDefaultRequest());
+            nrs.add(createDefaultInternetRequestForTransport(
+                    TYPE_NONE, NetworkRequest.Type.TRACK_DEFAULT));
             setNetworkRequestUids(nrs, UidRange.fromIntRanges(pref.capabilities.getUids()));
             final NetworkRequestInfo nri = new NetworkRequestInfo(Process.myUid(), nrs);
             result.add(nri);
@@ -9706,9 +9829,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
         validateNetworkCapabilitiesOfProfileNetworkPreference(preference.capabilities);
 
         mProfileNetworkPreferences = mProfileNetworkPreferences.plus(preference);
-        final ArraySet<NetworkRequestInfo> nris =
-                createNrisFromProfileNetworkPreferences(mProfileNetworkPreferences);
-        replaceDefaultNetworkRequestsForPreference(nris);
+        mSystemNetworkRequestCounter.transact(
+                mDeps.getCallingUid(), mProfileNetworkPreferences.preferences.size(),
+                () -> {
+                    final ArraySet<NetworkRequestInfo> nris =
+                            createNrisFromProfileNetworkPreferences(mProfileNetworkPreferences);
+                    replaceDefaultNetworkRequestsForPreference(nris);
+                });
         // Finally, rematch.
         rematchAllNetworksAndRequests();
 
@@ -9793,11 +9920,18 @@ public class ConnectivityService extends IConnectivityManager.Stub
             return;
         }
 
-        final ArraySet<NetworkRequestInfo> nris =
-                new OemNetworkRequestFactory().createNrisFromOemNetworkPreferences(preference);
-        replaceDefaultNetworkRequestsForPreference(nris);
+        mOemNetworkPreferencesLogs.log("UPDATE INITIATED: " + preference);
+        final int uniquePreferenceCount = new ArraySet<>(
+                preference.getNetworkPreferences().values()).size();
+        mSystemNetworkRequestCounter.transact(
+                mDeps.getCallingUid(), uniquePreferenceCount,
+                () -> {
+                    final ArraySet<NetworkRequestInfo> nris =
+                            new OemNetworkRequestFactory()
+                                    .createNrisFromOemNetworkPreferences(preference);
+                    replaceDefaultNetworkRequestsForPreference(nris);
+                });
         mOemNetworkPreferences = preference;
-        // TODO http://b/176496396 persist data to shared preferences.
 
         if (null != listener) {
             try {
@@ -9821,10 +9955,14 @@ public class ConnectivityService extends IConnectivityManager.Stub
         final ArraySet<NetworkRequestInfo> perAppCallbackRequestsToUpdate =
                 getPerAppCallbackRequestsToUpdate();
         final ArraySet<NetworkRequestInfo> nrisToRegister = new ArraySet<>(nris);
-        nrisToRegister.addAll(
-                createPerAppCallbackRequestsToRegister(perAppCallbackRequestsToUpdate));
-        handleRemoveNetworkRequests(perAppCallbackRequestsToUpdate);
-        handleRegisterNetworkRequests(nrisToRegister);
+        mSystemNetworkRequestCounter.transact(
+                mDeps.getCallingUid(), perAppCallbackRequestsToUpdate.size(),
+                () -> {
+                    nrisToRegister.addAll(
+                            createPerAppCallbackRequestsToRegister(perAppCallbackRequestsToUpdate));
+                    handleRemoveNetworkRequests(perAppCallbackRequestsToUpdate);
+                    handleRegisterNetworkRequests(nrisToRegister);
+                });
     }
 
     /**
@@ -9947,14 +10085,13 @@ public class ConnectivityService extends IConnectivityManager.Stub
                     }
                     for (final UserHandle ui : users) {
                         // Add the rules for all users as this policy is device wide.
-                        uids.get(pref).add(UserHandle.getUid(ui, uid));
+                        uids.get(pref).add(ui.getUid(uid));
                     }
                 } catch (PackageManager.NameNotFoundException e) {
                     // Although this may seem like an error scenario, it is ok that uninstalled
                     // packages are sent on a network preference as the system will watch for
                     // package installations associated with this network preference and update
                     // accordingly. This is done so as to minimize race conditions on app install.
-                    // TODO b/177092163 add app install watching.
                     continue;
                 }
             }
@@ -9970,7 +10107,8 @@ public class ConnectivityService extends IConnectivityManager.Stub
                 case OemNetworkPreferences.OEM_NETWORK_PREFERENCE_OEM_PAID:
                     requests.add(createUnmeteredNetworkRequest());
                     requests.add(createOemPaidNetworkRequest());
-                    requests.add(createDefaultRequest());
+                    requests.add(createDefaultInternetRequestForTransport(
+                            TYPE_NONE, NetworkRequest.Type.TRACK_DEFAULT));
                     break;
                 case OemNetworkPreferences.OEM_NETWORK_PREFERENCE_OEM_PAID_NO_FALLBACK:
                     requests.add(createUnmeteredNetworkRequest());

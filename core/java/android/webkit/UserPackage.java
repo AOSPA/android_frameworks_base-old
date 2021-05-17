@@ -34,8 +34,7 @@ public class UserPackage {
     private final UserInfo mUserInfo;
     private final PackageInfo mPackageInfo;
 
-    // TODO(178523880): Revert I15964017f6950283a0f57d0a0cad0de032abe66d.
-    public static final int MINIMUM_SUPPORTED_SDK = Build.VERSION_CODES.R;
+    public static final int MINIMUM_SUPPORTED_SDK = Build.VERSION_CODES.S;
 
     public UserPackage(UserInfo user, PackageInfo packageInfo) {
         this.mUserInfo = user;

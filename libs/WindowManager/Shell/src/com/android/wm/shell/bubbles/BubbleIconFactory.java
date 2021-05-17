@@ -29,6 +29,8 @@ import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
 
+import androidx.annotation.VisibleForTesting;
+
 import com.android.launcher3.icons.BaseIconFactory;
 import com.android.launcher3.icons.BitmapInfo;
 import com.android.launcher3.icons.ShadowGenerator;
@@ -39,11 +41,12 @@ import com.android.wm.shell.R;
  * We are not using Launcher's IconFactory because bubbles only runs on the UI thread,
  * so there is no need to manage a pool across multiple threads.
  */
+@VisibleForTesting
 public class BubbleIconFactory extends BaseIconFactory {
 
     private int mBadgeSize;
 
-    protected BubbleIconFactory(Context context) {
+    public BubbleIconFactory(Context context) {
         super(context, context.getResources().getConfiguration().densityDpi,
                 context.getResources().getDimensionPixelSize(R.dimen.individual_bubble_size));
         mBadgeSize = mContext.getResources().getDimensionPixelSize(
@@ -93,7 +96,7 @@ public class BubbleIconFactory extends BaseIconFactory {
             final float ringStrokeWidth = mContext.getResources().getDimensionPixelSize(
                     com.android.internal.R.dimen.importance_ring_stroke_width);
             final int importantConversationColor = mContext.getResources().getColor(
-                    com.android.settingslib.R.color.important_conversation, null);
+                    R.color.important_conversation, null);
             Bitmap badgeAndRing = Bitmap.createBitmap(userBadgedBitmap.getWidth(),
                     userBadgedBitmap.getHeight(), userBadgedBitmap.getConfig());
             Canvas c = new Canvas(badgeAndRing);

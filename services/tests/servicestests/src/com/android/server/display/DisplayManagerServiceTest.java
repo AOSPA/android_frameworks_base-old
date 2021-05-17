@@ -93,9 +93,10 @@ public class DisplayManagerServiceTest {
     private static final long SHORT_DEFAULT_DISPLAY_TIMEOUT_MILLIS = 10;
     private static final String VIRTUAL_DISPLAY_NAME = "Test Virtual Display";
     private static final String PACKAGE_NAME = "com.android.frameworks.servicestests";
-    private static final long ALL_DISPLAY_EVENTS = DisplayManager.EVENT_FLAG_DISPLAY_ADDED
+    private static final long STANDARD_DISPLAY_EVENTS = DisplayManager.EVENT_FLAG_DISPLAY_ADDED
                     | DisplayManager.EVENT_FLAG_DISPLAY_CHANGED
                     | DisplayManager.EVENT_FLAG_DISPLAY_REMOVED;
+
     @Rule
     public TestRule compatChangeRule = new PlatformCompatChangeRule();
 
@@ -346,6 +347,9 @@ public class DisplayManagerServiceTest {
         DisplayDeviceInfo displayDeviceInfo = new DisplayDeviceInfo();
         displayDeviceInfo.width = 100;
         displayDeviceInfo.height = 200;
+        displayDeviceInfo.supportedModes = new Display.Mode[1];
+        displayDeviceInfo.supportedModes[0] = new Display.Mode(1, 100, 200, 60f);
+        displayDeviceInfo.modeId = 1;
         final Rect zeroRect = new Rect();
         displayDeviceInfo.displayCutout = new DisplayCutout(
                 Insets.of(0, 10, 0, 0),
@@ -761,7 +765,8 @@ public class DisplayManagerServiceTest {
 
         // register display listener callback
         FakeDisplayManagerCallback callback = new FakeDisplayManagerCallback();
-        displayManagerBinderService.registerCallbackWithEventMask(callback, ALL_DISPLAY_EVENTS);
+        displayManagerBinderService.registerCallbackWithEventMask(
+                callback, STANDARD_DISPLAY_EVENTS);
 
         waitForIdleHandler(handler);
 
@@ -790,7 +795,7 @@ public class DisplayManagerServiceTest {
 
         // register display listener callback
         FakeDisplayManagerCallback callback = new FakeDisplayManagerCallback();
-        long allEventsExceptDisplayAdded = ALL_DISPLAY_EVENTS
+        long allEventsExceptDisplayAdded = STANDARD_DISPLAY_EVENTS
                 & ~DisplayManager.EVENT_FLAG_DISPLAY_ADDED;
         displayManagerBinderService.registerCallbackWithEventMask(callback,
                 allEventsExceptDisplayAdded);
@@ -859,7 +864,7 @@ public class DisplayManagerServiceTest {
         waitForIdleHandler(handler);
 
         FakeDisplayManagerCallback callback = new FakeDisplayManagerCallback();
-        long allEventsExceptDisplayRemoved = ALL_DISPLAY_EVENTS
+        long allEventsExceptDisplayRemoved = STANDARD_DISPLAY_EVENTS
                 & ~DisplayManager.EVENT_FLAG_DISPLAY_REMOVED;
         displayManagerBinderService.registerCallbackWithEventMask(callback,
                 allEventsExceptDisplayRemoved);
@@ -1029,7 +1034,8 @@ public class DisplayManagerServiceTest {
 
         // register display listener callback
         FakeDisplayManagerCallback callback = new FakeDisplayManagerCallback(displayId);
-        displayManagerBinderService.registerCallbackWithEventMask(callback, ALL_DISPLAY_EVENTS);
+        displayManagerBinderService.registerCallbackWithEventMask(
+                callback, STANDARD_DISPLAY_EVENTS);
         return callback;
     }
 

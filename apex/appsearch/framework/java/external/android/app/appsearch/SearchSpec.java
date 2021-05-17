@@ -20,7 +20,6 @@ import android.annotation.IntDef;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.SuppressLint;
-import android.app.appsearch.exceptions.IllegalSearchSpecException;
 import android.os.Bundle;
 import android.util.ArrayMap;
 
@@ -34,6 +33,7 @@ import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -176,7 +176,7 @@ public final class SearchSpec {
 
     /** @hide */
     public SearchSpec(@NonNull Bundle bundle) {
-        Preconditions.checkNotNull(bundle);
+        Objects.requireNonNull(bundle);
         mBundle = bundle;
     }
 
@@ -322,9 +322,15 @@ public final class SearchSpec {
         public Builder() {
             mBundle = new Bundle();
             mBundle.putInt(NUM_PER_PAGE_FIELD, DEFAULT_NUM_PER_PAGE);
+            mBundle.putInt(TERM_MATCH_TYPE_FIELD, TERM_MATCH_PREFIX);
         }
 
-        /** Indicates how the query terms should match {@code TermMatchCode} in the index. */
+        /**
+         * Indicates how the query terms should match {@code TermMatchCode} in the index.
+         *
+         * <p>If this method is not called, the default term match type is {@link
+         * SearchSpec#TERM_MATCH_PREFIX}.
+         */
         @NonNull
         public Builder setTermMatch(@TermMatch int termMatchTypeCode) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
@@ -342,7 +348,7 @@ public final class SearchSpec {
          */
         @NonNull
         public Builder addFilterSchemas(@NonNull String... schemas) {
-            Preconditions.checkNotNull(schemas);
+            Objects.requireNonNull(schemas);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
             return addFilterSchemas(Arrays.asList(schemas));
         }
@@ -355,7 +361,7 @@ public final class SearchSpec {
          */
         @NonNull
         public Builder addFilterSchemas(@NonNull Collection<String> schemas) {
-            Preconditions.checkNotNull(schemas);
+            Objects.requireNonNull(schemas);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
             mSchemas.addAll(schemas);
             return this;
@@ -369,7 +375,7 @@ public final class SearchSpec {
          */
         @NonNull
         public Builder addFilterNamespaces(@NonNull String... namespaces) {
-            Preconditions.checkNotNull(namespaces);
+            Objects.requireNonNull(namespaces);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
             return addFilterNamespaces(Arrays.asList(namespaces));
         }
@@ -382,7 +388,7 @@ public final class SearchSpec {
          */
         @NonNull
         public Builder addFilterNamespaces(@NonNull Collection<String> namespaces) {
-            Preconditions.checkNotNull(namespaces);
+            Objects.requireNonNull(namespaces);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
             mNamespaces.addAll(namespaces);
             return this;
@@ -398,7 +404,7 @@ public final class SearchSpec {
          */
         @NonNull
         public Builder addFilterPackageNames(@NonNull String... packageNames) {
-            Preconditions.checkNotNull(packageNames);
+            Objects.requireNonNull(packageNames);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
             return addFilterPackageNames(Arrays.asList(packageNames));
         }
@@ -413,7 +419,7 @@ public final class SearchSpec {
          */
         @NonNull
         public Builder addFilterPackageNames(@NonNull Collection<String> packageNames) {
-            Preconditions.checkNotNull(packageNames);
+            Objects.requireNonNull(packageNames);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
             mPackageNames.addAll(packageNames);
             return this;
@@ -586,11 +592,11 @@ public final class SearchSpec {
         public SearchSpec.Builder addProjection(
                 @NonNull String schema, @NonNull Collection<String> propertyPaths) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(schema);
-            Preconditions.checkNotNull(propertyPaths);
+            Objects.requireNonNull(schema);
+            Objects.requireNonNull(propertyPaths);
             ArrayList<String> propertyPathsArrayList = new ArrayList<>(propertyPaths.size());
             for (String propertyPath : propertyPaths) {
-                Preconditions.checkNotNull(propertyPath);
+                Objects.requireNonNull(propertyPath);
                 propertyPathsArrayList.add(propertyPath);
             }
             mProjectionTypePropertyMasks.putStringArrayList(schema, propertyPathsArrayList);
@@ -633,9 +639,6 @@ public final class SearchSpec {
         @NonNull
         public SearchSpec build() {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            if (!mBundle.containsKey(TERM_MATCH_TYPE_FIELD)) {
-                throw new IllegalSearchSpecException("Missing termMatchType field.");
-            }
             mBundle.putStringArrayList(NAMESPACE_FIELD, mNamespaces);
             mBundle.putStringArrayList(SCHEMA_FIELD, mSchemas);
             mBundle.putStringArrayList(PACKAGE_NAME_FIELD, mPackageNames);

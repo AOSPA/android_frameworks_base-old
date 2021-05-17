@@ -1300,8 +1300,9 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                     if (callbacks == null) return;
                     callbacks.broadcast(c -> {
                         try {
-                            int targetDisplayId =
+                            Integer targetDisplayId =
                                     callbackDisplayIds.get(c.asBinder());
+                            if (targetDisplayId == null) return;
                             if (targetDisplayId == displayId) c.onColorsChanged(area, colors);
                         } catch (RemoteException e) {
                             e.printStackTrace();
@@ -2373,6 +2374,51 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 engine.setInAmbientMode(inAmbientMode, animationDuration);
             } catch (RemoteException e) {
                 // Cannot talk to wallpaper engine.
+            }
+        }
+    }
+
+    /**
+     * Propagate a wake event to the wallpaper engine.
+     */
+    public void notifyWakingUp(int x, int y, @NonNull Bundle extras) {
+        synchronized (mLock) {
+            final WallpaperData data = mWallpaperMap.get(mCurrentUserId);
+            if (data != null && data.connection != null) {
+                data.connection.forEachDisplayConnector(
+                        displayConnector -> {
+                            if (displayConnector.mEngine != null) {
+                                try {
+                                    displayConnector.mEngine.dispatchWallpaperCommand(
+                                            WallpaperManager.COMMAND_WAKING_UP, x, y, -1, extras);
+                                } catch (RemoteException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
+            }
+        }
+    }
+
+    /**
+     * Propagate a sleep event to the wallpaper engine.
+     */
+    public void notifyGoingToSleep(int x, int y, @NonNull Bundle extras) {
+        synchronized (mLock) {
+            final WallpaperData data = mWallpaperMap.get(mCurrentUserId);
+            if (data != null && data.connection != null) {
+                data.connection.forEachDisplayConnector(
+                        displayConnector -> {
+                            if (displayConnector.mEngine != null) {
+                                try {
+                                    displayConnector.mEngine.dispatchWallpaperCommand(
+                                            WallpaperManager.COMMAND_GOING_TO_SLEEP, x, y, -1,
+                                            extras);
+                                } catch (RemoteException e) {
+                                    e.printStackTrace();
+                                }
+                            }
+                        });
             }
         }
     }

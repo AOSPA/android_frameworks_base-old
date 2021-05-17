@@ -19,6 +19,7 @@ package com.android.wm.shell.pip;
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyLong;
@@ -31,6 +32,7 @@ import android.app.ActivityManager;
 import android.app.PictureInPictureParams;
 import android.content.ComponentName;
 import android.content.pm.ActivityInfo;
+import android.graphics.Rect;
 import android.os.RemoteException;
 import android.test.suitebuilder.annotation.SmallTest;
 import android.testing.AndroidTestingRunner;
@@ -88,7 +90,8 @@ public class PipTaskOrganizerTest extends ShellTestCase {
         mComponent1 = new ComponentName(mContext, "component1");
         mComponent2 = new ComponentName(mContext, "component2");
         mPipBoundsState = new PipBoundsState(mContext);
-        mPipBoundsAlgorithm = new PipBoundsAlgorithm(mContext, mPipBoundsState);
+        mPipBoundsAlgorithm = new PipBoundsAlgorithm(mContext, mPipBoundsState,
+                new PipSnapAlgorithm());
         mMainExecutor = new TestShellExecutor();
         mSpiedPipTaskOrganizer = spy(new PipTaskOrganizer(mContext,
                 mMockSyncTransactionQueue, mPipBoundsState,
@@ -219,6 +222,16 @@ public class PipTaskOrganizerTest extends ShellTestCase {
                 createPipParams(null), minSize));
 
         assertEquals(minSize, mPipBoundsState.getOverrideMinSize());
+    }
+
+    @Test
+    public void onTaskVanished_clearsPipBounds() {
+        mSpiedPipTaskOrganizer.onTaskAppeared(createTaskInfo(mComponent1,
+                createPipParams(null)), null /* leash */);
+        mPipBoundsState.setBounds(new Rect(100, 100, 200, 150));
+
+        mSpiedPipTaskOrganizer.onTaskVanished(createTaskInfo(mComponent1, createPipParams(null)));
+        assertTrue(mPipBoundsState.getBounds().isEmpty());
     }
 
     private void preparePipTaskOrg() {

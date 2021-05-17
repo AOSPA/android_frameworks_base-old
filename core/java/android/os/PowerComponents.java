@@ -26,19 +26,24 @@ import android.annotation.NonNull;
 class PowerComponents {
     private static final int CUSTOM_POWER_COMPONENT_OFFSET = BatteryConsumer.POWER_COMPONENT_COUNT
             - BatteryConsumer.FIRST_CUSTOM_POWER_COMPONENT_ID;
-    public static final int CUSTOM_TIME_COMPONENT_OFFSET = BatteryConsumer.TIME_COMPONENT_COUNT
+    private static final int CUSTOM_TIME_COMPONENT_OFFSET = BatteryConsumer.TIME_COMPONENT_COUNT
             - BatteryConsumer.FIRST_CUSTOM_TIME_COMPONENT_ID;
 
     private final double mTotalConsumedPowerMah;
     private final double[] mPowerComponentsMah;
     private final long[] mTimeComponentsMs;
     private final int mCustomPowerComponentCount;
+    private final byte[] mPowerModels;
+    // Not written to Parcel and must be explicitly restored during the parent object's unparceling
+    private String[] mCustomPowerComponentNames;
 
     PowerComponents(@NonNull Builder builder) {
-        mCustomPowerComponentCount = builder.mCustomPowerComponentCount;
+        mCustomPowerComponentNames = builder.mCustomPowerComponentNames;
+        mCustomPowerComponentCount = mCustomPowerComponentNames.length;
         mPowerComponentsMah = builder.mPowerComponentsMah;
         mTimeComponentsMs = builder.mTimeComponentsMs;
         mTotalConsumedPowerMah = builder.getTotalPower();
+        mPowerModels = builder.mPowerModels;
     }
 
     PowerComponents(@NonNull Parcel source) {
@@ -46,6 +51,12 @@ class PowerComponents {
         mCustomPowerComponentCount = source.readInt();
         mPowerComponentsMah = source.createDoubleArray();
         mTimeComponentsMs = source.createLongArray();
+        if (source.readBoolean()) {
+            mPowerModels = new byte[BatteryConsumer.POWER_COMPONENT_COUNT];
+            source.readByteArray(mPowerModels);
+        } else {
+            mPowerModels = null;
+        }
     }
 
     /** Writes contents to Parcel */
@@ -54,6 +65,12 @@ class PowerComponents {
         dest.writeInt(mCustomPowerComponentCount);
         dest.writeDoubleArray(mPowerComponentsMah);
         dest.writeLongArray(mTimeComponentsMs);
+        if (mPowerModels != null) {
+            dest.writeBoolean(true);
+            dest.writeByteArray(mPowerModels);
+        } else {
+            dest.writeBoolean(false);
+        }
     }
 
     /**
@@ -103,6 +120,35 @@ class PowerComponents {
         }
     }
 
+    void setCustomPowerComponentNames(String[] customPowerComponentNames) {
+        mCustomPowerComponentNames = customPowerComponentNames;
+    }
+
+    public String getCustomPowerComponentName(int componentId) {
+        if (componentId >= BatteryConsumer.FIRST_CUSTOM_POWER_COMPONENT_ID
+                && componentId < BatteryConsumer.LAST_CUSTOM_POWER_COMPONENT_ID) {
+            try {
+                return mCustomPowerComponentNames[componentId
+                        - BatteryConsumer.FIRST_CUSTOM_POWER_COMPONENT_ID];
+            } catch (ArrayIndexOutOfBoundsException e) {
+                throw new IllegalArgumentException(
+                        "Unsupported custom power component ID: " + componentId);
+            }
+        } else {
+            throw new IllegalArgumentException(
+                    "Unsupported custom power component ID: " + componentId);
+        }
+    }
+
+    @BatteryConsumer.PowerModel
+    int getPowerModel(@BatteryConsumer.PowerComponent int component) {
+        if (mPowerModels == null) {
+            throw new IllegalStateException(
+                    "Power model IDs were not requested in the BatteryUsageStatsQuery");
+        }
+        return mPowerModels[component];
+    }
+
     /**
      * Returns the amount of time used by the specified component, e.g. CPU, WiFi etc.
      *
@@ -141,21 +187,45 @@ class PowerComponents {
         }
     }
 
+    public int getCustomPowerComponentCount() {
+        return mCustomPowerComponentCount;
+    }
+
+    /**
+     * Returns the largest usage duration among all time components.
+     */
+    public long getMaxComponentUsageDurationMillis() {
+        long max = 0;
+        for (int i = mTimeComponentsMs.length - 1; i >= 0; i--) {
+            if (mTimeComponentsMs[i] > max) {
+                max = mTimeComponentsMs[i];
+            }
+        }
+        return max;
+    }
+
     /**
      * Builder for PowerComponents.
      */
     static final class Builder {
         private final double[] mPowerComponentsMah;
-        private final int mCustomPowerComponentCount;
+        private final String[] mCustomPowerComponentNames;
         private final long[] mTimeComponentsMs;
+        private final byte[] mPowerModels;
 
-        Builder(int customPowerComponentCount, int customTimeComponentCount) {
-            mCustomPowerComponentCount = customPowerComponentCount;
+        Builder(@NonNull String[] customPowerComponentNames, int customTimeComponentCount,
+                boolean includePowerModels) {
+            mCustomPowerComponentNames = customPowerComponentNames;
             int powerComponentCount =
-                    BatteryConsumer.POWER_COMPONENT_COUNT + customPowerComponentCount;
+                    BatteryConsumer.POWER_COMPONENT_COUNT + mCustomPowerComponentNames.length;
             mPowerComponentsMah = new double[powerComponentCount];
             mTimeComponentsMs =
                     new long[BatteryConsumer.TIME_COMPONENT_COUNT + customTimeComponentCount];
+            if (includePowerModels) {
+                mPowerModels = new byte[BatteryConsumer.POWER_COMPONENT_COUNT];
+            } else {
+                mPowerModels = null;
+            }
         }
 
         /**
@@ -167,7 +237,7 @@ class PowerComponents {
          */
         @NonNull
         public Builder setConsumedPower(@BatteryConsumer.PowerComponent int componentId,
-                double componentPower) {
+                double componentPower, @BatteryConsumer.PowerModel int powerModel) {
             if (componentId >= BatteryConsumer.POWER_COMPONENT_COUNT) {
                 throw new IllegalArgumentException(
                         "Unsupported power component ID: " + componentId);
@@ -177,6 +247,9 @@ class PowerComponents {
             } catch (ArrayIndexOutOfBoundsException e) {
                 throw new IllegalArgumentException(
                         "Unsupported power component ID: " + componentId);
+            }
+            if (mPowerModels != null) {
+                mPowerModels[componentId] = (byte) powerModel;
             }
             return this;
         }
@@ -252,10 +325,10 @@ class PowerComponents {
         }
 
         public void addPowerAndDuration(Builder other) {
-            for (int i = 0; i < mPowerComponentsMah.length; i++) {
+            for (int i = mPowerComponentsMah.length - 1; i >= 0; i--) {
                 mPowerComponentsMah[i] += other.mPowerComponentsMah[i];
             }
-            for (int i = 0; i < mTimeComponentsMs.length; i++) {
+            for (int i = mTimeComponentsMs.length - 1; i >= 0; i--) {
                 mTimeComponentsMs[i] += other.mTimeComponentsMs[i];
             }
         }

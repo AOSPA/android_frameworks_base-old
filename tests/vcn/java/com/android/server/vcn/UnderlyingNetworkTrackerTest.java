@@ -146,40 +146,32 @@ public class UnderlyingNetworkTrackerTest {
 
     @Test
     public void testNetworkCallbacksRegisteredOnStartup() {
-        // verify NetworkCallbacks registered when instantiated
-        verify(mConnectivityManager)
-                .requestBackgroundNetwork(
-                        eq(getWifiRequest()),
-                        any(),
-                        any(NetworkBringupCallback.class));
-        verifyBackgroundCellRequests(mSubscriptionSnapshot, SUB_GROUP, INITIAL_SUB_IDS);
-
-        verify(mConnectivityManager)
-                .requestBackgroundNetwork(
-                        eq(getRouteSelectionRequest()),
-                        any(),
-                        any(RouteSelectionCallback.class));
+        verifyNetworkRequestsRegistered(INITIAL_SUB_IDS);
     }
 
-    private void verifyBackgroundCellRequests(
-            TelephonySubscriptionSnapshot snapshot,
-            ParcelUuid subGroup,
-            Set<Integer> expectedSubIds) {
-        verify(snapshot).getAllSubIdsInGroup(eq(subGroup));
-
+    private void verifyNetworkRequestsRegistered(Set<Integer> expectedSubIds) {
+        verify(mConnectivityManager)
+                .requestBackgroundNetwork(
+                        eq(getWifiRequest(expectedSubIds)),
+                        any(NetworkBringupCallback.class),
+                        any());
         for (final int subId : expectedSubIds) {
             verify(mConnectivityManager)
                     .requestBackgroundNetwork(
                             eq(getCellRequestForSubId(subId)),
-                            any(),
-                            any(NetworkBringupCallback.class));
+                            any(NetworkBringupCallback.class), any());
         }
+
+        verify(mConnectivityManager)
+                .requestBackgroundNetwork(
+                        eq(getRouteSelectionRequest(expectedSubIds)),
+                        any(RouteSelectionCallback.class), any());
     }
 
     @Test
     public void testUpdateSubscriptionSnapshot() {
         // Verify initial cell background requests filed
-        verifyBackgroundCellRequests(mSubscriptionSnapshot, SUB_GROUP, INITIAL_SUB_IDS);
+        verifyNetworkRequestsRegistered(INITIAL_SUB_IDS);
 
         TelephonySubscriptionSnapshot subscriptionUpdate =
                 mock(TelephonySubscriptionSnapshot.class);
@@ -187,40 +179,38 @@ public class UnderlyingNetworkTrackerTest {
 
         mUnderlyingNetworkTracker.updateSubscriptionSnapshot(subscriptionUpdate);
 
-        // verify that initially-filed bringup requests are unregistered
-        verify(mConnectivityManager, times(INITIAL_SUB_IDS.size()))
+        // verify that initially-filed bringup requests are unregistered (cell + wifi)
+        verify(mConnectivityManager, times(INITIAL_SUB_IDS.size() + 1))
                 .unregisterNetworkCallback(any(NetworkBringupCallback.class));
-        verifyBackgroundCellRequests(subscriptionUpdate, SUB_GROUP, UPDATED_SUB_IDS);
+        verify(mConnectivityManager).unregisterNetworkCallback(any(RouteSelectionCallback.class));
+        verifyNetworkRequestsRegistered(UPDATED_SUB_IDS);
     }
 
-    private NetworkRequest getWifiRequest() {
-        return getExpectedRequestBase(true)
+    private NetworkRequest getWifiRequest(Set<Integer> netCapsSubIds) {
+        return getExpectedRequestBase()
                 .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .setSubscriptionIds(netCapsSubIds)
                 .build();
     }
 
     private NetworkRequest getCellRequestForSubId(int subId) {
-        return getExpectedRequestBase(false)
+        return getExpectedRequestBase()
                 .addTransportType(NetworkCapabilities.TRANSPORT_CELLULAR)
                 .setNetworkSpecifier(new TelephonyNetworkSpecifier(subId))
                 .build();
     }
 
-    private NetworkRequest getRouteSelectionRequest() {
-        return getExpectedRequestBase(true).build();
+    private NetworkRequest getRouteSelectionRequest(Set<Integer> netCapsSubIds) {
+        return getExpectedRequestBase().setSubscriptionIds(netCapsSubIds).build();
     }
 
-    private NetworkRequest.Builder getExpectedRequestBase(boolean requireVcnManaged) {
+    private NetworkRequest.Builder getExpectedRequestBase() {
         final NetworkRequest.Builder builder =
                 new NetworkRequest.Builder()
                         .addCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
                         .removeCapability(NetworkCapabilities.NET_CAPABILITY_TRUSTED)
                         .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_RESTRICTED)
                         .removeCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
-
-        if (requireVcnManaged) {
-            builder.addUnwantedCapability(NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED);
-        }
 
         return builder;
     }
@@ -274,9 +264,9 @@ public class UnderlyingNetworkTrackerTest {
             NetworkCapabilities networkCapabilities) {
         verify(mConnectivityManager)
                 .requestBackgroundNetwork(
-                        eq(getRouteSelectionRequest()),
-                        any(),
-                        mRouteSelectionCallbackCaptor.capture());
+                        eq(getRouteSelectionRequest(INITIAL_SUB_IDS)),
+                        mRouteSelectionCallbackCaptor.capture(),
+                        any());
 
         RouteSelectionCallback cb = mRouteSelectionCallbackCaptor.getValue();
         cb.onAvailable(mNetwork);

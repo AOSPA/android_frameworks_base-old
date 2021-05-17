@@ -52,6 +52,8 @@ public:
             const ::android::sp<IStorageHealthListener>& healthListener,
             const ::std::vector<::android::os::incremental::PerUidReadTimeouts>& perUidReadTimeouts,
             bool* _aidl_return) final;
+    binder::Status onInstallationComplete(int32_t storageId) final;
+
     binder::Status makeBindMount(int32_t storageId, const std::string& sourcePath,
                                  const std::string& targetFullPath, int32_t bindType,
                                  int32_t* _aidl_return) final;
@@ -93,11 +95,6 @@ public:
                     progressListener,
             bool* _aidl_return) final;
     binder::Status unregisterLoadingProgressListener(int32_t storageId, bool* _aidl_return) final;
-    binder::Status registerStorageHealthListener(
-            int32_t storageId,
-            const ::android::os::incremental::StorageHealthCheckParams& healthCheckParams,
-            const ::android::sp<IStorageHealthListener>& healthListener, bool* _aidl_return) final;
-    binder::Status unregisterStorageHealthListener(int32_t storageId) final;
     binder::Status getMetrics(int32_t storageId,
                               android::os::PersistableBundle* _aidl_return) final;
 

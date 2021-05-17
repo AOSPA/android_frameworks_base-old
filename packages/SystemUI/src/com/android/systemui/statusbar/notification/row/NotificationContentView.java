@@ -16,7 +16,6 @@
 
 package com.android.systemui.statusbar.notification.row;
 
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
@@ -59,6 +58,7 @@ import com.android.systemui.statusbar.policy.RemoteInputView;
 import com.android.systemui.statusbar.policy.SmartReplyConstants;
 import com.android.systemui.statusbar.policy.SmartReplyStateInflaterKt;
 import com.android.systemui.statusbar.policy.SmartReplyView;
+import com.android.systemui.wmshell.BubblesManager;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -693,7 +693,6 @@ public class NotificationContentView extends FrameLayout {
             endColor = NotificationUtils.interpolateColors(startColor, endColor,
                     transformationAmount);
         }
-        mContainingNotification.updateBackgroundAlpha(transformationAmount);
         mContainingNotification.setContentBackground(endColor, false, this);
     }
 
@@ -868,18 +867,22 @@ public class NotificationContentView extends FrameLayout {
 
     public void updateBackgroundColor(boolean animate) {
         int customBackgroundColor = getBackgroundColor(mVisibleType);
-        mContainingNotification.resetBackgroundAlpha();
         mContainingNotification.setContentBackground(customBackgroundColor, animate, this);
     }
 
     public void setBackgroundTintColor(int color) {
+        boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
         if (mExpandedSmartReplyView != null) {
-            boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
             mExpandedSmartReplyView.setBackgroundTintColor(color, colorized);
         }
         if (mHeadsUpSmartReplyView != null) {
-            boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
             mHeadsUpSmartReplyView.setBackgroundTintColor(color, colorized);
+        }
+        if (mExpandedRemoteInput != null) {
+            mExpandedRemoteInput.setBackgroundTintColor(color, colorized);
+        }
+        if (mHeadsUpRemoteInput != null) {
+            mHeadsUpRemoteInput.setBackgroundTintColor(color, colorized);
         }
     }
 
@@ -1243,8 +1246,7 @@ public class NotificationContentView extends FrameLayout {
         View actionContainerCandidate = view.findViewById(
                 com.android.internal.R.id.actions_container);
         if (actionContainerCandidate instanceof FrameLayout) {
-            RemoteInputView existing = (RemoteInputView)
-                    view.findViewWithTag(RemoteInputView.VIEW_TAG);
+            RemoteInputView existing = view.findViewWithTag(RemoteInputView.VIEW_TAG);
 
             if (existing != null) {
                 existing.onNotificationUpdateOrReset();
@@ -1292,13 +1294,9 @@ public class NotificationContentView extends FrameLayout {
                 }
             }
             if (existing != null) {
-                if (entry.getSbn().getNotification().isColorized()) {
-                    existing.setBackgroundTintColor(
-                            entry.getSbn().getNotification().color, true);
-                } else {
-                    existing.setBackgroundTintColor(
-                            entry.getRow().getCurrentBackgroundTint(), false);
-                }
+                int backgroundColor = entry.getRow().getCurrentBackgroundTint();
+                boolean colorized = mNotificationEntry.getSbn().getNotification().isColorized();
+                existing.setBackgroundTintColor(backgroundColor, colorized);
             }
             return existing;
         }
@@ -1313,11 +1311,6 @@ public class NotificationContentView extends FrameLayout {
      */
     public void updateBubbleButton(NotificationEntry entry) {
         applyBubbleAction(mExpandedChild, entry);
-    }
-
-    private boolean isBubblesEnabled() {
-        return Settings.Global.getInt(mContext.getContentResolver(),
-                Settings.Global.NOTIFICATION_BUBBLES, 0) == 1;
     }
 
     /**
@@ -1340,7 +1333,7 @@ public class NotificationContentView extends FrameLayout {
         boolean isPersonWithShortcut =
                 mPeopleIdentifier.getPeopleNotificationType(entry)
                         >= PeopleNotificationIdentifier.TYPE_FULL_PERSON;
-        boolean showButton = isBubblesEnabled()
+        boolean showButton = BubblesManager.areBubblesEnabled(mContext, entry.getSbn().getUser())
                 && isPersonWithShortcut
                 && entry.getBubbleMetadata() != null;
         if (showButton) {
@@ -1481,18 +1474,26 @@ public class NotificationContentView extends FrameLayout {
             return null;
         }
 
-        SmartReplyView smartReplyView = null;
-        if (smartReplyContainer.getChildCount() == 1
-                && smartReplyContainer.getChildAt(0) instanceof SmartReplyView) {
+        // Search for an existing SmartReplyView
+        int index = 0;
+        final int childCount = smartReplyContainer.getChildCount();
+        for (; index < childCount; index++) {
+            View child = smartReplyContainer.getChildAt(index);
+            if (child.getId() == R.id.smart_reply_view && child instanceof SmartReplyView) {
+                break;
+            }
+        }
+
+        if (index < childCount) {
             // If we already have a SmartReplyView - replace it with the newly inflated one. The
             // newly inflated one is connected to the new inflated smart reply/action buttons.
-            smartReplyContainer.removeAllViews();
+            smartReplyContainer.removeViewAt(index);
         }
-        if (smartReplyContainer.getChildCount() == 0
-                && inflatedSmartReplyViewHolder != null
+        SmartReplyView smartReplyView = null;
+        if (inflatedSmartReplyViewHolder != null
                 && inflatedSmartReplyViewHolder.getSmartReplyView() != null) {
             smartReplyView = inflatedSmartReplyViewHolder.getSmartReplyView();
-            smartReplyContainer.addView(smartReplyView);
+            smartReplyContainer.addView(smartReplyView, index);
         }
         if (smartReplyView != null) {
             smartReplyView.resetSmartSuggestions(smartReplyContainer);

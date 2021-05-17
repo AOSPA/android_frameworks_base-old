@@ -569,6 +569,7 @@ public class AudioManager {
 
     /** @hide */
     @IntDef(prefix = {"ENCODED_SURROUND_OUTPUT_"}, value = {
+            ENCODED_SURROUND_OUTPUT_UNKNOWN,
             ENCODED_SURROUND_OUTPUT_AUTO,
             ENCODED_SURROUND_OUTPUT_NEVER,
             ENCODED_SURROUND_OUTPUT_ALWAYS,
@@ -576,6 +577,11 @@ public class AudioManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface EncodedSurroundOutputMode {}
+
+    /**
+     * The mode for surround sound formats is unknown.
+     */
+    public static final int ENCODED_SURROUND_OUTPUT_UNKNOWN = -1;
 
     /**
      * The surround sound formats are available for use if they are detected. This is the default
@@ -2854,6 +2860,159 @@ public class AudioManager {
             return mode;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Interface definition of a callback that is notified when the audio mode changes
+     */
+    public interface OnModeChangedListener {
+        /**
+         * Called on the listener to indicate that the audio mode has changed
+         *
+         * @param mode The current audio mode
+         */
+        void onModeChanged(@AudioMode int mode);
+    }
+
+    private final Object mModeListenerLock = new Object();
+    /**
+     * List of listeners for audio mode and their associated Executor.
+     * List is lazy-initialized on first registration
+     */
+    @GuardedBy("mModeListenerLock")
+    private @Nullable ArrayList<ModeListenerInfo> mModeListeners;
+
+    @GuardedBy("mModeListenerLock")
+    private ModeDispatcherStub mModeDispatcherStub;
+
+    private final class ModeDispatcherStub
+            extends IAudioModeDispatcher.Stub {
+
+        @Override
+        public void dispatchAudioModeChanged(int mode) {
+            // make a shallow copy of listeners so callback is not executed under lock
+            final ArrayList<ModeListenerInfo> modeListeners;
+            synchronized (mModeListenerLock) {
+                if (mModeListeners == null || mModeListeners.size() == 0) {
+                    return;
+                }
+                modeListeners = (ArrayList<ModeListenerInfo>) mModeListeners.clone();
+            }
+            final long ident = Binder.clearCallingIdentity();
+            try {
+                for (ModeListenerInfo info : modeListeners) {
+                    info.mExecutor.execute(() ->
+                            info.mListener.onModeChanged(mode));
+                }
+            } finally {
+                Binder.restoreCallingIdentity(ident);
+            }
+        }
+    }
+
+    private static class ModeListenerInfo {
+        final @NonNull OnModeChangedListener mListener;
+        final @NonNull Executor mExecutor;
+
+        ModeListenerInfo(OnModeChangedListener listener, Executor exe) {
+            mListener = listener;
+            mExecutor = exe;
+        }
+    }
+
+    @GuardedBy("mModeListenerLock")
+    private boolean hasModeListener(OnModeChangedListener listener) {
+        return getModeListenerInfo(listener) != null;
+    }
+
+    @GuardedBy("mModeListenerLock")
+    private @Nullable ModeListenerInfo getModeListenerInfo(
+            OnModeChangedListener listener) {
+        if (mModeListeners == null) {
+            return null;
+        }
+        for (ModeListenerInfo info : mModeListeners) {
+            if (info.mListener == listener) {
+                return info;
+            }
+        }
+        return null;
+    }
+
+
+    @GuardedBy("mModeListenerLock")
+    /**
+     * @return true if the listener was removed from the list
+     */
+    private boolean removeModeListener(OnModeChangedListener listener) {
+        final ModeListenerInfo infoToRemove = getModeListenerInfo(listener);
+        if (infoToRemove != null) {
+            mModeListeners.remove(infoToRemove);
+            return true;
+        }
+        return false;
+    }
+
+    /**
+     * Adds a listener to be notified of changes to the audio mode.
+     * See {@link #getMode()}
+     * @param executor
+     * @param listener
+     */
+    public void addOnModeChangedListener(
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull OnModeChangedListener listener) {
+        Objects.requireNonNull(executor);
+        Objects.requireNonNull(listener);
+        synchronized (mModeListenerLock) {
+            if (hasModeListener(listener)) {
+                throw new IllegalArgumentException("attempt to call addOnModeChangedListener() "
+                        + "on a previously registered listener");
+            }
+            // lazy initialization of the list of strategy-preferred device listener
+            if (mModeListeners == null) {
+                mModeListeners = new ArrayList<>();
+            }
+            final int oldCbCount = mModeListeners.size();
+            mModeListeners.add(new ModeListenerInfo(listener, executor));
+            if (oldCbCount == 0) {
+                // register binder for callbacks
+                if (mModeDispatcherStub == null) {
+                    mModeDispatcherStub = new ModeDispatcherStub();
+                }
+                try {
+                    getService().registerModeDispatcher(mModeDispatcherStub);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                }
+            }
+        }
+    }
+
+    /**
+     * Removes a previously added listener for changes to audio mode.
+     * See {@link #getMode()}
+     * @param listener
+     */
+    public void removeOnModeChangedListener(@NonNull OnModeChangedListener listener) {
+        Objects.requireNonNull(listener);
+        synchronized (mModeListenerLock) {
+            if (!removeModeListener(listener)) {
+                throw new IllegalArgumentException("attempt to call removeOnModeChangedListener() "
+                        + "on an unregistered listener");
+            }
+            if (mModeListeners.size() == 0) {
+                // unregister binder for callbacks
+                try {
+                    getService().unregisterModeDispatcher(mModeDispatcherStub);
+                } catch (RemoteException e) {
+                    throw e.rethrowFromSystemServer();
+                } finally {
+                    mModeDispatcherStub = null;
+                    mModeListeners = null;
+                }
+            }
         }
     }
 
@@ -5201,6 +5360,10 @@ public class AudioManager {
      */
     public static final int DEVICE_OUT_HDMI_ARC = AudioSystem.DEVICE_OUT_HDMI_ARC;
     /** @hide
+     * The audio output device code for HDMI enhanced Audio Return Channel.
+     */
+    public static final int DEVICE_OUT_HDMI_EARC = AudioSystem.DEVICE_OUT_HDMI_EARC;
+    /** @hide
      * The audio output device code for S/PDIF digital connection.
      */
     public static final int DEVICE_OUT_SPDIF = AudioSystem.DEVICE_OUT_SPDIF;
@@ -5251,6 +5414,12 @@ public class AudioManager {
      */
     public static final int DEVICE_IN_HDMI_ARC =
                                     AudioSystem.DEVICE_IN_HDMI_ARC;
+
+    /** @hide
+     * The audio input device code for HDMI EARC
+     */
+    public static final int DEVICE_IN_HDMI_EARC =
+                                    AudioSystem.DEVICE_IN_HDMI_EARC;
 
     /** @hide
      * The audio input device code for telephony voice RX path
@@ -5366,6 +5535,7 @@ public class AudioManager {
      *            {@link #DEVICE_OUT_TELEPHONY_TX}.
      *            {@link #DEVICE_OUT_LINE}.
      *            {@link #DEVICE_OUT_HDMI_ARC}.
+     *            {@link #DEVICE_OUT_HDMI_EARC}.
      *            {@link #DEVICE_OUT_SPDIF}.
      *            {@link #DEVICE_OUT_FM}.
      *            {@link #DEVICE_OUT_DEFAULT} is not used here.
@@ -6920,10 +7090,10 @@ public class AudioManager {
      *
      * @return true if successful, otherwise false
      */
-    @RequiresPermission(android.Manifest.permission.WRITE_SETTINGS)
     public @EncodedSurroundOutputMode int getEncodedSurroundMode() {
         try {
-            return getService().getEncodedSurroundMode();
+            return getService().getEncodedSurroundMode(
+                    getContext().getApplicationInfo().targetSdkVersion);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -6976,7 +7146,6 @@ public class AudioManager {
      *
      * @return whether the required surround format is enabled
      */
-    @RequiresPermission(android.Manifest.permission.WRITE_SETTINGS)
     public boolean isSurroundFormatEnabled(@AudioFormat.SurroundSoundEncoding int audioFormat) {
         try {
             return getService().isSurroundFormatEnabled(audioFormat);

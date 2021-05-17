@@ -796,13 +796,14 @@ public class TelephonyRegistryManager {
     /**
      * Notify {@link PhysicalChannelConfig} has changed for a specific subscription.
      *
+     * @param slotIndex for which physical channel configs changed.
      * @param subId the subId
      * @param configs a list of {@link PhysicalChannelConfig}, the configs of physical channel.
      */
-    public void notifyPhysicalChannelConfigForSubscriber(
-            int subId, List<PhysicalChannelConfig> configs) {
+    public void notifyPhysicalChannelConfigForSubscriber(int slotIndex, int subId,
+            List<PhysicalChannelConfig> configs) {
         try {
-            sRegistry.notifyPhysicalChannelConfigForSubscriber(subId, configs);
+            sRegistry.notifyPhysicalChannelConfigForSubscriber(slotIndex, subId, configs);
         } catch (RemoteException ex) {
             // system server crash
         }
@@ -892,10 +893,6 @@ public class TelephonyRegistryManager {
 
         if (telephonyCallback instanceof TelephonyCallback.SignalStrengthsListener) {
             eventList.add(TelephonyCallback.EVENT_SIGNAL_STRENGTHS_CHANGED);
-        }
-
-        if (telephonyCallback instanceof TelephonyCallback.AlwaysReportedSignalStrengthListener) {
-            eventList.add(TelephonyCallback.EVENT_ALWAYS_REPORTED_SIGNAL_STRENGTH_CHANGED);
         }
 
         if (telephonyCallback instanceof TelephonyCallback.CellInfoListener) {

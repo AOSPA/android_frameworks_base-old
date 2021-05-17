@@ -826,7 +826,7 @@
             that created the task, and therefore there will only be one instance of this activity
             in a task. In constrast to the {@code singleTask} launch mode, this activity can be
             started in multiple instances in different tasks if the
-            {@code FLAG_ACTIVITY_MULTIPLE_TASK} is set.-->
+            {@code FLAG_ACTIVITY_MULTIPLE_TASK} or {@code FLAG_ACTIVITY_NEW_DOCUMENT} is set.-->
         <enum name="singleInstancePerTask" value="4" />
     </attr>
     <!-- Specify the orientation an activity should be run in.  If not
@@ -1867,16 +1867,24 @@
              -->
         <attr name="preserveLegacyExternalStorage" format="boolean" />
 
-        <!-- If {@code true} this app would like optimized external storage access.
+        <!-- If {@code true} this app would like raw external storage access.
 
         <p> This flag can only be used by apps holding
         <ul>
         <li>{@link android.Manifest.permission#MANAGE_EXTERNAL_STORAGE} permission or
         <li>{@link android.app.role}#SYSTEM_GALLERY role.
         </ul>
-        When the flag is set, bulk file path operations will be optimized.
+        <p> When the flag is set, all file path access on external storage will bypass database
+        operations that update MediaStore collection. Raw external storage access as a side effect
+        can improve performance of bulk file path operations but can cause unexpected behavior in
+        apps due to inconsistencies in MediaStore collection and lower file system.
+        When the flag is set, app should scan the file after file path operations to ensure
+        consistency of MediaStore collection.
+        <p> The flag can be set to false if the app doesn't do many bulk file path operations or if
+        app prefers the system to ensure the consistency of the MediaStore collection for file path
+        operations without scanning the file.
 
-        The default value is {@code true} if
+        <p> The default value is {@code true} if
         <ul>
         <li>app has {@link android.Manifest.permission#MANAGE_EXTERNAL_STORAGE} permission and
         targets targetSDK<=30.
@@ -1884,7 +1892,7 @@
         </ul>
         {@code false} otherwise.
         -->
-        <attr name="requestOptimizedExternalStorageAccess" format="boolean" />
+        <attr name="requestRawExternalStorageAccess" format="boolean" />
 
         <!-- If {@code true} this app declares that it should be visible to all other apps on
              device, regardless of what they declare via the {@code queries} tags in their

@@ -44,6 +44,7 @@ import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.Intent;
+import android.net.ConnectivityDiagnosticsManager.DataStallReport.DetectionMethod;
 import android.net.IpSecManager.UdpEncapsulationSocket;
 import android.net.SocketKeepalive.Callback;
 import android.net.TetheringManager.StartTetheringCallback;
@@ -423,6 +424,9 @@ public class ConnectivityManager {
      * Action used to display a dialog that asks the user whether to connect to a network that is
      * not validated. This intent is used to start the dialog in settings via startActivity.
      *
+     * This action includes a {@link Network} typed extra which is called
+     * {@link ConnectivityManager#EXTRA_NETWORK} that represents the network which is unvalidated.
+     *
      * @hide
      */
     @SystemApi(client = MODULE_LIBRARIES)
@@ -431,6 +435,10 @@ public class ConnectivityManager {
     /**
      * Action used to display a dialog that asks the user whether to avoid a network that is no
      * longer validated. This intent is used to start the dialog in settings via startActivity.
+     *
+     * This action includes a {@link Network} typed extra which is called
+     * {@link ConnectivityManager#EXTRA_NETWORK} that represents the network which is no longer
+     * validated.
      *
      * @hide
      */
@@ -443,11 +451,24 @@ public class ConnectivityManager {
      * that has not validated. This intent is used to start the dialog in settings via
      * startActivity.
      *
+     * This action includes a {@link Network} typed extra which is called
+     * {@link ConnectivityManager#EXTRA_NETWORK} that represents the network which has partial
+     * connectivity.
+     *
      * @hide
      */
     @SystemApi(client = MODULE_LIBRARIES)
     public static final String ACTION_PROMPT_PARTIAL_CONNECTIVITY =
             "android.net.action.PROMPT_PARTIAL_CONNECTIVITY";
+
+    /**
+     * Clear DNS Cache Action: This is broadcast when networks have changed and old
+     * DNS entries should be cleared.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
+    public static final String ACTION_CLEAR_DNS_CACHE = "android.net.action.CLEAR_DNS_CACHE";
 
     /**
      * Invalid tethering type.
@@ -1193,7 +1214,8 @@ public class ConnectivityManager {
      *
      * @return a {@link Network} object for the current default network for the
      *         given UID or {@code null} if no default network is currently active
-     * TODO: b/183465229 Cleanup getActiveNetworkForUid once b/165835257 is fixed
+     *
+     * @hide
      */
     @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
     @Nullable
@@ -1414,9 +1436,9 @@ public class ConnectivityManager {
             android.Manifest.permission.NETWORK_STACK,
             android.Manifest.permission.NETWORK_SETTINGS})
     @NonNull
-    public List<NetworkStateSnapshot> getAllNetworkStateSnapshot() {
+    public List<NetworkStateSnapshot> getAllNetworkStateSnapshots() {
         try {
-            return mService.getAllNetworkStateSnapshot();
+            return mService.getAllNetworkStateSnapshots();
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -3143,18 +3165,27 @@ public class ConnectivityManager {
     }
 
     /**
-     * Set a network-independent global http proxy.  This is not normally what you want
-     * for typical HTTP proxies - they are general network dependent.  However if you're
-     * doing something unusual like general internal filtering this may be useful.  On
-     * a private network where the proxy is not accessible, you may break HTTP using this.
+     * Set a network-independent global HTTP proxy.
      *
-     * @param p A {@link ProxyInfo} object defining the new global
-     *        HTTP proxy.  A {@code null} value will clear the global HTTP proxy.
+     * This sets an HTTP proxy that applies to all networks and overrides any network-specific
+     * proxy. If set, HTTP libraries that are proxy-aware will use this global proxy when
+     * accessing any network, regardless of what the settings for that network are.
+     *
+     * Note that HTTP proxies are by nature typically network-dependent, and setting a global
+     * proxy is likely to break networking on multiple networks. This method is only meant
+     * for device policy clients looking to do general internal filtering or similar use cases.
+     *
+     * {@see #getGlobalProxy}
+     * {@see LinkProperties#getHttpProxy}
+     *
+     * @param p A {@link ProxyInfo} object defining the new global HTTP proxy. Calling this
+     *          method with a {@code null} value will clear the global HTTP proxy.
      * @hide
      */
+    // Used by Device Policy Manager to set the global proxy.
     @SystemApi(client = MODULE_LIBRARIES)
     @RequiresPermission(android.Manifest.permission.NETWORK_STACK)
-    public void setGlobalProxy(@Nullable ProxyInfo p) {
+    public void setGlobalProxy(@Nullable final ProxyInfo p) {
         try {
             mService.setGlobalProxy(p);
         } catch (RemoteException e) {
@@ -3466,6 +3497,8 @@ public class ConnectivityManager {
          * not include location sensitive info.
          * </p>
          */
+        // Note: Some existing fields which are location sensitive may still be included without
+        // this flag if the app targets SDK < S (to maintain backwards compatibility).
         public static final int FLAG_INCLUDE_LOCATION_INFO = 1 << 0;
 
         /** @hide */
@@ -4440,7 +4473,7 @@ public class ConnectivityManager {
     @RequiresPermission(android.Manifest.permission.ACCESS_NETWORK_STATE)
     public void registerDefaultNetworkCallback(@NonNull NetworkCallback networkCallback,
             @NonNull Handler handler) {
-        registerDefaultNetworkCallbackAsUid(Process.INVALID_UID, networkCallback, handler);
+        registerDefaultNetworkCallbackForUid(Process.INVALID_UID, networkCallback, handler);
     }
 
     /**
@@ -4470,7 +4503,7 @@ public class ConnectivityManager {
     @RequiresPermission(anyOf = {
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK,
             android.Manifest.permission.NETWORK_SETTINGS})
-    public void registerDefaultNetworkCallbackAsUid(int uid,
+    public void registerDefaultNetworkCallbackForUid(int uid,
             @NonNull NetworkCallback networkCallback, @NonNull Handler handler) {
         CallbackHandler cbHandler = new CallbackHandler(handler);
         sendRequestForNetwork(uid, null /* need */, networkCallback, 0 /* timeoutMs */,
@@ -5138,10 +5171,13 @@ public class ConnectivityManager {
      *
      * <p>This method should only be used for tests.
      *
-     * <p>The caller must be the owner of the specified Network.
+     * <p>The caller must be the owner of the specified Network. This simulates a data stall to
+     * have the system behave as if it had happened, but does not actually stall connectivity.
      *
      * @param detectionMethod The detection method used to identify the Data Stall.
-     * @param timestampMillis The timestamp at which the stall 'occurred', in milliseconds.
+     *                        See ConnectivityDiagnosticsManager.DataStallReport.DETECTION_METHOD_*.
+     * @param timestampMillis The timestamp at which the stall 'occurred', in milliseconds, as per
+     *                        SystemClock.elapsedRealtime.
      * @param network The Network for which a Data Stall is being simluated.
      * @param extras The PersistableBundle of extras included in the Data Stall notification.
      * @throws SecurityException if the caller is not the owner of the given network.
@@ -5150,7 +5186,7 @@ public class ConnectivityManager {
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @RequiresPermission(anyOf = {android.Manifest.permission.MANAGE_TEST_NETWORKS,
             android.Manifest.permission.NETWORK_STACK})
-    public void simulateDataStall(int detectionMethod, long timestampMillis,
+    public void simulateDataStall(@DetectionMethod int detectionMethod, long timestampMillis,
             @NonNull Network network, @NonNull PersistableBundle extras) {
         try {
             mService.simulateDataStall(detectionMethod, timestampMillis, network, extras);
@@ -5337,10 +5373,10 @@ public class ConnectivityManager {
      * {@link #unregisterNetworkCallback(NetworkCallback)}.
      *
      * @param request {@link NetworkRequest} describing this request.
-     * @param handler {@link Handler} to specify the thread upon which the callback will be invoked.
-     *                If null, the callback is invoked on the default internal Handler.
      * @param networkCallback The {@link NetworkCallback} to be utilized for this request. Note
      *                        the callback must not be shared - it uniquely specifies this request.
+     * @param handler {@link Handler} to specify the thread upon which the callback will be invoked.
+     *                If null, the callback is invoked on the default internal Handler.
      * @throws IllegalArgumentException if {@code request} contains invalid network capabilities.
      * @throws SecurityException if missing the appropriate permissions.
      * @throws RuntimeException if the app already has too many callbacks registered.
@@ -5355,7 +5391,8 @@ public class ConnectivityManager {
             NetworkStack.PERMISSION_MAINLINE_NETWORK_STACK
     })
     public void requestBackgroundNetwork(@NonNull NetworkRequest request,
-            @NonNull Handler handler, @NonNull NetworkCallback networkCallback) {
+            @NonNull NetworkCallback networkCallback,
+            @SuppressLint("ListenerLast") @NonNull Handler handler) {
         final NetworkCapabilities nc = request.networkCapabilities;
         sendRequestForNetwork(nc, networkCallback, 0, BACKGROUND_REQUEST,
                 TYPE_NONE, new CallbackHandler(handler));

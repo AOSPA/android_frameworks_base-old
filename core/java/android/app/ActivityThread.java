@@ -39,7 +39,6 @@ import android.annotation.Nullable;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
 import android.app.backup.BackupAgent;
-import android.app.backup.BackupManager;
 import android.app.servertransaction.ActivityLifecycleItem;
 import android.app.servertransaction.ActivityLifecycleItem.LifecycleState;
 import android.app.servertransaction.ActivityRelaunchItem;
@@ -53,6 +52,7 @@ import android.app.servertransaction.ResumeActivityItem;
 import android.app.servertransaction.TransactionExecutor;
 import android.app.servertransaction.TransactionExecutorHelper;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.AttributionSource;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
 import android.content.ComponentCallbacks2;
@@ -236,12 +236,6 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Consumer;
-
-final class RemoteServiceException extends AndroidRuntimeException {
-    public RemoteServiceException(String msg) {
-        super(msg);
-    }
-}
 
 /**
  * This manages the execution of the main thread in an
@@ -601,6 +595,9 @@ public final class ActivityThread extends ClientTransactionHandler
          */
         FixedRotationAdjustments mPendingFixedRotationAdjustments;
 
+        /** Whether this activiy was launched from a bubble. */
+        boolean mLaunchedFromBubble;
+
         @LifecycleState
         private int mLifecycleState = PRE_ON_CREATE;
 
@@ -620,7 +617,7 @@ public final class ActivityThread extends ClientTransactionHandler
                 List<ReferrerIntent> pendingNewIntents, ActivityOptions activityOptions,
                 boolean isForward, ProfilerInfo profilerInfo, ClientTransactionHandler client,
                 IBinder assistToken, FixedRotationAdjustments fixedRotationAdjustments,
-                IBinder shareableActivityToken) {
+                IBinder shareableActivityToken, boolean launchedFromBubble) {
             this.token = token;
             this.assistToken = assistToken;
             this.shareableActivityToken = shareableActivityToken;
@@ -641,6 +638,7 @@ public final class ActivityThread extends ClientTransactionHandler
                     compatInfo);
             mActivityOptions = activityOptions;
             mPendingFixedRotationAdjustments = fixedRotationAdjustments;
+            mLaunchedFromBubble = launchedFromBubble;
             init();
         }
 
@@ -1275,8 +1273,9 @@ public final class ActivityThread extends ClientTransactionHandler
             sendMessage(H.DISPATCH_PACKAGE_BROADCAST, packages, cmd);
         }
 
-        public void scheduleCrash(String msg) {
-            sendMessage(H.SCHEDULE_CRASH, msg);
+        @Override
+        public void scheduleCrash(String msg, int typeId) {
+            sendMessage(H.SCHEDULE_CRASH, msg, typeId);
         }
 
         public void dumpActivity(ParcelFileDescriptor pfd, IBinder activitytoken,
@@ -1589,9 +1588,17 @@ public final class ActivityThread extends ClientTransactionHandler
 
         @Override
         public void dumpGfxInfo(ParcelFileDescriptor pfd, String[] args) {
-            nDumpGraphicsInfo(pfd.getFileDescriptor());
-            WindowManagerGlobal.getInstance().dumpGfxInfo(pfd.getFileDescriptor(), args);
-            IoUtils.closeQuietly(pfd);
+            DumpComponentInfo data = new DumpComponentInfo();
+            try {
+                data.fd = pfd.dup();
+                data.token = null;
+                data.args = args;
+                sendMessage(H.DUMP_GFXINFO, data, 0, 0, true /*async*/);
+            } catch (IOException e) {
+                Slog.w(TAG, "dumpGfxInfo failed", e);
+            } finally {
+                IoUtils.closeQuietly(pfd);
+            }
         }
 
         @Override
@@ -1837,12 +1844,12 @@ public final class ActivityThread extends ClientTransactionHandler
 
         @Override
         public void updateUiTranslationState(IBinder activityToken, int state,
-                TranslationSpec sourceSpec, TranslationSpec destSpec, List<AutofillId> viewIds) {
+                TranslationSpec sourceSpec, TranslationSpec targetSpec, List<AutofillId> viewIds) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = activityToken;
             args.arg2 = state;
             args.arg3 = sourceSpec;
-            args.arg4 = destSpec;
+            args.arg4 = targetSpec;
             args.arg5 = viewIds;
             sendMessage(H.UPDATE_UI_TRANSLATION_STATE, args);
         }
@@ -1890,6 +1897,17 @@ public final class ActivityThread extends ClientTransactionHandler
                     cancellation.cancel();
                 }
             }
+        }
+    }
+
+    private void throwRemoteServiceException(String message, int typeId) {
+        // Use a switch to ensure all the type IDs are unique.
+        switch (typeId) {
+            case ForegroundServiceDidNotStartInTimeException.TYPE_ID: // 1
+                throw new ForegroundServiceDidNotStartInTimeException(message);
+            case RemoteServiceException.TYPE_ID: // 0
+            default:
+                throw new RemoteServiceException(message);
         }
     }
 
@@ -1952,6 +1970,7 @@ public final class ActivityThread extends ClientTransactionHandler
         public static final int ATTACH_STARTUP_AGENTS = 162;
         public static final int UPDATE_UI_TRANSLATION_STATE = 163;
         public static final int SET_CONTENT_CAPTURE_OPTIONS_CALLBACK = 164;
+        public static final int DUMP_GFXINFO = 165;
 
         public static final int INSTRUMENT_WITHOUT_RESTART = 170;
         public static final int FINISH_INSTRUMENTATION_WITHOUT_RESTART = 171;
@@ -2001,6 +2020,7 @@ public final class ActivityThread extends ClientTransactionHandler
                     case UPDATE_UI_TRANSLATION_STATE: return "UPDATE_UI_TRANSLATION_STATE";
                     case SET_CONTENT_CAPTURE_OPTIONS_CALLBACK:
                         return "SET_CONTENT_CAPTURE_OPTIONS_CALLBACK";
+                    case DUMP_GFXINFO: return "DUMP GFXINFO";
                     case INSTRUMENT_WITHOUT_RESTART: return "INSTRUMENT_WITHOUT_RESTART";
                     case FINISH_INSTRUMENTATION_WITHOUT_RESTART:
                         return "FINISH_INSTRUMENTATION_WITHOUT_RESTART";
@@ -2074,6 +2094,9 @@ public final class ActivityThread extends ClientTransactionHandler
                 case DUMP_SERVICE:
                     handleDumpService((DumpComponentInfo)msg.obj);
                     break;
+                case DUMP_GFXINFO:
+                    handleDumpGfxInfo((DumpComponentInfo) msg.obj);
+                    break;
                 case LOW_MEMORY:
                     Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "lowMemory");
                     handleLowMemory();
@@ -2106,7 +2129,8 @@ public final class ActivityThread extends ClientTransactionHandler
                     Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
                     break;
                 case SCHEDULE_CRASH:
-                    throw new RemoteServiceException((String)msg.obj);
+                    throwRemoteServiceException((String) msg.obj, msg.arg1);
+                    break;
                 case DUMP_HEAP:
                     handleDumpHeap((DumpHeapData) msg.obj);
                     break;
@@ -2274,6 +2298,12 @@ public final class ActivityThread extends ClientTransactionHandler
         ActivityThread am = currentActivityThread();
         return (am != null && am.getApplication() != null)
                 ? am.getApplication().getOpPackageName() : null;
+    }
+
+    public static AttributionSource currentAttributionSource() {
+        ActivityThread am = currentActivityThread();
+        return (am != null && am.getApplication() != null)
+                ? am.getApplication().getAttributionSource() : null;
     }
 
     @UnsupportedAppUsage
@@ -3543,6 +3573,7 @@ public final class ActivityThread extends ClientTransactionHandler
                     activity.mPendingOptions = r.mActivityOptions;
                     r.mActivityOptions = null;
                 }
+                activity.mLaunchedFromBubble = r.mLaunchedFromBubble;
                 activity.mCalled = false;
                 if (r.isPersistable()) {
                     mInstrumentation.callActivityOnCreate(activity, r.state, r.persistentState);
@@ -3976,6 +4007,12 @@ public final class ActivityThread extends ClientTransactionHandler
         }
     }
 
+    @Override
+    public void handlePictureInPictureStateChanged(@NonNull ActivityClientRecord r,
+            PictureInPictureUiState pipState) {
+        r.activity.onPictureInPictureUiStateChanged(pipState);
+    }
+
     /**
      * Register a splash screen manager to this process.
      */
@@ -4158,13 +4195,13 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     private void updateUiTranslationState(IBinder activityToken, int state,
-            TranslationSpec sourceSpec, TranslationSpec destSpec, List<AutofillId> viewIds) {
+            TranslationSpec sourceSpec, TranslationSpec targetSpec, List<AutofillId> viewIds) {
         final ActivityClientRecord r = mActivities.get(activityToken);
         if (r == null) {
             Log.w(TAG, "updateUiTranslationState(): no activity for " + activityToken);
             return;
         }
-        r.activity.updateUiTranslationState(state, sourceSpec, destSpec, viewIds);
+        r.activity.updateUiTranslationState(state, sourceSpec, targetSpec, viewIds);
     }
 
     private static final ThreadLocal<Intent> sCurrentBroadcastIntent = new ThreadLocal<Intent>();
@@ -4329,17 +4366,10 @@ public final class ActivityThread extends ClientTransactionHandler
 
     private String getBackupAgentName(CreateBackupAgentData data) {
         String agentName = data.appInfo.backupAgentName;
-        if (!UserHandle.isCore(data.appInfo.uid)
-                && data.operationType == BackupManager.OperationType.MIGRATION) {
-            // If this is a migration, use the default backup agent regardless of the app's
-            // preferences.
+        // full backup operation but no app-supplied agent?  use the default implementation
+        if (agentName == null && (data.backupMode == ApplicationThreadConstants.BACKUP_MODE_FULL
+                || data.backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL)) {
             agentName = DEFAULT_FULL_BACKUP_AGENT;
-        } else {
-            // full backup operation but no app-supplied agent?  use the default implementation
-            if (agentName == null && (data.backupMode == ApplicationThreadConstants.BACKUP_MODE_FULL
-                    || data.backupMode == ApplicationThreadConstants.BACKUP_MODE_RESTORE_FULL)) {
-                agentName = DEFAULT_FULL_BACKUP_AGENT;
-            }
         }
         return agentName;
     }
@@ -4386,11 +4416,12 @@ public final class ActivityThread extends ClientTransactionHandler
         try {
             if (localLOGV) Slog.v(TAG, "Creating service " + data.info.name);
 
-            ContextImpl context = ContextImpl.createAppContext(this, packageInfo);
             Application app = packageInfo.makeApplication(false, mInstrumentation);
             java.lang.ClassLoader cl = packageInfo.getClassLoader();
             service = packageInfo.getAppFactory()
                     .instantiateService(cl, data.info.name, data.intent);
+            final ContextImpl context = ContextImpl.getImpl(service
+                    .createServiceBaseContext(this, packageInfo));
             // Service resources must be initialized with the same loaders as the application
             // context.
             context.getResources().addLoaders(
@@ -4475,6 +4506,17 @@ public final class ActivityThread extends ClientTransactionHandler
                             + " with " + data.intent + ": " + e.toString(), e);
                 }
             }
+        }
+    }
+
+    private void handleDumpGfxInfo(DumpComponentInfo info) {
+        try {
+            nDumpGraphicsInfo(info.fd.getFileDescriptor());
+            WindowManagerGlobal.getInstance().dumpGfxInfo(info.fd.getFileDescriptor(), info.args);
+        } catch (Exception e) {
+            Log.w(TAG, "Caught exception from dumpGfxInfo()", e);
+        } finally {
+            IoUtils.closeQuietly(info.fd);
         }
     }
 
@@ -4804,6 +4846,10 @@ public final class ActivityThread extends ClientTransactionHandler
         }
 
         if (r.isTopResumedActivity == onTop) {
+            if (!Build.IS_DEBUGGABLE) {
+                Slog.w(TAG, "Activity top position already set to onTop=" + onTop);
+                return;
+            }
             throw new IllegalStateException("Activity top position already set to onTop=" + onTop);
         }
 

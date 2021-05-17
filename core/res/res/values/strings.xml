@@ -825,9 +825,9 @@
     <string name="permgroupdesc_camera">take pictures and record video</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=40]-->
-    <string name="permgrouplab_nearby_devices">Nearby Bluetooth Devices</string>
+    <string name="permgrouplab_nearby_devices">Nearby devices</string>
     <!-- Description of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=NONE]-->
-    <string name="permgroupdesc_nearby_devices">discover and connect to nearby Bluetooth devices</string>
+    <string name="permgroupdesc_nearby_devices">discover and connect to nearby devices</string>
 
     <!-- Title of a category of application permissions, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permgrouplab_calllog">Call logs</string>
@@ -1486,6 +1486,15 @@
     <string name="permlab_bluetooth_connect">connect to paired Bluetooth devices</string>
     <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=120]-->
     <string name="permdesc_bluetooth_connect" product="default">Allows the app to connect to paired Bluetooth devices</string>
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=50]-->
+    <string name="permlab_bluetooth_advertise">advertise to nearby Bluetooth devices</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=120]-->
+    <string name="permdesc_bluetooth_advertise" product="default">Allows the app to advertise to nearby Bluetooth devices</string>
+
+    <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=50]-->
+    <string name="permlab_uwb_ranging">determine relative position between nearby Ultra-Wideband devices</string>
+    <!-- Description of an application permission, listed so the user can choose whether they want to allow the application to do this. [CHAR LIMIT=120]-->
+    <string name="permdesc_uwb_ranging">Allow the app to determine relative position between nearby Ultra-Wideband devices</string>
 
     <!-- Title of an application permission, listed so the user can choose whether they want to allow the application to do this. -->
     <string name="permlab_preferredPaymentInfo">Preferred NFC Payment Service Information</string>
@@ -1578,7 +1587,7 @@
     <!-- Name for an app setting that lets the user authenticate for that app with their screen lock credential (i.e. PIN, pattern, or password). [CHAR LIMIT=30] -->
     <string name="screen_lock_app_setting_name">Use screen lock</string>
     <!-- Subtitle shown on the system-provided biometric dialog, asking the user to authenticate with their screen lock credential (i.e. PIN, pattern, or password). [CHAR LIMIT=70] -->
-    <string name="screen_lock_dialog_default_subtitle">Enter your device credential to continue</string>
+    <string name="screen_lock_dialog_default_subtitle">Enter your screen lock to continue</string>
 
     <!-- Message shown during fingerprint acquisision when the fingerprint cannot be recognized -->
     <string name="fingerprint_acquired_partial">Partial fingerprint detected</string>
@@ -1748,7 +1757,7 @@
     <!-- Name for an app setting that lets the user authenticate for that app with their face or screen lock credential (i.e. PIN, pattern, or password). [CHAR LIMIT=70] -->
     <string name="face_or_screen_lock_app_setting_name">Use face or screen lock</string>
     <!-- Subtitle shown on the system-provided biometric dialog, asking the user to authenticate with their face. [CHAR LIMIT=70] -->
-    <string name="face_dialog_default_subtitle">Use face unlock to continue</string>
+    <string name="face_dialog_default_subtitle">Use your face to continue</string>
     <!-- Subtitle shown on the system-provided biometric dialog, asking the user to authenticate with their face or screen lock credential (i.e. PIN, pattern, or password). [CHAR LIMIT=90] -->
     <string name="face_or_screen_lock_dialog_default_subtitle">Use your face or screen lock to continue</string>
 
@@ -4771,6 +4780,28 @@
     <string name="mediasize_na_quarto">Quarto</string>
     <!-- North America Foolscap media (paper) size: 8" x 13" (203mm x 330mm) -->
     <string name="mediasize_na_foolscap">Foolscap</string>
+    <!-- North America ANSI C media (paper) size: 17" x 22" (432mm x 559mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_ansi_c">ANSI C</string>
+    <!-- North America ANSI D media (paper) size: 22" x 34" (559mm x 864mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_ansi_d">ANSI D</string>
+    <!-- North America ANSI E media (paper) size: 34" x 44" (864mm x 1118mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_ansi_e">ANSI E</string>
+    <!-- North America ANSI F media (paper) size: 28" x 40" (711mm x 1016mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_ansi_f">ANSI F</string>
+    <!-- North America Arch A media (paper) size: 9" x 12" (229mm x 305mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_arch_a">Arch A</string>
+    <!-- North America Arch B media (paper) size: 12" x 18" (305mm x 457mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_arch_b">Arch B</string>
+    <!-- North America Arch C media (paper) size: 18" x 24" (457mm x 610mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_arch_c">Arch C</string>
+    <!-- North America Arch D media (paper) size: 24" x 36" (610mm x 914mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_arch_d">Arch D</string>
+    <!-- North America Arch E media (paper) size: 36" x 48" (914mm x 1219mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_arch_e">Arch E</string>
+    <!-- North America Arch E1 media (paper) size: 30" x 42" (762mm x 1067mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_arch_e1">Arch E1</string>
+    <!-- North America Super B media (paper) size: 13" x 19" (330mm x 483mm) [CHAR LIMIT=none] -->
+    <string name="mediasize_na_super_b">Super B</string>
 
     <!-- Chinese Roc 8k media (paper) size: 270mm x 390mm (10.629" x 15.3543") -->
     <string name="mediasize_chinese_roc_8k">ROC 8K</string>
@@ -4850,6 +4881,8 @@
     <string name="mediasize_japanese_kaku2">Kaku2</string>
     <!-- Japanese You4 media (paper) size: 105mm x 235mm (4.134" x 9.252") -->
     <string name="mediasize_japanese_you4">You4</string>
+    <!-- Japanese Photo L (paper) size: 89mm x 127mm (3.5 x 5") [CHAR LIMIT=20] -->
+    <string name="mediasize_japanese_l">L</string>
 
     <!-- Media (paper) size for specifying any paper size in portrait.-->
     <string name="mediasize_unknown_portrait">Unknown portrait</string>
@@ -4976,10 +5009,10 @@
     <string name="confirm_battery_saver">OK</string>
 
     <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description, with a "learn more" link. -->
-    <string name="battery_saver_description_with_learn_more">To extend battery life, Battery Saver:\n\n\u2022 Turns on Dark theme\n\u2022 Turns off or restricts background activity, some visual effects, and other features like \u201cHey Google\u201d\n\n<annotation id="url">Learn more</annotation></string>
+    <string name="battery_saver_description_with_learn_more">Battery Saver turns on Dark theme and limits or turns off background activity, some visual effects, and certain features.\n\n<annotation id="url">Learn more</annotation></string>
 
     <!-- [CHAR_LIMIT=NONE] Battery saver: Feature description, without a "learn more" link. -->
-    <string name="battery_saver_description">To extend battery life, Battery Saver:\n\n\u2022 Turns on Dark theme\n\u2022 Turns off or restricts background activity, some visual effects, and other features like \u201cHey Google\u201d</string>
+    <string name="battery_saver_description">Battery Saver turns on Dark theme and limits or turns off background activity, some visual effects, and certain features.</string>
 
     <!-- [CHAR_LIMIT=NONE] Data saver: Feature description -->
     <string name="data_saver_description">To help reduce data usage, Data Saver prevents some apps from sending or receiving data in the background. An app you’re currently using can access data, but may do so less frequently. This may mean, for example, that images don’t display until you tap them.</string>
@@ -5144,6 +5177,8 @@
 
     <!-- Action text to be displayed for the "answer" action of an incoming call [CHAR LIMIT=13] -->
     <string name="call_notification_answer_action">Answer</string>
+    <!-- Action text to be displayed for the "answer" action of an incoming VIDEO call [CHAR LIMIT=13] -->
+    <string name="call_notification_answer_video_action">Video</string>
     <!-- Action text to be displayed for the "decline" action of an incoming call [CHAR LIMIT=13] -->
     <string name="call_notification_decline_action">Decline</string>
     <!-- Action text to be displayed for the "hang up" action of an ongoing call [CHAR LIMIT=13] -->
@@ -5505,6 +5540,21 @@
     <string name="notification_feedback_indicator_promoted">This notification was ranked higher. Tap to provide feedback.</string>
     <!-- Content description of the demoted feedback icon in the notification. [CHAR LIMIT=NONE] -->
     <string name="notification_feedback_indicator_demoted">This notification was ranked lower. Tap to provide feedback.</string>
+
+    <!-- Enhanced Notifications -->
+    <!-- Title of notification indicating adaptive notifications setting need migration when upgrading to S [CHAR LIMIT=30] -->
+    <string name="nas_upgrade_notification_title">Enhanced notifications</string>
+    <!-- Content of notification indicating users need to update the settings [CHAR LIMIT=NONE] -->
+    <string name="nas_upgrade_notification_content">Suggested actions and replies are now provided by enhanced notifications. Android Adaptive Notifications are no longer supported.</string>
+    <!-- Label of notification action button to turn on the enhanced notifications [CHAR LIMIT=20] -->
+    <string name="nas_upgrade_notification_enable_action">OK</string>
+    <!-- Label of notification action button to turn off the enhanced notifications [CHAR LIMIT=20] -->
+    <string name="nas_upgrade_notification_disable_action">Turn off</string>
+    <!-- Label of notification action button to learn more about the enhanced notifications [CHAR LIMIT=20] -->
+    <string name="nas_upgrade_notification_learn_more_action">Learn more</string>
+    <!-- Content of notification learn more dialog about the enhanced notifications [CHAR LIMIT=NONE] -->
+    <string name="nas_upgrade_notification_learn_more_content">Enhanced notifications replaced Android Adaptive Notifications in Android 12. This feature shows suggested actions and replies, and organizes your notifications.\n\nEnhanced notifications can access notification content, including personal information like contact names and messages. This feature can also dismiss or respond to notifications, such as answering phone calls and controlling Do Not Disturb.</string>
+
 
     <!-- Dynamic mode battery saver strings -->
     <!-- The user visible name of the notification channel for the routine mode battery saver fyi notification [CHAR_LIMIT=80]-->
@@ -5938,12 +5988,14 @@ ul.</string>
     <!-- Notification action to dismiss. [CHAR LIMIT=50] -->
     <string name="dismiss_action">Dismiss</string>
 
-    <!--- Content of notification triggered if the microphone is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
-    <string name="sensor_privacy_start_use_mic_notification_content">To continue, &lt;b&gt;‎‏‎‎‏‏‎<xliff:g id="app" example="Gmail">%s</xliff:g>&lt;/b&gt; needs access to your device microphone.</string>
+    <!--- Title of notification triggered if the microphone is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_start_use_mic_notification_content_title">Unblock device microphone</string>
+    <!--- Title of notification triggered if the camera is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_start_use_camera_notification_content_title">Unblock device camera</string>
     <!--- Content of notification triggered if the camera is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
-    <string name="sensor_privacy_start_use_camera_notification_content">To continue, &lt;b&gt;<xliff:g id="app" example="Gmail">%s</xliff:g>&lt;/b&gt; needs access to your device’s camera.</string>
+    <string name="sensor_privacy_start_use_notification_content_text">For &lt;b&gt;<xliff:g id="app" example="Gmail">%s</xliff:g>&lt;/b&gt; and all apps and services</string>
     <!--- Action button in the dialog triggered if a sensor (e.g. microphone or camera) is disabled but an app tried to access it. [CHAR LIMIT=60] -->
-    <string name="sensor_privacy_start_use_dialog_turn_on_button">Turn on</string>
+    <string name="sensor_privacy_start_use_dialog_turn_on_button">Unblock</string>
     <!--- Label for notification channel for all sensor privacy related notifications. [CHAR LIMIT=NONE] -->
     <string name="sensor_privacy_notification_channel_label">Sensor Privacy</string>
 

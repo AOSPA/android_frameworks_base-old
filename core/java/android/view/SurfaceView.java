@@ -30,10 +30,10 @@ import android.graphics.BLASTBufferQueue;
 import android.graphics.BlendMode;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.HardwareRenderer;
 import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.PixelFormat;
-import android.graphics.PorterDuff;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.graphics.RenderNode;
@@ -222,8 +222,35 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
 
     private int mPendingReportDraws;
 
-    private SurfaceControl.Transaction mRtTransaction = new SurfaceControl.Transaction();
-    private SurfaceControl.Transaction mTmpTransaction = new SurfaceControl.Transaction();
+    /**
+     * Transaction that should be used from the render thread. This transaction is only thread safe
+     * with other calls directly from the render thread.
+     */
+    private final SurfaceControl.Transaction mRtTransaction = new SurfaceControl.Transaction();
+
+    /**
+     * Transaction that should be used whe
+     * {@link HardwareRenderer.FrameDrawingCallback#onFrameDraw} is invoked. All
+     * frame callbacks can use the same transaction since they will be thread safe
+     */
+    private final SurfaceControl.Transaction mFrameCallbackTransaction =
+            new SurfaceControl.Transaction();
+
+    /**
+     * Transaction that should be used for
+     * {@link RenderNode.PositionUpdateListener#positionChanged(long, int, int, int, int)}
+     * The callback is invoked from a thread pool so it's not thread safe with other render thread
+     * transactions. Keep the transactions for position changed callbacks on its own transaction.
+     */
+    private final SurfaceControl.Transaction mPositionChangedTransaction =
+            new SurfaceControl.Transaction();
+
+    /**
+     * A temporary transaction holder that should only be used when applying right away. There
+     * should be no assumption about thread safety for this transaction.
+     */
+    private final SurfaceControl.Transaction mTmpTransaction = new SurfaceControl.Transaction();
+
     private int mParentSurfaceSequenceId;
 
     private RemoteAccessibilityController mRemoteAccessibilityController =
@@ -433,7 +460,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                  * This gets called on a RenderThread worker thread, so members accessed here must
                  * be protected by a lock.
                  */
-                final boolean useBLAST = useBLASTSync(viewRoot);
                 viewRoot.registerRtFrameCallback(frame -> {
                     try {
                         synchronized (mSurfaceControlLock) {
@@ -457,8 +483,9 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                                 Log.d(TAG, System.identityHashCode(this)
                                         + " updateSurfaceAlpha RT: set alpha=" + alpha);
                             }
-                            mRtTransaction.setAlpha(mSurfaceControl, alpha);
-                            applyRtTransaction(frame);
+
+                            mFrameCallbackTransaction.setAlpha(mSurfaceControl, alpha);
+                            applyOrMergeTransaction(mFrameCallbackTransaction, frame);
                         }
                         // It's possible that mSurfaceControl is released in the UI thread before
                         // the transaction completes. If that happens, an exception is thrown, which
@@ -670,10 +697,16 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
             if (mClipSurfaceToBounds && mClipBounds != null) {
                 mTmpRect.intersect(mClipBounds);
             }
-            canvas.drawRoundRect(mTmpRect.left, mTmpRect.top, mTmpRect.right, mTmpRect.bottom,
-                    mCornerRadius, mCornerRadius, mRoundedViewportPaint);
+            canvas.punchHole(
+                    mTmpRect.left,
+                    mTmpRect.top,
+                    mTmpRect.right,
+                    mTmpRect.bottom,
+                    mCornerRadius,
+                    mCornerRadius
+            );
         } else {
-            canvas.drawColor(0, PorterDuff.Mode.CLEAR);
+            canvas.punchHole(0f, 0f, getWidth(), getHeight(), 0f, 0f);
         }
     }
 
@@ -801,7 +834,6 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
          * This gets called on a RenderThread worker thread, so members accessed here must
          * be protected by a lock.
          */
-        final boolean useBLAST = useBLASTSync(viewRoot);
         viewRoot.registerRtFrameCallback(frame -> {
             try {
                 synchronized (mSurfaceControlLock) {
@@ -809,8 +841,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                         return;
                     }
 
-                    updateRelativeZ(mRtTransaction);
-                    applyRtTransaction(frame);
+                    updateRelativeZ(mFrameCallbackTransaction);
+                    applyOrMergeTransaction(mFrameCallbackTransaction, frame);
                 }
                 // It's possible that mSurfaceControl is released in the UI thread before
                 // the transaction completes. If that happens, an exception is thrown, which
@@ -1395,22 +1427,21 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
         return mRTLastReportedPosition;
     }
 
-    private void setParentSpaceRectangle(Rect position, long frameNumber) {
+    private void setParentSpaceRectangle(Rect position, long frameNumber, Transaction t) {
         final ViewRootImpl viewRoot = getViewRootImpl();
-        applySurfaceTransforms(mSurfaceControl, mRtTransaction, position);
-        applyChildSurfaceTransaction_renderWorker(mRtTransaction, viewRoot.mSurface, frameNumber);
-        applyRtTransaction(frameNumber);
+        applySurfaceTransforms(mSurfaceControl, t, position);
+        applyChildSurfaceTransaction_renderWorker(t, viewRoot.mSurface, frameNumber);
+        applyOrMergeTransaction(t, frameNumber);
     }
 
-    private void applyRtTransaction(long frameNumber) {
+    private void applyOrMergeTransaction(Transaction t, long frameNumber) {
         final ViewRootImpl viewRoot = getViewRootImpl();
         boolean useBLAST = viewRoot != null && useBLASTSync(viewRoot);
         if (useBLAST) {
             // If we are using BLAST, merge the transaction with the viewroot buffer transaction.
-            viewRoot.mergeWithNextTransaction(mRtTransaction, frameNumber);
-            return;
+            viewRoot.mergeWithNextTransaction(t, frameNumber);
         } else {
-            mRtTransaction.apply();
+            t.apply();
         }
     }
 
@@ -1451,7 +1482,8 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                             left, top, right, bottom));
                 }
                 mRTLastReportedPosition.set(left, top, right, bottom);
-                setParentSpaceRectangle(mRTLastReportedPosition, frameNumber);
+                setParentSpaceRectangle(mRTLastReportedPosition, frameNumber,
+                        mPositionChangedTransaction);
                 // Now overwrite mRTLastReportedPosition with our values
             } catch (Exception ex) {
                 Log.e(TAG, "Exception from repositionChild", ex);
@@ -1463,7 +1495,7 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
                 float bottom, float vecX, float vecY, float maxStretch) {
             mRtTransaction.setStretchEffect(mSurfaceControl, left, top, right, bottom, vecX, vecY,
                     maxStretch);
-            applyRtTransaction(frameNumber);
+            applyOrMergeTransaction(mRtTransaction, frameNumber);
         }
 
         @Override
@@ -1483,14 +1515,12 @@ public class SurfaceView extends View implements ViewRootImpl.SurfaceChangedCall
              * need to hold the lock here.
              */
             synchronized (mSurfaceControlLock) {
-                final ViewRootImpl viewRoot = getViewRootImpl();
-
                 mRtTransaction.hide(mSurfaceControl);
                 if (mRtReleaseSurfaces) {
                     mRtReleaseSurfaces = false;
                     releaseSurfaces(mRtTransaction);
                 }
-                applyRtTransaction(frameNumber);
+                applyOrMergeTransaction(mRtTransaction, frameNumber);
                 mRtHandlingPositionUpdates = false;
             }
         }

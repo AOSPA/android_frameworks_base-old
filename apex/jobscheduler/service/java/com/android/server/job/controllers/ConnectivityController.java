@@ -29,6 +29,7 @@ import android.net.ConnectivityManager;
 import android.net.ConnectivityManager.NetworkCallback;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.NetworkPolicyManager;
 import android.net.NetworkRequest;
 import android.os.Handler;
 import android.os.Looper;
@@ -76,12 +77,26 @@ public final class ConnectivityController extends RestrictingController implemen
             || Log.isLoggable(TAG, Log.DEBUG);
 
     // The networking stack has a hard limit so we can't make this configurable.
-    private static final int MAX_NETWORK_CALLBACKS = 50;
+    private static final int MAX_NETWORK_CALLBACKS = 125;
     /**
      * Minimum amount of time that should have elapsed before we'll update a {@link UidStats}
      * instance.
      */
     private static final long MIN_STATS_UPDATE_INTERVAL_MS = 30_000L;
+    private static final long MIN_ADJUST_CALLBACK_INTERVAL_MS = 1_000L;
+
+    private static final int UNBYPASSABLE_BG_BLOCKED_REASONS =
+            ~ConnectivityManager.BLOCKED_REASON_NONE;
+    private static final int UNBYPASSABLE_EJ_BLOCKED_REASONS =
+            ~(ConnectivityManager.BLOCKED_REASON_APP_STANDBY
+                    | ConnectivityManager.BLOCKED_REASON_BATTERY_SAVER
+                    | ConnectivityManager.BLOCKED_REASON_DOZE);
+    private static final int UNBYPASSABLE_FOREGROUND_BLOCKED_REASONS =
+            ~(ConnectivityManager.BLOCKED_REASON_APP_STANDBY
+                    | ConnectivityManager.BLOCKED_REASON_BATTERY_SAVER
+                    | ConnectivityManager.BLOCKED_REASON_DOZE
+                    | ConnectivityManager.BLOCKED_METERED_REASON_DATA_SAVER
+                    | ConnectivityManager.BLOCKED_METERED_REASON_USER_RESTRICTED);
 
     private final ConnectivityManager mConnManager;
     private final NetworkPolicyManagerInternal mNetPolicyManagerInternal;
@@ -107,51 +122,82 @@ public final class ConnectivityController extends RestrictingController implemen
     private final SparseArray<UidDefaultNetworkCallback> mCurrentDefaultNetworkCallbacks =
             new SparseArray<>();
     private final Comparator<UidStats> mUidStatsComparator = new Comparator<UidStats>() {
-        private int prioritizeExistence(int v1, int v2) {
-            if (v1 > 0 && v2 > 0) {
+        private int prioritizeExistenceOver(int threshold, int v1, int v2) {
+            // Check if they're both on the same side of the threshold.
+            if ((v1 > threshold && v2 > threshold) || (v1 <= threshold && v2 <= threshold)) {
                 return 0;
             }
-            return v2 - v1;
+            // They're on opposite sides of the threshold.
+            if (v1 > threshold) {
+                return -1;
+            }
+            return 1;
         }
 
         @Override
         public int compare(UidStats us1, UidStats us2) {
-            // TODO: build a better prioritization scheme
-            // Some things to use:
-            //   * Proc state
-            //   * IMPORTANT_WHILE_IN_FOREGROUND bit
-            final int runningPriority = prioritizeExistence(us1.numRunning, us2.numRunning);
+            // Prioritize a UID ahead of another based on:
+            //   1. Already running connectivity jobs (so we don't drop the listener)
+            //   2. Waiting connectivity jobs would be ready with connectivity
+            //   3. An existing network satisfies a waiting connectivity job's requirements
+            //   4. TOP proc state
+            //   5. Existence of treat-as-EJ EJs (not just requested EJs)
+            //   6. FGS proc state
+            //   7. EJ enqueue time
+            //   8. Any other important job priorities/proc states
+            //   9. Enqueue time
+            // TODO: maybe consider number of jobs
+            // TODO: consider IMPORTANT_WHILE_FOREGROUND bit
+            final int runningPriority = prioritizeExistenceOver(0,
+                    us1.runningJobs.size(), us2.runningJobs.size());
             if (runningPriority != 0) {
                 return runningPriority;
             }
             // Prioritize any UIDs that have jobs that would be ready ahead of UIDs that don't.
-            final int readyWithConnPriority =
-                    prioritizeExistence(us1.numReadyWithConnectivity, us2.numReadyWithConnectivity);
+            final int readyWithConnPriority = prioritizeExistenceOver(0,
+                    us1.numReadyWithConnectivity, us2.numReadyWithConnectivity);
             if (readyWithConnPriority != 0) {
                 return readyWithConnPriority;
             }
             // They both have jobs that would be ready. Prioritize the UIDs whose requested
             // network is available ahead of UIDs that don't have their requested network available.
-            final int reqAvailPriority = prioritizeExistence(
+            final int reqAvailPriority = prioritizeExistenceOver(0,
                     us1.numRequestedNetworkAvailable, us2.numRequestedNetworkAvailable);
             if (reqAvailPriority != 0) {
                 return reqAvailPriority;
             }
-            // They both have jobs with available networks. Prioritize based on:
-            //   1. (eventually) proc state
-            //   2. Existence of runnable EJs (not just requested)
-            //   3. Enqueue time
-            // TODO: maybe consider number of jobs
-            final int ejPriority = prioritizeExistence(us1.numEJs, us2.numEJs);
+            // Prioritize the top app. If neither are top apps, then use a later prioritization
+            // check.
+            final int topPriority = prioritizeExistenceOver(JobInfo.PRIORITY_TOP_APP - 1,
+                    us1.basePriority, us2.basePriority);
+            if (topPriority != 0) {
+                return topPriority;
+            }
+            // They're either both TOP or both not TOP. Prioritize the app that has runnable EJs
+            // pending.
+            final int ejPriority = prioritizeExistenceOver(0, us1.numEJs, us2.numEJs);
             if (ejPriority != 0) {
                 return ejPriority;
             }
-            // They both have EJs. Order them by EJ enqueue time to help provide low EJ latency.
+            // They both have runnable EJs.
+            // Prioritize an FGS+ app. If neither are FGS+ apps, then use a later prioritization
+            // check.
+            final int fgsPriority = prioritizeExistenceOver(JobInfo.PRIORITY_FOREGROUND_SERVICE - 1,
+                    us1.basePriority, us2.basePriority);
+            if (fgsPriority != 0) {
+                return fgsPriority;
+            }
+            // Order them by EJ enqueue time to help provide low EJ latency.
             if (us1.earliestEJEnqueueTime < us2.earliestEJEnqueueTime) {
                 return -1;
             } else if (us1.earliestEJEnqueueTime > us2.earliestEJEnqueueTime) {
                 return 1;
             }
+            // Order by any latent important proc states.
+            if (us1.basePriority != us2.basePriority) {
+                return us2.basePriority - us1.basePriority;
+            }
+            // Order by enqueue time.
             if (us1.earliestEnqueueTime < us2.earliestEnqueueTime) {
                 return -1;
             }
@@ -166,8 +212,9 @@ public final class ConnectivityController extends RestrictingController implemen
      * is only done in {@link #maybeAdjustRegisteredCallbacksLocked()} and may sometimes be stale.
      */
     private final List<UidStats> mSortedStats = new ArrayList<>();
+    private long mLastCallbackAdjustmentTimeElapsed;
 
-    private static final int MSG_REEVALUATE_JOBS = 2;
+    private static final int MSG_ADJUST_CALLBACKS = 0;
 
     private final Handler mHandler;
 
@@ -210,7 +257,18 @@ public final class ConnectivityController extends RestrictingController implemen
         if (jobStatus.hasConnectivityConstraint()) {
             final UidStats uidStats =
                     getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
-            uidStats.numRunning++;
+            uidStats.runningJobs.add(jobStatus);
+        }
+    }
+
+    @GuardedBy("mLock")
+    @Override
+    public void unprepareFromExecutionLocked(JobStatus jobStatus) {
+        if (jobStatus.hasConnectivityConstraint()) {
+            final UidStats uidStats =
+                    getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
+            uidStats.runningJobs.remove(jobStatus);
+            postAdjustCallbacks();
         }
     }
 
@@ -226,11 +284,9 @@ public final class ConnectivityController extends RestrictingController implemen
             final UidStats uidStats =
                     getUidStats(jobStatus.getSourceUid(), jobStatus.getSourcePackageName(), true);
             uidStats.numReadyWithConnectivity--;
-            if (jobStatus.madeActive != 0) {
-                uidStats.numRunning--;
-            }
+            uidStats.runningJobs.remove(jobStatus);
             maybeRevokeStandbyExceptionLocked(jobStatus);
-            maybeAdjustRegisteredCallbacksLocked();
+            postAdjustCallbacks();
         }
     }
 
@@ -432,11 +488,15 @@ public final class ConnectivityController extends RestrictingController implemen
     @GuardedBy("mLock")
     @Override
     public void onAppRemovedLocked(String pkgName, int uid) {
-        mTrackedJobs.delete(uid);
-        UidStats uidStats = mUidStats.removeReturnOld(uid);
-        unregisterDefaultNetworkCallbackLocked(uid, sElapsedRealtimeClock.millis());
-        mSortedStats.remove(uidStats);
-        registerPendingUidCallbacksLocked();
+        if (mService.getPackagesForUidLocked(uid) == null) {
+            // All packages in the UID have been removed. It's safe to remove things based on
+            // UID alone.
+            mTrackedJobs.delete(uid);
+            UidStats uidStats = mUidStats.removeReturnOld(uid);
+            unregisterDefaultNetworkCallbackLocked(uid, sElapsedRealtimeClock.millis());
+            mSortedStats.remove(uidStats);
+            registerPendingUidCallbacksLocked();
+        }
     }
 
     @GuardedBy("mLock")
@@ -451,7 +511,17 @@ public final class ConnectivityController extends RestrictingController implemen
                 mUidStats.removeAt(u);
             }
         }
-        maybeAdjustRegisteredCallbacksLocked();
+        postAdjustCallbacks();
+    }
+
+    @GuardedBy("mLock")
+    @Override
+    public void onUidPriorityChangedLocked(int uid, int newPriority) {
+        UidStats uidStats = mUidStats.get(uid);
+        if (uidStats != null && uidStats.basePriority != newPriority) {
+            uidStats.basePriority = newPriority;
+            postAdjustCallbacks();
+        }
     }
 
     private boolean isUsable(NetworkCapabilities capabilities) {
@@ -598,8 +668,7 @@ public final class ConnectivityController extends RestrictingController implemen
             mSortedStats.add(uidStats);
         }
         if (mCurrentDefaultNetworkCallbacks.size() >= MAX_NETWORK_CALLBACKS) {
-            // TODO: offload to handler
-            maybeAdjustRegisteredCallbacksLocked();
+            postAdjustCallbacks();
             return;
         }
         registerPendingUidCallbacksLocked();
@@ -628,19 +697,36 @@ public final class ConnectivityController extends RestrictingController implemen
             }
             callback.setUid(uidStats.uid);
             mCurrentDefaultNetworkCallbacks.append(uidStats.uid, callback);
-            mConnManager.registerDefaultNetworkCallbackAsUid(uidStats.uid, callback, mHandler);
+            mConnManager.registerDefaultNetworkCallbackForUid(uidStats.uid, callback, mHandler);
         }
+    }
+
+    private void postAdjustCallbacks() {
+        postAdjustCallbacks(0);
+    }
+
+    private void postAdjustCallbacks(long delayMs) {
+        mHandler.sendEmptyMessageDelayed(MSG_ADJUST_CALLBACKS, delayMs);
     }
 
     @GuardedBy("mLock")
     private void maybeAdjustRegisteredCallbacksLocked() {
+        mHandler.removeMessages(MSG_ADJUST_CALLBACKS);
+
         final int count = mUidStats.size();
         if (count == mCurrentDefaultNetworkCallbacks.size()) {
             // All of them are registered and there are no blocked UIDs.
             // No point evaluating all UIDs.
             return;
         }
+
         final long nowElapsed = sElapsedRealtimeClock.millis();
+        if (nowElapsed - mLastCallbackAdjustmentTimeElapsed < MIN_ADJUST_CALLBACK_INTERVAL_MS) {
+            postAdjustCallbacks(MIN_ADJUST_CALLBACK_INTERVAL_MS);
+            return;
+        }
+
+        mLastCallbackAdjustmentTimeElapsed = nowElapsed;
         mSortedStats.clear();
 
         for (int u = 0; u < mUidStats.size(); ++u) {
@@ -662,17 +748,23 @@ public final class ConnectivityController extends RestrictingController implemen
 
                 for (int j = 0; j < jobs.size(); ++j) {
                     JobStatus job = jobs.valueAt(j);
-                    us.earliestEnqueueTime = Math.min(us.earliestEnqueueTime, job.enqueueTime);
                     if (wouldBeReadyWithConstraintLocked(job, JobStatus.CONSTRAINT_CONNECTIVITY)) {
                         us.numReadyWithConnectivity++;
                         if (isNetworkAvailable(job)) {
                             us.numRequestedNetworkAvailable++;
                         }
+                        // Only use the enqueue time of jobs that would be ready to prevent apps
+                        // from gaming the system (eg. by scheduling a job that requires all
+                        // constraints and has a minimum latency of 6 months to always have the
+                        // earliest enqueue time).
+                        us.earliestEnqueueTime = Math.min(us.earliestEnqueueTime, job.enqueueTime);
+                        if (job.shouldTreatAsExpeditedJob() || job.startedAsExpeditedJob) {
+                            us.earliestEJEnqueueTime =
+                                    Math.min(us.earliestEJEnqueueTime, job.enqueueTime);
+                        }
                     }
                     if (job.shouldTreatAsExpeditedJob() || job.startedAsExpeditedJob) {
                         us.numEJs++;
-                        us.earliestEJEnqueueTime =
-                                Math.min(us.earliestEJEnqueueTime, job.enqueueTime);
                     } else {
                         us.numRegular++;
                     }
@@ -702,7 +794,7 @@ public final class ConnectivityController extends RestrictingController implemen
                     }
                     defaultNetworkCallback.setUid(us.uid);
                     mCurrentDefaultNetworkCallbacks.append(us.uid, defaultNetworkCallback);
-                    mConnManager.registerDefaultNetworkCallbackAsUid(
+                    mConnManager.registerDefaultNetworkCallbackForUid(
                             us.uid, defaultNetworkCallback, mHandler);
                 }
             }
@@ -751,6 +843,42 @@ public final class ConnectivityController extends RestrictingController implemen
         }
     }
 
+    @GuardedBy("mLock")
+    @Nullable
+    private Network getNetworkLocked(@NonNull JobStatus jobStatus) {
+        final UidDefaultNetworkCallback defaultNetworkCallback =
+                mCurrentDefaultNetworkCallbacks.get(jobStatus.getSourceUid());
+        if (defaultNetworkCallback == null) {
+            return null;
+        }
+
+        UidStats uidStats = mUidStats.get(jobStatus.getSourceUid());
+
+        final int unbypassableBlockedReasons;
+        // TOP will probably have fewer reasons, so we may not have to worry about returning
+        // BG_BLOCKED for a TOP app. However, better safe than sorry.
+        if (uidStats.basePriority >= JobInfo.PRIORITY_BOUND_FOREGROUND_SERVICE
+                || (jobStatus.getFlags() & JobInfo.FLAG_WILL_BE_FOREGROUND) != 0) {
+            if (DEBUG) {
+                Slog.d(TAG, "Using FG bypass for " + jobStatus.getSourceUid());
+            }
+            unbypassableBlockedReasons = UNBYPASSABLE_FOREGROUND_BLOCKED_REASONS;
+        } else if (jobStatus.shouldTreatAsExpeditedJob() || jobStatus.startedAsExpeditedJob) {
+            if (DEBUG) {
+                Slog.d(TAG, "Using EJ bypass for " + jobStatus.getSourceUid());
+            }
+            unbypassableBlockedReasons = UNBYPASSABLE_EJ_BLOCKED_REASONS;
+        } else {
+            if (DEBUG) {
+                Slog.d(TAG, "Using BG bypass for " + jobStatus.getSourceUid());
+            }
+            unbypassableBlockedReasons = UNBYPASSABLE_BG_BLOCKED_REASONS;
+        }
+
+        return (unbypassableBlockedReasons & defaultNetworkCallback.mBlockedReasons) == 0
+                ? defaultNetworkCallback.mDefaultNetwork : null;
+    }
+
     private boolean updateConstraintsSatisfied(JobStatus jobStatus) {
         final long nowElapsed = sElapsedRealtimeClock.millis();
         final UidDefaultNetworkCallback defaultNetworkCallback =
@@ -759,9 +887,7 @@ public final class ConnectivityController extends RestrictingController implemen
             maybeRegisterDefaultNetworkCallbackLocked(jobStatus);
             return updateConstraintsSatisfied(jobStatus, nowElapsed, null, null);
         }
-        final Network network =
-                (jobStatus.shouldIgnoreNetworkBlocking() || !defaultNetworkCallback.mBlocked)
-                        ? defaultNetworkCallback.mDefaultNetwork : null;
+        final Network network = getNetworkLocked(jobStatus);
         final NetworkCapabilities capabilities = getNetworkCapabilities(network);
         return updateConstraintsSatisfied(jobStatus, nowElapsed, network, capabilities);
     }
@@ -819,36 +945,22 @@ public final class ConnectivityController extends RestrictingController implemen
         UidDefaultNetworkCallback defaultNetworkCallback =
                 mCurrentDefaultNetworkCallbacks.get(jobs.valueAt(0).getSourceUid());
         if (defaultNetworkCallback == null) {
-            maybeRegisterDefaultNetworkCallbackLocked(jobs.valueAt(0));
+            // This method is only called via a network callback object. That means something
+            // changed about a general network characteristic (since we wouldn't be in this
+            // situation if called from a UID_specific callback). The general network callback
+            // will handle adjusting the per-UID callbacks, so nothing left to do here.
             return false;
         }
-
-        final Network network = defaultNetworkCallback.mBlocked
-                ? null : defaultNetworkCallback.mDefaultNetwork;
-        final NetworkCapabilities capabilities = getNetworkCapabilities(network);
-        final boolean networkMatch = (filterNetwork == null
-                || Objects.equals(filterNetwork, network));
-        // Ignore blocked
-        final Network exemptedNetwork = defaultNetworkCallback.mDefaultNetwork;
-        final NetworkCapabilities exemptedNetworkCapabilities =
-                getNetworkCapabilities(exemptedNetwork);
-        final boolean exemptedNetworkMatch =
-                (filterNetwork == null || Objects.equals(filterNetwork, exemptedNetwork));
 
         final long nowElapsed = sElapsedRealtimeClock.millis();
         boolean changed = false;
         for (int i = jobs.size() - 1; i >= 0; i--) {
             final JobStatus js = jobs.valueAt(i);
 
-            Network net = network;
-            NetworkCapabilities netCap = capabilities;
-            boolean match = networkMatch;
-
-            if (js.shouldIgnoreNetworkBlocking()) {
-                net = exemptedNetwork;
-                netCap = exemptedNetworkCapabilities;
-                match = exemptedNetworkMatch;
-            }
+            final Network net = getNetworkLocked(js);
+            final NetworkCapabilities netCap = getNetworkCapabilities(net);
+            final boolean match = (filterNetwork == null
+                    || Objects.equals(filterNetwork, net));
 
             // Update either when we have a network match, or when the
             // job hasn't yet been evaluated against the currently
@@ -898,7 +1010,7 @@ public final class ConnectivityController extends RestrictingController implemen
             synchronized (mLock) {
                 mAvailableNetworks.put(network, capabilities);
                 updateTrackedJobsLocked(-1, network);
-                maybeAdjustRegisteredCallbacksLocked();
+                postAdjustCallbacks();
             }
         }
 
@@ -916,7 +1028,7 @@ public final class ConnectivityController extends RestrictingController implemen
                     }
                 }
                 updateTrackedJobsLocked(-1, network);
-                maybeAdjustRegisteredCallbacksLocked();
+                postAdjustCallbacks();
             }
         }
     };
@@ -930,8 +1042,10 @@ public final class ConnectivityController extends RestrictingController implemen
         public void handleMessage(Message msg) {
             synchronized (mLock) {
                 switch (msg.what) {
-                    case MSG_REEVALUATE_JOBS:
-                        updateTrackedJobsLocked(-1, null);
+                    case MSG_ADJUST_CALLBACKS:
+                        synchronized (mLock) {
+                            maybeAdjustRegisteredCallbacksLocked();
+                        }
                         break;
                 }
             }
@@ -942,7 +1056,7 @@ public final class ConnectivityController extends RestrictingController implemen
         private int mUid;
         @Nullable
         private Network mDefaultNetwork;
-        private boolean mBlocked;
+        private int mBlockedReasons;
 
         private void setUid(int uid) {
             mUid = uid;
@@ -960,17 +1074,17 @@ public final class ConnectivityController extends RestrictingController implemen
         }
 
         @Override
-        public void onBlockedStatusChanged(Network network, boolean blocked) {
+        public void onBlockedStatusChanged(Network network, int blockedReasons) {
             if (DEBUG) {
                 Slog.v(TAG, "default-onBlockedStatusChanged(" + mUid + "): "
-                        + network + " -> " + blocked);
+                        + network + " -> " + blockedReasons);
             }
             if (mUid == UserHandle.USER_NULL) {
                 return;
             }
             synchronized (mLock) {
                 mDefaultNetwork = network;
-                mBlocked = blocked;
+                mBlockedReasons = blockedReasons;
                 updateTrackedJobsLocked(mUid, network);
             }
         }
@@ -1014,8 +1128,13 @@ public final class ConnectivityController extends RestrictingController implemen
             synchronized (mLock) {
                 if (Objects.equals(mDefaultNetwork, network)) {
                     mDefaultNetwork = null;
+                    updateTrackedJobsLocked(mUid, network);
+                    // Add a delay in case onAvailable()+onBlockedStatusChanged is called for a
+                    // new network. If this onLost was called because the network is completely
+                    // gone, the delay will hel make sure we don't have a short burst of adjusting
+                    // callback calls.
+                    postAdjustCallbacks(1000);
                 }
-                updateTrackedJobsLocked(mUid, network);
             }
         }
 
@@ -1029,7 +1148,7 @@ public final class ConnectivityController extends RestrictingController implemen
                 pw.print("Network: ");
                 pw.print(mDefaultNetwork);
                 pw.print(" (blocked=");
-                pw.print(mBlocked);
+                pw.print(NetworkPolicyManager.blockedReasonsToString(mBlockedReasons));
                 pw.print(")");
             }
             pw.println();
@@ -1038,7 +1157,8 @@ public final class ConnectivityController extends RestrictingController implemen
 
     private static class UidStats {
         public final int uid;
-        public int numRunning;
+        public int basePriority;
+        public final ArraySet<JobStatus> runningJobs = new ArraySet<>();
         public int numReadyWithConnectivity;
         public int numRequestedNetworkAvailable;
         public int numEJs;
@@ -1054,7 +1174,8 @@ public final class ConnectivityController extends RestrictingController implemen
         private void dumpLocked(IndentingPrintWriter pw, final long nowElapsed) {
             pw.print("UidStats{");
             pw.print("uid", uid);
-            pw.print("#run", numRunning);
+            pw.print("pri", basePriority);
+            pw.print("#run", runningJobs.size());
             pw.print("#readyWithConn", numReadyWithConnectivity);
             pw.print("#netAvail", numRequestedNetworkAvailable);
             pw.print("#EJs", numEJs);

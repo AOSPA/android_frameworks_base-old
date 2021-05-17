@@ -16,6 +16,8 @@
 
 package com.android.server.vcn;
 
+import static android.net.NetworkCapabilities.NET_CAPABILITY_DUN;
+import static android.net.NetworkCapabilities.NET_CAPABILITY_INTERNET;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_CONGESTED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_METERED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING;
@@ -23,6 +25,7 @@ import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_VCN_MANAGED;
 import static android.net.NetworkCapabilities.TRANSPORT_CELLULAR;
 import static android.net.NetworkCapabilities.TRANSPORT_WIFI;
+import static android.net.ipsec.ike.exceptions.IkeProtocolException.ERROR_TYPE_AUTHENTICATION_FAILED;
 import static android.net.vcn.VcnManager.VCN_ERROR_CODE_CONFIG_ERROR;
 import static android.net.vcn.VcnManager.VCN_ERROR_CODE_INTERNAL_ERROR;
 import static android.net.vcn.VcnManager.VCN_ERROR_CODE_NETWORK_ERROR;
@@ -32,6 +35,7 @@ import static com.android.server.VcnManagementService.VDBG;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
+import android.net.ConnectivityManager;
 import android.net.InetAddresses;
 import android.net.IpPrefix;
 import android.net.IpSecManager;
@@ -44,8 +48,11 @@ import android.net.Network;
 import android.net.NetworkAgent;
 import android.net.NetworkAgentConfig;
 import android.net.NetworkCapabilities;
+import android.net.NetworkProvider;
+import android.net.NetworkScore;
 import android.net.RouteInfo;
 import android.net.TelephonyNetworkSpecifier;
+import android.net.TunnelConnectionParams;
 import android.net.Uri;
 import android.net.annotations.PolicyDirection;
 import android.net.ipsec.ike.ChildSessionCallback;
@@ -55,11 +62,10 @@ import android.net.ipsec.ike.IkeSession;
 import android.net.ipsec.ike.IkeSessionCallback;
 import android.net.ipsec.ike.IkeSessionConfiguration;
 import android.net.ipsec.ike.IkeSessionParams;
-import android.net.ipsec.ike.exceptions.AuthenticationFailedException;
+import android.net.ipsec.ike.IkeTunnelConnectionParams;
 import android.net.ipsec.ike.exceptions.IkeException;
 import android.net.ipsec.ike.exceptions.IkeInternalException;
 import android.net.ipsec.ike.exceptions.IkeProtocolException;
-import android.net.vcn.VcnControlPlaneIkeConfig;
 import android.net.vcn.VcnGatewayConnectionConfig;
 import android.net.vcn.VcnTransportInfo;
 import android.net.wifi.WifiInfo;
@@ -75,6 +81,7 @@ import android.util.Slog;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.annotations.VisibleForTesting.Visibility;
+import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.State;
 import com.android.internal.util.StateMachine;
 import com.android.internal.util.WakeupMessage;
@@ -82,6 +89,7 @@ import com.android.server.vcn.TelephonySubscriptionTracker.TelephonySubscription
 import com.android.server.vcn.UnderlyingNetworkTracker.UnderlyingNetworkRecord;
 import com.android.server.vcn.UnderlyingNetworkTracker.UnderlyingNetworkTrackerCallback;
 import com.android.server.vcn.Vcn.VcnGatewayStatusCallback;
+import com.android.server.vcn.util.MtuUtils;
 
 import java.io.IOException;
 import java.net.Inet4Address;
@@ -92,6 +100,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Set;
 import java.util.concurrent.TimeUnit;
+import java.util.function.Consumer;
 
 /**
  * A single VCN Gateway Connection, providing a single public-facing VCN network.
@@ -445,6 +454,44 @@ public class VcnGatewayConnection extends StateMachine {
      */
     private static final int EVENT_SAFE_MODE_TIMEOUT_EXCEEDED = 10;
 
+    /**
+     * Sent when an IKE has completed migration, and created updated transforms for application.
+     *
+     * <p>Only relevant in the Connected state.
+     *
+     * @param arg1 The session token for the IKE Session that completed migration, used to prevent
+     *     out-of-date signals from propagating.
+     * @param obj @NonNull An EventMigrationCompletedInfo instance with relevant data.
+     */
+    private static final int EVENT_MIGRATION_COMPLETED = 11;
+
+    private static class EventMigrationCompletedInfo implements EventInfo {
+        @NonNull public final IpSecTransform inTransform;
+        @NonNull public final IpSecTransform outTransform;
+
+        EventMigrationCompletedInfo(
+                @NonNull IpSecTransform inTransform, @NonNull IpSecTransform outTransform) {
+            this.inTransform = Objects.requireNonNull(inTransform);
+            this.outTransform = Objects.requireNonNull(outTransform);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(inTransform, outTransform);
+        }
+
+        @Override
+        public boolean equals(@Nullable Object other) {
+            if (!(other instanceof EventMigrationCompletedInfo)) {
+                return false;
+            }
+
+            final EventMigrationCompletedInfo rhs = (EventMigrationCompletedInfo) other;
+            return Objects.equals(inTransform, rhs.inTransform)
+                    && Objects.equals(outTransform, rhs.outTransform);
+        }
+    }
+
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     @NonNull
     final DisconnectedState mDisconnectedState = new DisconnectedState();
@@ -474,6 +521,7 @@ public class VcnGatewayConnection extends StateMachine {
     @NonNull private final VcnGatewayStatusCallback mGatewayStatusCallback;
     @NonNull private final Dependencies mDeps;
     @NonNull private final VcnUnderlyingNetworkTrackerCallback mUnderlyingNetworkTrackerCallback;
+    private final boolean mIsMobileDataEnabled;
 
     @NonNull private final IpSecManager mIpSecManager;
 
@@ -502,6 +550,15 @@ public class VcnGatewayConnection extends StateMachine {
      * unwanted, the owning VCN entering safe mode, or an irrecoverable internal failure.
      */
     private boolean mIsQuitting = false;
+
+    /**
+     * Whether the VcnGatewayConnection is in safe mode.
+     *
+     * <p>Upon hitting the safe mode timeout, this will be set to {@code true}. In safe mode, this
+     * VcnGatewayConnection will continue attempting to connect, and if a successful connection is
+     * made, safe mode will be exited.
+     */
+    private boolean mIsInSafeMode = false;
 
     /**
      * The token used by the primary/current/active session.
@@ -562,8 +619,7 @@ public class VcnGatewayConnection extends StateMachine {
      * <p>Set in Connected state, always @NonNull in Connected, Migrating states, @Nullable
      * otherwise.
      */
-    @VisibleForTesting(visibility = Visibility.PRIVATE)
-    NetworkAgent mNetworkAgent;
+    private VcnNetworkAgent mNetworkAgent;
 
     @Nullable private WakeupMessage mTeardownTimeoutAlarm;
     @Nullable private WakeupMessage mDisconnectRequestAlarm;
@@ -575,13 +631,15 @@ public class VcnGatewayConnection extends StateMachine {
             @NonNull ParcelUuid subscriptionGroup,
             @NonNull TelephonySubscriptionSnapshot snapshot,
             @NonNull VcnGatewayConnectionConfig connectionConfig,
-            @NonNull VcnGatewayStatusCallback gatewayStatusCallback) {
+            @NonNull VcnGatewayStatusCallback gatewayStatusCallback,
+            boolean isMobileDataEnabled) {
         this(
                 vcnContext,
                 subscriptionGroup,
                 snapshot,
                 connectionConfig,
                 gatewayStatusCallback,
+                isMobileDataEnabled,
                 new Dependencies());
     }
 
@@ -592,6 +650,7 @@ public class VcnGatewayConnection extends StateMachine {
             @NonNull TelephonySubscriptionSnapshot snapshot,
             @NonNull VcnGatewayConnectionConfig connectionConfig,
             @NonNull VcnGatewayStatusCallback gatewayStatusCallback,
+            boolean isMobileDataEnabled,
             @NonNull Dependencies deps) {
         super(TAG, Objects.requireNonNull(vcnContext, "Missing vcnContext").getLooper());
         mVcnContext = vcnContext;
@@ -599,6 +658,7 @@ public class VcnGatewayConnection extends StateMachine {
         mConnectionConfig = Objects.requireNonNull(connectionConfig, "Missing connectionConfig");
         mGatewayStatusCallback =
                 Objects.requireNonNull(gatewayStatusCallback, "Missing gatewayStatusCallback");
+        mIsMobileDataEnabled = isMobileDataEnabled;
         mDeps = Objects.requireNonNull(deps, "Missing deps");
 
         mLastSnapshot = Objects.requireNonNull(snapshot, "Missing snapshot");
@@ -626,6 +686,14 @@ public class VcnGatewayConnection extends StateMachine {
         setInitialState(mDisconnectedState);
         setDbg(VDBG);
         start();
+    }
+
+    /** Queries whether this VcnGatewayConnection is in safe mode. */
+    public boolean isInSafeMode() {
+        // Accessing internal state; must only be done on looper thread.
+        mVcnContext.ensureRunningOnLooperThread();
+
+        return mIsInSafeMode;
     }
 
     /**
@@ -980,7 +1048,7 @@ public class VcnGatewayConnection extends StateMachine {
         // IkeSessionCallback.onClosedExceptionally(), which calls sessionClosed()
         if (exception != null) {
             mGatewayStatusCallback.onGatewayConnectionError(
-                    mConnectionConfig.getExposedCapabilities(),
+                    mConnectionConfig.getGatewayConnectionName(),
                     VCN_ERROR_CODE_INTERNAL_ERROR,
                     RuntimeException.class.getName(),
                     "Received "
@@ -992,12 +1060,21 @@ public class VcnGatewayConnection extends StateMachine {
         sessionLostWithoutCallback(token, exception);
     }
 
+    private static boolean isIkeAuthFailure(@NonNull Exception exception) {
+        if (!(exception instanceof IkeProtocolException)) {
+            return false;
+        }
+
+        return ((IkeProtocolException) exception).getErrorType()
+                == ERROR_TYPE_AUTHENTICATION_FAILED;
+    }
+
     private void notifyStatusCallbackForSessionClosed(@NonNull Exception exception) {
         final int errorCode;
         final String exceptionClass;
         final String exceptionMessage;
 
-        if (exception instanceof AuthenticationFailedException) {
+        if (isIkeAuthFailure(exception)) {
             errorCode = VCN_ERROR_CODE_CONFIG_ERROR;
             exceptionClass = exception.getClass().getName();
             exceptionMessage = exception.getMessage();
@@ -1017,7 +1094,7 @@ public class VcnGatewayConnection extends StateMachine {
         }
 
         mGatewayStatusCallback.onGatewayConnectionError(
-                mConnectionConfig.getExposedCapabilities(),
+                mConnectionConfig.getGatewayConnectionName(),
                 errorCode,
                 exceptionClass,
                 exceptionMessage);
@@ -1032,6 +1109,14 @@ public class VcnGatewayConnection extends StateMachine {
         // Disconnecting state.
         sessionLostWithoutCallback(token, exception);
         sendMessageAndAcquireWakeLock(EVENT_SESSION_CLOSED, token);
+    }
+
+    private void migrationCompleted(
+            int token, @NonNull IpSecTransform inTransform, @NonNull IpSecTransform outTransform) {
+        sendMessageAndAcquireWakeLock(
+                EVENT_MIGRATION_COMPLETED,
+                token,
+                new EventMigrationCompletedInfo(inTransform, outTransform));
     }
 
     private void childTransformCreated(
@@ -1129,7 +1214,9 @@ public class VcnGatewayConnection extends StateMachine {
                 case EVENT_SETUP_COMPLETED: // Fallthrough
                 case EVENT_DISCONNECT_REQUESTED: // Fallthrough
                 case EVENT_TEARDOWN_TIMEOUT_EXPIRED: // Fallthrough
-                case EVENT_SUBSCRIPTIONS_CHANGED:
+                case EVENT_SUBSCRIPTIONS_CHANGED: // Fallthrough
+                case EVENT_SAFE_MODE_TIMEOUT_EXCEEDED: // Fallthrough
+                case EVENT_MIGRATION_COMPLETED:
                     logUnexpectedEvent(msg.what);
                     break;
                 default:
@@ -1160,6 +1247,15 @@ public class VcnGatewayConnection extends StateMachine {
                 // Still need to wait for full closure
                 transitionTo(mDisconnectingState);
             }
+        }
+
+        protected void handleSafeModeTimeoutExceeded() {
+            mSafeModeTimeoutAlarm = null;
+
+            // Connectivity for this GatewayConnection is broken; tear down the Network.
+            teardownNetwork();
+            mIsInSafeMode = true;
+            mGatewayStatusCallback.onSafeModeStatusChanged();
         }
 
         protected void logUnexpectedEvent(int what) {
@@ -1315,8 +1411,7 @@ public class VcnGatewayConnection extends StateMachine {
                     }
                     break;
                 case EVENT_SAFE_MODE_TIMEOUT_EXCEEDED:
-                    mGatewayStatusCallback.onEnteredSafeMode();
-                    mSafeModeTimeoutAlarm = null;
+                    handleSafeModeTimeoutExceeded();
                     break;
                 default:
                     logUnhandledMessage(msg);
@@ -1401,8 +1496,7 @@ public class VcnGatewayConnection extends StateMachine {
                     handleDisconnectRequested((EventDisconnectRequestedInfo) msg.obj);
                     break;
                 case EVENT_SAFE_MODE_TIMEOUT_EXCEEDED:
-                    mGatewayStatusCallback.onEnteredSafeMode();
-                    mSafeModeTimeoutAlarm = null;
+                    handleSafeModeTimeoutExceeded();
                     break;
                 default:
                     logUnhandledMessage(msg);
@@ -1414,48 +1508,61 @@ public class VcnGatewayConnection extends StateMachine {
     private abstract class ConnectedStateBase extends ActiveBaseState {
         protected void updateNetworkAgent(
                 @NonNull IpSecTunnelInterface tunnelIface,
-                @NonNull NetworkAgent agent,
+                @NonNull VcnNetworkAgent agent,
                 @NonNull VcnChildSessionConfiguration childConfig) {
             final NetworkCapabilities caps =
-                    buildNetworkCapabilities(mConnectionConfig, mUnderlying);
+                    buildNetworkCapabilities(mConnectionConfig, mUnderlying, mIsMobileDataEnabled);
             final LinkProperties lp =
-                    buildConnectedLinkProperties(mConnectionConfig, tunnelIface, childConfig);
+                    buildConnectedLinkProperties(
+                            mConnectionConfig, tunnelIface, childConfig, mUnderlying);
 
             agent.sendNetworkCapabilities(caps);
             agent.sendLinkProperties(lp);
         }
 
-        protected NetworkAgent buildNetworkAgent(
+        protected VcnNetworkAgent buildNetworkAgent(
                 @NonNull IpSecTunnelInterface tunnelIface,
                 @NonNull VcnChildSessionConfiguration childConfig) {
             final NetworkCapabilities caps =
-                    buildNetworkCapabilities(mConnectionConfig, mUnderlying);
+                    buildNetworkCapabilities(mConnectionConfig, mUnderlying, mIsMobileDataEnabled);
             final LinkProperties lp =
-                    buildConnectedLinkProperties(mConnectionConfig, tunnelIface, childConfig);
+                    buildConnectedLinkProperties(
+                            mConnectionConfig, tunnelIface, childConfig, mUnderlying);
+            final NetworkAgentConfig nac =
+                    new NetworkAgentConfig.Builder()
+                            .setLegacyType(ConnectivityManager.TYPE_MOBILE)
+                            .build();
 
-            final NetworkAgent agent =
-                    new NetworkAgent(
-                            mVcnContext.getContext(),
-                            mVcnContext.getLooper(),
+            final VcnNetworkAgent agent =
+                    mDeps.newNetworkAgent(
+                            mVcnContext,
                             TAG,
                             caps,
                             lp,
                             Vcn.getNetworkScore(),
-                            new NetworkAgentConfig.Builder().build(),
-                            mVcnContext.getVcnNetworkProvider()) {
-                        @Override
-                        public void onNetworkUnwanted() {
-                            Slog.d(TAG, "NetworkAgent was unwanted");
-                            teardownAsynchronously();
-                        }
+                            nac,
+                            mVcnContext.getVcnNetworkProvider(),
+                            (agentRef) -> {
+                                // Only trigger teardown if the NetworkAgent hasn't been replaced or
+                                // changed. This guards against two cases - the first where
+                                // unwanted() may be called as a result of the
+                                // NetworkAgent.unregister() call, which might trigger a teardown
+                                // instead of just a Network disconnect, as well as the case where a
+                                // new NetworkAgent replaces an old one before the unwanted() call
+                                // is processed.
+                                if (mNetworkAgent != agentRef) {
+                                    Slog.d(TAG, "unwanted() called on stale NetworkAgent");
+                                    return;
+                                }
 
-                        @Override
-                        public void onValidationStatus(int status, @Nullable Uri redirectUri) {
-                            if (status == NetworkAgent.VALIDATION_STATUS_VALID) {
-                                clearFailedAttemptCounterAndSafeModeAlarm();
-                            }
-                        }
-                    };
+                                Slog.d(TAG, "NetworkAgent was unwanted");
+                                teardownAsynchronously();
+                            } /* networkUnwantedCallback */,
+                            (status) -> {
+                                if (status == NetworkAgent.VALIDATION_STATUS_VALID) {
+                                    clearFailedAttemptCounterAndSafeModeAlarm();
+                                }
+                            } /* validationStatusCallback */);
 
             agent.register();
             agent.markConnected();
@@ -1469,6 +1576,11 @@ public class VcnGatewayConnection extends StateMachine {
             // Validated connection, clear failed attempt counter
             mFailedAttempts = 0;
             cancelSafeModeAlarm();
+
+            if (mIsInSafeMode) {
+                mIsInSafeMode = false;
+                mGatewayStatusCallback.onSafeModeStatusChanged();
+            }
         }
 
         protected void applyTransform(
@@ -1486,13 +1598,6 @@ public class VcnGatewayConnection extends StateMachine {
                 Slog.d(TAG, "Transform application failed for network " + token, e);
                 sessionLost(token, e);
             }
-        }
-
-        protected void setupInterface(
-                int token,
-                @NonNull IpSecTunnelInterface tunnelIface,
-                @NonNull VcnChildSessionConfiguration childConfig) {
-            setupInterface(token, tunnelIface, childConfig, null);
         }
 
         protected void setupInterface(
@@ -1579,21 +1684,46 @@ public class VcnGatewayConnection extends StateMachine {
                             transformCreatedInfo.direction);
                     break;
                 case EVENT_SETUP_COMPLETED:
+                    final VcnChildSessionConfiguration oldChildConfig = mChildConfig;
                     mChildConfig = ((EventSetupCompletedInfo) msg.obj).childSessionConfig;
 
-                    setupInterfaceAndNetworkAgent(mCurrentToken, mTunnelIface, mChildConfig);
+                    setupInterfaceAndNetworkAgent(
+                            mCurrentToken, mTunnelIface, mChildConfig, oldChildConfig);
                     break;
                 case EVENT_DISCONNECT_REQUESTED:
                     handleDisconnectRequested((EventDisconnectRequestedInfo) msg.obj);
                     break;
                 case EVENT_SAFE_MODE_TIMEOUT_EXCEEDED:
-                    mGatewayStatusCallback.onEnteredSafeMode();
-                    mSafeModeTimeoutAlarm = null;
+                    handleSafeModeTimeoutExceeded();
+                    break;
+                case EVENT_MIGRATION_COMPLETED:
+                    final EventMigrationCompletedInfo migrationCompletedInfo =
+                            (EventMigrationCompletedInfo) msg.obj;
+
+                    handleMigrationCompleted(migrationCompletedInfo);
                     break;
                 default:
                     logUnhandledMessage(msg);
                     break;
             }
+        }
+
+        private void handleMigrationCompleted(EventMigrationCompletedInfo migrationCompletedInfo) {
+            applyTransform(
+                    mCurrentToken,
+                    mTunnelIface,
+                    mUnderlying.network,
+                    migrationCompletedInfo.inTransform,
+                    IpSecManager.DIRECTION_IN);
+
+            applyTransform(
+                    mCurrentToken,
+                    mTunnelIface,
+                    mUnderlying.network,
+                    migrationCompletedInfo.outTransform,
+                    IpSecManager.DIRECTION_OUT);
+
+            updateNetworkAgent(mTunnelIface, mNetworkAgent, mChildConfig);
         }
 
         private void handleUnderlyingNetworkChanged(@NonNull Message msg) {
@@ -1626,8 +1756,9 @@ public class VcnGatewayConnection extends StateMachine {
         protected void setupInterfaceAndNetworkAgent(
                 int token,
                 @NonNull IpSecTunnelInterface tunnelIface,
-                @NonNull VcnChildSessionConfiguration childConfig) {
-            setupInterface(token, tunnelIface, childConfig);
+                @NonNull VcnChildSessionConfiguration childConfig,
+                @NonNull VcnChildSessionConfiguration oldChildConfig) {
+            setupInterface(token, tunnelIface, childConfig, oldChildConfig);
 
             if (mNetworkAgent == null) {
                 mNetworkAgent = buildNetworkAgent(tunnelIface, childConfig);
@@ -1692,8 +1823,7 @@ public class VcnGatewayConnection extends StateMachine {
                     handleDisconnectRequested((EventDisconnectRequestedInfo) msg.obj);
                     break;
                 case EVENT_SAFE_MODE_TIMEOUT_EXCEEDED:
-                    mGatewayStatusCallback.onEnteredSafeMode();
-                    mSafeModeTimeoutAlarm = null;
+                    handleSafeModeTimeoutExceeded();
                     break;
                 default:
                     logUnhandledMessage(msg);
@@ -1722,7 +1852,8 @@ public class VcnGatewayConnection extends StateMachine {
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     static NetworkCapabilities buildNetworkCapabilities(
             @NonNull VcnGatewayConnectionConfig gatewayConnectionConfig,
-            @Nullable UnderlyingNetworkRecord underlying) {
+            @Nullable UnderlyingNetworkRecord underlying,
+            boolean isMobileDataEnabled) {
         final NetworkCapabilities.Builder builder = new NetworkCapabilities.Builder();
 
         builder.addTransportType(TRANSPORT_CELLULAR);
@@ -1732,6 +1863,12 @@ public class VcnGatewayConnection extends StateMachine {
 
         // Add exposed capabilities
         for (int cap : gatewayConnectionConfig.getAllExposedCapabilities()) {
+            // Skip adding INTERNET or DUN if mobile data is disabled.
+            if (!isMobileDataEnabled
+                    && (cap == NET_CAPABILITY_INTERNET || cap == NET_CAPABILITY_DUN)) {
+                continue;
+            }
+
             builder.addCapability(cap);
         }
 
@@ -1785,7 +1922,16 @@ public class VcnGatewayConnection extends StateMachine {
     private static LinkProperties buildConnectedLinkProperties(
             @NonNull VcnGatewayConnectionConfig gatewayConnectionConfig,
             @NonNull IpSecTunnelInterface tunnelIface,
-            @NonNull VcnChildSessionConfiguration childConfig) {
+            @NonNull VcnChildSessionConfiguration childConfig,
+            @Nullable UnderlyingNetworkRecord underlying) {
+        final TunnelConnectionParams tunnelParams =
+                gatewayConnectionConfig.getTunnelConnectionParams();
+        if (!(tunnelParams instanceof IkeTunnelConnectionParams)) {
+            throw new IllegalStateException(
+                    "TunnelConnectionParams is not IkeTunnelConnectionParams");
+        }
+
+        final IkeTunnelConnectionParams ikeTunnelParams = (IkeTunnelConnectionParams) tunnelParams;
         final LinkProperties lp = new LinkProperties();
 
         lp.setInterfaceName(tunnelIface.getInterfaceName());
@@ -1801,7 +1947,12 @@ public class VcnGatewayConnection extends StateMachine {
         lp.addRoute(new RouteInfo(new IpPrefix(Inet6Address.ANY, 0), null /*gateway*/,
                 null /*iface*/, RouteInfo.RTN_UNICAST));
 
-        lp.setMtu(gatewayConnectionConfig.getMaxMtu());
+        final int underlyingMtu = (underlying == null) ? 0 : underlying.linkProperties.getMtu();
+        lp.setMtu(
+                MtuUtils.getMtu(
+                        ikeTunnelParams.getTunnelModeChildSessionParams().getSaProposals(),
+                        gatewayConnectionConfig.getMaxMtu(),
+                        underlyingMtu));
 
         return lp;
     }
@@ -1882,8 +2033,7 @@ public class VcnGatewayConnection extends StateMachine {
                 @NonNull IpSecTransform inIpSecTransform,
                 @NonNull IpSecTransform outIpSecTransform) {
             Slog.v(TAG, "ChildTransformsMigrated; token " + mToken);
-            onIpSecTransformCreated(inIpSecTransform, IpSecManager.DIRECTION_IN);
-            onIpSecTransformCreated(outIpSecTransform, IpSecManager.DIRECTION_OUT);
+            migrationCompleted(mToken, inIpSecTransform, outIpSecTransform);
         }
 
         @Override
@@ -1892,6 +2042,41 @@ public class VcnGatewayConnection extends StateMachine {
             // will be closed by the IKE library.
             Slog.v(TAG, "ChildTransformDeleted; Direction: " + direction + "; for token " + mToken);
         }
+    }
+
+    /**
+     * Dumps the state of this VcnGatewayConnection for logging and debugging purposes.
+     *
+     * <p>PII and credentials MUST NEVER be dumped here.
+     */
+    public void dump(IndentingPrintWriter pw) {
+        pw.println("VcnGatewayConnection (" + mConnectionConfig.getGatewayConnectionName() + "):");
+        pw.increaseIndent();
+
+        pw.println(
+                "Current state: "
+                        + (getCurrentState() == null
+                                ? null
+                                : getCurrentState().getClass().getSimpleName()));
+        pw.println("mIsQuitting: " + mIsQuitting);
+        pw.println("mIsInSafeMode: " + mIsInSafeMode);
+        pw.println("mCurrentToken: " + mCurrentToken);
+        pw.println("mFailedAttempts: " + mFailedAttempts);
+        pw.println(
+                "mNetworkAgent.getNetwork(): "
+                        + (mNetworkAgent == null ? null : mNetworkAgent.getNetwork()));
+
+        pw.println("mUnderlying:");
+        pw.increaseIndent();
+        if (mUnderlying != null) {
+            mUnderlying.dump(pw);
+        } else {
+            pw.println("null");
+        }
+        pw.decreaseIndent();
+        pw.println();
+
+        pw.decreaseIndent();
     }
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
@@ -1935,6 +2120,16 @@ public class VcnGatewayConnection extends StateMachine {
     }
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
+    VcnNetworkAgent getNetworkAgent() {
+        return mNetworkAgent;
+    }
+
+    @VisibleForTesting(visibility = Visibility.PRIVATE)
+    void setNetworkAgent(@Nullable VcnNetworkAgent networkAgent) {
+        mNetworkAgent = networkAgent;
+    }
+
+    @VisibleForTesting(visibility = Visibility.PRIVATE)
     void sendDisconnectRequestedAndAcquireWakelock(String reason, boolean shouldQuit) {
         sendMessageAndAcquireWakeLock(
                 EVENT_DISCONNECT_REQUESTED,
@@ -1943,19 +2138,32 @@ public class VcnGatewayConnection extends StateMachine {
     }
 
     private IkeSessionParams buildIkeParams(@NonNull Network network) {
-        final VcnControlPlaneIkeConfig controlPlaneConfig =
-                (VcnControlPlaneIkeConfig) mConnectionConfig.getControlPlaneConfig();
-        final IkeSessionParams.Builder builder =
-                new IkeSessionParams.Builder(controlPlaneConfig.getIkeSessionParams());
-        builder.setConfiguredNetwork(network);
+        final TunnelConnectionParams tunnelConnectionParams =
+                mConnectionConfig.getTunnelConnectionParams();
 
-        return builder.build();
+        if (tunnelConnectionParams instanceof IkeTunnelConnectionParams) {
+            final IkeTunnelConnectionParams ikeTunnelConnectionParams =
+                    (IkeTunnelConnectionParams) tunnelConnectionParams;
+            final IkeSessionParams.Builder builder =
+                    new IkeSessionParams.Builder(ikeTunnelConnectionParams.getIkeSessionParams());
+            builder.setNetwork(network);
+
+            return builder.build();
+        }
+
+        throw new IllegalStateException("TunnelConnectionParams is not IkeTunnelConnectionParams");
     }
 
     private ChildSessionParams buildChildParams() {
-        final VcnControlPlaneIkeConfig controlPlaneConfig =
-                (VcnControlPlaneIkeConfig) mConnectionConfig.getControlPlaneConfig();
-        return controlPlaneConfig.getChildSessionParams();
+        final TunnelConnectionParams tunnelConnectionParams =
+                mConnectionConfig.getTunnelConnectionParams();
+
+        if (tunnelConnectionParams instanceof IkeTunnelConnectionParams) {
+            return ((IkeTunnelConnectionParams) tunnelConnectionParams)
+                    .getTunnelModeChildSessionParams();
+        }
+
+        throw new IllegalStateException("TunnelConnectionParams is not IkeTunnelConnectionParams");
     }
 
     @VisibleForTesting(visibility = Visibility.PRIVATE)
@@ -2016,6 +2224,29 @@ public class VcnGatewayConnection extends StateMachine {
                 @NonNull String tag,
                 @NonNull Runnable runnable) {
             return new WakeupMessage(vcnContext.getContext(), handler, tag, runnable);
+        }
+
+        /** Builds a new VcnNetworkAgent. */
+        public VcnNetworkAgent newNetworkAgent(
+                @NonNull VcnContext vcnContext,
+                @NonNull String tag,
+                @NonNull NetworkCapabilities caps,
+                @NonNull LinkProperties lp,
+                @NonNull NetworkScore score,
+                @NonNull NetworkAgentConfig nac,
+                @NonNull NetworkProvider provider,
+                @NonNull Consumer<VcnNetworkAgent> networkUnwantedCallback,
+                @NonNull Consumer<Integer> validationStatusCallback) {
+            return new VcnNetworkAgent(
+                    vcnContext,
+                    tag,
+                    caps,
+                    lp,
+                    score,
+                    nac,
+                    provider,
+                    networkUnwantedCallback,
+                    validationStatusCallback);
         }
 
         /** Gets the elapsed real time since boot, in millis. */
@@ -2129,6 +2360,75 @@ public class VcnGatewayConnection extends StateMachine {
          */
         public synchronized void release() {
             mImpl.release();
+        }
+    }
+
+    /** Proxy Implementation of NetworkAgent, used for testing. */
+    @VisibleForTesting(visibility = Visibility.PRIVATE)
+    public static class VcnNetworkAgent {
+        private final NetworkAgent mImpl;
+
+        public VcnNetworkAgent(
+                @NonNull VcnContext vcnContext,
+                @NonNull String tag,
+                @NonNull NetworkCapabilities caps,
+                @NonNull LinkProperties lp,
+                @NonNull NetworkScore score,
+                @NonNull NetworkAgentConfig nac,
+                @NonNull NetworkProvider provider,
+                @NonNull Consumer<VcnNetworkAgent> networkUnwantedCallback,
+                @NonNull Consumer<Integer> validationStatusCallback) {
+            mImpl =
+                    new NetworkAgent(
+                            vcnContext.getContext(),
+                            vcnContext.getLooper(),
+                            tag,
+                            caps,
+                            lp,
+                            score,
+                            nac,
+                            provider) {
+                        @Override
+                        public void onNetworkUnwanted() {
+                            networkUnwantedCallback.accept(VcnNetworkAgent.this);
+                        }
+
+                        @Override
+                        public void onValidationStatus(int status, @Nullable Uri redirectUri) {
+                            validationStatusCallback.accept(status);
+                        }
+                    };
+        }
+
+        /** Registers the underlying NetworkAgent */
+        public void register() {
+            mImpl.register();
+        }
+
+        /** Marks the underlying NetworkAgent as connected */
+        public void markConnected() {
+            mImpl.markConnected();
+        }
+
+        /** Unregisters the underlying NetworkAgent */
+        public void unregister() {
+            mImpl.unregister();
+        }
+
+        /** Sends new NetworkCapabilities for the underlying NetworkAgent */
+        public void sendNetworkCapabilities(@NonNull NetworkCapabilities caps) {
+            mImpl.sendNetworkCapabilities(caps);
+        }
+
+        /** Sends new LinkProperties for the underlying NetworkAgent */
+        public void sendLinkProperties(@NonNull LinkProperties lp) {
+            mImpl.sendLinkProperties(lp);
+        }
+
+        /** Retrieves the Network for the underlying NetworkAgent */
+        @Nullable
+        public Network getNetwork() {
+            return mImpl.getNetwork();
         }
     }
 }

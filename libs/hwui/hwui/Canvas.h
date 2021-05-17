@@ -146,6 +146,7 @@ public:
                             uirenderer::CanvasPropertyPrimitive* radius,
                             uirenderer::CanvasPropertyPaint* paint,
                             uirenderer::CanvasPropertyPrimitive* progress,
+                            uirenderer::CanvasPropertyPrimitive* turbulencePhase,
                             const SkRuntimeShaderBuilder& effectBuilder) = 0;
 
     virtual void drawLayer(uirenderer::DeferredLayerUpdater* layerHandle) = 0;
@@ -154,6 +155,8 @@ public:
     virtual void drawWebViewFunctor(int /*functor*/) {
         LOG_ALWAYS_FATAL("Not supported");
     }
+
+    virtual void punchHole(const SkRRect& rect) = 0;
 
     // ----------------------------------------------------------------------------
     // Canvas state operations

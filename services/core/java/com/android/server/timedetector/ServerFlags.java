@@ -28,7 +28,11 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.server.timezonedetector.ConfigurationChangeListener;
 import com.android.server.timezonedetector.ServiceConfigAccessor;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
+import java.time.DateTimeException;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
@@ -53,18 +57,21 @@ public final class ServerFlags {
      */
     @StringDef(prefix = "KEY_", value = {
             KEY_LOCATION_TIME_ZONE_DETECTION_FEATURE_SUPPORTED,
-            KEY_PRIMARY_LOCATION_TIME_ZONE_PROVIDER_ENABLED_OVERRIDE,
-            KEY_SECONDARY_LOCATION_TIME_ZONE_PROVIDER_ENABLED_OVERRIDE,
+            KEY_PRIMARY_LOCATION_TIME_ZONE_PROVIDER_MODE_OVERRIDE,
+            KEY_SECONDARY_LOCATION_TIME_ZONE_PROVIDER_MODE_OVERRIDE,
             KEY_LOCATION_TIME_ZONE_PROVIDER_INITIALIZATION_TIMEOUT_FUZZ_MILLIS,
             KEY_LOCATION_TIME_ZONE_PROVIDER_INITIALIZATION_TIMEOUT_MILLIS,
             KEY_LOCATION_TIME_ZONE_DETECTION_UNCERTAINTY_DELAY_MILLIS,
             KEY_LOCATION_TIME_ZONE_DETECTION_SETTING_ENABLED_OVERRIDE,
             KEY_LOCATION_TIME_ZONE_DETECTION_SETTING_ENABLED_DEFAULT,
+            KEY_TIME_DETECTOR_LOWER_BOUND_MILLIS_OVERRIDE,
+            KEY_TIME_DETECTOR_ORIGIN_PRIORITIES_OVERRIDE,
     })
+    @Retention(RetentionPolicy.SOURCE)
     @interface DeviceConfigKey {}
 
     /**
-     * Controls whether the location time zone manager service will started. Only observed if
+     * Controls whether the location time zone manager service will be started. Only observed if
      * the device build is configured to support location-based time zone detection. See
      * {@link ServiceConfigAccessor#isGeoTimeZoneDetectionFeatureSupportedInConfig()} and {@link
      * ServiceConfigAccessor#isGeoTimeZoneDetectionFeatureSupported()}.
@@ -75,19 +82,19 @@ public final class ServerFlags {
 
     /**
      * The key for the server flag that can override the device config for whether the primary
-     * location time zone provider is enabled or disabled.
+     * location time zone provider is enabled, disabled, or (for testing) in simulation mode.
      */
     @DeviceConfigKey
-    public static final String KEY_PRIMARY_LOCATION_TIME_ZONE_PROVIDER_ENABLED_OVERRIDE =
-            "primary_location_time_zone_provider_enabled_override";
+    public static final String KEY_PRIMARY_LOCATION_TIME_ZONE_PROVIDER_MODE_OVERRIDE =
+            "primary_location_time_zone_provider_mode_override";
 
     /**
      * The key for the server flag that can override the device config for whether the secondary
-     * location time zone provider is enabled or disabled.
+     * location time zone provider is enabled or disabled, or (for testing) in simulation mode.
      */
     @DeviceConfigKey
-    public static final String KEY_SECONDARY_LOCATION_TIME_ZONE_PROVIDER_ENABLED_OVERRIDE =
-            "secondary_location_time_zone_provider_enabled_override";
+    public static final String KEY_SECONDARY_LOCATION_TIME_ZONE_PROVIDER_MODE_OVERRIDE =
+            "secondary_location_time_zone_provider_mode_override";
 
     /**
      * The key for the minimum delay after location time zone detection has been enabled before the
@@ -131,6 +138,23 @@ public final class ServerFlags {
     @DeviceConfigKey
     public static final String KEY_LOCATION_TIME_ZONE_DETECTION_SETTING_ENABLED_DEFAULT =
             "location_time_zone_detection_setting_enabled_default";
+
+    /**
+     * The key to override the time detector origin priorities configuration. A comma-separated list
+     * of strings that will be passed to {@link TimeDetectorStrategy#stringToOrigin(String)}.
+     * All values must be recognized or the override value will be ignored.
+     */
+    @DeviceConfigKey
+    public static final String KEY_TIME_DETECTOR_ORIGIN_PRIORITIES_OVERRIDE =
+            "time_detector_origin_priorities_override";
+
+    /**
+     * The key to override the time detector lower bound configuration. The values is the number of
+     * milliseconds since the beginning of the Unix epoch.
+     */
+    @DeviceConfigKey
+    public static final String KEY_TIME_DETECTOR_LOWER_BOUND_MILLIS_OVERRIDE =
+            "time_detector_lower_bound_millis_override";
 
     @GuardedBy("mListeners")
     private final ArrayMap<ConfigurationChangeListener, Set<String>> mListeners = new ArrayMap<>();
@@ -192,6 +216,48 @@ public final class ServerFlags {
 
         synchronized (mListeners) {
             mListeners.put(listener, keys);
+        }
+    }
+
+    /**
+     * Returns an optional string value from {@link DeviceConfig} from the system_time
+     * namespace, returns {@link Optional#empty()} if there is no explicit value set.
+     */
+    @NonNull
+    public Optional<String> getOptionalString(@DeviceConfigKey String key) {
+        String value = DeviceConfig.getProperty(NAMESPACE_SYSTEM_TIME, key);
+        return Optional.ofNullable(value);
+    }
+
+    /**
+     * Returns an optional string array value from {@link DeviceConfig} from the system_time
+     * namespace, returns {@link Optional#empty()} if there is no explicit value set.
+     */
+    @NonNull
+    public Optional<String[]> getOptionalStringArray(@DeviceConfigKey String key) {
+        Optional<String> string = getOptionalString(key);
+        if (!string.isPresent()) {
+            return Optional.empty();
+        }
+        return Optional.of(string.get().split(","));
+    }
+
+    /**
+     * Returns an {@link Instant} from {@link DeviceConfig} from the system_time
+     * namespace, returns the {@code defaultValue} if the value is missing or invalid.
+     */
+    @NonNull
+    public Optional<Instant> getOptionalInstant(@DeviceConfigKey String key) {
+        String value = DeviceConfig.getProperty(NAMESPACE_SYSTEM_TIME, key);
+        if (value == null) {
+            return Optional.empty();
+        }
+
+        try {
+            long millis = Long.parseLong(value);
+            return Optional.of(Instant.ofEpochMilli(millis));
+        } catch (DateTimeException | NumberFormatException e) {
+            return Optional.empty();
         }
     }
 

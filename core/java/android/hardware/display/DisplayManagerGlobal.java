@@ -79,6 +79,7 @@ public final class DisplayManagerGlobal {
             EVENT_DISPLAY_ADDED,
             EVENT_DISPLAY_CHANGED,
             EVENT_DISPLAY_REMOVED,
+            EVENT_DISPLAY_BRIGHTNESS_CHANGED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface DisplayEvent {}
@@ -86,6 +87,7 @@ public final class DisplayManagerGlobal {
     public static final int EVENT_DISPLAY_ADDED = 1;
     public static final int EVENT_DISPLAY_CHANGED = 2;
     public static final int EVENT_DISPLAY_REMOVED = 3;
+    public static final int EVENT_DISPLAY_BRIGHTNESS_CHANGED = 4;
 
     @UnsupportedAppUsage
     private static DisplayManagerGlobal sInstance;
@@ -391,8 +393,9 @@ public final class DisplayManagerGlobal {
             }
 
             final int numListeners = mDisplayListeners.size();
+            DisplayInfo info = getDisplayInfo(displayId);
             for (int i = 0; i < numListeners; i++) {
-                mDisplayListeners.get(i).sendDisplayEvent(displayId, event);
+                mDisplayListeners.get(i).sendDisplayEvent(displayId, event, info);
             }
             if (event == EVENT_DISPLAY_CHANGED && mDispatchNativeCallbacks) {
                 // Choreographer only supports a single display, so only dispatch refresh rate
@@ -664,6 +667,17 @@ public final class DisplayManagerGlobal {
     }
 
     /**
+     * Retrieves Brightness Info for the specified display.
+     */
+    public BrightnessInfo getBrightnessInfo(int displayId) {
+        try {
+            return mDm.getBrightnessInfo(displayId);
+        } catch (RemoteException ex) {
+            throw ex.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Gets the preferred wide gamut color space for all displays.
      * The wide gamut color space is returned from composition pipeline
      * based on hardware capability.
@@ -894,6 +908,8 @@ public final class DisplayManagerGlobal {
         public final DisplayListener mListener;
         public long mEventsMask;
 
+        private final DisplayInfo mDisplayInfo = new DisplayInfo();
+
         DisplayListenerDelegate(DisplayListener listener, @NonNull Looper looper,
                 @EventsMask long eventsMask) {
             super(looper, null, true /*async*/);
@@ -901,8 +917,8 @@ public final class DisplayManagerGlobal {
             mEventsMask = eventsMask;
         }
 
-        public void sendDisplayEvent(int displayId, @DisplayEvent int event) {
-            Message msg = obtainMessage(event, displayId, 0);
+        public void sendDisplayEvent(int displayId, @DisplayEvent int event, DisplayInfo info) {
+            Message msg = obtainMessage(event, displayId, 0, info);
             sendMessage(msg);
         }
 
@@ -924,6 +940,15 @@ public final class DisplayManagerGlobal {
                     break;
                 case EVENT_DISPLAY_CHANGED:
                     if ((mEventsMask & DisplayManager.EVENT_FLAG_DISPLAY_CHANGED) != 0) {
+                        DisplayInfo newInfo = (DisplayInfo) msg.obj;
+                        if (newInfo != null && !newInfo.equals(mDisplayInfo)) {
+                            mDisplayInfo.copyFrom(newInfo);
+                            mListener.onDisplayChanged(msg.arg1);
+                        }
+                    }
+                    break;
+                case EVENT_DISPLAY_BRIGHTNESS_CHANGED:
+                    if ((mEventsMask & DisplayManager.EVENT_FLAG_DISPLAY_BRIGHTNESS) != 0) {
                         mListener.onDisplayChanged(msg.arg1);
                     }
                     break;

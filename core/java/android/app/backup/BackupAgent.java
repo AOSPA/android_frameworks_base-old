@@ -16,6 +16,7 @@
 
 package android.app.backup;
 
+import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.app.IBackupAgent;
 import android.app.QueuedWork;
@@ -48,6 +49,8 @@ import org.xmlpull.v1.XmlPullParserException;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.LinkedList;
@@ -187,6 +190,15 @@ public abstract class BackupAgent extends ContextWrapper {
      * @hide
      */
     public static final int FLAG_FAKE_CLIENT_SIDE_ENCRYPTION_ENABLED = 1 << 31;
+
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, value = {
+            FLAG_CLIENT_SIDE_ENCRYPTION_ENABLED,
+            FLAG_DEVICE_TO_DEVICE_TRANSFER,
+            FLAG_FAKE_CLIENT_SIDE_ENCRYPTION_ENABLED
+    })
+    public @interface BackupTransportFlags {}
 
     Handler mHandler = null;
 
@@ -544,20 +556,11 @@ public abstract class BackupAgent extends ContextWrapper {
     }
 
     private Set<String> getExtraExcludeDirsIfAny(Context context) throws IOException {
-        if (isDeviceToDeviceMigration()) {
-            return Collections.emptySet();
-        }
-
-        // If this is not a migration, also exclude no-backup and cache dirs.
         Set<String> excludedDirs = new HashSet<>();
         excludedDirs.add(context.getCacheDir().getCanonicalPath());
         excludedDirs.add(context.getCodeCacheDir().getCanonicalPath());
         excludedDirs.add(context.getNoBackupFilesDir().getCanonicalPath());
         return Collections.unmodifiableSet(excludedDirs);
-    }
-
-    private boolean isDeviceToDeviceMigration() {
-        return mOperationType == OperationType.MIGRATION;
     }
 
     /** @hide */
@@ -905,11 +908,6 @@ public abstract class BackupAgent extends ContextWrapper {
     }
 
     private boolean isFileEligibleForRestore(File destination) throws IOException {
-        if (isDeviceToDeviceMigration()) {
-            // Everything is eligible for device-to-device migration.
-            return true;
-        }
-
         FullBackup.BackupScheme bs = FullBackup.getBackupScheme(this, mOperationType);
         if (!bs.isFullRestoreEnabled()) {
             if (Log.isLoggable(FullBackup.TAG_XML_PARSER, Log.VERBOSE)) {

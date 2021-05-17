@@ -88,6 +88,11 @@ public class FeatureFlagUtils {
      * @return true if the flag is enabled (either by default in system, or override by user)
      */
     public static boolean isEnabled(Context context, String feature) {
+        // Hide feature in SC Developer Preview
+        if (SETTINGS_PROVIDER_MODEL.equals(feature)) {
+            return false;
+        }
+
         // Override precedence:
         // Settings.Global -> sys.fflag.override.* -> static list
 

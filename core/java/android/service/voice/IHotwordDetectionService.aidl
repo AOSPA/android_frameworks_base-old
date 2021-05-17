@@ -17,12 +17,13 @@
 package android.service.voice;
 
 import android.media.AudioFormat;
+import android.os.IRemoteCallback;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.SharedMemory;
 import android.service.voice.IDspHotwordDetectionCallback;
-
-import com.android.internal.app.IHotwordRecognitionStatusCallback;
+import android.view.contentcapture.IContentCaptureManager;
+import android.content.ContentCaptureOptions;
 
 /**
  * Provide the interface to communicate with hotword detection service.
@@ -43,6 +44,12 @@ oneway interface IHotwordDetectionService {
         in PersistableBundle options,
         in IDspHotwordDetectionCallback callback);
 
-    void updateState(in PersistableBundle options, in SharedMemory sharedMemory,
-            in IHotwordRecognitionStatusCallback callback);
+    void updateState(
+        in PersistableBundle options,
+        in SharedMemory sharedMemory,
+        in IRemoteCallback callback);
+
+    void updateContentCaptureManager(
+        in IContentCaptureManager contentCaptureManager,
+        in ContentCaptureOptions options);
 }

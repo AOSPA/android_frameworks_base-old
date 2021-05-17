@@ -43,6 +43,12 @@ import org.mockito.stubbing.Answer;
 import java.util.Arrays;
 
 public class BatteryUsageStatsRule implements TestRule {
+    public static final BatteryUsageStatsQuery POWER_PROFILE_MODEL_ONLY =
+            new BatteryUsageStatsQuery.Builder()
+                    .powerProfileModeledOnly()
+                    .includePowerModels()
+                    .build();
+
     private final PowerProfile mPowerProfile;
     private final MockClocks mMockClocks = new MockClocks();
     private final MockBatteryStatsImpl mBatteryStats = new MockBatteryStatsImpl(mMockClocks) {
@@ -103,11 +109,11 @@ public class BatteryUsageStatsRule implements TestRule {
     }
 
     /** Call only after setting the power profile information. */
-    public BatteryUsageStatsRule initMeasuredEnergyStatsLocked(int numCustom) {
+    public BatteryUsageStatsRule initMeasuredEnergyStatsLocked() {
         final boolean[] supportedStandardBuckets =
                 new boolean[MeasuredEnergyStats.NUMBER_STANDARD_POWER_BUCKETS];
         Arrays.fill(supportedStandardBuckets, true);
-        mBatteryStats.initMeasuredEnergyStatsLocked(supportedStandardBuckets, numCustom);
+        mBatteryStats.initMeasuredEnergyStatsLocked(supportedStandardBuckets, new String[0]);
         mBatteryStats.informThatAllExternalStatsAreFlushed();
         return this;
     }
@@ -156,17 +162,16 @@ public class BatteryUsageStatsRule implements TestRule {
     }
 
     BatteryUsageStats apply(PowerCalculator... calculators) {
-        return apply(BatteryUsageStatsQuery.DEFAULT, calculators);
+        return apply(new BatteryUsageStatsQuery.Builder().includePowerModels().build(),
+                calculators);
     }
 
     BatteryUsageStats apply(BatteryUsageStatsQuery query, PowerCalculator... calculators) {
-        final long[] customMeasuredEnergiesMicroJoules =
-                mBatteryStats.getCustomConsumerMeasuredBatteryConsumptionUC();
-        final int customMeasuredEnergiesCount = customMeasuredEnergiesMicroJoules != null
-                ? customMeasuredEnergiesMicroJoules.length
-                : 0;
+        final String[] customPowerComponentNames = mBatteryStats.getCustomEnergyConsumerNames();
+        final boolean includePowerModels = (query.getFlags()
+                & BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_POWER_MODELS) != 0;
         BatteryUsageStats.Builder builder = new BatteryUsageStats.Builder(
-                customMeasuredEnergiesCount, 0);
+                customPowerComponentNames, 0, includePowerModels);
         SparseArray<? extends BatteryStats.Uid> uidStats = mBatteryStats.getUidStats();
         for (int i = 0; i < uidStats.size(); i++) {
             builder.getOrCreateUidBatteryConsumerBuilder(uidStats.valueAt(i));

@@ -531,7 +531,7 @@ public class TransactionParcelTests {
         }
 
         @Override
-        public void scheduleCrash(String s) throws RemoteException {
+        public void scheduleCrash(String s, int i) throws RemoteException {
         }
 
         @Override
@@ -693,7 +693,7 @@ public class TransactionParcelTests {
 
         @Override
         public void updateUiTranslationState(IBinder activityToken, int state,
-                TranslationSpec sourceSpec, TranslationSpec destSpec, List<AutofillId> viewIds) {
+                TranslationSpec sourceSpec, TranslationSpec targetSpec, List<AutofillId> viewIds) {
 
         }
     }

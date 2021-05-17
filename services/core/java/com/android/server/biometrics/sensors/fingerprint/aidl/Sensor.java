@@ -50,14 +50,15 @@ import com.android.server.biometrics.sensors.AuthenticationConsumer;
 import com.android.server.biometrics.sensors.BaseClientMonitor;
 import com.android.server.biometrics.sensors.BiometricScheduler;
 import com.android.server.biometrics.sensors.EnumerateConsumer;
+import com.android.server.biometrics.sensors.ErrorConsumer;
 import com.android.server.biometrics.sensors.HalClientMonitor;
-import com.android.server.biometrics.sensors.Interruptable;
 import com.android.server.biometrics.sensors.LockoutCache;
 import com.android.server.biometrics.sensors.LockoutConsumer;
 import com.android.server.biometrics.sensors.RemovalConsumer;
 import com.android.server.biometrics.sensors.StartUserClient;
 import com.android.server.biometrics.sensors.StopUserClient;
 import com.android.server.biometrics.sensors.UserAwareBiometricScheduler;
+import com.android.server.biometrics.sensors.fingerprint.FingerprintStateCallback;
 import com.android.server.biometrics.sensors.fingerprint.FingerprintUtils;
 import com.android.server.biometrics.sensors.fingerprint.GestureAvailabilityDispatcher;
 
@@ -178,7 +179,8 @@ class Sensor {
                 }
 
                 final AcquisitionClient<?> acquisitionClient = (AcquisitionClient<?>) client;
-                acquisitionClient.onAcquired(info, vendorCode);
+                acquisitionClient.onAcquired(AidlConversionUtils.toFrameworkAcquiredInfo(info),
+                        vendorCode);
             });
         }
 
@@ -190,14 +192,14 @@ class Sensor {
                         + ", client: " + Utils.getClientName(client)
                         + ", error: " + error
                         + ", vendorCode: " + vendorCode);
-                if (!(client instanceof Interruptable)) {
+                if (!(client instanceof ErrorConsumer)) {
                     Slog.e(mTag, "onError for non-error consumer: "
                             + Utils.getClientName(client));
                     return;
                 }
 
-                final Interruptable interruptable = (Interruptable) client;
-                interruptable.onError(error, vendorCode);
+                final ErrorConsumer errorConsumer = (ErrorConsumer) client;
+                errorConsumer.onError(AidlConversionUtils.toFrameworkError(error), vendorCode);
 
                 if (error == Error.HW_UNAVAILABLE) {
                     mCallback.onHardwareUnavailable();
@@ -485,9 +487,10 @@ class Sensor {
         }
     }
 
-    @NonNull ITestSession createTestSession(@NonNull ITestSessionCallback callback) {
+    @NonNull ITestSession createTestSession(@NonNull ITestSessionCallback callback,
+            @NonNull FingerprintStateCallback fingerprintStateCallback) {
         return new BiometricTestSessionImpl(mContext, mSensorProperties.sensorId, callback,
-                mProvider, this);
+                fingerprintStateCallback, mProvider, this);
     }
 
     @NonNull BiometricScheduler getScheduler() {
@@ -526,6 +529,8 @@ class Sensor {
 
         proto.write(SensorStateProto.SENSOR_ID, mSensorProperties.sensorId);
         proto.write(SensorStateProto.MODALITY, SensorStateProto.FINGERPRINT);
+        proto.write(SensorStateProto.CURRENT_STRENGTH,
+                Utils.getCurrentStrength(mSensorProperties.sensorId));
         proto.write(SensorStateProto.SCHEDULER, mScheduler.dumpProtoState(clearSchedulerBuffer));
 
         for (UserInfo user : UserManager.get(mContext).getUsers()) {
@@ -549,10 +554,10 @@ class Sensor {
 
     public void onBinderDied() {
         final BaseClientMonitor client = mScheduler.getCurrentClient();
-        if (client instanceof Interruptable) {
+        if (client instanceof ErrorConsumer) {
             Slog.e(mTag, "Sending ERROR_HW_UNAVAILABLE for client: " + client);
-            final Interruptable interruptable = (Interruptable) client;
-            interruptable.onError(FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE,
+            final ErrorConsumer errorConsumer = (ErrorConsumer) client;
+            errorConsumer.onError(FingerprintManager.FINGERPRINT_ERROR_HW_UNAVAILABLE,
                     0 /* vendorCode */);
 
             FrameworkStatsLog.write(FrameworkStatsLog.BIOMETRIC_SYSTEM_HEALTH_ISSUE_DETECTED,

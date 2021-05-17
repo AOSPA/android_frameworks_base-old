@@ -19,7 +19,6 @@ package com.android.internal.os;
 import static com.google.common.truth.Truth.assertThat;
 
 import android.os.BatteryConsumer;
-import android.os.BatteryUsageStatsQuery;
 import android.os.SystemBatteryConsumer;
 import android.view.Display;
 
@@ -66,11 +65,13 @@ public class AmbientDisplayPowerCalculatorTest {
         SystemBatteryConsumer consumer =
                 mStatsRule.getSystemBatteryConsumer(
                         SystemBatteryConsumer.DRAIN_TYPE_AMBIENT_DISPLAY);
-        assertThat(consumer.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_USAGE))
+        assertThat(consumer.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_SCREEN))
                 .isEqualTo(90 * MINUTE_IN_MS);
         // 100,000,00 uC / 1000 (micro-/milli-) / 360 (seconds/hour) = 27.777778 mAh
-        assertThat(consumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_USAGE))
+        assertThat(consumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_SCREEN))
                 .isWithin(PRECISION).of(27.777778);
+        assertThat(consumer.getPowerModel(BatteryConsumer.POWER_COMPONENT_SCREEN))
+                .isEqualTo(BatteryConsumer.POWER_MODEL_MEASURED_ENERGY);
     }
 
     @Test
@@ -85,15 +86,16 @@ public class AmbientDisplayPowerCalculatorTest {
         AmbientDisplayPowerCalculator calculator =
                 new AmbientDisplayPowerCalculator(mStatsRule.getPowerProfile());
 
-        mStatsRule.apply(new BatteryUsageStatsQuery.Builder().powerProfileModeledOnly().build(),
-                calculator);
+        mStatsRule.apply(BatteryUsageStatsRule.POWER_PROFILE_MODEL_ONLY, calculator);
 
         SystemBatteryConsumer consumer =
                 mStatsRule.getSystemBatteryConsumer(
                         SystemBatteryConsumer.DRAIN_TYPE_AMBIENT_DISPLAY);
-        assertThat(consumer.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_USAGE))
+        assertThat(consumer.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_SCREEN))
                 .isEqualTo(90 * MINUTE_IN_MS);
-        assertThat(consumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_USAGE))
+        assertThat(consumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_SCREEN))
                 .isWithin(PRECISION).of(15.0);
+        assertThat(consumer.getPowerModel(BatteryConsumer.POWER_COMPONENT_SCREEN))
+                .isEqualTo(BatteryConsumer.POWER_MODEL_POWER_PROFILE);
     }
 }

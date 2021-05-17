@@ -24,14 +24,12 @@ import static android.text.FontConfig.FontFamily.VARIANT_DEFAULT;
 import static android.text.FontConfig.FontFamily.VARIANT_ELEGANT;
 
 import static com.google.common.truth.Truth.assertThat;
-import static com.google.common.truth.Truth.assertWithMessage;
 
 import static junit.framework.Assert.fail;
 
 import android.graphics.fonts.FontStyle;
 import android.os.LocaleList;
 import android.text.FontConfig;
-import android.util.TypedXmlSerializer;
 import android.util.Xml;
 
 import androidx.test.filters.SmallTest;
@@ -43,7 +41,6 @@ import org.xmlpull.v1.XmlPullParser;
 import org.xmlpull.v1.XmlPullParserException;
 
 import java.io.ByteArrayInputStream;
-import java.io.ByteArrayOutputStream;
 import java.io.File;
 import java.io.IOException;
 import java.io.InputStream;
@@ -62,17 +59,13 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("test.ttf"), null,
+                        new FontConfig.Font(new File("test.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", null)),
                 "sans-serif", LocaleList.getEmptyLocaleList(), VARIANT_DEFAULT);
 
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
-
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
     }
 
     @Test
@@ -84,20 +77,16 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("test.ttf"), null,
+                        new FontConfig.Font(new File("test.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", null),
-                        new FontConfig.Font(new File("test.ttf"), null,
+                        new FontConfig.Font(new File("test.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", "serif")),
                 null, LocaleList.forLanguageTags("en"), VARIANT_DEFAULT);
 
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
-
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
     }
 
     @Test
@@ -108,17 +97,13 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("test.ttf"), null,
+                        new FontConfig.Font(new File("test.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", null)),
                 null, LocaleList.forLanguageTags("en"), VARIANT_COMPACT);
 
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
-
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
     }
 
     @Test
@@ -129,17 +114,13 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("test.ttf"), null,
+                        new FontConfig.Font(new File("test.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", null)),
                 null, LocaleList.forLanguageTags("en"), VARIANT_ELEGANT);
 
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
-
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
     }
 
     @Test
@@ -152,22 +133,18 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("normal.ttf"), null,
+                        new FontConfig.Font(new File("normal.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", null),
-                        new FontConfig.Font(new File("weight.ttf"), null,
+                        new FontConfig.Font(new File("weight.ttf"), null, "test",
                                 new FontStyle(100, FONT_SLANT_UPRIGHT),
                                 0, "", null),
-                        new FontConfig.Font(new File("italic.ttf"), null,
+                        new FontConfig.Font(new File("italic.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_ITALIC),
                                 0, "", null)),
                 "sans-serif", LocaleList.getEmptyLocaleList(), VARIANT_DEFAULT);
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
-
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
     }
 
     @Test
@@ -185,19 +162,15 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("test-VF.ttf"), null,
+                        new FontConfig.Font(new File("test-VF.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "'wdth' 100.0,'wght' 200.0", null),
-                        new FontConfig.Font(new File("test-VF.ttf"), null,
+                        new FontConfig.Font(new File("test-VF.ttf"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "'wdth' 400.0,'wght' 700.0", null)),
                 "sans-serif", LocaleList.getEmptyLocaleList(), VARIANT_DEFAULT);
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
-
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
     }
 
     @Test
@@ -209,19 +182,35 @@ public final class FontListParserTest {
                 + "</family>";
         FontConfig.FontFamily expected = new FontConfig.FontFamily(
                 Arrays.asList(
-                        new FontConfig.Font(new File("test.ttc"), null,
+                        new FontConfig.Font(new File("test.ttc"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 0, "", null),
-                        new FontConfig.Font(new File("test.ttc"), null,
+                        new FontConfig.Font(new File("test.ttc"), null, "test",
                                 new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
                                 1, "", null)),
                 "sans-serif", LocaleList.getEmptyLocaleList(), VARIANT_DEFAULT);
         FontConfig.FontFamily family = readFamily(xml);
         assertThat(family).isEqualTo(expected);
+    }
 
-        String serialized = writeFamily(family);
-        assertWithMessage("serialized = " + serialized)
-                .that(readFamily(serialized)).isEqualTo(expected);
+    @Test
+    public void psName() throws Exception {
+        String xml = "<?xml version='1.0' encoding='UTF-8'?>"
+                + "<family name='sans-serif'>"
+                + "  <font index='0' postScriptName='foo'>test.ttc</font>"
+                + "  <font index='1'>test.ttc</font>"
+                + "</family>";
+        FontConfig.FontFamily expected = new FontConfig.FontFamily(
+                Arrays.asList(
+                        new FontConfig.Font(new File("test.ttc"), null, "foo",
+                                new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
+                                0, "", null),
+                        new FontConfig.Font(new File("test.ttc"), null, "test",
+                                new FontStyle(FONT_WEIGHT_NORMAL, FONT_SLANT_UPRIGHT),
+                                1, "", null)),
+                "sans-serif", LocaleList.getEmptyLocaleList(), VARIANT_DEFAULT);
+        FontConfig.FontFamily family = readFamily(xml);
+        assertThat(family).isEqualTo(expected);
     }
 
     @Test
@@ -337,16 +326,5 @@ public final class FontListParserTest {
         parser.setInput(buffer, "UTF-8");
         parser.nextTag();
         return FontListParser.readFamily(parser, "", null);
-    }
-
-    private String writeFamily(FontConfig.FontFamily family) throws IOException {
-        TypedXmlSerializer out = Xml.newFastSerializer();
-        ByteArrayOutputStream buffer = new ByteArrayOutputStream();
-        out.setOutput(buffer, "UTF-8");
-        out.startTag(null, "family");
-        FontListParser.writeFamily(out, family);
-        out.endTag(null, "family");
-        out.endDocument();
-        return buffer.toString("UTF-8");
     }
 }

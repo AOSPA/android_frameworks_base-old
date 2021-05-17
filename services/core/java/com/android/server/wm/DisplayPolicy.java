@@ -151,7 +151,6 @@ import android.view.View;
 import android.view.ViewDebug;
 import android.view.WindowInsets.Type;
 import android.view.WindowInsets.Type.InsetsType;
-import android.view.WindowInsetsController.Appearance;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
 import android.view.WindowManagerGlobal;
@@ -440,7 +439,7 @@ public class DisplayPolicy {
         String currentPackage;
         try {
             ActivityManager.RunningTaskInfo rti = ActivityTaskManager.getService().getTasks(
-                  1, false /* filterVisibleRecents */).get(0);
+                1, false /* filterVisibleRecents */, false /*keepIntentExtra */).get(0);
             currentPackage = rti.topActivity.getPackageName();
         } catch (Exception e) {
             currentPackage = null;
@@ -1051,8 +1050,8 @@ public class DisplayPolicy {
                         && win.mActivityRecord.fillsParent()
                         && (win.mAttrs.privateFlags & PRIVATE_FLAG_FORCE_DRAW_BAR_BACKGROUNDS) != 0
                         && attrs.getFitInsetsTypes() != 0) {
-                    throw new RuntimeException("Illegal attributes: Main activity window that isn't"
-                            + " translucent trying to fit insets: "
+                    throw new IllegalArgumentException("Illegal attributes: Main activity window"
+                            + " that isn't translucent trying to fit insets: "
                             + attrs.getFitInsetsTypes()
                             + " attrs=" + attrs);
                 }
@@ -2641,12 +2640,10 @@ public class DisplayPolicy {
         mService.getRootTaskBounds(inSplitScreen ? WINDOWING_MODE_SPLIT_SCREEN_SECONDARY
                         : WINDOWING_MODE_FULLSCREEN,
                 ACTIVITY_TYPE_UNDEFINED, mNonDockedRootTaskBounds);
-        final int fullscreenAppearance = updateLightStatusBarLw(0 /* appearance */,
-                mTopFullscreenOpaqueWindowState, mTopFullscreenOpaqueOrDimmingWindowState,
-                mNonDockedRootTaskBounds);
-        final int dockedAppearance = updateLightStatusBarLw(0 /* appearance */,
-                mTopDockedOpaqueWindowState, mTopDockedOpaqueOrDimmingWindowState,
-                mDockedRootTaskBounds);
+        final int fullscreenAppearance = getStatusBarAppearance(mTopFullscreenOpaqueWindowState,
+                mTopFullscreenOpaqueOrDimmingWindowState);
+        final int dockedAppearance = getStatusBarAppearance(mTopDockedOpaqueWindowState,
+                mTopDockedOpaqueOrDimmingWindowState);
         final int disableFlags = win.getDisableFlags();
         final int opaqueAppearance = updateSystemBarsLw(win, disableFlags);
         final WindowState navColorWin = chooseNavigationColorWindowLw(
@@ -2706,30 +2703,12 @@ public class DisplayPolicy {
         return true;
     }
 
-    private int updateLightStatusBarLw(@Appearance int appearance, WindowState opaque,
-            WindowState opaqueOrDimming, Rect rootTaskBounds) {
-        final DisplayRotation displayRotation = mDisplayContent.getDisplayRotation();
-        final int statusBarHeight = mStatusBarHeightForRotation[displayRotation.getRotation()];
-        final boolean rootTaskBoundsContainStatusBar =
-                rootTaskBounds.isEmpty() ? false : rootTaskBounds.top < statusBarHeight;
+    private int getStatusBarAppearance(WindowState opaque, WindowState opaqueOrDimming) {
         final boolean onKeyguard = isKeyguardShowing() && !isKeyguardOccluded();
-        final WindowState statusColorWin = onKeyguard ? mNotificationShade : opaqueOrDimming;
-        if (rootTaskBoundsContainStatusBar && statusColorWin != null) {
-            if (statusColorWin == opaque || onKeyguard) {
-                // If the top fullscreen-or-dimming window is also the top fullscreen, respect
-                // its light flag.
-                appearance &= ~APPEARANCE_LIGHT_STATUS_BARS;
-                appearance |= statusColorWin.mAttrs.insetsFlags.appearance
-                        & APPEARANCE_LIGHT_STATUS_BARS;
-            } else if (statusColorWin.isDimming()) {
-                // Otherwise if it's dimming, clear the light flag.
-                appearance &= ~APPEARANCE_LIGHT_STATUS_BARS;
-            }
-            if (!isLightBarAllowed(statusColorWin, TYPE_STATUS_BAR)) {
-                appearance &= ~APPEARANCE_LIGHT_STATUS_BARS;
-            }
-        }
-        return appearance;
+        final WindowState colorWin = onKeyguard ? mNotificationShade : opaqueOrDimming;
+        return isLightBarAllowed(colorWin, ITYPE_STATUS_BAR) && (colorWin == opaque || onKeyguard)
+                ? (colorWin.mAttrs.insetsFlags.appearance & APPEARANCE_LIGHT_STATUS_BARS)
+                : 0;
     }
 
     @VisibleForTesting
@@ -2788,9 +2767,9 @@ public class DisplayPolicy {
                 // Clear the light flag for dimming window.
                 appearance &= ~APPEARANCE_LIGHT_NAVIGATION_BARS;
             }
-            if (!isLightBarAllowed(navColorWin, TYPE_NAVIGATION_BAR)) {
-                appearance &= ~APPEARANCE_LIGHT_NAVIGATION_BARS;
-            }
+        }
+        if (!isLightBarAllowed(navColorWin, ITYPE_NAVIGATION_BAR)) {
+            appearance &= ~APPEARANCE_LIGHT_NAVIGATION_BARS;
         }
         return appearance;
     }
@@ -2843,11 +2822,12 @@ public class DisplayPolicy {
         return appearance;
     }
 
-    private boolean isLightBarAllowed(WindowState win, int windowType) {
+    private boolean isLightBarAllowed(WindowState win, @InternalInsetsType int type) {
         if (win == null) {
-            return true;
+            return false;
         }
-        return !win.isLetterboxedOverlappingWith(getBarContentFrameForWindow(win, windowType));
+        final InsetsSource source = win.getInsetsState().peekSource(type);
+        return source != null && Rect.intersects(win.getFrame(), source.getFrame());
     }
 
     private Rect getBarContentFrameForWindow(WindowState win, int windowType) {

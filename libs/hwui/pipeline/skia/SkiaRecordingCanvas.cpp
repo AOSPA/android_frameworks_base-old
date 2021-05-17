@@ -53,6 +53,26 @@ void SkiaRecordingCanvas::initDisplayList(uirenderer::RenderNode* renderNode, in
 
     mDisplayList->attachRecorder(&mRecorder, SkIRect::MakeWH(width, height));
     SkiaCanvas::reset(&mRecorder);
+    mDisplayList->setHasHolePunches(false);
+}
+
+void SkiaRecordingCanvas::punchHole(const SkRRect& rect) {
+    // Add the marker annotation to allow HWUI to determine where the current
+    // clip/transformation should be applied
+    SkVector vector = rect.getSimpleRadii();
+    float data[2];
+    data[0] = vector.x();
+    data[1] = vector.y();
+    mRecorder.drawAnnotation(rect.rect(), HOLE_PUNCH_ANNOTATION.c_str(),
+                             SkData::MakeWithCopy(data, 2 * sizeof(float)));
+
+    // Clear the current rect within the layer itself
+    SkPaint paint = SkPaint();
+    paint.setColor(0);
+    paint.setBlendMode(SkBlendMode::kClear);
+    mRecorder.drawRRect(rect, paint);
+
+    mDisplayList->setHasHolePunches(true);
 }
 
 std::unique_ptr<SkiaDisplayList> SkiaRecordingCanvas::finishRecording() {
@@ -94,9 +114,10 @@ void SkiaRecordingCanvas::drawRipple(uirenderer::CanvasPropertyPrimitive* x,
                                      uirenderer::CanvasPropertyPrimitive* radius,
                                      uirenderer::CanvasPropertyPaint* paint,
                                      uirenderer::CanvasPropertyPrimitive* progress,
+                                     uirenderer::CanvasPropertyPrimitive* turbulencePhase,
                                      const SkRuntimeShaderBuilder& effectBuilder) {
     drawDrawable(mDisplayList->allocateDrawable<AnimatedRipple>(x, y, radius, paint, progress,
-                                                                effectBuilder));
+                                                                turbulencePhase, effectBuilder));
 }
 
 void SkiaRecordingCanvas::enableZ(bool enableZ) {

@@ -30,8 +30,8 @@ import android.widget.ImageView;
 import androidx.annotation.Nullable;
 
 import com.android.settingslib.Utils;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.statusbar.StatusBarState;
 
 /**
@@ -48,6 +48,7 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
     private ImageView mBgProtection;
 
     private AnimatorSet mAnimatorSet;
+    private int mAlpha; // 0-255
 
     public UdfpsKeyguardView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
@@ -85,7 +86,6 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
 
     @Override
     public boolean dozeTimeTick() {
-        // TODO: burnin
         mFingerprintDrawable.dozeTimeTick();
         return true;
     }
@@ -98,15 +98,34 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
         }
     }
 
+    /**
+     * @param alpha between 0 and 255
+     */
+    void setUnpausedAlpha(int alpha) {
+        mAlpha = alpha;
+        updateAlpha();
+    }
+
+    @Override
+    int calculateAlpha() {
+        if (mPauseAuth) {
+            return 0;
+        }
+        return mAlpha;
+    }
+
     void onDozeAmountChanged(float linear, float eased) {
         mFingerprintDrawable.onDozeAmountChanged(linear, eased);
-        invalidate();
+    }
+
+    void animateHint() {
+        mFingerprintDrawable.animateHint();
     }
 
     /**
      * Animates in the bg protection circle behind the fp icon to highlight the icon.
      */
-    void animateHighlightFp() {
+    void animateUdfpsBouncer() {
         if (mBgProtection.getVisibility() == View.VISIBLE && mBgProtection.getAlpha() == 1f) {
             // already fully highlighted, don't re-animate
             return;
@@ -151,10 +170,14 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
         return mStatusBarState == StatusBarState.SHADE_LOCKED;
     }
 
+    boolean isHome() {
+        return mStatusBarState == StatusBarState.SHADE;
+    }
+
     /**
      * Animates out the bg protection circle behind the fp icon to unhighlight the icon.
      */
-    void animateUnhighlightFp(@Nullable Runnable onEndAnimation) {
+    void animateAwayUdfpsBouncer(@Nullable Runnable onEndAnimation) {
         if (mBgProtection.getVisibility() == View.GONE) {
             // already hidden
             return;

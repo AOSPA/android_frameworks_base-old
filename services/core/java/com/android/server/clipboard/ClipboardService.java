@@ -31,6 +31,7 @@ import android.app.KeyguardManager;
 import android.app.UriGrantsManager;
 import android.content.ClipData;
 import android.content.ClipDescription;
+import android.content.ClipboardManager;
 import android.content.ComponentName;
 import android.content.ContentProvider;
 import android.content.ContentResolver;
@@ -44,6 +45,7 @@ import android.content.pm.PackageManager;
 import android.content.pm.UserInfo;
 import android.net.Uri;
 import android.os.Binder;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.HandlerThread;
 import android.os.IBinder;
@@ -66,6 +68,7 @@ import android.view.autofill.AutofillManagerInternal;
 import android.view.textclassifier.TextClassificationContext;
 import android.view.textclassifier.TextClassificationManager;
 import android.view.textclassifier.TextClassifier;
+import android.view.textclassifier.TextClassifierEvent;
 import android.view.textclassifier.TextLinks;
 import android.widget.Toast;
 
@@ -78,107 +81,9 @@ import com.android.server.contentcapture.ContentCaptureManagerInternal;
 import com.android.server.uri.UriGrantsManagerInternal;
 import com.android.server.wm.WindowManagerInternal;
 
-import java.io.IOException;
-import java.io.RandomAccessFile;
-import java.util.Arrays;
 import java.util.HashSet;
 import java.util.List;
-
-// The following class is Android Emulator specific. It is used to read and
-// write contents of the host system's clipboard.
-class HostClipboardMonitor implements Runnable {
-    public interface HostClipboardCallback {
-        void onHostClipboardUpdated(String contents);
-    }
-
-    private RandomAccessFile mPipe = null;
-    private HostClipboardCallback mHostClipboardCallback;
-    private static final String PIPE_NAME = "pipe:clipboard";
-    private static final String PIPE_DEVICE = "/dev/qemu_pipe";
-
-    private static byte[] createOpenHandshake() {
-        // String.getBytes doesn't include the null terminator,
-        // but the QEMU pipe device requires the pipe service name
-        // to be null-terminated.
-
-        final byte[] bits = Arrays.copyOf(PIPE_NAME.getBytes(), PIPE_NAME.length() + 1);
-        bits[PIPE_NAME.length()] = 0;
-        return bits;
-    }
-
-    private boolean openPipe() {
-        try {
-            final RandomAccessFile pipe = new RandomAccessFile(PIPE_DEVICE, "rw");
-            try {
-                pipe.write(createOpenHandshake());
-                mPipe = pipe;
-                return true;
-            } catch (IOException ignore) {
-                pipe.close();
-            }
-        } catch (IOException ignore) {
-        }
-        return false;
-    }
-
-    private void closePipe() {
-        try {
-            final RandomAccessFile pipe = mPipe;
-            mPipe = null;
-            if (pipe != null) {
-                pipe.close();
-            }
-        } catch (IOException ignore) {
-        }
-    }
-
-    private byte[] receiveMessage() throws IOException {
-        final int size = Integer.reverseBytes(mPipe.readInt());
-        final byte[] receivedData = new byte[size];
-        mPipe.readFully(receivedData);
-        return receivedData;
-    }
-
-    private void sendMessage(byte[] message) throws IOException {
-        mPipe.writeInt(Integer.reverseBytes(message.length));
-        mPipe.write(message);
-    }
-
-    public HostClipboardMonitor(HostClipboardCallback cb) {
-        mHostClipboardCallback = cb;
-    }
-
-    @Override
-    public void run() {
-        while(!Thread.interrupted()) {
-            try {
-                // There's no guarantee that QEMU pipes will be ready at the moment
-                // this method is invoked. We simply try to get the pipe open and
-                // retry on failure indefinitely.
-                while ((mPipe == null) && !openPipe()) {
-                    Thread.sleep(100);
-                }
-
-                final byte[] receivedData = receiveMessage();
-                mHostClipboardCallback.onHostClipboardUpdated(
-                    new String(receivedData));
-            } catch (IOException e) {
-                closePipe();
-            } catch (InterruptedException e) {}
-        }
-    }
-
-    public void setHostClipboard(String content) {
-        try {
-            if (mPipe != null) {
-                sendMessage(content.getBytes());
-            }
-        } catch(IOException e) {
-            Slog.e("HostClipboardMonitor",
-                   "Failed to set host clipboard " + e.getMessage());
-        }
-    }
-}
+import java.util.function.Consumer;
 
 /**
  * Implementation of the clipboard for copy and paste.
@@ -195,8 +100,6 @@ public class ClipboardService extends SystemService {
             SystemProperties.getBoolean("ro.boot.qemu", false);
 
     // DeviceConfig properties
-    private static final String PROPERTY_SHOW_ACCESS_NOTIFICATIONS = "show_access_notifications";
-    private static final boolean DEFAULT_SHOW_ACCESS_NOTIFICATIONS = true;
     private static final String PROPERTY_MAX_CLASSIFICATION_LENGTH = "max_classification_length";
     private static final int DEFAULT_MAX_CLASSIFICATION_LENGTH = 400;
 
@@ -209,16 +112,16 @@ public class ClipboardService extends SystemService {
     private final AppOpsManager mAppOps;
     private final ContentCaptureManagerInternal mContentCaptureInternal;
     private final AutofillManagerInternal mAutofillInternal;
-    private final TextClassificationManager mTextClassificationManager;
     private final IBinder mPermissionOwner;
-    private final HostClipboardMonitor mHostClipboardMonitor;
+    private final Consumer<ClipData> mEmulatorClipboardMonitor;
     private final Handler mWorkerHandler;
 
     @GuardedBy("mLock")
     private final SparseArray<PerUserClipboard> mClipboards = new SparseArray<>();
 
     @GuardedBy("mLock")
-    private boolean mShowAccessNotifications = DEFAULT_SHOW_ACCESS_NOTIFICATIONS;
+    private boolean mShowAccessNotifications =
+            ClipboardManager.DEVICE_CONFIG_DEFAULT_SHOW_ACCESS_NOTIFICATIONS;
 
     @GuardedBy("mLock")
     private int mMaxClassificationLength = DEFAULT_MAX_CLASSIFICATION_LENGTH;
@@ -240,29 +143,17 @@ public class ClipboardService extends SystemService {
         mAppOps = (AppOpsManager) getContext().getSystemService(Context.APP_OPS_SERVICE);
         mContentCaptureInternal = LocalServices.getService(ContentCaptureManagerInternal.class);
         mAutofillInternal = LocalServices.getService(AutofillManagerInternal.class);
-        mTextClassificationManager = (TextClassificationManager)
-                getContext().getSystemService(Context.TEXT_CLASSIFICATION_SERVICE);
         final IBinder permOwner = mUgmInternal.newUriPermissionOwner("clipboard");
         mPermissionOwner = permOwner;
         if (IS_EMULATOR) {
-            mHostClipboardMonitor = new HostClipboardMonitor(
-                new HostClipboardMonitor.HostClipboardCallback() {
-                    @Override
-                    public void onHostClipboardUpdated(String contents){
-                        ClipData clip =
-                            new ClipData("host clipboard",
-                                         new String[]{"text/plain"},
-                                         new ClipData.Item(contents));
-                        synchronized (mLock) {
-                            setPrimaryClipInternalLocked(getClipboardLocked(0), clip,
-                                    android.os.Process.SYSTEM_UID, null);
-                        }
-                    }
-                });
-            Thread hostMonitorThread = new Thread(mHostClipboardMonitor);
-            hostMonitorThread.start();
+            mEmulatorClipboardMonitor = new EmulatorClipboardMonitor((clip) -> {
+                synchronized (mLock) {
+                    setPrimaryClipInternalLocked(getClipboardLocked(0), clip,
+                            android.os.Process.SYSTEM_UID, null);
+                }
+            });
         } else {
-            mHostClipboardMonitor = null;
+            mEmulatorClipboardMonitor = (clip) -> {};
         }
 
         updateConfig();
@@ -288,8 +179,10 @@ public class ClipboardService extends SystemService {
 
     private void updateConfig() {
         synchronized (mLock) {
-            mShowAccessNotifications = DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_CLIPBOARD,
-                    PROPERTY_SHOW_ACCESS_NOTIFICATIONS, DEFAULT_SHOW_ACCESS_NOTIFICATIONS);
+            mShowAccessNotifications = DeviceConfig.getBoolean(
+                    DeviceConfig.NAMESPACE_CLIPBOARD,
+                    ClipboardManager.DEVICE_CONFIG_SHOW_ACCESS_NOTIFICATIONS,
+                    ClipboardManager.DEVICE_CONFIG_DEFAULT_SHOW_ACCESS_NOTIFICATIONS);
             mMaxClassificationLength = DeviceConfig.getInt(DeviceConfig.NAMESPACE_CLIPBOARD,
                     PROPERTY_MAX_CLASSIFICATION_LENGTH, DEFAULT_MAX_CLASSIFICATION_LENGTH);
         }
@@ -320,8 +213,17 @@ public class ClipboardService extends SystemService {
         /** Uids that have already triggered a toast notification for {@link #primaryClip} */
         final SparseBooleanArray mNotifiedUids = new SparseBooleanArray();
 
+        /**
+         * Uids that have already triggered a notification to text classifier for
+         * {@link #primaryClip}.
+         */
+        final SparseBooleanArray mNotifiedTextClassifierUids = new SparseBooleanArray();
+
         final HashSet<String> activePermissionOwners
                 = new HashSet<String>();
+
+        /** The text classifier session that is used to annotate the text in the primary clip. */
+        TextClassifier mTextClassifier;
 
         PerUserClipboard(int userId) {
             this.userId = userId;
@@ -480,6 +382,7 @@ public class ClipboardService extends SystemService {
                 addActiveOwnerLocked(intendingUid, pkg);
                 PerUserClipboard clipboard = getClipboardLocked(intendingUserId);
                 showAccessNotificationLocked(pkg, intendingUid, intendingUserId, clipboard);
+                notifyTextClassifierLocked(clipboard, pkg, intendingUid);
                 return clipboard.primaryClip;
             }
         }
@@ -621,25 +524,14 @@ public class ClipboardService extends SystemService {
     @GuardedBy("mLock")
     private void setPrimaryClipInternalLocked(
             @Nullable ClipData clip, int uid, @Nullable String sourcePackage) {
-        // Push clipboard to host, if any
-        if (mHostClipboardMonitor != null) {
-            if (clip == null) {
-                // Someone really wants the clipboard cleared, so push empty
-                mHostClipboardMonitor.setHostClipboard("");
-            } else if (clip.getItemCount() > 0) {
-                final CharSequence text = clip.getItemAt(0).getText();
-                if (text != null) {
-                    mHostClipboardMonitor.setHostClipboard(text.toString());
-                }
-            }
-        }
+        mEmulatorClipboardMonitor.accept(clip);
 
+        final int userId = UserHandle.getUserId(uid);
         if (clip != null) {
-            startClassificationLocked(clip);
+            startClassificationLocked(clip, userId);
         }
 
         // Update this user
-        final int userId = UserHandle.getUserId(uid);
         setPrimaryClipInternalLocked(getClipboardLocked(userId), clip, uid, sourcePackage);
 
         // Update related users
@@ -700,6 +592,7 @@ public class ClipboardService extends SystemService {
         }
         clipboard.primaryClip = clip;
         clipboard.mNotifiedUids.clear();
+        clipboard.mNotifiedTextClassifierUids.clear();
         if (clip != null) {
             clipboard.primaryClipUid = uid;
             clipboard.mPrimaryClipPackage = sourcePackage;
@@ -738,24 +631,24 @@ public class ClipboardService extends SystemService {
     }
 
     @GuardedBy("mLock")
-    private void startClassificationLocked(@NonNull ClipData clip) {
-        TextClassifier classifier;
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            classifier = mTextClassificationManager.createTextClassificationSession(
-                    new TextClassificationContext.Builder(
-                            getContext().getPackageName(),
-                            TextClassifier.WIDGET_TYPE_CLIPBOARD
-                    ).build()
-            );
-        } finally {
-            Binder.restoreCallingIdentity(ident);
-        }
-
+    private void startClassificationLocked(@NonNull ClipData clip, @UserIdInt int userId) {
         if (clip.getItemCount() == 0) {
             clip.getDescription().setClassificationStatus(
                     ClipDescription.CLASSIFICATION_NOT_PERFORMED);
             return;
+        }
+        TextClassifier classifier;
+        final long ident = Binder.clearCallingIdentity();
+        try {
+            classifier = createTextClassificationManagerAsUser(userId)
+                    .createTextClassificationSession(
+                            new TextClassificationContext.Builder(
+                                    getContext().getPackageName(),
+                                    TextClassifier.WIDGET_TYPE_CLIPBOARD
+                            ).build()
+                    );
+        } finally {
+            Binder.restoreCallingIdentity(ident);
         }
         CharSequence text = clip.getItemAt(0).getText();
         if (TextUtils.isEmpty(text) || text.length() > mMaxClassificationLength
@@ -764,7 +657,7 @@ public class ClipboardService extends SystemService {
                     ClipDescription.CLASSIFICATION_NOT_PERFORMED);
             return;
         }
-
+        getClipboardLocked(userId).mTextClassifier = classifier;
         mWorkerHandler.post(() -> doClassification(text, clip, classifier));
     }
 
@@ -772,12 +665,7 @@ public class ClipboardService extends SystemService {
     private void doClassification(
             CharSequence text, ClipData clip, TextClassifier classifier) {
         TextLinks.Request request = new TextLinks.Request.Builder(text).build();
-        TextLinks links;
-        try {
-            links = classifier.generateLinks(request);
-        } finally {
-            classifier.destroy();
-        }
+        TextLinks links = classifier.generateLinks(request);
 
         // Find the highest confidence for each entity in the text.
         ArrayMap<String, Float> confidences = new ArrayMap<>();
@@ -1033,11 +921,9 @@ public class ClipboardService extends SystemService {
         if (clipboard.primaryClip == null) {
             return;
         }
-        if (!mShowAccessNotifications) {
-            return;
-        }
         if (Settings.Secure.getInt(getContext().getContentResolver(),
-                Settings.Secure.CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS, 1) == 0) {
+                Settings.Secure.CLIPBOARD_SHOW_ACCESS_NOTIFICATIONS,
+                (mShowAccessNotifications ? 1 : 0)) == 0) {
             return;
         }
         // Don't notify if the app accessing the clipboard is the same as the current owner.
@@ -1066,14 +952,8 @@ public class ClipboardService extends SystemService {
             try {
                 CharSequence callingAppLabel = mPm.getApplicationLabel(
                         mPm.getApplicationInfoAsUser(callingPackage, 0, userId));
-                String message;
-                if (isText(clipboard.primaryClip)) {
-                    message = getContext().getString(
-                            R.string.pasted_text, callingAppLabel);
-                } else {
-                    message = getContext().getString(
-                            R.string.pasted_content, callingAppLabel);
-                }
+                String message =
+                        getContext().getString(R.string.pasted_from_clipboard, callingAppLabel);
                 Slog.i(TAG, message);
                 Toast.makeText(
                         getContext(), UiThread.get().getLooper(), message, Toast.LENGTH_SHORT)
@@ -1100,4 +980,50 @@ public class ClipboardService extends SystemService {
                 && item.getIntent() == null;
     }
 
+    /** Potentially notifies the text classifier that an app is accessing a text clip. */
+    @GuardedBy("mLock")
+    private void notifyTextClassifierLocked(
+            PerUserClipboard clipboard, String callingPackage, int callingUid) {
+        if (clipboard.primaryClip == null) {
+            return;
+        }
+        ClipData.Item item = clipboard.primaryClip.getItemAt(0);
+        if (item == null) {
+            return;
+        }
+        if (!isText(clipboard.primaryClip)) {
+            return;
+        }
+        TextClassifier textClassifier = clipboard.mTextClassifier;
+        // Don't notify text classifier if we haven't used it to annotate the text in the clip.
+        if (textClassifier == null) {
+            return;
+        }
+        // Don't notify text classifier if the app reading the clipboard does not have the focus.
+        if (!mWm.isUidFocused(callingUid)) {
+            return;
+        }
+        // Don't notify text classifier again if already notified for this uid and clip.
+        if (clipboard.mNotifiedTextClassifierUids.get(callingUid)) {
+            return;
+        }
+        clipboard.mNotifiedTextClassifierUids.put(callingUid, true);
+        Binder.withCleanCallingIdentity(() -> {
+            TextClassifierEvent.TextLinkifyEvent pasteEvent =
+                    new TextClassifierEvent.TextLinkifyEvent.Builder(
+                            TextClassifierEvent.TYPE_READ_CLIPBOARD)
+                            .setEventContext(new TextClassificationContext.Builder(
+                                    callingPackage, TextClassifier.WIDGET_TYPE_CLIPBOARD)
+                                    .build())
+                            .setExtras(
+                                    Bundle.forPair("source_package", clipboard.mPrimaryClipPackage))
+                            .build();
+            textClassifier.onTextClassifierEvent(pasteEvent);
+        });
+    }
+
+    private TextClassificationManager createTextClassificationManagerAsUser(@UserIdInt int userId) {
+        Context context = getContext().createContextAsUser(UserHandle.of(userId), /* flags= */ 0);
+        return context.getSystemService(TextClassificationManager.class);
+    }
 }

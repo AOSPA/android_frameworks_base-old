@@ -81,6 +81,12 @@ public final class SystemUiDeviceConfigFlags {
     public static final String SCREENSHOT_NOTIFICATION_SMART_ACTIONS_TIMEOUT_MS =
             "screenshot_notification_smart_actions_timeout_ms";
 
+    /**
+     * (int) Timeout value in ms to get Quick Share actions for screenshot notification.
+     */
+    public static final String SCREENSHOT_NOTIFICATION_QUICK_SHARE_ACTIONS_TIMEOUT_MS =
+            "screenshot_notification_quick_share_actions_timeout_ms";
+
     // Flags related to Smart Suggestions - these are read in SmartReplyConstants.
 
     /** (boolean) Whether to enable smart suggestions in notifications. */
@@ -482,6 +488,12 @@ public final class SystemUiDeviceConfigFlags {
      */
     public static final String HOME_BUTTON_LONG_PRESS_DURATION_MS =
             "home_button_long_press_duration_ms";
+
+    /**
+     * (boolean) Whether shortcut integration over app search service is enabled.
+     */
+    public static final String SHORTCUT_APPSEARCH_INTEGRATION =
+            "shortcut_appsearch_integration";
 
     private SystemUiDeviceConfigFlags() {
     }

@@ -16,6 +16,7 @@ package com.android.systemui.statusbar.phone;
 
 import static com.android.systemui.qs.dagger.QSFlagsModule.RBC_AVAILABLE;
 
+import android.annotation.Nullable;
 import android.content.Context;
 import android.content.res.Resources;
 import android.hardware.display.ColorDisplayManager;
@@ -36,8 +37,10 @@ import com.android.systemui.statusbar.policy.CastController;
 import com.android.systemui.statusbar.policy.CastController.CastDevice;
 import com.android.systemui.statusbar.policy.DataSaverController;
 import com.android.systemui.statusbar.policy.DataSaverController.Listener;
+import com.android.systemui.statusbar.policy.DeviceControlsController;
 import com.android.systemui.statusbar.policy.HotspotController;
 import com.android.systemui.statusbar.policy.HotspotController.Callback;
+import com.android.systemui.statusbar.policy.WalletController;
 import com.android.systemui.util.UserAwareController;
 import com.android.systemui.util.settings.SecureSettings;
 
@@ -58,6 +61,8 @@ public class AutoTileManager implements UserAwareController {
     public static final String WORK = "work";
     public static final String NIGHT = "night";
     public static final String CAST = "cast";
+    public static final String DEVICE_CONTROLS = "controls";
+    public static final String WALLET = "wallet";
     public static final String BRIGHTNESS = "reduce_brightness";
     static final String SETTING_SEPARATOR = ":";
 
@@ -74,6 +79,8 @@ public class AutoTileManager implements UserAwareController {
     private final ManagedProfileController mManagedProfileController;
     private final NightDisplayListener mNightDisplayListener;
     private final CastController mCastController;
+    private final DeviceControlsController mDeviceControlsController;
+    private final WalletController mWalletController;
     private final ReduceBrightColorsController mReduceBrightColorsController;
     private final boolean mIsReduceBrightColorsAvailable;
     private final ArrayList<AutoAddSetting> mAutoAddSettingList = new ArrayList<>();
@@ -88,6 +95,8 @@ public class AutoTileManager implements UserAwareController {
             NightDisplayListener nightDisplayListener,
             CastController castController,
             ReduceBrightColorsController reduceBrightColorsController,
+            DeviceControlsController deviceControlsController,
+            WalletController walletController,
             @Named(RBC_AVAILABLE) boolean isReduceBrightColorsAvailable) {
         mContext = context;
         mHost = host;
@@ -102,6 +111,8 @@ public class AutoTileManager implements UserAwareController {
         mCastController = castController;
         mReduceBrightColorsController = reduceBrightColorsController;
         mIsReduceBrightColorsAvailable = isReduceBrightColorsAvailable;
+        mDeviceControlsController = deviceControlsController;
+        mWalletController = walletController;
     }
 
     /**
@@ -138,6 +149,12 @@ public class AutoTileManager implements UserAwareController {
         if (!mAutoTracker.isAdded(BRIGHTNESS) && mIsReduceBrightColorsAvailable) {
             mReduceBrightColorsController.addCallback(mReduceBrightColorsCallback);
         }
+        if (!mAutoTracker.isAdded(DEVICE_CONTROLS)) {
+            mDeviceControlsController.setCallback(mDeviceControlsCallback);
+        }
+        if (!mAutoTracker.isAdded(WALLET)) {
+            initWalletController();
+        }
 
         int settingsN = mAutoAddSettingList.size();
         for (int i = 0; i < settingsN; i++) {
@@ -158,6 +175,7 @@ public class AutoTileManager implements UserAwareController {
             mReduceBrightColorsController.removeCallback(mReduceBrightColorsCallback);
         }
         mCastController.removeCallback(mCastCallback);
+        mDeviceControlsController.removeCallback();
         int settingsN = mAutoAddSettingList.size();
         for (int i = 0; i < settingsN; i++) {
             mAutoAddSettingList.get(i).setListening(false);
@@ -273,6 +291,29 @@ public class AutoTileManager implements UserAwareController {
             }
         }
     };
+
+    private final DeviceControlsController.Callback mDeviceControlsCallback =
+            new DeviceControlsController.Callback() {
+        @Override
+        public void onControlsUpdate(@Nullable Integer position) {
+            if (mAutoTracker.isAdded(DEVICE_CONTROLS)) return;
+            if (position != null) {
+                mHost.addTile(DEVICE_CONTROLS, position);
+            }
+            mAutoTracker.setTileAdded(DEVICE_CONTROLS);
+            mHandler.post(() -> mDeviceControlsController.removeCallback());
+        }
+    };
+
+    private void initWalletController() {
+        if (mAutoTracker.isAdded(WALLET)) return;
+        Integer position = mWalletController.getWalletPosition();
+
+        if (position != null) {
+            mHost.addTile(WALLET, position);
+            mAutoTracker.setTileAdded(WALLET);
+        }
+    }
 
     @VisibleForTesting
     final NightDisplayListener.Callback mNightDisplayCallback =

@@ -317,23 +317,24 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private final String mOriginalInstallerPackageName;
 
     /** Uid of the owner of the installer session */
-    @GuardedBy("mLock")
-    private int mInstallerUid;
+    private volatile int mInstallerUid;
 
     /** Where this install request came from */
     @GuardedBy("mLock")
     private InstallSource mInstallSource;
 
-    @GuardedBy("mLock")
+    private final Object mProgressLock = new Object();
+
+    @GuardedBy("mProgressLock")
     private float mClientProgress = 0;
-    @GuardedBy("mLock")
+    @GuardedBy("mProgressLock")
     private float mInternalProgress = 0;
 
-    @GuardedBy("mLock")
+    @GuardedBy("mProgressLock")
     private float mProgress = 0;
-    @GuardedBy("mLock")
+    @GuardedBy("mProgressLock")
     private float mReportedProgress = -1;
-    @GuardedBy("mLock")
+    @GuardedBy("mProgressLock")
     private float mIncrementalProgress = 0;
 
     /** State of the session. */
@@ -579,7 +580,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
          */
         @Override
         public void installSession(IntentSender statusReceiver) {
-            assertCallerIsOwnerOrRootOrSystemLocked();
+            assertCallerIsOwnerOrRootOrSystem();
             assertNotChildLocked("StagedSession#installSession");
             Preconditions.checkArgument(isCommitted() && isSessionReady());
 
@@ -678,7 +679,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             final Runnable r;
             synchronized (mLock) {
                 assertNotChildLocked("StagedSession#abandon");
-                assertCallerIsOwnerOrRootLocked();
+                assertCallerIsOwnerOrRoot();
                 if (isInTerminalState()) {
                     // We keep the session in the database if it's in a finalized state. It will be
                     // removed by PackageInstallerService when the last update time is old enough.
@@ -752,7 +753,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
          */
         @Override
         public void verifySession() {
-            assertCallerIsOwnerOrRootOrSystemLocked();
+            assertCallerIsOwnerOrRootOrSystem();
             Preconditions.checkArgument(isCommitted());
             Preconditions.checkArgument(!mSessionApplied && !mSessionFailed);
             verify();
@@ -935,7 +936,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         final boolean forcePermissionPrompt =
                 (params.installFlags & PackageManager.INSTALL_FORCE_PERMISSION_PROMPT) != 0
-                        || params.requireUserAction == SessionInfo.USER_ACTION_REQUIRED;
+                        || params.requireUserAction == SessionParams.USER_ACTION_REQUIRED;
         if (forcePermissionPrompt) {
             return USER_ACTION_REQUIRED;
         }
@@ -955,14 +956,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 == PackageManager.PERMISSION_GRANTED);
         final int targetPackageUid = mPm.getPackageUid(packageName, 0, userId);
         final boolean isUpdate = targetPackageUid != -1;
-        final InstallSourceInfo installSourceInfo = isUpdate
+        final InstallSourceInfo existingInstallSourceInfo = isUpdate
                 ? mPm.getInstallSourceInfo(packageName)
                 : null;
-        final String installerPackageName = installSourceInfo != null
-                ? installSourceInfo.getInstallingPackageName()
+        final String existingInstallerPackageName = existingInstallSourceInfo != null
+                ? existingInstallSourceInfo.getInstallingPackageName()
                 : null;
         final boolean isInstallerOfRecord = isUpdate
-                && Objects.equals(installerPackageName, getInstallerPackageName());
+                && Objects.equals(existingInstallerPackageName, getInstallerPackageName());
         final boolean isSelfUpdate = targetPackageUid == mInstallerUid;
         final boolean isPermissionGranted = isInstallPermissionGranted
                 || (isUpdatePermissionGranted && isUpdate)
@@ -979,12 +980,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return USER_ACTION_NOT_NEEDED;
         }
 
-        if (mPm.isInstallDisabledForPackage(installerPackageName, mInstallerUid, userId)) {
+        if (mPm.isInstallDisabledForPackage(getInstallerPackageName(), mInstallerUid, userId)) {
             // show the installer to account for device poslicy or unknown sources use cases
             return USER_ACTION_REQUIRED;
         }
 
-        if (params.requireUserAction == SessionInfo.USER_ACTION_NOT_REQUIRED
+        if (params.requireUserAction == SessionParams.USER_ACTION_NOT_REQUIRED
                 && isUpdateWithoutUserActionPermissionGranted
                 && (isInstallerOfRecord || isSelfUpdate)) {
             return USER_ACTION_PENDING_APK_PARSING;
@@ -1237,7 +1238,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
     }
 
-    @GuardedBy("mLock")
+    @GuardedBy("mProgressLock")
     private void setClientProgressLocked(float progress) {
         // Always publish first staging movement
         final boolean forcePublish = (mClientProgress == 0);
@@ -1247,21 +1248,21 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public void setClientProgress(float progress) {
-        synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
+        assertCallerIsOwnerOrRoot();
+        synchronized (mProgressLock) {
             setClientProgressLocked(progress);
         }
     }
 
     @Override
     public void addClientProgress(float progress) {
-        synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
+        assertCallerIsOwnerOrRoot();
+        synchronized (mProgressLock) {
             setClientProgressLocked(mClientProgress + progress);
         }
     }
 
-    @GuardedBy("mLock")
+    @GuardedBy("mProgressLock")
     private void computeProgressLocked(boolean forcePublish) {
         if (!mCommitted) {
             mProgress = MathUtils.constrain(mClientProgress * 0.8f, 0f, 0.8f)
@@ -1286,8 +1287,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public String[] getNames() {
+        assertCallerIsOwnerOrRoot();
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotCommittedOrDestroyedLocked("getNames");
 
             return getNamesLocked();
@@ -1370,8 +1371,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
+        assertCallerIsOwnerOrRoot();
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotCommittedOrDestroyedLocked("addChecksums");
 
             if (mChecksums.containsKey(name)) {
@@ -1392,8 +1393,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new IllegalStateException("Must specify package name to remove a split");
         }
 
+        assertCallerIsOwnerOrRoot();
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotCommittedOrDestroyedLocked("removeSplit");
 
             try {
@@ -1439,8 +1440,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new IllegalStateException(
                     "Cannot write regular files in a data loader installation session.");
         }
+        assertCallerIsOwnerOrRoot();
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotSealedLocked("assertCanWrite");
         }
         if (reverseMode) {
@@ -1621,8 +1622,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             throw new IllegalStateException(
                     "Cannot read regular files in a data loader installation session.");
         }
+        assertCallerIsOwnerOrRoot();
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotCommittedOrDestroyedLocked("openRead");
             try {
                 return openReadInternalLocked(name);
@@ -1650,8 +1651,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      * Check if the caller is the owner of this session. Otherwise throw a
      * {@link SecurityException}.
      */
-    @GuardedBy("mLock")
-    private void assertCallerIsOwnerOrRootLocked() {
+    private void assertCallerIsOwnerOrRoot() {
         final int callingUid = Binder.getCallingUid();
         if (callingUid != Process.ROOT_UID && callingUid != mInstallerUid) {
             throw new SecurityException("Session does not belong to uid " + callingUid);
@@ -1662,8 +1662,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      * Check if the caller is the owner of this session. Otherwise throw a
      * {@link SecurityException}.
      */
-    @GuardedBy("mLock")
-    private void assertCallerIsOwnerOrRootOrSystemLocked() {
+    private void assertCallerIsOwnerOrRootOrSystem() {
         final int callingUid = Binder.getCallingUid();
         if (callingUid != Process.ROOT_UID && callingUid != mInstallerUid
                 && callingUid != Process.SYSTEM_UID) {
@@ -1949,9 +1948,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
      */
     private boolean markAsSealed(@NonNull IntentSender statusReceiver, boolean forTransfer) {
         Objects.requireNonNull(statusReceiver);
+        assertCallerIsOwnerOrRoot();
 
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
             assertPreparedAndNotDestroyedLocked("commit of session " + sessionId);
             assertNoWriteFileTransfersOpenLocked();
 
@@ -2024,9 +2023,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             "Session destroyed");
                 }
                 if (!isIncrementalInstallation()) {
-                    // For non-incremental installs, client staging is fully done at this point
-                    mClientProgress = 1f;
-                    computeProgressLocked(true);
+                    synchronized (mProgressLock) {
+                        // For non-incremental installs, client staging is fully done at this point
+                        mClientProgress = 1f;
+                        computeProgressLocked(true);
+                    }
                 }
 
                 // This ongoing commit should keep session active, even though client
@@ -2211,7 +2212,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
+            assertCallerIsOwnerOrRoot();
             assertPreparedAndNotSealedLocked("transfer");
 
             try {
@@ -2396,8 +2397,10 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             PackageLite result = parseApkLite();
             if (result != null) {
                 mPackageLite = result;
-                mInternalProgress = 0.5f;
-                computeProgressLocked(true);
+                synchronized (mProgressLock) {
+                    mInternalProgress = 0.5f;
+                    computeProgressLocked(true);
+                }
 
                 extractNativeLibraries(
                         mPackageLite, stageDir, params.abiOverride, mayInheritNativeLibs());
@@ -3574,7 +3577,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         int activeCount;
         synchronized (mLock) {
             if (checkCaller) {
-                assertCallerIsOwnerOrRootLocked();
+                assertCallerIsOwnerOrRoot();
             }
 
             activeCount = mActiveCount.decrementAndGet();
@@ -3614,7 +3617,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         synchronized (mLock) {
             assertNotChildLocked("abandonNonStaged");
-            assertCallerIsOwnerOrRootLocked();
+            assertCallerIsOwnerOrRoot();
             if (mRelinquished) {
                 if (LOGD) Slog.d(TAG, "Ignoring abandon after commit relinquished control");
                 return;
@@ -3658,12 +3661,14 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public DataLoaderParamsParcel getDataLoaderParams() {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         return params.dataLoaderParams != null ? params.dataLoaderParams.getData() : null;
     }
 
     @Override
     public void addFile(int location, String name, long lengthBytes, byte[] metadata,
             byte[] signature) {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         if (!isDataLoaderInstallation()) {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
@@ -3684,7 +3689,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
+            assertCallerIsOwnerOrRoot();
             assertPreparedAndNotSealedLocked("addFile");
 
             if (!mFiles.add(new FileEntry(mFiles.size(),
@@ -3696,6 +3701,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     @Override
     public void removeFile(int location, String name) {
+        mContext.enforceCallingOrSelfPermission(Manifest.permission.USE_INSTALLER_V2, null);
         if (!isDataLoaderInstallation()) {
             throw new IllegalStateException(
                     "Cannot add files to non-data loader installation session.");
@@ -3705,7 +3711,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
+            assertCallerIsOwnerOrRoot();
             assertPreparedAndNotSealedLocked("removeFile");
 
             if (!mFiles.add(new FileEntry(mFiles.size(),
@@ -3857,13 +3863,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     sendPendingStreaming(mContext, statusReceiver, sessionId, e.getMessage());
                 }
             }
-            @Override
-            public void reportStreamHealth(int dataLoaderId, int streamStatus) {
-                // Currently the stream status is not used during package installation. It is
-                // technically possible for the data loader to report stream status via this
-                // callback, but if something is wrong with the streaming, it is more likely that
-                // prepareDataLoaderLocked will return false and the installation will be aborted.
-            }
         };
 
         if (!manualStartAndDestroy) {
@@ -3918,7 +3917,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         new IPackageLoadingProgressCallback.Stub() {
                             @Override
                             public void onPackageLoadingProgressChanged(float progress) {
-                                synchronized (mLock) {
+                                synchronized (mProgressLock) {
                                     mIncrementalProgress = progress;
                                     computeProgressLocked(true);
                                 }
@@ -4018,7 +4017,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         + " as it is in an invalid state.");
             }
             synchronized (mLock) {
-                assertCallerIsOwnerOrRootLocked();
+                assertCallerIsOwnerOrRoot();
                 assertPreparedAndNotSealedLocked("addChildSessionId");
 
                 final int indexOfSession = mChildSessions.indexOfKey(childSessionId);
@@ -4037,7 +4036,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     @Override
     public void removeChildSessionId(int sessionId) {
         synchronized (mLock) {
-            assertCallerIsOwnerOrRootLocked();
+            assertCallerIsOwnerOrRoot();
             assertPreparedAndNotSealedLocked("removeChildSessionId");
 
             final int indexOfSession = mChildSessions.indexOfKey(sessionId);
@@ -4157,6 +4156,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private void destroyInternal() {
+        final IncrementalFileStorages incrementalFileStorages;
         synchronized (mLock) {
             mSealed = true;
             if (!params.isStaged) {
@@ -4169,16 +4169,17 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             for (FileBridge bridge : mBridges) {
                 bridge.forceClose();
             }
-            if (mIncrementalFileStorages != null) {
-                mIncrementalFileStorages.cleanUp();
-                mIncrementalFileStorages = null;
-            }
+            incrementalFileStorages = mIncrementalFileStorages;
+            mIncrementalFileStorages = null;
         }
         // For staged sessions, we don't delete the directory where the packages have been copied,
         // since these packages are supposed to be read on reboot.
         // Those dirs are deleted when the staged session has reached a final state.
         if (stageDir != null && !params.isStaged) {
             try {
+                if (incrementalFileStorages != null) {
+                    incrementalFileStorages.cleanUpAndMarkComplete();
+                }
                 mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
             } catch (InstallerException ignored) {
             }
@@ -4196,13 +4197,15 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     private void cleanStageDir() {
+        final IncrementalFileStorages incrementalFileStorages;
         synchronized (mLock) {
-            if (mIncrementalFileStorages != null) {
-                mIncrementalFileStorages.cleanUp();
-                mIncrementalFileStorages = null;
-            }
+            incrementalFileStorages = mIncrementalFileStorages;
+            mIncrementalFileStorages = null;
         }
         try {
+            if (incrementalFileStorages != null) {
+                incrementalFileStorages.cleanUpAndMarkComplete();
+            }
             mPm.mInstaller.rmPackageDir(stageDir.getAbsolutePath());
         } catch (InstallerException ignored) {
         }

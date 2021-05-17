@@ -241,6 +241,10 @@ public final class MultiClientInputMethodManagerService {
                         public void removeImeSurface() {
                             reportNotSupported();
                         }
+
+                        @Override
+                        public void updateImeWindowStatus() {
+                        }
                     });
         }
 
@@ -1510,10 +1514,8 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void removeImeSurfaceFromWindow(IBinder windowToken,
-                IVoidResultCallback resultCallback) {
+        public void removeImeSurfaceFromWindowAsync(IBinder windowToken) {
             reportNotSupported();
-            CallbackUtils.onResult(resultCallback, () -> { });
         }
 
         @BinderThread
@@ -1842,7 +1844,7 @@ public final class MultiClientInputMethodManagerService {
 
         @BinderThread
         @Override
-        public void reportPerceptible(IBinder windowClient, boolean perceptible) {
+        public void reportPerceptibleAsync(IBinder windowClient, boolean perceptible) {
             reportNotSupported();
         }
 

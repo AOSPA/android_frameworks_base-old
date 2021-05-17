@@ -385,17 +385,16 @@ final class HistoricalRegistry {
                         callback.sendResult(new Bundle());
                         return;
                     }
-                    mPersistence.collectHistoricalOpsDLocked(result, uid, packageName,
-                            attributionTag,
-                            opNames, filter, beginTimeMillis, endTimeMillis, flags);
-
                 }
+                mPersistence.collectHistoricalOpsDLocked(result, uid, packageName,
+                        attributionTag,
+                        opNames, filter, beginTimeMillis, endTimeMillis, flags);
             }
         }
 
         if ((historyFlags & HISTORY_FLAG_DISCRETE) != 0) {
-            mDiscreteRegistry.getHistoricalDiscreteOps(result, beginTimeMillis, endTimeMillis,
-                    filter, uid, packageName, opNames, attributionTag,
+            mDiscreteRegistry.addFilteredDiscreteOpsToHistoricalOps(result, beginTimeMillis,
+                    endTimeMillis, filter, uid, packageName, opNames, attributionTag,
                     flags);
         }
 
@@ -428,8 +427,8 @@ final class HistoricalRegistry {
                 inMemoryAdjEndTimeMillis);
 
         if ((historyFlags & HISTORY_FLAG_DISCRETE) != 0) {
-            mDiscreteRegistry.getHistoricalDiscreteOps(result, beginTimeMillis, endTimeMillis,
-                    filter, uid, packageName, opNames, attributionTag, flags);
+            mDiscreteRegistry.addFilteredDiscreteOpsToHistoricalOps(result, beginTimeMillis,
+                    endTimeMillis, filter, uid, packageName, opNames, attributionTag, flags);
         }
 
         if ((historyFlags & HISTORY_FLAG_AGGREGATE) != 0) {
@@ -577,19 +576,19 @@ final class HistoricalRegistry {
                     Slog.e(LOG_TAG, "Interaction before persistence initialized");
                     return;
                 }
-                final List<HistoricalOps> history = mPersistence.readHistoryDLocked();
-                clearHistoricalRegistry();
-                if (history != null) {
-                    final int historySize = history.size();
-                    for (int i = 0; i < historySize; i++) {
-                        final HistoricalOps ops = history.get(i);
-                        ops.offsetBeginAndEndTime(offsetMillis);
-                    }
-                    if (offsetMillis < 0) {
-                        pruneFutureOps(history);
-                    }
-                    mPersistence.persistHistoricalOpsDLocked(history);
+            }
+            final List<HistoricalOps> history = mPersistence.readHistoryDLocked();
+            clearHistoricalRegistry();
+            if (history != null) {
+                final int historySize = history.size();
+                for (int i = 0; i < historySize; i++) {
+                    final HistoricalOps ops = history.get(i);
+                    ops.offsetBeginAndEndTime(offsetMillis);
                 }
+                if (offsetMillis < 0) {
+                    pruneFutureOps(history);
+                }
+                mPersistence.persistHistoricalOpsDLocked(history);
             }
         }
     }
@@ -645,6 +644,7 @@ final class HistoricalRegistry {
                 mPersistence.clearHistoryDLocked(uid, packageName);
             }
         }
+        mDiscreteRegistry.clearHistory(uid, packageName);
     }
 
     void writeAndClearDiscreteHistory() {

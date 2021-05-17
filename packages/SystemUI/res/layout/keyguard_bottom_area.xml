@@ -62,7 +62,7 @@
         android:id="@+id/keyguard_selector_fade_container"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
-        android:layout_marginBottom="70dp"
+        android:layout_marginBottom="60dp"
         android:orientation="vertical"
         android:layout_gravity="bottom|center_horizontal"
         android:gravity="center_horizontal" />
@@ -99,9 +99,11 @@
         android:layout_width="@dimen/keyguard_affordance_width"
         android:layout_gravity="bottom|end"
         android:scaleType="center"
-        android:tint="?attr/wallpaperTextColor"
-        android:layout_marginStart="24dp"
-        android:layout_marginBottom="48dp"
+        android:tint="?android:attr/textColorPrimary"
+        android:src="@drawable/ic_wallet_lockscreen"
+        android:background="@drawable/wallet_lockscreen_bg"
+        android:layout_marginEnd="@dimen/keyguard_affordance_horizontal_offset"
+        android:layout_marginBottom="@dimen/keyguard_affordance_vertical_offset"
         android:visibility="gone" />
 
     <FrameLayout

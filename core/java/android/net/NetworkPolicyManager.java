@@ -479,7 +479,8 @@ public class NetworkPolicyManager {
      * @param overrideMask the bitmask that specifies which of the overrides is being
      *            set or cleared.
      * @param overrideValue the override values to set or clear.
-     * @param networkTypes the network types this override applies to.
+     * @param networkTypes the network types this override applies to. If no
+     *            network types are specified, override values will be ignored.
      *            {@see TelephonyManager#getAllNetworkTypes()}
      * @param timeoutMillis the timeout after which the requested override will
      *            be automatically cleared, or {@code 0} to leave in the
@@ -558,31 +559,6 @@ public class NetworkPolicyManager {
     public boolean isUidNetworkingBlocked(int uid, boolean meteredNetwork) {
         try {
             return mService.isUidNetworkingBlocked(uid, meteredNetwork);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
-    /**
-     * Figure out if networking is blocked for a given set of conditions.
-     *
-     * This is used by ConnectivityService via passing stale copies of conditions, so it must not
-     * take any locks.
-     *
-     * @param uid The target uid.
-     * @param uidRules The uid rules which are obtained from NetworkPolicyManagerService.
-     * @param isNetworkMetered True if the network is metered.
-     * @param isBackgroundRestricted True if data saver is enabled.
-     *
-     * @return true if networking is blocked for the UID under the specified conditions.
-     *
-     * @hide
-     */
-    public boolean checkUidNetworkingBlocked(int uid, int uidRules,
-            boolean isNetworkMetered, boolean isBackgroundRestricted) {
-        try {
-            return mService.checkUidNetworkingBlocked(uid, uidRules, isNetworkMetered,
-                    isBackgroundRestricted);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -791,10 +767,15 @@ public class NetworkPolicyManager {
      *                       blocked.
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     @NonNull
     public static String blockedReasonsToString(int blockedReasons) {
-        return DebugUtils.flagsToString(NetworkPolicyManager.class, "BLOCKED_", blockedReasons);
+        return DebugUtils.flagsToString(ConnectivityManager.class, "BLOCKED_", blockedReasons);
+    }
+
+    /** @hide */
+    @NonNull
+    public static String allowedReasonsToString(int allowedReasons) {
+        return DebugUtils.flagsToString(NetworkPolicyManager.class, "ALLOWED_", allowedReasons);
     }
 
     /**

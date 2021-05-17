@@ -29,18 +29,17 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.annotation.IdRes;
 import android.app.ActivityManager;
-import android.app.StatusBarManager;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.hardware.biometrics.BiometricSourceType;
 import android.os.PowerManager;
 import android.os.UserManager;
+import android.service.quickaccesswallet.QuickAccessWalletClient;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.util.DisplayMetrics;
@@ -65,6 +64,7 @@ import com.android.keyguard.KeyguardClockSwitchController;
 import com.android.keyguard.KeyguardStatusView;
 import com.android.keyguard.KeyguardStatusViewController;
 import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.LockIconViewController;
 import com.android.keyguard.dagger.KeyguardQsUserSwitchComponent;
 import com.android.keyguard.dagger.KeyguardStatusBarViewComponent;
 import com.android.keyguard.dagger.KeyguardStatusViewComponent;
@@ -82,6 +82,7 @@ import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.KeyguardAffordanceView;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
+import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
@@ -98,6 +99,8 @@ import com.android.systemui.statusbar.notification.stack.NotificationStackScroll
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.util.concurrency.FakeExecutor;
+import com.android.systemui.util.time.FakeSystemClock;
 import com.android.wm.shell.animation.FlingAnimationUtils;
 
 import org.junit.Before;
@@ -109,7 +112,6 @@ import org.mockito.MockitoAnnotations;
 import org.mockito.stubbing.Answer;
 
 import java.util.List;
-import java.util.function.Consumer;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -219,6 +221,8 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     @Mock
     private NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
     @Mock
+    private NotificationShadeDepthController mNotificationShadeDepthController;
+    @Mock
     private AuthController mAuthController;
     @Mock
     private ScrimController mScrimController;
@@ -232,6 +236,10 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     private UserManager mUserManager;
     @Mock
     private UiEventLogger mUiEventLogger;
+    @Mock
+    private LockIconViewController mLockIconViewController;
+    @Mock
+    private QuickAccessWalletClient mQuickAccessWalletClient;
 
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
@@ -333,8 +341,12 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 mScrimController,
                 mUserManager,
                 mMediaDataManager,
+                mNotificationShadeDepthController,
                 mAmbientState,
-                mFeatureFlags);
+                mLockIconViewController,
+                mFeatureFlags,
+                mQuickAccessWalletClient,
+                new FakeExecutor(new FakeSystemClock()));
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,
                 mNotificationShelfController);
@@ -364,19 +376,6 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     public void testSetExpandedHeight() {
         mNotificationPanelViewController.setExpandedHeight(200);
         assertThat((int) mNotificationPanelViewController.getExpandedHeight()).isEqualTo(200);
-    }
-
-    @Test
-    public void testAffordanceLaunchingListener() {
-        Consumer<Boolean> listener = spy((showing) -> { });
-        mNotificationPanelViewController.setExpandedFraction(1f);
-        mNotificationPanelViewController.setLaunchAffordanceListener(listener);
-        mNotificationPanelViewController.launchCamera(false /* animate */,
-                StatusBarManager.CAMERA_LAUNCH_SOURCE_POWER_DOUBLE_TAP);
-        verify(listener).accept(eq(true));
-
-        mNotificationPanelViewController.onAffordanceLaunchEnded();
-        verify(listener).accept(eq(false));
     }
 
     @Test

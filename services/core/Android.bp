@@ -135,7 +135,6 @@ java_library_static {
     ],
 
     static_libs: [
-        "protolog-lib",
         "time_zone_distro",
         "time_zone_distro_installer",
         "android.hardware.authsecret-V1.0-java",
@@ -161,7 +160,6 @@ java_library_static {
         "android.hardware.power.stats-V1-java",
         "android.hidl.manager-V1.2-java",
         "capture_state_listener-aidl-java",
-        "dnsresolver_aidl_interface-V8-java",
         "icu4j_calendar_astronomer",
         "netd-client",
         "overlayable_policy_aidl-java",
@@ -230,7 +228,6 @@ filegroup {
         "java/com/android/server/NetIdManager.java",
         "java/com/android/server/TestNetworkService.java",
         "java/com/android/server/connectivity/AutodestructReference.java",
-        "java/com/android/server/connectivity/ConnectivityConstants.java",
         "java/com/android/server/connectivity/DnsManager.java",
         "java/com/android/server/connectivity/FullScore.java",
         "java/com/android/server/connectivity/KeepaliveTracker.java",

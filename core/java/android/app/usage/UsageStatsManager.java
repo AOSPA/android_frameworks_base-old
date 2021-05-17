@@ -982,6 +982,20 @@ public final class UsageStatsManager {
     }
 
     /**
+     * Reports user interaction with a given package in the given user.
+     *
+     * <p><em>This method is only for use by the system</em>
+     * @hide
+     */
+    public void reportUserInteraction(@NonNull String packageName, int userId) {
+        try {
+            mService.reportUserInteraction(packageName, userId);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Report usage associated with a particular {@code token} has started. Tokens are app defined
      * strings used to represent usage of in-app features. Apps with the {@link
      * android.Manifest.permission#OBSERVE_APP_USAGE} permission can register time limit observers
@@ -1248,6 +1262,34 @@ public final class UsageStatsManager {
         try {
             mService.reportChooserSelection(packageName, userId, contentType, annotations, action);
         } catch (RemoteException re) {
+        }
+    }
+
+    /**
+     * Get the last time a package is used by any users including explicit user interaction and
+     * component usage, measured in milliseconds since the epoch and truncated to the boundary of
+     * last day before the exact time. For packages that are never used, the time will be the epoch.
+     * <p> Note that this usage stats is user-agnostic. </p>
+     * <p>
+     * Also note that component usage is only reported for component bindings (e.g. broadcast
+     * receiver, service, content provider) and only when such a binding would cause an app to leave
+     * the stopped state.
+     * See {@link UsageEvents.Event.USER_INTERACTION}, {@link UsageEvents.Event.APP_COMPONENT_USED}.
+     * </p>
+     *
+     * @param packageName The name of the package to be queried.
+     * @return last time the queried package is used since the epoch.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.INTERACT_ACROSS_USERS,
+            android.Manifest.permission.PACKAGE_USAGE_STATS})
+    public long getLastTimeAnyComponentUsed(@NonNull String packageName) {
+        try {
+            return mService.getLastTimeAnyComponentUsed(packageName);
+        } catch (RemoteException re) {
+            throw re.rethrowFromSystemServer();
         }
     }
 }

@@ -232,13 +232,15 @@ package android.net {
     method @NonNull public android.net.Network register();
     method public final void sendLinkProperties(@NonNull android.net.LinkProperties);
     method public final void sendNetworkCapabilities(@NonNull android.net.NetworkCapabilities);
+    method public final void sendNetworkScore(@NonNull android.net.NetworkScore);
     method public final void sendNetworkScore(@IntRange(from=0, to=99) int);
     method public final void sendQosCallbackError(int, int);
     method public final void sendQosSessionAvailable(int, int, @NonNull android.net.QosSessionAttributes);
     method public final void sendQosSessionLost(int, int, int);
     method public final void sendSocketKeepaliveEvent(int, int);
     method @Deprecated public void setLegacySubtype(int, @NonNull String);
-    method public void setTeardownDelayMs(@IntRange(from=0, to=0x1388) int);
+    method public void setLingerDuration(@NonNull java.time.Duration);
+    method public void setTeardownDelayMillis(@IntRange(from=0, to=0x1388) int);
     method public final void setUnderlyingNetworks(@Nullable java.util.List<android.net.Network>);
     method public void unregister();
     field public static final int VALIDATION_STATUS_NOT_VALID = 2; // 0x2
@@ -259,15 +261,15 @@ package android.net {
   public static final class NetworkAgentConfig.Builder {
     ctor public NetworkAgentConfig.Builder();
     method @NonNull public android.net.NetworkAgentConfig build();
-    method @NonNull public android.net.NetworkAgentConfig.Builder disableNat64Detection();
-    method @NonNull public android.net.NetworkAgentConfig.Builder disableProvisioningNotification();
     method @NonNull public android.net.NetworkAgentConfig.Builder setExplicitlySelected(boolean);
     method @NonNull public android.net.NetworkAgentConfig.Builder setLegacyExtraInfo(@NonNull String);
     method @NonNull public android.net.NetworkAgentConfig.Builder setLegacySubType(int);
     method @NonNull public android.net.NetworkAgentConfig.Builder setLegacySubTypeName(@NonNull String);
     method @NonNull public android.net.NetworkAgentConfig.Builder setLegacyType(int);
     method @NonNull public android.net.NetworkAgentConfig.Builder setLegacyTypeName(@NonNull String);
+    method @NonNull public android.net.NetworkAgentConfig.Builder setNat64DetectionEnabled(boolean);
     method @NonNull public android.net.NetworkAgentConfig.Builder setPartialConnectivityAcceptable(boolean);
+    method @NonNull public android.net.NetworkAgentConfig.Builder setProvisioningNotificationEnabled(boolean);
     method @NonNull public android.net.NetworkAgentConfig.Builder setUnvalidatedConnectivityAcceptable(boolean);
   }
 
@@ -275,6 +277,7 @@ package android.net {
     method @NonNull public int[] getAdministratorUids();
     method @Nullable public static String getCapabilityCarrierName(int);
     method @Nullable public String getSsid();
+    method @NonNull public java.util.Set<java.lang.Integer> getSubscriptionIds();
     method @NonNull public int[] getTransportTypes();
     method public boolean isPrivateDnsBroken();
     method public boolean satisfiedByNetworkCapabilities(@Nullable android.net.NetworkCapabilities);
@@ -305,7 +308,7 @@ package android.net {
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY) public android.net.NetworkCapabilities.Builder setRequestorUid(int);
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_SIGNAL_STRENGTH_WAKEUP) public android.net.NetworkCapabilities.Builder setSignalStrength(int);
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_FACTORY) public android.net.NetworkCapabilities.Builder setSsid(@Nullable String);
-    method @NonNull public android.net.NetworkCapabilities.Builder setSubIds(@NonNull java.util.Set<java.lang.Integer>);
+    method @NonNull public android.net.NetworkCapabilities.Builder setSubscriptionIds(@NonNull java.util.Set<java.lang.Integer>);
     method @NonNull public android.net.NetworkCapabilities.Builder setTransportInfo(@Nullable android.net.TransportInfo);
   }
 
@@ -335,12 +338,15 @@ package android.net {
 
   public static class NetworkRequest.Builder {
     method @NonNull @RequiresPermission(android.Manifest.permission.NETWORK_SIGNAL_STRENGTH_WAKEUP) public android.net.NetworkRequest.Builder setSignalStrength(int);
+    method @NonNull public android.net.NetworkRequest.Builder setSubscriptionIds(@NonNull java.util.Set<java.lang.Integer>);
   }
 
   public final class NetworkScore implements android.os.Parcelable {
     method public int describeContents();
     method public int getKeepConnectedReason();
     method public int getLegacyInt();
+    method public boolean isExiting();
+    method public boolean isTransportPrimary();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.net.NetworkScore> CREATOR;
     field public static final int KEEP_CONNECTED_FOR_HANDOVER = 1; // 0x1
@@ -350,8 +356,10 @@ package android.net {
   public static final class NetworkScore.Builder {
     ctor public NetworkScore.Builder();
     method @NonNull public android.net.NetworkScore build();
+    method @NonNull public android.net.NetworkScore.Builder setExiting(boolean);
     method @NonNull public android.net.NetworkScore.Builder setKeepConnectedReason(int);
     method @NonNull public android.net.NetworkScore.Builder setLegacyInt(int);
+    method @NonNull public android.net.NetworkScore.Builder setTransportPrimary(boolean);
   }
 
   public final class OemNetworkPreferences implements android.os.Parcelable {
@@ -464,14 +472,14 @@ package android.net {
   public final class TcpKeepalivePacketData extends android.net.KeepalivePacketData implements android.os.Parcelable {
     ctor public TcpKeepalivePacketData(@NonNull java.net.InetAddress, int, @NonNull java.net.InetAddress, int, @NonNull byte[], int, int, int, int, int, int) throws android.net.InvalidPacketException;
     method public int describeContents();
+    method public int getIpTos();
+    method public int getIpTtl();
+    method public int getTcpAck();
+    method public int getTcpSeq();
+    method public int getTcpWindow();
+    method public int getTcpWindowScale();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.net.TcpKeepalivePacketData> CREATOR;
-    field public final int ipTos;
-    field public final int ipTtl;
-    field public final int tcpAck;
-    field public final int tcpSeq;
-    field public final int tcpWindow;
-    field public final int tcpWindowScale;
   }
 
 }

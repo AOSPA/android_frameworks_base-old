@@ -38,7 +38,7 @@ public class VcnGatewayConnectionRetryTimeoutStateTest extends VcnGatewayConnect
     public void setUp() throws Exception {
         super.setUp();
 
-        mFirstRetryInterval = mConfig.getRetryInterval()[0];
+        mFirstRetryInterval = mConfig.getRetryIntervalsMs()[0];
 
         mGatewayConnection.setUnderlyingNetwork(TEST_UNDERLYING_NETWORK_RECORD_1);
         mGatewayConnection.transitionTo(mGatewayConnection.mRetryTimeoutState);
@@ -96,8 +96,9 @@ public class VcnGatewayConnectionRetryTimeoutStateTest extends VcnGatewayConnect
     }
 
     @Test
-    public void testSafeModeTimeoutNotifiesCallback() {
-        verifySafeModeTimeoutNotifiesCallback(mGatewayConnection.mRetryTimeoutState);
+    public void testSafeModeTimeoutNotifiesCallbackAndUnregistersNetworkAgent() {
+        verifySafeModeTimeoutNotifiesCallbackAndUnregistersNetworkAgent(
+                mGatewayConnection.mRetryTimeoutState);
     }
 
     @Test

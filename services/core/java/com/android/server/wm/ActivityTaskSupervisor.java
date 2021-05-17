@@ -587,6 +587,15 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void reportActivityLaunched(boolean timeout, ActivityRecord r, long totalTime,
             @WaitResult.LaunchState int launchState) {
         boolean changed = false;
+        if (totalTime > 0) {
+            if (mPerfBoost != null) {
+                if (r.app != null) {
+                    mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW,
+                        r.packageName, r.app.getPid(),
+                        BoostFramework.Draw.EVENT_TYPE_V1);
+                }
+            }
+        }
         for (int i = mWaitingActivityLaunched.size() - 1; i >= 0; i--) {
             final WaitInfo info = mWaitingActivityLaunched.get(i);
             if (!info.matches(r)) {
@@ -864,7 +873,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         r.getSavedState(), r.getPersistentSavedState(), results, newIntents,
                         r.takeOptions(), dc.isNextTransitionForward(),
                         proc.createProfilerInfoIfNeeded(), r.assistToken, activityClientController,
-                        r.createFixedRotationAdjustmentsIfNeeded(), r.shareableActivityToken));
+                        r.createFixedRotationAdjustmentsIfNeeded(), r.shareableActivityToken,
+                        r.getLaunchedFromBubble()));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -2122,7 +2132,9 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     }
 
     final void scheduleIdle() {
-        mHandler.sendEmptyMessage(IDLE_NOW_MSG);
+        if (!mHandler.hasMessages(IDLE_NOW_MSG)) {
+            mHandler.sendEmptyMessage(IDLE_NOW_MSG);
+        }
     }
 
     /**
@@ -2210,8 +2222,16 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
     }
 
-    void scheduleProcessStoppingAndFinishingActivities() {
-        if (!mHandler.hasMessages(PROCESS_STOPPING_AND_FINISHING_MSG)) {
+    void scheduleProcessStoppingAndFinishingActivitiesIfNeeded() {
+        if (mStoppingActivities.isEmpty() && mFinishingActivities.isEmpty()) {
+            return;
+        }
+        if (mRootWindowContainer.allResumedActivitiesIdle()) {
+            scheduleIdle();
+            return;
+        }
+        if (!mHandler.hasMessages(PROCESS_STOPPING_AND_FINISHING_MSG)
+                && mRootWindowContainer.allResumedActivitiesVisible()) {
             mHandler.sendEmptyMessage(PROCESS_STOPPING_AND_FINISHING_MSG);
         }
     }

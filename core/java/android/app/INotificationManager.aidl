@@ -85,6 +85,7 @@ interface INotificationManager
 
     void setBubblesAllowed(String pkg, int uid, int bubblePreference);
     boolean areBubblesAllowed(String pkg);
+    boolean areBubblesEnabled(in UserHandle user);
     int getBubblePreferenceForPackage(String pkg, int uid);
 
     void createNotificationChannelGroups(String pkg, in ParceledListSlice channelGroupList);
@@ -187,6 +188,8 @@ interface INotificationManager
     List<ComponentName> getEnabledNotificationListeners(int userId);
     ComponentName getAllowedNotificationAssistantForUser(int userId);
     ComponentName getAllowedNotificationAssistant();
+    ComponentName getDefaultNotificationAssistant();
+    void setNASMigrationDoneAndResetDefault(int userId, boolean loadFromConfig);
     boolean hasEnabledNotificationListener(String packageName, int userId);
 
     @UnsupportedAppUsage
@@ -227,6 +230,7 @@ interface INotificationManager
 
     NotificationListenerFilter getListenerFilter(in ComponentName cn, int userId);
     void setListenerFilter(in ComponentName cn, int userId, in NotificationListenerFilter nlf);
+    void migrateNotificationFilter(in INotificationListener token, int defaultTypes, in List<String> disallowedPkgs);
 
     void setToastRateLimitingEnabled(boolean enable);
 }

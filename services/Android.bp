@@ -7,6 +7,22 @@ package {
     default_applicable_licenses: ["frameworks_base_license"],
 }
 
+// Defaults for platform code that runs inside system_server
+java_defaults {
+    name: "platform_service_defaults",
+    plugins: ["error_prone_android_framework"],
+    errorprone: {
+        javacflags: [
+            // "-Xep:AndroidFrameworkBinderIdentity:ERROR",
+            "-Xep:AndroidFrameworkCompatChange:ERROR",
+            // "-Xep:AndroidFrameworkUid:ERROR",
+            // NOTE: only enable to generate local patchfiles
+            // "-XepPatchChecks:refaster:frameworks/base/errorprone/refaster/EfficientXml.java.refaster",
+            // "-XepPatchLocation:/tmp/refaster/",
+        ],
+    },
+}
+
 filegroup {
     name: "services-main-sources",
     srcs: [
@@ -49,6 +65,7 @@ filegroup {
         ":services.texttospeech-sources",
         ":services.usage-sources",
         ":services.usb-sources",
+        ":services.uwb-sources",
         ":services.voiceinteraction-sources",
         ":services.wifi-sources",
     ],
@@ -64,6 +81,11 @@ filegroup {
         ":service-statsd-sources",
     ],
     visibility: ["//visibility:private"],
+}
+
+java_library {
+    name: "Slogf",
+    srcs: ["core/java/com/android/server/utils/Slogf.java"],
 }
 
 // merge all required services into one jar
@@ -108,6 +130,7 @@ java_library {
         "services.texttospeech",
         "services.usage",
         "services.usb",
+        "services.uwb",
         "services.voiceinteraction",
         "services.wifi",
         "service-blobstore",
@@ -118,6 +141,7 @@ java_library {
     libs: [
         "android.hidl.manager-V1.0-java",
         "framework-tethering.stubs.module_lib",
+        "service-art.stubs.system_server",
     ],
 
     // Uncomment to enable output of certain warnings (deprecated, unchecked)

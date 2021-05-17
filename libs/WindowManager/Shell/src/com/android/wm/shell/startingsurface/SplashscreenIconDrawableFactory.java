@@ -37,14 +37,12 @@ import android.graphics.drawable.AdaptiveIconDrawable;
 import android.graphics.drawable.Animatable;
 import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.SystemClock;
+import android.os.Handler;
 import android.os.Trace;
 import android.util.PathParser;
 import android.window.SplashScreenView;
 
 import com.android.internal.R;
-
-import java.util.function.Consumer;
 
 /**
  * Creating a lightweight Drawable object used for splash screen.
@@ -53,42 +51,61 @@ import java.util.function.Consumer;
 public class SplashscreenIconDrawableFactory {
 
     static Drawable makeIconDrawable(@ColorInt int backgroundColor,
-            @NonNull Drawable foregroundDrawable, int iconSize) {
+            @NonNull Drawable foregroundDrawable, int iconSize,
+            Handler splashscreenWorkerHandler) {
         if (foregroundDrawable instanceof Animatable) {
             return new AnimatableIconDrawable(backgroundColor, foregroundDrawable);
         } else if (foregroundDrawable instanceof AdaptiveIconDrawable) {
-            return new ImmobileIconDrawable((AdaptiveIconDrawable) foregroundDrawable, iconSize);
+            return new ImmobileIconDrawable((AdaptiveIconDrawable) foregroundDrawable, iconSize,
+                    splashscreenWorkerHandler);
         } else {
             return new ImmobileIconDrawable(new AdaptiveIconDrawable(
-                    new ColorDrawable(backgroundColor), foregroundDrawable), iconSize);
+                    new ColorDrawable(backgroundColor), foregroundDrawable), iconSize,
+                    splashscreenWorkerHandler);
         }
     }
 
     private static class ImmobileIconDrawable extends Drawable {
-        private Shader mLayersShader;
+        private boolean mCacheComplete;
         private final Paint mPaint = new Paint(Paint.ANTI_ALIAS_FLAG | Paint.DITHER_FLAG
                 | Paint.FILTER_BITMAP_FLAG);
 
-        ImmobileIconDrawable(AdaptiveIconDrawable drawable, int iconSize) {
-            cachePaint(drawable, iconSize, iconSize);
+        ImmobileIconDrawable(AdaptiveIconDrawable drawable, int iconSize,
+                Handler splashscreenWorkerHandler) {
+            splashscreenWorkerHandler.post(() -> cachePaint(drawable, iconSize, iconSize));
         }
 
         private void cachePaint(AdaptiveIconDrawable drawable, int width, int height) {
-            Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "cachePaint");
-            final Bitmap layersBitmap = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888);
-            final Canvas canvas = new Canvas(layersBitmap);
-            drawable.setBounds(0, 0, width, height);
-            drawable.draw(canvas);
-            mLayersShader = new BitmapShader(layersBitmap, Shader.TileMode.CLAMP,
-                    Shader.TileMode.CLAMP);
-            mPaint.setShader(mLayersShader);
-            Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+            synchronized (mPaint) {
+                if (mCacheComplete) {
+                    return;
+                }
+                Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "cachePaint");
+                final Bitmap layersBitmap = Bitmap.createBitmap(width, height,
+                        Bitmap.Config.ARGB_8888);
+                final Canvas canvas = new Canvas(layersBitmap);
+                drawable.setBounds(0, 0, width, height);
+                drawable.draw(canvas);
+                final Shader layersShader = new BitmapShader(layersBitmap, Shader.TileMode.CLAMP,
+                        Shader.TileMode.CLAMP);
+                mPaint.setShader(layersShader);
+                Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
+                mCacheComplete = true;
+            }
         }
 
         @Override
         public void draw(Canvas canvas) {
-            final Rect bounds = getBounds();
-            canvas.drawRect(bounds, mPaint);
+            synchronized (mPaint) {
+                if (mCacheComplete) {
+                    final Rect bounds = getBounds();
+                    canvas.drawRect(bounds, mPaint);
+                } else {
+                    // this shouldn't happen, but if it really happen, invalidate self to wait
+                    // for cachePaint finish.
+                    invalidateSelf();
+                }
+            }
         }
 
         @Override
@@ -133,7 +150,6 @@ public class SplashscreenIconDrawableFactory {
         private Animatable mAnimatableIcon;
         private Animator mIconAnimator;
         private boolean mAnimationTriggered;
-        private long mIconAnimationStart;
 
         AnimatableIconDrawable(@ColorInt int backgroundColor, Drawable foregroundDrawable) {
             mForegroundDrawable = foregroundDrawable;
@@ -150,16 +166,15 @@ public class SplashscreenIconDrawableFactory {
         }
 
         @Override
-        protected boolean prepareAnimate(long duration, Consumer<Long> startListener) {
+        protected boolean prepareAnimate(long duration, Runnable startListener) {
             mAnimatableIcon = (Animatable) mForegroundDrawable;
             mIconAnimator = ValueAnimator.ofInt(0, 1);
             mIconAnimator.setDuration(duration);
             mIconAnimator.addListener(new Animator.AnimatorListener() {
                 @Override
                 public void onAnimationStart(Animator animation) {
-                    mIconAnimationStart = SystemClock.uptimeMillis();
                     if (startListener != null) {
-                        startListener.accept(mIconAnimationStart);
+                        startListener.run();
                     }
                     mAnimatableIcon.start();
                 }

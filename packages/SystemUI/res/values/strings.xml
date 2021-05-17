@@ -245,10 +245,14 @@
     <string name="screenshot_dismiss_description">Dismiss screenshot</string>
     <!-- Content description indicating that the view is a preview of the screenshot that was just taken [CHAR LIMIT=NONE] -->
     <string name="screenshot_preview_description">Screenshot preview</string>
-    <!-- Content description for the top boundary of the screenshot being cropped [CHAR LIMIT=NONE] -->
-    <string name="screenshot_top_boundary">Top boundary</string>
-    <!-- Content description for the bottom boundary of the screenshot being cropped [CHAR LIMIT=NONE] -->
-    <string name="screenshot_bottom_boundary">Bottom boundary</string>
+    <!-- Content description for the top boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_top_boundary_pct">Top boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
+    <!-- Content description for the bottom boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_bottom_boundary_pct">Bottom boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
+    <!-- Content description for the left boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_left_boundary_pct">Left boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
+    <!-- Content description for the right boundary of the screenshot being cropped, with the current position as a percentage. [CHAR LIMIT=NONE] -->
+    <string name="screenshot_right_boundary_pct">Right boundary <xliff:g id="percent" example="50">%1$d</xliff:g> percent</string>
 
     <!-- Notification title displayed for screen recording [CHAR LIMIT=50]-->
     <string name="screenrecord_name">Screen Recorder</string>
@@ -832,9 +836,13 @@
     <!-- QuickSettings: Location (Off) [CHAR LIMIT=NONE] -->
     <string name="quick_settings_location_off_label">Location Off</string>
     <!-- QuickSettings: Camera [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_camera_label">Block Camera</string>
+    <string name="quick_settings_camera_label">Camera access</string>
     <!-- QuickSettings: Microphone [CHAR LIMIT=NONE] -->
-    <string name="quick_settings_mic_label">Mute Microphone</string>
+    <string name="quick_settings_mic_label">Mic access</string>
+    <!-- QuickSettings: Camera or microphone access is allowed [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_camera_mic_available">Available</string>
+    <!-- QuickSettings: Camera or microphone access is blocked [CHAR LIMIT=NONE] -->
+    <string name="quick_settings_camera_mic_blocked">Blocked</string>
     <!-- QuickSettings: Media device [CHAR LIMIT=NONE] -->
     <string name="quick_settings_media_device_label">Media device</string>
     <!-- QuickSettings: RSSI [CHAR LIMIT=NONE] -->
@@ -981,10 +989,19 @@
     <!-- QuickSettings: Text to prompt the user to stop an ongoing recording [CHAR LIMIT=20] -->
     <string name="quick_settings_screen_record_stop">Stop</string>
 
+    <!--- Title of dialog triggered if the microphone is disabled but an app tried to access it. [CHAR LIMIT=150] -->
+    <string name="sensor_privacy_start_use_mic_dialog_title">Unblock device microphone?</string>
+    <!--- Title of dialog triggered if the camera is disabled but an app tried to access it. [CHAR LIMIT=150] -->
+    <string name="sensor_privacy_start_use_camera_dialog_title">Unblock device camera?</string>
+    <!--- Title of dialog triggered if the camera is disabled but an app tried to access it. [CHAR LIMIT=150] -->
+    <string name="sensor_privacy_start_use_mic_camera_dialog_title">Unblock device camera and microphone?</string>
+
     <!--- Content of dialog triggered if the microphone is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
-    <string name="sensor_privacy_start_use_mic_dialog_content">To continue, &lt;b&gt;<xliff:g id="app" example="Gmail">%s</xliff:g>&lt;/b&gt; needs access to your device microphone.</string>
+    <string name="sensor_privacy_start_use_mic_dialog_content">This unblocks access for all apps and services allowed to use your microphone.</string>
     <!--- Content of dialog triggered if the camera is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
-    <string name="sensor_privacy_start_use_camera_dialog_content">To continue, &lt;b&gt;<xliff:g id="app" example="Gmail">%s</xliff:g>&lt;/b&gt; needs access to your device’s camera.</string>
+    <string name="sensor_privacy_start_use_camera_dialog_content">This unblocks access for all apps and services allowed to use your camera.</string>
+    <!--- Content of dialog triggered if the camera is disabled but an app tried to access it. [CHAR LIMIT=NONE] -->
+    <string name="sensor_privacy_start_use_mic_camera_dialog_content">This unblocks access for all apps and services allowed to use your camera or microphone.</string>
 
     <!-- Default name for the media device shown in the output switcher when the name is not available [CHAR LIMIT=30] -->
     <string name="media_seamless_remote_device">Device</string>
@@ -1633,8 +1650,18 @@
     <!-- Wallet strings -->
     <!-- Wallet empty state, title [CHAR LIMIT=32] -->
     <string name="wallet_title">Wallet</string>
-    <!-- Secondary label of the quick access wallet tile. [CHAR LIMIT=32] -->
-    <string name="wallet_secondary_label">Ready</string>
+    <!-- Label of the button at the bottom prompting user enter wallet app. [CHAR LIMIT=NONE] -->
+    <string name="wallet_app_button_label">Show all</string>
+    <!-- Label of the button underneath the card carousel prompting user unlock device. [CHAR LIMIT=NONE] -->
+    <string name="wallet_action_button_label_unlock">Unlock to pay</string>
+    <!-- Secondary label of the quick access wallet tile if active. [CHAR LIMIT=32] -->
+    <string name="wallet_secondary_label_active">Ready</string>
+    <!-- Secondary label of the quick access wallet tile if no card. [CHAR LIMIT=NONE] -->
+    <string name="wallet_secondary_label_no_card">Set up payment</string>
+    <!-- Secondary label of the quick access wallet tile if device locked. [CHAR LIMIT=NONE] -->
+    <string name="wallet_secondary_label_device_locked">Unlock to use</string>
+    <!-- Message shown when an unknown failure occurred when fetching cards. [CHAR LIMIT=NONE] -->
+    <string name="wallet_error_generic">There was a problem getting your cards, please try again later</string>
 
     <!-- Name of the work status bar icon. -->
     <string name="status_bar_work">Work profile</string>
@@ -1868,13 +1895,13 @@
     <string name="notification_channel_summary_automatic_demoted">&lt;b>Status:&lt;/b> Ranked Lower</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level summary -->
-    <string name="notification_channel_summary_priority">Shows at top of conversation section, appears as floating bubble, displays profile picture on lock screen</string>
+    <string name="notification_channel_summary_priority">Always shown at the top of your notifications, even when Priority mode is on</string>
 
     <!--[CHAR LIMIT=30] Linkable text to Settings app -->
     <string name="notification_conversation_channel_settings">Settings</string>
 
     <!-- [CHAR LIMIT=150] Notification Importance title: important conversation level -->
-    <string name="notification_priority_title">Priority</string>
+    <string name="notification_priority_title">Priority conversations</string>
 
     <!-- Text shown in notification guts for conversation notifications that don't implement the full feature -->
     <string name="no_shortcut"><xliff:g id="app_name" example="YouTube">%1$s</xliff:g> doesn\u2019t support conversation features</string>
@@ -1985,7 +2012,7 @@
     <string name="notification_menu_settings_action">Settings</string>
 
     <!-- Notification: Snooze panel: Snooze undo button label. [CHAR LIMIT=50]-->
-    <string name="snooze_undo">UNDO</string>
+    <string name="snooze_undo">Undo</string>
 
     <!-- Notification: Snooze panel: message indicating how long the notification was snoozed for. [CHAR LIMIT=100]-->
     <string name="snoozed_for_time">Snoozed for <xliff:g id="time_amount" example="15 minutes">%1$s</xliff:g></string>
@@ -2069,7 +2096,8 @@
     <string name="keyboard_key_num_lock">Num Lock</string>
     <!-- Name used to refer to keys on the numeric pad of the keyboard, e.g. "Numpad 9". -->
     <string name="keyboard_key_numpad_template">Numpad <xliff:g id="name">%1$s</xliff:g></string>
-
+    <!-- Content description for the delete button on an image attachment when using inline reply via notification [CHAR LIMIT=NONE] -->
+    <string name="notif_inline_reply_remove_attachment_description">Remove attachment</string>
     <!-- User visible title for the system-wide keyboard shortcuts list. -->
     <string name="keyboard_shortcut_group_system">System</string>
     <!-- User visible title for the keyboard shortcut that takes the user to the home screen. -->
@@ -2593,19 +2621,19 @@
     <string name="ongoing_privacy_dialog_last_separator">\u0020and\u0020</string>
 
     <!-- Text for privacy dialog, using sensitive app op (one of camera, location, microphone) right now [CHAR LIMIT=NONE] -->
-    <string name="ongoing_privacy_dialog_using_op"><xliff:g id="application_name" example="Photos">%1$s</xliff:g> is using the <xliff:g id="app_opp_name" example="camera">%2$s</xliff:g></string>
+    <string name="ongoing_privacy_dialog_using_op">Being used by <xliff:g id="application_name" example="Photos">%1$s</xliff:g></string>
 
     <!-- Text for privacy dialog, recently used sensitive app op (one of camera, location, microphone) [CHAR LIMIT=NONE] -->
-    <string name="ongoing_privacy_dialog_recent_op"><xliff:g id="application_name" example="Photos">%1$s</xliff:g> used the <xliff:g id="app_opp_name" example="camera">%2$s</xliff:g> recently</string>
+    <string name="ongoing_privacy_dialog_recent_op">Recently used by <xliff:g id="application_name" example="Photos">%1$s</xliff:g></string>
 
     <!-- Text for privacy dialog, indicating that the application is the enterprise version [CHAR LIMIT=NONE] -->
-    <string name="ongoing_privacy_dialog_enterprise">(enterprise)</string>
+    <string name="ongoing_privacy_dialog_enterprise">(work)</string>
 
     <!-- Text for privacy dialog, identifying the phone call app [CHAR LIMIT=NONE]-->
     <string name="ongoing_privacy_dialog_phonecall">Phone call</string>
 
-    <!-- Text for privacy dialog, indicating that an app is using an op on behalf of another [CHAR LIMIT=NONE] -->
-    <string name="ongoing_privacy_dialog_attribution_text">(through <xliff:g id="attribution" example="Special app">%s</xliff:g>)</string>
+    <!-- Text for privacy dialog, indicating that an app (or multiple) is using an op on behalf of another [CHAR LIMIT=NONE] -->
+    <string name="ongoing_privacy_dialog_attribution_text">(through <xliff:g id="application name(s)" example="Maps, and Assistant">%s</xliff:g>)</string>
 
     <!-- Text for camera app op [CHAR LIMIT=20]-->
     <string name="privacy_type_camera">camera</string>
@@ -2642,14 +2670,14 @@
     <string name="priority_onboarding_title">Conversation set to priority</string>
     <!--  Text explaining that the following actions are the behaviors of priority conversations.
     E.g. priority conversations will show at the top of the conversation section [CHAR LIMIT=75]  -->
-    <string name="priority_onboarding_behavior">Priority conversations will:</string>
-    <!--  Text explaining that priority conversations show at the top of the conversation section [CHAR LIMIT=75]  -->
-    <string name="priority_onboarding_show_at_top_text">Show at top of conversation section</string>
-    <!--  Text explaining that priority conversations show an avatar on the lock screen [CHAR LIMIT=75]  -->
-    <string name="priority_onboarding_show_avatar_text">Show profile picture on lock screen</string>
-    <!--  Text explaining that priority conversations will appear as a bubble [CHAR LIMIT=75]  -->
-    <string name="priority_onboarding_appear_as_bubble_text">Appear as a floating bubble on top of apps</string>
-    <!--  Text explaining that priority conversations can interrupt DnD settings [CHAR LIMIT=75]  -->
+    <string name="priority_onboarding_behavior">Priority conversations</string>
+    <!--  Text explaining that priority conversations show at the top of the conversation section [CHAR LIMIT=120]  -->
+    <string name="priority_onboarding_show_at_top_text">These conversations are shown at the top of your list and can always reach you when Priority mode is on</string>
+    <!--  Text explaining that priority conversations show an avatar on the lock screen [CHAR LIMIT=120]  -->
+    <string name="priority_onboarding_show_avatar_text">Profile pictures are shown on the lock screen</string>
+    <!--  Text explaining that priority conversations will appear as a bubble [CHAR LIMIT=120]  -->
+    <string name="priority_onboarding_appear_as_bubble_text">You can easily find these conversations in bubbles on your Home screen</string>
+    <!--  Text explaining that priority conversations can interrupt DnD settings [CHAR LIMIT=120]  -->
     <string name="priority_onboarding_ignores_dnd_text">Interrupt Do Not Disturb</string>
     <!--  Title for the affirmative button [CHAR LIMIT=50]  -->
     <string name="priority_onboarding_done_button_title">Got it</string>
@@ -2687,6 +2715,18 @@
     <string name="accessibility_floating_button_migration_tooltip">Accessibility button replaced the accessibility gesture\n\n<annotation id="link">View settings</annotation></string>
     <!-- Message for the accessibility floating button docking tooltip. It shows when the user first time drag the button. It will tell the user about docking behavior. [CHAR LIMIT=70] -->
     <string name="accessibility_floating_button_docking_tooltip">Move button to the edge to hide it temporarily</string>
+    <!-- Action in accessibility menu to move the accessibility floating button to the top left of the screen. [CHAR LIMIT=30] -->
+    <string name="accessibility_floating_button_action_move_top_left">Move top left</string>
+    <!-- Action in accessibility menu to move the accessibility floating button to the top right of the screen. [CHAR LIMIT=30] -->
+    <string name="accessibility_floating_button_action_move_top_right">Move top right</string>
+    <!-- Action in accessibility menu to move the accessibility floating button to the bottom left of the screen. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_action_move_bottom_left">Move bottom left</string>
+    <!-- Action in accessibility menu to move the accessibility floating button to the bottom right of the screen. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_action_move_bottom_right">Move bottom right</string>
+    <!-- Action in accessibility menu to move the accessibility floating button to the edge and hide it to half. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_action_move_to_edge_and_hide_to_half">Move to edge and hide</string>
+    <!-- Action in accessibility menu to move the accessibility floating button out the edge and show. [CHAR LIMIT=30]-->
+    <string name="accessibility_floating_button_action_move_out_edge_and_show">Move out edge and show</string>
 
     <!-- Device Controls strings -->
     <!-- Device Controls empty state, title [CHAR LIMIT=30] -->
@@ -2848,6 +2888,14 @@
     <string name="select_conversation_title">Conversation widgets</string>
     <!--Text explaining to tap a conversation to select it show in their Conversation widget [CHAR LIMIT=180] -->
     <string name="select_conversation_text">Tap a conversation to add it to your Home screen</string>
+    <!--Text explaining there are no existing conversations to show in their Conversation widget [CHAR LIMIT=100] -->
+    <string name="no_conversations_text">Check back here once you get some messages</string>
+    <!--Text header for priority conversation tiles available to be added to the home screen [CHAR LIMIT=100] -->
+    <string name="priority_conversations">Priority conversations</string>
+    <!--Text header for recent conversation tiles available to be added to the home screen [CHAR LIMIT=100] -->
+    <string name="recent_conversations">Recent conversations</string>
+    <!-- Text for button dismissing configuration activity with no conversations [CHAR LIMIT=20] -->
+    <string name="okay">Okay</string>
     <!-- Timestamp for notification with exact time [CHAR LIMIT=25] -->
     <string name="timestamp"><xliff:g id="duration" example="5 hours">%1$s</xliff:g> ago</string>
     <!-- Timestamp for notification when less than a certain time window [CHAR LIMIT=25] -->
@@ -2856,14 +2904,24 @@
     <string name="over_timestamp">Over <xliff:g id="duration" example="1 week">%1$s</xliff:g> ago</string>
     <!-- Status text on the Conversation widget for a birthday today [CHAR LIMIT=20] -->
     <string name="birthday_status">Birthday</string>
+    <!-- Content description text on the Conversation widget for a birthday today [CHAR LIMIT=150] -->
+    <string name="birthday_status_content_description">It\'s <xliff:g id="name" example="Anna">%1$s</xliff:g>\’s birthday</string>
     <!-- Status text on the Conversation widget for an upcoming birthday [CHAR LIMIT=20] -->
     <string name="upcoming_birthday_status">Birthday soon</string>
+    <!-- Content description text on the Conversation widget for an upcoming birthday [CHAR LIMIT=150] -->
+    <string name="upcoming_birthday_status_content_description">It\'s <xliff:g id="name" example="Anna">%1$s</xliff:g>\’s birthday soon</string>
     <!-- Status text on the Conversation widget for an anniversary [CHAR LIMIT=20] -->
     <string name="anniversary_status">Anniversary</string>
+    <!-- Content description text on the Conversation widget for an anniversary [CHAR LIMIT=150] -->
+    <string name="anniversary_status_content_description">It\'s <xliff:g id="name" example="Anna">%1$s</xliff:g>\’s anniversary</string>
     <!-- Status text on the Conversation widget for sharing location [CHAR LIMIT=20] -->
     <string name="location_status">Sharing location</string>
+    <!-- Content description text on the Conversation widget for sharing location [CHAR LIMIT=150] -->
+    <string name="location_status_content_description"><xliff:g id="name" example="Anna">%1$s</xliff:g> is sharing location</string>
     <!-- Status text on the Conversation widget for a new story posted [CHAR LIMIT=20] -->
     <string name="new_story_status">New story</string>
+    <!-- Content description text on the Conversation widget for a new story posted on social channels, usually a photograph. [CHAR LIMIT=150] -->
+    <string name="new_story_status_content_description"><xliff:g id="name" example="Anna">%1$s</xliff:g> shared a new story</string>
     <!-- Status text on the Conversation widget for watching a video [CHAR LIMIT=20] -->
     <string name="video_status">Watching</string>
     <!-- Status text on the Conversation widget for listening to audio [CHAR LIMIT=20] -->
@@ -2874,6 +2932,8 @@
     <string name="empty_user_name">Friends</string>
     <!-- Empty status shown before user has selected a friend for their Conversation widget [CHAR LIMIT=20] -->
     <string name="empty_status">Let’s chat tonight!</string>
+    <!-- Empty status shown temporarily before we've been able to load the conversation for their Conversation widget after reboots [CHAR LIMIT=40] -->
+    <string name="status_before_loading">Content will show up soon</string>
     <!-- Default text for missed call notifications on their Conversation widget [CHAR LIMIT=20] -->
     <string name="missed_call">Missed call</string>
     <!-- Text when a Notification may have more messages than the number indicated [CHAR LIMIT=5] -->
@@ -2882,6 +2942,10 @@
     <string name="people_tile_description">See recent messages, missed calls, and status updates</string>
     <!-- Title text displayed for the Conversation widget [CHAR LIMIT=50] -->
     <string name="people_tile_title">Conversation</string>
+    <!-- Content description text on the Conversation widget when a person has sent a new text message [CHAR LIMIT=150] -->
+    <string name="new_notification_text_content_description"><xliff:g id="name" example="Anna">%1$s</xliff:g> sent a message</string>
+    <!-- Content description text on the Conversation widget when a person has sent a new image message [CHAR LIMIT=150] -->
+    <string name="new_notification_image_content_description"><xliff:g id="name" example="Anna">%1$s</xliff:g> sent an image</string>
 
     <!-- Title to display in a notification when ACTION_BATTERY_CHANGED.EXTRA_PRESENT field is false
     [CHAR LIMIT=NONE] -->
@@ -2890,10 +2954,7 @@
     [CHAR LIMIT=NONE] -->
     <string name="battery_state_unknown_notification_text">Tap for more information</string>
 
-    <!-- No translation [CHAR LIMIT=0] -->
-    <string name="qs_remove_labels" translatable="false"></string>
-
-    <string name="qs_tile_label_fontFamily" translatable="false">@*android:string/config_headlineFontFamily</string>
+    <string name="qs_tile_label_fontFamily" translatable="false">@*android:string/config_headlineFontFamilyMedium</string>
 
     <!-- Secondary label for alarm tile when there is no next alarm information [CHAR LIMIT=20] -->
     <string name="qs_alarm_tile_no_alarm">No alarm set</string>

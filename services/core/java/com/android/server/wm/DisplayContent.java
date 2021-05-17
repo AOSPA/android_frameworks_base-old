@@ -61,7 +61,6 @@ import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
 import static android.view.WindowManager.LayoutParams.FLAG_SPLIT_TOUCH;
 import static android.view.WindowManager.LayoutParams.LAST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
@@ -155,6 +154,8 @@ import android.content.pm.ActivityInfo.ScreenOrientation;
 import android.content.res.CompatibilityInfo;
 import android.content.res.Configuration;
 import android.graphics.Bitmap;
+import android.graphics.ColorSpace;
+import android.graphics.GraphicBuffer;
 import android.graphics.Insets;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -349,6 +350,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     int mBaseDisplayWidth = 0;
     int mBaseDisplayHeight = 0;
     boolean mIsSizeForced = false;
+
+    /**
+     * Overridden display size and metrics to activity window bounds. Set via
+     * "adb shell wm set-sandbox-display-apis". Default to true, since only disable for debugging.
+     * @see WindowManagerService#setSandboxDisplayApis(int, boolean)
+     */
+    private boolean mSandboxDisplayApis = true;
+
     /**
      * Overridden display density for current user. Initialized with {@link #mInitialDisplayDensity}
      * but can be set from Settings or via shell command "adb shell wm density".
@@ -776,6 +785,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             if (mTmpInitial) {
                 w.resetContentChanged();
             }
+            w.mSurfacePlacementNeeded = true;
             w.mLayoutNeeded = false;
             w.prelayout();
             final boolean firstLayout = !w.isLaidOut();
@@ -818,6 +828,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
                     //Slog.i(TAG, "Window " + this + " clearing mContentChanged - initial");
                     w.resetContentChanged();
                 }
+                w.mSurfacePlacementNeeded = true;
                 w.mLayoutNeeded = false;
                 w.prelayout();
                 getDisplayPolicy().layoutWindowLw(w, w.getParentWindow(), mDisplayFrames);
@@ -911,7 +922,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
             // Take care of the window being ready to display.
             final boolean committed = winAnimator.commitFinishDrawingLocked();
             if (isDefaultDisplay && committed) {
-                if ((w.mAttrs.flags & FLAG_SHOW_WALLPAPER) != 0) {
+                if (w.hasWallpaper()) {
                     if (DEBUG_WALLPAPER_LIGHT) Slog.v(TAG,
                             "First draw done in potential wallpaper target " + w);
                     mWallpaperMayChange = true;
@@ -3750,6 +3761,10 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @VisibleForTesting
     void setImeInputTarget(WindowState target) {
         mImeInputTarget = target;
+        boolean canScreenshot = mImeInputTarget == null || !mImeInputTarget.isSecureLocked();
+        if (mImeWindowsContainer.setCanScreenshot(canScreenshot)) {
+            mWmService.requestTraversal();
+        }
     }
 
     @VisibleForTesting
@@ -3808,7 +3823,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         final ActivityRecord activity = mImeLayeringTarget.mActivityRecord;
         final SurfaceControl imeSurface = mWmService.mSurfaceControlFactory.apply(null)
                 .setName("IME-snapshot-surface")
-                .setBufferSize(buffer.getWidth(), buffer.getHeight())
+                .setBLASTLayer()
                 .setFormat(buffer.getFormat())
                 .setParent(activity.getSurfaceControl())
                 .setCallsite("DisplayContent.attachAndShowImeScreenshotOnTarget")
@@ -3816,10 +3831,9 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
         // Make IME snapshot as trusted overlay
         InputMonitor.setTrustedOverlayInputInfo(imeSurface, t, getDisplayId(),
                 "IME-snapshot-surface");
-        Surface surface = mWmService.mSurfaceFactory.get();
-        surface.copyFrom(imeSurface);
-        surface.attachAndQueueBufferWithColorSpace(buffer, null);
-        surface.release();
+        GraphicBuffer graphicBuffer = GraphicBuffer.createFromHardwareBuffer(buffer);
+        t.setBuffer(imeSurface, graphicBuffer);
+        t.setColorSpace(mSurfaceControl, ColorSpace.get(ColorSpace.Named.SRGB));
         t.setRelativeLayer(imeSurface, activity.getSurfaceControl(), 1);
         t.setPosition(imeSurface, mInputMethodWindow.getDisplayFrame().left,
                 mInputMethodWindow.getDisplayFrame().top);
@@ -3867,7 +3881,7 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     void updateImeInputAndControlTarget(WindowState target) {
         if (mImeInputTarget != target) {
             ProtoLog.i(WM_DEBUG_IME, "setInputMethodInputTarget %s", target);
-            mImeInputTarget = target;
+            setImeInputTarget(target);
             updateImeControlTarget();
         }
     }
@@ -4423,9 +4437,14 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     boolean okToDisplay(boolean ignoreFrozen) {
+        return okToDisplay(ignoreFrozen, false /* ignoreScreenOn */);
+    }
+
+    boolean okToDisplay(boolean ignoreFrozen, boolean ignoreScreenOn) {
         if (mDisplayId == DEFAULT_DISPLAY) {
             return (!mWmService.mDisplayFrozen || ignoreFrozen)
-                    && mWmService.mDisplayEnabled && mWmService.mPolicy.isScreenOn();
+                    && mWmService.mDisplayEnabled
+                    && (ignoreScreenOn || mWmService.mPolicy.isScreenOn());
         }
         return mDisplayInfo.state == Display.STATE_ON;
     }
@@ -4435,8 +4454,13 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     }
 
     boolean okToAnimate(boolean ignoreFrozen) {
-        return okToDisplay(ignoreFrozen) &&
-                (mDisplayId != DEFAULT_DISPLAY || mWmService.mPolicy.okToAnimate());
+        return okToAnimate(ignoreFrozen, false /* ignoreScreenOn */);
+    }
+
+    boolean okToAnimate(boolean ignoreFrozen, boolean ignoreScreenOn) {
+        return okToDisplay(ignoreFrozen, ignoreScreenOn)
+                && (mDisplayId != DEFAULT_DISPLAY
+                || mWmService.mPolicy.okToAnimate(ignoreScreenOn));
     }
 
     static final class TaskForResizePointSearchResult {
@@ -5729,6 +5753,21 @@ class DisplayContent extends RootDisplayArea implements WindowManagerPolicy.Disp
     @Override
     public boolean providesMaxBounds() {
         return true;
+    }
+
+    /**
+     * Sets if Display APIs should be sandboxed to the activity window bounds.
+     */
+    void setSandboxDisplayApis(boolean sandboxDisplayApis) {
+        mSandboxDisplayApis = sandboxDisplayApis;
+    }
+
+    /**
+     * Returns {@code true} is Display APIs should be sandboxed to the activity window bounds,
+     * {@code false} otherwise. Default to true, unless set for debugging purposes.
+     */
+    boolean sandboxDisplayApis() {
+        return mSandboxDisplayApis;
     }
 
     /** The entry for proceeding to handle {@link #mFixedRotationLaunchingApp}. */

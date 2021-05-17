@@ -48,8 +48,11 @@ import android.os.Messenger;
 import android.os.RemoteException;
 import android.os.UserHandle;
 import android.provider.MediaStore;
-import android.provider.Settings;
 import android.service.media.CameraPrewarmService;
+import android.service.quickaccesswallet.GetWalletCardsError;
+import android.service.quickaccesswallet.GetWalletCardsRequest;
+import android.service.quickaccesswallet.GetWalletCardsResponse;
+import android.service.quickaccesswallet.QuickAccessWalletClient;
 import android.telecom.TelecomManager;
 import android.text.TextUtils;
 import android.util.AttributeSet;
@@ -64,6 +67,9 @@ import android.widget.FrameLayout;
 import android.widget.ImageView;
 import android.widget.TextView;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.EmergencyCarrierArea;
@@ -71,10 +77,12 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.Dependency;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.assist.AssistManager;
+import com.android.systemui.camera.CameraIntents;
 import com.android.systemui.plugins.ActivityStarter;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.IntentButtonProvider;
 import com.android.systemui.plugins.IntentButtonProvider.IntentButton;
 import com.android.systemui.plugins.IntentButtonProvider.IntentButton.IconState;
@@ -87,6 +95,9 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.PreviewInflater;
 import com.android.systemui.tuner.LockscreenFragment.LockButtonFactory;
 import com.android.systemui.tuner.TunerService;
+import com.android.systemui.wallet.ui.WalletActivity;
+
+import java.util.concurrent.Executor;
 
 /**
  * Implementation for the bottom area of the Keyguard, including camera/phone affordance and status
@@ -111,11 +122,6 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private static final String RIGHT_BUTTON_PLUGIN
             = "com.android.systemui.action.PLUGIN_LOCKSCREEN_RIGHT_BUTTON";
 
-    private static final Intent SECURE_CAMERA_INTENT =
-            new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA_SECURE)
-                    .addFlags(Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS);
-    public static final Intent INSECURE_CAMERA_INTENT =
-            new Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA);
     private static final Intent PHONE_INTENT = new Intent(Intent.ACTION_DIAL);
     private static final int DOZE_ANIMATION_STAGGER_DELAY = 48;
     private static final int DOZE_ANIMATION_ELEMENT_DURATION = 250;
@@ -128,7 +134,13 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
 
     private KeyguardAffordanceView mRightAffordanceView;
     private KeyguardAffordanceView mLeftAffordanceView;
+
     private ImageView mWalletButton;
+    private boolean mWalletEnabled = false;
+    private boolean mHasCard = false;
+    private WalletCardRetriever mCardRetriever = new WalletCardRetriever();
+    private QuickAccessWalletClient mQuickAccessWalletClient;
+
     private ViewGroup mIndicationArea;
     private TextView mIndicationText;
     private TextView mIndicationTextBottom;
@@ -145,7 +157,8 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private AccessibilityController mAccessibilityController;
     private StatusBar mStatusBar;
     private KeyguardAffordanceHelper mAffordanceHelper;
-
+    private FalsingManager mFalsingManager;
+    @Nullable private Executor mUiExecutor;
     private boolean mUserSetupComplete;
     private boolean mPrewarmBound;
     private Messenger mPrewarmMessenger;
@@ -173,11 +186,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     private String mLeftButtonStr;
     private boolean mDozing;
     private int mIndicationBottomMargin;
+    private int mIndicationPadding;
     private float mDarkAmount;
     private int mBurnInXOffset;
     private int mBurnInYOffset;
     private ActivityIntentHelper mActivityIntentHelper;
-    private int mLockScreenMode;
     private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
 
     public KeyguardBottomAreaView(Context context) {
@@ -268,6 +281,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         mAccessibilityController = Dependency.get(AccessibilityController.class);
         mActivityIntentHelper = new ActivityIntentHelper(getContext());
         updateLeftAffordance();
+
+        mIndicationPadding = getResources().getDimensionPixelSize(
+                R.dimen.keyguard_indication_area_padding);
+        updateWalletVisibility();
     }
 
     @Override
@@ -350,6 +367,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         lp.width = getResources().getDimensionPixelSize(R.dimen.keyguard_affordance_width);
         lp.height = getResources().getDimensionPixelSize(R.dimen.keyguard_affordance_height);
         mWalletButton.setLayoutParams(lp);
+
+        mIndicationPadding = getResources().getDimensionPixelSize(
+                R.dimen.keyguard_indication_area_padding);
+        updateWalletVisibility();
     }
 
     private void updateRightAffordanceIcon() {
@@ -423,10 +444,13 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     }
 
     private void updateWalletVisibility() {
-        if (mDozing) {
+        if (mDozing || !mWalletEnabled || !mHasCard) {
             mWalletButton.setVisibility(GONE);
+            mIndicationArea.setPadding(0, 0, 0, 0);
         } else {
             mWalletButton.setVisibility(VISIBLE);
+            mWalletButton.setOnClickListener(this::onWalletClick);
+            mIndicationArea.setPadding(mIndicationPadding, 0, mIndicationPadding, 0);
         }
     }
 
@@ -502,7 +526,7 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         intent.putExtra(EXTRA_CAMERA_LAUNCH_SOURCE, source);
         boolean wouldLaunchResolverActivity = mActivityIntentHelper.wouldLaunchResolverActivity(
                 intent, KeyguardUpdateMonitor.getCurrentUser());
-        if (intent == SECURE_CAMERA_INTENT && !wouldLaunchResolverActivity) {
+        if (CameraIntents.isSecureCameraIntent(intent) && !wouldLaunchResolverActivity) {
             AsyncTask.execute(new Runnable() {
                 @Override
                 public void run() {
@@ -650,6 +674,13 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
     @Override
     public void onUnlockedChanged() {
         updateCameraVisibility();
+    }
+
+    @Override
+    public void onKeyguardShowingChanged() {
+        if (mKeyguardStateController.isShowing()) {
+            queryWalletCards();
+        }
     }
 
     private void inflateCameraPreview() {
@@ -862,7 +893,11 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         public Intent getIntent() {
             boolean canDismissLs = mKeyguardStateController.canDismissLockScreen();
             boolean secure = mKeyguardStateController.isMethodSecure();
-            return (secure && !canDismissLs) ? SECURE_CAMERA_INTENT : INSECURE_CAMERA_INTENT;
+            if (secure && !canDismissLs) {
+                return CameraIntents.getSecureCameraIntent(getContext());
+            } else {
+                return CameraIntents.getInsecureCameraIntent(getContext());
+            }
         }
     }
 
@@ -878,25 +913,67 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         return insets;
     }
 
-    private void setupWallet() {
-        boolean inNewLayout = mLockScreenMode != KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
-        boolean settingEnabled = Settings.Global.getInt(mContext.getContentResolver(),
-                "controls_lockscreen", 0) == 1;
-        if (!inNewLayout || !settingEnabled) {
-            mWalletButton.setVisibility(View.GONE);
-            return;
-        }
-
-        // TODO: add image
-        //        mWalletButton.setImageDrawable(list.get(0).loadIcon());
-        updateWalletVisibility();
+    /** Set the falsing manager */
+    public void setFalsingManager(FalsingManager falsingManager) {
+        mFalsingManager = falsingManager;
     }
 
     /**
-     * Optionally add controls when in the new lockscreen mode
+     * Initialize the wallet feature, only enabling if the feature is enabled within the platform.
      */
-    public void onLockScreenModeChanged(int mode) {
-        mLockScreenMode = mode;
-        setupWallet();
+    public void initWallet(QuickAccessWalletClient client, Executor uiExecutor, boolean enabled) {
+        mQuickAccessWalletClient = client;
+        mWalletEnabled = enabled && client.isWalletFeatureAvailable();
+        mUiExecutor = uiExecutor;
+        queryWalletCards();
+
+        updateWalletVisibility();
+    }
+
+    private void queryWalletCards() {
+        if (!mWalletEnabled || mUiExecutor == null) {
+            return;
+        }
+        GetWalletCardsRequest request =
+                new GetWalletCardsRequest(1 /* cardWidth */, 1 /* cardHeight */,
+                        1 /* iconSizePx */, 2 /* maxCards */);
+        mQuickAccessWalletClient.getWalletCards(mUiExecutor, request, mCardRetriever);
+    }
+
+    private void onWalletClick(View v) {
+        // More coming here; need to inform the user about how to proceed
+        if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
+            return;
+        }
+
+        if (mHasCard) {
+            Intent intent = new Intent(mContext, WalletActivity.class)
+                    .setAction(Intent.ACTION_VIEW)
+                    .addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP | Intent.FLAG_ACTIVITY_NEW_TASK);
+            mContext.startActivity(intent);
+        } else {
+            if (mQuickAccessWalletClient.createWalletIntent() == null) {
+                Log.w(TAG, "Could not get intent of the wallet app.");
+                return;
+            }
+            mActivityStarter.postStartActivityDismissingKeyguard(
+                    mQuickAccessWalletClient.createWalletIntent(), /* delay= */ 0);
+        }
+    }
+
+    private class WalletCardRetriever implements
+            QuickAccessWalletClient.OnWalletCardsRetrievedCallback {
+
+        @Override
+        public void onWalletCardsRetrieved(@NonNull GetWalletCardsResponse response) {
+            mHasCard = !response.getWalletCards().isEmpty();
+            updateWalletVisibility();
+        }
+
+        @Override
+        public void onWalletCardRetrievalError(@NonNull GetWalletCardsError error) {
+            mHasCard = false;
+            updateWalletVisibility();
+        }
     }
 }

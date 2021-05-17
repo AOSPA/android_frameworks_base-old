@@ -116,7 +116,6 @@ interface IVoiceInteractionManagerService {
     KeyphraseMetadata getEnrolledKeyphraseMetadata(String keyphrase, String bcp47Locale);
     /**
      * @return the component name for the currently active voice interaction service
-     * @RequiresPermission Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE
      */
     ComponentName getActiveServiceComponentName();
 
@@ -262,4 +261,11 @@ interface IVoiceInteractionManagerService {
         in AudioFormat audioFormat,
         in PersistableBundle options,
         in IMicrophoneHotwordDetectionVoiceInteractionCallback callback);
+
+    /**
+     * Test API to simulate to trigger hardware recognition event for test.
+     */
+    void triggerHardwareRecognitionEventForTest(
+            in SoundTrigger.KeyphraseRecognitionEvent event,
+            in IHotwordRecognitionStatusCallback callback);
 }

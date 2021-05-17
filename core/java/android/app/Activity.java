@@ -899,6 +899,9 @@ public class Activity extends ContextThemeWrapper
     /** The options for scene transition. */
     ActivityOptions mPendingOptions;
 
+    /** Whether this activity was launched from a bubble. **/
+    boolean mLaunchedFromBubble;
+
     private static final class ManagedCursor {
         ManagedCursor(Cursor cursor) {
             mCursor = cursor;
@@ -2807,6 +2810,29 @@ public class Activity extends ContextThemeWrapper
         // Left deliberately empty. There should be no side effects if a direct
         // subclass of Activity does not call super.
         onPictureInPictureModeChanged(isInPictureInPictureMode);
+    }
+
+    /**
+     * Called by the system when the activity is in PiP and has state changes.
+     *
+     * Compare to {@link #onPictureInPictureModeChanged(boolean, Configuration)}, which is only
+     * called when PiP mode changes (meaning, enters or exits PiP), this can be called at any time
+     * while the activity is in PiP mode. Therefore, all invocation can only happen after
+     * {@link #onPictureInPictureModeChanged(boolean, Configuration)} is called with true, and
+     * before {@link #onPictureInPictureModeChanged(boolean, Configuration)} is called with false.
+     * You would not need to worry about cases where this is called and the activity is not in
+     * Picture-In-Picture mode. For managing cases where the activity enters/exits
+     * Picture-in-Picture (e.g. resources clean-up on exit), use
+     * {@link #onPictureInPictureModeChanged(boolean, Configuration)}.
+     *
+     * The default state is everything declared in {@link PictureInPictureUiState} is false, such as
+     * {@link PictureInPictureUiState#isStashed()}.
+     *
+     * @param pipState the new Picture-in-Picture state.
+     */
+    public void onPictureInPictureUiStateChanged(@NonNull PictureInPictureUiState pipState) {
+        // Left deliberately empty. There should be no side effects if a direct
+        // subclass of Activity does not call super.
     }
 
     /**
@@ -5254,32 +5280,17 @@ public class Activity extends ContextThemeWrapper
             return;
         }
 
-        List<String> filteredPermissions = null;
-
         if (!getAttributionSource().getRenouncedPermissions().isEmpty()) {
             final int permissionCount = permissions.length;
             for (int i = 0; i < permissionCount; i++) {
                 if (getAttributionSource().getRenouncedPermissions().contains(permissions[i])) {
-                    if (filteredPermissions == null) {
-                        filteredPermissions = new ArrayList<>(i);
-                        for (int j = 0; j < i; j++) {
-                            filteredPermissions.add(permissions[i]);
-                        }
-                    }
-                } else if (filteredPermissions != null) {
-                    filteredPermissions.add(permissions[i]);
+                    throw new IllegalArgumentException("Cannot request renounced permission: "
+                            + permissions[i]);
                 }
             }
         }
 
-        final Intent intent;
-        if (filteredPermissions == null) {
-            intent = getPackageManager().buildRequestPermissionsIntent(permissions);
-        } else {
-            intent = getPackageManager().buildRequestPermissionsIntent(
-                    filteredPermissions.toArray(new String[0]));
-        }
-
+        final Intent intent = getPackageManager().buildRequestPermissionsIntent(permissions);
         startActivityForResult(REQUEST_PERMISSIONS_WHO_PREFIX, intent, requestCode, null);
         mHasCurrentPermissionsRequest = true;
     }
@@ -6803,6 +6814,25 @@ public class Activity extends ContextThemeWrapper
      */
     public SharedPreferences getPreferences(@Context.PreferencesMode int mode) {
         return getSharedPreferences(getLocalClassName(), mode);
+    }
+
+    /**
+     * Indicates whether this activity is launched from a bubble. A bubble is a floating shortcut
+     * on the screen that expands to show an activity.
+     *
+     * If your activity can be used normally or as a bubble, you might use this method to check
+     * if the activity is bubbled to modify any behaviour that might be different between the
+     * normal activity and the bubbled activity. For example, if you normally cancel the
+     * notification associated with the activity when you open the activity, you might not want to
+     * do that when you're bubbled as that would remove the bubble.
+     *
+     * @return {@code true} if the activity is launched from a bubble.
+     *
+     * @see Notification.Builder#setBubbleMetadata(Notification.BubbleMetadata)
+     * @see Notification.BubbleMetadata.Builder#Builder(String)
+     */
+    public boolean isLaunchedFromBubble() {
+        return mLaunchedFromBubble;
     }
 
     private void ensureSearchManager() {
@@ -8785,11 +8815,11 @@ public class Activity extends ContextThemeWrapper
      * @hide
      */
     public void updateUiTranslationState(int state, TranslationSpec sourceSpec,
-            TranslationSpec destSpec, List<AutofillId> viewIds) {
+            TranslationSpec targetSpec, List<AutofillId> viewIds) {
         if (mUiTranslationController == null) {
             mUiTranslationController = new UiTranslationController(this, getApplicationContext());
         }
-        mUiTranslationController.updateUiTranslationState(state, sourceSpec, destSpec, viewIds);
+        mUiTranslationController.updateUiTranslationState(state, sourceSpec, targetSpec, viewIds);
     }
 
     class HostCallbacks extends FragmentHostCallback<Activity> {

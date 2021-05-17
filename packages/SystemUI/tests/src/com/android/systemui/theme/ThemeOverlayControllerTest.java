@@ -26,6 +26,8 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
@@ -49,9 +51,13 @@ import androidx.test.filters.SmallTest;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.settings.UserTracker;
 import com.android.systemui.statusbar.FeatureFlags;
-import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.statusbar.policy.DeviceProvisionedController;
+import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.util.settings.SecureSettings;
+
+import com.google.common.util.concurrent.MoreExecutors;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -86,24 +92,29 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
     @Mock
     private UserManager mUserManager;
     @Mock
-    private KeyguardStateController mKeyguardStateController;
+    private UserTracker mUserTracker;
     @Mock
     private DumpManager mDumpManager;
+    @Mock
+    private DeviceProvisionedController mDeviceProvisionedController;
     @Mock
     private FeatureFlags mFeatureFlags;
     @Captor
     private ArgumentCaptor<BroadcastReceiver> mBroadcastReceiver;
     @Captor
     private ArgumentCaptor<WallpaperManager.OnColorsChangedListener> mColorsListener;
+    @Captor
+    private ArgumentCaptor<DeviceProvisionedListener> mDeviceProvisionedListener;
 
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
         when(mFeatureFlags.isMonetEnabled()).thenReturn(true);
+        when(mDeviceProvisionedController.isCurrentUserSetup()).thenReturn(true);
         mThemeOverlayController = new ThemeOverlayController(null /* context */,
                 mBroadcastDispatcher, mBgHandler, mMainExecutor, mBgExecutor, mThemeOverlayApplier,
-                mSecureSettings, mWallpaperManager, mUserManager, mKeyguardStateController,
-                mDumpManager, mFeatureFlags) {
+                mSecureSettings, mWallpaperManager, mUserManager, mDeviceProvisionedController,
+                mUserTracker, mDumpManager, mFeatureFlags) {
             @Nullable
             @Override
             protected FabricatedOverlay getOverlay(int color, int type) {
@@ -120,6 +131,7 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
         verify(mBroadcastDispatcher).registerReceiver(mBroadcastReceiver.capture(), any(),
                 eq(mMainExecutor), any());
         verify(mDumpManager).registerDumpable(any(), any());
+        verify(mDeviceProvisionedController).addCallback(mDeviceProvisionedListener.capture());
     }
 
     @Test
@@ -188,6 +200,93 @@ public class ThemeOverlayControllerTest extends SysuiTestCase {
         // Assert that we received the colors that we were expecting
         assertThat(themeOverlays.getValue().get(OVERLAY_CATEGORY_SYSTEM_PALETTE))
                 .isEqualTo(new OverlayIdentifier("override.package.name"));
+    }
+
+    @Test
+    public void onProfileAdded_setsTheme() {
+        mBroadcastReceiver.getValue().onReceive(null,
+                new Intent(Intent.ACTION_MANAGED_PROFILE_ADDED));
+        verify(mThemeOverlayApplier).applyCurrentUserOverlays(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    public void onProfileAdded_ignoresUntilSetupComplete() {
+        reset(mDeviceProvisionedController);
+        mBroadcastReceiver.getValue().onReceive(null,
+                new Intent(Intent.ACTION_MANAGED_PROFILE_ADDED));
+        verify(mThemeOverlayApplier, never())
+                .applyCurrentUserOverlays(any(), any(), anyInt(), any());
+    }
+
+    @Test
+    public void onWallpaperColorsChanged_firstEventBeforeUserSetup_shouldBeAccepted() {
+        // By default, on setup() we make this controller return that the user finished setup
+        // wizard. This test on the other hand, is testing the setup flow.
+        reset(mDeviceProvisionedController);
+        WallpaperColors mainColors = new WallpaperColors(Color.valueOf(Color.RED),
+                Color.valueOf(Color.BLUE), null);
+        mColorsListener.getValue().onColorsChanged(mainColors, WallpaperManager.FLAG_SYSTEM);
+
+        verify(mThemeOverlayApplier).applyCurrentUserOverlays(any(), any(), anyInt(), any());
+
+        // Regression test: null events should not reset the internal state and allow colors to be
+        // applied again.
+        clearInvocations(mThemeOverlayApplier);
+        mBroadcastReceiver.getValue().onReceive(null, new Intent(Intent.ACTION_WALLPAPER_CHANGED));
+        mColorsListener.getValue().onColorsChanged(null, WallpaperManager.FLAG_SYSTEM);
+        verify(mThemeOverlayApplier, never()).applyCurrentUserOverlays(any(), any(), anyInt(),
+                any());
+        mColorsListener.getValue().onColorsChanged(new WallpaperColors(Color.valueOf(Color.GREEN),
+                null, null), WallpaperManager.FLAG_SYSTEM);
+        verify(mThemeOverlayApplier, never()).applyCurrentUserOverlays(any(), any(), anyInt(),
+                any());
+    }
+
+    @Test
+    public void onWallpaperColorsChanged_defersUntilSetupIsCompleted_ifHasColors() {
+        mDeviceProvisionedController = mock(DeviceProvisionedController.class);
+        mThemeOverlayApplier = mock(ThemeOverlayApplier.class);
+        mWallpaperManager = mock(WallpaperManager.class);
+
+        // Assume we have some wallpaper colors at boot.
+        when(mWallpaperManager.getWallpaperColors(anyInt()))
+                .thenReturn(new WallpaperColors(Color.valueOf(Color.GRAY), null, null));
+
+        Executor executor = MoreExecutors.directExecutor();
+        mThemeOverlayController = new ThemeOverlayController(null /* context */,
+                mBroadcastDispatcher, mBgHandler, executor, executor, mThemeOverlayApplier,
+                mSecureSettings, mWallpaperManager, mUserManager, mDeviceProvisionedController,
+                mUserTracker, mDumpManager, mFeatureFlags) {
+            @Nullable
+            @Override
+            protected FabricatedOverlay getOverlay(int color, int type) {
+                FabricatedOverlay overlay = mock(FabricatedOverlay.class);
+                when(overlay.getIdentifier())
+                        .thenReturn(new OverlayIdentifier(Integer.toHexString(color | 0xff000000)));
+                return overlay;
+            }
+        };
+        mThemeOverlayController.start();
+        verify(mWallpaperManager).addOnColorsChangedListener(mColorsListener.capture(), eq(null),
+                eq(UserHandle.USER_ALL));
+        verify(mDeviceProvisionedController).addCallback(mDeviceProvisionedListener.capture());
+
+        // Colors were applied during controller initialization.
+        verify(mThemeOverlayApplier).applyCurrentUserOverlays(any(), any(), anyInt(), any());
+        clearInvocations(mThemeOverlayApplier);
+
+        WallpaperColors mainColors = new WallpaperColors(Color.valueOf(Color.RED),
+                Color.valueOf(Color.BLUE), null);
+        mColorsListener.getValue().onColorsChanged(mainColors, WallpaperManager.FLAG_SYSTEM);
+
+        // Defers event because we already have initial colors.
+        verify(mThemeOverlayApplier, never())
+                .applyCurrentUserOverlays(any(), any(), anyInt(), any());
+
+        // Then event happens after setup phase is over.
+        when(mDeviceProvisionedController.isCurrentUserSetup()).thenReturn(true);
+        mDeviceProvisionedListener.getValue().onUserSetupChanged();
+        verify(mThemeOverlayApplier).applyCurrentUserOverlays(any(), any(), anyInt(), any());
     }
 
     @Test

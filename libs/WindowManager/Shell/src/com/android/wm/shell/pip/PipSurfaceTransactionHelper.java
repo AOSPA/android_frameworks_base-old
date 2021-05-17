@@ -21,6 +21,7 @@ import android.content.res.Resources;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.os.SystemProperties;
 import android.view.SurfaceControl;
 
 import com.android.wm.shell.R;
@@ -42,7 +43,8 @@ public class PipSurfaceTransactionHelper {
 
     public PipSurfaceTransactionHelper(Context context) {
         final Resources res = context.getResources();
-        mEnableCornerRadius = res.getBoolean(R.bool.config_pipEnableRoundCorner);
+        mEnableCornerRadius = res.getBoolean(R.bool.config_pipEnableRoundCorner)
+            || SystemProperties.getBoolean("debug.sf.enable_hole_punch_pip", false);
     }
 
     /**
@@ -94,11 +96,14 @@ public class PipSurfaceTransactionHelper {
     public PipSurfaceTransactionHelper scale(SurfaceControl.Transaction tx, SurfaceControl leash,
             Rect sourceBounds, Rect destinationBounds, float degrees) {
         mTmpSourceRectF.set(sourceBounds);
+        // We want the matrix to position the surface relative to the screen coordinates so offset
+        // the source to 0,0
+        mTmpSourceRectF.offsetTo(0, 0);
         mTmpDestinationRectF.set(destinationBounds);
         mTmpTransform.setRectToRect(mTmpSourceRectF, mTmpDestinationRectF, Matrix.ScaleToFit.FILL);
-        mTmpTransform.postRotate(degrees);
-        tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
-                .setPosition(leash, mTmpDestinationRectF.left, mTmpDestinationRectF.top);
+        mTmpTransform.postRotate(degrees,
+                mTmpDestinationRectF.centerX(), mTmpDestinationRectF.centerY());
+        tx.setMatrix(leash, mTmpTransform, mTmpFloat9);
         return this;
     }
 

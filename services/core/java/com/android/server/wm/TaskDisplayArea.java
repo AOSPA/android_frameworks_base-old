@@ -47,7 +47,6 @@ import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
 import android.content.Intent;
 import android.os.UserHandle;
-import android.util.BoostFramework;
 import android.util.IntArray;
 import android.util.Slog;
 import android.view.RemoteAnimationTarget;
@@ -164,12 +163,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      */
     private boolean mRemoved;
 
-    public static boolean mPerfSendTapHint = false;
-    public static boolean mIsPerfBoostAcquired = false;
-    public static int mPerfHandle = -1;
-    public BoostFramework mPerfBoost = null;
-    public BoostFramework mUxPerf = null;
-
     /**
      * The id of a leaf task that most recently being moved to front.
      */
@@ -181,18 +174,33 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      */
     final boolean mCreatedByOrganizer;
 
+    /**
+     * True if this TaskDisplayArea can have a home task
+     * {@link WindowConfiguration#ACTIVITY_TYPE_HOME}
+     */
+    private final boolean mCanHostHomeTask;
+
     TaskDisplayArea(DisplayContent displayContent, WindowManagerService service, String name,
-            int displayAreaFeature) {
-        this(displayContent, service, name, displayAreaFeature, false /* createdByOrganizer */);
+                    int displayAreaFeature) {
+        this(displayContent, service, name, displayAreaFeature, false /* createdByOrganizer */,
+                true /* canHostHomeTask */);
     }
 
     TaskDisplayArea(DisplayContent displayContent, WindowManagerService service, String name,
-            int displayAreaFeature, boolean createdByOrganizer) {
+                    int displayAreaFeature, boolean createdByOrganizer) {
+        this(displayContent, service, name, displayAreaFeature, createdByOrganizer,
+                true /* canHostHomeTask */);
+    }
+
+    TaskDisplayArea(DisplayContent displayContent, WindowManagerService service, String name,
+                    int displayAreaFeature, boolean createdByOrganizer,
+                    boolean canHostHomeTask) {
         super(service, Type.ANY, name, displayAreaFeature);
         mDisplayContent = displayContent;
         mRootWindowContainer = service.mRoot;
         mAtmService = service.mAtmService;
         mCreatedByOrganizer = createdByOrganizer;
+        mCanHostHomeTask = canHostHomeTask;
     }
 
     /**
@@ -355,6 +363,12 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         position = findPositionForRootTask(position, task, true /* adding */);
 
         super.addChild(task, position);
+        if (mPreferredTopFocusableRootTask != null
+                && task.isFocusable()
+                && mPreferredTopFocusableRootTask.compareTo(task) < 0) {
+            // Clear preferred top because the adding focusable task has a higher z-order.
+            mPreferredTopFocusableRootTask = null;
+        }
         mAtmService.updateSleepIfNeededLocked();
         onRootTaskOrderChanged(task);
     }
@@ -447,6 +461,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
         // Update the top resumed activity because the preferred top focusable task may be changed.
         mAtmService.mTaskSupervisor.updateTopResumedActivityIfNeeded();
+
+        final ActivityRecord r = child.getResumedActivity();
+        if (r != null && r == mRootWindowContainer.getTopResumedActivity()) {
+            mAtmService.setResumedActivityUncheckLocked(r, "positionChildAt");
+        }
 
         if (mChildren.indexOf(child) != oldPosition) {
             onRootTaskOrderChanged(child);
@@ -1385,47 +1404,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         return someActivityPaused[0] > 0;
     }
 
-    void acquireAppLaunchPerfLock(ActivityRecord r) {
-       /* Acquire perf lock during new app launch */
-       if (mPerfBoost == null) {
-           mPerfBoost = new BoostFramework();
-       }
-       if (mPerfBoost != null) {
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V1);
-           mPerfSendTapHint = true;
-           mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V2);
-           if (mAtmService != null && r != null && r.info != null && r.info.applicationInfo != null) {
-               final WindowProcessController wpc =
-                       mAtmService.getProcessController(r.processName, r.info.applicationInfo.uid);
-               if (wpc != null && wpc.hasThread()) {
-                   //If target process didn't start yet, this operation will be done when app call attach
-                   mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, wpc.getPid(), BoostFramework.Launch.TYPE_ATTACH_APPLICATION);
-               }
-           }
-
-           if(mPerfBoost.perfGetFeedback(BoostFramework.VENDOR_FEEDBACK_WORKLOAD_TYPE, r.packageName) == BoostFramework.WorkloadType.GAME)
-           {
-               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_GAME);
-           } else {
-               mPerfHandle = mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, r.packageName, -1, BoostFramework.Launch.BOOST_V3);
-           }
-           if (mPerfHandle > 0)
-               mIsPerfBoostAcquired = true;
-           // Start IOP
-           if(r.info.applicationInfo != null && r.info.applicationInfo.sourceDir != null) {
-               mPerfBoost.perfIOPrefetchStart(-1,r.packageName,
-                   r.info.applicationInfo.sourceDir.substring(0, r.info.applicationInfo.sourceDir.lastIndexOf('/')));
-           }
-       }
-   }
-
-   void acquireUxPerfLock(int opcode, String packageName) {
-        mUxPerf = new BoostFramework();
-        if (mUxPerf != null) {
-            mUxPerf.perfUXEngine_events(opcode, 0, packageName, 0);
-        }
-    }
-
     void onSplitScreenModeDismissed() {
         // The focused task could be a non-resizeable fullscreen root task that is on top of the
         // other split-screen tasks, therefore had to dismiss split-screen, make sure the current
@@ -1706,7 +1684,9 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     @Nullable
     Task getOrCreateRootHomeTask(boolean onTop) {
         Task homeTask = getRootHomeTask();
-        if (homeTask == null && mDisplayContent.supportsSystemDecorations()) {
+        // Take into account if this TaskDisplayArea can have a home task before trying to
+        // create the root task
+        if (homeTask == null && canHostHomeTask()) {
             homeTask = createRootTask(WINDOWING_MODE_UNDEFINED, ACTIVITY_TYPE_HOME, onTop);
         }
         return homeTask;
@@ -1918,6 +1898,13 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     @Override
     boolean canCreateRemoteAnimationTarget() {
         return true;
+    }
+
+    /**
+     * Exposes the home task capability of the TaskDisplayArea
+     */
+    boolean canHostHomeTask() {
+        return mDisplayContent.supportsSystemDecorations() && mCanHostHomeTask;
     }
 
     /**

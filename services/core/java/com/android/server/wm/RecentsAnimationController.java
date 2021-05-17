@@ -36,7 +36,6 @@ import static com.android.server.wm.WindowManagerInternal.AppTransitionListener;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.app.WindowConfiguration;
-import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -231,17 +230,16 @@ public class RecentsAnimationController implements DeathRecipient {
         }
 
         @Override
-        public void setFinishTaskBounds(int taskId, Rect destinationBounds,
+        public void setFinishTaskTransaction(int taskId,
                 PictureInPictureSurfaceTransaction finishTransaction) {
             ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
-                    "setFinishTaskBounds(%d): bounds=%s", taskId, destinationBounds);
+                    "setFinishTaskTransaction(%d): transaction=%s", taskId, finishTransaction);
             final long token = Binder.clearCallingIdentity();
             try {
                 synchronized (mService.getWindowManagerLock()) {
                     for (int i = mPendingAnimations.size() - 1; i >= 0; i--) {
                         final TaskAnimationAdapter taskAdapter = mPendingAnimations.get(i);
                         if (taskAdapter.mTask.mTaskId == taskId) {
-                            taskAdapter.mFinishBounds.set(destinationBounds);
                             taskAdapter.mFinishTransaction = finishTransaction;
                             break;
                         }
@@ -669,21 +667,35 @@ public class RecentsAnimationController implements DeathRecipient {
         }
         navWindow.setSurfaceTranslationY(0);
 
-        if (navWindow.mToken == null) {
+        final WindowToken navToken = navWindow.mToken;
+        if (navToken == null) {
             return;
         }
         final SurfaceControl.Transaction t = mDisplayContent.getPendingTransaction();
-        final WindowContainer parent = navWindow.mToken.getParent();
-        // Reparent the SurfaceControl of nav bar token back.
-        t.reparent(navWindow.mToken.getSurfaceControl(), parent.getSurfaceControl());
+        final WindowContainer parent = navToken.getParent();
+        t.setLayer(navToken.getSurfaceControl(), navToken.getLastLayer());
 
         if (animate) {
-            // Run fade-in animation to show navigation bar back to bottom of the display.
-            final NavBarFadeAnimationController controller =
+            final NavBarFadeAnimationController navBarFadeAnimationController =
                     mDisplayContent.getDisplayPolicy().getNavBarFadeAnimationController();
-            if (controller != null) {
-                controller.fadeWindowToken(true);
+            final Runnable fadeInAnim = () -> {
+                // Reparent the SurfaceControl of nav bar token back.
+                t.reparent(navToken.getSurfaceControl(), parent.getSurfaceControl());
+                // Run fade-in animation to show navigation bar back to bottom of the display.
+                if (navBarFadeAnimationController != null) {
+                    navBarFadeAnimationController.fadeWindowToken(true);
+                }
+            };
+            final FadeRotationAnimationController fadeRotationAnimationController =
+                    mDisplayContent.getFadeRotationAnimationController();
+            if (fadeRotationAnimationController != null) {
+                fadeRotationAnimationController.setOnShowRunnable(fadeInAnim);
+            } else {
+                fadeInAnim.run();
             }
+        } else {
+            // Reparent the SurfaceControl of nav bar token back.
+            t.reparent(navToken.getSurfaceControl(), parent.getSurfaceControl());
         }
     }
 
@@ -1092,9 +1104,7 @@ public class RecentsAnimationController implements DeathRecipient {
         private final Rect mBounds = new Rect();
         // The bounds of the target relative to its parent.
         private final Rect mLocalBounds = new Rect();
-        // The bounds of the target when animation is finished
-        private final Rect mFinishBounds = new Rect();
-        // Bounds and transform for the final transaction.
+        // The final surface transaction when animation is finished.
         private PictureInPictureSurfaceTransaction mFinishTransaction;
 
         TaskAnimationAdapter(Task task, boolean isRecentTaskInvisible) {
@@ -1126,34 +1136,18 @@ public class RecentsAnimationController implements DeathRecipient {
                     !topApp.fillsParent(), new Rect(),
                     insets, mTask.getPrefixOrderIndex(), new Point(mBounds.left, mBounds.top),
                     mLocalBounds, mBounds, mTask.getWindowConfiguration(),
-                    mIsRecentTaskInvisible, null, null, mTask.getPictureInPictureParams());
+                    mIsRecentTaskInvisible, null, null, mTask.getTaskInfo());
             return mTarget;
         }
 
         void onCleanup() {
-            if (!mFinishBounds.isEmpty()) {
-                final SurfaceControl taskSurface = mTask.mSurfaceControl;
+            if (mFinishTransaction != null) {
                 final Transaction pendingTransaction = mTask.getPendingTransaction();
-                if (mFinishTransaction != null) {
-                    final Matrix matrix = new Matrix();
-                    matrix.setScale(mFinishTransaction.mScaleX, mFinishTransaction.mScaleY);
-                    if (mFinishTransaction.mRotation != 0) {
-                        matrix.postRotate(mFinishTransaction.mRotation);
-                    }
-                    pendingTransaction.setMatrix(taskSurface, matrix, new float[9])
-                            .setPosition(taskSurface,
-                                    mFinishTransaction.mPositionX, mFinishTransaction.mPositionY)
-                            .setWindowCrop(taskSurface, mFinishTransaction.getWindowCrop())
-                            .setCornerRadius(taskSurface, mFinishTransaction.mCornerRadius);
-                    mTask.mLastRecentsAnimationBounds.set(mFinishBounds);
-                    mFinishTransaction = null;
-                } else {
-                    pendingTransaction
-                            .setPosition(taskSurface, mFinishBounds.left, mFinishBounds.top)
-                            .setWindowCrop(taskSurface, mFinishBounds);
-                }
+                PictureInPictureSurfaceTransaction.apply(mFinishTransaction,
+                        mTask.mSurfaceControl, pendingTransaction);
+                mTask.setLastRecentsAnimationTransaction(mFinishTransaction);
+                mFinishTransaction = null;
                 pendingTransaction.apply();
-                mFinishBounds.setEmpty();
             } else if (!mTask.isAttached()) {
                 // Apply the task's pending transaction in case it is detached and its transaction
                 // is not reachable.
@@ -1206,7 +1200,7 @@ public class RecentsAnimationController implements DeathRecipient {
             }
             pw.println("mIsRecentTaskInvisible=" + mIsRecentTaskInvisible);
             pw.println("mLocalBounds=" + mLocalBounds);
-            pw.println("mFinishBounds=" + mFinishBounds);
+            pw.println("mFinishTransaction=" + mFinishTransaction);
             pw.println("mBounds=" + mBounds);
             pw.println("mIsRecentTaskInvisible=" + mIsRecentTaskInvisible);
         }

@@ -84,6 +84,7 @@ import android.media.AudioRecordingConfiguration;
 import android.media.AudioRoutesInfo;
 import android.media.AudioSystem;
 import android.media.IAudioFocusDispatcher;
+import android.media.IAudioModeDispatcher;
 import android.media.IAudioRoutesObserver;
 import android.media.IAudioServerStateDispatcher;
 import android.media.IAudioService;
@@ -120,6 +121,7 @@ import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.Process;
+import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
@@ -128,6 +130,7 @@ import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
+import android.os.VibratorManager;
 import android.provider.Settings;
 import android.provider.Settings.System;
 import android.service.notification.ZenModeConfig;
@@ -312,6 +315,9 @@ public class AudioService extends IAudioService.Stub
     private static final int MSG_UPDATE_A11Y_SERVICE_UIDS = 35;
     private static final int MSG_UPDATE_AUDIO_MODE = 36;
     private static final int MSG_RECORDING_CONFIG_CHANGE = 37;
+    private static final int MSG_SET_A2DP_DEV_CONNECTION_STATE = 38;
+    private static final int MSG_A2DP_DEV_CONFIG_CHANGE = 39;
+    private static final int MSG_DISPATCH_AUDIO_MODE = 40;
 
     // start of messages handled under wakelock
     //   these messages can only be queued, i.e. sent with queueMsgUnderWakeLock(),
@@ -564,6 +570,7 @@ public class AudioService extends IAudioService.Stub
             AudioSystem.DEVICE_OUT_DGTL_DOCK_HEADSET,
             AudioSystem.DEVICE_OUT_ANLG_DOCK_HEADSET,
             AudioSystem.DEVICE_OUT_HDMI_ARC,
+            AudioSystem.DEVICE_OUT_HDMI_EARC,
             AudioSystem.DEVICE_OUT_AUX_LINE));
     // Devices for which the volume is always max, no volume panel
     Set<Integer> mFullVolumeDevices = new HashSet<>();
@@ -842,8 +849,8 @@ public class AudioService extends IAudioService.Stub
         mVibrator = (Vibrator) context.getSystemService(Context.VIBRATOR_SERVICE);
         mHasVibrator = mVibrator == null ? false : mVibrator.hasVibrator();
 
-        mSupportsMicPrivacyToggle = mContext.getPackageManager()
-                .hasSystemFeature(PackageManager.FEATURE_MICROPHONE_TOGGLE);
+        mSupportsMicPrivacyToggle = context.getSystemService(SensorPrivacyManager.class)
+                .supportsSensorToggle(SensorPrivacyManager.Sensors.MICROPHONE);
 
         // Initialize volume
         // Priority 1 - Android Property
@@ -1095,6 +1102,33 @@ public class AudioService extends IAudioService.Stub
         }
     }
 
+    private void updateVibratorInfos() {
+        VibratorManager vibratorManager = mContext.getSystemService(VibratorManager.class);
+        if (vibratorManager == null) {
+            Slog.e(TAG, "Vibrator manager is not found");
+            return;
+        }
+        int[] vibratorIds = vibratorManager.getVibratorIds();
+        if (vibratorIds.length == 0) {
+            Slog.d(TAG, "No vibrator found");
+            return;
+        }
+        List<Vibrator> vibrators = new ArrayList<>(vibratorIds.length);
+        for (int id : vibratorIds) {
+            Vibrator vibrator = vibratorManager.getVibrator(id);
+            if (vibrator != null) {
+                vibrators.add(vibrator);
+            } else {
+                Slog.w(TAG, "Vibrator(" + id + ") is not found");
+            }
+        }
+        if (vibrators.isEmpty()) {
+            Slog.w(TAG, "Cannot find any available vibrator");
+            return;
+        }
+        AudioSystem.setVibratorInfos(vibrators);
+    }
+
     public void onSystemReady() {
         mSystemReady = true;
         scheduleLoadSoundEffects();
@@ -1152,6 +1186,8 @@ public class AudioService extends IAudioService.Stub
         setMicMuteFromSwitchInput();
 
         initMinStreamVolumeWithoutModifyAudioSettings();
+
+        updateVibratorInfos();
     }
 
     RoleObserver mRoleObserver;
@@ -1234,7 +1270,7 @@ public class AudioService extends IAudioService.Stub
         // Restore call state
         synchronized (mDeviceBroker.mSetModeLock) {
             onUpdateAudioMode(AudioSystem.MODE_CURRENT, android.os.Process.myPid(),
-                    mContext.getPackageName());
+                    mContext.getPackageName(), true /*force*/);
         }
         final int forSys;
         synchronized (mSettingsLock) {
@@ -1344,6 +1380,9 @@ public class AudioService extends IAudioService.Stub
 
         setMicrophoneMuteNoCallerCheck(getCurrentUserId()); // will also update the mic mute cache
         setMicMuteFromSwitchInput();
+
+        // Restore vibrator info
+        updateVibratorInfos();
     }
 
     private void onReinitVolumes(@NonNull String caller) {
@@ -1895,7 +1934,7 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#setEncodedSurroundMode(int) */
     @Override
-    public boolean setEncodedSurroundMode(int mode) {
+    public boolean setEncodedSurroundMode(@AudioManager.EncodedSurroundOutputMode int mode) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.WRITE_SETTINGS)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Missing WRITE_SETTINGS permission");
@@ -1906,7 +1945,7 @@ public class AudioService extends IAudioService.Stub
             synchronized (mSettingsLock) {
                 Settings.Global.putInt(mContentResolver,
                         Settings.Global.ENCODED_SURROUND_OUTPUT,
-                        mode);
+                        toEncodedSurroundSetting(mode));
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -1916,7 +1955,7 @@ public class AudioService extends IAudioService.Stub
 
     /** @see AudioManager#getEncodedSurroundMode() */
     @Override
-    public int getEncodedSurroundMode() {
+    public int getEncodedSurroundMode(int targetSdkVersion) {
         if (mContext.checkCallingOrSelfPermission(android.Manifest.permission.WRITE_SETTINGS)
                 != PackageManager.PERMISSION_GRANTED) {
             throw new SecurityException("Missing WRITE_SETTINGS permission");
@@ -1925,9 +1964,10 @@ public class AudioService extends IAudioService.Stub
         final long token = Binder.clearCallingIdentity();
         try {
             synchronized (mSettingsLock) {
-                return Settings.Global.getInt(mContentResolver,
+                int encodedSurroundSetting = Settings.Global.getInt(mContentResolver,
                         Settings.Global.ENCODED_SURROUND_OUTPUT,
                         AudioManager.ENCODED_SURROUND_OUTPUT_AUTO);
+                return toEncodedSurroundOutputMode(encodedSurroundSetting, targetSdkVersion);
             }
         } finally {
             Binder.restoreCallingIdentity(token);
@@ -1949,6 +1989,41 @@ public class AudioService extends IAudioService.Stub
             }
         }
         return formats;
+    }
+
+    @SuppressWarnings("AndroidFrameworkCompatChange")
+    @AudioManager.EncodedSurroundOutputMode
+    private int toEncodedSurroundOutputMode(int encodedSurroundSetting, int targetSdkVersion) {
+        if (targetSdkVersion <= Build.VERSION_CODES.S
+                && encodedSurroundSetting > Settings.Global.ENCODED_SURROUND_SC_MAX) {
+            return AudioManager.ENCODED_SURROUND_OUTPUT_UNKNOWN;
+        }
+        switch (encodedSurroundSetting) {
+            case Settings.Global.ENCODED_SURROUND_OUTPUT_AUTO:
+                return AudioManager.ENCODED_SURROUND_OUTPUT_AUTO;
+            case Settings.Global.ENCODED_SURROUND_OUTPUT_NEVER:
+                return AudioManager.ENCODED_SURROUND_OUTPUT_NEVER;
+            case Settings.Global.ENCODED_SURROUND_OUTPUT_ALWAYS:
+                return AudioManager.ENCODED_SURROUND_OUTPUT_ALWAYS;
+            case Settings.Global.ENCODED_SURROUND_OUTPUT_MANUAL:
+                return AudioManager.ENCODED_SURROUND_OUTPUT_MANUAL;
+            default:
+                return AudioManager.ENCODED_SURROUND_OUTPUT_UNKNOWN;
+        }
+    }
+
+    private int toEncodedSurroundSetting(
+            @AudioManager.EncodedSurroundOutputMode int encodedSurroundOutputMode) {
+        switch (encodedSurroundOutputMode) {
+            case AudioManager.ENCODED_SURROUND_OUTPUT_NEVER:
+                return Settings.Global.ENCODED_SURROUND_OUTPUT_NEVER;
+            case AudioManager.ENCODED_SURROUND_OUTPUT_ALWAYS:
+                return Settings.Global.ENCODED_SURROUND_OUTPUT_ALWAYS;
+            case AudioManager.ENCODED_SURROUND_OUTPUT_MANUAL:
+                return Settings.Global.ENCODED_SURROUND_OUTPUT_MANUAL;
+            default:
+                return Settings.Global.ENCODED_SURROUND_OUTPUT_AUTO;
+        }
     }
 
     private boolean isSurroundFormat(int audioFormat) {
@@ -4623,7 +4698,8 @@ public class AudioService extends IAudioService.Stub
     }
 
     @GuardedBy("mDeviceBroker.mSetModeLock")
-    void onUpdateAudioMode(int requestedMode, int requesterPid, String requesterPackage) {
+    void onUpdateAudioMode(int requestedMode, int requesterPid, String requesterPackage,
+                           boolean force) {
         if (requestedMode == AudioSystem.MODE_CURRENT) {
             requestedMode = getMode();
         }
@@ -4640,7 +4716,7 @@ public class AudioService extends IAudioService.Stub
             Log.v(TAG, "onUpdateAudioMode() new mode: " + mode + ", current mode: "
                     + mMode.get() + " requested mode: " + requestedMode);
         }
-        if (mode != mMode.get()) {
+        if (mode != mMode.get() || force) {
             final long identity = Binder.clearCallingIdentity();
             int status = mAudioSystem.setPhoneState(mode, uid);
             Binder.restoreCallingIdentity(identity);
@@ -4648,6 +4724,8 @@ public class AudioService extends IAudioService.Stub
                 if (DEBUG_MODE) {
                     Log.v(TAG, "onUpdateAudioMode: mode successfully set to " + mode);
                 }
+                sendMsg(mAudioHandler, MSG_DISPATCH_AUDIO_MODE, SENDMSG_REPLACE, mode, 0,
+                        /*obj*/ null, /*delay*/ 0);
                 int previousMode = mMode.getAndSet(mode);
                 // Note: newModeOwnerPid is always 0 when actualMode is MODE_NORMAL
                 mModeLogger.log(new PhoneStateEvent(requesterPackage, requesterPid,
@@ -4690,6 +4768,38 @@ public class AudioService extends IAudioService.Stub
     /** @see AudioManager#isCallScreeningModeSupported() */
     public boolean isCallScreeningModeSupported() {
         return mIsCallScreeningModeSupported;
+    }
+
+    protected void dispatchMode(int mode) {
+        final int nbDispatchers = mModeDispatchers.beginBroadcast();
+        for (int i = 0; i < nbDispatchers; i++) {
+            try {
+                mModeDispatchers.getBroadcastItem(i).dispatchAudioModeChanged(mode);
+            } catch (RemoteException e) {
+            }
+        }
+        mModeDispatchers.finishBroadcast();
+    }
+
+    final RemoteCallbackList<IAudioModeDispatcher> mModeDispatchers =
+            new RemoteCallbackList<IAudioModeDispatcher>();
+
+    /**
+     * @see {@link AudioManager#addOnModeChangedListener(Executor, AudioManager.OnModeChangedListener)}
+     * @param dispatcher
+     */
+    public void registerModeDispatcher(
+            @NonNull IAudioModeDispatcher dispatcher) {
+        mModeDispatchers.register(dispatcher);
+    }
+
+    /**
+     * @see {@link AudioManager#removeOnModeChangedListener(AudioManager.OnModeChangedListener)}
+     * @param dispatcher
+     */
+    public void unregisterModeDispatcher(
+            @NonNull IAudioModeDispatcher dispatcher) {
+        mModeDispatchers.unregister(dispatcher);
     }
 
     /** @see AudioManager#setRttEnabled() */
@@ -5833,6 +5943,9 @@ public class AudioService extends IAudioService.Stub
             if ((device & AudioSystem.DEVICE_OUT_SPEAKER) != 0) {
                 device = AudioSystem.DEVICE_OUT_SPEAKER;
             } else if ((device & AudioSystem.DEVICE_OUT_HDMI_ARC) != 0) {
+                // FIXME(b/184944421): DEVICE_OUT_HDMI_EARC has two bits set,
+                // so it must be handled correctly as it aliases
+                // with DEVICE_OUT_HDMI_ARC | DEVICE_OUT_EARPIECE.
                 device = AudioSystem.DEVICE_OUT_HDMI_ARC;
             } else if ((device & AudioSystem.DEVICE_OUT_SPDIF) != 0) {
                 device = AudioSystem.DEVICE_OUT_SPDIF;
@@ -6066,7 +6179,7 @@ public class AudioService extends IAudioService.Stub
      * See AudioManager.setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent()
      */
     public void setBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
-            @NonNull BluetoothDevice device, @AudioService.BtProfileConnectionState int state,
+            @NonNull BluetoothDevice device, @BtProfileConnectionState int state,
             int profile, boolean suppressNoisyIntent, int a2dpVolume) {
         if (device == null) {
             throw new IllegalArgumentException("Illegal null device");
@@ -6076,8 +6189,13 @@ public class AudioService extends IAudioService.Stub
             throw new IllegalArgumentException("Illegal BluetoothProfile state for device "
                     + " (dis)connection, got " + state);
         }
-        mDeviceBroker.postBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(device, state,
-                profile, suppressNoisyIntent, a2dpVolume);
+
+        AudioDeviceBroker.BtDeviceConnectionInfo info =
+                new AudioDeviceBroker.BtDeviceConnectionInfo(device, state,
+                        profile, suppressNoisyIntent, a2dpVolume);
+        sendMsg(mAudioHandler, MSG_SET_A2DP_DEV_CONNECTION_STATE, SENDMSG_QUEUE,
+                0 /*arg1*/, 0 /*arg2*/,
+                /*obj*/ info, 0 /*delay*/);
     }
 
     /** only public for mocking/spying, do not call outside of AudioService */
@@ -6095,7 +6213,8 @@ public class AudioService extends IAudioService.Stub
         if (device == null) {
             throw new IllegalArgumentException("Illegal null device");
         }
-        mDeviceBroker.postBluetoothA2dpDeviceConfigChange(device);
+        sendMsg(mAudioHandler, MSG_A2DP_DEV_CONFIG_CHANGE, SENDMSG_QUEUE, 0, 0,
+                /*obj*/ device, /*delay*/ 0);
     }
 
     /**
@@ -7449,8 +7568,8 @@ public class AudioService extends IAudioService.Stub
                         h.setPlaybackActive(mPlaybackMonitor.isPlaybackActiveForUid(h.getUid()));
                         h.setRecordingActive(mRecordMonitor.isRecordingActiveForUid(h.getUid()));
                         if (wasActive != h.isActive()) {
-                            onUpdateAudioMode(AudioSystem.MODE_CURRENT,
-                                    android.os.Process.myPid(), mContext.getPackageName());
+                            onUpdateAudioMode(AudioSystem.MODE_CURRENT, android.os.Process.myPid(),
+                                    mContext.getPackageName(), false /*force*/);
                         }
                     }
                     break;
@@ -7475,8 +7594,21 @@ public class AudioService extends IAudioService.Stub
 
                 case MSG_UPDATE_AUDIO_MODE:
                     synchronized (mDeviceBroker.mSetModeLock) {
-                        onUpdateAudioMode(msg.arg1, msg.arg2, (String) msg.obj);
+                        onUpdateAudioMode(msg.arg1, msg.arg2, (String) msg.obj, false /*force*/);
                     }
+                    break;
+
+                case MSG_SET_A2DP_DEV_CONNECTION_STATE:
+                    mDeviceBroker.queueBluetoothA2dpDeviceConnectionStateSuppressNoisyIntent(
+                            (AudioDeviceBroker.BtDeviceConnectionInfo) msg.obj);
+                    break;
+
+                case MSG_A2DP_DEV_CONFIG_CHANGE:
+                    mDeviceBroker.postBluetoothA2dpDeviceConfigChange((BluetoothDevice) msg.obj);
+                    break;
+
+                case MSG_DISPATCH_AUDIO_MODE:
+                    dispatchMode(msg.arg1);
                     break;
             }
         }

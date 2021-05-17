@@ -2495,7 +2495,10 @@ public final class MediaDrm implements AutoCloseable {
      * The default security level is defined as the highest security level
      * supported on the device.
      *
-     * @param mime The mime type of the media data
+     * @param mime The mime type of the media data. Please use {@link
+     *             #isCryptoSchemeSupported(UUID, String)} to query mime type support separately;
+     *             for unsupported mime types the return value of {@link
+     *             #requiresSecureDecoder(String)} is crypto scheme dependent.
      */
     public boolean requiresSecureDecoder(@NonNull String mime) {
         return requiresSecureDecoder(mime, getMaxSecurityLevel());
@@ -2505,7 +2508,10 @@ public final class MediaDrm implements AutoCloseable {
      * Query if the crypto scheme requires the use of a secure decoder
      * to decode data of the given mime type at the given security level.
      *
-     * @param mime The mime type of the media data
+     * @param mime The mime type of the media data. Please use {@link
+     *             #isCryptoSchemeSupported(UUID, String, int)} to query mime type support
+     *             separately; for unsupported mime types the return value of {@link
+     *             #requiresSecureDecoder(String, int)} is crypto scheme dependent.
      * @param level a security level between {@link #SECURITY_LEVEL_SW_SECURE_CRYPTO}
      *              and {@link #SECURITY_LEVEL_HW_SECURE_ALL}. Otherwise the special value
      *              {@link #getMaxSecurityLevel()} is also permitted;
@@ -2991,13 +2997,16 @@ public final class MediaDrm implements AutoCloseable {
      * A {@link LogMessage} records an event in the {@link MediaDrm} framework
      * or vendor plugin.
      */
-    public static class LogMessage {
+    public static final class LogMessage {
+        private final long timestampMillis;
+        private final int priority;
+        private final String message;
 
         /**
          * Timing of the recorded event measured in milliseconds since the Epoch,
          * 1970-01-01 00:00:00 +0000 (UTC).
          */
-        public final long timestampMillis;
+        public final long getTimestampMillis() { return timestampMillis; }
 
         /**
          * Priority of the recorded event.
@@ -3013,13 +3022,13 @@ public final class MediaDrm implements AutoCloseable {
          * </ul>
          */
         @Log.Level
-        public final int priority;
+        public final int getPriority() { return priority; }
 
         /**
          * Description of the recorded event.
          */
         @NonNull
-        public final String message;
+        public final String getMessage() { return message; }
 
         private LogMessage(long timestampMillis, int priority, String message) {
             this.timestampMillis = timestampMillis;

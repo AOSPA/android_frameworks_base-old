@@ -49,6 +49,7 @@ import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_NEVER;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_RARE;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_RESTRICTED;
 import static android.app.usage.UsageStatsManager.STANDBY_BUCKET_WORKING_SET;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
 import static com.android.server.SystemService.PHASE_BOOT_COMPLETED;
 import static com.android.server.SystemService.PHASE_SYSTEM_SERVICES_READY;
@@ -57,7 +58,6 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
-import android.app.AppGlobals;
 import android.app.usage.AppStandbyInfo;
 import android.app.usage.UsageEvents;
 import android.app.usage.UsageStatsManager.StandbyBuckets;
@@ -74,7 +74,6 @@ import android.content.pm.CrossProfileAppsInternal;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
-import android.content.pm.ParceledListSlice;
 import android.database.ContentObserver;
 import android.hardware.display.DisplayManager;
 import android.net.NetworkScoreManager;
@@ -100,7 +99,7 @@ import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
 import android.util.Slog;
 import android.util.SparseArray;
-import android.util.SparseIntArray;
+import android.util.SparseBooleanArray;
 import android.util.TimeUtils;
 import android.view.Display;
 import android.widget.Toast;
@@ -111,10 +110,13 @@ import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.app.IBatteryStats;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.ConcurrentUtils;
+import com.android.server.AlarmManagerInternal;
 import com.android.server.JobSchedulerBackgroundThread;
 import com.android.server.LocalServices;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.usage.AppIdleHistory.AppUsageHistory;
+
+import libcore.util.EmptyArray;
 
 import java.io.File;
 import java.io.PrintWriter;
@@ -1191,6 +1193,10 @@ public class AppStandbyController
             if (mInjector.isWellbeingPackage(packageName)) {
                 return STANDBY_BUCKET_WORKING_SET;
             }
+
+            if (mInjector.hasScheduleExactAlarm(packageName, UserHandle.getUid(userId, appId))) {
+                return STANDBY_BUCKET_WORKING_SET;
+            }
         }
 
         // Check this last, as it can be the most expensive check
@@ -1200,6 +1206,11 @@ public class AppStandbyController
 
         if (isHeadlessSystemApp(packageName)) {
             return STANDBY_BUCKET_ACTIVE;
+        }
+
+        if (mPackageManager.checkPermission(android.Manifest.permission.ACCESS_BACKGROUND_LOCATION,
+                packageName) == PERMISSION_GRANTED) {
+            return STANDBY_BUCKET_FREQUENT;
         }
 
         return STANDBY_BUCKET_NEVER;
@@ -1238,71 +1249,55 @@ public class AppStandbyController
     @Override
     public int[] getIdleUidsForUser(int userId) {
         if (!mAppIdleEnabled) {
-            return new int[0];
+            return EmptyArray.INT;
         }
 
         Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "getIdleUidsForUser");
 
         final long elapsedRealtime = mInjector.elapsedRealtime();
 
-        List<ApplicationInfo> apps;
-        try {
-            ParceledListSlice<ApplicationInfo> slice = AppGlobals.getPackageManager()
-                    .getInstalledApplications(/* flags= */ 0, userId);
-            if (slice == null) {
-                return new int[0];
-            }
-            apps = slice.getList();
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
+        final PackageManagerInternal pmi = mInjector.getPackageManagerInternal();
+        final List<ApplicationInfo> apps = pmi.getInstalledApplications(0, userId, Process.myUid());
+        if (apps == null) {
+            return EmptyArray.INT;
         }
 
-        // State of each uid.  Key is the uid.  Value lower 16 bits is the number of apps
-        // associated with that uid, upper 16 bits is the number of those apps that is idle.
-        SparseIntArray uidStates = new SparseIntArray();
-
-        // Now resolve all app state.  Iterating over all apps, keeping track of how many
-        // we find for each uid and how many of those are idle.
+        // State of each uid: Key is the uid, value is whether all the apps in that uid are idle.
+        final SparseBooleanArray uidIdleStates = new SparseBooleanArray();
+        int notIdleCount = 0;
         for (int i = apps.size() - 1; i >= 0; i--) {
-            ApplicationInfo ai = apps.get(i);
+            final ApplicationInfo ai = apps.get(i);
+            final int index = uidIdleStates.indexOfKey(ai.uid);
 
-            // Check whether this app is idle.
-            boolean idle = isAppIdleFiltered(ai.packageName, UserHandle.getAppId(ai.uid),
-                    userId, elapsedRealtime);
+            final boolean currentIdle = (index < 0) ? true : uidIdleStates.valueAt(index);
 
-            int index = uidStates.indexOfKey(ai.uid);
+            final boolean newIdle = currentIdle && isAppIdleFiltered(ai.packageName,
+                    UserHandle.getAppId(ai.uid), userId, elapsedRealtime);
+
+            if (currentIdle && !newIdle) {
+                // This transition from true to false can happen at most once per uid in this loop.
+                notIdleCount++;
+            }
             if (index < 0) {
-                uidStates.put(ai.uid, 1 + (idle ? 1<<16 : 0));
+                uidIdleStates.put(ai.uid, newIdle);
             } else {
-                int value = uidStates.valueAt(index);
-                uidStates.setValueAt(index, value + 1 + (idle ? 1<<16 : 0));
+                uidIdleStates.setValueAt(index, newIdle);
             }
         }
 
+        int numIdleUids = uidIdleStates.size() - notIdleCount;
+        final int[] idleUids = new int[numIdleUids];
+        for (int i = uidIdleStates.size() - 1; i >= 0; i--) {
+            if (uidIdleStates.valueAt(i)) {
+                idleUids[--numIdleUids] = uidIdleStates.keyAt(i);
+            }
+        }
         if (DEBUG) {
             Slog.d(TAG, "getIdleUids took " + (mInjector.elapsedRealtime() - elapsedRealtime));
         }
-        int numIdle = 0;
-        for (int i = uidStates.size() - 1; i >= 0; i--) {
-            int value = uidStates.valueAt(i);
-            if ((value&0x7fff) == (value>>16)) {
-                numIdle++;
-            }
-        }
-
-        int[] res = new int[numIdle];
-        numIdle = 0;
-        for (int i = uidStates.size() - 1; i >= 0; i--) {
-            int value = uidStates.valueAt(i);
-            if ((value&0x7fff) == (value>>16)) {
-                res[numIdle] = uidStates.keyAt(i);
-                numIdle++;
-            }
-        }
-
         Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
 
-        return res;
+        return idleUids;
     }
 
     @Override
@@ -2007,6 +2002,7 @@ public class AppStandbyController
         private PowerManager mPowerManager;
         private IDeviceIdleController mDeviceIdleController;
         private CrossProfileAppsInternal mCrossProfileAppsInternal;
+        private AlarmManagerInternal mAlarmManagerInternal;
         int mBootPhase;
         /**
          * The minimum amount of time required since the last user interaction before an app can be
@@ -2047,6 +2043,7 @@ public class AppStandbyController
                 mBatteryManager = mContext.getSystemService(BatteryManager.class);
                 mCrossProfileAppsInternal = LocalServices.getService(
                         CrossProfileAppsInternal.class);
+                mAlarmManagerInternal = LocalServices.getService(AlarmManagerInternal.class);
 
                 final ActivityManager activityManager =
                         (ActivityManager) mContext.getSystemService(Context.ACTIVITY_SERVICE);
@@ -2108,6 +2105,10 @@ public class AppStandbyController
          */
         boolean isWellbeingPackage(String packageName) {
             return mWellbeingApp != null && mWellbeingApp.equals(packageName);
+        }
+
+        boolean hasScheduleExactAlarm(String packageName, int uid) {
+            return mAlarmManagerInternal.hasScheduleExactAlarm(packageName, uid);
         }
 
         void updatePowerWhitelistCache() {

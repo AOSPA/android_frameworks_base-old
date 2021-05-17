@@ -27,12 +27,15 @@ java_library {
 
     srcs: [
         "src/**/*.java",
+        "src/**/*.kt",
         "bcsmartspace/src/**/*.java",
     ],
 
     static_libs: [
+        "androidx.annotation_annotation",
         "PluginCoreLib",
         "SystemUI-sensors",
+        "SystemUIAnimationLib",
     ],
 
 }

@@ -1656,10 +1656,11 @@ class Linker {
                                                      << " with config \"" << config_value->config
                                                      << "\" for round icon compatibility");
 
-      auto value = icon_reference->Clone(&table->string_pool);
+      CloningValueTransformer cloner(&table->string_pool);
+      auto value = icon_reference->Transform(cloner);
       auto round_config_value =
           round_icon_entry->FindOrCreateValue(config_value->config, config_value->product);
-      round_config_value->value.reset(value);
+      round_config_value->value = std::move(value);
     }
   }
 
@@ -1764,7 +1765,7 @@ class Linker {
     // anything else being generated, which includes the Java classes.
     // If required, the package name is modifed before flattening, and then modified back
     // to its original name.
-    std::optional<ResourceTablePackageView> package_to_rewrite;
+    ResourceTablePackage* package_to_rewrite = nullptr;
     // Pre-O, the platform treats negative resource IDs [those with a package ID of 0x80
     // or higher] as invalid. In order to work around this limitation, we allow the use
     // of traditionally reserved resource IDs [those between 0x02 and 0x7E]. Allow the
@@ -1773,16 +1774,13 @@ class Linker {
           context_->GetPackageId() != kAppPackageId &&
           context_->GetPackageId() != kFrameworkPackageId)
         || (!options_.allow_reserved_package_id && context_->GetPackageId() > kAppPackageId);
-    if (isSplitPackage &&
-        included_feature_base_ == make_value(context_->GetCompilationPackage())) {
+    if (isSplitPackage && included_feature_base_ == context_->GetCompilationPackage()) {
       // The base APK is included, and this is a feature split. If the base package is
       // the same as this package, then we are building an old style Android Instant Apps feature
       // split and must apply this workaround to avoid requiring namespaces support.
-      auto table_view = table->GetPartitionedView();
-      if (!table_view.packages.empty() &&
-          table_view.packages.back().name == context_->GetCompilationPackage()) {
-        package_to_rewrite = std::move(table_view.packages.back());
-        CHECK_EQ(1u, table->packages.size()) << "can't change name of package when > 1 package";
+      if (!table->packages.empty() &&
+          table->packages.back()->name == context_->GetCompilationPackage()) {
+        package_to_rewrite = table->packages.back().get();
         std::string new_package_name =
             StringPrintf("%s.%s", package_to_rewrite->name.c_str(),
                          app_info_.split_name.value_or_default("feature").c_str());
@@ -1798,12 +1796,15 @@ class Linker {
 
     bool success = FlattenTable(table, options_.output_format, writer);
 
-    if (package_to_rewrite.has_value()) {
+    if (package_to_rewrite != nullptr) {
       // Change the name back.
       package_to_rewrite->name = context_->GetCompilationPackage();
-      if (package_to_rewrite->id) {
-        table->included_packages_.erase(package_to_rewrite->id.value());
-      }
+
+      // TableFlattener creates an `included_packages_` mapping entry for each package with a
+      // non-standard package id (not 0x01 or 0x7f). Since this is a feature split and not a shared
+      // library, do not include a mapping from the feature package name to the feature package id
+      // in the feature's dynamic reference table.
+      table->included_packages_.erase(context_->GetPackageId());
     }
 
     if (!success) {

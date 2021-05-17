@@ -53,6 +53,11 @@ interface IIncrementalService {
                          in PerUidReadTimeouts[] perUidReadTimeouts);
 
     /**
+     * PM/system is done with this storage, ok to increase timeouts.
+     */
+    void onInstallationComplete(int storageId);
+
+    /**
      * Bind-mounts a path under a storage to a full path. Can be permanent or temporary.
      */
     const int BIND_TEMPORARY = 0;
@@ -156,16 +161,6 @@ interface IIncrementalService {
      * Stop listening for the loading progress change for a storage.
      */
     boolean unregisterLoadingProgressListener(int storageId);
-
-    /**
-     * Register storage health status listener.
-     */
-    boolean registerStorageHealthListener(int storageId, in StorageHealthCheckParams params, in IStorageHealthListener listener);
-
-    /**
-     * Register storage health status listener.
-     */
-    void unregisterStorageHealthListener(int storageId);
 
     /**
      * Metrics key for the duration in milliseconds between now and the oldest pending read. The value is a long.

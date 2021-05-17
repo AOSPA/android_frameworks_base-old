@@ -137,7 +137,7 @@ interface IActivityManager {
             int appOp, in Bundle options, boolean serialized, boolean sticky, int userId);
     int broadcastIntentWithFeature(in IApplicationThread caller, in String callingFeatureId,
             in Intent intent, in String resolvedType, in IIntentReceiver resultTo, int resultCode,
-            in String resultData, in Bundle map, in String[] requiredPermissions,
+            in String resultData, in Bundle map, in String[] requiredPermissions, in String[] excludePermissions,
             int appOp, in Bundle options, boolean serialized, boolean sticky, int userId);
     void unbroadcastIntent(in IApplicationThread caller, in Intent intent, int userId);
     @UnsupportedAppUsage
@@ -321,6 +321,8 @@ interface IActivityManager {
     boolean isTopActivityImmersive();
     void crashApplication(int uid, int initialPid, in String packageName, int userId,
             in String message, boolean force);
+    void crashApplicationWithType(int uid, int initialPid, in String packageName, int userId,
+            in String message, boolean force, int exceptionTypeId);
     /** @deprecated -- use getProviderMimeTypeAsync */
     @UnsupportedAppUsage(maxTargetSdk = 29, publicAlternatives =
             "Use {@link android.content.ContentResolver#getType} public API instead.")
@@ -570,6 +572,12 @@ interface IActivityManager {
      * started from the shell.
      */
     void stopDelegateShellPermissionIdentity();
+
+    /**
+     * Method for the shell UID to get currently adopted permissions for an active instrumentation.
+     * An active instrumentation is one running and started from the shell.
+     */
+    List<String> getDelegatedShellPermissions();
 
     /** Returns a file descriptor that'll be closed when the system server process dies. */
     ParcelFileDescriptor getLifeMonitor();

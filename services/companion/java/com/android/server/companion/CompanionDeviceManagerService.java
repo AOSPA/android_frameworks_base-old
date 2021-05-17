@@ -154,6 +154,8 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
     private static final long DEVICE_DISAPPEARED_TIMEOUT_MS = 10 * 1000;
     private static final long DEVICE_DISAPPEARED_UNBIND_TIMEOUT_MS = 10 * 60 * 1000;
 
+    private static final long DEVICE_LISTENER_DIED_REBIND_TIMEOUT_MS = 10 * 1000;
+
     private static final boolean DEBUG = false;
     private static final String LOG_TAG = "CompanionDeviceManagerService";
 
@@ -637,16 +639,17 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
                     return association;
                 }
             }));
+
+            restartBleScan();
         }
 
         @Override
-        public boolean createAssociation(String packageName, String macAddress, int userId) {
+        public void createAssociation(String packageName, String macAddress, int userId) {
             getContext().enforceCallingOrSelfPermission(
                     android.Manifest.permission.ASSOCIATE_COMPANION_DEVICES, "createAssociation");
 
             addAssociation(new Association(
                     userId, macAddress, packageName, null, false, System.currentTimeMillis()));
-            return true;
         }
 
         private void checkCanCallNotificationApi(String callingPackage) throws RemoteException {
@@ -1118,11 +1121,26 @@ public class CompanionDeviceManagerService extends SystemService implements Bind
         }
         ComponentName componentName = packageResolveInfos.get(0).serviceInfo.getComponentName();
         Slog.i(LOG_TAG, "Initializing CompanionDeviceService binding for " + componentName);
-        return new ServiceConnector.Impl<>(getContext(),
+        return new ServiceConnector.Impl<ICompanionDeviceService>(getContext(),
                 new Intent(CompanionDeviceService.SERVICE_INTERFACE).setComponent(componentName),
                 BIND_IMPORTANT,
                 a.getUserId(),
-                ICompanionDeviceService.Stub::asInterface);
+                ICompanionDeviceService.Stub::asInterface) {
+
+            @Override
+            protected long getAutoDisconnectTimeoutMs() {
+                // Service binding is managed manually based on corresponding device being nearby
+                return Long.MAX_VALUE;
+            }
+
+            @Override
+            public void binderDied() {
+                super.binderDied();
+
+                // Re-connect to the service if process gets killed
+                mMainHandler.postDelayed(this::connect, DEVICE_LISTENER_DIED_REBIND_TIMEOUT_MS);
+            }
+        };
     }
 
     private class BleScanCallback extends ScanCallback {

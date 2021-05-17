@@ -80,11 +80,11 @@ public final class StorageSessionController {
     public int getConnectionUserIdForVolume(VolumeInfo vol) {
         final Context volumeUserContext = mContext.createContextAsUser(
                 UserHandle.of(vol.mountUserId), 0);
-        boolean sharesMediaWithParent = volumeUserContext.getSystemService(
-                UserManager.class).sharesMediaWithParent();
+        boolean isMediaSharedWithParent = volumeUserContext.getSystemService(
+                UserManager.class).isMediaSharedWithParent();
 
         UserInfo userInfo = mUserManager.getUserInfo(vol.mountUserId);
-        if (userInfo != null && sharesMediaWithParent) {
+        if (userInfo != null && isMediaSharedWithParent) {
             // Clones use the same connection as their parent
             return userInfo.profileGroupId;
         } else {
@@ -147,17 +147,18 @@ public final class StorageSessionController {
             return;
         }
         String sessionId = vol.getId();
-        int userId = getConnectionUserIdForVolume(vol);
+        int connectionUserId = getConnectionUserIdForVolume(vol);
 
         StorageUserConnection connection = null;
         synchronized (mLock) {
-            connection = mConnections.get(userId);
+            connection = mConnections.get(connectionUserId);
             if (connection != null) {
                 Slog.i(TAG, "Notifying volume state changed for session with id: " + sessionId);
                 connection.notifyVolumeStateChanged(sessionId,
-                        vol.buildStorageVolume(mContext, userId, false));
+                        vol.buildStorageVolume(mContext, vol.getMountUserId(), false));
             } else {
-                Slog.w(TAG, "No available storage user connection for userId : " + userId);
+                Slog.w(TAG, "No available storage user connection for userId : "
+                        + connectionUserId);
             }
         }
     }

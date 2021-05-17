@@ -294,7 +294,7 @@
     <string name="notification_channel_heavy_weight_app" msgid="17455756500828043">"App wird ausgeführt"</string>
     <string name="notification_channel_foreground_service" msgid="7102189948158885178">"Strom verbrauchende Apps"</string>
     <string name="notification_channel_accessibility_magnification" msgid="1707913872219798098">"Vergrößerung"</string>
-    <string name="notification_channel_accessibility_security_policy" msgid="3350443906017624270">"Sicherheitsrichtlinien für Bedienungshilfen"</string>
+    <string name="notification_channel_accessibility_security_policy" msgid="1727787021725251912">"Nutzung der Bedienungshilfen"</string>
     <string name="foreground_service_app_in_background" msgid="1439289699671273555">"<xliff:g id="APP_NAME">%1$s</xliff:g> verbraucht Strom"</string>
     <string name="foreground_service_apps_in_background" msgid="7340037176412387863">"<xliff:g id="NUMBER">%1$d</xliff:g> Apps verbrauchen Strom"</string>
     <string name="foreground_service_tap_for_details" msgid="9078123626015586751">"Für Details zur Akku- und Datennutzung tippen"</string>
@@ -319,6 +319,8 @@
     <string name="permgroupdesc_activityRecognition" msgid="4725624819457670704">"Zugriff auf körperliche Aktivität"</string>
     <string name="permgrouplab_camera" msgid="9090413408963547706">"Kamera"</string>
     <string name="permgroupdesc_camera" msgid="7585150538459320326">"Bilder und Videos aufnehmen"</string>
+    <string name="permgrouplab_nearby_devices" msgid="5529147543651181991">"Geräte in der Nähe"</string>
+    <string name="permgroupdesc_nearby_devices" msgid="3213561597116913508">"Geräte in der Nähe finden und eine Verbindung herstellen"</string>
     <string name="permgrouplab_calllog" msgid="7926834372073550288">"Anrufliste"</string>
     <string name="permgroupdesc_calllog" msgid="2026996642917801803">"Schreib- und Lesezugriff auf Anrufliste"</string>
     <string name="permgrouplab_phone" msgid="570318944091926620">"Telefon"</string>
@@ -532,6 +534,14 @@
     <string name="permdesc_bluetooth" product="tablet" msgid="3053222571491402635">"Ermöglicht der App, die Bluetooth-Konfiguration eines Tablets einzusehen und Verbindungen zu gekoppelten Geräten herzustellen und zu akzeptieren."</string>
     <string name="permdesc_bluetooth" product="tv" msgid="8851534496561034998">"Ermöglicht der App, die Bluetooth-Konfiguration des Android TV-Geräts abzurufen und Verbindungen zu gekoppelten Geräten herzustellen und zu akzeptieren."</string>
     <string name="permdesc_bluetooth" product="default" msgid="2779606714091276746">"Ermöglicht der App, die Bluetooth-Konfiguration des Telefons einzusehen und Verbindungen mit gekoppelten Geräten herzustellen und zu akzeptieren."</string>
+    <string name="permlab_bluetooth_scan" msgid="5402587142833124594">"Bluetooth-Geräte in der Nähe finden und koppeln"</string>
+    <string name="permdesc_bluetooth_scan" product="default" msgid="6540723536925289276">"Erlaubt der App, Bluetooth-Geräte in der Nähe zu finden und zu koppeln"</string>
+    <string name="permlab_bluetooth_connect" msgid="6657463246355003528">"Mit gekoppelten Bluetooth-Geräten verbinden"</string>
+    <string name="permdesc_bluetooth_connect" product="default" msgid="4546016548795544617">"Erlaubt der App, sich mit gekoppelten Bluetooth-Geräten zu verbinden"</string>
+    <string name="permlab_bluetooth_advertise" msgid="2781147747928853177">"Inhalte an Bluetooth-Geräte in der Nähe senden"</string>
+    <string name="permdesc_bluetooth_advertise" product="default" msgid="6085174451034210183">"Erlaubt der App, Inhalte an Bluetooth-Geräte in der Nähe zu senden"</string>
+    <string name="permlab_uwb_ranging" msgid="8141915781475770665">"Relative Distanz zwischen Ultrabreitband-Geräten in der Nähe bestimmen"</string>
+    <string name="permdesc_uwb_ranging" msgid="2519723069604307055">"Ermöglicht der App, die relative Distanz zwischen Ultrabreitband-Geräten in der Nähe zu bestimmen"</string>
     <string name="permlab_preferredPaymentInfo" msgid="5274423844767445054">"Informationen zum bevorzugten NFC-Zahlungsdienst"</string>
     <string name="permdesc_preferredPaymentInfo" msgid="8583552469807294967">"Ermöglicht der App, Informationen zum bevorzugten NFC-Zahlungsdienst abzurufen, etwa registrierte Hilfsmittel oder das Routenziel."</string>
     <string name="permlab_nfc" msgid="1904455246837674977">"Nahfeldkommunikation steuern"</string>
@@ -566,19 +576,22 @@
     <string name="biometric_error_device_not_secured" msgid="3129845065043995924">"Keine PIN, kein Muster und kein Passwort festgelegt"</string>
     <string name="biometric_error_generic" msgid="6784371929985434439">"Fehler bei der Authentifizierung"</string>
     <string name="screen_lock_app_setting_name" msgid="6054944352976789228">"Displaysperre verwenden"</string>
-    <string name="screen_lock_dialog_default_subtitle" msgid="8638638125397857315">"Zum Fortfahren Anmeldedaten des Geräts eingeben"</string>
-    <string name="fingerprint_acquired_partial" msgid="8532380671091299342">"Fingerabdruck nur teilweise erkannt. Bitte versuche es noch einmal."</string>
+    <string name="screen_lock_dialog_default_subtitle" msgid="120359538048533695">"Displaysperre eingeben, um fortzufahren"</string>
+    <string name="fingerprint_acquired_partial" msgid="694598777291084823">"Fingerabdruck wurde nur teilweise erkannt"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Fingerabdruck konnte nicht verarbeitet werden. Bitte versuche es noch einmal."</string>
-    <string name="fingerprint_acquired_imager_dirty" msgid="4694800187151533990">"Fingerabdrucksensor ist verschmutzt. Reinige ihn und versuche es noch einmal."</string>
-    <string name="fingerprint_acquired_too_fast" msgid="5151661932298844352">"Du hast deinen Finger zu schnell bewegt. Bitte versuche es noch einmal."</string>
+    <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"Sensor reinigen"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="1254724478300787385">"Finger wurde zu schnell bewegt"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"Finger zu langsam bewegt. Bitte versuche es noch einmal."</string>
+    <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"Anderen Fingerabdruck verwenden"</string>
+    <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"Zu hell"</string>
+    <string name="fingerprint_acquired_try_adjusting" msgid="3667006071003809364">"Versuche, den Finger anders aufzulegen"</string>
   <string-array name="fingerprint_acquired_vendor">
   </string-array>
     <string name="fingerprint_authenticated" msgid="2024862866860283100">"Fingerabdruck wurde authentifiziert"</string>
     <string name="face_authenticated_no_confirmation_required" msgid="8867889115112348167">"Gesicht authentifiziert"</string>
     <string name="face_authenticated_confirmation_required" msgid="6872632732508013755">"Gesicht authentifiziert, bitte bestätigen"</string>
     <string name="fingerprint_error_hw_not_available" msgid="4571700896929561202">"Fingerabdruckhardware nicht verfügbar"</string>
-    <string name="fingerprint_error_no_space" msgid="6126456006769817485">"Fingerabdruck kann nicht gespeichert werden. Entferne einen vorhandenen Fingerabdruck."</string>
+    <string name="fingerprint_error_no_space" msgid="7285481581905967580">"Fingerabdruck konnte nicht eingerichtet werden"</string>
     <string name="fingerprint_error_timeout" msgid="2946635815726054226">"Zeitüberschreitung bei Fingerabdruck. Bitte versuche es noch einmal."</string>
     <string name="fingerprint_error_canceled" msgid="540026881380070750">"Fingerabdruckvorgang abgebrochen"</string>
     <string name="fingerprint_error_user_canceled" msgid="7685676229281231614">"Vorgang der Fingerabdruckauthentifizierung vom Nutzer abgebrochen."</string>
@@ -603,6 +616,10 @@
     <string name="face_recalibrate_notification_name" msgid="6006095897989257026">"Face Unlock"</string>
     <string name="face_recalibrate_notification_title" msgid="5944930528030496897">"Gesicht neu scannen lassen"</string>
     <string name="face_recalibrate_notification_content" msgid="892757485125249962">"Für bessere Erkennung Gesicht neu scannen lassen"</string>
+    <string name="face_setup_notification_title" msgid="550617822603450009">"Face Unlock einrichten"</string>
+    <string name="face_setup_notification_content" msgid="5463999831057751676">"Entsperre dein Smartphone, indem du es ansiehst"</string>
+    <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Weitere Möglichkeiten zum Entsperren einrichten"</string>
+    <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Tippe, um einen Fingerabdruck hinzuzufügen"</string>
     <string name="face_acquired_insufficient" msgid="2150805835949162453">"Gesichtsdaten nicht gut erfasst. Erneut versuchen."</string>
     <string name="face_acquired_too_bright" msgid="8070756048978079164">"Zu hell. Schwächere Beleuchtung ausprobieren."</string>
     <string name="face_acquired_too_dark" msgid="252573548464426546">"Zu dunkel. Probier eine hellere Beleuchtung aus."</string>
@@ -639,7 +656,7 @@
     <string name="face_name_template" msgid="3877037340223318119">"Gesicht <xliff:g id="FACEID">%d</xliff:g>"</string>
     <string name="face_app_setting_name" msgid="8130135875458467243">"Face Unlock verwenden"</string>
     <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Face Unlock oder Displaysperre verwenden"</string>
-    <string name="face_dialog_default_subtitle" msgid="4979205739418564856">"Zum Fortfahren Face Unlock verwenden"</string>
+    <string name="face_dialog_default_subtitle" msgid="6620492813371195429">"Gesichtserkennung verwenden, um fortzufahren"</string>
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Verwende die Gesichtserkennung oder deine Display-Entsperrmethode, um fortzufahren"</string>
   <string-array name="face_error_vendor">
   </string-array>
@@ -698,8 +715,8 @@
     <string name="permdesc_bindCarrierMessagingService" msgid="6316457028173478345">"Ermöglicht dem Inhaber die Bindung an die Oberfläche eines Mobilfunkanbieter-Messaging-Dienstes auf oberster Ebene. Für normale Apps sollte dies nie erforderlich sein."</string>
     <string name="permlab_bindCarrierServices" msgid="2395596978626237474">"An Mobilfunkanbieter-Dienste binden"</string>
     <string name="permdesc_bindCarrierServices" msgid="9185614481967262900">"Ermöglicht dem Inhaber die Bindung an Mobilfunkanbieter-Dienste. Für normale Apps sollte dies nicht erforderlich sein."</string>
-    <string name="permlab_access_notification_policy" msgid="5524112842876975537">"Auf \"Bitte nicht stören\" zugreifen"</string>
-    <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Ermöglicht der App Lese- und Schreibzugriff auf die \"Bitte nicht stören\"-Konfiguration"</string>
+    <string name="permlab_access_notification_policy" msgid="5524112842876975537">"Auf „Bitte nicht stören“ zugreifen"</string>
+    <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Ermöglicht der App Lese- und Schreibzugriff auf die „Bitte nicht stören“-Konfiguration"</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"Mit der Verwendung der Anzeigeberechtigung beginnen"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Ermöglicht dem Inhaber, die Berechtigungsnutzung für eine App zu beginnen. Sollte für normale Apps nie benötigt werden."</string>
     <string name="permlab_highSamplingRateSensors" msgid="3941068435726317070">"Sensordaten mit hoher Frequenz auslesen"</string>
@@ -720,7 +737,7 @@
     <string name="policylab_wipeData" msgid="1359485247727537311">"Alle Daten löschen"</string>
     <string name="policydesc_wipeData" product="tablet" msgid="7245372676261947507">"Auf Werkseinstellungen zurücksetzen und Daten auf dem Tablet ohne Warnung löschen"</string>
     <string name="policydesc_wipeData" product="tv" msgid="513862488950801261">"Du kannst die Daten auf deinem Android TV-Gerät ohne vorherige Warnung löschen, indem du es auf die Werkseinstellungen zurücksetzt."</string>
-    <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Auf Werkseinstellungen zurücksetzen und damit Daten auf dem Telefon ohne Warnung löschen"</string>
+    <string name="policydesc_wipeData" product="default" msgid="8036084184768379022">"Gerät auf Werkseinstellungen zurücksetzen und damit Daten auf dem Telefon ohne Warnung löschen"</string>
     <string name="policylab_wipeData_secondaryUser" msgid="413813645323433166">"Nutzerdaten löschen"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tablet" msgid="2336676480090926470">"Daten dieses Nutzers auf diesem Tablet ohne vorherige Warnung löschen"</string>
     <string name="policydesc_wipeData_secondaryUser" product="tv" msgid="2293713284515865200">"Daten dieses Nutzers auf diesem Android TV-Gerät werden ohne vorherige Warnung gelöscht."</string>
@@ -1006,6 +1023,9 @@
     <string name="copied" msgid="4675902854553014676">"Kopiert"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> hat etwas von <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g> eingefügt"</string>
     <string name="pasted_from_clipboard" msgid="6295556725844421812">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> hat etwas aus der Zwischenablage eingefügt"</string>
+    <string name="pasted_text" msgid="4298871641549173733">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> hat einen von dir kopierten Text eingefügt"</string>
+    <string name="pasted_image" msgid="4729097394781491022">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> hat ein von dir kopiertes Bild eingefügt"</string>
+    <string name="pasted_content" msgid="646276353060777131">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> hat den von dir kopierten Inhalt eingefügt"</string>
     <string name="more_item_label" msgid="7419249600215749115">"Mehr"</string>
     <string name="prepend_shortcut_label" msgid="1743716737502867951">"Menü+"</string>
     <string name="menu_meta_shortcut_label" msgid="1623390163674762478">"Meta-Taste +"</string>
@@ -1500,7 +1520,7 @@
     <string name="gpsNotifTicker" msgid="3207361857637620780">"Standortabfrage von <xliff:g id="NAME">%s</xliff:g>"</string>
     <string name="gpsNotifTitle" msgid="1590033371665669570">"Standortabfrage"</string>
     <string name="gpsNotifMessage" msgid="7346649122793758032">"Angefordert von <xliff:g id="NAME">%1$s</xliff:g> (<xliff:g id="SERVICE">%2$s</xliff:g>)"</string>
-    <string name="gpsVerifYes" msgid="3719843080744112940">"\"Ja\""</string>
+    <string name="gpsVerifYes" msgid="3719843080744112940">"„Ja“"</string>
     <string name="gpsVerifNo" msgid="1671201856091564741">"Nein"</string>
     <string name="sync_too_many_deletes" msgid="6999440774578705300">"Löschbegrenzung überschritten"</string>
     <string name="sync_too_many_deletes_desc" msgid="7409327940303504440">"Es sind <xliff:g id="NUMBER_OF_DELETED_ITEMS">%1$d</xliff:g> gelöschte Elemente für <xliff:g id="TYPE_OF_SYNC">%2$s</xliff:g>, Konto <xliff:g id="ACCOUNT_NAME">%3$s</xliff:g>, vorhanden. Wie möchtest du fortfahren?"</string>
@@ -1672,7 +1692,7 @@
     <string name="accessibility_shortcut_menu_item_status_off" msgid="5531598275559472393">"AUS"</string>
     <string name="accessibility_enable_service_title" msgid="3931558336268541484">"<xliff:g id="SERVICE">%1$s</xliff:g> die vollständige Kontrolle über dein Gerät geben?"</string>
     <string name="accessibility_enable_service_encryption_warning" msgid="8603532708618236909">"Wenn du <xliff:g id="SERVICE">%1$s</xliff:g> aktivierst, verwendet dein Gerät nicht die Displaysperre, um die Datenverschlüsselung zu verbessern."</string>
-    <string name="accessibility_service_warning_description" msgid="291674995220940133">"Die vollständige Kontrolle sollte nur für die Apps aktiviert werden, die dir den Zugang zu den App-Funktionen erleichtern. Das ist in der Regel nur ein kleiner Teil der Apps."</string>
+    <string name="accessibility_service_warning_description" msgid="291674995220940133">"Die vollständige Kontrolle sollte nur für Apps aktiviert werden, die dir Zugang zu App-Funktionen erleichtern. Das ist in der Regel nur ein kleiner Teil der Apps."</string>
     <string name="accessibility_service_screen_control_title" msgid="190017412626919776">"Bildschirm aufrufen und steuern"</string>
     <string name="accessibility_service_screen_control_description" msgid="6946315917771791525">"Die Funktion kann alle Inhalte auf dem Bildschirm lesen und diese Inhalte über andere Apps anzeigen."</string>
     <string name="accessibility_service_action_perform_title" msgid="779670378951658160">"Aktionen aufrufen und durchführen"</string>
@@ -1689,8 +1709,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Verknüpfung verwenden"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Farbumkehr"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Farbkorrektur"</string>
-    <!-- no translation found for reduce_bright_colors_feature_name (3222994553174604132) -->
-    <skip />
+    <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Extradunkel"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Lautstärketasten wurden gedrückt gehalten. <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ist aktiviert."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Lautstärketasten wurden gedrückt gehalten. <xliff:g id="SERVICE_NAME">%1$s</xliff:g> ist deaktiviert."</string>
     <string name="accessibility_shortcut_spoken_feedback" msgid="4228997042855695090">"Halten Sie beide Lautstärketasten drei Sekunden lang gedrückt, um <xliff:g id="SERVICE_NAME">%1$s</xliff:g> zu verwenden"</string>
@@ -1754,6 +1773,28 @@
     <string name="mediasize_na_monarch" msgid="4396943937986136896">"Monarch"</string>
     <string name="mediasize_na_quarto" msgid="2119101847712239885">"Quarto"</string>
     <string name="mediasize_na_foolscap" msgid="5011612828564394648">"Foolscap"</string>
+    <!-- no translation found for mediasize_na_ansi_c (3104916921818289618) -->
+    <skip />
+    <!-- no translation found for mediasize_na_ansi_d (254005964819282724) -->
+    <skip />
+    <!-- no translation found for mediasize_na_ansi_e (4424174989686785675) -->
+    <skip />
+    <!-- no translation found for mediasize_na_ansi_f (146980362213260987) -->
+    <skip />
+    <!-- no translation found for mediasize_na_arch_a (5280681822380032361) -->
+    <skip />
+    <!-- no translation found for mediasize_na_arch_b (2113344093437297427) -->
+    <skip />
+    <!-- no translation found for mediasize_na_arch_c (971002546186856623) -->
+    <skip />
+    <!-- no translation found for mediasize_na_arch_d (6450996075335049806) -->
+    <skip />
+    <!-- no translation found for mediasize_na_arch_e (6782708486949266519) -->
+    <skip />
+    <!-- no translation found for mediasize_na_arch_e1 (4707138568738504275) -->
+    <skip />
+    <!-- no translation found for mediasize_na_super_b (6964127155618393178) -->
+    <skip />
     <string name="mediasize_chinese_roc_8k" msgid="411670106572707544">"ROC 8K"</string>
     <string name="mediasize_chinese_roc_16k" msgid="7496706798725321898">"ROC 16K"</string>
     <string name="mediasize_chinese_prc_1" msgid="946949835711037253">"PRC 1"</string>
@@ -1790,6 +1831,8 @@
     <string name="mediasize_japanese_kahu" msgid="7290232592648122042">"Kahu"</string>
     <string name="mediasize_japanese_kaku2" msgid="7477551750461028312">"Kaku2"</string>
     <string name="mediasize_japanese_you4" msgid="5552111912684384833">"You4"</string>
+    <!-- no translation found for mediasize_japanese_l (1326765321473431817) -->
+    <skip />
     <string name="mediasize_unknown_portrait" msgid="3817016220446495613">"Unbekannt – Hochformat"</string>
     <string name="mediasize_unknown_landscape" msgid="1584741567225095325">"Unbekannt – Querformat"</string>
     <string name="write_fail_reason_cancelled" msgid="2344081488493969190">"Abgebrochen"</string>
@@ -1833,8 +1876,10 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Von deinem Administrator aktualisiert"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Von deinem Administrator gelöscht"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="4424488535318105801">"Der Energiesparmodus sorgt für eine längere Akkulaufzeit:\n\n• Das dunkle Design wird aktiviert\n• Hintergrundaktivitäten, einige optische Effekte und weitere Funktionen wie \"Ok Google\" werden abgeschaltet oder eingeschränkt\n\n"<annotation id="url">"Weitere Informationen"</annotation></string>
-    <string name="battery_saver_description" msgid="6794188153647295212">"Der Energiesparmodus sorgt für eine längere Akkulaufzeit:\n\n• Das dunkle Design wird aktiviert\n• Hintergrundaktivitäten, einige optische Effekte und weitere Funktionen wie \"Ok Google\" werden abgeschaltet oder eingeschränkt"</string>
+    <!-- no translation found for battery_saver_description_with_learn_more (750683025714899363) -->
+    <skip />
+    <!-- no translation found for battery_saver_description (5693741424234005958) -->
+    <skip />
     <string name="data_saver_description" msgid="4995164271550590517">"Der Datensparmodus verhindert zum einen, dass manche Apps im Hintergrund Daten senden oder empfangen, sodass weniger Daten verbraucht werden. Zum anderen werden die Datenzugriffe der gerade aktiven App eingeschränkt, was z. B. dazu führen kann, dass Bilder erst angetippt werden müssen, bevor sie sichtbar werden."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Datensparmodus aktivieren?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Aktivieren"</string>
@@ -1874,7 +1919,7 @@
     <string name="zen_mode_until" msgid="2250286190237669079">"Bis <xliff:g id="FORMATTEDTIME">%1$s</xliff:g>"</string>
     <string name="zen_mode_alarm" msgid="7046911727540499275">"Bis <xliff:g id="FORMATTEDTIME">%1$s</xliff:g> (nächste Weckzeit)"</string>
     <string name="zen_mode_forever" msgid="740585666364912448">"Bis zur Deaktivierung"</string>
-    <string name="zen_mode_forever_dnd" msgid="3423201955704180067">"Bis zur Deaktivierung von \"Bitte nicht stören\""</string>
+    <string name="zen_mode_forever_dnd" msgid="3423201955704180067">"Bis zur Deaktivierung von „Bitte nicht stören“"</string>
     <string name="zen_mode_rule_name_combination" msgid="7174598364351313725">"<xliff:g id="FIRST">%1$s</xliff:g>/<xliff:g id="REST">%2$s</xliff:g>"</string>
     <string name="toolbar_collapse_description" msgid="8009920446193610996">"Minimieren"</string>
     <string name="zen_mode_feature_name" msgid="3785547207263754500">"Bitte nicht stören"</string>
@@ -1910,11 +1955,12 @@
     <string name="close_button_text" msgid="10603510034455258">"Schließen"</string>
     <string name="notification_messaging_title_template" msgid="772857526770251989">"<xliff:g id="CONVERSATION_TITLE">%1$s</xliff:g>: <xliff:g id="SENDER_NAME">%2$s</xliff:g>"</string>
     <string name="call_notification_answer_action" msgid="5999246836247132937">"Annehmen"</string>
+    <string name="call_notification_answer_video_action" msgid="2086030940195382249">"Video"</string>
     <string name="call_notification_decline_action" msgid="3700345945214000726">"Ablehnen"</string>
     <string name="call_notification_hang_up_action" msgid="9130720590159188131">"Auflegen"</string>
     <string name="call_notification_incoming_text" msgid="6143109825406638201">"Eingehender Anruf"</string>
     <string name="call_notification_ongoing_text" msgid="3880832933933020875">"Aktueller Anruf"</string>
-    <string name="call_notification_screening_text" msgid="8396931408268940208">"Screening für eingehenden Anruf"</string>
+    <string name="call_notification_screening_text" msgid="8396931408268940208">"Filter für eingehenden Anruf"</string>
     <plurals name="selected_count" formatted="false" msgid="3946212171128200491">
       <item quantity="other"><xliff:g id="COUNT_1">%1$d</xliff:g> ausgewählt</item>
       <item quantity="one"><xliff:g id="COUNT_0">%1$d</xliff:g> ausgewählt</item>
@@ -1980,7 +2026,7 @@
     <string name="time_picker_text_input_mode_description" msgid="4761160667516611576">"In den Texteingabemodus wechseln, um die Uhrzeit einzugeben."</string>
     <string name="time_picker_radial_mode_description" msgid="1222342577115016953">"In den Uhrzeitmodus wechseln, um die Uhrzeit einzugeben."</string>
     <string name="autofill_picker_accessibility_title" msgid="4425806874792196599">"Optionen für automatisches Ausfüllen"</string>
-    <string name="autofill_save_accessibility_title" msgid="1523225776218450005">"Für \"Automatisches Ausfüllen\" speichern"</string>
+    <string name="autofill_save_accessibility_title" msgid="1523225776218450005">"Für „Automatisches Ausfüllen“ speichern"</string>
     <string name="autofill_error_cannot_autofill" msgid="6528827648643138596">"Inhalte können nicht automatisch ausgefüllt werden"</string>
     <string name="autofill_picker_no_suggestions" msgid="1076022650427481509">"Keine Vorschläge für automatisches Ausfüllen"</string>
     <plurals name="autofill_picker_some_suggestions" formatted="false" msgid="6651883186966959978">
@@ -2039,9 +2085,9 @@
     <string name="volume_dialog_ringer_guidance_silent" msgid="1011246774949993783">"Anrufe und Benachrichtigungen stummgeschaltet"</string>
     <string name="notification_channel_system_changes" msgid="2462010596920209678">"Systemänderungen"</string>
     <string name="notification_channel_do_not_disturb" msgid="7832584281883687653">"Bitte nicht stören"</string>
-    <string name="zen_upgrade_notification_visd_title" msgid="2001148984371968620">"Neu: Durch \"Bitte nicht stören\" werden Benachrichtigungen nicht mehr angezeigt"</string>
+    <string name="zen_upgrade_notification_visd_title" msgid="2001148984371968620">"Neu: Durch „Bitte nicht stören“ werden Benachrichtigungen nicht mehr angezeigt"</string>
     <string name="zen_upgrade_notification_visd_content" msgid="3683314609114134946">"Für weitere Informationen und zum Ändern tippen."</string>
-    <string name="zen_upgrade_notification_title" msgid="8198167698095298717">"\"Bitte nicht stören\" wurde geändert"</string>
+    <string name="zen_upgrade_notification_title" msgid="8198167698095298717">"„Bitte nicht stören“ wurde geändert"</string>
     <string name="zen_upgrade_notification_content" msgid="5228458567180124005">"Tippe, um zu überprüfen, welche Inhalte blockiert werden."</string>
     <string name="notification_app_name_system" msgid="3045196791746735601">"System"</string>
     <string name="notification_app_name_settings" msgid="9088548800899952531">"Einstellungen"</string>
@@ -2053,6 +2099,12 @@
     <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Diese Benachrichtigung wurde auf „Lautlos“ herabgestuft. Tippe, um Feedback zu geben."</string>
     <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Diese Benachrichtigung wurde hochgestuft. Tippe, um Feedback zu geben."</string>
     <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Diese Benachrichtigung wurde herabgestuft. Tippe, um Feedback zu geben."</string>
+    <string name="nas_upgrade_notification_title" msgid="4224351129445073051">"„Erweiterte Benachrichtigungen“ ausprobieren"</string>
+    <string name="nas_upgrade_notification_content" msgid="7036860187157134706">"Wenn du weiterhin beispielsweise Vorschläge für Aktionen und Antworten erhalten möchtest, aktiviere die Funktion „Erweiterte Benachrichtigungen“. Adaptive Benachrichtigungen für Android werden nicht mehr unterstützt."</string>
+    <string name="nas_upgrade_notification_enable_action" msgid="4823652531622744798">"Aktivieren"</string>
+    <string name="nas_upgrade_notification_disable_action" msgid="7561210256700811433">"Nicht jetzt"</string>
+    <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Weitere Informationen"</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="6276343083934111208">"Die Funktion „Erweiterte Benachrichtigungen“ kann alle Benachrichtigungen lesen, darunter auch personenbezogene Daten wie Kontaktnamen und Nachrichten. Außerdem kann sie Benachrichtigungen schließen oder Schaltflächen in Benachrichtigungen verwenden und so beispielsweise Anrufe entgegennehmen.\n\nDiese Funktion kann auch den Prioritätsmodus aktivieren bzw. deaktivieren und zugehörige Einstellungen ändern."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Infomitteilung zum Ablaufmodus"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Dein Akku könnte vor der gewöhnlichen Ladezeit leer sein"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Energiesparmodus aktiviert, um die Akkulaufzeit zu verlängern"</string>
@@ -2111,20 +2163,19 @@
     <string name="resolver_work_tab" msgid="2690019516263167035">"Geschäftlich"</string>
     <string name="resolver_personal_tab_accessibility" msgid="5739524949153091224">"Private Ansicht"</string>
     <string name="resolver_work_tab_accessibility" msgid="4753168230363802734">"Geschäftliche Ansicht"</string>
-    <string name="resolver_cant_share_with_work_apps" msgid="637686613606502219">"Teilen mit geschäftlichen Apps nicht möglich"</string>
-    <string name="resolver_cant_share_with_work_apps_explanation" msgid="3332302070341130545">"Dein IT-Administrator hat festgelegt, dass du diese Inhalte mit den Apps in deinem Arbeitsprofil nicht teilen darfst"</string>
-    <string name="resolver_cant_access_work_apps" msgid="2455757966397563223">"Öffnen mit geschäftlichen Apps nicht möglich"</string>
-    <string name="resolver_cant_access_work_apps_explanation" msgid="3626983885525445790">"Dein IT-Administrator hat festgelegt, dass du diese Inhalte mit den Apps in deinem Arbeitsprofil nicht aufrufen darfst"</string>
-    <string name="resolver_cant_share_with_personal_apps" msgid="3079139799233316203">"Teilen mit privaten Apps nicht möglich"</string>
-    <string name="resolver_cant_share_with_personal_apps_explanation" msgid="2959282422751315171">"Dein IT-Administrator hat festgelegt, dass du diese Inhalte mit den Apps in deinem privaten Profil nicht teilen darfst"</string>
-    <string name="resolver_cant_access_personal_apps" msgid="648291604475669395">"Öffnen mit privaten Apps nicht möglich"</string>
-    <string name="resolver_cant_access_personal_apps_explanation" msgid="2298773629302296519">"Dein IT-Administrator hat festgelegt, dass du diese Inhalte mit den Apps in deinem privaten Profil nicht aufrufen darfst"</string>
+    <string name="resolver_cross_profile_blocked" msgid="3014597376026044840">"Von deinem IT-Administrator blockiert"</string>
+    <string name="resolver_cant_share_with_work_apps_explanation" msgid="9071442683080586643">"Diese Art von Inhalt kann nicht über geschäftliche Apps geteilt werden"</string>
+    <string name="resolver_cant_access_work_apps_explanation" msgid="1129960195389373279">"Diese Art von Inhalt kann nicht mit geschäftlichen Apps geöffnet werden"</string>
+    <string name="resolver_cant_share_with_personal_apps_explanation" msgid="6349766201904601544">"Diese Art von Inhalt kann nicht über private Apps geteilt werden"</string>
+    <string name="resolver_cant_access_personal_apps_explanation" msgid="1679399548862724359">"Diese Art von Inhalt kann nicht mit privaten Apps geöffnet werden"</string>
     <string name="resolver_turn_on_work_apps" msgid="884910835250037247">"Arbeitsprofil pausiert"</string>
-    <string name="resolver_switch_on_work" msgid="2873009160846966379">"Aktivieren"</string>
-    <string name="resolver_no_work_apps_available_share" msgid="7933949011797699505">"Diese Inhalte werden von geschäftlichen Apps nicht unterstützt"</string>
-    <string name="resolver_no_work_apps_available_resolve" msgid="1244844292366099399">"Diese Inhalte dürfen nicht mit geschäftlichen Apps geöffnet werden"</string>
-    <string name="resolver_no_personal_apps_available_share" msgid="5639102815174748732">"Diese Inhalte werden von privaten Apps nicht unterstützt"</string>
-    <string name="resolver_no_personal_apps_available_resolve" msgid="5120671970531446978">"Diese Inhalte dürfen nicht mit privaten Apps geöffnet werden"</string>
+    <string name="resolver_switch_on_work" msgid="463709043650610420">"Zum Aktivieren tippen"</string>
+    <string name="resolver_no_work_apps_available" msgid="3298291360133337270">"Keine geschäftlichen Apps"</string>
+    <string name="resolver_no_personal_apps_available" msgid="6284837227019594881">"Keine privaten Apps"</string>
+    <string name="miniresolver_open_in_personal" msgid="2937599899213467617">"In <xliff:g id="APP">%s</xliff:g> im privaten Profil öffnen?"</string>
+    <string name="miniresolver_open_in_work" msgid="152208044699347924">"In <xliff:g id="APP">%s</xliff:g> im Arbeitsprofil öffnen?"</string>
+    <string name="miniresolver_use_personal_browser" msgid="776072682871133308">"Privaten Browser verwenden"</string>
+    <string name="miniresolver_use_work_browser" msgid="543575306251952994">"Arbeitsbrowser verwenden"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_ENTRY" msgid="8050953231914637819">"Entsperr-PIN für netzgebundenes Gerät"</string>
     <string name="PERSOSUBSTATE_SIM_NETWORK_SUBSET_ENTRY" msgid="7164399703751688214">"Entsperr-PIN für subnetzgebundenes Gerät"</string>
     <string name="PERSOSUBSTATE_SIM_CORPORATE_ENTRY" msgid="4447629474818217364">"Entsperr-PIN für unternehmensgebundenes Gerät"</string>
@@ -2237,13 +2288,14 @@
     <string name="config_pdp_reject_user_authentication_failed" msgid="4531693033885744689"></string>
     <string name="config_pdp_reject_service_not_subscribed" msgid="8190338397128671588"></string>
     <string name="config_pdp_reject_multi_conn_to_same_pdn_not_allowed" msgid="6024904218067254186"></string>
-    <string name="window_magnification_prompt_title" msgid="4657040468055863672">"Einen Teil des Bildschirms vergrößern"</string>
-    <string name="window_magnification_prompt_content" msgid="3549230303326142349">"Du kannst jetzt den gesamten Bildschirm oder einen bestimmten Bereich vergrößern und zwischen beiden Optionen wechseln."</string>
+    <string name="window_magnification_prompt_title" msgid="2876703640772778215">"Neue Vergrößerungseinstellungen"</string>
+    <string name="window_magnification_prompt_content" msgid="8159173903032344891">"Du kannst das Display teilweise vergrößern"</string>
     <string name="turn_on_magnification_settings_action" msgid="8521433346684847700">"In den Einstellungen aktivieren"</string>
     <string name="dismiss_action" msgid="1728820550388704784">"Schließen"</string>
-    <string name="sensor_privacy_start_use_mic_notification_content" msgid="8063355861118105607">"Zum Fortfahren benötigt, &lt;b&gt;‎‏‎‎‏‏‎<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; Zugriff auf das Mikrofon deines Geräts."</string>
-    <string name="sensor_privacy_start_use_camera_notification_content" msgid="4738005643315863736">"Zum Fortfahren benötigt &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; Zugriff auf die Kamera deines Geräts."</string>
-    <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7921147002346108119">"Aktivieren"</string>
+    <string name="sensor_privacy_start_use_mic_notification_content_title" msgid="2420858361276370367">"Blockierung des Gerätemikrofons aufheben"</string>
+    <string name="sensor_privacy_start_use_camera_notification_content_title" msgid="7287720213963466672">"Blockierung der Gerätekamera aufheben"</string>
+    <string name="sensor_privacy_start_use_notification_content_text" msgid="7595608891015777346">"Für &lt;b&gt;<xliff:g id="APP">%s</xliff:g>&lt;/b&gt; und alle Apps und Dienste"</string>
+    <string name="sensor_privacy_start_use_dialog_turn_on_button" msgid="7089318886628390827">"Blockierung aufheben"</string>
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"Datenschutz für Sensoren"</string>
     <string name="splash_screen_view_icon_description" msgid="180638751260598187">"App-Symbol"</string>
     <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"App-Branding-Hintergrundbild"</string>

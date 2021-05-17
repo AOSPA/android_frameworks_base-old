@@ -18,10 +18,13 @@ package com.android.server.voiceinteraction;
 
 import static android.service.voice.HotwordDetectionService.AUDIO_SOURCE_EXTERNAL;
 import static android.service.voice.HotwordDetectionService.AUDIO_SOURCE_MICROPHONE;
+import static android.service.voice.HotwordDetectionService.INITIALIZATION_STATUS_UNKNOWN;
+import static android.service.voice.HotwordDetectionService.KEY_INITIALIZATION_STATUS;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
+import android.content.ContentCaptureOptions;
 import android.content.Context;
 import android.content.Intent;
 import android.hardware.soundtrigger.IRecognitionStatusCallback;
@@ -31,9 +34,13 @@ import android.media.AudioFormat;
 import android.media.AudioManager;
 import android.media.AudioRecord;
 import android.media.MediaRecorder;
+import android.os.Bundle;
+import android.os.IBinder;
+import android.os.IRemoteCallback;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.SharedMemory;
 import android.service.voice.HotwordDetectedResult;
 import android.service.voice.HotwordDetectionService;
@@ -43,9 +50,11 @@ import android.service.voice.IHotwordDetectionService;
 import android.service.voice.IMicrophoneHotwordDetectionVoiceInteractionCallback;
 import android.util.Pair;
 import android.util.Slog;
+import android.view.contentcapture.IContentCaptureManager;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.app.IHotwordRecognitionStatusCallback;
+import com.android.internal.infra.AndroidFuture;
 import com.android.internal.infra.ServiceConnector;
 
 import java.io.Closeable;
@@ -58,6 +67,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * A class that provides the communication with the HotwordDetectionService.
@@ -75,11 +86,13 @@ final class HotwordDetectionConnection {
     private static final int MAX_STREAMING_SECONDS = 10;
     private static final int MICROPHONE_BUFFER_LENGTH_SECONDS = 8;
     private static final int HOTWORD_AUDIO_LENGTH_SECONDS = 3;
+    private static final long MAX_UPDATE_TIMEOUT_MILLIS = 6000;
 
     private final Executor mAudioCopyExecutor = Executors.newCachedThreadPool();
     // TODO: This may need to be a Handler(looper)
     private final ScheduledExecutorService mScheduledExecutorService =
             Executors.newSingleThreadScheduledExecutor();
+    private final AtomicBoolean mUpdateStateFinish = new AtomicBoolean(false);
 
     final Object mLock;
     final ComponentName mDetectionComponentName;
@@ -107,16 +120,11 @@ final class HotwordDetectionConnection {
             @Override // from ServiceConnector.Impl
             protected void onServiceConnectionStatusChanged(IHotwordDetectionService service,
                     boolean connected) {
+                if (DEBUG) {
+                    Slog.d(TAG, "onServiceConnectionStatusChanged connected = " + connected);
+                }
                 synchronized (mLock) {
                     mBound = connected;
-                    if (connected) {
-                        try {
-                            service.updateState(options, sharedMemory, callback);
-                        } catch (RemoteException e) {
-                            // TODO: (b/181842909) Report an error to voice interactor
-                            Slog.w(TAG, "Failed to updateState for HotwordDetectionService", e);
-                        }
-                    }
                 }
             }
 
@@ -126,6 +134,77 @@ final class HotwordDetectionConnection {
             }
         };
         mRemoteHotwordDetectionService.connect();
+        if (callback == null) {
+            updateStateLocked(options, sharedMemory);
+            return;
+        }
+        updateStateWithCallbackLocked(options, sharedMemory, callback);
+        updateContentCaptureManager();
+    }
+
+    private void updateStateWithCallbackLocked(PersistableBundle options,
+            SharedMemory sharedMemory, IHotwordRecognitionStatusCallback callback) {
+        if (DEBUG) {
+            Slog.d(TAG, "updateStateWithCallbackLocked");
+        }
+        mRemoteHotwordDetectionService.postAsync(service -> {
+            AndroidFuture<Void> future = new AndroidFuture<>();
+            IRemoteCallback statusCallback = new IRemoteCallback.Stub() {
+                @Override
+                public void sendResult(Bundle bundle) throws RemoteException {
+                    if (DEBUG) {
+                        Slog.d(TAG, "updateState finish");
+                    }
+                    future.complete(null);
+                    try {
+                        if (mUpdateStateFinish.getAndSet(true)) {
+                            Slog.w(TAG, "call callback after timeout");
+                            return;
+                        }
+                        int status = bundle != null ? bundle.getInt(
+                                KEY_INITIALIZATION_STATUS,
+                                INITIALIZATION_STATUS_UNKNOWN)
+                                : INITIALIZATION_STATUS_UNKNOWN;
+                        callback.onStatusReported(status);
+                    } catch (RemoteException e) {
+                        Slog.w(TAG, "Failed to report initialization status: " + e);
+                    }
+                }
+            };
+            try {
+                service.updateState(options, sharedMemory, statusCallback);
+            } catch (RemoteException e) {
+                // TODO: (b/181842909) Report an error to voice interactor
+                Slog.w(TAG, "Failed to updateState for HotwordDetectionService", e);
+            }
+            return future;
+        }).orTimeout(MAX_UPDATE_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)
+                .whenComplete((res, err) -> {
+                    if (err instanceof TimeoutException) {
+                        Slog.w(TAG, "updateState timed out");
+                        try {
+                            if (mUpdateStateFinish.getAndSet(true)) {
+                                return;
+                            }
+                            callback.onStatusReported(INITIALIZATION_STATUS_UNKNOWN);
+                        } catch (RemoteException e) {
+                            Slog.w(TAG, "Failed to report initialization status: " + e);
+                        }
+                    } else if (err != null) {
+                        Slog.w(TAG, "Failed to update state: " + err);
+                    } else {
+                        // NOTE: so far we don't need to take any action.
+                    }
+                });
+    }
+
+    private void updateContentCaptureManager() {
+        IBinder b = ServiceManager
+                .getService(Context.CONTENT_CAPTURE_MANAGER_SERVICE);
+        IContentCaptureManager binderService = IContentCaptureManager.Stub.asInterface(b);
+        mRemoteHotwordDetectionService.post(
+                service -> service.updateContentCaptureManager(binderService,
+                        new ContentCaptureOptions(null)));
     }
 
     private boolean isBound() {
@@ -203,6 +282,114 @@ final class HotwordDetectionConnection {
             }
             mCurrentAudioSink = null;
         }
+    }
+
+    void triggerHardwareRecognitionEventForTestLocked(
+            SoundTrigger.KeyphraseRecognitionEvent event,
+            IHotwordRecognitionStatusCallback callback) {
+        if (DEBUG) {
+            Slog.d(TAG, "triggerHardwareRecognitionEventForTestLocked");
+        }
+        detectFromDspSourceForTest(event, callback);
+    }
+
+    private void detectFromDspSourceForTest(SoundTrigger.KeyphraseRecognitionEvent recognitionEvent,
+            IHotwordRecognitionStatusCallback externalCallback) {
+        if (DEBUG) {
+            Slog.d(TAG, "detectFromDspSourceForTest");
+        }
+
+        AudioRecord record = createFakeAudioRecord();
+        if (record == null) {
+            Slog.d(TAG, "Failed to create fake audio record");
+            return;
+        }
+
+        Pair<ParcelFileDescriptor, ParcelFileDescriptor> clientPipe = createPipe();
+        if (clientPipe == null) {
+            Slog.d(TAG, "Failed to create pipe");
+            return;
+        }
+        ParcelFileDescriptor audioSink = clientPipe.second;
+        ParcelFileDescriptor clientRead = clientPipe.first;
+
+        record.startRecording();
+
+        mAudioCopyExecutor.execute(() -> {
+            try (OutputStream fos =
+                         new ParcelFileDescriptor.AutoCloseOutputStream(audioSink)) {
+
+                int remainToRead = 10240;
+                byte[] buffer = new byte[1024];
+                while (remainToRead > 0) {
+                    int bytesRead = record.read(buffer, 0, 1024);
+                    if (DEBUG) {
+                        Slog.d(TAG, "bytesRead = " + bytesRead);
+                    }
+                    if (bytesRead <= 0) {
+                        break;
+                    }
+                    if (bytesRead > 8) {
+                        System.arraycopy(new byte[] {'h', 'o', 't', 'w', 'o', 'r', 'd', '!'}, 0,
+                                buffer, 0, 8);
+                    }
+
+                    fos.write(buffer, 0, bytesRead);
+                    remainToRead -= bytesRead;
+                }
+            } catch (IOException e) {
+                Slog.w(TAG, "Failed supplying audio data to validator", e);
+            }
+        });
+
+        Runnable cancellingJob = () -> {
+            Slog.d(TAG, "Timeout for getting callback from HotwordDetectionService");
+            record.stop();
+            record.release();
+            bestEffortClose(audioSink);
+            bestEffortClose(clientRead);
+        };
+
+        ScheduledFuture<?> cancelingFuture =
+                mScheduledExecutorService.schedule(
+                        cancellingJob, VALIDATION_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
+
+        IDspHotwordDetectionCallback internalCallback = new IDspHotwordDetectionCallback.Stub() {
+            @Override
+            public void onDetected(HotwordDetectedResult result) throws RemoteException {
+                if (DEBUG) {
+                    Slog.d(TAG, "onDetected");
+                }
+                cancelingFuture.cancel(true);
+                record.stop();
+                record.release();
+                bestEffortClose(audioSink);
+                bestEffortClose(clientRead);
+
+                externalCallback.onKeyphraseDetected(recognitionEvent);
+            }
+
+            @Override
+            public void onRejected(HotwordRejectedResult result) throws RemoteException {
+                if (DEBUG) {
+                    Slog.d(TAG, "onRejected");
+                }
+                cancelingFuture.cancel(true);
+                record.stop();
+                record.release();
+                bestEffortClose(audioSink);
+                bestEffortClose(clientRead);
+
+                externalCallback.onRejected(result);
+            }
+        };
+
+        mRemoteHotwordDetectionService.run(
+                service -> service.detectFromDspSource(
+                        clientRead,
+                        recognitionEvent.getCaptureFormat(),
+                        VALIDATION_TIMEOUT_MILLIS,
+                        internalCallback));
     }
 
     private void detectFromDspSource(SoundTrigger.KeyphraseRecognitionEvent recognitionEvent,
@@ -369,7 +556,8 @@ final class HotwordDetectionConnection {
         }
         try {
             AudioRecord audioRecord = new AudioRecord(
-                    new AudioAttributes.Builder().setHotwordMode().build(),
+                    new AudioAttributes.Builder()
+                            .setInternalCapturePreset(MediaRecorder.AudioSource.HOTWORD).build(),
                     audioFormat,
                     getBufferSizeInBytes(
                             audioFormat.getSampleRate(),
@@ -388,6 +576,37 @@ final class HotwordDetectionConnection {
             Slog.e(TAG, "Failed to create AudioRecord", e);
             return null;
         }
+    }
+
+    @Nullable
+    private AudioRecord createFakeAudioRecord() {
+        if (DEBUG) {
+            Slog.i(TAG, "#createFakeAudioRecord");
+        }
+        try {
+            AudioRecord audioRecord = new AudioRecord.Builder()
+                    .setAudioFormat(new AudioFormat.Builder()
+                            .setSampleRate(32000)
+                            .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                            .setChannelMask(AudioFormat.CHANNEL_IN_MONO).build())
+                    .setAudioAttributes(new AudioAttributes.Builder()
+                            .setInternalCapturePreset(MediaRecorder.AudioSource.HOTWORD).build())
+                    .setBufferSizeInBytes(
+                            AudioRecord.getMinBufferSize(32000,
+                                    AudioFormat.CHANNEL_IN_MONO,
+                                    AudioFormat.ENCODING_PCM_16BIT) * 2)
+                    .build();
+
+            if (audioRecord.getState() != AudioRecord.STATE_INITIALIZED) {
+                Slog.w(TAG, "Failed to initialize AudioRecord");
+                audioRecord.release();
+                return null;
+            }
+            return audioRecord;
+        } catch (IllegalArgumentException e) {
+            Slog.e(TAG, "Failed to create AudioRecord", e);
+        }
+        return null;
     }
 
     /**

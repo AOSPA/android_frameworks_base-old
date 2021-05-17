@@ -1130,6 +1130,29 @@ public class VoiceInteractionManagerService extends SystemService {
             }
         }
 
+        @Override
+        public void triggerHardwareRecognitionEventForTest(
+                SoundTrigger.KeyphraseRecognitionEvent event,
+                IHotwordRecognitionStatusCallback callback)
+                throws RemoteException {
+            enforceCallingPermission(Manifest.permission.RECORD_AUDIO);
+            enforceCallingPermission(Manifest.permission.CAPTURE_AUDIO_HOTWORD);
+            synchronized (this) {
+                enforceIsCurrentVoiceInteractionService();
+
+                if (mImpl == null) {
+                    Slog.w(TAG, "triggerHardwareRecognitionEventForTest without running"
+                            + " voice interaction service");
+                    return;
+                }
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mImpl.triggerHardwareRecognitionEventForTestLocked(event, callback);
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
+            }
+        }
         //----------------- Model management APIs --------------------------------//
 
         @Override
@@ -1439,7 +1462,6 @@ public class VoiceInteractionManagerService extends SystemService {
 
         @Override
         public ComponentName getActiveServiceComponentName() {
-            enforceCallingPermission(Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE);
             synchronized (this) {
                 return mImpl != null ? mImpl.mComponent : null;
             }

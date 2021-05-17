@@ -382,17 +382,36 @@ public final class CameraManager {
      * <p>For a logical multi-camera, query the map between physical camera id and
      * the physical camera's multi-resolution stream configuration. This map is in turn
      * combined to form the logical camera's multi-resolution stream configuration map.</p>
+     *
+     * <p>For an ultra high resolution camera, directly use
+     * android.scaler.physicalCameraMultiResolutionStreamConfigurations as the camera device's
+     * multi-resolution stream configuration map.</p>
      */
     private Map<String, StreamConfiguration[]> getPhysicalCameraMultiResolutionConfigs(
-            CameraMetadataNative info, ICameraService cameraService)
+            String cameraId, CameraMetadataNative info, ICameraService cameraService)
             throws CameraAccessException {
         HashMap<String, StreamConfiguration[]> multiResolutionStreamConfigurations =
                 new HashMap<String, StreamConfiguration[]>();
 
+        Boolean multiResolutionStreamSupported = info.get(
+                CameraCharacteristics.SCALER_MULTI_RESOLUTION_STREAM_SUPPORTED);
+        if (multiResolutionStreamSupported == null || !multiResolutionStreamSupported) {
+            return multiResolutionStreamConfigurations;
+        }
+
         // Query the characteristics of all physical sub-cameras, and combine the multi-resolution
-        // stream configurations. Note that framework derived formats such as HEIC and DEPTH_JPEG
-        // aren't supported as multi-resolution input or output formats.
+        // stream configurations. Alternatively, for ultra-high resolution camera, direclty use
+        // its multi-resolution stream configurations. Note that framework derived formats such as
+        // HEIC and DEPTH_JPEG aren't supported as multi-resolution input or output formats.
         Set<String> physicalCameraIds = info.getPhysicalCameraIds();
+        if (physicalCameraIds.size() == 0 && info.isUltraHighResolutionSensor()) {
+            StreamConfiguration[] configs = info.get(CameraCharacteristics.
+                    SCALER_PHYSICAL_CAMERA_MULTI_RESOLUTION_STREAM_CONFIGURATIONS);
+            if (configs != null) {
+                multiResolutionStreamConfigurations.put(cameraId, configs);
+            }
+            return multiResolutionStreamConfigurations;
+        }
         try {
             for (String physicalCameraId : physicalCameraIds) {
                 CameraMetadataNative physicalCameraInfo =
@@ -404,9 +423,6 @@ public final class CameraManager {
                     multiResolutionStreamConfigurations.put(physicalCameraId, configs);
                 }
             }
-
-            // TODO: If this is an ultra high resolution sensor camera, combine the multi-resolution
-            // stream combination from "info" as well.
         } catch (RemoteException e) {
             ServiceSpecificException sse = new ServiceSpecificException(
                     ICameraService.ERROR_DISCONNECTED,
@@ -471,7 +487,7 @@ public final class CameraManager {
                 info.setDisplaySize(displaySize);
 
                 Map<String, StreamConfiguration[]> multiResolutionSizeMap =
-                        getPhysicalCameraMultiResolutionConfigs(info, cameraService);
+                        getPhysicalCameraMultiResolutionConfigs(cameraId, info, cameraService);
                 if (multiResolutionSizeMap.size() > 0) {
                     info.setMultiResolutionStreamConfigurationMap(multiResolutionSizeMap);
                 }
@@ -1400,6 +1416,8 @@ public final class CameraManager {
                     // devices going offline (in real world scenarios, these permissions aren't
                     // changeable). Future calls to getCameraIdList() will reflect the changes in
                     // the camera id list after getCameraIdListNoLazy() is called.
+                    // We need to remove the torch ids which may have been associated with the
+                    // devices removed as well. This is the same situation.
                     cameraStatuses = mCameraService.addListener(testListener);
                     mCameraService.removeListener(testListener);
                     for (CameraStatus c : cameraStatuses) {
@@ -1418,6 +1436,7 @@ public final class CameraManager {
                     }
                     for (String id : deviceIdsToRemove) {
                         onStatusChangedLocked(ICameraServiceListener.STATUS_NOT_PRESENT, id);
+                        mTorchStatus.remove(id);
                     }
                 } catch (ServiceSpecificException e) {
                     // Unexpected failure
@@ -1518,7 +1537,11 @@ public final class CameraManager {
         */
         public boolean cameraIdHasConcurrentStreamsLocked(String cameraId) {
             if (!mDeviceStatus.containsKey(cameraId)) {
-                Log.e(TAG, "cameraIdHasConcurrentStreamsLocked called on non existing camera id");
+                // physical camera ids aren't advertised in concurrent camera id combinations.
+                if (DEBUG) {
+                    Log.v(TAG, " physical camera id " + cameraId + " is hidden." +
+                            " Available logical camera ids : " + mDeviceStatus.toString());
+                }
                 return false;
             }
             for (Set<String> comb : mConcurrentCameraIdCombinations) {

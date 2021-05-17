@@ -22,6 +22,8 @@ import static android.os.ParcelFileDescriptor.MODE_READ_ONLY;
 import static android.os.ParcelFileDescriptor.MODE_READ_WRITE;
 import static android.os.ParcelFileDescriptor.MODE_TRUNCATE;
 import static android.os.ParcelFileDescriptor.MODE_WRITE_ONLY;
+import static android.system.OsConstants.EINVAL;
+import static android.system.OsConstants.ENOSYS;
 import static android.system.OsConstants.F_OK;
 import static android.system.OsConstants.O_ACCMODE;
 import static android.system.OsConstants.O_APPEND;
@@ -46,8 +48,6 @@ import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.pm.ProviderInfo;
-import android.content.res.AssetFileDescriptor;
-import android.net.Uri;
 import android.provider.DocumentsContract.Document;
 import android.provider.MediaStore;
 import android.system.ErrnoException;
@@ -83,7 +83,6 @@ import java.security.NoSuchAlgorithmException;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Comparator;
-import java.util.Locale;
 import java.util.Objects;
 import java.util.concurrent.Executor;
 import java.util.concurrent.TimeUnit;
@@ -444,7 +443,19 @@ public final class FileUtils {
                 final StructStat st_in = Os.fstat(in);
                 final StructStat st_out = Os.fstat(out);
                 if (S_ISREG(st_in.st_mode) && S_ISREG(st_out.st_mode)) {
-                    return copyInternalSendfile(in, out, count, signal, executor, listener);
+                    try {
+                        return copyInternalSendfile(in, out, count, signal, executor, listener);
+                    } catch (ErrnoException e) {
+                        if (e.errno == EINVAL || e.errno == ENOSYS) {
+                            // sendfile(2) will fail in at least any of the following conditions:
+                            // 1. |in| doesn't support mmap(2)
+                            // 2. |out| was opened with O_APPEND
+                            // We fallback to userspace copy if that fails
+                            return copyInternalUserspace(in, out, count, signal, executor,
+                                    listener);
+                        }
+                        throw e;
+                    }
                 } else if (S_ISFIFO(st_in.st_mode) || S_ISFIFO(st_out.st_mode)) {
                     return copyInternalSplice(in, out, count, signal, executor, listener);
                 }
@@ -1446,46 +1457,22 @@ public final class FileUtils {
         }
     }
 
-    // TODO(b/170488060): Consider better approach
     /** {@hide} */
     @VisibleForTesting
-    public static FileDescriptor convertToModernFd(FileDescriptor fd) {
+    public static ParcelFileDescriptor convertToModernFd(FileDescriptor fd) {
         try {
             Context context = AppGlobals.getInitialApplication();
-            // /mnt/user paths are not accessible directly so convert to a /storage path
-            String filePath = Os.readlink("/proc/self/fd/" + fd.getInt$()).replace(
-                    "/mnt/user/" + UserHandle.myUserId(), "/storage");
-            File realFile = new File(filePath);
-            String fileName = realFile.getName();
-            boolean isCameraVideo = !fileName.startsWith(".") && fileName.endsWith(".mp4")
-                    && contains(CAMERA_DIR_LOWER_CASE, filePath.toLowerCase(Locale.ROOT));
-
-            if (!SystemProperties.getBoolean("sys.fuse.transcode_enabled", false)
-                    || UserHandle.getAppId(Process.myUid()) == getMediaProviderAppId(context)
-                    || !isCameraVideo) {
-                // 1. If transcode is enabled we optimize by default, unless explicitly disabled.
-                // 2. Never convert modern fd for MediaProvider, because this requires
+            if (UserHandle.getAppId(Process.myUid()) == getMediaProviderAppId(context)) {
+                // Never convert modern fd for MediaProvider, because this requires
                 // MediaStore#scanFile and can cause infinite loops when MediaProvider scans
-                // 3. Only convert published mp4 videos in the DCIM/Camera dir
                 return null;
             }
-            Log.i(TAG, "Changing to modern format dataSource for: " + realFile);
-            ContentResolver resolver = context.getContentResolver();
-
-            Uri uri = MediaStore.scanFile(resolver, realFile);
-            if (uri != null) {
-                Bundle opts = new Bundle();
-                opts.putBoolean(MediaStore.EXTRA_ACCEPT_ORIGINAL_MEDIA_FORMAT, true);
-                AssetFileDescriptor afd = resolver.openTypedAssetFileDescriptor(uri, "*/*", opts);
-                Log.i(TAG, "Changed to modern format dataSource for: " + realFile);
-                return afd.getFileDescriptor();
-            } else {
-                Log.i(TAG, "Failed to change to modern format dataSource for: " + realFile);
-            }
+            return MediaStore.getOriginalMediaFormatFileDescriptor(context,
+                    ParcelFileDescriptor.dup(fd));
         } catch (Exception e) {
-            Log.w(TAG, "Failed to change to modern format dataSource", e);
+            Log.w(TAG, "Failed to convert to modern format file descriptor", e);
+            return null;
         }
-        return null;
     }
 
     private static int getMediaProviderAppId(Context context) {

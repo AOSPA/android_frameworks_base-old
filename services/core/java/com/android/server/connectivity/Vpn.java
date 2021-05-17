@@ -102,7 +102,6 @@ import android.os.UserManager;
 import android.provider.Settings;
 import android.security.Credentials;
 import android.security.KeyStore2;
-import android.security.keystore.AndroidKeyStoreProvider;
 import android.security.keystore.KeyProperties;
 import android.system.keystore2.Domain;
 import android.system.keystore2.KeyDescriptor;
@@ -2057,10 +2056,6 @@ public class Vpn {
         if (alias == null) {
             return null;
         }
-        // If Keystore 2.0 is not enabled the legacy private key prefix is used.
-        if (!AndroidKeyStoreProvider.isKeystore2Enabled()) {
-            return Credentials.USER_PRIVATE_KEY + alias;
-        }
         final KeyStore2 keystore2 = KeyStore2.getInstance();
 
         KeyDescriptor key = new KeyDescriptor();
@@ -2703,19 +2698,21 @@ public class Vpn {
                 // prevent the NetworkManagementEventObserver from killing this VPN based on the
                 // interface going down (which we expect).
                 mInterface = null;
-                mConfig.interfaze = null;
+                if (mConfig != null) {
+                    mConfig.interfaze = null;
 
-                // Set as unroutable to prevent traffic leaking while the interface is down.
-                if (mConfig != null && mConfig.routes != null) {
-                    final List<RouteInfo> oldRoutes = new ArrayList<>(mConfig.routes);
+                    // Set as unroutable to prevent traffic leaking while the interface is down.
+                    if (mConfig.routes != null) {
+                        final List<RouteInfo> oldRoutes = new ArrayList<>(mConfig.routes);
 
-                    mConfig.routes.clear();
-                    for (final RouteInfo route : oldRoutes) {
-                        mConfig.routes.add(new RouteInfo(route.getDestination(), null /*gateway*/,
-                                null /*iface*/, RTN_UNREACHABLE));
-                    }
-                    if (mNetworkAgent != null) {
-                        mNetworkAgent.sendLinkProperties(makeLinkProperties());
+                        mConfig.routes.clear();
+                        for (final RouteInfo route : oldRoutes) {
+                            mConfig.routes.add(new RouteInfo(route.getDestination(),
+                                    null /*gateway*/, null /*iface*/, RTN_UNREACHABLE));
+                        }
+                        if (mNetworkAgent != null) {
+                            mNetworkAgent.sendLinkProperties(makeLinkProperties());
+                        }
                     }
                 }
             }

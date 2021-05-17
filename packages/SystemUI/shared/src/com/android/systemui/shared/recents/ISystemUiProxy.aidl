@@ -79,11 +79,6 @@ interface ISystemUiProxy {
     void startAssistant(in Bundle bundle) = 13;
 
     /**
-     * Creates a new gesture monitor
-     */
-    Bundle monitorGestureInput(String name, int displayId) = 14;
-
-    /**
      * Notifies that the accessibility button in the system's navigation area has been clicked
      */
     void notifyAccessibilityButtonClicked(int displayId) = 15;
@@ -134,5 +129,10 @@ interface ISystemUiProxy {
      */
     void expandNotificationPanel() = 29;
 
-    // Next id = 44
+    /**
+     * Notifies SystemUI to invoke Back.
+     */
+    void onBackPressed() = 44;
+
+    // Next id = 45
 }

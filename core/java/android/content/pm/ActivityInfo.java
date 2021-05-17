@@ -17,6 +17,7 @@
 package android.content.pm;
 
 import android.annotation.IntDef;
+import android.annotation.SuppressLint;
 import android.annotation.TestApi;
 import android.app.compat.CompatChanges;
 import android.compat.annotation.ChangeId;
@@ -896,11 +897,13 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     };
 
     /**
-     * This change id forces the packages it is applied to to be resizable. We only allow resizing
-     * in fullscreen windowing mode, but not forcing the app into resizable multi-windowing mode.
+     * This change id forces the packages it is applied to be resizable. It won't change whether
+     * the app can be put into multi-windowing mode, but allow the app to resize when the window
+     * container resizes, such as display size change.
      * @hide
      */
     @ChangeId
+    @Overridable
     @Disabled
     @TestApi
     public static final long FORCE_RESIZE_APP = 174042936L; // buganizer id
@@ -910,6 +913,7 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
      * @hide
      */
     @ChangeId
+    @Overridable
     @Disabled
     @TestApi
     public static final long FORCE_NON_RESIZE_APP = 181136395L; // buganizer id
@@ -956,6 +960,29 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface SizeChangesSupportMode {}
+
+    /**
+     * This change id forces the packages it is applied to never have Display API sandboxing
+     * applied for a letterbox or SCM activity. The Display APIs will continue to provide
+     * DisplayArea bounds.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    @TestApi
+    public static final long NEVER_SANDBOX_DISPLAY_APIS = 184838306L; // buganizer id
+
+    /**
+     * This change id forces the packages it is applied to always have Display API sandboxing
+     * applied, regardless of windowing mode. The Display APIs will always provide the app bounds.
+     * @hide
+     */
+    @ChangeId
+    @Overridable
+    @Disabled
+    @TestApi
+    public static final long ALWAYS_SANDBOX_DISPLAY_APIS = 185004937L; // buganizer id
 
     /**
      * This change id is the gatekeeper for all treatments that force a given min aspect ratio.
@@ -1148,10 +1175,10 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
     public WindowLayout windowLayout;
 
     /**
-     * Attribution tags for finer grained calls if a {@android.content.Context#sendBroadcast(Intent,
-     * String)} is used with a permission.
-     * @hide
+     * Attribution tags for finer grained calls if a {@link
+     * android.content.Context#sendBroadcast(Intent, String)} is used with a permission.
      */
+    @SuppressLint("MissingNullability")
     public String[] attributionTags;
 
     public ActivityInfo() {
@@ -1320,6 +1347,26 @@ public class ActivityInfo extends ComponentInfo implements Parcelable {
         }
 
         return SIZE_CHANGES_UNSUPPORTED_METADATA;
+    }
+
+    /**
+     * Returns if the activity should never be sandboxed to the activity window bounds.
+     * @hide
+     */
+    public boolean neverSandboxDisplayApis() {
+        return CompatChanges.isChangeEnabled(NEVER_SANDBOX_DISPLAY_APIS,
+                applicationInfo.packageName,
+                UserHandle.getUserHandleForUid(applicationInfo.uid));
+    }
+
+    /**
+     * Returns if the activity should always be sandboxed to the activity window bounds.
+     * @hide
+     */
+    public boolean alwaysSandboxDisplayApis() {
+        return CompatChanges.isChangeEnabled(ALWAYS_SANDBOX_DISPLAY_APIS,
+                applicationInfo.packageName,
+                UserHandle.getUserHandleForUid(applicationInfo.uid));
     }
 
     /** @hide */

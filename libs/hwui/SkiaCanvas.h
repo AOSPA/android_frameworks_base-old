@@ -60,6 +60,8 @@ public:
         LOG_ALWAYS_FATAL("SkiaCanvas does not support enableZ");
     }
 
+    virtual void punchHole(const SkRRect& rect) override;
+
     virtual void setBitmap(const SkBitmap& bitmap) override;
 
     virtual bool isOpaque() override;
@@ -151,6 +153,7 @@ public:
                             uirenderer::CanvasPropertyPrimitive* radius,
                             uirenderer::CanvasPropertyPaint* paint,
                             uirenderer::CanvasPropertyPrimitive* progress,
+                            uirenderer::CanvasPropertyPrimitive* turbulencePhase,
                             const SkRuntimeShaderBuilder& effectBuilder) override;
 
     virtual void drawLayer(uirenderer::DeferredLayerUpdater* layerHandle) override;

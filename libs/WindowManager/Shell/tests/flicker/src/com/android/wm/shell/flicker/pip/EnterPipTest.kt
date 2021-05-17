@@ -18,6 +18,7 @@ package com.android.wm.shell.flicker.pip
 
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -46,6 +47,12 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
             }
         }
 
+    @FlakyTest
+    @Test
+    override fun noUncoveredRegions() {
+        super.noUncoveredRegions()
+    }
+
     @Presubmit
     @Test
     fun pipAppWindowAlwaysVisible() {
@@ -54,7 +61,7 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
         }
     }
 
-    @Presubmit
+    @FlakyTest
     @Test
     fun pipLayerBecomesVisible() {
         testSpec.assertLayers {
@@ -62,7 +69,7 @@ class EnterPipTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
         }
     }
 
-    @Presubmit
+    @FlakyTest
     @Test
     fun pipWindowBecomesVisible() {
         testSpec.assertWm {

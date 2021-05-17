@@ -24,20 +24,25 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SdkConstant;
+import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.app.Service;
+import android.content.ContentCaptureOptions;
+import android.content.Context;
 import android.content.Intent;
 import android.media.AudioFormat;
+import android.os.Bundle;
 import android.os.Handler;
 import android.os.IBinder;
+import android.os.IRemoteCallback;
 import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.SharedMemory;
 import android.util.Log;
-
-import com.android.internal.app.IHotwordRecognitionStatusCallback;
+import android.view.contentcapture.ContentCaptureManager;
+import android.view.contentcapture.IContentCaptureManager;
 
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
@@ -58,6 +63,8 @@ public abstract class HotwordDetectionService extends Service {
     private static final boolean DBG = true;
 
     private static final long UPDATE_TIMEOUT_MILLIS = 5000;
+    /** @hide */
+    public static final String KEY_INITIALIZATION_STATUS = "initialization_status";
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
@@ -120,6 +127,9 @@ public abstract class HotwordDetectionService extends Service {
 
     private Handler mHandler;
 
+    @Nullable
+    private ContentCaptureManager mContentCaptureManager;
+
     private final IHotwordDetectionService mInterface = new IHotwordDetectionService.Stub() {
         @Override
         public void detectFromDspSource(
@@ -141,7 +151,7 @@ public abstract class HotwordDetectionService extends Service {
 
         @Override
         public void updateState(PersistableBundle options, SharedMemory sharedMemory,
-                IHotwordRecognitionStatusCallback callback) throws RemoteException {
+                IRemoteCallback callback) throws RemoteException {
             if (DBG) {
                 Log.d(TAG, "#updateState");
             }
@@ -185,6 +195,13 @@ public abstract class HotwordDetectionService extends Service {
                     Log.i(TAG, "Unsupported audio source " + audioSource);
             }
         }
+
+        @Override
+        public void updateContentCaptureManager(IContentCaptureManager manager,
+                ContentCaptureOptions options) {
+            mContentCaptureManager = new ContentCaptureManager(
+                    HotwordDetectionService.this, manager, options);
+        }
     };
 
     @CallSuper
@@ -203,6 +220,16 @@ public abstract class HotwordDetectionService extends Service {
         Log.w(TAG, "Tried to bind to wrong intent (should be " + SERVICE_INTERFACE + ": "
                 + intent);
         return null;
+    }
+
+    @Override
+    @SuppressLint("OnNameExpected")
+    public @Nullable Object getSystemService(@ServiceName @NonNull String name) {
+        if (Context.CONTENT_CAPTURE_MANAGER_SERVICE.equals(name)) {
+            return mContentCaptureManager;
+        } else {
+            return super.getSystemService(name);
+        }
     }
 
     /**
@@ -314,14 +341,15 @@ public abstract class HotwordDetectionService extends Service {
     }
 
     private void onUpdateStateInternal(@Nullable PersistableBundle options,
-            @Nullable SharedMemory sharedMemory, IHotwordRecognitionStatusCallback callback) {
-        // TODO (b/183684347): Implement timeout case.
+            @Nullable SharedMemory sharedMemory, IRemoteCallback callback) {
         IntConsumer intConsumer = null;
         if (callback != null) {
             intConsumer =
                     value -> {
                         try {
-                            callback.onStatusReported(value);
+                            Bundle status = new Bundle();
+                            status.putInt(KEY_INITIALIZATION_STATUS, value);
+                            callback.sendResult(status);
                         } catch (RemoteException e) {
                             throw e.rethrowFromSystemServer();
                         }

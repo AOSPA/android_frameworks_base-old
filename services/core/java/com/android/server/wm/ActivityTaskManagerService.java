@@ -35,9 +35,7 @@ import static android.app.ActivityManagerInternal.ALLOW_NON_FULL;
 import static android.app.ActivityTaskManager.INVALID_TASK_ID;
 import static android.app.ActivityTaskManager.RESIZE_MODE_PRESERVE_WINDOW;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
-import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
-import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.Intent.FLAG_ACTIVITY_EXCLUDE_FROM_RECENTS;
 import static android.content.Intent.FLAG_ACTIVITY_NEW_TASK;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
@@ -114,7 +112,6 @@ import static com.android.server.wm.RecentsAnimationController.REORDER_MOVE_TO_O
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_ONLY;
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS;
 import static com.android.server.wm.Task.REPARENT_KEEP_ROOT_TASK_AT_FRONT;
-import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowManagerService.UPDATE_FOCUS_NORMAL;
 
 import android.Manifest;
@@ -144,10 +141,10 @@ import android.app.Notification;
 import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.PictureInPictureParams;
+import android.app.PictureInPictureUiState;
 import android.app.ProfilerInfo;
 import android.app.RemoteAction;
 import android.app.WaitResult;
-import android.app.WindowConfiguration;
 import android.app.admin.DevicePolicyCache;
 import android.app.assist.AssistContent;
 import android.app.assist.AssistStructure;
@@ -214,6 +211,7 @@ import android.telecom.TelecomManager;
 import android.text.format.TimeMigrationUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
+import android.util.IntArray;
 import android.util.Log;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -226,7 +224,6 @@ import android.view.WindowManager;
 import android.window.IWindowOrganizerController;
 import android.window.SplashScreenView.SplashScreenViewParcelable;
 import android.window.TaskSnapshot;
-import android.window.WindowContainerTransaction;
 
 import com.android.internal.R;
 import com.android.internal.annotations.VisibleForTesting;
@@ -676,6 +673,8 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     @Nullable
     private BackgroundActivityStartCallback mBackgroundActivityStartCallback;
+
+    private int[] mAccessibilityServiceUids = new int[0];
 
     private int mDeviceOwnerUid = Process.INVALID_UID;
 
@@ -1894,57 +1893,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return null;
     }
 
-    @Override
-    public boolean setTaskWindowingMode(int taskId, int windowingMode, boolean toTop) {
-        enforceTaskPermission("setTaskWindowingMode()");
-        synchronized (mGlobalLock) {
-            final long ident = Binder.clearCallingIdentity();
-            try {
-                if (isInLockTaskMode() && windowingMode != WINDOWING_MODE_FULLSCREEN) {
-                    Slog.w(TAG, "setTaskWindowingMode: Is in lock task mode="
-                            + getLockTaskModeState());
-                    return false;
-                }
-
-                if (WindowConfiguration.isSplitScreenWindowingMode(windowingMode)) {
-                    return setTaskWindowingModeSplitScreen(taskId, windowingMode, toTop);
-                }
-                final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                        MATCH_ATTACHED_TASK_ONLY);
-                if (task == null) {
-                    Slog.w(TAG, "setTaskWindowingMode: No task for id=" + taskId);
-                    return false;
-                }
-
-                ProtoLog.d(WM_DEBUG_TASKS, "setTaskWindowingMode: moving task=%d "
-                        + "to windowingMode=%d toTop=%b", taskId, windowingMode, toTop);
-
-                if (!task.isActivityTypeStandardOrUndefined()) {
-                    throw new IllegalArgumentException("setTaskWindowingMode: Attempt to move"
-                            + " non-standard task " + taskId + " to windowing mode="
-                            + windowingMode);
-                }
-
-                final Task rootTask = task.getRootTask();
-                if (toTop) {
-                    rootTask.moveToFront("setTaskWindowingMode", task);
-                }
-                // Convert some windowing-mode changes into root-task reparents for split-screen.
-                if (rootTask.inSplitScreenWindowingMode()) {
-                    rootTask.getDisplayArea().onSplitScreenModeDismissed();
-
-                } else {
-                    rootTask.setWindowingMode(windowingMode);
-                    rootTask.mDisplayContent.ensureActivitiesVisible(null, 0, PRESERVE_WINDOWS,
-                            true /* notifyClients */);
-                }
-                return true;
-            } finally {
-                Binder.restoreCallingIdentity(ident);
-            }
-        }
-    }
-
     /**
      * Sets the locusId for a particular activity.
      *
@@ -2156,8 +2104,16 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
     }
 
-    List<ActivityManager.RunningTaskInfo> getTasks(int maxNum) {
-        return getTasks(maxNum, false /* filterForVisibleRecents */);
+    /**
+     * Gets info of running tasks up to the given number.
+     *
+     * @param maxNum the maximum number of task info returned by this method. If the total number of
+     *               running tasks is larger than it then there is no guarantee which task will be
+     *               left out.
+     * @return a list of {@link ActivityManager.RunningTaskInfo} with up to {@code maxNum} items
+     */
+    public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum) {
+        return getTasks(maxNum, false /* filterForVisibleRecents */, false /* keepIntentExtra */);
     }
 
     /**
@@ -2166,10 +2122,14 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
      */
     @Override
     public List<ActivityManager.RunningTaskInfo> getTasks(int maxNum,
-            boolean filterOnlyVisibleRecents) {
+            boolean filterOnlyVisibleRecents, boolean keepIntentExtra) {
         final int callingUid = Binder.getCallingUid();
         final int callingPid = Binder.getCallingPid();
+
+        int flags = filterOnlyVisibleRecents ? RunningTasks.FLAG_FILTER_ONLY_VISIBLE_RECENTS : 0;
+        flags |= (keepIntentExtra ? RunningTasks.FLAG_KEEP_INTENT_EXTRA : 0);
         final boolean crossUser = isCrossUserAllowed(callingPid, callingUid);
+        flags |= (crossUser ? RunningTasks.FLAG_CROSS_USERS : 0);
         final int[] profileIds = getUserManager().getProfileIds(
                 UserHandle.getUserId(callingUid), true);
         ArraySet<Integer> callingProfileIds = new ArraySet<>();
@@ -2182,8 +2142,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             if (DEBUG_ALL) Slog.v(TAG, "getTasks: max=" + maxNum);
 
             final boolean allowed = isGetTasksAllowed("getTasks", callingPid, callingUid);
-            mRootWindowContainer.getRunningTasks(maxNum, list, filterOnlyVisibleRecents, callingUid,
-                    allowed, crossUser, callingProfileIds);
+            flags |= (allowed ? RunningTasks.FLAG_ALLOWED : 0);
+            mRootWindowContainer.getRunningTasks(
+                    maxNum, list, flags, callingUid, callingProfileIds);
         }
 
         return list;
@@ -2219,59 +2180,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 Binder.restoreCallingIdentity(ident);
             }
         }
-    }
-
-    /**
-     * Moves the specified task into a split-screen tile.
-     */
-    private boolean setTaskWindowingModeSplitScreen(int taskId, int windowingMode, boolean toTop) {
-        if (!WindowConfiguration.isSplitScreenWindowingMode(windowingMode)) {
-            throw new IllegalArgumentException("Calling setTaskWindowingModeSplitScreen with non"
-                    + "split-screen mode: " + windowingMode);
-        }
-
-        final Task task = mRootWindowContainer.anyTaskForId(taskId,
-                MATCH_ATTACHED_TASK_ONLY);
-        if (task == null) {
-            Slog.w(TAG, "setTaskWindowingModeSplitScreenPrimary: No task for id=" + taskId);
-            return false;
-        }
-        if (!task.isActivityTypeStandardOrUndefined()) {
-            throw new IllegalArgumentException("setTaskWindowingMode: Attempt to move"
-                    + " non-standard task " + taskId + " to split-screen windowing mode");
-        }
-        if (!task.supportsSplitScreenWindowingMode()) {
-            return false;
-        }
-
-        final int prevMode = task.getWindowingMode();
-        if (prevMode == windowingMode) {
-            // The task is already in split-screen and with correct windowing mode.
-            return true;
-        }
-
-        moveTaskToSplitScreenPrimaryTask(task, toTop);
-        return prevMode != task.getWindowingMode();
-    }
-
-    void moveTaskToSplitScreenPrimaryTask(Task task, boolean toTop) {
-        final TaskDisplayArea taskDisplayArea = task.getDisplayArea();
-        final Task primarySplitTask = taskDisplayArea.getRootSplitScreenPrimaryTask();
-        if (primarySplitTask == null) {
-            throw new IllegalStateException("Can't enter split without associated organized task");
-        }
-
-        if (toTop) {
-            taskDisplayArea.positionChildAt(POSITION_TOP, primarySplitTask,
-                    false /* includingParents */);
-        }
-        WindowContainerTransaction wct = new WindowContainerTransaction();
-        // Clear out current windowing mode before reparenting to split taks.
-        wct.setWindowingMode(
-                task.getRootTask().mRemoteToken.toWindowContainerToken(), WINDOWING_MODE_UNDEFINED);
-        wct.reparent(task.getRootTask().mRemoteToken.toWindowContainerToken(),
-                primarySplitTask.mRemoteToken.toWindowContainerToken(), toTop);
-        mWindowOrganizerController.applyTransaction(wct);
     }
 
     /**
@@ -2934,7 +2842,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         if (packageName != null) {
             caller = packageName + " " + caller;
         }
-        if (!canCloseSystemDialogs(pid, uid, process)) {
+        if (!canCloseSystemDialogs(pid, uid)) {
             // The app can't close system dialogs, throw only if it targets S+
             if (CompatChanges.isChangeEnabled(LOCK_DOWN_CLOSE_SYSTEM_DIALOGS, uid)) {
                 throw new SecurityException(
@@ -2959,49 +2867,53 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return true;
     }
 
-    private boolean canCloseSystemDialogs(int pid, int uid,
-            @Nullable WindowProcessController process) {
+    private boolean canCloseSystemDialogs(int pid, int uid) {
         if (checkPermission(Manifest.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, pid, uid)
                 == PERMISSION_GRANTED) {
             return true;
         }
-        if (process == null) {
-            synchronized (mGlobalLock) {
-                process = mProcessMap.getProcess(pid);
+        synchronized (mGlobalLock) {
+            // Check all the processes from the given uid, especially since for PendingIntents sent
+            // the pid equals -1
+            ArraySet<WindowProcessController> processes = mProcessMap.getProcesses(uid);
+            if (processes != null) {
+                for (int i = 0, n = processes.size(); i < n; i++) {
+                    WindowProcessController process = processes.valueAt(i);
+                    // Check if the instrumentation of the process has the permission. This covers
+                    // the usual test started from the shell (which has the permission) case. This
+                    // is needed for apps targeting SDK level < S but we are also allowing for
+                    // targetSdk S+ as a convenience to avoid breaking a bunch of existing tests and
+                    // asking them to adopt shell permissions to do this.
+                    int sourceUid = process.getInstrumentationSourceUid();
+                    if (process.isInstrumenting() && sourceUid != -1 && checkPermission(
+                            Manifest.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, -1, sourceUid)
+                            == PERMISSION_GRANTED) {
+                        return true;
+                    }
+                    // This is the notification trampoline use-case for example, where apps use
+                    // Intent.ACSD to close the shade prior to starting an activity.
+                    if (process.canCloseSystemDialogsByToken()) {
+                        return true;
+                    }
+                }
             }
-        }
-        if (process != null) {
-            // Check if the instrumentation of the process has the permission. This covers the
-            // usual test started from the shell (which has the permission) case. This is needed
-            // for apps targeting SDK level < S but we are also allowing for targetSdk S+ as a
-            // convenience to avoid breaking a bunch of existing tests and asking them to adopt
-            // shell permissions to do this.
-            // Note that these getters all read from volatile fields in WindowProcessController, so
-            // no need to lock.
-            int sourceUid = process.getInstrumentationSourceUid();
-            if (process.isInstrumenting() && sourceUid != -1 && checkPermission(
-                    Manifest.permission.BROADCAST_CLOSE_SYSTEM_DIALOGS, -1, sourceUid)
-                    == PERMISSION_GRANTED) {
-                return true;
-            }
-            // This is the notification trampoline use-case for example, where apps use Intent.ACSD
-            // to close the shade prior to starting an activity.
-            if (process.canCloseSystemDialogsByToken()) {
-                return true;
-            }
-        }
-        // This covers the case where the app is displaying some UI on top of the notification shade
-        // and wants to start an activity. The app then sends the intent in order to move the
-        // notification shade out of the way and show the activity to the user. This is fine since
-        // the caller already has privilege to show a visible window on top of the notification
-        // shade, so it can already prevent the user from accessing the shade if it wants to.
-        // We only allow for targetSdk < S, for S+ we automatically collapse the shade on
-        // startActivity() for these apps.
-        if (!CompatChanges.isChangeEnabled(LOCK_DOWN_CLOSE_SYSTEM_DIALOGS, uid)) {
-            synchronized (mGlobalLock) {
+            if (!CompatChanges.isChangeEnabled(LOCK_DOWN_CLOSE_SYSTEM_DIALOGS, uid)) {
+                // This covers the case where the app is displaying some UI on top of the
+                // notification shade and wants to start an activity. The app then sends the intent
+                // in order to move the notification shade out of the way and show the activity to
+                // the user. This is fine since the caller already has privilege to show a visible
+                // window on top of the notification shade, so it can already prevent the user from
+                // accessing the shade if it wants to. We only allow for targetSdk < S, for S+ we
+                // automatically collapse the shade on startActivity() for these apps.
                 // It's ok that the owner of the shade is not allowed *per this rule* because it has
                 // BROADCAST_CLOSE_SYSTEM_DIALOGS (SystemUI), so it would fall into that rule.
                 if (mRootWindowContainer.hasVisibleWindowAboveButDoesNotOwnNotificationShade(uid)) {
+                    return true;
+                }
+                // Accessibility services are allowed to send the intent unless they are targeting
+                // S+, in which case they should use {@link AccessibilityService
+                // #GLOBAL_ACTION_DISMISS_NOTIFICATION_SHADE} to dismiss the notification shade.
+                if (ArrayUtils.contains(mAccessibilityServiceUids, uid)) {
                     return true;
                 }
             }
@@ -3391,47 +3303,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         return true;
     }
 
-    // TODO(b/149338177): remove when CTS no-longer requires it
-    @Override
-    public void resizePrimarySplitScreen(Rect dockedBounds, Rect tempDockedTaskBounds,
-            Rect tempDockedTaskInsetBounds,
-            Rect tempOtherTaskBounds, Rect tempOtherTaskInsetBounds) {
-        enforceTaskPermission("resizePrimarySplitScreen()");
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                final TaskDisplayArea tc = mRootWindowContainer.getDefaultTaskDisplayArea();
-                final Task primary = tc.getRootSplitScreenPrimaryTask();
-                final Task secondary = tc.getTask(t -> t.mCreatedByOrganizer && t.isRootTask()
-                        && t.inSplitScreenSecondaryWindowingMode());
-                if (primary == null || secondary == null) {
-                    return;
-                }
-                final WindowContainerTransaction wct = new WindowContainerTransaction();
-                final Rect primaryRect =
-                        tempDockedTaskInsetBounds != null ? tempDockedTaskInsetBounds
-                                : (tempDockedTaskBounds != null ? tempDockedTaskBounds
-                                        : dockedBounds);
-                wct.setBounds(primary.mRemoteToken.toWindowContainerToken(), primaryRect);
-                Rect otherRect = tempOtherTaskInsetBounds != null ? tempOtherTaskInsetBounds
-                        : tempOtherTaskBounds;
-                if (otherRect == null) {
-                    // Temporary estimation... again this is just for tests.
-                    otherRect = new Rect(secondary.getBounds());
-                    if (tc.getBounds().width() > tc.getBounds().height()) {
-                        otherRect.left = primaryRect.right + 6;
-                    } else {
-                        otherRect.top = primaryRect.bottom + 6;
-                    }
-                }
-                wct.setBounds(secondary.mRemoteToken.toWindowContainerToken(), otherRect);
-                mWindowOrganizerController.applyTransaction(wct);
-            }
-        } finally {
-            Binder.restoreCallingIdentity(ident);
-        }
-    }
-
     @Override
     public void setSplitScreenResizing(boolean resizing) {
         enforceTaskPermission("setSplitScreenResizing()");
@@ -3782,6 +3653,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             for (int i = 0; i < packageNames.size(); ++i) {
                 mTaskSupervisor.mLaunchParamsPersister.removeRecordForPackage(packageNames.get(i));
             }
+        }
+    }
+
+    @Override
+    public void onPictureInPictureStateChanged(PictureInPictureUiState pipState) {
+        enforceTaskPermission("onPictureInPictureStateChanged");
+        final Task rootPinnedStask = mRootWindowContainer.getDefaultTaskDisplayArea()
+                .getRootPinnedTask();
+        if (rootPinnedStask != null && rootPinnedStask.getTopMostActivity() != null) {
+            mWindowManager.mAtmService.mActivityClientController.onPictureInPictureStateChanged(
+                    rootPinnedStask.getTopMostActivity(), pipState);
         }
     }
 
@@ -4655,11 +4537,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                             .setContentTitle(text)
                             .setContentText(
                                     mContext.getText(R.string.heavy_weight_notification_detail))
-                            // TODO(b/175194709) Please replace FLAG_MUTABLE_UNAUDITED below
-                            // with either FLAG_IMMUTABLE (recommended) or FLAG_MUTABLE.
                             .setContentIntent(PendingIntent.getActivityAsUser(mContext, 0,
                                     intent, PendingIntent.FLAG_CANCEL_CURRENT
-                                    | PendingIntent.FLAG_MUTABLE_UNAUDITED, null,
+                                    | PendingIntent.FLAG_IMMUTABLE, null,
                                     new UserHandle(userId)))
                             .build();
             try {
@@ -5122,9 +5002,17 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
             return mVisibleActivityProcessTracker.hasResumedActivity(uid);
         }
 
+        @Override
         public void setBackgroundActivityStartCallback(
                 @Nullable BackgroundActivityStartCallback backgroundActivityStartCallback) {
             mBackgroundActivityStartCallback = backgroundActivityStartCallback;
+        }
+
+        @Override
+        public void setAccessibilityServiceUids(IntArray uids) {
+            synchronized (mGlobalLock) {
+                mAccessibilityServiceUids = uids.toArray();
+            }
         }
 
         @Override
@@ -5291,8 +5179,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public boolean canCloseSystemDialogs(int pid, int uid) {
-            return ActivityTaskManagerService.this.canCloseSystemDialogs(pid, uid,
-                    null /* process */);
+            return ActivityTaskManagerService.this.canCloseSystemDialogs(pid, uid);
         }
 
         @Override
@@ -5733,10 +5620,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                     mTaskSupervisor.endDeferResume();
                 }
 
-                if (wpc.isInstrumenting()) {
-                    finishInstrumentationCallback.run();
-                }
-
                 if (!restarting && hasVisibleActivities) {
                     deferWindowLayout();
                     try {
@@ -5752,6 +5635,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                         continueWindowLayout();
                     }
                 }
+            }
+            if (wpc.isInstrumenting()) {
+                finishInstrumentationCallback.run();
             }
         }
 
@@ -6252,6 +6138,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         public boolean handleAppCrashInActivityController(String processName, int pid,
                 String shortMsg, String longMsg, long timeMillis, String stackTrace,
                 Runnable killCrashingAppCallback) {
+            Runnable targetRunnable = null;
             synchronized (mGlobalLock) {
                 if (mController == null) {
                     return false;
@@ -6260,15 +6147,18 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 try {
                     if (!mController.appCrashed(processName, pid, shortMsg, longMsg, timeMillis,
                             stackTrace)) {
-                        killCrashingAppCallback.run();
-                        return true;
+                        targetRunnable = killCrashingAppCallback;
                     }
                 } catch (RemoteException e) {
                     mController = null;
                     Watchdog.getInstance().setActivityController(null);
                 }
-                return false;
             }
+            if (targetRunnable != null) {
+                targetRunnable.run();
+                return true;
+            }
+            return false;
         }
 
         @Override

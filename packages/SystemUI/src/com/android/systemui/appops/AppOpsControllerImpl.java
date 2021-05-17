@@ -25,24 +25,20 @@ import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
-import android.content.pm.PackageManager;
-import android.location.LocationManager;
 import android.media.AudioManager;
 import android.media.AudioRecordingConfiguration;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.UserHandle;
-import android.provider.DeviceConfig;
+import android.permission.PermissionManager;
 import android.util.ArraySet;
 import android.util.Log;
 import android.util.SparseArray;
 
 import androidx.annotation.WorkerThread;
 
-import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.config.sysui.SystemUiDeviceConfigFlags;
 import com.android.systemui.Dumpable;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
@@ -83,19 +79,12 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
     private final Context mContext;
     private final AppOpsManager mAppOps;
     private final AudioManager mAudioManager;
-    private final LocationManager mLocationManager;
     private final IndividualSensorPrivacyController mSensorPrivacyController;
     private final SystemClock mClock;
-
-    // mLocationProviderPackages are cached and updated only occasionally
-    private static final long LOCATION_PROVIDER_UPDATE_FREQUENCY_MS = 30000;
-    private long mLastLocationProviderPackageUpdate;
-    private List<String> mLocationProviderPackages;
 
     private H mBGHandler;
     private final List<AppOpsController.Callback> mCallbacks = new ArrayList<>();
     private final SparseArray<Set<Callback>> mCallbacksByCode = new SparseArray<>();
-    private final PermissionFlagsCache mFlagsCache;
     private boolean mListening;
     private boolean mMicMuted;
     private boolean mCameraDisabled;
@@ -124,7 +113,6 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
             Context context,
             @Background Looper bgLooper,
             DumpManager dumpManager,
-            PermissionFlagsCache cache,
             AudioManager audioManager,
             IndividualSensorPrivacyController sensorPrivacyController,
             BroadcastDispatcher dispatcher,
@@ -132,7 +120,6 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
     ) {
         mDispatcher = dispatcher;
         mAppOps = (AppOpsManager) context.getSystemService(Context.APP_OPS_SERVICE);
-        mFlagsCache = cache;
         mBGHandler = new H(bgLooper);
         final int numOps = OPS.length;
         for (int i = 0; i < numOps; i++) {
@@ -143,7 +130,6 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
         mMicMuted = audioManager.isMicrophoneMute()
                 || mSensorPrivacyController.isSensorBlocked(MICROPHONE);
         mCameraDisabled = mSensorPrivacyController.isSensorBlocked(CAMERA);
-        mLocationManager = context.getSystemService(LocationManager.class);
         mContext = context;
         mClock = clock;
         dumpManager.registerDumpable(TAG, this);
@@ -255,9 +241,9 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
             AppOpItem item = getAppOpItemLocked(mActiveItems, code, uid, packageName);
             if (item == null && active) {
                 item = new AppOpItem(code, uid, packageName, mClock.elapsedRealtime());
-                if (code == AppOpsManager.OP_RECORD_AUDIO) {
+                if (isOpMicrophone(code)) {
                     item.setDisabled(isAnyRecordingPausedLocked(uid));
-                } else if (code == AppOpsManager.OP_CAMERA) {
+                } else if (isOpCamera(code)) {
                     item.setDisabled(mCameraDisabled);
                 }
                 mActiveItems.add(item);
@@ -308,102 +294,13 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
         return createdNew;
     }
 
-    /**
-     * Does the app-op code refer to a user sensitive permission for the specified user id
-     * and package. Only user sensitive permission should be shown to the user by default.
-     *
-     * @param appOpCode The code of the app-op.
-     * @param uid The uid of the user.
-     * @param packageName The name of the package.
-     *
-     * @return {@code true} iff the app-op item is user sensitive
-     */
-    private boolean isUserSensitive(int appOpCode, int uid, String packageName) {
-        String permission = AppOpsManager.opToPermission(appOpCode);
-        if (permission == null) {
-            return false;
-        }
-        int permFlags = mFlagsCache.getPermissionFlags(permission,
-                packageName, uid);
-        return (permFlags & PackageManager.FLAG_PERMISSION_USER_SENSITIVE_WHEN_GRANTED) != 0;
+    private boolean isUserVisible(String packageName) {
+        return PermissionManager.shouldShowPackageForIndicatorCached(mContext, packageName);
     }
 
-    /**
-     * Does the app-op item refer to an operation that should be shown to the user.
-     * Only specficic ops (like SYSTEM_ALERT_WINDOW) or ops that refer to user sensitive
-     * permission should be shown to the user by default.
-     *
-     * @param item The item
-     *
-     * @return {@code true} iff the app-op item should be shown to the user
-     */
-    private boolean isUserVisible(AppOpItem item) {
-        return isUserVisible(item.getCode(), item.getUid(), item.getPackageName());
-    }
-
-    /**
-     * Checks if a package is the current location provider.
-     *
-     * <p>Data is cached to avoid too many calls into system server
-     *
-     * @param packageName The package that might be the location provider
-     *
-     * @return {@code true} iff the package is the location provider.
-     */
-    private boolean isLocationProvider(String packageName) {
-        long now = System.currentTimeMillis();
-
-        if (mLastLocationProviderPackageUpdate + LOCATION_PROVIDER_UPDATE_FREQUENCY_MS < now) {
-            mLastLocationProviderPackageUpdate = now;
-            mLocationProviderPackages = mLocationManager.getProviderPackages(
-                    LocationManager.FUSED_PROVIDER);
-        }
-
-        return mLocationProviderPackages.contains(packageName);
-    }
-
-    private boolean isSpeechRecognizerUsage(int opCode, String packageName) {
-        if (AppOpsManager.OP_RECORD_AUDIO != opCode) {
-            return false;
-        }
-
-        return packageName.equals(
-                mContext.getString(R.string.config_systemSpeechRecognizer));
-    }
-
-    // TODO ntmyren: remove after teamfood is finished
-    private boolean showSystemApps() {
-        return DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PRIVACY,
-                SystemUiDeviceConfigFlags.PROPERTY_PERMISSIONS_HUB_ENABLED, false);
-    }
-
-    /**
-     * Does the app-op, uid and package name, refer to an operation that should be shown to the
-     * user. Only specficic ops (like {@link AppOpsManager.OP_SYSTEM_ALERT_WINDOW}) or
-     * ops that refer to user sensitive permission should be shown to the user by default.
-     *
-     * @param item The item
-     *
-     * @return {@code true} iff the app-op for should be shown to the user
-     */
-    private boolean isUserVisible(int appOpCode, int uid, String packageName) {
-        // currently OP_SYSTEM_ALERT_WINDOW and OP_MONITOR_HIGH_POWER_LOCATION
-        // does not correspond to a platform permission
-        // which may be user sensitive, so for now always show it to the user.
-        if (appOpCode == AppOpsManager.OP_SYSTEM_ALERT_WINDOW
-                || appOpCode == AppOpsManager.OP_MONITOR_HIGH_POWER_LOCATION
-                || appOpCode == AppOpsManager.OP_PHONE_CALL_CAMERA
-                || appOpCode == AppOpsManager.OP_PHONE_CALL_MICROPHONE) {
-            return true;
-        }
-        // TODO ntmyren: Replace this with more robust check if this moves beyond teamfood
-        if (((showSystemApps() && !packageName.equals("android"))
-                || appOpCode == AppOpsManager.OP_CAMERA && isLocationProvider(packageName))
-                || isSpeechRecognizerUsage(appOpCode, packageName)) {
-            return true;
-        }
-
-        return isUserSensitive(appOpCode, uid, packageName);
+    @WorkerThread
+    public List<AppOpItem> getActiveAppOps() {
+        return getActiveAppOps(false);
     }
 
     /**
@@ -414,8 +311,8 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
      * @return List of active AppOps information
      */
     @WorkerThread
-    public List<AppOpItem> getActiveAppOps() {
-        return getActiveAppOpsForUser(UserHandle.USER_ALL);
+    public List<AppOpItem> getActiveAppOps(boolean showPaused) {
+        return getActiveAppOpsForUser(UserHandle.USER_ALL, showPaused);
     }
 
     /**
@@ -429,7 +326,7 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
      * @return List of active AppOps information for that user id
      */
     @WorkerThread
-    public List<AppOpItem> getActiveAppOpsForUser(int userId) {
+    public List<AppOpItem> getActiveAppOpsForUser(int userId, boolean showPaused) {
         Assert.isNotMainThread();
         List<AppOpItem> list = new ArrayList<>();
         synchronized (mActiveItems) {
@@ -438,7 +335,8 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
                 AppOpItem item = mActiveItems.get(i);
                 if ((userId == UserHandle.USER_ALL
                         || UserHandle.getUserId(item.getUid()) == userId)
-                        && isUserVisible(item) && !item.isDisabled()) {
+                        && isUserVisible(item.getPackageName())
+                        && (showPaused || !item.isDisabled())) {
                     list.add(item);
                 }
             }
@@ -449,7 +347,7 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
                 AppOpItem item = mNotedItems.get(i);
                 if ((userId == UserHandle.USER_ALL
                         || UserHandle.getUserId(item.getUid()) == userId)
-                        && isUserVisible(item)) {
+                        && isUserVisible(item.getPackageName())) {
                     list.add(item);
                 }
             }
@@ -503,7 +401,7 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
     }
 
     private void notifySuscribersWorker(int code, int uid, String packageName, boolean active) {
-        if (mCallbacksByCode.contains(code) && isUserVisible(code, uid, packageName)) {
+        if (mCallbacksByCode.contains(code) && isUserVisible(packageName)) {
             if (DEBUG) Log.d(TAG, "Notifying of change in package " + packageName);
             for (Callback cb: mCallbacksByCode.get(code)) {
                 cb.onActiveStateChanged(code, uid, packageName, active);
@@ -549,9 +447,9 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
                 AppOpItem item = mActiveItems.get(i);
 
                 boolean paused = false;
-                if (item.getCode() == AppOpsManager.OP_RECORD_AUDIO) {
+                if (isOpMicrophone(item.getCode())) {
                     paused = isAnyRecordingPausedLocked(item.getUid());
-                } else if (item.getCode() == AppOpsManager.OP_CAMERA) {
+                } else if (isOpCamera(item.getCode())) {
                     paused = mCameraDisabled;
                 }
 
@@ -608,6 +506,19 @@ public class AppOpsControllerImpl extends BroadcastReceiver implements AppOpsCon
             }
             updateSensorDisabledStatus();
         });
+    }
+
+    @Override
+    public boolean isMicMuted() {
+        return mMicMuted;
+    }
+
+    private boolean isOpCamera(int op) {
+        return op == AppOpsManager.OP_CAMERA || op == AppOpsManager.OP_PHONE_CALL_CAMERA;
+    }
+
+    private boolean isOpMicrophone(int op) {
+        return op == AppOpsManager.OP_RECORD_AUDIO || op == AppOpsManager.OP_PHONE_CALL_MICROPHONE;
     }
 
     protected class H extends Handler {

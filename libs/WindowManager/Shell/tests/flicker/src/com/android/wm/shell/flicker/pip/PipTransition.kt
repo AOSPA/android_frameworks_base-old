@@ -20,6 +20,7 @@ import android.app.Instrumentation
 import android.content.Intent
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.server.wm.flicker.FlickerBuilderProvider
 import com.android.server.wm.flicker.FlickerTestParameter
@@ -33,12 +34,12 @@ import com.android.server.wm.flicker.navBarLayerRotatesAndScales
 import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
 import com.android.server.wm.flicker.noUncoveredRegions
 import com.android.server.wm.flicker.repetitions
+import com.android.server.wm.flicker.rules.RemoveAllTasksButHomeRule.Companion.removeAllTasksButHome
 import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.wm.shell.flicker.helpers.PipAppHelper
-import com.android.wm.shell.flicker.removeAllTasksButHome
 import com.android.wm.shell.flicker.testapp.Components
 import org.junit.Test
 
@@ -131,13 +132,13 @@ abstract class PipTransition(protected val testSpec: FlickerTestParameter) {
                     removeAllTasksButHome()
                     if (!eachRun) {
                         pipApp.launchViaIntent(wmHelper, stringExtras = stringExtras)
-                        wmHelper.waitPipWindowShown()
+                        wmHelper.waitFor { it.wmState.hasPipWindow() }
                     }
                 }
                 eachRun {
                     if (eachRun) {
                         pipApp.launchViaIntent(wmHelper, stringExtras = stringExtras)
-                        wmHelper.waitPipWindowShown()
+                        wmHelper.waitFor { it.wmState.hasPipWindow() }
                     }
                 }
             }
@@ -167,11 +168,11 @@ abstract class PipTransition(protected val testSpec: FlickerTestParameter) {
     @Test
     open fun statusBarWindowIsAlwaysVisible() = testSpec.statusBarWindowIsAlwaysVisible()
 
-    @Presubmit
+    @FlakyTest
     @Test
     open fun navBarLayerIsAlwaysVisible() = testSpec.navBarLayerIsAlwaysVisible()
 
-    @Presubmit
+    @FlakyTest
     @Test
     open fun statusBarLayerIsAlwaysVisible() = testSpec.statusBarLayerIsAlwaysVisible()
 

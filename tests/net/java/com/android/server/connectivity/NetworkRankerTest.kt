@@ -16,7 +16,9 @@
 
 package com.android.server.connectivity
 
+import android.net.NetworkCapabilities
 import android.net.NetworkRequest
+import android.net.NetworkScore.KEEP_CONNECTED_NONE
 import androidx.test.filters.SmallTest
 import androidx.test.runner.AndroidJUnit4
 import org.junit.Test
@@ -32,10 +34,14 @@ import kotlin.test.assertNull
 class NetworkRankerTest {
     private val ranker = NetworkRanker()
 
-    private fun makeNai(satisfy: Boolean, score: Int) = mock(NetworkAgentInfo::class.java).also {
-        doReturn(satisfy).`when`(it).satisfies(any())
-        doReturn(score).`when`(it).currentScore
-    }
+    private fun makeNai(satisfy: Boolean, legacyScore: Int) =
+            mock(NetworkAgentInfo::class.java).also {
+                doReturn(satisfy).`when`(it).satisfies(any())
+                val fs = FullScore(legacyScore, 0 /* policies */, KEEP_CONNECTED_NONE)
+                doReturn(fs).`when`(it).getScore()
+                val nc = NetworkCapabilities.Builder().build()
+                doReturn(nc).`when`(it).getCapsNoCopy()
+            }
 
     @Test
     fun testGetBestNetwork() {
@@ -43,7 +49,7 @@ class NetworkRankerTest {
         val nais = scores.map { makeNai(true, it) }
         val bestNetwork = nais[2] // The one with the top score
         val someRequest = mock(NetworkRequest::class.java)
-        assertEquals(bestNetwork, ranker.getBestNetwork(someRequest, nais))
+        assertEquals(bestNetwork, ranker.getBestNetwork(someRequest, nais, bestNetwork))
     }
 
     @Test
@@ -52,20 +58,20 @@ class NetworkRankerTest {
                 makeNai(false, 60), makeNai(true, 23), makeNai(false, 68))
         val bestNetwork = nais[1] // Top score that's satisfying
         val someRequest = mock(NetworkRequest::class.java)
-        assertEquals(bestNetwork, ranker.getBestNetwork(someRequest, nais))
+        assertEquals(bestNetwork, ranker.getBestNetwork(someRequest, nais, nais[1]))
     }
 
     @Test
     fun testNoMatch() {
         val nais = listOf(makeNai(false, 20), makeNai(false, 50), makeNai(false, 90))
         val someRequest = mock(NetworkRequest::class.java)
-        assertNull(ranker.getBestNetwork(someRequest, nais))
+        assertNull(ranker.getBestNetwork(someRequest, nais, null))
     }
 
     @Test
     fun testEmpty() {
         val someRequest = mock(NetworkRequest::class.java)
-        assertNull(ranker.getBestNetwork(someRequest, emptyList()))
+        assertNull(ranker.getBestNetwork(someRequest, emptyList(), null))
     }
 
     // Make sure the ranker is "stable" (as in stable sort), that is, it always returns the FIRST
@@ -75,10 +81,10 @@ class NetworkRankerTest {
         val nais1 = listOf(makeNai(true, 30), makeNai(true, 30), makeNai(true, 30),
                 makeNai(true, 30), makeNai(true, 30), makeNai(true, 30))
         val someRequest = mock(NetworkRequest::class.java)
-        assertEquals(nais1[0], ranker.getBestNetwork(someRequest, nais1))
+        assertEquals(nais1[0], ranker.getBestNetwork(someRequest, nais1, nais1[0]))
 
         val nais2 = listOf(makeNai(true, 30), makeNai(true, 50), makeNai(true, 20),
                 makeNai(true, 50), makeNai(true, 50), makeNai(true, 40))
-        assertEquals(nais2[1], ranker.getBestNetwork(someRequest, nais2))
+        assertEquals(nais2[1], ranker.getBestNetwork(someRequest, nais2, nais2[1]))
     }
 }

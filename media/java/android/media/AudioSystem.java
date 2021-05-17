@@ -27,6 +27,7 @@ import android.content.pm.PackageManager;
 import android.media.audiofx.AudioEffect;
 import android.media.audiopolicy.AudioMix;
 import android.os.Build;
+import android.os.Vibrator;
 import android.telephony.TelephonyManager;
 import android.util.Log;
 import android.util.Pair;
@@ -452,6 +453,10 @@ public class AudioSystem
                 return "AUDIO_FORMAT_MAT_2_0"; // (MAT | MAT_SUB_2_0)
             case /* AUDIO_FORMAT_MAT_2_1           */ 0x24000003:
                 return "AUDIO_FORMAT_MAT_2_1"; // (MAT | MAT_SUB_2_1)
+            case /* AUDIO_FORMAT_DTS_UHD */           0x2E000000:
+                return "AUDIO_FORMAT_DTS_UHD";
+            case /* AUDIO_FORMAT_DRA */           0x2F000000:
+                return "AUDIO_FORMAT_DRA";
             default:
                 return "AUDIO_FORMAT_(" + audioFormat + ")";
         }
@@ -912,6 +917,8 @@ public class AudioSystem
     /** @hide */
     public static final int DEVICE_OUT_HDMI_ARC = 0x40000;
     /** @hide */
+    public static final int DEVICE_OUT_HDMI_EARC = 0x40001;
+    /** @hide */
     public static final int DEVICE_OUT_SPDIF = 0x80000;
     /** @hide */
     @UnsupportedAppUsage
@@ -983,6 +990,7 @@ public class AudioSystem
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_TELEPHONY_TX);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_LINE);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_HDMI_ARC);
+        DEVICE_OUT_ALL_SET.add(DEVICE_OUT_HDMI_EARC);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_SPDIF);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_FM);
         DEVICE_OUT_ALL_SET.add(DEVICE_OUT_AUX_LINE);
@@ -1015,6 +1023,7 @@ public class AudioSystem
         DEVICE_OUT_ALL_HDMI_SYSTEM_AUDIO_SET = new HashSet<>();
         DEVICE_OUT_ALL_HDMI_SYSTEM_AUDIO_SET.add(DEVICE_OUT_AUX_LINE);
         DEVICE_OUT_ALL_HDMI_SYSTEM_AUDIO_SET.add(DEVICE_OUT_HDMI_ARC);
+        DEVICE_OUT_ALL_HDMI_SYSTEM_AUDIO_SET.add(DEVICE_OUT_HDMI_EARC);
         DEVICE_OUT_ALL_HDMI_SYSTEM_AUDIO_SET.add(DEVICE_OUT_SPDIF);
 
         DEVICE_ALL_HDMI_SYSTEM_AUDIO_AND_SPEAKER_SET = new HashSet<>();
@@ -1096,6 +1105,8 @@ public class AudioSystem
     /** @hide */
     public static final int DEVICE_IN_HDMI_ARC = DEVICE_BIT_IN | 0x8000000;
     /** @hide */
+    public static final int DEVICE_IN_HDMI_EARC = DEVICE_BIT_IN | 0x8000001;
+    /** @hide */
     public static final int DEVICE_IN_ECHO_REFERENCE = DEVICE_BIT_IN | 0x10000000;
     /** @hide */
     public static final int DEVICE_IN_BLE_HEADSET = DEVICE_BIT_IN | 0x20000000;
@@ -1136,6 +1147,7 @@ public class AudioSystem
         DEVICE_IN_ALL_SET.add(DEVICE_IN_USB_HEADSET);
         DEVICE_IN_ALL_SET.add(DEVICE_IN_BLUETOOTH_BLE);
         DEVICE_IN_ALL_SET.add(DEVICE_IN_HDMI_ARC);
+        DEVICE_IN_ALL_SET.add(DEVICE_IN_HDMI_EARC);
         DEVICE_IN_ALL_SET.add(DEVICE_IN_ECHO_REFERENCE);
         DEVICE_IN_ALL_SET.add(DEVICE_IN_BLE_HEADSET);
         DEVICE_IN_ALL_SET.add(DEVICE_IN_DEFAULT);
@@ -1191,6 +1203,7 @@ public class AudioSystem
     /** @hide */ public static final String DEVICE_OUT_TELEPHONY_TX_NAME = "telephony_tx";
     /** @hide */ public static final String DEVICE_OUT_LINE_NAME = "line";
     /** @hide */ public static final String DEVICE_OUT_HDMI_ARC_NAME = "hmdi_arc";
+    /** @hide */ public static final String DEVICE_OUT_HDMI_EARC_NAME = "hmdi_earc";
     /** @hide */ public static final String DEVICE_OUT_SPDIF_NAME = "spdif";
     /** @hide */ public static final String DEVICE_OUT_FM_NAME = "fm_transmitter";
     /** @hide */ public static final String DEVICE_OUT_AUX_LINE_NAME = "aux_line";
@@ -1230,6 +1243,7 @@ public class AudioSystem
     /** @hide */ public static final String DEVICE_IN_BLUETOOTH_BLE_NAME = "bt_ble";
     /** @hide */ public static final String DEVICE_IN_ECHO_REFERENCE_NAME = "echo_reference";
     /** @hide */ public static final String DEVICE_IN_HDMI_ARC_NAME = "hdmi_arc";
+    /** @hide */ public static final String DEVICE_IN_HDMI_EARC_NAME = "hdmi_earc";
     /** @hide */ public static final String DEVICE_IN_BLE_HEADSET_NAME = "ble_headset";
 
     /** @hide */
@@ -1275,6 +1289,8 @@ public class AudioSystem
             return DEVICE_OUT_LINE_NAME;
         case DEVICE_OUT_HDMI_ARC:
             return DEVICE_OUT_HDMI_ARC_NAME;
+        case DEVICE_OUT_HDMI_EARC:
+            return DEVICE_OUT_HDMI_EARC_NAME;
         case DEVICE_OUT_SPDIF:
             return DEVICE_OUT_SPDIF_NAME;
         case DEVICE_OUT_FM:
@@ -1361,6 +1377,8 @@ public class AudioSystem
             return DEVICE_IN_ECHO_REFERENCE_NAME;
         case DEVICE_IN_HDMI_ARC:
             return DEVICE_IN_HDMI_ARC_NAME;
+        case DEVICE_IN_HDMI_EARC:
+            return DEVICE_IN_HDMI_EARC_NAME;
         case DEVICE_IN_BLE_HEADSET:
             return DEVICE_IN_BLE_HEADSET_NAME;
         case DEVICE_IN_DEFAULT:
@@ -1473,6 +1491,10 @@ public class AudioSystem
     // usage for AudioRecord.startRecordingSync(), must match AudioSystem::sync_event_t
     /** @hide */ public static final int SYNC_EVENT_NONE = 0;
     /** @hide */ public static final int SYNC_EVENT_PRESENTATION_COMPLETE = 1;
+    /** @hide
+     *  Not used by native implementation.
+     *  See {@link AudioRecord.Builder#setSharedAudioEvent(MediaSyncEvent) */
+    public static final int SYNC_EVENT_SHARE_AUDIO_HISTORY = 100;
 
     /**
      * @hide
@@ -1961,6 +1983,14 @@ public class AudioSystem
      */
     public static native int getDevicesForRoleAndCapturePreset(
             int capturePreset, int role, @NonNull List<AudioDeviceAttributes> devices);
+
+    /**
+     * @hide
+     * Set the vibrators' information. The value will be used to initialize HapticGenerator.
+     * @param vibrators a list of all available vibrators
+     * @return command completion status
+     */
+    public static native int setVibratorInfos(@NonNull List<Vibrator> vibrators);
 
     // Items shared with audio service
 

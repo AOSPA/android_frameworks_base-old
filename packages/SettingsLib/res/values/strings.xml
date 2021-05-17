@@ -1037,6 +1037,9 @@
     <!-- Settings item title to select whether to show transcoding notifications. [CHAR LIMIT=85] -->
     <string name="transcode_notification">Show transcoding notifications</string>
 
+    <!-- Settings item title to select whether to disable cache for transcoding. [CHAR LIMIT=85] -->
+    <string name="transcode_disable_cache">Disable transcoding cache</string>
+
     <!-- Services settings screen, setting option name for the user to go to the screen to view running services -->
     <string name="runningservices_settings_title">Running services</string>
     <!-- Services settings screen, setting option summary for the user to go to the screen to view running services  -->
@@ -1149,9 +1152,9 @@
     <!-- [CHAR_LIMIT=40] Label for battery level chart when charging -->
     <string name="power_charging"><xliff:g id="level">%1$s</xliff:g> - <xliff:g id="state">%2$s</xliff:g></string>
     <!-- [CHAR_LIMIT=40] Label for estimated remaining duration of battery charging -->
-    <string name="power_remaining_charging_duration_only"><xliff:g id="time">%1$s</xliff:g> left until charged</string>
+    <string name="power_remaining_charging_duration_only"><xliff:g id="time">%1$s</xliff:g> left until full</string>
     <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
-    <string name="power_charging_duration"><xliff:g id="level">%1$s</xliff:g> - <xliff:g id="time">%2$s</xliff:g> until charged</string>
+    <string name="power_charging_duration"><xliff:g id="level">%1$s</xliff:g> - <xliff:g id="time">%2$s</xliff:g> left until full</string>
     <!-- [CHAR_LIMIT=80] Label for battery level chart when charge been limited -->
     <string name="power_charging_limited"><xliff:g id="level">%1$s</xliff:g> - Optimizing for battery health</string>
 
@@ -1163,12 +1166,14 @@
     <string name="battery_info_status_charging_fast">Charging rapidly</string>
     <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging speed is slow.  -->
     <string name="battery_info_status_charging_slow">Charging slowly</string>
+    <!-- [CHAR_LIMIT=20] Battery use screen.  Battery status shown in chart label when charging wirelessly.  -->
+    <string name="battery_info_status_charging_wireless">Charging wirelessly</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_discharging">Not charging</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_not_charging">Plugged in, can\'t charge right now</string>
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
-    <string name="battery_info_status_full">Full</string>
+    <string name="battery_info_status_full">Charged</string>
 
     <!-- Summary for settings preference disabled by administrator [CHAR LIMIT=50] -->
     <string name="disabled_by_admin_summary_text">Controlled by admin</string>
@@ -1298,18 +1303,32 @@
     <!-- Label for the settings activity for controlling apps that can schedule alarms [CHAR LIMIT=30] -->
     <string name="alarms_and_reminders_label">Alarms and reminders</string>
     <!-- Label for the switch to toggler the permission for scheduling alarms [CHAR LIMIT=50] -->
-    <string name="alarms_and_reminders_switch_title">Allow to set alarms or reminders</string>
+    <string name="alarms_and_reminders_switch_title">Allow setting alarms and reminders</string>
     <!-- Title for the setting screen for controlling apps that can schedule alarms [CHAR LIMIT=30] -->
-    <string name="alarms_and_reminders_title">Alarms and reminders</string>
+    <string name="alarms_and_reminders_title">Alarms &amp; reminders</string>
     <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
-    <string name="alarms_and_reminders_footer_title">
-        Allow this app to schedule alarms or other timing based events.
-        This will allow the app to wake up and run even when you are not using the device.
-        Note that revoking this permission may cause the app to malfunction, specifically any alarms
-        that the app has scheduled will no longer work.
+    <string name="alarms_and_reminders_footer_title" product="default">
+        Allow this app to set alarms and schedule other actions.
+        This app may be used when you\u2019re not using your phone, which may use more battery.
+        If this permission is off, this app may not function normally,
+        and its alarms won\u2019t work as scheduled.
+    </string>
+    <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
+    <string name="alarms_and_reminders_footer_title" product="tablet">
+        Allow this app to set alarms and schedule other actions.
+        This app may be used when you\u2019re not using your tablet, which may use more battery.
+        If this permission is off, this app may not function normally,
+        and its alarms won\u2019t work as scheduled.
+    </string>
+    <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
+    <string name="alarms_and_reminders_footer_title" product="device">
+        Allow this app to set alarms and schedule other actions.
+        This app may be used when you\u2019re not using your device, which may use more battery.
+        If this permission is off, this app may not function normally,
+        and its alarms won\u2019t work as scheduled.
     </string>
     <!-- Keywords for setting screen for controlling apps that can schedule alarms [CHAR LIMIT=100] -->
-    <string name="keywords_alarms_and_reminders">schedule, alarm, reminder, event</string>
+    <string name="keywords_alarms_and_reminders">schedule, alarm, reminder, clock</string>
 
     <!--  Do not disturb: Label for button in enable zen dialog that will turn on zen mode. [CHAR LIMIT=30] -->
     <string name="zen_mode_enable_dialog_turn_on">Turn on</string>
@@ -1428,6 +1447,8 @@
     <string name="user_switch_to_user">Switch to <xliff:g id="user_name" example="John Doe">%s</xliff:g></string>
     <!-- Dialog message when creating a new user [CHAR LIMIT=40] -->
     <string name="creating_new_user_dialog_message">Creating new user…</string>
+    <!-- Text shown to notify that the creation of new user has failed. [CHAR LIMIT=40] -->
+    <string name="add_user_failed">Failed to create a new user</string>
 
     <!-- Title for the preference to enter the nickname of the user to display in the user switcher [CHAR LIMIT=25]-->
     <string name="user_nickname">Nickname</string>

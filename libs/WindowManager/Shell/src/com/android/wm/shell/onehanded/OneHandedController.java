@@ -17,9 +17,14 @@
 package com.android.wm.shell.onehanded;
 
 import static android.os.UserHandle.USER_CURRENT;
+import static android.os.UserHandle.myUserId;
 import static android.view.Display.DEFAULT_DISPLAY;
 
 import static com.android.wm.shell.common.ExecutorUtils.executeRemoteCallWithTaskPermission;
+import static com.android.wm.shell.onehanded.OneHandedState.STATE_ACTIVE;
+import static com.android.wm.shell.onehanded.OneHandedState.STATE_ENTERING;
+import static com.android.wm.shell.onehanded.OneHandedState.STATE_EXITING;
+import static com.android.wm.shell.onehanded.OneHandedState.STATE_NONE;
 
 import android.annotation.BinderThread;
 import android.content.ComponentName;
@@ -28,6 +33,7 @@ import android.content.om.IOverlayManager;
 import android.content.om.OverlayInfo;
 import android.content.res.Configuration;
 import android.database.ContentObserver;
+import android.graphics.Rect;
 import android.os.Handler;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -74,6 +80,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
     private volatile boolean mIsSwipeToNotificationEnabled;
     private boolean mTaskChangeToExit;
     private boolean mLockedDisabled;
+    private int mUserId;
     private float mOffSetFraction;
 
     private Context mContext;
@@ -81,8 +88,10 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
     private final AccessibilityManager mAccessibilityManager;
     private final DisplayController mDisplayController;
     private final OneHandedSettingsUtil mOneHandedSettingsUtil;
+    private final OneHandedAccessibilityUtil mOneHandedAccessibilityUtil;
     private final OneHandedTimeoutHandler mTimeoutHandler;
     private final OneHandedTouchHandler mTouchHandler;
+    private final OneHandedState mState;
     private final OneHandedTutorialHandler mTutorialHandler;
     private final OneHandedUiEventLogger mOneHandedUiEventLogger;
     private final TaskStackListenerImpl mTaskStackListener;
@@ -141,7 +150,8 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
                     }
                     if (enabled) {
                         final int mOneHandedTimeout = mOneHandedSettingsUtil
-                                .getSettingsOneHandedModeTimeout(mContext.getContentResolver());
+                                .getSettingsOneHandedModeTimeout(
+                                        mContext.getContentResolver(), mUserId);
                         final int timeout = mAccessibilityManager
                                 .getRecommendedTimeoutMillis(mOneHandedTimeout * 1000
                                         /* align with A11y timeout millis */,
@@ -149,8 +159,22 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
                         mTimeoutHandler.setTimeout(timeout / 1000);
                     } else {
                         mTimeoutHandler.setTimeout(mOneHandedSettingsUtil
-                                .getSettingsOneHandedModeTimeout(mContext.getContentResolver()));
+                                .getSettingsOneHandedModeTimeout(
+                                        mContext.getContentResolver(), mUserId));
                     }
+                }
+            };
+
+    private final OneHandedTransitionCallback mTransitionCallBack =
+            new OneHandedTransitionCallback() {
+                @Override
+                public void onStartFinished(Rect bounds) {
+                    mState.setState(STATE_ACTIVE);
+                }
+
+                @Override
+                public void onStopFinished(Rect bounds) {
+                    mState.setState(STATE_NONE);
                 }
             };
 
@@ -189,7 +213,10 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
             return null;
         }
 
+        OneHandedSettingsUtil settingsUtil = new OneHandedSettingsUtil();
+        OneHandedAccessibilityUtil accessibilityUtil = new OneHandedAccessibilityUtil(context);
         OneHandedTimeoutHandler timeoutHandler = new OneHandedTimeoutHandler(mainExecutor);
+        OneHandedState transitionState = new OneHandedState();
         OneHandedTutorialHandler tutorialHandler = new OneHandedTutorialHandler(context,
                 windowManager, mainExecutor);
         OneHandedAnimationController animationController =
@@ -201,16 +228,16 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
         OneHandedBackgroundPanelOrganizer oneHandedBackgroundPanelOrganizer =
                 new OneHandedBackgroundPanelOrganizer(context, displayLayout, mainExecutor);
         OneHandedDisplayAreaOrganizer organizer = new OneHandedDisplayAreaOrganizer(
-                context, displayLayout, animationController, tutorialHandler,
+                context, displayLayout, settingsUtil, animationController, tutorialHandler,
                 oneHandedBackgroundPanelOrganizer, mainExecutor);
-        OneHandedSettingsUtil settingsUtil = new OneHandedSettingsUtil();
         OneHandedUiEventLogger oneHandedUiEventsLogger = new OneHandedUiEventLogger(uiEventLogger);
         IOverlayManager overlayManager = IOverlayManager.Stub.asInterface(
                 ServiceManager.getService(Context.OVERLAY_SERVICE));
         return new OneHandedController(context, displayController,
                 oneHandedBackgroundPanelOrganizer, organizer, touchHandler, tutorialHandler,
-                gestureHandler, settingsUtil, timeoutHandler, oneHandedUiEventsLogger,
-                overlayManager, taskStackListener, mainExecutor, mainHandler);
+                gestureHandler, settingsUtil, accessibilityUtil, timeoutHandler, transitionState,
+                oneHandedUiEventsLogger, overlayManager, taskStackListener, mainExecutor,
+                mainHandler);
     }
 
     @VisibleForTesting
@@ -222,7 +249,9 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
             OneHandedTutorialHandler tutorialHandler,
             OneHandedGestureHandler gestureHandler,
             OneHandedSettingsUtil settingsUtil,
+            OneHandedAccessibilityUtil oneHandedAccessibilityUtil,
             OneHandedTimeoutHandler timeoutHandler,
+            OneHandedState state,
             OneHandedUiEventLogger uiEventsLogger,
             IOverlayManager overlayManager,
             TaskStackListenerImpl taskStackListener,
@@ -230,10 +259,12 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
             Handler mainHandler) {
         mContext = context;
         mOneHandedSettingsUtil = settingsUtil;
+        mOneHandedAccessibilityUtil = oneHandedAccessibilityUtil;
         mBackgroundPanelOrganizer = backgroundPanelOrganizer;
         mDisplayAreaOrganizer = displayAreaOrganizer;
         mDisplayController = displayController;
         mTouchHandler = touchHandler;
+        mState = state;
         mTutorialHandler = tutorialHandler;
         mGestureHandler = gestureHandler;
         mOverlayManager = overlayManager;
@@ -247,12 +278,13 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
                 R.fraction.config_one_handed_offset, 1, 1);
         final int sysPropPercentageConfig = SystemProperties.getInt(
                 ONE_HANDED_MODE_OFFSET_PERCENTAGE, Math.round(offsetPercentageConfig * 100.0f));
+        mUserId = myUserId();
         mOffSetFraction = sysPropPercentageConfig / 100.0f;
         mIsOneHandedEnabled = mOneHandedSettingsUtil.getSettingsOneHandedModeEnabled(
-                context.getContentResolver());
+                context.getContentResolver(), mUserId);
         mIsSwipeToNotificationEnabled =
                 mOneHandedSettingsUtil.getSettingsSwipeToNotificationEnabled(
-                        context.getContentResolver());
+                        context.getContentResolver(), mUserId);
         mTimeoutHandler = timeoutHandler;
 
         mEnabledObserver = getObserver(this::onEnabledSettingChanged);
@@ -262,9 +294,8 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
                 getObserver(this::onSwipeToNotificationEnabledSettingChanged);
 
         mDisplayController.addDisplayChangingController(mRotationController);
-
         setupCallback();
-        setupSettingObservers();
+        registerSettingObservers(mUserId);
         setupTimeoutListener();
         setupGesturalOverlay();
         updateSettings();
@@ -322,36 +353,40 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
             Slog.d(TAG, "Temporary lock disabled");
             return;
         }
+        if (mState.isTransitioning() || mState.isInOneHanded()) {
+            return;
+        }
         final int currentRotation = mDisplayAreaOrganizer.getDisplayLayout().rotation();
         if (currentRotation != Surface.ROTATION_0 && currentRotation != Surface.ROTATION_180) {
             Slog.w(TAG, "One handed mode only support portrait mode");
             return;
         }
-        if (!mDisplayAreaOrganizer.isInOneHanded()) {
-            final int yOffSet = Math.round(
-                    mDisplayAreaOrganizer.getDisplayLayout().height() * mOffSetFraction);
-            mDisplayAreaOrganizer.scheduleOffset(0, yOffSet);
-            mTimeoutHandler.resetTimer();
-
-            mOneHandedUiEventLogger.writeEvent(
-                    OneHandedUiEventLogger.EVENT_ONE_HANDED_TRIGGER_GESTURE_IN);
-        }
+        mState.setState(STATE_ENTERING);
+        final int yOffSet = Math.round(
+                mDisplayAreaOrganizer.getDisplayLayout().height() * mOffSetFraction);
+        mOneHandedAccessibilityUtil.announcementForScreenReader(
+                mOneHandedAccessibilityUtil.getOneHandedStartDescription());
+        mDisplayAreaOrganizer.scheduleOffset(0, yOffSet);
+        mTimeoutHandler.resetTimer();
+        mOneHandedUiEventLogger.writeEvent(
+                OneHandedUiEventLogger.EVENT_ONE_HANDED_TRIGGER_GESTURE_IN);
     }
 
     @VisibleForTesting
     void stopOneHanded() {
-        if (mDisplayAreaOrganizer.isInOneHanded()) {
-            mDisplayAreaOrganizer.scheduleOffset(0, 0);
-            mTimeoutHandler.removeTimer();
-        }
+        stopOneHanded(OneHandedUiEventLogger.EVENT_ONE_HANDED_TRIGGER_GESTURE_OUT);
     }
 
     private void stopOneHanded(int uiEvent) {
-        if (mDisplayAreaOrganizer.isInOneHanded()) {
-            mDisplayAreaOrganizer.scheduleOffset(0, 0);
-            mTimeoutHandler.removeTimer();
-            mOneHandedUiEventLogger.writeEvent(uiEvent);
+        if (mState.isTransitioning() || mState.getState() == STATE_NONE) {
+            return;
         }
+        mState.setState(STATE_EXITING);
+        mOneHandedAccessibilityUtil.announcementForScreenReader(
+                mOneHandedAccessibilityUtil.getOneHandedStopDescription());
+        mDisplayAreaOrganizer.scheduleOffset(0, 0);
+        mTimeoutHandler.removeTimer();
+        mOneHandedUiEventLogger.writeEvent(uiEvent);
     }
 
     private void setThreeButtonModeEnabled(boolean enabled) {
@@ -374,38 +409,50 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
         mDisplayAreaOrganizer.registerTransitionCallback(mGestureHandler);
         mDisplayAreaOrganizer.registerTransitionCallback(mTutorialHandler);
         mDisplayAreaOrganizer.registerTransitionCallback(mBackgroundPanelOrganizer);
+        mDisplayAreaOrganizer.registerTransitionCallback(mTransitionCallBack);
         if (mTaskChangeToExit) {
             mTaskStackListener.addListener(mTaskStackListenerCallback);
         }
     }
 
-    private void setupSettingObservers() {
+    private void registerSettingObservers(int newUserId) {
         mOneHandedSettingsUtil.registerSettingsKeyObserver(Settings.Secure.ONE_HANDED_MODE_ENABLED,
-                mContext.getContentResolver(), mEnabledObserver);
+                mContext.getContentResolver(), mEnabledObserver, newUserId);
         mOneHandedSettingsUtil.registerSettingsKeyObserver(Settings.Secure.ONE_HANDED_MODE_TIMEOUT,
-                mContext.getContentResolver(), mTimeoutObserver);
+                mContext.getContentResolver(), mTimeoutObserver, newUserId);
         mOneHandedSettingsUtil.registerSettingsKeyObserver(Settings.Secure.TAPS_APP_TO_EXIT,
-                mContext.getContentResolver(), mTaskChangeExitObserver);
+                mContext.getContentResolver(), mTaskChangeExitObserver, newUserId);
         mOneHandedSettingsUtil.registerSettingsKeyObserver(
                 Settings.Secure.SWIPE_BOTTOM_TO_NOTIFICATION_ENABLED,
-                mContext.getContentResolver(), mSwipeToNotificationEnabledObserver);
+                mContext.getContentResolver(), mSwipeToNotificationEnabledObserver, newUserId);
+    }
+
+    private void unregisterSettingObservers() {
+        mOneHandedSettingsUtil.unregisterSettingsKeyObserver(mContext.getContentResolver(),
+                mEnabledObserver);
+        mOneHandedSettingsUtil.unregisterSettingsKeyObserver(mContext.getContentResolver(),
+                mTimeoutObserver);
+        mOneHandedSettingsUtil.unregisterSettingsKeyObserver(mContext.getContentResolver(),
+                mTaskChangeExitObserver);
+        mOneHandedSettingsUtil.unregisterSettingsKeyObserver(mContext.getContentResolver(),
+                mSwipeToNotificationEnabledObserver);
     }
 
     private void updateSettings() {
         setOneHandedEnabled(mOneHandedSettingsUtil
-                .getSettingsOneHandedModeEnabled(mContext.getContentResolver()));
+                .getSettingsOneHandedModeEnabled(mContext.getContentResolver(), mUserId));
         mTimeoutHandler.setTimeout(mOneHandedSettingsUtil
-                .getSettingsOneHandedModeTimeout(mContext.getContentResolver()));
+                .getSettingsOneHandedModeTimeout(mContext.getContentResolver(), mUserId));
         setTaskChangeToExit(mOneHandedSettingsUtil
-                .getSettingsTapsAppToExit(mContext.getContentResolver()));
+                .getSettingsTapsAppToExit(mContext.getContentResolver(), mUserId));
         setSwipeToNotificationEnabled(mOneHandedSettingsUtil
-                .getSettingsSwipeToNotificationEnabled(mContext.getContentResolver()));
+                .getSettingsSwipeToNotificationEnabled(mContext.getContentResolver(), mUserId));
     }
 
     private void updateDisplayLayout(int displayId) {
-        mDisplayAreaOrganizer.setDisplayLayout(
-                mDisplayController.getDisplayLayout(displayId));
-        mGestureHandler.onDisplayChanged(mDisplayAreaOrganizer.getDisplayLayout());
+        final DisplayLayout newDisplayLayout = mDisplayController.getDisplayLayout(displayId);
+        mDisplayAreaOrganizer.setDisplayLayout(newDisplayLayout);
+        mGestureHandler.onDisplayChanged(newDisplayLayout);
     }
 
     private ContentObserver getObserver(Runnable onChangeRunnable) {
@@ -420,7 +467,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
     @VisibleForTesting
     void onEnabledSettingChanged() {
         final boolean enabled = mOneHandedSettingsUtil.getSettingsOneHandedModeEnabled(
-                mContext.getContentResolver());
+                mContext.getContentResolver(), mUserId);
         mOneHandedUiEventLogger.writeEvent(enabled
                 ? OneHandedUiEventLogger.EVENT_ONE_HANDED_SETTINGS_ENABLED_ON
                 : OneHandedUiEventLogger.EVENT_ONE_HANDED_SETTINGS_ENABLED_OFF);
@@ -430,13 +477,13 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
         // Also checks swipe to notification settings since they all need gesture overlay.
         setEnabledGesturalOverlay(
                 enabled || mOneHandedSettingsUtil.getSettingsSwipeToNotificationEnabled(
-                        mContext.getContentResolver()));
+                        mContext.getContentResolver(), mUserId));
     }
 
     @VisibleForTesting
     void onTimeoutSettingChanged() {
         final int newTimeout = mOneHandedSettingsUtil.getSettingsOneHandedModeTimeout(
-                mContext.getContentResolver());
+                mContext.getContentResolver(), mUserId);
         int metricsId = OneHandedUiEventLogger.OneHandedSettingsTogglesEvent.INVALID.getId();
         switch (newTimeout) {
             case OneHandedSettingsUtil.ONE_HANDED_TIMEOUT_NEVER:
@@ -465,7 +512,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
     @VisibleForTesting
     void onTaskChangeExitSettingChanged() {
         final boolean enabled = mOneHandedSettingsUtil.getSettingsTapsAppToExit(
-                mContext.getContentResolver());
+                mContext.getContentResolver(), mUserId);
         mOneHandedUiEventLogger.writeEvent(enabled
                 ? OneHandedUiEventLogger.EVENT_ONE_HANDED_SETTINGS_APP_TAPS_EXIT_ON
                 : OneHandedUiEventLogger.EVENT_ONE_HANDED_SETTINGS_APP_TAPS_EXIT_OFF);
@@ -477,13 +524,13 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
     void onSwipeToNotificationEnabledSettingChanged() {
         final boolean enabled =
                 mOneHandedSettingsUtil.getSettingsSwipeToNotificationEnabled(
-                        mContext.getContentResolver());
+                        mContext.getContentResolver(), mUserId);
         setSwipeToNotificationEnabled(enabled);
 
         // Also checks one handed mode settings since they all need gesture overlay.
         setEnabledGesturalOverlay(
                 enabled || mOneHandedSettingsUtil.getSettingsOneHandedModeEnabled(
-                        mContext.getContentResolver()));
+                        mContext.getContentResolver(), mUserId));
     }
 
     private void setupTimeoutListener() {
@@ -497,8 +544,8 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
     }
 
     private void updateOneHandedEnabled() {
-        if (mDisplayAreaOrganizer.isInOneHanded()) {
-            stopOneHanded();
+        if (mState.getState() == STATE_ENTERING || mState.getState() == STATE_ACTIVE) {
+            mMainExecutor.execute(() -> stopOneHanded());
         }
 
         mTouchHandler.onOneHandedEnabled(mIsOneHandedEnabled);
@@ -524,7 +571,7 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
 
     private void setupGesturalOverlay() {
         if (!mOneHandedSettingsUtil.getSettingsOneHandedModeEnabled(
-                mContext.getContentResolver())) {
+                mContext.getContentResolver(), mUserId)) {
             return;
         }
 
@@ -572,6 +619,14 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
         }
     }
 
+    private void onUserSwitch(int newUserId) {
+        unregisterSettingObservers();
+        mUserId = newUserId;
+        registerSettingObservers(newUserId);
+        updateSettings();
+        updateOneHandedEnabled();
+    }
+
     public void dump(@NonNull PrintWriter pw) {
         final String innerPrefix = "  ";
         pw.println(TAG + "States: ");
@@ -579,6 +634,8 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
         pw.println(mOffSetFraction);
         pw.print(innerPrefix + "mLockedDisabled=");
         pw.println(mLockedDisabled);
+        pw.print(innerPrefix + "mUserId=");
+        pw.println(mUserId);
 
         if (mBackgroundPanelOrganizer != null) {
             mBackgroundPanelOrganizer.dump(pw);
@@ -600,11 +657,19 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
             mTimeoutHandler.dump(pw);
         }
 
+        if (mState != null) {
+            mState.dump(pw);
+        }
+
         if (mTutorialHandler != null) {
             mTutorialHandler.dump(pw);
         }
 
-        mOneHandedSettingsUtil.dump(pw, innerPrefix, mContext.getContentResolver());
+        if (mOneHandedAccessibilityUtil != null) {
+            mOneHandedAccessibilityUtil.dump(pw);
+        }
+
+        mOneHandedSettingsUtil.dump(pw, innerPrefix, mContext.getContentResolver(), mUserId);
 
         if (mOverlayManager != null) {
             OverlayInfo info = null;
@@ -701,6 +766,13 @@ public class OneHandedController implements RemoteCallable<OneHandedController> 
         public void onConfigChanged(Configuration newConfig) {
             mMainExecutor.execute(() -> {
                 OneHandedController.this.onConfigChanged(newConfig);
+            });
+        }
+
+        @Override
+        public void onUserSwitch(int userId) {
+            mMainExecutor.execute(() -> {
+                OneHandedController.this.onUserSwitch(userId);
             });
         }
     }

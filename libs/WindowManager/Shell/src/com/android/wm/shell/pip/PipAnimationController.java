@@ -37,12 +37,13 @@ import com.android.wm.shell.animation.Interpolators;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.Objects;
 
 /**
  * Controller class of PiP animations (both from and to PiP mode).
  */
 public class PipAnimationController {
-    private static final float FRACTION_START = 0f;
+    static final float FRACTION_START = 0f;
     private static final float FRACTION_END = 1f;
 
     public static final int ANIM_TYPE_BOUNDS = 0;
@@ -112,6 +113,7 @@ public class PipAnimationController {
                     PipTransitionAnimator.ofAlpha(taskInfo, leash, destinationBounds, alphaStart,
                             alphaEnd));
         } else if (mCurrentAnimator.getAnimationType() == ANIM_TYPE_ALPHA
+                && Objects.equals(destinationBounds, mCurrentAnimator.getDestinationBounds())
                 && mCurrentAnimator.isRunning()) {
             mCurrentAnimator.updateEndValue(alphaEnd);
         } else {
@@ -540,9 +542,10 @@ public class PipAnimationController {
                     // WindowContainerTransaction in task organizer
                     final Rect destBounds = getDestinationBounds();
                     getSurfaceTransactionHelper().resetScale(tx, leash, destBounds);
-                    if (transitionDirection == TRANSITION_DIRECTION_LEAVE_PIP) {
-                        // Leaving to fullscreen, reset crop to null.
-                        tx.setPosition(leash, destBounds.left, destBounds.top);
+                    if (isOutPipDirection(transitionDirection)) {
+                        // Exit pip, clear scale, position and crop.
+                        tx.setMatrix(leash, 1, 0, 0, 1);
+                        tx.setPosition(leash, 0, 0);
                         tx.setWindowCrop(leash, 0, 0);
                     } else {
                         getSurfaceTransactionHelper().crop(tx, leash, destBounds);

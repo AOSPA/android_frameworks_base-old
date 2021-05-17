@@ -4825,6 +4825,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                     0, Integer.MAX_VALUE, 0, Integer.MAX_VALUE);
             mTouchMode = TOUCH_MODE_FLING;
             mSuppressIdleStateChangeCall = false;
+            removeCallbacks(this);
             postOnAnimation(this);
 
             if (PROFILE_FLINGING) {
@@ -6504,6 +6505,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
             if (lp != null && mRecycler.shouldRecycleViewType(lp.viewType)) {
                 views.add(child);
                 child.setAccessibilityDelegate(null);
+                child.resetSubtreeAutofillIds();
                 if (listener != null) {
                     // Pretend they went through the scrap heap
                     listener.onMovedToScrapHeap(child);
@@ -7444,10 +7446,12 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
         private void clearScrapForRebind(View view) {
             view.clearAccessibilityFocus();
             view.setAccessibilityDelegate(null);
+            view.resetSubtreeAutofillIds();
         }
 
         private void removeDetachedView(View child, boolean animate) {
             child.setAccessibilityDelegate(null);
+            child.resetSubtreeAutofillIds();
             AbsListView.this.removeDetachedView(child, animate);
         }
     }

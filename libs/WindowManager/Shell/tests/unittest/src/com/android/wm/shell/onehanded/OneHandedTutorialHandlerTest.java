@@ -41,6 +41,7 @@ import org.mockito.MockitoAnnotations;
 public class OneHandedTutorialHandlerTest extends OneHandedTestCase {
     OneHandedTimeoutHandler mTimeoutHandler;
     OneHandedController mOneHandedController;
+    OneHandedState mSpiedTransitionState;
 
     @Mock
     OneHandedGestureHandler mMockGestureHandler;
@@ -66,11 +67,14 @@ public class OneHandedTutorialHandlerTest extends OneHandedTestCase {
     OneHandedUiEventLogger mMockUiEventLogger;
     @Mock
     OneHandedSettingsUtil mMockSettingsUtil;
+    @Mock
+    OneHandedAccessibilityUtil mMockAccessibilityUtil;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mTimeoutHandler = new OneHandedTimeoutHandler(mMockShellMainExecutor);
+        mSpiedTransitionState = new OneHandedState();
 
         when(mMockDisplayAreaOrganizer.getDisplayAreaTokenMap()).thenReturn(new ArrayMap<>());
         mOneHandedController = new OneHandedController(
@@ -82,7 +86,9 @@ public class OneHandedTutorialHandlerTest extends OneHandedTestCase {
                 mMockTutorialHandler,
                 mMockGestureHandler,
                 mMockSettingsUtil,
+                mMockAccessibilityUtil,
                 mTimeoutHandler,
+                mSpiedTransitionState,
                 mMockUiEventLogger,
                 mMockOverlayManager,
                 mMockTaskStackListener,

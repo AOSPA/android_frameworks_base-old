@@ -102,7 +102,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mRootView = (ViewGroup) new LayoutInflaterBuilder(mContext)
                 .replace("ImageView", TestableImageView.class)
                 .build().inflate(R.layout.quick_settings_footer, null, false);
-        mFooter = new QSSecurityFooter(mRootView, mContext, mUserTracker, new Handler(looper),
+        mFooter = new QSSecurityFooter(mRootView, mUserTracker, new Handler(looper),
                 mActivityStarter, mSecurityController, looper);
         mFooterText = mRootView.findViewById(R.id.footer_text);
         mFooterIcon = mRootView.findViewById(R.id.footer_icon);
@@ -196,7 +196,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
     }
 
     @Test
-    public void testNetworkLoggingEnabled() {
+    public void testNetworkLoggingEnabled_deviceOwner() {
         when(mSecurityController.isDeviceManaged()).thenReturn(true);
         when(mSecurityController.isNetworkLoggingEnabled()).thenReturn(true);
         mFooter.refreshState();
@@ -219,6 +219,18 @@ public class QSSecurityFooterTest extends SysuiTestCase {
                              R.string.quick_settings_disclosure_named_management_monitoring,
                              MANAGING_ORGANIZATION),
                      mFooterText.getText());
+    }
+
+    @Test
+    public void testNetworkLoggingEnabled_managedProfileOwner() {
+        when(mSecurityController.hasWorkProfile()).thenReturn(true);
+        when(mSecurityController.isNetworkLoggingEnabled()).thenReturn(true);
+        mFooter.refreshState();
+
+        TestableLooper.get(this).processAllMessages();
+        assertEquals(mContext.getString(
+                R.string.quick_settings_disclosure_managed_profile_network_activity),
+                mFooterText.getText());
     }
 
     @Test

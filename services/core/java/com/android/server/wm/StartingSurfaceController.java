@@ -20,6 +20,7 @@ import static android.window.StartingWindowInfo.TYPE_PARAMETER_ACTIVITY_CREATED;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_ALLOW_TASK_SNAPSHOT;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_NEW_TASK;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_PROCESS_RUNNING;
+import static android.window.StartingWindowInfo.TYPE_PARAMETER_SAME_PACKAGE;
 import static android.window.StartingWindowInfo.TYPE_PARAMETER_TASK_SWITCH;
 
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -57,16 +58,19 @@ public class StartingSurfaceController {
                     overrideConfig, displayId);
         }
 
-        final Task task = activity.getTask();
-        if (task != null && mService.mAtmService.mTaskOrganizerController.addStartingWindow(task,
-                activity.token, theme)) {
-            return new ShellStartingSurface(task);
+        synchronized (mService.mGlobalLock) {
+            final Task task = activity.getTask();
+            if (task != null && mService.mAtmService.mTaskOrganizerController.addStartingWindow(
+                    task, activity.token, theme, null /* taskSnapshot */)) {
+                return new ShellStartingSurface(task);
+            }
         }
         return null;
     }
 
     int makeStartingWindowTypeParameter(boolean newTask, boolean taskSwitch,
-            boolean processRunning, boolean allowTaskSnapshot, boolean activityCreated) {
+            boolean processRunning, boolean allowTaskSnapshot, boolean activityCreated,
+            boolean samePackage) {
         int parameter = 0;
         if (newTask) {
             parameter |= TYPE_PARAMETER_NEW_TASK;
@@ -82,6 +86,9 @@ public class StartingSurfaceController {
         }
         if (activityCreated) {
             parameter |= TYPE_PARAMETER_ACTIVITY_CREATED;
+        }
+        if (samePackage) {
+            parameter |= TYPE_PARAMETER_SAME_PACKAGE;
         }
         return parameter;
     }
@@ -119,14 +126,13 @@ public class StartingSurfaceController {
                 activity.mDisplayContent.handleTopActivityLaunchingInDifferentOrientation(
                         topFullscreenActivity, false /* checkOpening */);
             }
+            if (DEBUG_ENABLE_SHELL_DRAWER) {
+                mService.mAtmService.mTaskOrganizerController.addStartingWindow(task,
+                        activity.token, 0 /* launchTheme */, taskSnapshot);
+                return new ShellStartingSurface(task);
+            }
         }
-        if (!DEBUG_ENABLE_SHELL_DRAWER) {
-            return mService.mTaskSnapshotController
-                    .createStartingSurface(activity, taskSnapshot);
-        }
-        mService.mAtmService.mTaskOrganizerController.addStartingWindow(task, activity.token,
-                0 /* launchTheme */);
-        return new ShellStartingSurface(task);
+        return mService.mTaskSnapshotController.createStartingSurface(activity, taskSnapshot);
     }
 
 
@@ -139,8 +145,9 @@ public class StartingSurfaceController {
 
         @Override
         public void remove(boolean animate) {
-            mService.mAtmService.mTaskOrganizerController.removeStartingWindow(mTask,
-                    animate);
+            synchronized (mService.mGlobalLock) {
+                mService.mAtmService.mTaskOrganizerController.removeStartingWindow(mTask, animate);
+            }
         }
     }
 }

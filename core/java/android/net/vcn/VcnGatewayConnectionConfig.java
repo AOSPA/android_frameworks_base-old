@@ -24,6 +24,8 @@ import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.net.TunnelConnectionParams;
+import android.net.vcn.persistablebundleutils.TunnelConnectionParamsUtils;
 import android.os.PersistableBundle;
 import android.util.ArraySet;
 
@@ -79,7 +81,12 @@ public final class VcnGatewayConnectionConfig {
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     static final int MIN_MTU_V6 = 1280;
 
-    private static final Set<Integer> ALLOWED_CAPABILITIES;
+    /**
+     * The set of allowed capabilities for exposed capabilities.
+     *
+     * @hide
+     */
+    public static final Set<Integer> ALLOWED_CAPABILITIES;
 
     static {
         Set<Integer> allowedCaps = new ArraySet<>();
@@ -134,7 +141,7 @@ public final class VcnGatewayConnectionConfig {
      * <p>To ensure the device is not constantly being woken up, this retry interval MUST be greater
      * than this value.
      *
-     * @see {@link Builder#setRetryInterval()}
+     * @see {@link Builder#setRetryIntervalsMs()}
      */
     private static final long MINIMUM_REPEATING_RETRY_INTERVAL_MS = TimeUnit.MINUTES.toMillis(15);
 
@@ -148,9 +155,11 @@ public final class VcnGatewayConnectionConfig {
                 TimeUnit.MINUTES.toMillis(5),
                 TimeUnit.MINUTES.toMillis(15)
             };
+    private static final String GATEWAY_CONNECTION_NAME_KEY = "mGatewayConnectionName";
+    @NonNull private final String mGatewayConnectionName;
 
-    private static final String CTRL_PLANE_CONFIG_KEY = "mCtrlPlaneConfig";
-    @NonNull private VcnControlPlaneConfig mCtrlPlaneConfig;
+    private static final String TUNNEL_CONNECTION_PARAMS_KEY = "mTunnelConnectionParams";
+    @NonNull private TunnelConnectionParams mTunnelConnectionParams;
 
     private static final String EXPOSED_CAPABILITIES_KEY = "mExposedCapabilities";
     @NonNull private final SortedSet<Integer> mExposedCapabilities;
@@ -166,12 +175,14 @@ public final class VcnGatewayConnectionConfig {
 
     /** Builds a VcnGatewayConnectionConfig with the specified parameters. */
     private VcnGatewayConnectionConfig(
-            @NonNull VcnControlPlaneConfig ctrlPlaneConfig,
+            @NonNull String gatewayConnectionName,
+            @NonNull TunnelConnectionParams tunnelConnectionParams,
             @NonNull Set<Integer> exposedCapabilities,
             @NonNull Set<Integer> underlyingCapabilities,
             @NonNull long[] retryIntervalsMs,
             @IntRange(from = MIN_MTU_V6) int maxMtu) {
-        mCtrlPlaneConfig = ctrlPlaneConfig;
+        mGatewayConnectionName = gatewayConnectionName;
+        mTunnelConnectionParams = tunnelConnectionParams;
         mExposedCapabilities = new TreeSet(exposedCapabilities);
         mUnderlyingCapabilities = new TreeSet(underlyingCapabilities);
         mRetryIntervalsMs = retryIntervalsMs;
@@ -183,16 +194,19 @@ public final class VcnGatewayConnectionConfig {
     /** @hide */
     @VisibleForTesting(visibility = Visibility.PRIVATE)
     public VcnGatewayConnectionConfig(@NonNull PersistableBundle in) {
-        final PersistableBundle ctrlPlaneConfigBundle =
-                in.getPersistableBundle(CTRL_PLANE_CONFIG_KEY);
-        Objects.requireNonNull(ctrlPlaneConfigBundle, "ctrlPlaneConfigBundle was null");
+        final PersistableBundle tunnelConnectionParamsBundle =
+                in.getPersistableBundle(TUNNEL_CONNECTION_PARAMS_KEY);
+        Objects.requireNonNull(
+                tunnelConnectionParamsBundle, "tunnelConnectionParamsBundle was null");
 
         final PersistableBundle exposedCapsBundle =
                 in.getPersistableBundle(EXPOSED_CAPABILITIES_KEY);
         final PersistableBundle underlyingCapsBundle =
                 in.getPersistableBundle(UNDERLYING_CAPABILITIES_KEY);
 
-        mCtrlPlaneConfig = VcnControlPlaneConfig.fromPersistableBundle(ctrlPlaneConfigBundle);
+        mGatewayConnectionName = in.getString(GATEWAY_CONNECTION_NAME_KEY);
+        mTunnelConnectionParams =
+                TunnelConnectionParamsUtils.fromPersistableBundle(tunnelConnectionParamsBundle);
         mExposedCapabilities = new TreeSet<>(PersistableBundleUtils.toList(
                 exposedCapsBundle, PersistableBundleUtils.INTEGER_DESERIALIZER));
         mUnderlyingCapabilities = new TreeSet<>(PersistableBundleUtils.toList(
@@ -204,7 +218,8 @@ public final class VcnGatewayConnectionConfig {
     }
 
     private void validate() {
-        Objects.requireNonNull(mCtrlPlaneConfig, "control plane config was null");
+        Objects.requireNonNull(mGatewayConnectionName, "gatewayConnectionName was null");
+        Objects.requireNonNull(mTunnelConnectionParams, "tunnel connection parameter was null");
 
         Preconditions.checkArgument(
                 mExposedCapabilities != null && !mExposedCapabilities.isEmpty(),
@@ -242,13 +257,27 @@ public final class VcnGatewayConnectionConfig {
     }
 
     /**
-     * Returns control plane configuration.
+     * Returns the configured Gateway Connection name.
+     *
+     * <p>This name is used by the configuring apps to distinguish between
+     * VcnGatewayConnectionConfigs configured on a single {@link VcnConfig}. This will be used as
+     * the identifier in VcnStatusCallback invocations.
+     *
+     * @see VcnManager.VcnStatusCallback#onGatewayConnectionError
+     */
+    @NonNull
+    public String getGatewayConnectionName() {
+        return mGatewayConnectionName;
+    }
+
+    /**
+     * Returns tunnel connection parameters.
      *
      * @hide
      */
     @NonNull
-    public VcnControlPlaneConfig getControlPlaneConfig() {
-        return mCtrlPlaneConfig.copy();
+    public TunnelConnectionParams getTunnelConnectionParams() {
+        return mTunnelConnectionParams;
     }
 
     /**
@@ -313,25 +342,11 @@ public final class VcnGatewayConnectionConfig {
     /**
      * Retrieves the configured retry intervals.
      *
-     * @see Builder#setRetryInterval(long[])
+     * @see Builder#setRetryIntervalsMs(long[])
      */
-    @NonNull
-    public long[] getRetryInterval() {
-        return Arrays.copyOf(mRetryIntervalsMs, mRetryIntervalsMs.length);
-    }
-
-    /**
-     * Retrieves the configured retry intervals.
-     *
-     * <p>Left to prevent the need to make major changes while changes are actively in flight.
-     *
-     * @deprecated use getRetryInterval() instead
-     * @hide
-     */
-    @Deprecated
     @NonNull
     public long[] getRetryIntervalsMs() {
-        return getRetryInterval();
+        return Arrays.copyOf(mRetryIntervalsMs, mRetryIntervalsMs.length);
     }
 
     /**
@@ -354,7 +369,8 @@ public final class VcnGatewayConnectionConfig {
     public PersistableBundle toPersistableBundle() {
         final PersistableBundle result = new PersistableBundle();
 
-        final PersistableBundle ctrlPlaneConfigBundle = mCtrlPlaneConfig.toPersistableBundle();
+        final PersistableBundle tunnelConnectionParamsBundle =
+                TunnelConnectionParamsUtils.toPersistableBundle(mTunnelConnectionParams);
         final PersistableBundle exposedCapsBundle =
                 PersistableBundleUtils.fromList(
                         new ArrayList<>(mExposedCapabilities),
@@ -364,7 +380,8 @@ public final class VcnGatewayConnectionConfig {
                         new ArrayList<>(mUnderlyingCapabilities),
                         PersistableBundleUtils.INTEGER_SERIALIZER);
 
-        result.putPersistableBundle(CTRL_PLANE_CONFIG_KEY, ctrlPlaneConfigBundle);
+        result.putString(GATEWAY_CONNECTION_NAME_KEY, mGatewayConnectionName);
+        result.putPersistableBundle(TUNNEL_CONNECTION_PARAMS_KEY, tunnelConnectionParamsBundle);
         result.putPersistableBundle(EXPOSED_CAPABILITIES_KEY, exposedCapsBundle);
         result.putPersistableBundle(UNDERLYING_CAPABILITIES_KEY, underlyingCapsBundle);
         result.putLongArray(RETRY_INTERVAL_MS_KEY, mRetryIntervalsMs);
@@ -376,6 +393,7 @@ public final class VcnGatewayConnectionConfig {
     @Override
     public int hashCode() {
         return Objects.hash(
+                mGatewayConnectionName,
                 mExposedCapabilities,
                 mUnderlyingCapabilities,
                 Arrays.hashCode(mRetryIntervalsMs),
@@ -389,7 +407,8 @@ public final class VcnGatewayConnectionConfig {
         }
 
         final VcnGatewayConnectionConfig rhs = (VcnGatewayConnectionConfig) other;
-        return mExposedCapabilities.equals(rhs.mExposedCapabilities)
+        return mGatewayConnectionName.equals(rhs.mGatewayConnectionName)
+                && mExposedCapabilities.equals(rhs.mExposedCapabilities)
                 && mUnderlyingCapabilities.equals(rhs.mUnderlyingCapabilities)
                 && Arrays.equals(mRetryIntervalsMs, rhs.mRetryIntervalsMs)
                 && mMaxMtu == rhs.mMaxMtu;
@@ -399,7 +418,8 @@ public final class VcnGatewayConnectionConfig {
      * This class is used to incrementally build {@link VcnGatewayConnectionConfig} objects.
      */
     public static final class Builder {
-        @NonNull private final VcnControlPlaneConfig mCtrlPlaneConfig;
+        @NonNull private final String mGatewayConnectionName;
+        @NonNull private final TunnelConnectionParams mTunnelConnectionParams;
         @NonNull private final Set<Integer> mExposedCapabilities = new ArraySet();
         @NonNull private final Set<Integer> mUnderlyingCapabilities = new ArraySet();
         @NonNull private long[] mRetryIntervalsMs = DEFAULT_RETRY_INTERVALS_MS;
@@ -412,13 +432,23 @@ public final class VcnGatewayConnectionConfig {
         /**
          * Construct a Builder object.
          *
-         * @param ctrlPlaneConfig the control plane configuration
-         * @see VcnControlPlaneConfig
+         * @param gatewayConnectionName the String GatewayConnection name for this
+         *     VcnGatewayConnectionConfig. Each VcnGatewayConnectionConfig within a {@link
+         *     VcnConfig} must be given a unique name. This name is used by the caller to
+         *     distinguish between VcnGatewayConnectionConfigs configured on a single {@link
+         *     VcnConfig}. This will be used as the identifier in VcnStatusCallback invocations.
+         * @param tunnelConnectionParams the tunnel connection configuration
+         * @see TunnelConnectionParams
+         * @see VcnManager.VcnStatusCallback#onGatewayConnectionError
          */
-        public Builder(@NonNull VcnControlPlaneConfig ctrlPlaneConfig) {
-            Objects.requireNonNull(ctrlPlaneConfig, "ctrlPlaneConfig was null");
+        public Builder(
+                @NonNull String gatewayConnectionName,
+                @NonNull TunnelConnectionParams tunnelConnectionParams) {
+            Objects.requireNonNull(gatewayConnectionName, "gatewayConnectionName was null");
+            Objects.requireNonNull(tunnelConnectionParams, "tunnelConnectionParams was null");
 
-            mCtrlPlaneConfig = ctrlPlaneConfig;
+            mGatewayConnectionName = gatewayConnectionName;
+            mTunnelConnectionParams = tunnelConnectionParams;
         }
 
         /**
@@ -525,7 +555,7 @@ public final class VcnGatewayConnectionConfig {
          * @see VcnManager for additional discussion on fail-safe mode
          */
         @NonNull
-        public Builder setRetryInterval(@NonNull long[] retryIntervalsMs) {
+        public Builder setRetryIntervalsMs(@NonNull long[] retryIntervalsMs) {
             validateRetryInterval(retryIntervalsMs);
 
             mRetryIntervalsMs = retryIntervalsMs;
@@ -562,7 +592,8 @@ public final class VcnGatewayConnectionConfig {
         @NonNull
         public VcnGatewayConnectionConfig build() {
             return new VcnGatewayConnectionConfig(
-                    mCtrlPlaneConfig,
+                    mGatewayConnectionName,
+                    mTunnelConnectionParams,
                     mExposedCapabilities,
                     mUnderlyingCapabilities,
                     mRetryIntervalsMs,

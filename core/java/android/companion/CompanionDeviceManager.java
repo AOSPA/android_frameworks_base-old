@@ -375,6 +375,14 @@ public final class CompanionDeviceManager {
      * Calling app must check for feature presence of
      * {@link PackageManager#FEATURE_COMPANION_DEVICE_SETUP} before calling this API.
      *
+     * For Bluetooth LE devices this is based on scanning for device with the given address.
+     * For Bluetooth classic devices this is triggered when the device connects/disconnects.
+     * WiFi devices are not supported.
+     *
+     * If a Bluetooth LE device wants to use a rotating mac address, it is recommended to use
+     * Resolvable Private Address, and ensure the device is bonded to the phone so that android OS
+     * is able to resolve the address.
+     *
      * @param deviceAddress a previously-associated companion device's address
      *
      * @throws DeviceNotAssociatedException if the given device was not previously associated
@@ -431,24 +439,22 @@ public final class CompanionDeviceManager {
     /**
      * Associates given device with given app for the given user directly, without UI prompt.
      *
-     * @return whether successful
-     *
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.ASSOCIATE_COMPANION_DEVICES)
-    public boolean associate(
+    public void associate(
             @NonNull String packageName,
             @NonNull MacAddress macAddress) {
         if (!checkFeaturePresent()) {
-            return false;
+            return;
         }
         Objects.requireNonNull(packageName, "package name cannot be null");
         Objects.requireNonNull(macAddress, "mac address cannot be null");
 
         UserHandle user = android.os.Process.myUserHandle();
         try {
-            return mService.createAssociation(
+            mService.createAssociation(
                     packageName, macAddress.toString(), user.getIdentifier());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();

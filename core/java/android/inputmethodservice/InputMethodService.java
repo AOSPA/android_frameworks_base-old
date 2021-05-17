@@ -513,6 +513,7 @@ public class InputMethodService extends AbstractInputMethodService {
     private boolean mIsAutomotive;
     private Handler mHandler;
     private boolean mImeSurfaceScheduledForRemoval;
+    private ImsConfigurationTracker mConfigTracker = new ImsConfigurationTracker();
 
     /**
      * An opaque {@link Binder} token of window requesting {@link InputMethodImpl#showSoftInput}
@@ -588,12 +589,13 @@ public class InputMethodService extends AbstractInputMethodService {
         @MainThread
         @Override
         public final void initializeInternal(@NonNull IBinder token, int displayId,
-                IInputMethodPrivilegedOperations privilegedOperations) {
+                IInputMethodPrivilegedOperations privilegedOperations, int configChanges) {
             if (InputMethodPrivilegedOperationsRegistry.isRegistered(token)) {
                 Log.w(TAG, "The token has already registered, ignore this initialization.");
                 return;
             }
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMS.initializeInternal");
+            mConfigTracker.onInitialize(configChanges);
             mPrivOps.set(privilegedOperations);
             InputMethodPrivilegedOperationsRegistry.put(token, mPrivOps);
             updateInputMethodDisplay(displayId);
@@ -663,6 +665,7 @@ public class InputMethodService extends AbstractInputMethodService {
             reportFullscreenMode();
             initialize();
             onBindInput();
+            mConfigTracker.onBindInput(getResources());
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
 
@@ -715,7 +718,7 @@ public class InputMethodService extends AbstractInputMethodService {
         public final void dispatchStartInputWithToken(@Nullable InputConnection inputConnection,
                 @NonNull EditorInfo editorInfo, boolean restarting,
                 @NonNull IBinder startInputToken) {
-            mPrivOps.reportStartInput(startInputToken);
+            mPrivOps.reportStartInputAsync(startInputToken);
 
             if (restarting) {
                 restartInput(inputConnection, editorInfo);
@@ -816,10 +819,9 @@ public class InputMethodService extends AbstractInputMethodService {
             if (dispatchOnShowInputRequested(flags, false)) {
                 showWindow(true);
                 applyVisibilityInInsetsConsumerIfNecessary(true /* setVisible */);
-            } else {
-                // If user uses hard keyboard, IME button should always be shown.
-                setImeWindowStatus(mapToImeWindowStatus(), mBackDisposition);
             }
+            setImeWindowStatus(mapToImeWindowStatus(), mBackDisposition);
+
             final boolean isVisible = isInputViewShown();
             final boolean visibilityChanged = isVisible != wasVisible;
             if (resultReceiver != null) {
@@ -938,7 +940,7 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     private void setImeWindowStatus(int visibilityFlags, int backDisposition) {
-        mPrivOps.setImeWindowStatus(visibilityFlags, backDisposition);
+        mPrivOps.setImeWindowStatusAsync(visibilityFlags, backDisposition);
     }
 
     /** Set region of the keyboard to be avoided from back gesture */
@@ -1428,10 +1430,13 @@ public class InputMethodService extends AbstractInputMethodService {
      * state: {@link #onStartInput} if input is active, and
      * {@link #onCreateInputView} and {@link #onStartInputView} and related
      * appropriate functions if the UI is displayed.
+     * <p>Starting with {@link Build.VERSION_CODES#S}, IMEs can opt into handling configuration
+     * changes themselves instead of being restarted with
+     * {@link android.R.styleable#InputMethod_configChanges}.
      */
     @Override public void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
-        resetStateForNewConfiguration();
+        mConfigTracker.onConfigurationChanged(newConfig, this::resetStateForNewConfiguration);
     }
 
     private void resetStateForNewConfiguration() {
@@ -1622,7 +1627,7 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     private void reportFullscreenMode() {
-        mPrivOps.reportFullscreenMode(mIsFullscreen);
+        mPrivOps.reportFullscreenModeAsync(mIsFullscreen);
     }
 
     /**
@@ -3181,7 +3186,7 @@ public class InputMethodService extends AbstractInputMethodService {
             requestHideSelf(InputMethodManager.HIDE_NOT_ALWAYS);
         }
     }
-    
+
     void startExtractingText(boolean inputChanged) {
         final ExtractEditText eet = mExtractEditText;
         if (eet != null && getCurrentInputStarted()

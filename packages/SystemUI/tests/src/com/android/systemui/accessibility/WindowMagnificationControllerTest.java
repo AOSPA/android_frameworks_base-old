@@ -97,6 +97,9 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
         doAnswer(invocation ->
                 wm.getMaximumWindowMetrics()
         ).when(mWindowManager).getMaximumWindowMetrics();
+        doAnswer(invocation ->
+                wm.getCurrentWindowMetrics()
+        ).when(mWindowManager).getCurrentWindowMetrics();
         mContext.addMockSystemService(Context.WINDOW_SERVICE, mWindowManager);
         doAnswer(invocation -> {
             mMirrorView = invocation.getArgument(0);
@@ -200,7 +203,6 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
         mInstrumentation.runOnMainSync(() -> {
             mWindowMagnificationController.enableWindowMagnification(Float.NaN, Float.NaN,
                     Float.NaN);
-            Mockito.reset(mWindowManager);
         });
 
         mInstrumentation.runOnMainSync(() -> {
@@ -300,6 +302,19 @@ public class WindowMagnificationControllerTest extends SysuiTestCase {
                 mMirrorView.performAccessibilityAction(R.id.accessibility_action_move_right, null));
         assertTrue(
                 mMirrorView.performAccessibilityAction(R.id.accessibility_action_move_left, null));
+    }
+
+    @Test
+    public void performA11yActions_visible_notifyAccessibilityActionPerformed() {
+        final int displayId = mContext.getDisplayId();
+        mInstrumentation.runOnMainSync(() -> {
+            mWindowMagnificationController.enableWindowMagnification(2.5f, Float.NaN,
+                    Float.NaN);
+        });
+
+        mMirrorView.performAccessibilityAction(R.id.accessibility_action_move_up, null);
+
+        verify(mWindowMagnifierCallback).onAccessibilityActionPerformed(eq(displayId));
     }
 
     @Test

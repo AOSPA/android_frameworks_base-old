@@ -87,12 +87,12 @@ public class NotificationShadeWindowViewController {
     private final ShadeController mShadeController;
     private final NotificationShadeDepthController mDepthController;
     private final NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
+    private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
 
     private GestureDetector mGestureDetector;
     private View mBrightnessMirror;
     private boolean mTouchActive;
     private boolean mTouchCancelled;
-    private boolean mExpandAnimationPending;
     private boolean mExpandAnimationRunning;
     private NotificationStackScrollLayout mStackScrollLayout;
     private PhoneStatusBarView mStatusBarView;
@@ -136,7 +136,8 @@ public class NotificationShadeWindowViewController {
             NotificationShadeWindowView notificationShadeWindowView,
             NotificationPanelViewController notificationPanelViewController,
             SuperStatusBarViewFactory statusBarViewFactory,
-            NotificationStackScrollLayoutController notificationStackScrollLayoutController) {
+            NotificationStackScrollLayoutController notificationStackScrollLayoutController,
+            StatusBarKeyguardViewManager statusBarKeyguardViewManager) {
         mInjectionInflationController = injectionInflationController;
         mCoordinator = coordinator;
         mPulseExpansionHandler = pulseExpansionHandler;
@@ -160,9 +161,10 @@ public class NotificationShadeWindowViewController {
         mDepthController = depthController;
         mStatusBarViewFactory = statusBarViewFactory;
         mNotificationStackScrollLayoutController = notificationStackScrollLayoutController;
+        mStatusBarKeyguardViewManager = statusBarKeyguardViewManager;
 
         // This view is not part of the newly inflated expanded status bar.
-        mBrightnessMirror = mView.findViewById(R.id.brightness_mirror);
+        mBrightnessMirror = mView.findViewById(R.id.brightness_mirror_container);
     }
 
     /** Inflates the {@link R.layout#status_bar_expanded} layout and sets it up. */
@@ -235,11 +237,12 @@ public class NotificationShadeWindowViewController {
                         || ev.getActionMasked() == MotionEvent.ACTION_CANCEL) {
                     setTouchActive(false);
                 }
-                if (mTouchCancelled || mExpandAnimationRunning || mExpandAnimationPending) {
+                if (mTouchCancelled || mExpandAnimationRunning) {
                     return false;
                 }
                 mFalsingCollector.onTouchEvent(ev);
                 mGestureDetector.onTouchEvent(ev);
+                mStatusBarKeyguardViewManager.onTouch(ev);
                 if (mBrightnessMirror != null
                         && mBrightnessMirror.getVisibility() == View.VISIBLE) {
                     // Disallow new pointers while the brightness mirror is visible. This is so that
@@ -289,6 +292,11 @@ public class NotificationShadeWindowViewController {
                 }
 
                 return null;
+            }
+
+            @Override
+            public void dispatchTouchEventComplete() {
+                mFalsingCollector.onMotionEventComplete();
             }
 
             @Override
@@ -388,7 +396,7 @@ public class NotificationShadeWindowViewController {
         mView.setOnHierarchyChangeListener(new ViewGroup.OnHierarchyChangeListener() {
             @Override
             public void onChildViewAdded(View parent, View child) {
-                if (child.getId() == R.id.brightness_mirror) {
+                if (child.getId() == R.id.brightness_mirror_container) {
                     mBrightnessMirror = child;
                 }
             }
@@ -430,8 +438,6 @@ public class NotificationShadeWindowViewController {
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
-        pw.print("  mExpandAnimationPending=");
-        pw.println(mExpandAnimationPending);
         pw.print("  mExpandAnimationRunning=");
         pw.println(mExpandAnimationRunning);
         pw.print("  mTouchCancelled=");
@@ -440,19 +446,10 @@ public class NotificationShadeWindowViewController {
         pw.println(mTouchActive);
     }
 
-    public void setExpandAnimationPending(boolean pending) {
-        if (mExpandAnimationPending != pending) {
-            mExpandAnimationPending = pending;
-            mNotificationShadeWindowController
-                    .setLaunchingActivity(mExpandAnimationPending | mExpandAnimationRunning);
-        }
-    }
-
     public void setExpandAnimationRunning(boolean running) {
         if (mExpandAnimationRunning != running) {
             mExpandAnimationRunning = running;
-            mNotificationShadeWindowController
-                    .setLaunchingActivity(mExpandAnimationPending | mExpandAnimationRunning);
+            mNotificationShadeWindowController.setLaunchingActivity(mExpandAnimationRunning);
         }
     }
 

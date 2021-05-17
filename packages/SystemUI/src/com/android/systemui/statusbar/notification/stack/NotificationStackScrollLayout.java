@@ -17,7 +17,6 @@
 package com.android.systemui.statusbar.notification.stack;
 
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_SCROLL_FLING;
-import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
 import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManagerKt.BUCKET_SILENT;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_SWIPE;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
@@ -78,8 +77,8 @@ import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
 import com.android.systemui.Dumpable;
 import com.android.systemui.ExpandHelper;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.plugins.statusbar.NotificationSwipeActionHelper;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper.DragDownCallback;
@@ -91,6 +90,7 @@ import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
+import com.android.systemui.statusbar.notification.ExpandAnimationParameters;
 import com.android.systemui.statusbar.notification.FakeShadowView;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationUtils;
@@ -658,6 +658,14 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             y = getHeight() - getEmptyBottomMargin();
             mDebugPaint.setColor(Color.GREEN);
             canvas.drawLine(0, y, getWidth(), y, mDebugPaint);
+
+            y = (int) (mAmbientState.getStackY());
+            mDebugPaint.setColor(Color.CYAN);
+            canvas.drawLine(0, y, getWidth(), y, mDebugPaint);
+
+            y = (int) (mAmbientState.getStackY() + mAmbientState.getStackHeight());
+            mDebugPaint.setColor(Color.BLUE);
+            canvas.drawLine(0, y, getWidth(), y, mDebugPaint);
         }
     }
 
@@ -1123,9 +1131,23 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 mTopPaddingNeedsAnimation = true;
                 mNeedsAnimation = true;
             }
+            updateStackPosition();
             requestChildrenUpdate();
             notifyHeightChangeListener(null, animate);
         }
+    }
+
+    /**
+     * Apply expansion fraction to the y position and height of the notifications panel.
+     */
+    private void updateStackPosition() {
+        // Consider interpolating from an mExpansionStartY for use on lockscreen and AOD
+        mAmbientState.setStackY(
+                MathUtils.lerp(0, mTopPadding, mAmbientState.getExpansionFraction()));
+        final float shadeBottom = getHeight() - getEmptyBottomMargin();
+        mAmbientState.setStackEndHeight(shadeBottom - mTopPadding);
+        mAmbientState.setStackHeight(
+                MathUtils.lerp(0, shadeBottom - mTopPadding, mAmbientState.getExpansionFraction()));
     }
 
     /**
@@ -1135,6 +1157,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      */
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     public void setExpandedHeight(float height) {
+        final float shadeBottom = getHeight() - getEmptyBottomMargin();
+        final float expansionFraction = MathUtils.constrain(height / shadeBottom, 0f, 1f);
+        mAmbientState.setExpansionFraction(expansionFraction);
+        updateStackPosition();
+
         mExpandedHeight = height;
         setIsExpanded(height > 0);
         int minExpansionHeight = getMinExpansionHeight();
@@ -1245,7 +1272,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
 
         if (mAmbientState.isHiddenAtAll()) {
-            clipToOutline = true;
+            clipToOutline = false;
             invalidateOutline();
             if (isFullyHidden()) {
                 setClipBounds(null);
@@ -2067,7 +2094,8 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mContentHeight = height + Math.max(mIntrinsicPadding, mTopPadding) + mBottomMargin;
         updateScrollability();
         clampScrollPosition();
-        mAmbientState.setLayoutMaxHeight(mContentHeight);
+        updateStackPosition();
+        mAmbientState.setContentHeight(mContentHeight);
     }
 
     /**
@@ -4849,7 +4877,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
             clearNotifications(ROWS_ALL, true /* closeShade */);
         });
         footerView.setManageButtonClickListener(v -> {
-            mNotificationActivityStarter.startHistoryIntent(mFooterView.isHistoryShown());
+            mNotificationActivityStarter.startHistoryIntent(v, mFooterView.isHistoryShown());
         });
         setFooterView(footerView);
     }
@@ -5499,9 +5527,16 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.INPUT)
     private final DragDownCallback mDragDownCallback = new DragDownCallback() {
 
+        @Override
+        public boolean canDragDown() {
+            return mStatusBarState == StatusBarState.KEYGUARD
+                    && (mController.hasActiveNotifications() || mKeyguardMediaControllorVisible)
+                    || mController.isInLockedDownShade();
+        }
+
         /* Only ever called as a consequence of a lockscreen expansion gesture. */
         @Override
-        public boolean onDraggedDown(View startingChild, int dragLengthY) {
+        public void onDraggedDown(View startingChild, int dragLengthY) {
             boolean canDragDown =
                     mController.hasActiveNotifications() || mKeyguardMediaControllorVisible;
             if (mStatusBarState == StatusBarState.KEYGUARD && canDragDown) {
@@ -5519,16 +5554,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                         row.onExpandedByGesture(true /* drag down is always an open */);
                     }
                 }
-
-                return true;
             } else if (mController.isInLockedDownShade()) {
                 mStatusbarStateController.setLeaveOpenOnKeyguardHide(true);
                 mStatusBar.dismissKeyguardThenExecute(() -> false /* dismissAction */,
                         null /* cancelRunnable */, false /* afterKeyguardGone */);
-                return true;
-            } else {
-                // abort gesture.
-                return false;
             }
         }
 

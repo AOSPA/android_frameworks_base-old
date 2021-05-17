@@ -25,18 +25,21 @@ import android.graphics.Color;
 import android.graphics.PorterDuff;
 import android.graphics.PorterDuff.Mode;
 import android.graphics.PorterDuffColorFilter;
+import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
-import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
 import android.view.View;
 
+import androidx.annotation.DimenRes;
+import androidx.annotation.Nullable;
 import androidx.core.graphics.ColorUtils;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.internal.colorextraction.drawable.ScrimDrawable;
+import com.android.systemui.R;
 
 import java.util.concurrent.Executor;
 
@@ -47,6 +50,10 @@ import java.util.concurrent.Executor;
  * need to be careful to synchronize when necessary.
  */
 public class ScrimView extends View {
+
+    @DimenRes
+    private static final int CORNER_RADIUS = R.dimen.notification_scrim_corner_radius;
+
     private final Object mColorLock = new Object();
 
     @GuardedBy("mColorLock")
@@ -61,6 +68,8 @@ public class ScrimView extends View {
     private Executor mChangeRunnableExecutor;
     private Executor mExecutor;
     private Looper mExecutorLooper;
+    @Nullable
+    private Rect mDrawableBounds;
 
     public ScrimView(Context context) {
         this(context, null);
@@ -120,7 +129,9 @@ public class ScrimView extends View {
     @Override
     protected void onLayout(boolean changed, int left, int top, int right, int bottom) {
         super.onLayout(changed, left, top, right, bottom);
-        if (changed) {
+        if (mDrawableBounds != null) {
+            mDrawable.setBounds(mDrawableBounds);
+        } else if (changed) {
             mDrawable.setBounds(left, top, right, bottom);
             invalidate();
         }
@@ -259,5 +270,39 @@ public class ScrimView extends View {
         } else {
             mExecutor.execute(r);
         }
+    }
+
+    /**
+     * Make bottom edge concave so overlap between layers is not visible for alphas between 0 and 1
+     * @return height of concavity
+     */
+    public float enableBottomEdgeConcave() {
+        if (mDrawable instanceof ScrimDrawable) {
+            float radius = getResources().getDimensionPixelSize(CORNER_RADIUS);
+            ((ScrimDrawable) mDrawable).setBottomEdgeConcave(radius);
+            return radius;
+        }
+        return 0;
+    }
+
+    /**
+     * Enable view to have rounded corners with radius of {@link #CORNER_RADIUS}
+     */
+    public void enableRoundedCorners() {
+        if (mDrawable instanceof ScrimDrawable) {
+            int radius = getResources().getDimensionPixelSize(CORNER_RADIUS);
+            ((ScrimDrawable) mDrawable).setRoundedCorners(radius);
+        }
+    }
+
+    /**
+     * Set bounds for the view, all coordinates are absolute
+     */
+    public void setDrawableBounds(float left, float top, float right, float bottom) {
+        if (mDrawableBounds == null) {
+            mDrawableBounds = new Rect();
+        }
+        mDrawableBounds.set((int) left, (int) top, (int) right, (int) bottom);
+        mDrawable.setBounds(mDrawableBounds);
     }
 }

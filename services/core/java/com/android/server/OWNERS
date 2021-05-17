@@ -1,5 +1,5 @@
 # Connectivity / Networking
-per-file ConnectivityService.java,ConnectivityServiceInitializer.java,NetworkManagementService.java,NsdService.java = file:/services/core/java/com/android/server/net/OWNERS
+per-file ConnectivityService.java,ConnectivityServiceInitializer.java,NetworkManagementService.java,NsdService.java,VpnManagerService.java = file:/services/core/java/com/android/server/net/OWNERS
 
 # Threads
 per-file DisplayThread.java = michaelwr@google.com, ogunwale@google.com
@@ -19,6 +19,7 @@ per-file ServiceWatcher.java = sooniln@google.com
 per-file *Alarm* = file:/apex/jobscheduler/OWNERS
 per-file *AppOp* = file:/core/java/android/permission/OWNERS
 per-file *Battery* = file:/BATTERY_STATS_OWNERS
+per-file *Binder* = file:/core/java/com/android/internal/os/BINDER_OWNERS
 per-file *Bluetooth* = file:/core/java/android/bluetooth/OWNERS
 per-file *Gnss* = file:/services/core/java/com/android/server/location/OWNERS
 per-file *Location* = file:/services/core/java/com/android/server/location/OWNERS

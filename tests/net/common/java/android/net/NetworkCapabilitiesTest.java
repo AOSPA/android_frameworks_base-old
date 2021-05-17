@@ -48,6 +48,7 @@ import static android.os.Process.INVALID_UID;
 
 import static com.android.modules.utils.build.SdkLevel.isAtLeastR;
 import static com.android.modules.utils.build.SdkLevel.isAtLeastS;
+import static com.android.net.module.util.NetworkCapabilitiesUtils.TRANSPORT_USB;
 import static com.android.testutils.MiscAsserts.assertEmpty;
 import static com.android.testutils.MiscAsserts.assertThrows;
 import static com.android.testutils.ParcelUtils.assertParcelSane;
@@ -311,7 +312,7 @@ public class NetworkCapabilitiesTest {
             .addCapability(NET_CAPABILITY_EIMS)
             .addCapability(NET_CAPABILITY_NOT_METERED);
         if (isAtLeastS()) {
-            netCap.setSubIds(Set.of(TEST_SUBID1, TEST_SUBID2));
+            netCap.setSubscriptionIds(Set.of(TEST_SUBID1, TEST_SUBID2));
             netCap.setUids(uids);
         }
         if (isAtLeastR()) {
@@ -641,16 +642,16 @@ public class NetworkCapabilitiesTest {
             assertTrue(nc2.appliesToUid(22));
 
             // Verify the subscription id list can be combined only when they are equal.
-            nc1.setSubIds(Set.of(TEST_SUBID1, TEST_SUBID2));
-            nc2.setSubIds(Set.of(TEST_SUBID2));
+            nc1.setSubscriptionIds(Set.of(TEST_SUBID1, TEST_SUBID2));
+            nc2.setSubscriptionIds(Set.of(TEST_SUBID2));
             assertThrows(IllegalStateException.class, () -> nc2.combineCapabilities(nc1));
 
-            nc2.setSubIds(Set.of());
+            nc2.setSubscriptionIds(Set.of());
             assertThrows(IllegalStateException.class, () -> nc2.combineCapabilities(nc1));
 
-            nc2.setSubIds(Set.of(TEST_SUBID2, TEST_SUBID1));
+            nc2.setSubscriptionIds(Set.of(TEST_SUBID2, TEST_SUBID1));
             nc2.combineCapabilities(nc1);
-            assertEquals(Set.of(TEST_SUBID2, TEST_SUBID1), nc2.getSubIds());
+            assertEquals(Set.of(TEST_SUBID2, TEST_SUBID1), nc2.getSubscriptionIds());
         }
     }
 
@@ -805,20 +806,20 @@ public class NetworkCapabilitiesTest {
         assertEquals(nc1, nc2);
 
         if (isAtLeastS()) {
-            assertThrows(NullPointerException.class, () -> nc1.setSubIds(null));
-            nc1.setSubIds(Set.of());
+            assertThrows(NullPointerException.class, () -> nc1.setSubscriptionIds(null));
+            nc1.setSubscriptionIds(Set.of());
             nc2.set(nc1);
             assertEquals(nc1, nc2);
 
-            nc1.setSubIds(Set.of(TEST_SUBID1));
+            nc1.setSubscriptionIds(Set.of(TEST_SUBID1));
             nc2.set(nc1);
             assertEquals(nc1, nc2);
 
-            nc2.setSubIds(Set.of(TEST_SUBID2, TEST_SUBID1));
+            nc2.setSubscriptionIds(Set.of(TEST_SUBID2, TEST_SUBID1));
             nc2.set(nc1);
             assertEquals(nc1, nc2);
 
-            nc2.setSubIds(Set.of(TEST_SUBID3, TEST_SUBID2));
+            nc2.setSubscriptionIds(Set.of(TEST_SUBID3, TEST_SUBID2));
             assertNotEquals(nc1, nc2);
         }
     }
@@ -907,8 +908,8 @@ public class NetworkCapabilitiesTest {
         // satisfy these requests.
         final NetworkCapabilities nc = new NetworkCapabilities.Builder()
                 .addCapability(NET_CAPABILITY_NOT_VCN_MANAGED)
-                .setSubIds(new ArraySet<>(subIds)).build();
-        assertEquals(new ArraySet<>(subIds), nc.getSubIds());
+                .setSubscriptionIds(new ArraySet<>(subIds)).build();
+        assertEquals(new ArraySet<>(subIds), nc.getSubscriptionIds());
         return nc;
     }
 
@@ -920,11 +921,11 @@ public class NetworkCapabilitiesTest {
         final NetworkCapabilities ncWithoutRequestedIds = capsWithSubIds(TEST_SUBID3);
 
         final NetworkRequest requestWithoutId = new NetworkRequest.Builder().build();
-        assertEmpty(requestWithoutId.networkCapabilities.getSubIds());
+        assertEmpty(requestWithoutId.networkCapabilities.getSubscriptionIds());
         final NetworkRequest requestWithIds = new NetworkRequest.Builder()
-                .setSubIds(Set.of(TEST_SUBID1, TEST_SUBID2)).build();
+                .setSubscriptionIds(Set.of(TEST_SUBID1, TEST_SUBID2)).build();
         assertEquals(Set.of(TEST_SUBID1, TEST_SUBID2),
-                requestWithIds.networkCapabilities.getSubIds());
+                requestWithIds.networkCapabilities.getSubscriptionIds());
 
         assertFalse(requestWithIds.canBeSatisfiedBy(ncWithoutId));
         assertTrue(requestWithIds.canBeSatisfiedBy(ncWithOtherIds));
@@ -959,6 +960,11 @@ public class NetworkCapabilitiesTest {
         assertNotEquals(512, nc.getLinkUpstreamBandwidthKbps());
     }
 
+    private int getMaxTransport() {
+        if (!isAtLeastS() && MAX_TRANSPORT == TRANSPORT_USB) return MAX_TRANSPORT - 1;
+        return MAX_TRANSPORT;
+    }
+
     @Test
     public void testSignalStrength() {
         final NetworkCapabilities nc = new NetworkCapabilities();
@@ -970,7 +976,7 @@ public class NetworkCapabilitiesTest {
     }
 
     private void assertNoTransport(NetworkCapabilities nc) {
-        for (int i = MIN_TRANSPORT; i <= MAX_TRANSPORT; i++) {
+        for (int i = MIN_TRANSPORT; i <= getMaxTransport(); i++) {
             assertFalse(nc.hasTransport(i));
         }
     }
@@ -987,7 +993,7 @@ public class NetworkCapabilitiesTest {
                 assertFalse(nc.hasTransport(i));
             }
         }
-        for (int i = MAX_TRANSPORT; i > maxTransportType; i--) {
+        for (int i = getMaxTransport(); i > maxTransportType; i--) {
             if (positiveSequence) {
                 assertFalse(nc.hasTransport(i));
             } else {
@@ -1001,12 +1007,12 @@ public class NetworkCapabilitiesTest {
         final NetworkCapabilities nc = new NetworkCapabilities();
         assertNoTransport(nc);
         // Test adding multiple transport types.
-        for (int i = MIN_TRANSPORT; i <= MAX_TRANSPORT; i++) {
+        for (int i = MIN_TRANSPORT; i <= getMaxTransport(); i++) {
             nc.addTransportType(i);
             checkCurrentTransportTypes(nc, i, true /* positiveSequence */);
         }
         // Test removing multiple transport types.
-        for (int i = MIN_TRANSPORT; i <= MAX_TRANSPORT; i++) {
+        for (int i = MIN_TRANSPORT; i <= getMaxTransport(); i++) {
             nc.removeTransportType(i);
             checkCurrentTransportTypes(nc, i, false /* positiveSequence */);
         }
@@ -1132,8 +1138,8 @@ public class NetworkCapabilitiesTest {
 
         if (isAtLeastS()) {
             final NetworkCapabilities nc2 = new NetworkCapabilities.Builder()
-                    .setSubIds(Set.of(TEST_SUBID1)).build();
-            assertEquals(Set.of(TEST_SUBID1), nc2.getSubIds());
+                    .setSubscriptionIds(Set.of(TEST_SUBID1)).build();
+            assertEquals(Set.of(TEST_SUBID1), nc2.getSubscriptionIds());
         }
     }
 }

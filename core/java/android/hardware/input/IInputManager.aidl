@@ -22,7 +22,7 @@ import android.hardware.input.KeyboardLayout;
 import android.hardware.input.IInputDevicesChangedListener;
 import android.hardware.input.ITabletModeChangedListener;
 import android.hardware.input.TouchCalibration;
-import android.os.CombinedVibrationEffect;
+import android.os.CombinedVibration;
 import android.hardware.input.IInputSensorEventListener;
 import android.hardware.input.InputSensorInfo;
 import android.hardware.lights.Light;
@@ -91,7 +91,7 @@ interface IInputManager {
 
     // Input device vibrator control.
     void vibrate(int deviceId, in VibrationEffect effect, IBinder token);
-    void vibrateCombined(int deviceId, in CombinedVibrationEffect effect, IBinder token);
+    void vibrateCombined(int deviceId, in CombinedVibration vibration, IBinder token);
     void cancelVibrate(int deviceId, IBinder token);
     int[] getVibratorIds(int deviceId);
     boolean isVibrating(int deviceId);
@@ -116,6 +116,11 @@ interface IInputManager {
     // Remove the runtime association between the input port and the display port. Any existing
     // static association for the cleared input port will be restored.
     void removePortAssociation(in String inputPort);
+
+    // Add a runtime association between the input device and display.
+    void addUniqueIdAssociation(in String inputDeviceName, in String displayUniqueId);
+    // Remove the runtime association between the input device and display.
+    void removeUniqueIdAssociation(in String inputDeviceName);
 
     InputSensorInfo[] getSensorList(int deviceId);
 

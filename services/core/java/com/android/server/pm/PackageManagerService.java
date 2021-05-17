@@ -287,11 +287,9 @@ import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.os.incremental.IStorageHealthListener;
 import android.os.incremental.IncrementalManager;
 import android.os.incremental.IncrementalStorage;
 import android.os.incremental.PerUidReadTimeouts;
-import android.os.incremental.StorageHealthCheckParams;
 import android.os.storage.DiskInfo;
 import android.os.storage.IStorageManager;
 import android.os.storage.StorageEventListener;
@@ -357,6 +355,7 @@ import com.android.internal.util.CollectionUtils;
 import com.android.internal.util.ConcurrentUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.internal.util.FunctionalUtils;
 import com.android.internal.util.IndentingPrintWriter;
 import com.android.internal.util.Preconditions;
 import com.android.permission.persistence.RuntimePermissionsPersistence;
@@ -817,14 +816,6 @@ public class PackageManagerService extends IPackageManager.Stub
             new String[] { android.Manifest.permission.ACCESS_INSTANT_APPS };
 
     private static final String RANDOM_DIR_PREFIX = "~~";
-
-    /**
-     * Timeout configurations for incremental storage health monitor.
-     * See {@link IStorageHealthListener}
-     */
-    private static final int INCREMENTAL_STORAGE_BLOCKED_TIMEOUT_MS = 2000;
-    private static final int INCREMENTAL_STORAGE_UNHEALTHY_TIMEOUT_MS = 7000;
-    private static final int INCREMENTAL_STORAGE_UNHEALTHY_MONITORING_MS = 60000;
 
     final Handler mHandler;
 
@@ -1451,21 +1442,21 @@ public class PackageManagerService extends IPackageManager.Stub
     /** Token for keys in mPendingEnableRollback. */
     private int mPendingEnableRollbackToken = 0;
 
-    @Watched
+    @Watched(manual = true)
     volatile boolean mSystemReady;
-    @Watched
+    @Watched(manual = true)
     private volatile boolean mSafeMode;
     volatile boolean mHasSystemUidErrors;
     @Watched
     private final WatchedSparseBooleanArray mWebInstantAppsDisabled =
             new WatchedSparseBooleanArray();
 
-    @Watched
+    @Watched(manual = true)
     private ApplicationInfo mAndroidApplication;
-    @Watched
+    @Watched(manual = true)
     final ActivityInfo mResolveActivity = new ActivityInfo();
     final ResolveInfo mResolveInfo = new ResolveInfo();
-    @Watched
+    @Watched(manual = true)
     private ComponentName mResolveComponentName;
     AndroidPackage mPlatformPackage;
     ComponentName mCustomResolverComponentName;
@@ -1481,9 +1472,9 @@ public class PackageManagerService extends IPackageManager.Stub
     final ComponentName mInstantAppResolverSettingsComponent;
 
     /** Activity used to install instant applications */
-    @Watched
+    @Watched(manual = true)
     private ActivityInfo mInstantAppInstallerActivity;
-    @Watched
+    @Watched(manual = true)
     private final ResolveInfo mInstantAppInstallerInfo = new ResolveInfo();
 
     private final Map<String, Pair<PackageInstalledInfo, IPackageInstallObserver2>>
@@ -1495,6 +1486,9 @@ public class PackageManagerService extends IPackageManager.Stub
     private final ComponentResolver mComponentResolver;
     // List of packages names to keep cached, even if they are uninstalled for all users
     private List<String> mKeepUninstalledPackages;
+
+    // Cached reference to IDevicePolicyManager.
+    private IDevicePolicyManager mDevicePolicyManager = null;
 
     private File mCacheDir;
 
@@ -1689,9 +1683,8 @@ public class PackageManagerService extends IPackageManager.Stub
     private final DomainVerificationConnection mDomainVerificationConnection =
             new DomainVerificationConnection();
 
-    private class DomainVerificationConnection implements
-            DomainVerificationService.Connection, DomainVerificationProxyV1.Connection,
-            DomainVerificationProxyV2.Connection {
+    private class DomainVerificationConnection implements DomainVerificationService.Connection,
+            DomainVerificationProxyV1.Connection, DomainVerificationProxyV2.Connection {
 
         @Override
         public void scheduleWriteSettings() {
@@ -1737,20 +1730,75 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Nullable
         @Override
-        public PackageSetting getPackageSettingLocked(@NonNull String pkgName) {
-            return PackageManagerService.this.getPackageSetting(pkgName);
-        }
-
-        @Nullable
-        @Override
-        public AndroidPackage getPackageLocked(@NonNull String pkgName) {
-            return PackageManagerService.this.getPackage(pkgName);
-        }
-
-        @Nullable
-        @Override
         public AndroidPackage getPackage(@NonNull String packageName) {
-            return getPackageLocked(packageName);
+            return PackageManagerService.this.getPackage(packageName);
+        }
+
+        @NonNull
+        @Override
+        public void withPackageSettings(@NonNull Consumer<Function<String, PackageSetting>> block) {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    block.accept(snapshot::getPackageSetting);
+                }
+            } else {
+                block.accept(snapshot::getPackageSetting);
+            }
+        }
+
+        @Override
+        public <Output> Output withPackageSettingsReturning(
+                @NonNull FunctionalUtils.ThrowingFunction<Function<String, PackageSetting>, Output>
+                        block) {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    return block.apply(snapshot::getPackageSetting);
+                }
+            } else {
+                return block.apply(snapshot::getPackageSetting);
+            }
+        }
+
+        @Override
+        public <ExceptionType extends Exception> void withPackageSettingsThrowing(
+                @NonNull ThrowingConsumer<Function<String, PackageSetting>, ExceptionType> block)
+                throws ExceptionType {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    block.accept(snapshot::getPackageSetting);
+                }
+            } else {
+                block.accept(snapshot::getPackageSetting);
+            }
+        }
+
+        @Override
+        public <Output, ExceptionType extends Exception> Output
+                withPackageSettingsReturningThrowing(@NonNull ThrowingFunction<Function<String,
+                PackageSetting>, Output, ExceptionType> block) throws ExceptionType {
+            final Computer snapshot = snapshotComputer();
+
+            // This method needs to either lock or not lock consistently throughout the method,
+            // so if the live computer is returned, force a wrapping sync block.
+            if (snapshot == mLiveComputer) {
+                synchronized (mLock) {
+                    return block.apply(snapshot::getPackageSetting);
+                }
+            } else {
+                return block.apply(snapshot::getPackageSetting);
+            }
         }
 
         @Override
@@ -1861,6 +1909,18 @@ public class PackageManagerService extends IPackageManager.Stub
      * A computer provides the functional interface to the snapshot.
      */
     private interface Computer {
+
+        /**
+         * Administrative statistics: record that the snapshot has been used.  Every call
+         * to use() increments the usage counter.
+         */
+        void use();
+
+        /**
+         * Fetch the snapshot usage counter.
+         * @return The number of times this snapshot was used.
+         */
+        int getUsed();
 
         @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent, String resolvedType,
                 int flags, @PrivateResolveFlags int privateResolveFlags, int filterCallingUid,
@@ -2013,9 +2073,12 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     private static class ComputerEngine implements Computer {
 
+        // The administrative use counter.
+        private int mUsed = 0;
+
         // Cached attributes.  The names in this class are the same as the
         // names in PackageManagerService; see that class for documentation.
-        private final Settings mSettings;
+        protected final Settings mSettings;
         private final WatchedSparseIntArray mIsolatedOwners;
         private final WatchedArrayMap<String, AndroidPackage> mPackages;
         private final WatchedArrayMap<ComponentName, ParsedInstrumentation>
@@ -2103,6 +2166,20 @@ public class PackageManagerService extends IPackageManager.Stub
             // Used to reference PMS attributes that are primitives and which are not
             // updated under control of the PMS lock.
             mService = args.service;
+        }
+
+        /**
+         * Record that the snapshot was used.
+         */
+        public void use() {
+            mUsed++;
+        }
+
+        /**
+         * Return the usage counter.
+         */
+        public int getUsed() {
+            return mUsed;
         }
 
         public @NonNull List<ResolveInfo> queryIntentActivitiesInternal(Intent intent,
@@ -3176,8 +3253,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 final int[] gids = (flags & PackageManager.GET_GIDS) == 0 ? EMPTY_INT_ARRAY
                         : mPermissionManager.getGidsForUid(UserHandle.getUid(userId, ps.appId));
                 // Compute granted permissions only if package has requested permissions
-                final Set<String> permissions = ArrayUtils.isEmpty(p.getRequestedPermissions())
-                        ? Collections.emptySet()
+                final Set<String> permissions = ((flags & PackageManager.GET_PERMISSIONS) == 0
+                        || ArrayUtils.isEmpty(p.getRequestedPermissions())) ? Collections.emptySet()
                         : mPermissionManager.getGrantedPermissions(ps.name, userId);
 
                 PackageInfo packageInfo = PackageInfoUtils.generate(p, gids, flags,
@@ -4220,8 +4297,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 // aware/unaware components they want to see, so fall through and
                 // give them what they want
             } else {
+                final UserManagerInternal umInternal = mInjector.getUserManagerInternal();
                 // Caller expressed no opinion, so match based on user state
-                if (mUserManager.isUserUnlockingOrUnlocked(userId)) {
+                if (umInternal.isUserUnlockingOrUnlocked(userId)) {
                     flags |= PackageManager.MATCH_DIRECT_BOOT_AWARE | MATCH_DIRECT_BOOT_UNAWARE;
                 } else {
                     flags |= PackageManager.MATCH_DIRECT_BOOT_AWARE;
@@ -4671,6 +4749,17 @@ public class PackageManagerService extends IPackageManager.Stub
             mLock = mService.mLock;
         }
 
+        /**
+         * Explicilty snapshot {@link Settings#mPackages} for cases where the caller must not lock
+         * in order to get package data. It is expected that the caller locks itself to be able
+         * to block on changes to the package data and bring itself up to date once the change
+         * propagates to it. Use with heavy caution.
+         * @return
+         */
+        private Map<String, PackageSetting> snapshotPackageSettings() {
+            return mSettings.snapshot().mPackages;
+        }
+
         public @NonNull List<ResolveInfo> queryIntentServicesInternalBody(Intent intent,
                 String resolvedType, int flags, int userId, int callingUid,
                 String instantAppPkgName) {
@@ -4802,7 +4891,7 @@ public class PackageManagerService extends IPackageManager.Stub
 
     // Compute read-only functions, based on live data.  This attribute may be modified multiple
     // times during the PackageManagerService constructor but it should not be modified thereafter.
-    private Computer mLiveComputer;
+    private ComputerLocked mLiveComputer;
     // A lock-free cache for frequently called functions.
     private volatile Computer mSnapshotComputer;
     // If true, the snapshot is invalid (stale).  The attribute is static since it may be
@@ -4821,125 +4910,15 @@ public class PackageManagerService extends IPackageManager.Stub
      */
     private final Object mSnapshotLock = new Object();
 
-    // A counter of all queries that hit the current snapshot.
-    @GuardedBy("mSnapshotLock")
-    private int mSnapshotHits = 0;
-
-    // A class to record snapshot statistics.
-    private static class SnapshotStatistics {
-        // A build time is "big" if it takes longer than 5ms.
-        private static final long SNAPSHOT_BIG_BUILD_TIME_NS = TimeUnit.MILLISECONDS.toNanos(5);
-
-        // A snapshot is in quick succession to the previous snapshot if it less than
-        // 100ms since the previous snapshot.
-        private static final long SNAPSHOT_QUICK_REBUILD_INTERVAL_NS =
-                TimeUnit.MILLISECONDS.toNanos(100);
-
-        // The interval between snapshot statistics logging, in ns.
-        private static final long SNAPSHOT_LOG_INTERVAL_NS = TimeUnit.MINUTES.toNanos(10);
-
-        // The throttle parameters for big build reporting.  Do not report more than this
-        // many events in a single log interval.
-        private static final int SNAPSHOT_BUILD_REPORT_LIMIT = 10;
-
-        // The time the snapshot statistics were last logged.
-        private long mStatisticsSent = 0;
-
-        // The number of build events logged since the last periodic log.
-        private int mLoggedBuilds = 0;
-
-        // The time of the last build.
-        private long mLastBuildTime = 0;
-
-        // The number of times the snapshot has been rebuilt since the statistics were
-        // last logged.
-        private int mRebuilds = 0;
-
-        // The number of times the snapshot has been used since it was rebuilt.
-        private int mReused = 0;
-
-        // The number of "big" build times since the last log.  "Big" is defined by
-        // SNAPSHOT_BIG_BUILD_TIME.
-        private int mBigBuilds = 0;
-
-        // The number of quick rebuilds.  "Quick" is defined by
-        // SNAPSHOT_QUICK_REBUILD_INTERVAL_NS.
-        private int mQuickRebuilds = 0;
-
-        // The time take to build a snapshot.  This is cumulative over the rebuilds recorded
-        // in mRebuilds, so the average time to build a snapshot is given by
-        // mBuildTimeNs/mRebuilds.
-        private int mBuildTimeNs = 0;
-
-        // The maximum build time since the last log.
-        private long mMaxBuildTimeNs = 0;
-
-        // The constant that converts ns to ms.  This is the divisor.
-        private final long NS_TO_MS = TimeUnit.MILLISECONDS.toNanos(1);
-
-        // Convert ns to an int ms.  The maximum range of this method is about 24 days.
-        // There is no expectation that an event will take longer than that.
-        private int nsToMs(long ns) {
-            return (int) (ns / NS_TO_MS);
-        }
-
-        // The single method records a rebuild.  The "now" parameter is passed in because
-        // the caller needed it to computer the duration, so pass it in to avoid
-        // recomputing it.
-        private void rebuild(long now, long done, int hits) {
-            if (mStatisticsSent == 0) {
-                mStatisticsSent = now;
-            }
-            final long elapsed = now - mLastBuildTime;
-            final long duration = done - now;
-            mLastBuildTime = now;
-
-            if (mMaxBuildTimeNs < duration) {
-                mMaxBuildTimeNs = duration;
-            }
-            mRebuilds++;
-            mReused += hits;
-            mBuildTimeNs += duration;
-
-            boolean log_build = false;
-            if (duration > SNAPSHOT_BIG_BUILD_TIME_NS) {
-                log_build = true;
-                mBigBuilds++;
-            }
-            if (elapsed < SNAPSHOT_QUICK_REBUILD_INTERVAL_NS) {
-                log_build = true;
-                mQuickRebuilds++;
-            }
-            if (log_build && mLoggedBuilds < SNAPSHOT_BUILD_REPORT_LIMIT) {
-                EventLogTags.writePmSnapshotRebuild(nsToMs(duration), nsToMs(elapsed));
-                mLoggedBuilds++;
-            }
-
-            final long log_interval = now - mStatisticsSent;
-            if (log_interval >= SNAPSHOT_LOG_INTERVAL_NS) {
-                EventLogTags.writePmSnapshotStats(mRebuilds, mReused,
-                                                  mBigBuilds, mQuickRebuilds,
-                                                  nsToMs(mMaxBuildTimeNs),
-                                                  nsToMs(mBuildTimeNs));
-                mStatisticsSent = now;
-                mRebuilds = 0;
-                mReused = 0;
-                mBuildTimeNs = 0;
-                mMaxBuildTimeNs = 0;
-                mBigBuilds = 0;
-                mQuickRebuilds = 0;
-                mLoggedBuilds = 0;
-            }
-        }
-    }
-
-    // Snapshot statistics.
-    @GuardedBy("mLock")
-    private final SnapshotStatistics mSnapshotStatistics = new SnapshotStatistics();
+    /**
+     * The snapshot statistics.  These are collected to track performance and to identify
+     * situations in which the snapshots are misbehaving.
+     */
+    private final SnapshotStatistics mSnapshotStatistics;
 
     // The snapshot disable/enable switch.  An image with the flag set true uses snapshots
     // and an image with the flag set false does not use snapshots.
-    private static final boolean SNAPSHOT_ENABLED = true;
+    private static final boolean SNAPSHOT_ENABLED = false;
 
     // The per-instance snapshot disable/enable flag.  This is generally set to false in
     // test instances and set to SNAPSHOT_ENABLED in operational instances.
@@ -4969,10 +4948,9 @@ public class PackageManagerService extends IPackageManager.Stub
             Computer c = mSnapshotComputer;
             if (sSnapshotCorked && (c != null)) {
                 // Snapshots are corked, which means new ones should not be built right now.
+                c.use();
                 return c;
             }
-            // Deliberately capture the value pre-increment
-            final int hits = mSnapshotHits++;
             if (sSnapshotInvalid || (c == null)) {
                 // The snapshot is invalid if it is marked as invalid or if it is null.  If it
                 // is null, then it is currently being rebuilt by rebuildSnapshot().
@@ -4982,7 +4960,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     // self-consistent (the lock is being held) and is current as of the time
                     // this function is entered.
                     if (sSnapshotInvalid) {
-                        rebuildSnapshot(hits);
+                        rebuildSnapshot();
                     }
 
                     // Guaranteed to be non-null.  mSnapshotComputer is only be set to null
@@ -4992,6 +4970,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     c = mSnapshotComputer;
                 }
             }
+            c.use();
             return c;
         }
     }
@@ -5001,16 +4980,16 @@ public class PackageManagerService extends IPackageManager.Stub
      * threads from using the invalid computer until it is rebuilt.
      */
     @GuardedBy("mLock")
-    private void rebuildSnapshot(int hits) {
-        final long now = System.nanoTime();
+    private void rebuildSnapshot() {
+        final long now = SystemClock.currentTimeMicro();
+        final int hits = mSnapshotComputer == null ? -1 : mSnapshotComputer.getUsed();
         mSnapshotComputer = null;
         sSnapshotInvalid = false;
         final Snapshot args = new Snapshot(Snapshot.SNAPPED);
         mSnapshotComputer = new ComputerEngine(args);
-        final long done = System.nanoTime();
+        final long done = SystemClock.currentTimeMicro();
 
         mSnapshotStatistics.rebuild(now, done, hits);
-        mSnapshotHits = 0;
     }
 
     /**
@@ -5968,7 +5947,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 backgroundHandler,
                 SYSTEM_PARTITIONS,
                 (i, pm) -> new ComponentResolver(i.getUserManagerService(), pm.mPmInternal, lock),
-                (i, pm) -> PermissionManagerService.create(context),
+                (i, pm) -> PermissionManagerService.create(context,
+                        i.getSystemConfig().getAvailableFeatures()),
                 (i, pm) -> new UserManagerService(context, pm,
                         new UserDataPreparer(installer, installLock, context, onlyCore),
                         lock),
@@ -6263,6 +6243,7 @@ public class PackageManagerService extends IPackageManager.Stub
         mSnapshotEnabled = false;
         mLiveComputer = createLiveComputer();
         mSnapshotComputer = null;
+        mSnapshotStatistics = null;
 
         mPackages.putAll(testParams.packages);
         mEnableFreeCacheV2 = testParams.enableFreeCacheV2;
@@ -6415,17 +6396,20 @@ public class PackageManagerService extends IPackageManager.Stub
         mDomainVerificationManager = injector.getDomainVerificationManagerInternal();
         mDomainVerificationManager.setConnection(mDomainVerificationConnection);
 
-        // Create the computer as soon as the state objects have been installed.  The
-        // cached computer is the same as the live computer until the end of the
-        // constructor, at which time the invalidation method updates it.  The cache is
-        // corked initially to ensure a cached computer is not built until the end of the
-        // constructor.
-        mSnapshotEnabled = SNAPSHOT_ENABLED;
-        sSnapshotCorked = true;
-        sSnapshotInvalid = true;
-        mLiveComputer = createLiveComputer();
-        mSnapshotComputer = null;
-        registerObserver();
+        synchronized (mLock) {
+            // Create the computer as soon as the state objects have been installed.  The
+            // cached computer is the same as the live computer until the end of the
+            // constructor, at which time the invalidation method updates it.  The cache is
+            // corked initially to ensure a cached computer is not built until the end of the
+            // constructor.
+            mSnapshotEnabled = SNAPSHOT_ENABLED;
+            sSnapshotCorked = true;
+            sSnapshotInvalid = true;
+            mSnapshotStatistics = new SnapshotStatistics();
+            mLiveComputer = createLiveComputer();
+            mSnapshotComputer = null;
+            registerObserver();
+        }
 
         // CHECKSTYLE:OFF IndentationCheck
         synchronized (mInstallLock) {
@@ -6472,20 +6456,6 @@ public class PackageManagerService extends IPackageManager.Stub
             t.traceEnd();
 
             mPermissionManager.readLegacyPermissionsTEMP(mSettings.mPermissions);
-
-            // Clean up orphaned packages for which the code path doesn't exist
-            // and they are an update to a system app - caused by bug/32321269
-            final WatchedArrayMap<String, PackageSetting> packageSettings =
-                mSettings.getPackagesLocked();
-            final int packageSettingCount = packageSettings.size();
-            for (int i = packageSettingCount - 1; i >= 0; i--) {
-                PackageSetting ps = packageSettings.valueAt(i);
-                if (!isExternal(ps) && (ps.getPath() == null || !ps.getPath().exists())
-                        && mSettings.getDisabledSystemPkgLPr(ps.name) != null) {
-                    packageSettings.removeAt(i);
-                    mSettings.enableSystemPackageLPw(ps.name);
-                }
-            }
 
             if (!mOnlyCore && mFirstBoot) {
                 requestCopyPreoptedFiles(mInjector);
@@ -6534,6 +6504,9 @@ public class PackageManagerService extends IPackageManager.Stub
 
             mIsPreNMR1Upgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.N_MR1;
             mIsPreQUpgrade = mIsUpgrade && ver.sdkVersion < Build.VERSION_CODES.Q;
+
+            final WatchedArrayMap<String, PackageSetting> packageSettings =
+                mSettings.getPackagesLocked();
 
             // Save the names of pre-existing packages prior to scanning, so we can determine
             // which system packages are completely new due to an upgrade.
@@ -6894,19 +6867,18 @@ public class PackageManagerService extends IPackageManager.Stub
                     + " seconds");
 
             mPermissionManager.readLegacyPermissionStateTEMP();
-            // If the platform SDK has changed since the last time we booted,
+            // If the build fingerprint has changed since the last time we booted,
             // we need to re-grant app permission to catch any new ones that
             // appear.  This is really a hack, and means that apps can in some
             // cases get permissions that the user didn't initially explicitly
             // allow...  it would be nice to have some better way to handle
             // this situation.
-            final boolean sdkUpdated = (ver.sdkVersion != mSdkVersion);
-            if (sdkUpdated) {
-                Slog.i(TAG, "Platform changed from " + ver.sdkVersion + " to "
-                        + mSdkVersion + "; regranting permissions for internal storage");
+            if (mIsUpgrade) {
+                Slog.i(TAG, "Build fingerprint changed from " + ver.fingerprint + " to "
+                        + Build.FINGERPRINT + "; regranting permissions for internal storage");
             }
             mPermissionManager.onStorageVolumeMounted(
-                    StorageManager.UUID_PRIVATE_INTERNAL, sdkUpdated);
+                    StorageManager.UUID_PRIVATE_INTERNAL, mIsUpgrade);
             ver.sdkVersion = mSdkVersion;
 
             // If this is the first boot or an update from pre-M, and it is a normal
@@ -7214,7 +7186,7 @@ public class PackageManagerService extends IPackageManager.Stub
                         updateSharedLibrariesLocked(pkg, stubPkgSetting, null, null,
                                 Collections.unmodifiableMap(mPackages));
                     } catch (PackageManagerException e) {
-                        Slog.e(TAG, "updateAllSharedLibrariesLPw failed: ", e);
+                        Slog.w(TAG, "updateAllSharedLibrariesLPw failed: ", e);
                     }
                     final int[] userIds = mUserManager.getUserIds();
                     for (final int userId : userIds) {
@@ -7474,7 +7446,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     return matches.get(i).getComponentInfo().packageName;
             }
         } else if (matches.size() == 0) {
-            Log.e(TAG, "There should probably be a verifier, but, none were found");
+            Log.w(TAG, "There should probably be a verifier, but, none were found");
             return null;
         }
         throw new RuntimeException("There must be exactly one verifier; found " + matches);
@@ -8246,9 +8218,10 @@ public class PackageManagerService extends IPackageManager.Stub
             // 11. Free storage service cache
             StorageManagerInternal smInternal =
                     mInjector.getLocalService(StorageManagerInternal.class);
-            // TODO(b/170481432): Decide what value of bytes needs to be sent instead of
-            // sending the bytes parameter of freeStorage
-            smInternal.freeCache(volumeUuid, bytes);
+            long freeBytesRequired = bytes - file.getUsableSpace();
+            if (freeBytesRequired > 0) {
+                smInternal.freeCache(volumeUuid, freeBytesRequired);
+            }
             if (file.getUsableSpace() >= bytes) return;
         } else {
             try {
@@ -11697,18 +11670,10 @@ public class PackageManagerService extends IPackageManager.Stub
         }
         if (mIncrementalManager != null && isIncrementalPath(parsedPackage.getPath())) {
             if (pkgSetting != null && pkgSetting.isPackageLoading()) {
-                final StorageHealthCheckParams healthCheckParams = new StorageHealthCheckParams();
-                healthCheckParams.blockedTimeoutMs = INCREMENTAL_STORAGE_BLOCKED_TIMEOUT_MS;
-                healthCheckParams.unhealthyTimeoutMs = INCREMENTAL_STORAGE_UNHEALTHY_TIMEOUT_MS;
-                healthCheckParams.unhealthyMonitoringMs =
-                        INCREMENTAL_STORAGE_UNHEALTHY_MONITORING_MS;
-                // Continue monitoring health and loading progress of active incremental packages
-                mIncrementalManager.registerHealthListener(parsedPackage.getPath(),
-                        healthCheckParams,
-                        new IncrementalHealthListener(parsedPackage.getPackageName()));
+                // Continue monitoring loading progress of active incremental packages
                 final IncrementalStatesCallback incrementalStatesCallback =
                         new IncrementalStatesCallback(parsedPackage.getPackageName(),
-                                UserHandle.getUid(UserHandle.ALL, pkgSetting.appId),
+                                UserHandle.getUid(UserHandle.USER_ALL, pkgSetting.appId),
                                 getInstalledUsers(pkgSetting, UserHandle.USER_ALL));
                 pkgSetting.setIncrementalStatesCallback(incrementalStatesCallback);
                 mIncrementalManager.registerLoadingProgressCallback(parsedPackage.getPath(),
@@ -12314,18 +12279,17 @@ public class PackageManagerService extends IPackageManager.Stub
 
     public ArraySet<String> getOptimizablePackages() {
         ArraySet<String> pkgs = new ArraySet<>();
-        final boolean hibernationEnabled = AppHibernationService.isAppHibernationEnabled();
-        AppHibernationManagerInternal appHibernationManager =
-                mInjector.getLocalService(AppHibernationManagerInternal.class);
         synchronized (mLock) {
             for (AndroidPackage p : mPackages.values()) {
-                // Checking hibernation state is an inexpensive call.
-                boolean isHibernating = hibernationEnabled
-                        && appHibernationManager.isHibernatingGlobally(p.getPackageName());
-                if (PackageDexOptimizer.canOptimizePackage(p) && !isHibernating) {
+                if (PackageDexOptimizer.canOptimizePackage(p)) {
                     pkgs.add(p.getPackageName());
                 }
             }
+        }
+        if (AppHibernationService.isAppHibernationEnabled()) {
+            AppHibernationManagerInternal appHibernationManager =
+                    mInjector.getLocalService(AppHibernationManagerInternal.class);
+            pkgs.removeIf(pkgName -> appHibernationManager.isHibernatingGlobally(pkgName));
         }
         return pkgs;
     }
@@ -12622,10 +12586,21 @@ public class PackageManagerService extends IPackageManager.Stub
     @GuardedBy("mInstallLock")
     void removeCodePathLI(File codePath) {
         if (codePath.isDirectory()) {
-            File codePathParent = codePath.getParentFile();
+            final File codePathParent = codePath.getParentFile();
+            final boolean needRemoveParent = codePathParent.getName().startsWith(RANDOM_DIR_PREFIX);
             try {
+                final boolean isIncremental = (mIncrementalManager != null && isIncrementalPath(
+                        codePath.getAbsolutePath()));
+                if (isIncremental) {
+                    if (needRemoveParent) {
+                        mIncrementalManager.rmPackageDir(codePathParent);
+                    } else {
+                        mIncrementalManager.rmPackageDir(codePath);
+                    }
+                }
+
                 mInstaller.rmPackageDir(codePath.getAbsolutePath());
-                if (codePathParent.getName().startsWith(RANDOM_DIR_PREFIX)) {
+                if (needRemoveParent) {
                     mInstaller.rmPackageDir(codePathParent.getAbsolutePath());
                     removeCachedResult(codePathParent);
                 }
@@ -15091,6 +15066,9 @@ public class PackageManagerService extends IPackageManager.Stub
                 uid = UserHandle.getUid(id, UserHandle.getAppId(uid));
                 intent.putExtra(Intent.EXTRA_UID, uid);
             }
+            if (broadcastAllowList != null && PLATFORM_PACKAGE_NAME.equals(targetPkg)) {
+                intent.putExtra(Intent.EXTRA_VISIBILITY_ALLOW_LIST, broadcastAllowList.get(id));
+            }
             intent.putExtra(Intent.EXTRA_USER_HANDLE, id);
             intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT | flags);
             if (DEBUG_BROADCASTS) {
@@ -15281,20 +15259,19 @@ public class PackageManagerService extends IPackageManager.Stub
             final BroadcastOptions bOptions = getTemporaryAppAllowlistBroadcastOptions(
                     REASON_LOCKED_BOOT_COMPLETED);
             am.broadcastIntentWithFeature(null, null, lockedBcIntent, null, null, 0, null, null,
-                    requiredPermissions, android.app.AppOpsManager.OP_NONE, bOptions.toBundle(),
-                    false, false,
-                    userId);
+                    requiredPermissions, null, android.app.AppOpsManager.OP_NONE,
+                    bOptions.toBundle(), false, false, userId);
 
             // Deliver BOOT_COMPLETED only if user is unlocked
-            if (mUserManager.isUserUnlockingOrUnlocked(userId)) {
+            final UserManagerInternal umInternal = mInjector.getUserManagerInternal();
+            if (umInternal.isUserUnlockingOrUnlocked(userId)) {
                 Intent bcIntent = new Intent(Intent.ACTION_BOOT_COMPLETED).setPackage(packageName);
                 if (includeStopped) {
                     bcIntent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
                 }
                 am.broadcastIntentWithFeature(null, null, bcIntent, null, null, 0, null, null,
-                        requiredPermissions, android.app.AppOpsManager.OP_NONE, bOptions.toBundle(),
-                        false, false,
-                        userId);
+                        requiredPermissions, null, android.app.AppOpsManager.OP_NONE,
+                        bOptions.toBundle(), false, false, userId);
             }
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
@@ -18198,16 +18175,7 @@ public class PackageManagerService extends IPackageManager.Stub
             if (codeFile == null || !codeFile.exists()) {
                 return false;
             }
-
-            final boolean isIncremental = (mIncrementalManager != null && isIncrementalPath(
-                    codeFile.getAbsolutePath()));
-
             removeCodePathLI(codeFile);
-
-            if (isIncremental) {
-                mIncrementalManager.onPackageRemoved(codeFile);
-            }
-
             return true;
         }
 
@@ -18563,16 +18531,6 @@ public class PackageManagerService extends IPackageManager.Stub
                     ps.setIncrementalStatesCallback(incrementalStatesCallback);
                     mIncrementalManager.registerLoadingProgressCallback(codePath,
                             new IncrementalProgressListener(ps.name));
-                    final IncrementalHealthListener incrementalHealthListener =
-                            new IncrementalHealthListener(ps.name);
-                    final StorageHealthCheckParams healthCheckParams =
-                            new StorageHealthCheckParams();
-                    healthCheckParams.blockedTimeoutMs = INCREMENTAL_STORAGE_BLOCKED_TIMEOUT_MS;
-                    healthCheckParams.unhealthyTimeoutMs = INCREMENTAL_STORAGE_UNHEALTHY_TIMEOUT_MS;
-                    healthCheckParams.unhealthyMonitoringMs =
-                            INCREMENTAL_STORAGE_UNHEALTHY_MONITORING_MS;
-                    mIncrementalManager.registerHealthListener(codePath, healthCheckParams,
-                            incrementalHealthListener);
                 }
 
                 // Ensure that the uninstall reason is UNKNOWN for users with the package installed.
@@ -19564,64 +19522,10 @@ public class PackageManagerService extends IPackageManager.Stub
                         ps, mInstalledUserIds, mSettings.getPackagesLocked());
                 codePath = ps.getPathString();
             }
-            Bundle extras = new Bundle();
-            extras.putInt(Intent.EXTRA_UID, mUid);
-            extras.putString(Intent.EXTRA_PACKAGE_NAME, mPackageName);
-            sendPackageBroadcast(Intent.ACTION_PACKAGE_FULLY_LOADED, mPackageName,
-                    extras, 0 /*flags*/,
-                    null /*targetPackage*/, null /*finishedReceiver*/,
-                    mInstalledUserIds, null /* instantUserIds */, newBroadcastAllowList, null);
             // Unregister progress listener
             mIncrementalManager.unregisterLoadingProgressCallbacks(codePath);
-            // Unregister health listener as it will always be healthy from now
-            mIncrementalManager.unregisterHealthListener(codePath);
             // Make sure the information is preserved
             scheduleWriteSettingsLocked();
-        }
-
-        @Override
-        public void onPackageUnstartable(int reason) {
-            final SparseArray<int[]> newBroadcastAllowList;
-            synchronized (mLock) {
-                final PackageSetting ps = mSettings.getPackageLPr(mPackageName);
-                if (ps == null) {
-                    return;
-                }
-                newBroadcastAllowList = mAppsFilter.getVisibilityAllowList(
-                        ps, mInstalledUserIds, mSettings.getPackagesLocked());
-            }
-            Bundle extras = new Bundle();
-            extras.putInt(Intent.EXTRA_UID, mUid);
-            extras.putString(Intent.EXTRA_PACKAGE_NAME, mPackageName);
-            extras.putInt(Intent.EXTRA_UNSTARTABLE_REASON, reason);
-            // send broadcast to users with this app installed
-            sendPackageBroadcast(Intent.ACTION_PACKAGE_UNSTARTABLE, mPackageName,
-                    extras, 0 /*flags*/,
-                    null /*targetPackage*/, null /*finishedReceiver*/,
-                    mInstalledUserIds, null /* instantUserIds */,
-                    newBroadcastAllowList, null);
-        }
-
-        @Override
-        public void onPackageStartable() {
-            final SparseArray<int[]> newBroadcastAllowList;
-            synchronized (mLock) {
-                final PackageSetting ps = mSettings.getPackageLPr(mPackageName);
-                if (ps == null) {
-                    return;
-                }
-                newBroadcastAllowList = mAppsFilter.getVisibilityAllowList(
-                        ps, mInstalledUserIds, mSettings.getPackagesLocked());
-            }
-            Bundle extras = new Bundle();
-            extras.putInt(Intent.EXTRA_UID, mUid);
-            extras.putString(Intent.EXTRA_PACKAGE_NAME, mPackageName);
-            // send broadcast to users with this app installed
-            sendPackageBroadcast(Intent.ACTION_PACKAGE_STARTABLE, mPackageName,
-                    extras, 0 /*flags*/,
-                    null /*targetPackage*/, null /*finishedReceiver*/,
-                    mInstalledUserIds, null /* instantUserIds */,
-                    newBroadcastAllowList, null);
         }
     }
 
@@ -19644,29 +19548,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 }
                 ps.setLoadingProgress(progress);
             }
-        }
-    }
-
-    /**
-     * Incremental storage health status callback, used to listen for monitoring changes and update
-     * package setting.
-     */
-    private class IncrementalHealthListener extends IStorageHealthListener.Stub {
-        private final String mPackageName;
-        IncrementalHealthListener(String packageName) {
-            mPackageName = packageName;
-        }
-
-        @Override
-        public void onHealthStatus(int storageId, int status) throws RemoteException {
-            final PackageSetting ps;
-            synchronized (mLock) {
-                ps = mSettings.getPackageLPr(mPackageName);
-            }
-            if (ps == null) {
-                return;
-            }
-            ps.setStorageHealthStatus(status);
         }
     }
 
@@ -20898,8 +20779,7 @@ public class PackageManagerService extends IPackageManager.Stub
     }
 
     private boolean isPackageDeviceAdmin(String packageName, int userId) {
-        IDevicePolicyManager dpm = IDevicePolicyManager.Stub.asInterface(
-                ServiceManager.getService(Context.DEVICE_POLICY_SERVICE));
+        final IDevicePolicyManager dpm = getDevicePolicyManager();
         try {
             if (dpm != null) {
                 final ComponentName deviceOwnerComponentName = dpm.getDeviceOwnerComponent(
@@ -20929,6 +20809,16 @@ public class PackageManagerService extends IPackageManager.Stub
         } catch (RemoteException e) {
         }
         return false;
+    }
+
+    /** Returns the device policy manager interface. */
+    private IDevicePolicyManager getDevicePolicyManager() {
+        if (mDevicePolicyManager == null) {
+            // No need to synchronize; worst-case scenario it will be fetched twice.
+            mDevicePolicyManager = IDevicePolicyManager.Stub.asInterface(
+                            ServiceManager.getService(Context.DEVICE_POLICY_SERVICE));
+        }
+        return mDevicePolicyManager;
     }
 
     private boolean shouldKeepUninstalledPackageLPr(String packageName) {
@@ -21195,6 +21085,10 @@ public class PackageManagerService extends IPackageManager.Stub
                             removedPackage, extras, 0 /*flags*/,
                             installerPackageName, null, broadcastUsers, instantUserIds, null, null);
                 }
+                packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_REMOVED_INTERNAL,
+                        removedPackage, extras, 0 /*flags*/, PLATFORM_PACKAGE_NAME,
+                        null /*finishedReceiver*/, broadcastUsers, instantUserIds,
+                        broadcastAllowList, null /*bOptions*/);
                 if (dataRemoved && !isRemovedPackageSystemUpdate) {
                     packageSender.sendPackageBroadcast(Intent.ACTION_PACKAGE_FULLY_REMOVED,
                             removedPackage, extras, Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND, null,
@@ -21544,6 +21438,8 @@ public class PackageManagerService extends IPackageManager.Stub
         synchronized (mLock) {
             if (outInfo != null) {
                 outInfo.uid = ps.appId;
+                outInfo.broadcastAllowList = mAppsFilter.getVisibilityAllowList(ps,
+                        allUserHandles, mSettings.getPackagesLocked());
             }
         }
 
@@ -21846,6 +21742,7 @@ public class PackageManagerService extends IPackageManager.Stub
             clearPackagePreferredActivities(ps.name, nextUserId);
             mPermissionManager.onPackageUninstalled(ps.name, ps.appId, pkg, sharedUserPkgs,
                     nextUserId);
+            mDomainVerificationManager.clearPackageForUser(ps.name, nextUserId);
         }
 
         if (outInfo != null) {
@@ -22216,7 +22113,7 @@ public class PackageManagerService extends IPackageManager.Stub
             intent.addFlags(Intent.FLAG_RECEIVER_REGISTERED_ONLY_BEFORE_BOOT);
             try {
                 am.broadcastIntentWithFeature(null, null, intent, null, null,
-                        0, null, null, null, android.app.AppOpsManager.OP_NONE,
+                        0, null, null, null, null, android.app.AppOpsManager.OP_NONE,
                         null, false, false, userId);
             } catch (RemoteException e) {
             }
@@ -22914,7 +22811,7 @@ public class PackageManagerService extends IPackageManager.Stub
         if (matches.size() == 1) {
             return matches.get(0).getComponentInfo().packageName;
         } else {
-            Slog.e(TAG, "There should probably be exactly one storage manager; found "
+            Slog.w(TAG, "There should probably be exactly one storage manager; found "
                     + matches.size() + ": matches=" + matches);
             return null;
         }
@@ -23542,7 +23439,7 @@ public class PackageManagerService extends IPackageManager.Stub
         // writer
         synchronized (mLock) {
             final PackageSetting ps = mSettings.getPackageLPr(packageName);
-            if (ps.getStopped(userId) && !stopped) {
+            if (ps != null && ps.getStopped(userId) && !stopped) {
                 shouldUnhibernate = true;
             }
             if (!shouldFilterApplicationLocked(ps, callingUid, userId)
@@ -23552,10 +23449,12 @@ public class PackageManagerService extends IPackageManager.Stub
             }
         }
         if (shouldUnhibernate) {
-            AppHibernationManagerInternal ah =
-                    mInjector.getLocalService(AppHibernationManagerInternal.class);
-            ah.setHibernatingForUser(packageName, userId, false);
-            ah.setHibernatingGlobally(packageName, false);
+            mHandler.post(() -> {
+                AppHibernationManagerInternal ah =
+                        mInjector.getLocalService(AppHibernationManagerInternal.class);
+                ah.setHibernatingForUser(packageName, userId, false);
+                ah.setHibernatingGlobally(packageName, false);
+            });
         }
     }
 
@@ -23712,11 +23611,17 @@ public class PackageManagerService extends IPackageManager.Stub
 
     @Override
     public int getComponentEnabledSetting(@NonNull ComponentName component, int userId) {
-        if (component == null) return COMPONENT_ENABLED_STATE_DEFAULT;
-        if (!mUserManager.exists(userId)) return COMPONENT_ENABLED_STATE_DISABLED;
         int callingUid = Binder.getCallingUid();
         enforceCrossUserPermission(callingUid, userId, false /*requireFullPermission*/,
                 false /*checkShell*/, "getComponentEnabled");
+        return getComponentEnabledSettingInternal(component, callingUid, userId);
+    }
+
+    private int getComponentEnabledSettingInternal(ComponentName component, int callingUid,
+            int userId) {
+        if (component == null) return COMPONENT_ENABLED_STATE_DEFAULT;
+        if (!mUserManager.exists(userId)) return COMPONENT_ENABLED_STATE_DISABLED;
+
         synchronized (mLock) {
             try {
                 if (shouldFilterApplicationLocked(
@@ -23977,6 +23882,7 @@ public class PackageManagerService extends IPackageManager.Stub
                 pw.println("    dexopt: dump dexopt state");
                 pw.println("    compiler-stats: dump compiler statistics");
                 pw.println("    service-permissions: dump permissions required by services");
+                pw.println("    snapshot: dump snapshot statistics");
                 pw.println("    known-packages: dump known packages");
                 pw.println("    <package.name>: info about given package");
                 return;
@@ -24125,6 +24031,8 @@ public class PackageManagerService extends IPackageManager.Stub
                 dumpState.setDump(DumpState.DUMP_KNOWN_PACKAGES);
             } else if ("t".equals(cmd) || "timeouts".equals(cmd)) {
                 dumpState.setDump(DumpState.DUMP_PER_UID_READ_TIMEOUTS);
+            } else if ("snapshot".equals(cmd)) {
+                dumpState.setDump(DumpState.DUMP_SNAPSHOT_STATISTICS);
             } else if ("write".equals(cmd)) {
                 synchronized (mLock) {
                     writeSettingsLPrTEMP();
@@ -24453,6 +24361,22 @@ public class PackageManagerService extends IPackageManager.Stub
                 pw.println(")");
             }
         }
+
+        if (!checkin && dumpState.isDumping(DumpState.DUMP_SNAPSHOT_STATISTICS)) {
+            pw.println("Snapshot statistics");
+            if (!mSnapshotEnabled) {
+                pw.println("  Snapshots disabled");
+            } else {
+                int hits = 0;
+                synchronized (mSnapshotLock) {
+                    if (mSnapshotComputer != null) {
+                        hits = mSnapshotComputer.getUsed();
+                    }
+                }
+                final long now = SystemClock.currentTimeMicro();
+                mSnapshotStatistics.dump(pw, "  ", now, hits, true);
+            }
+        }
     }
 
     /**
@@ -24703,12 +24627,13 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         synchronized (mLock) {
-            final boolean sdkUpdated = (ver.sdkVersion != mSdkVersion);
-            if (sdkUpdated) {
-                logCriticalInfo(Log.INFO, "Platform changed from " + ver.sdkVersion + " to "
-                        + mSdkVersion + "; regranting permissions for " + volumeUuid);
+            final boolean isUpgrade = !Build.FINGERPRINT.equals(ver.fingerprint);
+            if (isUpgrade) {
+                logCriticalInfo(Log.INFO, "Build fingerprint changed from " + ver.fingerprint
+                        + " to " + Build.FINGERPRINT + "; regranting permissions for "
+                        + volumeUuid);
             }
-            mPermissionManager.onStorageVolumeMounted(volumeUuid, sdkUpdated);
+            mPermissionManager.onStorageVolumeMounted(volumeUuid, isUpgrade);
 
             // Yay, everything is now upgraded
             ver.forceCurrent();
@@ -24869,7 +24794,7 @@ public class PackageManagerService extends IPackageManager.Stub
             final int fileToDeleteCount = filesToDelete.size();
             for (int i = 0; i < fileToDeleteCount; i++) {
                 File fileToDelete = filesToDelete.get(i);
-                logCriticalInfo(Log.WARN, "Destroying orphaned" + fileToDelete);
+                logCriticalInfo(Log.WARN, "Destroying orphaned at " + fileToDelete);
                 synchronized (mInstallLock) {
                     removeCodePathLI(fileToDelete);
                 }
@@ -25110,7 +25035,7 @@ public class PackageManagerService extends IPackageManager.Stub
                     // already held, since it's invoked as a side-effect of
                     // executeBatchLI()
                     if (e != null) {
-                        logCriticalInfo(Log.ERROR, "Failed to create app data for " + packageName
+                        logCriticalInfo(Log.WARN, "Failed to create app data for " + packageName
                                 + ", but trying to recover: " + e);
                         destroyAppDataLeafLIF(pkg, userId, flags);
                         try {
@@ -26178,7 +26103,11 @@ public class PackageManagerService extends IPackageManager.Stub
 
         @Override
         public String[] getNamesForUids(int[] uids) throws RemoteException {
-            final String[] results = PackageManagerService.this.getNamesForUids(uids);
+            if (uids == null || uids.length == 0) {
+                return null;
+            }
+            final String[] names = PackageManagerService.this.getNamesForUids(uids);
+            final String[] results = (names != null) ? names : new String[uids.length];
             // massage results so they can be parsed by the native binder
             for (int i = results.length - 1; i >= 0; --i) {
                 if (results[i] == null) {
@@ -27146,6 +27075,13 @@ public class PackageManagerService extends IPackageManager.Stub
         }
 
         @Override
+        public @PackageManager.EnabledState int getComponentEnabledSetting(
+                @NonNull ComponentName componentName, int callingUid, int userId) {
+            return PackageManagerService.this.getComponentEnabledSettingInternal(componentName,
+                    callingUid, userId);
+        }
+
+        @Override
         public void setEnableRollbackCode(int token, int enableRollbackCode) {
             PackageManagerService.this.setEnableRollbackCode(token, enableRollbackCode);
         }
@@ -27369,20 +27305,6 @@ public class PackageManagerService extends IPackageManager.Stub
                 return null;
             }
             return ps.getIncrementalStates();
-        }
-
-        @Override
-        public void notifyPackageCrashOrAnr(@NonNull String packageName) {
-            final PackageSetting ps;
-            synchronized (mLock) {
-                ps = mSettings.getPackageLPr(packageName);
-                if (ps == null) {
-                    Slog.w(TAG, "Failed notifyPackageCrash. Package " + packageName
-                            + " is not installed");
-                    return;
-                }
-            }
-            ps.setStatesOnCrashOrAnr();
         }
 
         @Override
@@ -27830,8 +27752,8 @@ public class PackageManagerService extends IPackageManager.Stub
             };
             try {
                 am.broadcastIntentWithFeature(null, null, intent, null, null, 0, null, null,
-                        requiredPermissions, android.app.AppOpsManager.OP_NONE, null, false, false,
-                        UserHandle.USER_ALL);
+                        requiredPermissions, null, android.app.AppOpsManager.OP_NONE, null, false,
+                        false, UserHandle.USER_ALL);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }

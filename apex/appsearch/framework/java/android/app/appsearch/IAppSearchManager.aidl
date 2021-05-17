@@ -40,6 +40,7 @@ interface IAppSearchManager {
      *     packages. The value List contains PackageIdentifier Bundles.
      * @param forceOverride Whether to apply the new schema even if it is incompatible. All
      *     incompatible documents will be deleted.
+     * @param schemaVersion  The overall schema version number of the request.
      * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Bundle}&gt;, where the value are
@@ -52,8 +53,8 @@ interface IAppSearchManager {
         in List<String> schemasNotDisplayedBySystem,
         in Map<String, List<Bundle>> schemasPackageAccessibleBundles,
         boolean forceOverride,
-        in int userId,
         in int schemaVersion,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -93,18 +94,20 @@ interface IAppSearchManager {
      * @param databaseName  The name of the database where this document lives.
      * @param documentBundes List of GenericDocument bundles.
      * @param userId Id of the calling user
+     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
      * @param callback
      *     If the call fails to start, {@link IAppSearchBatchResultCallback#onSystemError}
      *     will be called with the cause throwable. Otherwise,
      *     {@link IAppSearchBatchResultCallback#onResult} will be called with an
      *     {@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;
-     *     where the keys are document URIs, and the values are {@code null}.
+     *     where the keys are document IDs, and the values are {@code null}.
      */
     void putDocuments(
         in String packageName,
         in String databaseName,
         in List<Bundle> documentBundles,
         in int userId,
+        in long binderCallStartTimeMillis,
         in IAppSearchBatchResultCallback callback);
 
     /**
@@ -113,7 +116,7 @@ interface IAppSearchManager {
      * @param packageName The name of the package that owns this document.
      * @param databaseName  The databaseName this document resides in.
      * @param namespace    The namespace this document resides in.
-     * @param uris The URIs of the documents to retrieve
+     * @param ids The IDs of the documents to retrieve
      * @param typePropertyPaths A map of schema type to a list of property paths to return in the
      *     result.
      * @param userId Id of the calling user
@@ -122,13 +125,13 @@ interface IAppSearchManager {
      *     will be called with the cause throwable. Otherwise,
      *     {@link IAppSearchBatchResultCallback#onResult} will be called with an
      *     {@link AppSearchBatchResult}&lt;{@link String}, {@link Bundle}&gt;
-     *     where the keys are document URIs, and the values are Document bundles.
+     *     where the keys are document IDs, and the values are Document bundles.
      */
     void getDocuments(
         in String packageName,
         in String databaseName,
         in String namespace,
-        in List<String> uris,
+        in List<String> ids,
         in Map<String, List<String>> typePropertyPaths,
         in int userId,
         in IAppSearchBatchResultCallback callback);
@@ -232,7 +235,7 @@ interface IAppSearchManager {
         in IAppSearchResultCallback callback);
 
     /**
-     * Reports usage of a particular document by URI and namespace.
+     * Reports usage of a particular document by namespace and id.
      *
      * <p>A usage report represents an event in which a user interacted with or viewed a document.
      *
@@ -246,8 +249,8 @@ interface IAppSearchManager {
      * @param packageName The name of the package that owns this document.
      * @param databaseName  The name of the database to report usage against.
      * @param namespace Namespace the document being used belongs to.
-     * @param uri URI of the document being used.
-     * @param usageTimeMillis The timestamp at which the document was used.
+     * @param id ID of the document being used.
+     * @param usageTimestampMillis The timestamp at which the document was used.
      * @param systemUsage Whether the usage was reported by a system app against another app's doc.
      * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
@@ -257,33 +260,33 @@ interface IAppSearchManager {
          in String packageName,
          in String databaseName,
          in String namespace,
-         in String uri,
-         in long usageTimeMillis,
+         in String id,
+         in long usageTimestampMillis,
          in boolean systemUsage,
          in int userId,
          in IAppSearchResultCallback callback);
 
     /**
-     * Removes documents by URI.
+     * Removes documents by ID.
      *
      * @param packageName The name of the package the document is in.
      * @param databaseName The databaseName the document is in.
      * @param namespace    Namespace of the document to remove.
-     * @param uris The URIs of the documents to delete
+     * @param ids The IDs of the documents to delete
      * @param userId Id of the calling user
      * @param callback
      *     If the call fails to start, {@link IAppSearchBatchResultCallback#onSystemError}
      *     will be called with the cause throwable. Otherwise,
      *     {@link IAppSearchBatchResultCallback#onResult} will be called with an
      *     {@link AppSearchBatchResult}&lt;{@link String}, {@link Void}&gt;
-     *     where the keys are document URIs. If a document doesn't exist, it will be reported as a
+     *     where the keys are document IDs. If a document doesn't exist, it will be reported as a
      *     failure where the {@code throwable} is {@code null}.
      */
-    void removeByUri(
+    void removeByDocumentId(
         in String packageName,
         in String databaseName,
         in String namespace,
-        in List<String> uris,
+        in List<String> ids,
         in int userId,
         in IAppSearchBatchResultCallback callback);
 

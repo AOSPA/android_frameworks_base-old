@@ -1385,7 +1385,6 @@ public class ShortcutManagerTest1 extends BaseShortcutManagerTest {
             mService.waitForBitmapSavesForTest();
             assertWith(getCallerShortcuts())
                     .forShortcutWithId("s1", si -> {
-                        Log.d("ShortcutManagerTest1", si.toString());
                         assertTrue(si.hasIconFile());
                     });
 

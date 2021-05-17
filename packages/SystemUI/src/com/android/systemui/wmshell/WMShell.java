@@ -236,6 +236,14 @@ public final class WMShell extends SystemUI
 
         oneHanded.registerTransitionCallback(new OneHandedTransitionCallback() {
             @Override
+            public void onStartTransition(boolean isEntering) {
+                mSysUiMainExecutor.execute(() -> {
+                    mSysUiState.setFlag(SYSUI_STATE_ONE_HANDED_ACTIVE,
+                            true).commitUpdate(DEFAULT_DISPLAY);
+                });
+            }
+
+            @Override
             public void onStartFinished(Rect bounds) {
                 mSysUiMainExecutor.execute(() -> {
                     mSysUiState.setFlag(SYSUI_STATE_ONE_HANDED_ACTIVE,
@@ -268,6 +276,7 @@ public final class WMShell extends SystemUI
             public void onStop() {
                 mSysUiMainExecutor.execute(() -> {
                     if (oneHanded.isOneHandedEnabled()) {
+                        // Log metrics for 3-button navigation mode.
                         oneHanded.stopOneHanded(
                                 OneHandedUiEventLogger.EVENT_ONE_HANDED_TRIGGER_GESTURE_OUT);
                     } else if (oneHanded.isSwipeToNotificationEnabled()) {
@@ -295,6 +304,11 @@ public final class WMShell extends SystemUI
                     oneHanded.setLockedDisabled(false /* locked */, false /* enabled */);
                 }
                 oneHanded.stopOneHanded();
+            }
+
+            @Override
+            public void onUserSwitchComplete(int userId) {
+                oneHanded.onUserSwitch(userId);
             }
         };
         mKeyguardUpdateMonitor.registerCallback(mOneHandedKeyguardCallback);

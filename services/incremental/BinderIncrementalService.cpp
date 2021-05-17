@@ -150,6 +150,11 @@ binder::Status BinderIncrementalService::startLoading(
     return ok();
 }
 
+binder::Status BinderIncrementalService::onInstallationComplete(int32_t storageId) {
+    mImpl.onInstallationComplete(storageId);
+    return ok();
+}
+
 binder::Status BinderIncrementalService::makeBindMount(int32_t storageId,
                                                        const std::string& sourcePath,
                                                        const std::string& targetFullPath,
@@ -327,20 +332,6 @@ binder::Status BinderIncrementalService::registerLoadingProgressListener(
 binder::Status BinderIncrementalService::unregisterLoadingProgressListener(int32_t storageId,
                                                                            bool* _aidl_return) {
     *_aidl_return = mImpl.unregisterLoadingProgressListener(storageId);
-    return ok();
-}
-
-binder::Status BinderIncrementalService::registerStorageHealthListener(
-        int32_t storageId,
-        const ::android::os::incremental::StorageHealthCheckParams& healthCheckParams,
-        const ::android::sp<IStorageHealthListener>& healthListener, bool* _aidl_return) {
-    *_aidl_return =
-            mImpl.registerStorageHealthListener(storageId, healthCheckParams, healthListener);
-    return ok();
-}
-
-binder::Status BinderIncrementalService::unregisterStorageHealthListener(int32_t storageId) {
-    mImpl.unregisterStorageHealthListener(storageId);
     return ok();
 }
 

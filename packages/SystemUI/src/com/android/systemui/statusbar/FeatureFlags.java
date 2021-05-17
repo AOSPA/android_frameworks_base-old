@@ -53,18 +53,8 @@ public class FeatureFlags {
         return mFlagReader.isEnabled(R.bool.flag_notification_twocolumn);
     }
 
-    // Does not support runtime changes
-    public boolean isQSLabelsEnabled() {
-        return mFlagReader.isEnabled(R.bool.flag_qs_labels);
-    }
-
     public boolean isKeyguardLayoutEnabled() {
         return mFlagReader.isEnabled(R.bool.flag_keyguard_layout);
-    }
-
-    /** b/178485354 */
-    public boolean useNewBrightnessSlider() {
-        return mFlagReader.isEnabled(R.bool.flag_brightness_slider);
     }
 
     public boolean useNewLockscreenAnimations() {
@@ -97,5 +87,13 @@ public class FeatureFlags {
 
     public boolean isChargingRippleEnabled() {
         return mFlagReader.isEnabled(R.bool.flag_charging_ripple);
+    }
+
+    public boolean isOngoingCallStatusBarChipEnabled() {
+        return mFlagReader.isEnabled(R.bool.flag_ongoing_call_status_bar_chip);
+    }
+
+    public boolean isSmartspaceEnabled() {
+        return mFlagReader.isEnabled(R.bool.flag_smartspace);
     }
 }

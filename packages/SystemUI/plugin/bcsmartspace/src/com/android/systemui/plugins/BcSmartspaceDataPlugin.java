@@ -16,7 +16,13 @@
 
 package com.android.systemui.plugins;
 
+import android.app.PendingIntent;
+import android.app.smartspace.SmartspaceAction;
+import android.app.smartspace.SmartspaceTarget;
+import android.content.Intent;
 import android.os.Parcelable;
+import android.view.View;
+import android.view.ViewGroup;
 
 import com.android.systemui.plugins.annotations.ProvidesInterface;
 
@@ -36,9 +42,63 @@ public interface BcSmartspaceDataPlugin extends Plugin {
     /** Unregister a listener. */
     void unregisterListener(SmartspaceTargetListener listener);
 
+    /**
+     * Create a view to be shown within the parent. Do not add the view, as the parent
+     * will be responsible for correctly setting the LayoutParams
+     */
+    default SmartspaceView getView(ViewGroup parent) {
+        return null;
+    }
+
+    /** Updates Smartspace data and propagates it to any listeners. */
+    void onTargetsAvailable(List<SmartspaceTarget> targets);
+
     /** Provides Smartspace data to registered listeners. */
     interface SmartspaceTargetListener {
         /** Each Parcelable is a SmartspaceTarget that represents a card. */
         void onSmartspaceTargetsUpdated(List<? extends Parcelable> targets);
+    }
+
+    /** View to which this plugin can be registered, in order to get updates. */
+    interface SmartspaceView {
+        void registerDataProvider(BcSmartspaceDataPlugin plugin);
+
+        /**
+         * Primary color for unprotected text
+         */
+        void setPrimaryTextColor(int color);
+
+        /**
+         * Range [0.0 - 1.0] when transitioning from Lockscreen to/from AOD
+         */
+        void setDozeAmount(float amount);
+
+        /**
+         * Overrides how Intents/PendingIntents gets launched. Mostly to support auth from
+         * the lockscreen.
+         */
+        void setIntentStarter(IntentStarter intentStarter);
+
+        /**
+         * When on the lockscreen, use the FalsingManager to help detect errant touches
+         */
+        void setFalsingManager(FalsingManager falsingManager);
+    }
+
+    /** Interface for launching Intents, which can differ on the lockscreen */
+    interface IntentStarter {
+        default void startFromAction(SmartspaceAction action, View v) {
+            if (action.getIntent() != null) {
+                startIntent(v, action.getIntent());
+            } else if (action.getPendingIntent() != null) {
+                startPendingIntent(action.getPendingIntent());
+            }
+        }
+
+        /** Start the intent */
+        void startIntent(View v, Intent i);
+
+        /** Start the PendingIntent */
+        void startPendingIntent(PendingIntent pi);
     }
 }

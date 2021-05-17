@@ -158,12 +158,14 @@ import android.os.IBatteryPropertiesRegistrar;
 import android.os.IBinder;
 import android.os.IDumpstate;
 import android.os.IHardwarePropertiesManager;
+import android.os.IHintManager;
 import android.os.IPowerManager;
 import android.os.IRecoverySystem;
 import android.os.ISystemUpdateManager;
 import android.os.IThermalService;
 import android.os.IUserManager;
 import android.os.IncidentManager;
+import android.os.PerformanceHintManager;
 import android.os.PowerManager;
 import android.os.RecoverySystem;
 import android.os.ServiceManager;
@@ -592,6 +594,17 @@ public final class SystemServiceRegistry {
                         ctx.mMainThread.getHandler());
             }});
 
+        registerService(Context.PERFORMANCE_HINT_SERVICE, PerformanceHintManager.class,
+                new CachedServiceFetcher<PerformanceHintManager>() {
+            @Override
+            public PerformanceHintManager createService(ContextImpl ctx)
+                    throws ServiceNotFoundException {
+                IBinder hintBinder = ServiceManager.getServiceOrThrow(
+                        Context.PERFORMANCE_HINT_SERVICE);
+                IHintManager hintService = IHintManager.Stub.asInterface(hintBinder);
+                return new PerformanceHintManager(hintService);
+            }});
+
         registerService(Context.RECOVERY_SERVICE, RecoverySystem.class,
                 new CachedServiceFetcher<RecoverySystem>() {
             @Override
@@ -722,7 +735,7 @@ public final class SystemServiceRegistry {
                 new CachedServiceFetcher<UwbManager>() {
                     @Override
                     public UwbManager createService(ContextImpl ctx) {
-                        return UwbManager.getInstance();
+                        return UwbManager.getInstance(ctx);
                     }
                 });
 

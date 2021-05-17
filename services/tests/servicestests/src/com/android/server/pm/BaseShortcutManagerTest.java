@@ -125,6 +125,7 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.LinkedHashMap;
@@ -691,7 +692,8 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
 
         @Override
         public void putDocuments(String packageName, String databaseName,
-                List<Bundle> documentBundles, int userId, IAppSearchBatchResultCallback callback)
+                List<Bundle> documentBundles, int userId, long binderCallStartTimeMillis,
+                IAppSearchBatchResultCallback callback)
                 throws RemoteException {
             final List<GenericDocument> docs = new ArrayList<>(documentBundles.size());
             for (Bundle bundle : documentBundles) {
@@ -702,36 +704,36 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
             final String key = getKey(userId, databaseName);
             Map<String, GenericDocument> docMap = mDocumentMap.get(key);
             for (GenericDocument doc : docs) {
-                builder.setSuccess(doc.getUri(), null);
+                builder.setSuccess(doc.getId(), null);
                 if (docMap == null) {
                     docMap = new ArrayMap<>(1);
                     mDocumentMap.put(key, docMap);
                 }
-                docMap.put(doc.getUri(), doc);
+                docMap.put(doc.getId(), doc);
             }
             callback.onResult(builder.build());
         }
 
         @Override
         public void getDocuments(String packageName, String databaseName, String namespace,
-                List<String> uris, Map<String, List<String>> typePropertyPaths, int userId,
+                List<String> ids, Map<String, List<String>> typePropertyPaths, int userId,
                 IAppSearchBatchResultCallback callback) throws RemoteException {
             final AppSearchBatchResult.Builder<String, Bundle> builder =
                     new AppSearchBatchResult.Builder<>();
             final String key = getKey(userId, databaseName);
             if (!mDocumentMap.containsKey(key)) {
-                for (String uri : uris) {
-                    builder.setFailure(uri, AppSearchResult.RESULT_NOT_FOUND,
-                            key + " not found when getting: " + uri);
+                for (String id : ids) {
+                    builder.setFailure(id, AppSearchResult.RESULT_NOT_FOUND,
+                            key + " not found when getting: " + id);
                 }
             } else {
                 final Map<String, GenericDocument> docs = mDocumentMap.get(key);
-                for (String uri : uris) {
-                    if (docs.containsKey(uri)) {
-                        builder.setSuccess(uri, docs.get(uri).getBundle());
+                for (String id : ids) {
+                    if (docs.containsKey(id)) {
+                        builder.setSuccess(id, docs.get(id).getBundle());
                     } else {
-                        builder.setFailure(uri, AppSearchResult.RESULT_NOT_FOUND,
-                                "shortcut not found: " + uri);
+                        builder.setFailure(id, AppSearchResult.RESULT_NOT_FOUND,
+                                "shortcut not found: " + id);
                     }
                 }
             }
@@ -803,33 +805,33 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
 
         @Override
         public void reportUsage(String packageName, String databaseName, String namespace,
-                String uri, long usageTimeMillis, boolean systemUsage, int userId,
+                String documentId, long usageTimestampMillis, boolean systemUsage, int userId,
                 IAppSearchResultCallback callback)
                 throws RemoteException {
             ignore(callback);
         }
 
         @Override
-        public void removeByUri(String packageName, String databaseName, String namespace,
-                List<String> uris, int userId, IAppSearchBatchResultCallback callback)
+        public void removeByDocumentId(String packageName, String databaseName, String namespace,
+                List<String> ids, int userId, IAppSearchBatchResultCallback callback)
                 throws RemoteException {
             final AppSearchBatchResult.Builder<String, Void> builder =
                     new AppSearchBatchResult.Builder<>();
             final String key = getKey(userId, databaseName);
             if (!mDocumentMap.containsKey(key)) {
-                for (String uri : uris) {
-                    builder.setFailure(uri, AppSearchResult.RESULT_NOT_FOUND,
-                            "package " + key + " not found when removing " + uri);
+                for (String id : ids) {
+                    builder.setFailure(id, AppSearchResult.RESULT_NOT_FOUND,
+                            "package " + key + " not found when removing " + id);
                 }
             } else {
                 final Map<String, GenericDocument> docs = mDocumentMap.get(key);
-                for (String uri : uris) {
-                    if (docs.containsKey(uri)) {
-                        docs.remove(uri);
-                        builder.setSuccess(uri, null);
+                for (String id : ids) {
+                    if (docs.containsKey(id)) {
+                        docs.remove(id);
+                        builder.setSuccess(id, null);
                     } else {
-                        builder.setFailure(uri, AppSearchResult.RESULT_NOT_FOUND,
-                                "shortcut not found when removing " + uri);
+                        builder.setFailure(id, AppSearchResult.RESULT_NOT_FOUND,
+                                "shortcut not found when removing " + id);
                     }
                 }
             }
@@ -2595,6 +2597,13 @@ public abstract class BaseShortcutManagerTest extends InstrumentationTestCase {
             ((List) inv.getArguments()[0]).addAll(candidates);
             return preferred;
         }).when(mMockPackageManagerInternal).getHomeActivitiesAsUser(any(List.class), eq(userId));
+    }
+
+    protected void prepareIntentActivities(ComponentName cn) {
+        when(mMockPackageManagerInternal.queryIntentActivities(
+                anyOrNull(Intent.class), anyStringOrNull(), anyInt(), anyInt(), anyInt()))
+                .thenReturn(Collections.singletonList(
+                        ri(cn.getPackageName(), cn.getClassName(), false, 0)));
     }
 
     protected static ComponentName cn(String packageName, String name) {

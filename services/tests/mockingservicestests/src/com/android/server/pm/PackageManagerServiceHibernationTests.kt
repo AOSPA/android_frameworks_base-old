@@ -17,9 +17,14 @@
 package com.android.server.pm
 
 import android.os.Build
+import android.os.Handler
 import android.provider.DeviceConfig
 import android.provider.DeviceConfig.NAMESPACE_APP_HIBERNATION
+import android.testing.AndroidTestingRunner
+import android.testing.TestableLooper
+import android.testing.TestableLooper.RunWithLooper
 import com.android.server.apphibernation.AppHibernationManagerInternal
+import com.android.server.apphibernation.AppHibernationService
 import com.android.server.extendedtestutils.wheneverStatic
 import com.android.server.testutils.whenever
 import org.junit.Assert.assertFalse
@@ -28,12 +33,12 @@ import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
 import org.junit.runner.RunWith
-import org.junit.runners.JUnit4
 import org.mockito.Mock
 import org.mockito.Mockito.verify
 import org.mockito.MockitoAnnotations
 
-@RunWith(JUnit4::class)
+@RunWith(AndroidTestingRunner::class)
+@RunWithLooper
 class PackageManagerServiceHibernationTests {
 
     companion object {
@@ -57,9 +62,12 @@ class PackageManagerServiceHibernationTests {
         MockitoAnnotations.initMocks(this)
         wheneverStatic { DeviceConfig.getBoolean(
             NAMESPACE_APP_HIBERNATION, KEY_APP_HIBERNATION_ENABLED, false) }.thenReturn(true)
+        AppHibernationService.sIsServiceEnabled = true
         rule.system().stageNominalSystemState()
         whenever(rule.mocks().injector.getLocalService(AppHibernationManagerInternal::class.java))
             .thenReturn(appHibernationManager)
+        whenever(rule.mocks().injector.handler)
+            .thenReturn(Handler(TestableLooper.get(this).looper))
     }
 
     @Test
@@ -74,6 +82,9 @@ class PackageManagerServiceHibernationTests {
         ps!!.setStopped(true, TEST_USER_ID)
 
         pm.setPackageStoppedState(TEST_PACKAGE_NAME, false, TEST_USER_ID)
+
+        TestableLooper.get(this).processAllMessages()
+
         verify(appHibernationManager).setHibernatingForUser(TEST_PACKAGE_NAME, TEST_USER_ID, false)
         verify(appHibernationManager).setHibernatingGlobally(TEST_PACKAGE_NAME, false)
     }

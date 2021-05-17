@@ -24,6 +24,7 @@ import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.MediaDataManager;
+import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.ActionClickLogger;
 import com.android.systemui.statusbar.CommandQueue;
@@ -49,6 +50,7 @@ import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.inflation.LowPriorityInflationHelper;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
+import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
 import com.android.systemui.statusbar.notification.stack.ForegroundServiceSectionController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
@@ -57,10 +59,12 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarRemoteInputCallback;
+import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.policy.RemoteInputUriController;
 import com.android.systemui.tracing.ProtoTracer;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.concurrency.DelayableExecutor;
+import com.android.systemui.util.time.SystemClock;
 import com.android.wm.shell.bubbles.Bubbles;
 
 import java.util.Optional;
@@ -226,4 +230,20 @@ public interface StatusBarDependenciesModule {
     @Binds
     StatusBarIconController provideStatusBarIconController(
             StatusBarIconControllerImpl controllerImpl);
+
+    /**
+     */
+    @Provides
+    @SysUISingleton
+    static OngoingCallController provideOngoingCallController(
+            CommonNotifCollection notifCollection,
+            FeatureFlags featureFlags,
+            SystemClock systemClock,
+            ActivityStarter activityStarter) {
+        OngoingCallController ongoingCallController =
+                new OngoingCallController(
+                        notifCollection, featureFlags, systemClock, activityStarter);
+        ongoingCallController.init();
+        return ongoingCallController;
+    }
 }

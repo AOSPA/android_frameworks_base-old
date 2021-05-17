@@ -304,17 +304,17 @@ class ProcessErrorStateRecord {
         float loadingProgress = 1;
         IncrementalMetrics incrementalMetrics = null;
         final PackageManagerInternal packageManagerInternal = mService.getPackageManagerInternal();
-        if (aInfo != null && aInfo.packageName != null) {
+        if (mApp.info != null && mApp.info.packageName != null) {
             IncrementalStatesInfo incrementalStatesInfo =
                     packageManagerInternal.getIncrementalStatesInfo(
-                            aInfo.packageName, mApp.uid, mApp.userId);
+                            mApp.info.packageName, mApp.uid, mApp.userId);
             if (incrementalStatesInfo != null) {
                 loadingProgress = incrementalStatesInfo.getProgress();
             }
-            final String codePath = aInfo.getCodePath();
+            final String codePath = mApp.info.getCodePath();
             if (IncrementalManager.isIncrementalPath(codePath)) {
                 // Report in the main log that the incremental package is still loading
-                Slog.e(TAG, "App crashed on incremental package " + aInfo.packageName
+                Slog.e(TAG, "App ANR on incremental package " + mApp.info.packageName
                         + " which is " + ((int) (loadingProgress * 100)) + "% loaded.");
                 final IBinder incrementalService = ServiceManager.getService(
                         Context.INCREMENTAL_SERVICE);
@@ -417,7 +417,6 @@ class ProcessErrorStateRecord {
             mService.mProcessList.mAppExitInfoTracker.scheduleLogAnrTrace(
                     pid, mApp.uid, mApp.getPackageList(), tracesFile, offsets[0], offsets[1]);
         }
-
         FrameworkStatsLog.write(FrameworkStatsLog.ANR_OCCURRED, mApp.uid, mApp.processName,
                 activityShortComponentName == null ? "unknown" : activityShortComponentName,
                 annotation,
@@ -470,11 +469,6 @@ class ProcessErrorStateRecord {
                 makeAppNotRespondingLSP(activityShortComponentName,
                         annotation != null ? "ANR " + annotation : "ANR", info.toString());
                 mDialogController.setAnrController(anrController);
-            }
-
-            // Notify package manager service to possibly update package state
-            if (aInfo != null && aInfo.packageName != null) {
-                packageManagerInternal.notifyPackageCrashOrAnr(aInfo.packageName);
             }
 
             // mUiHandler can be null if the AMS is constructed with injector only. This will only

@@ -39,9 +39,10 @@ public final class BatteryUsageStats implements Parcelable {
     private final double mDischargedPowerUpperBound;
     private final long mBatteryTimeRemainingMs;
     private final long mChargeTimeRemainingMs;
-    private final ArrayList<UidBatteryConsumer> mUidBatteryConsumers;
-    private final ArrayList<SystemBatteryConsumer> mSystemBatteryConsumers;
-    private final ArrayList<UserBatteryConsumer> mUserBatteryConsumers;
+    private final String[] mCustomPowerComponentNames;
+    private final List<UidBatteryConsumer> mUidBatteryConsumers;
+    private final List<SystemBatteryConsumer> mSystemBatteryConsumers;
+    private final List<UserBatteryConsumer> mUserBatteryConsumers;
     private final Parcel mHistoryBuffer;
     private final List<BatteryStats.HistoryTag> mHistoryTagPool;
 
@@ -54,6 +55,7 @@ public final class BatteryUsageStats implements Parcelable {
         mHistoryTagPool = builder.mHistoryTagPool;
         mBatteryTimeRemainingMs = builder.mBatteryTimeRemainingMs;
         mChargeTimeRemainingMs = builder.mChargeTimeRemainingMs;
+        mCustomPowerComponentNames = builder.mCustomPowerComponentNames;
 
         double totalPower = 0;
 
@@ -74,7 +76,7 @@ public final class BatteryUsageStats implements Parcelable {
         for (int i = 0; i < systemBatteryConsumerCount; i++) {
             final SystemBatteryConsumer consumer =
                     builder.mSystemBatteryConsumerBuilders.valueAt(i).build();
-            totalPower += consumer.getConsumedPower();
+            totalPower += consumer.getConsumedPower() - consumer.getPowerConsumedByApps();
             mSystemBatteryConsumers.add(consumer);
         }
 
@@ -182,12 +184,31 @@ public final class BatteryUsageStats implements Parcelable {
         mDischargedPowerUpperBound = source.readDouble();
         mBatteryTimeRemainingMs = source.readLong();
         mChargeTimeRemainingMs = source.readLong();
-        mUidBatteryConsumers = new ArrayList<>();
-        source.readParcelableList(mUidBatteryConsumers, getClass().getClassLoader());
-        mSystemBatteryConsumers = new ArrayList<>();
-        source.readParcelableList(mSystemBatteryConsumers, getClass().getClassLoader());
-        mUserBatteryConsumers = new ArrayList<>();
-        source.readParcelableList(mUserBatteryConsumers, getClass().getClassLoader());
+        mCustomPowerComponentNames = source.readStringArray();
+        int uidCount = source.readInt();
+        mUidBatteryConsumers = new ArrayList<>(uidCount);
+        for (int i = 0; i < uidCount; i++) {
+            final UidBatteryConsumer consumer =
+                    UidBatteryConsumer.CREATOR.createFromParcel(source);
+            consumer.setCustomPowerComponentNames(mCustomPowerComponentNames);
+            mUidBatteryConsumers.add(consumer);
+        }
+        int sysCount = source.readInt();
+        mSystemBatteryConsumers = new ArrayList<>(sysCount);
+        for (int i = 0; i < sysCount; i++) {
+            final SystemBatteryConsumer consumer =
+                    SystemBatteryConsumer.CREATOR.createFromParcel(source);
+            consumer.setCustomPowerComponentNames(mCustomPowerComponentNames);
+            mSystemBatteryConsumers.add(consumer);
+        }
+        int userCount = source.readInt();
+        mUserBatteryConsumers = new ArrayList<>(userCount);
+        for (int i = 0; i < userCount; i++) {
+            final UserBatteryConsumer consumer =
+                    UserBatteryConsumer.CREATOR.createFromParcel(source);
+            consumer.setCustomPowerComponentNames(mCustomPowerComponentNames);
+            mUserBatteryConsumers.add(consumer);
+        }
         if (source.readBoolean()) {
             mHistoryBuffer = Parcel.obtain();
             mHistoryBuffer.setDataSize(0);
@@ -222,9 +243,19 @@ public final class BatteryUsageStats implements Parcelable {
         dest.writeDouble(mDischargedPowerUpperBound);
         dest.writeLong(mBatteryTimeRemainingMs);
         dest.writeLong(mChargeTimeRemainingMs);
-        dest.writeParcelableList(mUidBatteryConsumers, flags);
-        dest.writeParcelableList(mSystemBatteryConsumers, flags);
-        dest.writeParcelableList(mUserBatteryConsumers, flags);
+        dest.writeStringArray(mCustomPowerComponentNames);
+        dest.writeInt(mUidBatteryConsumers.size());
+        for (int i = mUidBatteryConsumers.size() - 1; i >= 0; i--) {
+            mUidBatteryConsumers.get(i).writeToParcel(dest, flags);
+        }
+        dest.writeInt(mSystemBatteryConsumers.size());
+        for (int i = mSystemBatteryConsumers.size() - 1; i >= 0; i--) {
+            mSystemBatteryConsumers.get(i).writeToParcel(dest, flags);
+        }
+        dest.writeInt(mUserBatteryConsumers.size());
+        for (int i = mUserBatteryConsumers.size() - 1; i >= 0; i--) {
+            mUserBatteryConsumers.get(i).writeToParcel(dest, flags);
+        }
         if (mHistoryBuffer != null) {
             dest.writeBoolean(true);
 
@@ -259,8 +290,10 @@ public final class BatteryUsageStats implements Parcelable {
      * Builder for BatteryUsageStats.
      */
     public static final class Builder {
-        private final int mCustomPowerComponentCount;
+        @NonNull
+        private final String[] mCustomPowerComponentNames;
         private final int mCustomTimeComponentCount;
+        private final boolean mIncludePowerModels;
         private long mStatsStartTimestampMs;
         private int mDischargePercentage;
         private double mDischargedPowerLowerBoundMah;
@@ -276,9 +309,15 @@ public final class BatteryUsageStats implements Parcelable {
         private Parcel mHistoryBuffer;
         private List<BatteryStats.HistoryTag> mHistoryTagPool;
 
-        public Builder(int customPowerComponentCount, int customTimeComponentCount) {
-            mCustomPowerComponentCount = customPowerComponentCount;
+        public Builder(@NonNull String[] customPowerComponentNames, int customTimeComponentCount) {
+            this(customPowerComponentNames, customTimeComponentCount, false);
+        }
+
+        public Builder(@NonNull String[] customPowerComponentNames, int customTimeComponentCount,
+                boolean includePowerModels) {
+            mCustomPowerComponentNames = customPowerComponentNames;
             mCustomTimeComponentCount = customTimeComponentCount;
+            mIncludePowerModels = includePowerModels;
         }
 
         /**
@@ -359,8 +398,8 @@ public final class BatteryUsageStats implements Parcelable {
             int uid = batteryStatsUid.getUid();
             UidBatteryConsumer.Builder builder = mUidBatteryConsumerBuilders.get(uid);
             if (builder == null) {
-                builder = new UidBatteryConsumer.Builder(mCustomPowerComponentCount,
-                        mCustomTimeComponentCount, batteryStatsUid);
+                builder = new UidBatteryConsumer.Builder(mCustomPowerComponentNames,
+                        mCustomTimeComponentCount, mIncludePowerModels, batteryStatsUid);
                 mUidBatteryConsumerBuilders.put(uid, builder);
             }
             return builder;
@@ -375,8 +414,8 @@ public final class BatteryUsageStats implements Parcelable {
                 @SystemBatteryConsumer.DrainType int drainType) {
             SystemBatteryConsumer.Builder builder = mSystemBatteryConsumerBuilders.get(drainType);
             if (builder == null) {
-                builder = new SystemBatteryConsumer.Builder(mCustomPowerComponentCount,
-                        mCustomTimeComponentCount, drainType);
+                builder = new SystemBatteryConsumer.Builder(mCustomPowerComponentNames,
+                        mCustomTimeComponentCount, mIncludePowerModels, drainType);
                 mSystemBatteryConsumerBuilders.put(drainType, builder);
             }
             return builder;
@@ -390,8 +429,8 @@ public final class BatteryUsageStats implements Parcelable {
         public UserBatteryConsumer.Builder getOrCreateUserBatteryConsumerBuilder(int userId) {
             UserBatteryConsumer.Builder builder = mUserBatteryConsumerBuilders.get(userId);
             if (builder == null) {
-                builder = new UserBatteryConsumer.Builder(mCustomPowerComponentCount,
-                        mCustomTimeComponentCount, userId);
+                builder = new UserBatteryConsumer.Builder(mCustomPowerComponentNames,
+                        mCustomTimeComponentCount, mIncludePowerModels, userId);
                 mUserBatteryConsumerBuilders.put(userId, builder);
             }
             return builder;

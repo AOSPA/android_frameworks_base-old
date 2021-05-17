@@ -15,6 +15,7 @@
  */
 #pragma once
 
+#include "HolePunch.h"
 #include "RecordingCanvas.h"
 #include "ReorderBarrierDrawables.h"
 #include "SkiaCanvas.h"
@@ -42,6 +43,8 @@ public:
                                 uirenderer::RenderNode* renderNode = nullptr) override {
         initDisplayList(renderNode, width, height);
     }
+
+    virtual void punchHole(const SkRRect& rect) override;
 
     virtual void finishRecording(uirenderer::RenderNode* destination) override;
     std::unique_ptr<SkiaDisplayList> finishRecording();
@@ -72,6 +75,7 @@ public:
                             uirenderer::CanvasPropertyPrimitive* radius,
                             uirenderer::CanvasPropertyPaint* paint,
                             uirenderer::CanvasPropertyPrimitive* progress,
+                            uirenderer::CanvasPropertyPrimitive* turbulencePhase,
                             const SkRuntimeShaderBuilder& effectBuilder) override;
 
     virtual void drawVectorDrawable(VectorDrawableRoot* vectorDrawable) override;

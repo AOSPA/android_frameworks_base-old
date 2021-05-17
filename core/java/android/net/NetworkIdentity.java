@@ -186,27 +186,23 @@ public class NetworkIdentity implements Comparable<NetworkIdentity> {
      */
     public static NetworkIdentity buildNetworkIdentity(Context context,
             NetworkStateSnapshot snapshot, boolean defaultNetwork, @NetworkType int subType) {
-        final int legacyType = snapshot.legacyType;
+        final int legacyType = snapshot.getLegacyType();
 
-        final String subscriberId = snapshot.subscriberId;
+        final String subscriberId = snapshot.getSubscriberId();
         String networkId = null;
-        boolean roaming = !snapshot.networkCapabilities.hasCapability(
+        boolean roaming = !snapshot.getNetworkCapabilities().hasCapability(
                 NetworkCapabilities.NET_CAPABILITY_NOT_ROAMING);
-        boolean metered = !snapshot.networkCapabilities.hasCapability(
+        boolean metered = !snapshot.getNetworkCapabilities().hasCapability(
                 NetworkCapabilities.NET_CAPABILITY_NOT_METERED);
 
-        final int oemManaged = getOemBitfield(snapshot.networkCapabilities);
+        final int oemManaged = getOemBitfield(snapshot.getNetworkCapabilities());
 
         if (legacyType == TYPE_WIFI) {
-            if (snapshot.networkCapabilities.getSsid() != null) {
-                networkId = snapshot.networkCapabilities.getSsid();
-                if (networkId == null) {
-                    // TODO: Figure out if this code path never runs. If so, remove them.
-                    final WifiManager wifi = (WifiManager) context.getSystemService(
-                            Context.WIFI_SERVICE);
-                    final WifiInfo info = wifi.getConnectionInfo();
-                    networkId = info != null ? info.getSSID() : null;
-                }
+            networkId = snapshot.getNetworkCapabilities().getSsid();
+            if (networkId == null) {
+                final WifiManager wifi = context.getSystemService(WifiManager.class);
+                final WifiInfo info = wifi.getConnectionInfo();
+                networkId = info != null ? info.getSSID() : null;
             }
         }
 

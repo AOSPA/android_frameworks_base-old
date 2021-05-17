@@ -17,6 +17,7 @@
 package android.hardware.display;
 
 import android.annotation.IntDef;
+import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.os.Parcel;
@@ -73,12 +74,26 @@ public final class DeviceProductInfo implements Parcelable {
             Integer modelYear,
             ManufactureDate manufactureDate,
             int connectionToSinkType) {
-        this.mName = name;
-        this.mManufacturerPnpId = manufacturerPnpId;
-        this.mProductId = productId;
-        this.mModelYear = modelYear;
-        this.mManufactureDate = manufactureDate;
-        this.mConnectionToSinkType = connectionToSinkType;
+        mName = name;
+        mManufacturerPnpId = manufacturerPnpId;
+        mProductId = productId;
+        mModelYear = modelYear;
+        mManufactureDate = manufactureDate;
+        mConnectionToSinkType = connectionToSinkType;
+    }
+
+    public DeviceProductInfo(
+            @Nullable String name,
+            @NonNull String manufacturerPnpId,
+            @NonNull String productId,
+            @IntRange(from = 1990) int modelYear,
+            @ConnectionToSinkType int connectionToSinkType) {
+        mName = name;
+        mManufacturerPnpId = Objects.requireNonNull(manufacturerPnpId);
+        mProductId = Objects.requireNonNull(productId);
+        mModelYear = modelYear;
+        mManufactureDate = null;
+        mConnectionToSinkType = connectionToSinkType;
     }
 
     private DeviceProductInfo(Parcel in) {
@@ -99,6 +114,9 @@ public final class DeviceProductInfo implements Parcelable {
     }
 
     /**
+     * Returns the Manufacturer Plug and Play ID. This ID identifies the manufacture according to
+     * the list: https://uefi.org/PNP_ID_List. It consist of 3 characters, each character
+     * is an uppercase letter (A-Z).
      * @return Manufacturer Plug and Play ID.
      */
     @NonNull
@@ -118,6 +136,7 @@ public final class DeviceProductInfo implements Parcelable {
      * @return Model year of the device. Return -1 if not available. Typically,
      * one of model year or manufacture year is available.
      */
+    @IntRange(from = -1)
     public int getModelYear()  {
         return mModelYear != null ? mModelYear : -1;
     }
@@ -126,6 +145,7 @@ public final class DeviceProductInfo implements Parcelable {
      * @return The year of manufacture, or -1 it is not available. Typically,
      * one of model year or manufacture year is available.
      */
+    @IntRange(from = -1)
     public int getManufactureYear()  {
         if (mManufactureDate == null) {
             return -1;
@@ -134,9 +154,10 @@ public final class DeviceProductInfo implements Parcelable {
     }
 
     /**
-     * @return The week of manufacture, or -1 it is not available. Typically,
-     * not present if model year is available.
+     * @return The week of manufacture which ranges from 1 to 53, or -1 it is not available.
+     * Typically, it is not present if model year is available.
      */
+    @IntRange(from = -1, to = 53)
     public int getManufactureWeek() {
         if (mManufactureDate == null) {
             return -1;

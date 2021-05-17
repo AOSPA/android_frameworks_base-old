@@ -16,7 +16,7 @@
 
 package android.uwb;
 
-import android.Manifest;
+import android.Manifest.permission;
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -47,9 +47,10 @@ import java.util.concurrent.Executor;
 @SystemApi
 @SystemService(Context.UWB_SERVICE)
 public final class UwbManager {
-    private IUwbAdapter mUwbAdapter;
-    private static final String SERVICE_NAME = "uwb";
+    private static final String SERVICE_NAME = Context.UWB_SERVICE;
 
+    private final Context mContext;
+    private final IUwbAdapter mUwbAdapter;
     private final AdapterStateListener mAdapterStateListener;
     private final RangingManager mRangingManager;
 
@@ -68,6 +69,16 @@ public final class UwbManager {
                 STATE_CHANGED_REASON_SYSTEM_BOOT,
                 STATE_CHANGED_REASON_ERROR_UNKNOWN})
         @interface StateChangedReason {}
+
+        /**
+         * @hide
+         */
+        @Retention(RetentionPolicy.SOURCE)
+        @IntDef(value = {
+                STATE_ENABLED_INACTIVE,
+                STATE_ENABLED_ACTIVE,
+                STATE_DISABLED})
+        @interface State {}
 
         /**
          * Indicates that the state change was due to opening of first UWB session
@@ -95,30 +106,51 @@ public final class UwbManager {
         int STATE_CHANGED_REASON_ERROR_UNKNOWN = 4;
 
         /**
+         * Indicates that UWB is disabled on device
+         */
+        int STATE_DISABLED = 0;
+        /**
+         * Indicates that UWB is enabled on device but has no active ranging sessions
+         */
+        int STATE_ENABLED_INACTIVE = 1;
+
+        /**
+         * Indicates that UWB is enabled and has active ranging session
+         */
+        int STATE_ENABLED_ACTIVE = 2;
+
+        /**
          * Invoked when underlying UWB adapter's state is changed
          * <p>Invoked with the adapter's current state after registering an
          * {@link AdapterStateCallback} using
          * {@link UwbManager#registerAdapterStateCallback(Executor, AdapterStateCallback)}.
          *
-         * <p>Possible values for the state to change are
+         * <p>Possible reasons for the state to change are
          * {@link #STATE_CHANGED_REASON_SESSION_STARTED},
          * {@link #STATE_CHANGED_REASON_ALL_SESSIONS_CLOSED},
          * {@link #STATE_CHANGED_REASON_SYSTEM_POLICY},
          * {@link #STATE_CHANGED_REASON_SYSTEM_BOOT},
          * {@link #STATE_CHANGED_REASON_ERROR_UNKNOWN}.
          *
-         * @param isEnabled true when UWB adapter is enabled, false when it is disabled
+         * <p>Possible values for the UWB state are
+         * {@link #STATE_ENABLED_INACTIVE},
+         * {@link #STATE_ENABLED_ACTIVE},
+         * {@link #STATE_DISABLED}.
+         *
+         * @param state the UWB state; inactive, active or disabled
          * @param reason the reason for the state change
          */
-        void onStateChanged(boolean isEnabled, @StateChangedReason int reason);
+        void onStateChanged(@State int state, @StateChangedReason int reason);
     }
 
     /**
      * Use <code>Context.getSystemService(UwbManager.class)</code> to get an instance.
      *
+     * @param ctx Context of the client.
      * @param adapter an instance of an {@link android.uwb.IUwbAdapter}
      */
-    private UwbManager(IUwbAdapter adapter) {
+    private UwbManager(@NonNull Context ctx, @NonNull IUwbAdapter adapter) {
+        mContext = ctx;
         mUwbAdapter = adapter;
         mAdapterStateListener = new AdapterStateListener(adapter);
         mRangingManager = new RangingManager(adapter);
@@ -127,7 +159,7 @@ public final class UwbManager {
     /**
      * @hide
      */
-    public static UwbManager getInstance() {
+    public static UwbManager getInstance(@NonNull Context ctx) {
         IBinder b = ServiceManager.getService(SERVICE_NAME);
         if (b == null) {
             return null;
@@ -138,7 +170,7 @@ public final class UwbManager {
             return null;
         }
 
-        return new UwbManager(adapter);
+        return new UwbManager(ctx, adapter);
     }
 
     /**
@@ -146,14 +178,14 @@ public final class UwbManager {
      * <p>The provided callback will be invoked by the given {@link Executor}.
      *
      * <p>When first registering a callback, the callbacks's
-     * {@link AdapterStateCallback#onStateChanged(boolean, int)} is immediately invoked to indicate
+     * {@link AdapterStateCallback#onStateChanged(int, int)} is immediately invoked to indicate
      * the current state of the underlying UWB adapter with the most recent
      * {@link AdapterStateCallback.StateChangedReason} that caused the change.
      *
      * @param executor an {@link Executor} to execute given callback
      * @param callback user implementation of the {@link AdapterStateCallback}
      */
-    @RequiresPermission(Manifest.permission.UWB_PRIVILEGED)
+    @RequiresPermission(permission.UWB_PRIVILEGED)
     public void registerAdapterStateCallback(@NonNull @CallbackExecutor Executor executor,
             @NonNull AdapterStateCallback callback) {
         mAdapterStateListener.register(executor, callback);
@@ -168,7 +200,7 @@ public final class UwbManager {
      *
      * @param callback user implementation of the {@link AdapterStateCallback}
      */
-    @RequiresPermission(Manifest.permission.UWB_PRIVILEGED)
+    @RequiresPermission(permission.UWB_PRIVILEGED)
     public void unregisterAdapterStateCallback(@NonNull AdapterStateCallback callback) {
         mAdapterStateListener.unregister(callback);
     }
@@ -182,7 +214,7 @@ public final class UwbManager {
      * @return {@link PersistableBundle} of the device's supported UWB protocols and parameters
      */
     @NonNull
-    @RequiresPermission(Manifest.permission.UWB_PRIVILEGED)
+    @RequiresPermission(permission.UWB_PRIVILEGED)
     public PersistableBundle getSpecificationInfo() {
         try {
             return mUwbAdapter.getSpecificationInfo();
@@ -199,7 +231,7 @@ public final class UwbManager {
      * @return the timestamp resolution in nanoseconds
      */
     @SuppressLint("MethodNameUnits")
-    @RequiresPermission(Manifest.permission.UWB_PRIVILEGED)
+    @RequiresPermission(permission.UWB_PRIVILEGED)
     public long elapsedRealtimeResolutionNanos() {
         try {
             return mUwbAdapter.getTimestampResolutionNanos();
@@ -235,10 +267,42 @@ public final class UwbManager {
      *         {@link RangingSession.Callback#onOpened(RangingSession)}.
      */
     @NonNull
-    @RequiresPermission(Manifest.permission.UWB_PRIVILEGED)
+    @RequiresPermission(allOf = {
+            permission.UWB_PRIVILEGED,
+            permission.UWB_RANGING
+    })
     public CancellationSignal openRangingSession(@NonNull PersistableBundle parameters,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull RangingSession.Callback callbacks) {
-        return mRangingManager.openSession(parameters, executor, callbacks);
+        return mRangingManager.openSession(
+                mContext.getAttributionSource(), parameters, executor, callbacks);
+    }
+
+    /**
+     * Returns the current enabled/disabled state for UWB.
+     *
+     * Possible values are:
+     * AdapterStateCallback#STATE_DISABLED
+     * AdapterStateCallback#STATE_ENABLED_INACTIVE
+     * AdapterStateCallback#STATE_ENABLED_ACTIVE
+     *
+     * @return value representing current enabled/disabled state for UWB.
+     * @hide
+     */
+    public @AdapterStateCallback.State int getAdapterState() {
+        return mAdapterStateListener.getAdapterState();
+    }
+
+    /**
+     * Disables or enables UWB for a user
+     *
+     * @param enabled value representing intent to disable or enable UWB. If true any subsequent
+     * calls to IUwbAdapter#openRanging will be allowed. If false, all active ranging sessions will
+     * be closed and subsequent calls to IUwbAdapter#openRanging will be disallowed.
+     *
+     * @hide
+     */
+    public void setUwbEnabled(boolean enabled) {
+        mAdapterStateListener.setEnabled(enabled);
     }
 }

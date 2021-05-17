@@ -40,8 +40,8 @@ import android.net.INetworkStatsService;
 import android.net.NetworkStats;
 import android.net.Uri;
 import android.net.wifi.WifiManager;
+import android.os.BatteryConsumer;
 import android.os.BatteryManager;
-import android.os.BatteryProperty;
 import android.os.BatteryStats;
 import android.os.Binder;
 import android.os.Build;
@@ -58,7 +58,6 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.SystemClock;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.WorkSource;
 import android.os.WorkSource.WorkChain;
@@ -150,14 +149,6 @@ import java.util.concurrent.locks.ReentrantLock;
 public class BatteryStatsImpl extends BatteryStats {
     private static final String TAG = "BatteryStatsImpl";
     private static final boolean DEBUG = false;
-
-    // TODO(b/169376495): STOPSHIP if true
-    private static final boolean DEBUG_FOREGROUND_STATS = true;
-
-    private static final boolean ENABLE_FOREGROUND_STATS_COLLECTION =
-            DEBUG_FOREGROUND_STATS && SystemProperties.getBoolean(
-                    "debug.battery_foreground_stats_collection", false);
-
     public static final boolean DEBUG_ENERGY = false;
     private static final boolean DEBUG_ENERGY_CPU = DEBUG_ENERGY;
     private static final boolean DEBUG_BINDER_STATS = false;
@@ -170,7 +161,7 @@ public class BatteryStatsImpl extends BatteryStats {
     private static final int MAGIC = 0xBA757475; // 'BATSTATS'
 
     // Current on-disk Parcel version
-    static final int VERSION = 196;
+    static final int VERSION = 198;
 
     // The maximum number of names wakelocks we will keep track of
     // per uid; once the limit is reached, we batch the remaining wakelocks
@@ -752,37 +743,6 @@ public class BatteryStatsImpl extends BatteryStats {
     long mTrackRunningHistoryElapsedRealtimeMs = 0;
     long mTrackRunningHistoryUptimeMs = 0;
 
-    private static final int FOREGROUND_UID_INITIAL_CAPACITY = 10;
-    private static final int INVALID_UID = -1;
-
-    private final IntArray mForegroundUids = ENABLE_FOREGROUND_STATS_COLLECTION
-            ? new IntArray(FOREGROUND_UID_INITIAL_CAPACITY) :  null;
-
-    // Last recorded battery energy capacity.
-    // This is used for computing foregrund power per application.
-    // See: PowerForUid below
-    private long mLastBatteryEnergyCapacityNwh = 0;
-
-    private static final class PowerForUid {
-        public long energyNwh = 0;
-        // Same as energyNwh, but not tracked for the first 2 minutes;
-        public long filteredEnergyNwh = 0;
-        public double totalHours = 0;
-        public long baseTimeMs = 0;
-
-        double computePower() {
-            // units in nW
-            return totalHours != 0 ? energyNwh / totalHours : -1.0;
-        }
-
-        double computeFilteredPower() {
-            // units in nW
-            return totalHours != 0 ? filteredEnergyNwh / totalHours : -1.0;
-        }
-    }
-    private final HashMap<Integer, PowerForUid> mUidToPower = ENABLE_FOREGROUND_STATS_COLLECTION
-            ? new HashMap<>() : null;
-
     @NonNull
     final BatteryStatsHistory mBatteryStatsHistory;
 
@@ -1094,7 +1054,6 @@ public class BatteryStatsImpl extends BatteryStats {
     private int mNumConnectivityChange;
 
     private int mBatteryVoltageMv = -1;
-    private int mBatteryChargeUah = -1;
     private int mEstimatedBatteryCapacityMah = -1;
 
     private int mMinLearnedBatteryCapacityUah = -1;
@@ -4020,49 +3979,6 @@ public class BatteryStatsImpl extends BatteryStats {
         // TODO(b/155216561): It is possible for isolated uids to be in a higher
         // state than its parent uid. We should track the highest state within the union of host
         // and isolated uids rather than only the parent uid.
-
-
-        int uidState = mapToInternalProcessState(state);
-
-        boolean isForeground = (uidState == Uid.PROCESS_STATE_TOP)
-                ||  (uidState == Uid.PROCESS_STATE_FOREGROUND);
-
-
-        if (ENABLE_FOREGROUND_STATS_COLLECTION) {
-            boolean previouslyInForegrond = false;
-            for (int i = 0; i < mForegroundUids.size(); i++) {
-                if (mForegroundUids.get(i) == uid) {
-                    previouslyInForegrond = true;
-                    if (!isForeground) {
-                        // If we were previously in the foreground, remove the uid
-                        // from the foreground set and dirty the slot.
-                        mForegroundUids.set(i, INVALID_UID);
-                        final PowerForUid pfu =
-                                mUidToPower.computeIfAbsent(uid, unused -> new PowerForUid());
-                        pfu.baseTimeMs = 0;
-                        break;
-                    }
-                }
-            }
-
-            if (!previouslyInForegrond && isForeground) {
-                boolean addedToForeground = false;
-                // Check if we have a free slot to clobber...
-                for (int i = 0; i < mForegroundUids.size(); i++) {
-                    if (mForegroundUids.get(i) == INVALID_UID) {
-                        addedToForeground = true;
-                        mForegroundUids.set(i, uid);
-                        break;
-                    }
-                }
-
-                // ...if not, append to the end of the array.
-                if (!addedToForeground) {
-                    mForegroundUids.add(uid);
-                }
-            }
-        }
-
         FrameworkStatsLog.write(FrameworkStatsLog.UID_PROCESS_STATE_CHANGED, uid,
                 ActivityManager.processStateAmToProto(state));
         getUidStatsLocked(uid, elapsedRealtimeMs, uptimeMs)
@@ -7030,6 +6946,23 @@ public class BatteryStatsImpl extends BatteryStats {
             return null;
         }
         return mGlobalMeasuredEnergyStats.getAccumulatedCustomBucketCharges();
+    }
+
+    /**
+     * Returns the names of custom power components.
+     */
+    @Override
+    public @NonNull String[] getCustomEnergyConsumerNames() {
+        if (mGlobalMeasuredEnergyStats == null) {
+            return new String[0];
+        }
+        final String[] names = mGlobalMeasuredEnergyStats.getCustomBucketNames();
+        for (int i = 0; i < names.length; i++) {
+            if (TextUtils.isEmpty(names[i])) {
+                names[i] = "CUSTOM_" + BatteryConsumer.FIRST_CUSTOM_POWER_COMPONENT_ID + i;
+            }
+        }
+        return names;
     }
 
     @Override public long getStartClockTime() {
@@ -12155,7 +12088,7 @@ public class BatteryStatsImpl extends BatteryStats {
     /**
      * Distribute Bluetooth energy info and network traffic to apps.
      *
-     * @param info The energy information from the bluetooth controller.
+     * @param info The accumulated energy information from the bluetooth controller.
      */
     public void updateBluetoothStateLocked(@Nullable final BluetoothActivityEnergyInfo info,
             final long consumedChargeUC, long elapsedRealtimeMs, long uptimeMs) {
@@ -12167,9 +12100,6 @@ public class BatteryStatsImpl extends BatteryStats {
             return;
         }
         if (!mOnBatteryInternal || mIgnoreNextExternalStats) {
-            // TODO(174818545): mLastBluetoothActivityInfo is actually extremely suspicious.
-            //  Firstly, the following line was originally missing. But even more so, BESW says that
-            //  info is a delta, not a total, so this entire algorithm requires review.
             mLastBluetoothActivityInfo.set(info);
             return;
         }
@@ -13547,7 +13477,6 @@ public class BatteryStatsImpl extends BatteryStats {
                 doWrite = true;
                 resetAllStatsLocked(mSecUptime, mSecRealtime);
                 if (chargeUah > 0 && level > 0) {
-                    mBatteryChargeUah = chargeUah;
                     // Only use the reported coulomb charge value if it is supported and reported.
                     mEstimatedBatteryCapacityMah = (int) ((chargeUah / 1000) / (level / 100.0));
                 }
@@ -13720,48 +13649,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 startRecordingHistory(elapsedRealtimeMs, uptimeMs, true);
             }
         }
-
         mBatteryVoltageMv = voltageMv;
-
-        if (ENABLE_FOREGROUND_STATS_COLLECTION) {
-            if (onBattery) {
-                final long energyNwh = (voltageMv * (long) chargeUah);
-                final long energyDelta = mLastBatteryEnergyCapacityNwh - energyNwh;
-                for (int i = 0; i < mForegroundUids.size(); i++) {
-                    final int uid = mForegroundUids.get(i);
-                    if (uid == INVALID_UID) {
-                        continue;
-                    }
-                    final PowerForUid pfu = mUidToPower
-                            .computeIfAbsent(uid, unused -> new PowerForUid());
-                    if (pfu.baseTimeMs <= 0) {
-                        pfu.baseTimeMs = currentTimeMs;
-                    } else {
-                        // Check if mLastBatteryEnergyCapacityNwh > energyNwh,
-                        // to make sure we only count discharges
-                        if (energyDelta > 0) {
-                            pfu.energyNwh += energyDelta;
-                            // Convert from milliseconds to hours
-                            // 1000 ms per second * 3600 seconds per hour
-                            pfu.totalHours += ((double) (currentTimeMs - pfu.baseTimeMs)
-                                    / (1.0 * 1000 * 60 * 60));
-                            // Now convert from 2 minutes to hours
-                            // 2 minutes = 1/30 of an hour
-                            if (pfu.totalHours > (2.0 / 60)) {
-                                pfu.filteredEnergyNwh += energyDelta;
-                            }
-
-                        }
-                        pfu.baseTimeMs = currentTimeMs;
-                    }
-                }
-                mLastBatteryEnergyCapacityNwh = energyNwh;
-            } else if (onBattery != mOnBattery) {
-                // Transition to onBattery = false
-                mUidToPower.values().forEach(v -> v.baseTimeMs = 0);
-            }
-        }
-
         mCurrentBatteryLevel = level;
         if (mDischargePlugLevel < 0) {
             mDischargePlugLevel = level;
@@ -14506,17 +14394,18 @@ public class BatteryStatsImpl extends BatteryStats {
         mConstants.startObserving(context.getContentResolver());
         registerUsbStateReceiver(context);
     }
+
     /**
      * Initialize the measured charge stats data structures.
      *
      * @param supportedStandardBuckets boolean array indicating which {@link StandardPowerBucket}s
-     *                                 are currently supported.
-     *                                 If null, none are supported (regardless of numCustomBuckets).
-     * @param numCustomBuckets number of custom (OTHER) EnergyConsumers on this device
+     *                                 are currently supported. If null, none are supported
+     *                                 (regardless of customBucketNames).
+     * @param customBucketNames        names of custom (OTHER) EnergyConsumers on this device
      */
     @GuardedBy("this")
     public void initMeasuredEnergyStatsLocked(@Nullable boolean[] supportedStandardBuckets,
-            int numCustomBuckets) {
+            String[] customBucketNames) {
         boolean supportedBucketMismatch = false;
         mScreenStateAtLastEnergyMeasurement = mScreenState;
 
@@ -14528,10 +14417,10 @@ public class BatteryStatsImpl extends BatteryStats {
         } else {
             if (mGlobalMeasuredEnergyStats == null) {
                 mGlobalMeasuredEnergyStats =
-                        new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
+                        new MeasuredEnergyStats(supportedStandardBuckets, customBucketNames);
             } else {
                 supportedBucketMismatch = !mGlobalMeasuredEnergyStats.isSupportEqualTo(
-                        supportedStandardBuckets, numCustomBuckets);
+                        supportedStandardBuckets, customBucketNames);
             }
 
             if (supportedStandardBuckets[MeasuredEnergyStats.POWER_BUCKET_BLUETOOTH]) {
@@ -14550,7 +14439,7 @@ public class BatteryStatsImpl extends BatteryStats {
 
         if (supportedBucketMismatch) {
             mGlobalMeasuredEnergyStats = supportedStandardBuckets == null
-                    ? null : new MeasuredEnergyStats(supportedStandardBuckets, numCustomBuckets);
+                    ? null : new MeasuredEnergyStats(supportedStandardBuckets, customBucketNames);
             // Supported power buckets changed since last boot.
             // Existing data is no longer reliable.
             resetAllStatsLocked(SystemClock.uptimeMillis(), SystemClock.elapsedRealtime());
@@ -15714,7 +15603,7 @@ public class BatteryStatsImpl extends BatteryStats {
         out.writeLong(mNextMaxDailyDeadlineMs);
         out.writeLong(mBatteryTimeToFullSeconds);
 
-        MeasuredEnergyStats.writeSummaryToParcel(mGlobalMeasuredEnergyStats, out, false);
+        MeasuredEnergyStats.writeSummaryToParcel(mGlobalMeasuredEnergyStats, out, false, false);
 
         mScreenOnTimer.writeSummaryFromParcelLocked(out, NOWREAL_SYS);
         mScreenDozeTimer.writeSummaryFromParcelLocked(out, NOWREAL_SYS);
@@ -16039,7 +15928,7 @@ public class BatteryStatsImpl extends BatteryStats {
                 out.writeInt(0);
             }
 
-            MeasuredEnergyStats.writeSummaryToParcel(u.mUidMeasuredEnergyStats, out, true);
+            MeasuredEnergyStats.writeSummaryToParcel(u.mUidMeasuredEnergyStats, out, true, true);
 
             final ArrayMap<String, Uid.Wakelock> wakeStats = u.mWakelockStats.getMap();
             int NW = wakeStats.size();
@@ -16679,48 +16568,6 @@ public class BatteryStatsImpl extends BatteryStats {
     }
 
     public void dumpLocked(Context context, PrintWriter pw, int flags, int reqUid, long histStart) {
-        if (ENABLE_FOREGROUND_STATS_COLLECTION) {
-            long actualChargeUah = -1;
-            long actualEnergyNwh = -1;
-            try {
-                IBatteryPropertiesRegistrar registrar =
-                        IBatteryPropertiesRegistrar.Stub.asInterface(
-                                ServiceManager.getService("batteryproperties"));
-                if (registrar != null) {
-                    BatteryProperty prop = new BatteryProperty();
-                    if (registrar.getProperty(
-                                BatteryManager.BATTERY_PROPERTY_CHARGE_COUNTER, prop) == 0) {
-                        actualChargeUah = prop.getLong();
-                    }
-                    prop = new BatteryProperty();
-                    if (registrar.getProperty(
-                                BatteryManager.BATTERY_PROPERTY_ENERGY_COUNTER, prop) == 0) {
-                        actualEnergyNwh = prop.getLong();
-                    }
-                }
-            } catch (RemoteException e) {
-                // Ignore.
-            }
-            pw.printf("ActualCharge (uAh): %d\n", (int) actualChargeUah);
-            pw.printf("ActualEnergy (nWh): %d\n", actualEnergyNwh);
-            pw.printf("mBatteryCharge (uAh): %d\n", mBatteryChargeUah);
-            pw.printf("mBatteryVolts (mV): %d\n", mBatteryVoltageMv);
-            pw.printf("est energy (nWh): %d\n", mBatteryVoltageMv * (long) mBatteryChargeUah);
-            pw.printf("mEstimatedBatteryCapacity (mAh): %d\n", mEstimatedBatteryCapacityMah);
-            pw.printf("mMinLearnedBatteryCapacity (uAh): %d\n", mMinLearnedBatteryCapacityUah);
-            pw.printf("mMaxLearnedBatteryCapacity (uAh): %d\n", mMaxLearnedBatteryCapacityUah);
-            pw.printf("est. capacity: %f\n",
-                    (float) actualChargeUah / (mEstimatedBatteryCapacityMah * 1000));
-            pw.printf("mCurrentBatteryLevel: %d\n", mCurrentBatteryLevel);
-            pw.println("Total Power per app:");
-            mUidToPower.entrySet().forEach(e ->
-                    pw.printf("Uid: %d, Total watts (nW): %f\n",
-                            e.getKey(), e.getValue().computePower()));
-            pw.println("Total Power per app after first 2 minutes initial launch:");
-            mUidToPower.entrySet().forEach(e ->
-                    pw.printf("Uid: %d, Total watts (nW): %f\n",
-                            e.getKey(), e.getValue().computeFilteredPower()));
-        }
         if (DEBUG) {
             pw.println("mOnBatteryTimeBase:");
             mOnBatteryTimeBase.dump(pw, "  ");

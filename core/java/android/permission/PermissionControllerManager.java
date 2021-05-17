@@ -720,4 +720,59 @@ public final class PermissionControllerManager {
         mRemoteService.run(
                 service -> service.notifyOneTimePermissionSessionTimeout(packageName));
     }
+
+    /**
+     * Get the platform permissions which belong to a particular permission group.
+     *
+     * @param permissionGroupName The permission group whose permissions are desired
+     * @param callback A callback which will receive a list of the platform permissions in the
+     *                 group, or empty if the group is not a valid platform group, or there
+     *                 was an exception.
+     */
+    @RequiresPermission(Manifest.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING)
+    public void getPlatformPermissionsForGroup(@NonNull String permissionGroupName,
+            @NonNull Consumer<List<String>> callback) {
+        enforceSomePermissionsGrantedToSelf(
+                Manifest.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING);
+        mRemoteService.postAsync(service -> {
+            AndroidFuture<List<String>> future = new AndroidFuture<>();
+            service.getPlatformPermissionsForGroup(permissionGroupName, future);
+            return future;
+        }).whenComplete((result, err) -> {
+            if (err != null) {
+                Log.e(TAG, "Failed to get permissions of " + permissionGroupName, err);
+                callback.accept(new ArrayList<>());
+            } else {
+                callback.accept(result);
+            }
+        });
+    }
+
+    /**
+     * Get the platform group of a particular permission, if the permission is a platform
+     * permission.
+     *
+     * @param permissionName The permission name whose group is desired
+     * @param callback A callback which will receive the name of the permission group this
+     *                 permission belongs to, or null if it has no group, is not a platform
+     *                 permission, or there was an exception.
+     */
+    @RequiresPermission(Manifest.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING)
+    public void getGroupOfPlatformPermission(@NonNull String permissionName,
+            @NonNull Consumer<String> callback) {
+        enforceSomePermissionsGrantedToSelf(
+                Manifest.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING);
+        mRemoteService.postAsync(service -> {
+            AndroidFuture<String> future = new AndroidFuture<>();
+            service.getGroupOfPlatformPermission(permissionName, future);
+            return future;
+        }).whenComplete((result, err) -> {
+            if (err != null) {
+                Log.e(TAG, "Failed to get group of " + permissionName, err);
+                callback.accept(null);
+            } else {
+                callback.accept(result);
+            }
+        });
+    }
 }

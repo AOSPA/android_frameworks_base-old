@@ -98,6 +98,8 @@ import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.LocalServices;
+import com.android.server.apphibernation.AppHibernationManagerInternal;
+import com.android.server.apphibernation.AppHibernationService;
 
 import java.util.ArrayList;
 import java.util.LinkedList;
@@ -128,6 +130,12 @@ class ActivityMetricsLogger {
     private static final int WINDOW_STATE_ASSISTANT = 3;
     private static final int WINDOW_STATE_MULTI_WINDOW = 4;
     private static final int WINDOW_STATE_INVALID = -1;
+
+    /**
+     * If a launching activity isn't visible within this duration when the device is sleeping, e.g.
+     * keyguard is locked, its transition info will be dropped.
+     */
+    private static final long UNKNOWN_VISIBILITY_CHECK_DELAY_MS = 3000;
 
     /**
      * The flag for {@link #notifyActivityLaunching} to skip associating a new launch with an active
@@ -162,6 +170,8 @@ class ActivityMetricsLogger {
      */
     private final LaunchObserverRegistryImpl mLaunchObserver;
     @VisibleForTesting static final int LAUNCH_OBSERVER_ACTIVITY_RECORD_PROTO_CHUNK_SIZE = 512;
+    private final ArrayMap<String, Boolean> mLastHibernationStates = new ArrayMap<>();
+    private AppHibernationManagerInternal mAppHibernationManagerInternal;
 
     /**
      * The information created when an intent is incoming but we do not yet know whether it will be
@@ -305,8 +315,7 @@ class ActivityMetricsLogger {
         }
 
         /** @return {@code true} if the activity matches a launched activity in this transition. */
-        boolean contains(WindowContainer wc) {
-            final ActivityRecord r = AppTransitionController.getAppFromContainer(wc);
+        boolean contains(ActivityRecord r) {
             return r != null && (r == mLastLaunchedActivity || mPendingDrawActivities.contains(r));
         }
 
@@ -478,10 +487,10 @@ class ActivityMetricsLogger {
 
     /** @return Non-null {@link TransitionInfo} if the activity is found in an active transition. */
     @Nullable
-    private TransitionInfo getActiveTransitionInfo(WindowContainer wc) {
+    private TransitionInfo getActiveTransitionInfo(ActivityRecord r) {
         for (int i = mTransitionInfoList.size() - 1; i >= 0; i--) {
             final TransitionInfo info = mTransitionInfoList.get(i);
-            if (info.contains(wc)) {
+            if (info.contains(r)) {
                 return info;
             }
         }
@@ -592,8 +601,8 @@ class ActivityMetricsLogger {
             return;
         }
 
-        if (info != null
-                && info.mLastLaunchedActivity.mDisplayContent == launchedActivity.mDisplayContent) {
+        final DisplayContent targetDisplay = launchedActivity.mDisplayContent;
+        if (info != null && info.mLastLaunchedActivity.mDisplayContent == targetDisplay) {
             // If we are already in an existing transition on the same display, only update the
             // activity name, but not the other attributes.
 
@@ -620,6 +629,13 @@ class ActivityMetricsLogger {
         } else {
             // As abort for no process switch.
             launchObserverNotifyIntentFailed();
+        }
+        if (targetDisplay.isSleeping()) {
+            // It is unknown whether the activity can be drawn or not, e.g. ut depends on the
+            // keyguard states and the attributes or flags set by the activity. If the activity
+            // keeps invisible in the grace period, the tracker will be cancelled so it won't get
+            // a very long launch time that takes unlocking as the end of launch.
+            scheduleCheckActivityToBeDrawn(launchedActivity, UNKNOWN_VISIBILITY_CHECK_DELAY_MS);
         }
     }
 
@@ -672,12 +688,15 @@ class ActivityMetricsLogger {
      *                         ActivityTaskManagerInternal.APP_TRANSITION_* reasons.
      */
     void notifyTransitionStarting(ArrayMap<WindowContainer, Integer> activityToReason) {
-        if (DEBUG_METRICS) Slog.i(TAG, "notifyTransitionStarting");
+        if (DEBUG_METRICS) Slog.i(TAG, "notifyTransitionStarting " + activityToReason);
 
         final long timestampNs = SystemClock.elapsedRealtimeNanos();
         for (int index = activityToReason.size() - 1; index >= 0; index--) {
-            final WindowContainer wc = activityToReason.keyAt(index);
-            final TransitionInfo info = getActiveTransitionInfo(wc);
+            final WindowContainer<?> wc = activityToReason.keyAt(index);
+            final ActivityRecord activity = wc.asActivityRecord();
+            final ActivityRecord r = activity != null ? activity
+                    : wc.getTopActivity(false /* includeFinishing */, true /* includeOverlays */);
+            final TransitionInfo info = getActiveTransitionInfo(r);
             if (info == null || info.mLoggedTransitionStarting) {
                 // Ignore any subsequent notifyTransitionStarting.
                 continue;
@@ -722,26 +741,32 @@ class ActivityMetricsLogger {
             Slog.i(TAG, "notifyVisibilityChanged " + r + " visible=" + r.mVisibleRequested
                     + " state=" + r.getState() + " finishing=" + r.finishing);
         }
-        if (!r.mVisibleRequested || r.finishing) {
-            info.removePendingDrawActivity(r);
-        }
-        if (info.mLastLaunchedActivity != r) {
+        if (r.isState(Task.ActivityState.RESUMED) && r.mDisplayContent.isSleeping()) {
+            // The activity may be launching while keyguard is locked. The keyguard may be dismissed
+            // after the activity finished relayout, so skip the visibility check to avoid aborting
+            // the tracking of launch event.
             return;
         }
-        // The activity and its task are passed separately because the activity may be removed from
-        // the task later.
-        r.mAtmService.mH.sendMessage(PooledLambda.obtainMessage(
-                ActivityMetricsLogger::checkVisibility, this, r.getTask(), r));
+        if (!r.mVisibleRequested || r.finishing) {
+            info.removePendingDrawActivity(r);
+            if (info.mLastLaunchedActivity == r) {
+                // Check if the tracker can be cancelled because the last launched activity may be
+                // no longer visible.
+                scheduleCheckActivityToBeDrawn(r, 0 /* delay */);
+            }
+        }
     }
 
-    /** @return {@code true} if the given task has an activity will be drawn. */
-    private static boolean hasActivityToBeDrawn(Task t) {
-        return t.forAllActivities(r -> r.mVisibleRequested && !r.isReportedDrawn() && !r.finishing);
+    private void scheduleCheckActivityToBeDrawn(@NonNull ActivityRecord r, long delay) {
+        // The activity and its task are passed separately because it is possible that the activity
+        // is removed from the task later.
+        r.mAtmService.mH.sendMessageDelayed(PooledLambda.obtainMessage(
+                ActivityMetricsLogger::checkActivityToBeDrawn, this, r.getTask(), r), delay);
     }
 
-    private void checkVisibility(Task t, ActivityRecord r) {
+    /** Cancels the tracking of launch if there won't be an activity to be drawn. */
+    private void checkActivityToBeDrawn(Task t, ActivityRecord r) {
         synchronized (mSupervisor.mService.mGlobalLock) {
-
             final TransitionInfo info = getActiveTransitionInfo(r);
 
             // If we have an active transition that's waiting on a certain activity that will be
@@ -762,13 +787,35 @@ class ActivityMetricsLogger {
             // window drawn event should report later to complete the transition. Otherwise all
             // activities in this task may be finished, invisible or drawn, so the transition event
             // should be cancelled.
-            if (hasActivityToBeDrawn(t)) {
+            if (t.forAllActivities(
+                    a -> a.mVisibleRequested && !a.isReportedDrawn() && !a.finishing)) {
                 return;
             }
 
-            if (DEBUG_METRICS) Slog.i(TAG, "notifyVisibilityChanged to invisible activity=" + r);
+            if (DEBUG_METRICS) Slog.i(TAG, "checkActivityToBeDrawn cancels activity=" + r);
             logAppTransitionCancel(info);
-            abort(info, "notifyVisibilityChanged to invisible");
+            abort(info, "checkActivityToBeDrawn (invisible or drawn already)");
+        }
+    }
+
+    @Nullable
+    private AppHibernationManagerInternal getAppHibernationManagerInternal() {
+        if (!AppHibernationService.isAppHibernationEnabled()) return null;
+        if (mAppHibernationManagerInternal == null) {
+            mAppHibernationManagerInternal =
+                    LocalServices.getService(AppHibernationManagerInternal.class);
+        }
+        return mAppHibernationManagerInternal;
+    }
+
+    /**
+     * Notifies the tracker before the package is unstopped because of launching activity.
+     * @param packageName The package to be unstopped.
+     */
+    void notifyBeforePackageUnstopped(@NonNull String packageName) {
+        final AppHibernationManagerInternal ahmInternal = getAppHibernationManagerInternal();
+        if (ahmInternal != null) {
+            mLastHibernationStates.put(packageName, ahmInternal.isHibernatingGlobally(packageName));
         }
     }
 
@@ -806,6 +853,8 @@ class ActivityMetricsLogger {
         }
 
         stopLaunchTrace(info);
+        final Boolean isHibernating =
+                mLastHibernationStates.remove(info.mLastLaunchedActivity.packageName);
         if (abort) {
             mSupervisor.stopWaitingForActivityVisible(info.mLastLaunchedActivity);
             launchObserverNotifyActivityLaunchCancelled(info);
@@ -813,7 +862,7 @@ class ActivityMetricsLogger {
             if (info.isInterestingToLoggerAndObserver()) {
                 launchObserverNotifyActivityLaunchFinished(info, timestampNs);
             }
-            logAppTransitionFinished(info);
+            logAppTransitionFinished(info, isHibernating != null ? isHibernating : false);
         }
         info.mPendingDrawActivities.clear();
         mTransitionInfoList.remove(info);
@@ -842,7 +891,7 @@ class ActivityMetricsLogger {
         }
     }
 
-    private void logAppTransitionFinished(@NonNull TransitionInfo info) {
+    private void logAppTransitionFinished(@NonNull TransitionInfo info, boolean isHibernating) {
         if (DEBUG_METRICS) Slog.i(TAG, "logging finished transition " + info);
 
         mLaunchedActivity = info.mLastLaunchedActivity;
@@ -853,7 +902,7 @@ class ActivityMetricsLogger {
         if (info.isInterestingToLoggerAndObserver()) {
             BackgroundThread.getHandler().post(() -> logAppTransition(
                     info.mCurrentTransitionDeviceUptime, info.mCurrentTransitionDelayMs,
-                    infoSnapshot));
+                    infoSnapshot, isHibernating));
         }
         BackgroundThread.getHandler().post(() -> logAppDisplayed(infoSnapshot));
         if (info.mPendingFullyDrawn != null) {
@@ -865,7 +914,7 @@ class ActivityMetricsLogger {
 
     // This gets called on a background thread without holding the activity manager lock.
     private void logAppTransition(int currentTransitionDeviceUptime, int currentTransitionDelayMs,
-            TransitionInfoSnapshot info) {
+            TransitionInfoSnapshot info, boolean isHibernating) {
         final LogMaker builder = new LogMaker(APP_TRANSITION);
         builder.setPackageName(info.packageName);
         builder.setType(info.type);
@@ -918,7 +967,8 @@ class ActivityMetricsLogger {
                 packageOptimizationInfo.getCompilationReason(),
                 packageOptimizationInfo.getCompilationFilter(),
                 info.sourceType,
-                info.sourceEventDelayMs);
+                info.sourceEventDelayMs,
+                isHibernating);
 
         if (DEBUG_METRICS) {
             Slog.i(TAG, String.format("APP_START_OCCURRED(%s, %s, %s, %s, %s)",

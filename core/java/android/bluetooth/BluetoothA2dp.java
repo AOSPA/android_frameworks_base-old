@@ -20,11 +20,16 @@ import android.Manifest;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
 import android.annotation.SdkConstant;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
+import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
+import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
+import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
 import android.os.Build;
@@ -69,10 +74,10 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * <p>{@link #EXTRA_STATE} or {@link #EXTRA_PREVIOUS_STATE} can be any of
      * {@link #STATE_DISCONNECTED}, {@link #STATE_CONNECTING},
      * {@link #STATE_CONNECTED}, {@link #STATE_DISCONNECTING}.
-     *
-     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
-     * receive.
      */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_CONNECTION_STATE_CHANGED =
             "android.bluetooth.a2dp.profile.action.CONNECTION_STATE_CHANGED";
@@ -90,15 +95,17 @@ public final class BluetoothA2dp implements BluetoothProfile {
      *
      * <p>{@link #EXTRA_STATE} or {@link #EXTRA_PREVIOUS_STATE} can be any of
      * {@link #STATE_PLAYING}, {@link #STATE_NOT_PLAYING},
-     *
-     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
-     * receive.
      */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PLAYING_STATE_CHANGED =
             "android.bluetooth.a2dp.profile.action.PLAYING_STATE_CHANGED";
 
     /** @hide */
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_AVRCP_CONNECTION_STATE_CHANGED =
             "android.bluetooth.a2dp.profile.action.AVRCP_CONNECTION_STATE_CHANGED";
@@ -112,11 +119,11 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * be null if no device is active. </li>
      * </ul>
      *
-     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
-     * receive.
-     *
      * @hide
      */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     @UnsupportedAppUsage(trackingBug = 171933273)
     public static final String ACTION_ACTIVE_DEVICE_CHANGED =
@@ -133,11 +140,11 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * connected, otherwise it is not included.</li>
      * </ul>
      *
-     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission to
-     * receive.
-     *
      * @hide
      */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     @UnsupportedAppUsage(trackingBug = 181103983)
     public static final String ACTION_CODEC_CONFIG_CHANGED =
@@ -258,7 +265,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
     @SystemApi
     public static final int DYNAMIC_BUFFER_SUPPORT_A2DP_SOFTWARE_ENCODING = 2;
 
-    private BluetoothAdapter mAdapter;
+    private final BluetoothAdapter mAdapter;
+    private final AttributionSource mAttributionSource;
     private final BluetoothProfileConnector<IBluetoothA2dp> mProfileConnector =
             new BluetoothProfileConnector(this, BluetoothProfile.A2DP, "BluetoothA2dp",
                     IBluetoothA2dp.class.getName()) {
@@ -272,8 +280,10 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * Create a BluetoothA2dp proxy object for interacting with the local
      * Bluetooth A2DP service.
      */
-    /*package*/ BluetoothA2dp(Context context, ServiceListener listener) {
-        mAdapter = BluetoothAdapter.getDefaultAdapter();
+    /* package */ BluetoothA2dp(Context context, ServiceListener listener,
+            BluetoothAdapter adapter) {
+        mAdapter = adapter;
+        mAttributionSource = adapter.getAttributionSource();
         mProfileConnector.connect(context, listener);
     }
 
@@ -307,7 +317,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return false on immediate error, true otherwise
      * @hide
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresLegacyBluetoothAdminPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @UnsupportedAppUsage
     public boolean connect(BluetoothDevice device) {
         if (DBG) log("connect(" + device + ")");
@@ -347,7 +359,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return false on immediate error, true otherwise
      * @hide
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresLegacyBluetoothAdminPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @UnsupportedAppUsage
     public boolean disconnect(BluetoothDevice device) {
         if (DBG) log("disconnect(" + device + ")");
@@ -368,12 +382,15 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * {@inheritDoc}
      */
     @Override
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getConnectedDevices() {
         if (VDBG) log("getConnectedDevices()");
         try {
             final IBluetoothA2dp service = getService();
             if (service != null && isEnabled()) {
-                return service.getConnectedDevices();
+                return BluetoothDevice.setAttributionSource(
+                        service.getConnectedDevices(), mAttributionSource);
             }
             if (service == null) Log.w(TAG, "Proxy not attached to service");
             return new ArrayList<BluetoothDevice>();
@@ -387,12 +404,15 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * {@inheritDoc}
      */
     @Override
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public List<BluetoothDevice> getDevicesMatchingConnectionStates(int[] states) {
         if (VDBG) log("getDevicesMatchingStates()");
         try {
             final IBluetoothA2dp service = getService();
             if (service != null && isEnabled()) {
-                return service.getDevicesMatchingConnectionStates(states);
+                return BluetoothDevice.setAttributionSource(
+                        service.getDevicesMatchingConnectionStates(states), mAttributionSource);
             }
             if (service == null) Log.w(TAG, "Proxy not attached to service");
             return new ArrayList<BluetoothDevice>();
@@ -406,6 +426,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * {@inheritDoc}
      */
     @Override
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public @BtProfileState int getConnectionState(BluetoothDevice device) {
         if (VDBG) log("getState(" + device + ")");
         try {
@@ -441,7 +463,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return false on immediate error, true otherwise
      * @hide
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresLegacyBluetoothAdminPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @UnsupportedAppUsage(trackingBug = 171933273)
     public boolean setActiveDevice(@Nullable BluetoothDevice device) {
         if (DBG) log("setActiveDevice(" + device + ")");
@@ -468,7 +492,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      */
     @UnsupportedAppUsage(trackingBug = 171933273)
     @Nullable
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public BluetoothDevice getActiveDevice() {
         if (VDBG) log("getActiveDevice()");
         try {
@@ -495,7 +521,11 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return true if priority is set, false on error
      * @hide
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setPriority(BluetoothDevice device, int priority) {
         if (DBG) log("setPriority(" + device + ", " + priority + ")");
         return setConnectionPolicy(device, BluetoothAdapter.priorityToConnectionPolicy(priority));
@@ -514,7 +544,11 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean setConnectionPolicy(@NonNull BluetoothDevice device,
             @ConnectionPolicy int connectionPolicy) {
         if (DBG) log("setConnectionPolicy(" + device + ", " + connectionPolicy + ")");
@@ -546,7 +580,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return priority of the device
      * @hide
      */
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
     public int getPriority(BluetoothDevice device) {
         if (VDBG) log("getPriority(" + device + ")");
@@ -599,6 +635,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @return true if device supports absolute volume
      * @hide
      */
+    @RequiresNoPermission
     public boolean isAvrcpAbsoluteVolumeSupported() {
         if (DBG) Log.d(TAG, "isAvrcpAbsoluteVolumeSupported");
         try {
@@ -620,6 +657,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @param volume Absolute volume to be set on AVRCP side
      * @hide
      */
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void setAvrcpAbsoluteVolume(int volume) {
         if (DBG) Log.d(TAG, "setAvrcpAbsoluteVolume");
         try {
@@ -636,10 +675,11 @@ public final class BluetoothA2dp implements BluetoothProfile {
     /**
      * Check if A2DP profile is streaming music.
      *
-     * <p>Requires {@link android.Manifest.permission#BLUETOOTH} permission.
-     *
      * @param device BluetoothDevice device
      */
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean isA2dpPlaying(BluetoothDevice device) {
         try {
             final IBluetoothA2dp service = getService();
@@ -662,6 +702,8 @@ public final class BluetoothA2dp implements BluetoothProfile {
      *
      * @hide
      */
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public boolean shouldSendVolumeKeys(BluetoothDevice device) {
         if (isEnabled() && isValidDevice(device)) {
             ParcelUuid[] uuids = device.getUuids();
@@ -686,7 +728,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      */
     @UnsupportedAppUsage(trackingBug = 181103983)
     @Nullable
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public BluetoothCodecStatus getCodecStatus(@NonNull BluetoothDevice device) {
         if (DBG) Log.d(TAG, "getCodecStatus(" + device + ")");
         verifyDeviceNotNull(device, "getCodecStatus");
@@ -714,7 +758,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage(trackingBug = 181103983)
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void setCodecConfigPreference(@NonNull BluetoothDevice device,
                                          @NonNull BluetoothCodecConfig codecConfig) {
         if (DBG) Log.d(TAG, "setCodecConfigPreference(" + device + ")");
@@ -744,7 +790,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void enableOptionalCodecs(@NonNull BluetoothDevice device) {
         if (DBG) Log.d(TAG, "enableOptionalCodecs(" + device + ")");
         verifyDeviceNotNull(device, "enableOptionalCodecs");
@@ -759,7 +807,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    @RequiresPermission(Manifest.permission.BLUETOOTH)
+    @RequiresLegacyBluetoothPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void disableOptionalCodecs(@NonNull BluetoothDevice device) {
         if (DBG) Log.d(TAG, "disableOptionalCodecs(" + device + ")");
         verifyDeviceNotNull(device, "disableOptionalCodecs");
@@ -773,6 +823,7 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * active A2DP Bluetooth device.
      * @param enable if true, enable the optional codecs, other disable them
      */
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     private void enableDisableOptionalCodecs(BluetoothDevice device, boolean enable) {
         try {
             final IBluetoothA2dp service = getService();
@@ -800,7 +851,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresLegacyBluetoothAdminPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @OptionalCodecsSupportStatus
     public int isOptionalCodecsSupported(@NonNull BluetoothDevice device) {
         verifyDeviceNotNull(device, "isOptionalCodecsSupported");
@@ -826,7 +879,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresLegacyBluetoothAdminPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     @OptionalCodecsPreferenceStatus
     public int isOptionalCodecsEnabled(@NonNull BluetoothDevice device) {
         verifyDeviceNotNull(device, "isOptionalCodecsEnabled");
@@ -853,7 +908,9 @@ public final class BluetoothA2dp implements BluetoothProfile {
      * @hide
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    @RequiresPermission(Manifest.permission.BLUETOOTH_ADMIN)
+    @RequiresLegacyBluetoothAdminPermission
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public void setOptionalCodecsEnabled(@NonNull BluetoothDevice device,
             @OptionalCodecsPreferenceStatus int value) {
         verifyDeviceNotNull(device, "setOptionalCodecsEnabled");

@@ -52,7 +52,6 @@ import java.io.PrintWriter;
 import java.nio.ByteBuffer;
 import java.nio.NioUtils;
 import java.nio.channels.FileChannel;
-import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
 import java.util.Map;
@@ -151,7 +150,17 @@ public final class FontManagerService extends IFontManager.Stub {
 
     /* package */ static class OtfFontFileParser implements UpdatableFontDir.FontFileParser {
         @Override
-        public String getCanonicalFileName(File file) throws IOException {
+        public String getPostScriptName(File file) throws IOException {
+            ByteBuffer buffer = mmap(file);
+            try {
+                return FontFileUtil.getPostScriptName(buffer, 0);
+            } finally {
+                NioUtils.freeDirectBuffer(buffer);
+            }
+        }
+
+        @Override
+        public String buildFontFileName(File file) throws IOException {
             ByteBuffer buffer = mmap(file);
             try {
                 String psName = FontFileUtil.getPostScriptName(buffer, 0);
@@ -172,6 +181,7 @@ public final class FontManagerService extends IFontManager.Stub {
             } finally {
                 NioUtils.freeDirectBuffer(buffer);
             }
+
         }
 
         @Override
@@ -238,8 +248,6 @@ public final class FontManagerService extends IFontManager.Stub {
         // If apk verity is supported, fs-verity should be available.
         if (!VerityUtils.isFsVeritySupported()) return null;
         return new UpdatableFontDir(new File(FONT_FILES_DIR),
-                Arrays.asList(new File(SystemFonts.SYSTEM_FONT_DIR),
-                        new File(SystemFonts.OEM_FONT_DIR)),
                 new OtfFontFileParser(), new FsverityUtilImpl());
     }
 
@@ -303,12 +311,16 @@ public final class FontManagerService extends IFontManager.Stub {
         }
     }
 
+    /* package */ void restart() {
+        initialize();
+    }
+
     /* package */ Map<String, File> getFontFileMap() {
         if (mUpdatableFontDir == null) {
             return Collections.emptyMap();
         }
         synchronized (mUpdatableFontDirLock) {
-            return mUpdatableFontDir.getFontFileMap();
+            return mUpdatableFontDir.getPostScriptMap();
         }
     }
 

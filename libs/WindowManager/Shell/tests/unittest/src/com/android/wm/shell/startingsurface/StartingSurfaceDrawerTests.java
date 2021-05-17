@@ -77,9 +77,9 @@ public class StartingSurfaceDrawerTests {
         int mAddWindowForTask = 0;
         int mViewThemeResId;
 
-        TestStartingSurfaceDrawer(Context context, ShellExecutor animExecutor,
+        TestStartingSurfaceDrawer(Context context, ShellExecutor splashScreenExecutor,
                 TransactionPool pool) {
-            super(context, animExecutor, pool);
+            super(context, splashScreenExecutor, pool);
         }
 
         @Override
@@ -120,8 +120,9 @@ public class StartingSurfaceDrawerTests {
         doReturn(metrics).when(mMockWindowManager).getMaximumWindowMetrics();
         doNothing().when(mMockWindowManager).addView(any(), any());
 
-        mStartingSurfaceDrawer = spy(new TestStartingSurfaceDrawer(context,
-                new HandlerExecutor(new Handler(Looper.getMainLooper())),
+        final HandlerExecutor testExecutor =
+                new HandlerExecutor(new Handler(Looper.getMainLooper()));
+        mStartingSurfaceDrawer = spy(new TestStartingSurfaceDrawer(context, testExecutor,
                 mTransactionPool));
     }
 
@@ -131,7 +132,7 @@ public class StartingSurfaceDrawerTests {
         final Handler mainLoop = new Handler(Looper.getMainLooper());
         final StartingWindowInfo windowInfo =
                 createWindowInfo(taskId, android.R.style.Theme);
-        mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, mBinder);
+        mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, mBinder, false);
         waitHandlerIdle(mainLoop);
         verify(mStartingSurfaceDrawer).postAddWindow(eq(taskId), eq(mBinder), any(), any(), any());
         assertEquals(mStartingSurfaceDrawer.mAddWindowForTask, taskId);
@@ -148,7 +149,7 @@ public class StartingSurfaceDrawerTests {
         final Handler mainLoop = new Handler(Looper.getMainLooper());
         final StartingWindowInfo windowInfo =
                 createWindowInfo(taskId, 0);
-        mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, mBinder);
+        mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, mBinder, false);
         waitHandlerIdle(mainLoop);
         verify(mStartingSurfaceDrawer).postAddWindow(eq(taskId), eq(mBinder), any(), any(), any());
         assertNotEquals(mStartingSurfaceDrawer.mViewThemeResId, 0);

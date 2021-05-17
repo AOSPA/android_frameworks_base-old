@@ -57,7 +57,7 @@ import android.hardware.lights.LightState;
 import android.media.AudioManager;
 import android.os.Binder;
 import android.os.Bundle;
-import android.os.CombinedVibrationEffect;
+import android.os.CombinedVibration;
 import android.os.Environment;
 import android.os.Handler;
 import android.os.IBinder;
@@ -270,6 +270,8 @@ public class InputManagerService extends IInputManager.Stub
     private final Object mAssociationsLock = new Object();
     @GuardedBy("mAssociationLock")
     private final Map<String, Integer> mRuntimeAssociations = new ArrayMap<String, Integer>();
+    @GuardedBy("mAssociationLock")
+    private final Map<String, String> mUniqueIdAssociations = new ArrayMap<>();
 
     private static native long nativeInit(InputManagerService service,
             Context context, MessageQueue messageQueue);
@@ -340,6 +342,7 @@ public class InputManagerService extends IInputManager.Stub
             boolean enabled);
     private static native boolean nativeCanDispatchToDisplay(long ptr, int deviceId, int displayId);
     private static native void nativeNotifyPortAssociationsChanged(long ptr);
+    private static native void nativeChangeUniqueIdAssociation(long ptr);
     private static native void nativeSetMotionClassifierEnabled(long ptr, boolean enabled);
     private static native InputSensorInfo[] nativeGetSensorList(long ptr, int deviceId);
     private static native boolean nativeFlushSensor(long ptr, int deviceId, int sensorType);
@@ -2033,23 +2036,23 @@ public class InputManagerService extends IInputManager.Stub
 
     // Binder call
     @Override
-    public void vibrateCombined(int deviceId, CombinedVibrationEffect effect, IBinder token) {
+    public void vibrateCombined(int deviceId, CombinedVibration effect, IBinder token) {
         VibratorToken v = getVibratorToken(deviceId, token);
         synchronized (v) {
-            if (!(effect instanceof CombinedVibrationEffect.Mono)
-                    && !(effect instanceof CombinedVibrationEffect.Stereo)) {
+            if (!(effect instanceof CombinedVibration.Mono)
+                    && !(effect instanceof CombinedVibration.Stereo)) {
                 Slog.e(TAG, "Only Mono and Stereo effects are supported");
                 return;
             }
 
             v.mVibrating = true;
-            if (effect instanceof CombinedVibrationEffect.Mono) {
-                CombinedVibrationEffect.Mono mono = (CombinedVibrationEffect.Mono) effect;
+            if (effect instanceof CombinedVibration.Mono) {
+                CombinedVibration.Mono mono = (CombinedVibration.Mono) effect;
                 VibrationInfo info = new VibrationInfo(mono.getEffect());
                 nativeVibrate(mPtr, deviceId, info.getPattern(), info.getAmplitudes(),
                         info.getRepeatIndex(), v.mTokenValue);
-            } else if (effect instanceof CombinedVibrationEffect.Stereo) {
-                CombinedVibrationEffect.Stereo stereo = (CombinedVibrationEffect.Stereo) effect;
+            } else if (effect instanceof CombinedVibration.Stereo) {
+                CombinedVibration.Stereo stereo = (CombinedVibration.Stereo) effect;
                 SparseArray<VibrationEffect> effects = stereo.getEffects();
                 long[] pattern = new long[0];
                 int repeat = Integer.MIN_VALUE;
@@ -2222,10 +2225,10 @@ public class InputManagerService extends IInputManager.Stub
     @Override // Binder call
     public void addPortAssociation(@NonNull String inputPort, int displayPort) {
         if (!checkCallingPermission(
-                android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY_BY_PORT,
+                android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
                 "addPortAssociation()")) {
             throw new SecurityException(
-                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY_BY_PORT permission");
+                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
         }
 
         Objects.requireNonNull(inputPort);
@@ -2243,10 +2246,10 @@ public class InputManagerService extends IInputManager.Stub
     @Override // Binder call
     public void removePortAssociation(@NonNull String inputPort) {
         if (!checkCallingPermission(
-                android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY_BY_PORT,
+                android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
                 "clearPortAssociations()")) {
             throw new SecurityException(
-                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY_BY_PORT permission");
+                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
         }
 
         Objects.requireNonNull(inputPort);
@@ -2254,6 +2257,49 @@ public class InputManagerService extends IInputManager.Stub
             mRuntimeAssociations.remove(inputPort);
         }
         nativeNotifyPortAssociationsChanged(mPtr);
+    }
+
+    /**
+     * Add a runtime association between the input device name and the display unique id.
+     * @param inputDeviceName The name of the input device.
+     * @param displayUniqueId The unique id of the associated display.
+     */
+    @Override // Binder call
+    public void addUniqueIdAssociation(@NonNull String inputDeviceName,
+            @NonNull String displayUniqueId) {
+        if (!checkCallingPermission(
+                android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
+                "addNameAssociation()")) {
+            throw new SecurityException(
+                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
+        }
+
+        Objects.requireNonNull(inputDeviceName);
+        Objects.requireNonNull(displayUniqueId);
+        synchronized (mAssociationsLock) {
+            mUniqueIdAssociations.put(inputDeviceName, displayUniqueId);
+        }
+        nativeChangeUniqueIdAssociation(mPtr);
+    }
+
+    /**
+     * Remove the runtime association between the input device and the display.
+     * @param inputDeviceName The port of the input device to be cleared.
+     */
+    @Override // Binder call
+    public void removeUniqueIdAssociation(@NonNull String inputDeviceName) {
+        if (!checkCallingPermission(
+                android.Manifest.permission.ASSOCIATE_INPUT_DEVICE_TO_DISPLAY,
+                "removeUniqueIdAssociation()")) {
+            throw new SecurityException(
+                    "Requires ASSOCIATE_INPUT_DEVICE_TO_DISPLAY permission");
+        }
+
+        Objects.requireNonNull(inputDeviceName);
+        synchronized (mAssociationsLock) {
+            mUniqueIdAssociations.remove(inputDeviceName);
+        }
+        nativeChangeUniqueIdAssociation(mPtr);
     }
 
     @Override // Binder call
@@ -2790,13 +2836,13 @@ public class InputManagerService extends IInputManager.Stub
      * key.
      * @return Flattened list
      */
-    private static List<String> flatten(@NonNull Map<String, Integer> map) {
+    private static <T> String[] flatten(@NonNull Map<String, T> map) {
         final List<String> list = new ArrayList<>(map.size() * 2);
         map.forEach((k, v)-> {
             list.add(k);
             list.add(v.toString());
         });
-        return list;
+        return list.toArray(new String[0]);
     }
 
     /**
@@ -2828,8 +2874,17 @@ public class InputManagerService extends IInputManager.Stub
             associations.putAll(mRuntimeAssociations);
         }
 
-        final List<String> associationList = flatten(associations);
-        return associationList.toArray(new String[0]);
+        return flatten(associations);
+    }
+
+    // Native callback
+    private String[] getInputUniqueIdAssociations() {
+        final Map<String, String> associations;
+        synchronized (mAssociationsLock) {
+            associations = new HashMap<>(mUniqueIdAssociations);
+        }
+
+        return flatten(associations);
     }
 
     /**

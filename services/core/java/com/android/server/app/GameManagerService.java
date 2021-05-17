@@ -34,7 +34,7 @@ import android.app.ActivityManager;
 import android.app.GameManager;
 import android.app.GameManager.GameMode;
 import android.app.IGameManagerService;
-import android.compat.Compatibility;
+import android.app.compat.PackageOverride;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -61,13 +61,12 @@ import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.compat.CompatibilityChangeConfig;
+import com.android.internal.compat.CompatibilityOverrideConfig;
 import com.android.internal.compat.IPlatformCompat;
 import com.android.server.ServiceThread;
 import com.android.server.SystemService;
 
 import java.io.FileDescriptor;
-import java.util.HashSet;
 import java.util.List;
 
 /**
@@ -87,6 +86,10 @@ public final class GameManagerService extends IGameManagerService.Stub {
     static final int REMOVE_SETTINGS = 2;
     static final int POPULATE_GAME_MODE_SETTINGS = 3;
     static final int WRITE_SETTINGS_DELAY = 10 * 1000;  // 10 seconds
+    static final PackageOverride COMPAT_ENABLED = new PackageOverride.Builder().setEnabled(true)
+            .build();
+    static final PackageOverride COMPAT_DISABLED = new PackageOverride.Builder().setEnabled(false)
+            .build();
 
     private final Context mContext;
     private final Object mLock = new Object();
@@ -196,13 +199,12 @@ public final class GameManagerService extends IGameManagerService.Stub {
         @Override
         public void onPropertiesChanged(Properties properties) {
             synchronized (mDeviceConfigLock) {
-                for (String key : properties.getKeyset()) {
+                for (final String packageName : properties.getKeyset()) {
                     try {
                         // Check if the package is installed before caching it.
-                        final String packageName = keyToPackageName(key);
                         mPackageManager.getPackageInfo(packageName, 0);
                         final GamePackageConfiguration config =
-                                GamePackageConfiguration.fromProperties(key, properties);
+                                GamePackageConfiguration.fromProperties(packageName, properties);
                         if (config.isValid()) {
                             putConfig(config);
                         } else {
@@ -287,8 +289,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
         private final String mPackageName;
         private final ArrayMap<Integer, GameModeConfiguration> mModeConfigs;
 
-        private GamePackageConfiguration(String keyName) {
-            mPackageName = keyToPackageName(keyName);
+        private GamePackageConfiguration(String packageName) {
+            mPackageName = packageName;
             mModeConfigs = new ArrayMap<>();
         }
 
@@ -560,9 +562,9 @@ public final class GameManagerService extends IGameManagerService.Stub {
         }
     }
 
-    private void loadDeviceConfigLocked() {
+    void loadDeviceConfigLocked() {
         final List<PackageInfo> packages = mPackageManager.getInstalledPackages(0);
-        final String[] packageNames = packages.stream().map(e -> packageNameToKey(e.packageName))
+        final String[] packageNames = packages.stream().map(e -> e.packageName)
                 .toArray(String[]::new);
         synchronized (mDeviceConfigLock) {
             final Properties properties = DeviceConfig.getProperties(
@@ -578,17 +580,14 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private void disableCompatScale(String packageName) {
         final long uid = Binder.clearCallingIdentity();
         try {
-            final HashSet<Long> disabledSet = new HashSet<>();
-            disabledSet.add(DOWNSCALED);
-            final CompatibilityChangeConfig changeConfig = new CompatibilityChangeConfig(
-                    new Compatibility.ChangeConfig(new HashSet<>(), disabledSet));
-            // TODO: switch to new API provided by aosp/1599153 once merged
+            final ArrayMap<Long, PackageOverride> overrides = new ArrayMap<>();
+            overrides.put(DOWNSCALED, COMPAT_DISABLED);
+            final CompatibilityOverrideConfig changeConfig = new CompatibilityOverrideConfig(
+                    overrides);
             try {
-                mPlatformCompat.setOverridesForTest(changeConfig, packageName);
-            } catch (SecurityException e) {
-                Slog.e(TAG, "Missing compat override permission", e);
+                mPlatformCompat.setOverridesOnReleaseBuilds(changeConfig, packageName);
             } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to call IPlatformCompat#setOverridesForTest", e);
+                Slog.e(TAG, "Failed to call IPlatformCompat#setOverridesOnReleaseBuilds", e);
             }
         } finally {
             Binder.restoreCallingIdentity(uid);
@@ -598,25 +597,20 @@ public final class GameManagerService extends IGameManagerService.Stub {
     private void enableCompatScale(String packageName, long scaleId) {
         final long uid = Binder.clearCallingIdentity();
         try {
-            final HashSet<Long> disabledSet = new HashSet<>();
-            final HashSet<Long> enabledSet = new HashSet<>();
-            disabledSet.add(DOWNSCALE_50);
-            disabledSet.add(DOWNSCALE_60);
-            disabledSet.add(DOWNSCALE_70);
-            disabledSet.add(DOWNSCALE_80);
-            disabledSet.add(DOWNSCALE_90);
-            disabledSet.remove(scaleId);
-            enabledSet.add(DOWNSCALED);
-            enabledSet.add(scaleId);
-            final CompatibilityChangeConfig changeConfig = new CompatibilityChangeConfig(
-                    new Compatibility.ChangeConfig(enabledSet, disabledSet));
-            // TODO: switch to new API provided by aosp/1599153 once merged
+            final ArrayMap<Long, PackageOverride> overrides = new ArrayMap<>();
+            overrides.put(DOWNSCALED, COMPAT_ENABLED);
+            overrides.put(DOWNSCALE_50, COMPAT_DISABLED);
+            overrides.put(DOWNSCALE_60, COMPAT_DISABLED);
+            overrides.put(DOWNSCALE_70, COMPAT_DISABLED);
+            overrides.put(DOWNSCALE_80, COMPAT_DISABLED);
+            overrides.put(DOWNSCALE_90, COMPAT_DISABLED);
+            overrides.put(scaleId, COMPAT_ENABLED);
+            final CompatibilityOverrideConfig changeConfig = new CompatibilityOverrideConfig(
+                    overrides);
             try {
-                mPlatformCompat.setOverridesForTest(changeConfig, packageName);
-            } catch (SecurityException e) {
-                Slog.e(TAG, "Missing compat override permission", e);
+                mPlatformCompat.setOverridesOnReleaseBuilds(changeConfig, packageName);
             } catch (RemoteException e) {
-                Slog.e(TAG, "Failed to call IPlatformCompat#setOverridesForTest", e);
+                Slog.e(TAG, "Failed to call IPlatformCompat#setOverridesOnReleaseBuilds", e);
             }
         } finally {
             Binder.restoreCallingIdentity(uid);
@@ -685,8 +679,7 @@ public final class GameManagerService extends IGameManagerService.Stub {
                         case ACTION_PACKAGE_CHANGED:
                             synchronized (mDeviceConfigLock) {
                                 Properties properties = DeviceConfig.getProperties(
-                                        DeviceConfig.NAMESPACE_GAME_OVERLAY,
-                                        packageNameToKey(packageName));
+                                        DeviceConfig.NAMESPACE_GAME_OVERLAY, packageName);
                                 for (String key : properties.getKeyset()) {
                                     GamePackageConfiguration config =
                                             GamePackageConfiguration.fromProperties(key,
@@ -697,7 +690,9 @@ public final class GameManagerService extends IGameManagerService.Stub {
                             break;
                         case ACTION_PACKAGE_REMOVED:
                             disableCompatScale(packageName);
-                            mConfigs.remove(packageName);
+                            synchronized (mDeviceConfigLock) {
+                                mConfigs.remove(packageName);
+                            }
                             break;
                         default:
                             // do nothing
@@ -713,23 +708,6 @@ public final class GameManagerService extends IGameManagerService.Stub {
 
     private void registerDeviceConfigListener() {
         mDeviceConfigListener = new DeviceConfigListener();
-    }
-
-    /**
-     * Valid package name characters are [a-zA-Z0-9_] with a '.' delimiter. Policy keys can only use
-     * [a-zA-Z0-9_] so we must handle periods. We do this by appending a '_' to any existing
-     * sequence of '_', then we replace all '.' chars with '_';
-     */
-    private static String packageNameToKey(String name) {
-        return name.replaceAll("(_+)", "_$1").replaceAll("\\.", "_");
-    }
-
-    /**
-     * Replace the last '_' in a sequence with '.' (this can be one or more chars), then replace the
-     * resulting special case '_.' with just '_' to get the original package name.
-     */
-    private static String keyToPackageName(String key) {
-        return key.replaceAll("(_)(?!\\1)", ".").replaceAll("_\\.", "_");
     }
 
     private String dumpDeviceConfigs() {

@@ -2,6 +2,7 @@ package com.android.systemui.media
 
 import android.app.Notification.MediaStyle
 import android.app.PendingIntent
+import android.app.smartspace.SmartspaceTarget
 import android.graphics.Bitmap
 import android.media.MediaDescription
 import android.media.MediaMetadata
@@ -39,6 +40,8 @@ import org.mockito.Mockito.`when` as whenever
 
 private const val KEY = "KEY"
 private const val KEY_2 = "KEY_2"
+private const val KEY_MEDIA_SMARTSPACE = "MEDIA_SMARTSPACE_ID"
+private const val KEY_NONE_MEDIA_SMARTSPACE = "NONE_MEDIA_SMARTSPACE_ID"
 private const val PACKAGE_NAME = "com.android.systemui"
 private const val APP_NAME = "SystemUI"
 private const val SESSION_ARTIST = "artist"
@@ -57,6 +60,7 @@ class MediaDataManagerTest : SysuiTestCase() {
     @JvmField @Rule val mockito = MockitoJUnit.rule()
     @Mock lateinit var mediaControllerFactory: MediaControllerFactory
     @Mock lateinit var controller: MediaController
+    @Mock lateinit var playbackInfo: MediaController.PlaybackInfo
     lateinit var session: MediaSession
     lateinit var metadataBuilder: MediaMetadata.Builder
     lateinit var backgroundExecutor: FakeExecutor
@@ -72,6 +76,8 @@ class MediaDataManagerTest : SysuiTestCase() {
     @Mock lateinit var listener: MediaDataManager.Listener
     @Mock lateinit var pendingIntent: PendingIntent
     @Mock lateinit var activityStarter: ActivityStarter
+    lateinit var smartspaceMediaDataProvider: SmartspaceMediaDataProvider
+    @Mock lateinit var mediaSmartspaceTarget: SmartspaceTarget
     lateinit var mediaDataManager: MediaDataManager
     lateinit var mediaNotification: StatusBarNotification
     @Captor lateinit var mediaDataCaptor: ArgumentCaptor<MediaData>
@@ -80,6 +86,7 @@ class MediaDataManagerTest : SysuiTestCase() {
     fun setup() {
         foregroundExecutor = FakeExecutor(FakeSystemClock())
         backgroundExecutor = FakeExecutor(FakeSystemClock())
+        smartspaceMediaDataProvider = SmartspaceMediaDataProvider()
         mediaDataManager = MediaDataManager(
             context = context,
             backgroundExecutor = backgroundExecutor,
@@ -94,6 +101,7 @@ class MediaDataManagerTest : SysuiTestCase() {
             mediaDataCombineLatest = mediaDataCombineLatest,
             mediaDataFilter = mediaDataFilter,
             activityStarter = activityStarter,
+            smartspaceMediaDataProvider = smartspaceMediaDataProvider,
             useMediaResumption = true,
             useQsMediaPlayer = true
         )
@@ -111,12 +119,18 @@ class MediaDataManagerTest : SysuiTestCase() {
             putString(MediaMetadata.METADATA_KEY_TITLE, SESSION_TITLE)
         }
         whenever(mediaControllerFactory.create(eq(session.sessionToken))).thenReturn(controller)
+        whenever(controller.playbackInfo).thenReturn(playbackInfo)
+        whenever(playbackInfo.playbackType).thenReturn(
+                MediaController.PlaybackInfo.PLAYBACK_TYPE_LOCAL)
 
         // This is an ugly hack for now. The mediaSessionBasedFilter is one of the internal
         // listeners in the internal processing pipeline. It receives events, but ince it is a
         // mock, it doesn't pass those events along the chain to the external listeners. So, just
         // treat mediaSessionBasedFilter as a listener for testing.
         listener = mediaSessionBasedFilter
+
+        whenever(mediaSmartspaceTarget.smartspaceTargetId).thenReturn(KEY_MEDIA_SMARTSPACE)
+        whenever(mediaSmartspaceTarget.featureType).thenReturn(SmartspaceTarget.FEATURE_MEDIA)
     }
 
     @After
@@ -220,6 +234,27 @@ class MediaDataManagerTest : SysuiTestCase() {
     }
 
     @Test
+    fun testOnNotificationRemoved_withResumption_butNotLocal() {
+        // GIVEN that the manager has a notification with a resume action, but is not local
+        whenever(controller.metadata).thenReturn(metadataBuilder.build())
+        whenever(playbackInfo.playbackType).thenReturn(
+                MediaController.PlaybackInfo.PLAYBACK_TYPE_REMOTE)
+        mediaDataManager.onNotificationAdded(KEY, mediaNotification)
+        assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
+        assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
+        verify(listener).onMediaDataLoaded(eq(KEY), eq(null), capture(mediaDataCaptor))
+        val data = mediaDataCaptor.value
+        val dataRemoteWithResume = data.copy(resumeAction = Runnable {}, isLocalSession = false)
+        mediaDataManager.onMediaDataLoaded(KEY, null, dataRemoteWithResume)
+
+        // WHEN the notification is removed
+        mediaDataManager.onNotificationRemoved(KEY)
+
+        // THEN the media data is removed
+        verify(listener).onMediaDataRemoved(eq(KEY))
+    }
+
+    @Test
     fun testAppBlockedFromResumption() {
         // GIVEN that the manager has a notification with a resume action
         whenever(controller.metadata).thenReturn(metadataBuilder.build())
@@ -270,11 +305,12 @@ class MediaDataManagerTest : SysuiTestCase() {
 
     @Test
     fun testAddResumptionControls() {
-        // WHEN resumption controls are added`
+        // WHEN resumption controls are added
         val desc = MediaDescription.Builder().run {
             setTitle(SESSION_TITLE)
             build()
         }
+        val currentTimeMillis = System.currentTimeMillis()
         mediaDataManager.addResumptionControls(USER_ID, desc, Runnable {}, session.sessionToken,
                 APP_NAME, pendingIntent, PACKAGE_NAME)
         assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
@@ -286,6 +322,7 @@ class MediaDataManagerTest : SysuiTestCase() {
         assertThat(data.song).isEqualTo(SESSION_TITLE)
         assertThat(data.app).isEqualTo(APP_NAME)
         assertThat(data.actions).hasSize(1)
+        assertThat(data.lastActive).isAtLeast(currentTimeMillis)
     }
 
     @Test
@@ -319,5 +356,73 @@ class MediaDataManagerTest : SysuiTestCase() {
         assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
         assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
         verify(listener).onMediaDataLoaded(eq(KEY), eq(null), capture(mediaDataCaptor))
+    }
+
+    @Test
+    fun testOnSmartspaceMediaDataLoaded_hasNewMediaTarget_callsListener() {
+        smartspaceMediaDataProvider.onTargetsAvailable(listOf(mediaSmartspaceTarget))
+        verify(listener).onSmartspaceMediaDataLoaded(
+            eq(KEY_MEDIA_SMARTSPACE), eq(mediaSmartspaceTarget))
+    }
+
+    @Test
+    fun testOnSmartspaceMediaDataLoaded_hasNoneMediaTarget_notCallsListener() {
+        smartspaceMediaDataProvider.onTargetsAvailable(listOf())
+        verify(listener, never()).onSmartspaceMediaDataLoaded(anyObject(), anyObject())
+    }
+
+    @Test
+    fun testOnSmartspaceMediaDataLoaded_hasNoneMediaTarget_callsRemoveListener() {
+        smartspaceMediaDataProvider.onTargetsAvailable(listOf(mediaSmartspaceTarget))
+        smartspaceMediaDataProvider.onTargetsAvailable(listOf())
+        verify(listener).onSmartspaceMediaDataRemoved(KEY_MEDIA_SMARTSPACE)
+    }
+
+    @Test
+    fun testOnMediaDataChanged_updatesLastActiveTime() {
+        val currentTimeMillis = System.currentTimeMillis()
+        mediaDataManager.onNotificationAdded(KEY, mediaNotification)
+        assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
+        assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
+        verify(listener).onMediaDataLoaded(eq(KEY), eq(null), capture(mediaDataCaptor))
+        assertThat(mediaDataCaptor.value!!.lastActive).isAtLeast(currentTimeMillis)
+    }
+
+    @Test
+    fun testOnMediaDataTimedOut_doesNotUpdateLastActiveTime() {
+        // GIVEN that the manager has a notification
+        mediaDataManager.onNotificationAdded(KEY, mediaNotification)
+        assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
+        assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
+
+        // WHEN the notification times out
+        val currentTimeMillis = System.currentTimeMillis()
+        mediaDataManager.setTimedOut(KEY, true, true)
+
+        // THEN the last active time is not changed
+        verify(listener).onMediaDataLoaded(eq(KEY), eq(KEY), capture(mediaDataCaptor))
+        assertThat(mediaDataCaptor.value.lastActive).isLessThan(currentTimeMillis)
+    }
+
+    @Test
+    fun testOnActiveMediaConverted_doesNotUpdateLastActiveTime() {
+        // GIVEN that the manager has a notification with a resume action
+        whenever(controller.metadata).thenReturn(metadataBuilder.build())
+        mediaDataManager.onNotificationAdded(KEY, mediaNotification)
+        assertThat(backgroundExecutor.runAllReady()).isEqualTo(1)
+        assertThat(foregroundExecutor.runAllReady()).isEqualTo(1)
+        verify(listener).onMediaDataLoaded(eq(KEY), eq(null), capture(mediaDataCaptor))
+        val data = mediaDataCaptor.value
+        assertThat(data.resumption).isFalse()
+        mediaDataManager.onMediaDataLoaded(KEY, null, data.copy(resumeAction = Runnable {}))
+
+        // WHEN the notification is removed
+        val currentTimeMillis = System.currentTimeMillis()
+        mediaDataManager.onNotificationRemoved(KEY)
+
+        // THEN the last active time is not changed
+        verify(listener).onMediaDataLoaded(eq(PACKAGE_NAME), eq(KEY), capture(mediaDataCaptor))
+        assertThat(mediaDataCaptor.value.resumption).isTrue()
+        assertThat(mediaDataCaptor.value.lastActive).isLessThan(currentTimeMillis)
     }
 }

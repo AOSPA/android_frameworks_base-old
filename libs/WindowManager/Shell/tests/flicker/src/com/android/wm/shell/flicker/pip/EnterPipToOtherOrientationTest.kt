@@ -75,7 +75,7 @@ class EnterPipToOtherOrientationTest(
                 // Enter PiP, and assert that the PiP is within bounds now that the device is back
                 // in portrait
                 broadcastActionTrigger.doAction(ACTION_ENTER_PIP)
-                wmHelper.waitPipWindowShown()
+                wmHelper.waitFor { it.wmState.hasPipWindow() }
                 wmHelper.waitForAppTransitionIdle()
             }
         }
@@ -87,6 +87,12 @@ class EnterPipToOtherOrientationTest(
     @FlakyTest
     @Test
     override fun statusBarLayerRotatesScales() = super.statusBarLayerRotatesScales()
+
+    @FlakyTest
+    @Test
+    override fun noUncoveredRegions() {
+        super.noUncoveredRegions()
+    }
 
     @Presubmit
     @Test

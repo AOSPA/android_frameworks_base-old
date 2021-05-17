@@ -26,6 +26,7 @@ import com.android.keyguard.clock.ClockModule;
 import com.android.keyguard.dagger.KeyguardBouncerComponent;
 import com.android.systemui.BootCompleteCache;
 import com.android.systemui.BootCompleteCacheImpl;
+import com.android.systemui.SystemUIFactory;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
 import com.android.systemui.classifier.FalsingModule;
@@ -73,6 +74,7 @@ import com.android.systemui.util.settings.SettingsUtilModule;
 import com.android.systemui.util.time.SystemClock;
 import com.android.systemui.util.time.SystemClockImpl;
 import com.android.systemui.volume.dagger.VolumeModule;
+import com.android.systemui.wallet.dagger.WalletModule;
 import com.android.systemui.wmshell.BubblesManager;
 import com.android.wm.shell.bubbles.Bubbles;
 
@@ -109,7 +111,8 @@ import dagger.Provides;
             TunerModule.class,
             UserModule.class,
             UtilModule.class,
-            VolumeModule.class
+            VolumeModule.class,
+            WalletModule.class
         },
         subcomponents = {
             StatusBarComponent.class,
@@ -156,6 +159,11 @@ public abstract class SystemUIModule {
     @SysUISingleton
     @Binds
     abstract SystemClock bindSystemClock(SystemClockImpl systemClock);
+
+    @Provides
+    static SystemUIFactory getSystemUIFactory() {
+        return SystemUIFactory.getInstance();
+    }
 
     // TODO: This should provided by the WM component
     /** Provides Optional of BubbleManager */

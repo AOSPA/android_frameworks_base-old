@@ -162,7 +162,6 @@ public final class NetworkCapabilities implements Parcelable {
      *                   {@link NetworkCapabilities}.
      * @hide
      */
-    @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public NetworkCapabilities(@Nullable NetworkCapabilities nc, @RedactionType long redactions) {
         mRedactions = redactions;
         if (nc != null) {
@@ -601,8 +600,9 @@ public final class NetworkCapabilities implements Parcelable {
         // TODO: Consider adding unwanted capabilities to the public API and mention this
         // in the documentation.
         checkValidCapability(capability);
-        mNetworkCapabilities |= 1 << capability;
-        mUnwantedNetworkCapabilities &= ~(1 << capability);  // remove from unwanted capability list
+        mNetworkCapabilities |= 1L << capability;
+        // remove from unwanted capability list
+        mUnwantedNetworkCapabilities &= ~(1L << capability);
         return this;
     }
 
@@ -621,8 +621,8 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public void addUnwantedCapability(@NetCapability int capability) {
         checkValidCapability(capability);
-        mUnwantedNetworkCapabilities |= 1 << capability;
-        mNetworkCapabilities &= ~(1 << capability);  // remove from requested capabilities
+        mUnwantedNetworkCapabilities |= 1L << capability;
+        mNetworkCapabilities &= ~(1L << capability);  // remove from requested capabilities
     }
 
     /**
@@ -635,7 +635,7 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public @NonNull NetworkCapabilities removeCapability(@NetCapability int capability) {
         checkValidCapability(capability);
-        final long mask = ~(1 << capability);
+        final long mask = ~(1L << capability);
         mNetworkCapabilities &= mask;
         return this;
     }
@@ -650,7 +650,7 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public @NonNull NetworkCapabilities removeUnwantedCapability(@NetCapability int capability) {
         checkValidCapability(capability);
-        mUnwantedNetworkCapabilities &= ~(1 << capability);
+        mUnwantedNetworkCapabilities &= ~(1L << capability);
         return this;
     }
 
@@ -718,14 +718,14 @@ public final class NetworkCapabilities implements Parcelable {
      */
     public boolean hasCapability(@NetCapability int capability) {
         return isValidCapability(capability)
-                && ((mNetworkCapabilities & (1 << capability)) != 0);
+                && ((mNetworkCapabilities & (1L << capability)) != 0);
     }
 
     /** @hide */
     @SystemApi(client = SystemApi.Client.MODULE_LIBRARIES)
     public boolean hasUnwantedCapability(@NetCapability int capability) {
         return isValidCapability(capability)
-                && ((mUnwantedNetworkCapabilities & (1 << capability)) != 0);
+                && ((mUnwantedNetworkCapabilities & (1L << capability)) != 0);
     }
 
     /**
@@ -1127,7 +1127,9 @@ public final class NetworkCapabilities implements Parcelable {
      * app needs to hold {@link android.Manifest.permission#ACCESS_FINE_LOCATION} permission. If the
      * app targets SDK version greater than or equal to {@link Build.VERSION_CODES#S}, then they
      * also need to use {@link NetworkCallback#FLAG_INCLUDE_LOCATION_INFO} to get the info in their
-     * callback. The app will be blamed for location access if this field is included.
+     * callback. If the apps targets SDK version equal to {{@link Build.VERSION_CODES#R}, this field
+     * will always be included. The app will be blamed for location access if this field is
+     * included.
      * </p>
      */
     public int getOwnerUid() {
@@ -1747,7 +1749,7 @@ public final class NetworkCapabilities implements Parcelable {
         combineSSIDs(nc);
         combineRequestor(nc);
         combineAdministratorUids(nc);
-        combineSubIds(nc);
+        combineSubscriptionIds(nc);
     }
 
     /**
@@ -1769,7 +1771,7 @@ public final class NetworkCapabilities implements Parcelable {
                 && (onlyImmutable || satisfiedByUids(nc))
                 && (onlyImmutable || satisfiedBySSID(nc))
                 && (onlyImmutable || satisfiedByRequestor(nc))
-                && (onlyImmutable || satisfiedBySubIds(nc)));
+                && (onlyImmutable || satisfiedBySubscriptionIds(nc)));
     }
 
     /**
@@ -1866,7 +1868,7 @@ public final class NetworkCapabilities implements Parcelable {
                 && equalsPrivateDnsBroken(that)
                 && equalsRequestor(that)
                 && equalsAdministratorUids(that)
-                && equalsSubIds(that);
+                && equalsSubscriptionIds(that);
     }
 
     @Override
@@ -2344,24 +2346,30 @@ public final class NetworkCapabilities implements Parcelable {
      * @hide
      */
     @NonNull
-    public NetworkCapabilities setSubIds(@NonNull Set<Integer> subIds) {
+    public NetworkCapabilities setSubscriptionIds(@NonNull Set<Integer> subIds) {
         mSubIds = new ArraySet(Objects.requireNonNull(subIds));
         return this;
     }
 
     /**
      * Gets the subscription ID set that associated to this network or request.
+     *
+     * <p>Instances of NetworkCapabilities will only have this field populated by the system if the
+     * receiver holds the NETWORK_FACTORY permission. In all other cases, it will be the empty set.
+     *
      * @return
+     * @hide
      */
     @NonNull
-    public Set<Integer> getSubIds() {
+    @SystemApi
+    public Set<Integer> getSubscriptionIds() {
         return new ArraySet<>(mSubIds);
     }
 
     /**
      * Tests if the subscription ID set of this network is the same as that of the passed one.
      */
-    private boolean equalsSubIds(@NonNull NetworkCapabilities nc) {
+    private boolean equalsSubscriptionIds(@NonNull NetworkCapabilities nc) {
         return Objects.equals(mSubIds, nc.mSubIds);
     }
 
@@ -2370,7 +2378,7 @@ public final class NetworkCapabilities implements Parcelable {
      * If specified in the request, the passed one need to have at least one subId and at least
      * one of them needs to be in the request set.
      */
-    private boolean satisfiedBySubIds(@NonNull NetworkCapabilities nc) {
+    private boolean satisfiedBySubscriptionIds(@NonNull NetworkCapabilities nc) {
         if (mSubIds.isEmpty()) return true;
         if (nc.mSubIds.isEmpty()) return false;
         for (final Integer subId : nc.mSubIds) {
@@ -2387,7 +2395,7 @@ public final class NetworkCapabilities implements Parcelable {
      * <p>If both subscription IDs are not equal, they belong to different subscription
      * (or no subscription). In this case, it would not make sense to add them together.
      */
-    private void combineSubIds(@NonNull NetworkCapabilities nc) {
+    private void combineSubscriptionIds(@NonNull NetworkCapabilities nc) {
         if (!Objects.equals(mSubIds, nc.mSubIds)) {
             throw new IllegalStateException("Can't combine two subscription ID sets");
         }
@@ -2718,12 +2726,19 @@ public final class NetworkCapabilities implements Parcelable {
         /**
          * Set the subscription ID set.
          *
+         * <p>SubIds are populated in NetworkCapability instances from the system only for callers
+         * that hold the NETWORK_FACTORY permission. Similarly, the system will reject any
+         * NetworkRequests filed with a non-empty set of subIds unless the caller holds the
+         * NETWORK_FACTORY permission.
+         *
          * @param subIds a set that represent the subscription IDs. Empty if clean up.
          * @return this builder.
+         * @hide
          */
         @NonNull
-        public Builder setSubIds(@NonNull final Set<Integer> subIds) {
-            mCaps.setSubIds(subIds);
+        @SystemApi
+        public Builder setSubscriptionIds(@NonNull final Set<Integer> subIds) {
+            mCaps.setSubscriptionIds(subIds);
             return this;
         }
 

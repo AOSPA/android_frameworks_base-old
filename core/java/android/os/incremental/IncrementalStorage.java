@@ -398,7 +398,7 @@ public final class IncrementalStorage {
     }
 
     /**
-     * Iinitializes and starts the DataLoader.
+     * Initializes and starts the DataLoader.
      * This makes sure all install-time parameters are applied.
      * Does not affect persistent DataLoader params.
      * @return True if start request was successfully queued.
@@ -418,6 +418,18 @@ public final class IncrementalStorage {
             return false;
         }
     }
+
+    /**
+     * Marks the completion of installation.
+     */
+    public void onInstallationComplete() {
+        try {
+            mService.onInstallationComplete(mId);
+        } catch (RemoteException e) {
+            e.rethrowFromSystemServer();
+        }
+    }
+
 
     private static final int UUID_BYTE_SIZE = 16;
 
@@ -573,33 +585,6 @@ public final class IncrementalStorage {
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
             return false;
-        }
-    }
-
-    /**
-     * Register to listen to the status changes of the storage health.
-     * @param healthCheckParams Params to specify status change timeouts.
-     * @param listener To report health status change from Incremental Service to the caller.
-     */
-    public boolean registerStorageHealthListener(StorageHealthCheckParams healthCheckParams,
-            IStorageHealthListener listener) {
-        try {
-            return mService.registerStorageHealthListener(mId, healthCheckParams, listener);
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-            return false;
-        }
-    }
-
-    /**
-     * Stops listening to the status changes of the storage health.
-     */
-    public void unregisterStorageHealthListener() {
-        try {
-            mService.unregisterStorageHealthListener(mId);
-        } catch (RemoteException e) {
-            e.rethrowFromSystemServer();
-            return;
         }
     }
 

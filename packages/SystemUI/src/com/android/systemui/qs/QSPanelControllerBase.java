@@ -75,8 +75,6 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     private float mRevealExpansion;
 
     private final QSHost.Callback mQSHostCallback = this::setTiles;
-    protected boolean mShowLabels = true;
-    protected boolean mQSLabelFlag;
 
     private final QSPanel.OnConfigurationChangedListener mOnConfigurationChangedListener =
             new QSPanel.OnConfigurationChangedListener() {
@@ -121,14 +119,13 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         mQSLogger = qsLogger;
         mDumpManager = dumpManager;
         mFeatureFlags = featureFlags;
-        mQSLabelFlag = featureFlags.isQSLabelsEnabled();
         mShouldUseSplitNotificationShade =
                 Utils.shouldUseSplitNotificationShade(mFeatureFlags, getResources());
     }
 
     @Override
     protected void onInit() {
-        mView.initialize(mQSLabelFlag);
+        mView.initialize();
         mQSLogger.logAllTilesChangeListening(mView.isListening(), mView.getDumpableTag(), "");
     }
 
@@ -202,11 +199,10 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
     private void addTile(final QSTile tile, boolean collapsedView) {
         final TileRecord r = new TileRecord();
         r.tile = tile;
-        r.tileView = mHost.createTileView(tile, collapsedView);
+        r.tileView = mHost.createTileView(getContext(), tile, collapsedView);
         mView.addTile(r);
         mRecords.add(r);
         mCachedSpecs = getTilesSpecs();
-
     }
 
     /** */
@@ -214,7 +210,7 @@ public abstract class QSPanelControllerBase<T extends QSPanel> extends ViewContr
         final String spec = CustomTile.toSpec(tile);
         for (TileRecord record : mRecords) {
             if (record.tile.getTileSpec().equals(spec)) {
-                record.tile.click();
+                record.tile.click(null /* view */);
                 break;
             }
         }

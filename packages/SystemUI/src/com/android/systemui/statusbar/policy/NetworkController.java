@@ -117,6 +117,7 @@ public interface NetworkController extends CallbackController<SignalCallback>, D
             this.qsType = qsType;
             this.activityIn = activityIn;
             this.activityOut = activityOut;
+            this.volteIcon = volteIcon;
             this.typeContentDescription = typeContentDescription;
             this.typeContentDescriptionHtml = typeContentDescriptionHtml;
             this.description = description;
@@ -135,6 +136,7 @@ public interface NetworkController extends CallbackController<SignalCallback>, D
                 .append(",qsType=").append(qsType)
                 .append(",activityIn=").append(activityIn)
                 .append(",activityOut=").append(activityOut)
+                .append(",volteIcon=").append(volteIcon)
                 .append(",typeContentDescription=").append(typeContentDescription)
                 .append(",typeContentDescriptionHtml=").append(typeContentDescriptionHtml)
                 .append(",description=").append(description)

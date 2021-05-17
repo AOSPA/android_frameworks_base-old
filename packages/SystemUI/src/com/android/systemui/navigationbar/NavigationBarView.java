@@ -67,9 +67,8 @@ import android.widget.FrameLayout;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.Utils;
 import com.android.systemui.Dependency;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
-import com.android.systemui.assist.AssistHandleViewController;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.buttons.ButtonDispatcher;
 import com.android.systemui.navigationbar.buttons.ContextualButton;
@@ -282,7 +281,7 @@ public class NavigationBarView extends FrameLayout implements
         // When in gestural and the IME is showing, don't use the nearest region since it will take
         // gesture space away from the IME
         info.setTouchableInsets(InternalInsetsInfo.TOUCHABLE_INSETS_REGION);
-        info.touchableRegion.set(getButtonLocations(false /* includeFloatingRotationButton */,
+        info.touchableRegion.set(getButtonLocations(false /* includeFloatingButtons */,
                 false /* inScreen */, false /* useNearestRegion */));
     };
 
@@ -983,7 +982,7 @@ public class NavigationBarView extends FrameLayout implements
      */
     public void notifyActiveTouchRegions() {
         mOverviewProxyService.onActiveNavBarRegionChanges(
-                getButtonLocations(true /* includeFloatingRotationButton */, true /* inScreen */,
+                getButtonLocations(true /* includeFloatingButtons */, true /* inScreen */,
                         true /* useNearestRegion */));
     }
 
@@ -996,14 +995,14 @@ public class NavigationBarView extends FrameLayout implements
     }
 
     /**
-     * @param includeFloatingRotationButton Whether to include the floating rotation button in the
-     *                                      region for all the buttons
+     * @param includeFloatingButtons Whether to include the floating rotation and overlay button in
+     *                               the region for all the buttons
      * @param inScreenSpace Whether to return values in screen space or window space
      * @param useNearestRegion Whether to use the nearest region instead of the actual button bounds
      * @return
      */
-    private Region getButtonLocations(boolean includeFloatingRotationButton,
-            boolean inScreenSpace, boolean useNearestRegion) {
+    private Region getButtonLocations(boolean includeFloatingButtons, boolean inScreenSpace,
+            boolean useNearestRegion) {
         if (useNearestRegion && !inScreenSpace) {
             // We currently don't support getting the nearest region in anything but screen space
             useNearestRegion = false;
@@ -1015,13 +1014,13 @@ public class NavigationBarView extends FrameLayout implements
         updateButtonLocation(getRecentsButton(), inScreenSpace, useNearestRegion);
         updateButtonLocation(getImeSwitchButton(), inScreenSpace, useNearestRegion);
         updateButtonLocation(getAccessibilityButton(), inScreenSpace, useNearestRegion);
-        if (includeFloatingRotationButton && mFloatingRotationButton.isVisible()) {
+        if (includeFloatingButtons && mFloatingRotationButton.isVisible()) {
             // Note: this button is floating so the nearest region doesn't apply
             updateButtonLocation(mFloatingRotationButton.getCurrentView(), inScreenSpace);
         } else {
             updateButtonLocation(getRotateSuggestionButton(), inScreenSpace, useNearestRegion);
         }
-        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()
+        if (includeFloatingButtons && mNavBarOverlayController.isNavigationBarOverlayEnabled()
                 && mNavBarOverlayController.isVisible()) {
             // Note: this button is floating so the nearest region doesn't apply
             updateButtonLocation(mNavBarOverlayController.getCurrentView(), inScreenSpace);
@@ -1187,6 +1186,7 @@ public class NavigationBarView extends FrameLayout implements
         boolean uiCarModeChanged = updateCarMode();
         updateIcons(mTmpLastConfiguration);
         updateRecentsIcon();
+        mEdgeBackGestureHandler.onConfigurationChanged(mConfiguration);
         mRecentsOnboarding.onConfigurationChanged(mConfiguration);
         if (uiCarModeChanged || mTmpLastConfiguration.densityDpi != mConfiguration.densityDpi
                 || mTmpLastConfiguration.getLayoutDirection() != mConfiguration.getLayoutDirection()) {
@@ -1357,14 +1357,6 @@ public class NavigationBarView extends FrameLayout implements
         setClipChildren(shouldClip);
         setClipToPadding(shouldClip);
 
-        NavigationBarController navigationBarController =
-                Dependency.get(NavigationBarController.class);
-        AssistHandleViewController controller =
-                navigationBarController == null
-                        ? null : navigationBarController.getAssistHandlerViewController();
-        if (controller != null) {
-            controller.setBottomOffset(insets.getSystemWindowInsetBottom());
-        }
         return super.onApplyWindowInsets(insets);
     }
 

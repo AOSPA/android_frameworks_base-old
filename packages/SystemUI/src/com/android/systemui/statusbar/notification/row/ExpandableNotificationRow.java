@@ -19,7 +19,6 @@ package com.android.systemui.statusbar.notification.row;
 import static android.app.Notification.Action.SEMANTIC_ACTION_MARK_CONVERSATION_AS_PRIORITY;
 import static android.service.notification.NotificationListenerService.REASON_CANCEL;
 
-import static com.android.systemui.statusbar.notification.ActivityLaunchAnimator.ExpandAnimationParameters;
 import static com.android.systemui.statusbar.notification.row.NotificationContentView.VISIBLE_TYPE_HEADSUP;
 import static com.android.systemui.statusbar.notification.row.NotificationRowContentBinder.FLAG_CONTENT_VIEW_PUBLIC;
 
@@ -72,10 +71,10 @@ import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.internal.util.ContrastColorUtil;
 import com.android.internal.widget.CachingIconView;
 import com.android.internal.widget.CallLayout;
-import com.android.internal.widget.MessagingLayout;
 import com.android.systemui.Dependency;
-import com.android.systemui.Interpolators;
 import com.android.systemui.R;
+import com.android.systemui.animation.ActivityLaunchAnimator;
+import com.android.systemui.animation.Interpolators;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.PluginListener;
@@ -86,7 +85,7 @@ import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarIconView;
 import com.android.systemui.statusbar.notification.AboveShelfChangedListener;
-import com.android.systemui.statusbar.notification.ActivityLaunchAnimator;
+import com.android.systemui.statusbar.notification.ExpandAnimationParameters;
 import com.android.systemui.statusbar.notification.NotificationUtils;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
@@ -631,17 +630,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mSecureStateProvider = secureStateProvider;
     }
 
-    @Override
-    public boolean isDimmable() {
-        if (!getShowingLayout().isDimmable()) {
-            return false;
-        }
-        if (showingPulsing()) {
-            return false;
-        }
-        return super.isDimmable();
-    }
-
     private void updateLimits() {
         for (NotificationContentView l : mLayouts) {
             updateLimitsForView(l);
@@ -658,10 +646,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean beforeS = mEntry.targetSdk < Build.VERSION_CODES.S;
         int smallHeight;
 
-        View expandedView = layout.getExpandedChild();
-        boolean isMediaLayout = expandedView != null
-                && expandedView.findViewById(com.android.internal.R.id.media_actions) != null;
-        boolean isMessagingLayout = contractedView instanceof MessagingLayout;
         boolean isCallLayout = contractedView instanceof CallLayout;
 
         if (customView && beforeS && !mIsSummaryWithChildren) {
@@ -672,12 +656,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             } else {
                 smallHeight = mMaxSmallHeightBeforeS;
             }
-        } else if (isMessagingLayout) {
-            // TODO(b/173204301): MessagingStyle notifications currently look broken when we enforce
-            //  the standard notification height, so we have to afford them more vertical space to
-            //  make sure we don't crop them terribly.  We actually need to revisit this and give
-            //  them a headerless design, then remove this hack.
-            smallHeight = mMaxSmallHeightLarge;
         } else if (isCallLayout) {
             smallHeight = mMaxExpandedHeight;
         } else if (mUseIncreasedCollapsedHeight && layout == mPrivateLayout) {
@@ -864,7 +842,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         mNotificationParent = isChildInGroup ? parent : null;
         mPrivateLayout.setIsChildInGroup(isChildInGroup);
 
-        resetBackgroundAlpha();
         updateBackgroundForGroupState();
         updateClickAndFocus();
         if (mNotificationParent != null) {
@@ -881,7 +858,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         // Other parts of the system may intercept and handle all the falsing.
         // Otherwise, if we see motion and follow-on events, try to classify them as a tap.
         if (ev.getActionMasked() != MotionEvent.ACTION_DOWN) {
-            mFalsingManager.isFalseTap(true, 0.3);
+            mFalsingManager.isFalseTap(FalsingManager.MODERATE_PENALTY);
         }
         return super.onInterceptTouchEvent(ev);
     }
@@ -903,11 +880,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             return true;
         }
         return false;
-    }
-
-    @Override
-    protected boolean shouldHideBackground() {
-        return super.shouldHideBackground() || mShowNoBackground;
     }
 
     @Override
@@ -2045,9 +2017,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         float extraWidthForClipping = params.getWidth() - getWidth();
         setExtraWidthForClipping(extraWidthForClipping);
         int top = params.getTop();
-        float interpolation = Interpolators.FAST_OUT_SLOW_IN.getInterpolation(params.getProgress());
         int startClipTopAmount = params.getStartClipTopAmount();
-        int clipTopAmount = (int) MathUtils.lerp(startClipTopAmount, 0, interpolation);
+        int clipTopAmount = (int) MathUtils.lerp(startClipTopAmount, 0, params.getProgress());
         if (mNotificationParent != null) {
             float parentY = mNotificationParent.getTranslationY();
             top -= parentY;
@@ -2096,8 +2067,8 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (expandAnimationRunning) {
             contentView.animate()
                     .alpha(0f)
-                    .setDuration(ActivityLaunchAnimator.ANIMATION_DURATION_FADE_CONTENT)
-                    .setInterpolator(Interpolators.ALPHA_OUT);
+                    .setDuration(ActivityLaunchAnimator.ANIMATION_DURATION_FADE_OUT_CONTENT)
+                    .setInterpolator(ActivityLaunchAnimator.CONTENT_FADE_OUT_INTERPOLATOR);
             setAboveShelf(true);
             mExpandAnimationRunning = true;
             getViewState().cancelAnimations(this);
@@ -2885,7 +2856,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             mShowNoBackground = false;
         }
         updateOutline();
-        updateBackground();
     }
 
     public int getPositionOfChild(ExpandableNotificationRow childRow) {

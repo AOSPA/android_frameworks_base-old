@@ -235,7 +235,9 @@ public class PackageInstaller {
      * See the individual types documentation for details.
      *
      * @see Intent#getIntExtra(String, int)
+     * {@hide}
      */
+    @SystemApi
     public static final String EXTRA_DATA_LOADER_TYPE = "android.content.pm.extra.DATA_LOADER_TYPE";
 
     /**
@@ -243,6 +245,7 @@ public class PackageInstaller {
      * Caller should make sure DataLoader is able to prepare image and reinitiate the operation.
      *
      * @see #EXTRA_SESSION_ID
+     * {@hide}
      */
     public static final int STATUS_PENDING_STREAMING = -2;
 
@@ -345,33 +348,44 @@ public class PackageInstaller {
      * Default value, non-streaming installation session.
      *
      * @see #EXTRA_DATA_LOADER_TYPE
+     * {@hide}
      */
+    @SystemApi
     public static final int DATA_LOADER_TYPE_NONE = DataLoaderType.NONE;
 
     /**
      * Streaming installation using data loader.
      *
      * @see #EXTRA_DATA_LOADER_TYPE
+     * {@hide}
      */
+    @SystemApi
     public static final int DATA_LOADER_TYPE_STREAMING = DataLoaderType.STREAMING;
 
     /**
      * Streaming installation using Incremental FileSystem.
      *
      * @see #EXTRA_DATA_LOADER_TYPE
+     * {@hide}
      */
+    @SystemApi
     public static final int DATA_LOADER_TYPE_INCREMENTAL = DataLoaderType.INCREMENTAL;
 
     /**
      * Target location for the file in installation session is /data/app/<packageName>-<id>.
      * This is the intended location for APKs.
+     * Requires permission to install packages.
+     * {@hide}
      */
+    @SystemApi
     public static final int LOCATION_DATA_APP = InstallationFileLocation.DATA_APP;
 
     /**
      * Target location for the file in installation session is
      * /data/media/<userid>/Android/obb/<packageName>. This is the intended location for OBBs.
+     * {@hide}
      */
+    @SystemApi
     public static final int LOCATION_MEDIA_OBB = InstallationFileLocation.MEDIA_OBB;
 
     /**
@@ -379,7 +393,9 @@ public class PackageInstaller {
      * /data/media/<userid>/Android/data/<packageName>.
      * This is the intended location for application data.
      * Can only be used by an app itself running under specific user.
+     * {@hide}
      */
+    @SystemApi
     public static final int LOCATION_MEDIA_DATA = InstallationFileLocation.MEDIA_DATA;
 
     /** @hide */
@@ -1151,7 +1167,10 @@ public class PackageInstaller {
 
         /**
          * @return data loader params or null if the session is not using one.
+         * {@hide}
          */
+        @SystemApi
+        @RequiresPermission(android.Manifest.permission.USE_INSTALLER_V2)
         public @Nullable DataLoaderParams getDataLoaderParams() {
             try {
                 DataLoaderParamsParcel data = mSession.getDataLoaderParams();
@@ -1165,7 +1184,7 @@ public class PackageInstaller {
         }
 
         /**
-         * Adds a file to session. On commit this file will be pulled from dataLoader {@code
+         * Adds a file to session. On commit this file will be pulled from DataLoader {@code
          * android.service.dataloader.DataLoaderService.DataLoader}.
          *
          * @param location target location for the file. Possible values:
@@ -1180,7 +1199,7 @@ public class PackageInstaller {
          * @param lengthBytes total size of the file being written.
          *            The system may clear various caches as needed to allocate
          *            this space.
-         * @param metadata additional info use by dataLoader to pull data for the file.
+         * @param metadata additional info use by DataLoader to pull data for the file.
          * @param signature additional file signature, e.g.
          *                  <a href="https://source.android.com/security/apksigning/v4.html">APK Signature Scheme v4</a>
          * @throws SecurityException if called after the session has been
@@ -1188,7 +1207,11 @@ public class PackageInstaller {
          * @throws IllegalStateException if called for non-streaming session
          *
          * @see android.content.pm.InstallationFile
+         *
+         * {@hide}
          */
+        @SystemApi
+        @RequiresPermission(android.Manifest.permission.USE_INSTALLER_V2)
         public void addFile(@FileLocation int location, @NonNull String name, long lengthBytes,
                 @NonNull byte[] metadata, @Nullable byte[] signature) {
             try {
@@ -1208,8 +1231,11 @@ public class PackageInstaller {
          * @param name name of a file, e.g. split.
          * @throws SecurityException if called after the session has been
          *             sealed or abandoned
-         * @throws IllegalStateException if called for non-streaming session
+         * @throws IllegalStateException if called for non-DataLoader session
+         * {@hide}
          */
+        @SystemApi
+        @RequiresPermission(android.Manifest.permission.USE_INSTALLER_V2)
         public void removeFile(@FileLocation int location, @NonNull String name) {
             try {
                 mSession.removeFile(location, name);
@@ -1503,6 +1529,33 @@ public class PackageInstaller {
          */
         public static final int MAX_PACKAGE_NAME_LENGTH = 255;
 
+        /** @hide */
+        @IntDef(prefix = {"USER_ACTION_"}, value = {
+                USER_ACTION_UNSPECIFIED,
+                USER_ACTION_REQUIRED,
+                USER_ACTION_NOT_REQUIRED
+        })
+        @Retention(RetentionPolicy.SOURCE)
+        public @interface UserActionRequirement {}
+
+        /**
+         * The installer did not call {@link SessionParams#setRequireUserAction(int)} to
+         * specify whether user action should be required for the install.
+         */
+        public static final int USER_ACTION_UNSPECIFIED = 0;
+
+        /**
+         * The installer called {@link SessionParams#setRequireUserAction(int)} with
+         * {@code true} to require user action for the install to complete.
+         */
+        public static final int USER_ACTION_REQUIRED = 1;
+
+        /**
+         * The installer called {@link SessionParams#setRequireUserAction(int)} with
+         * {@code false} to request that user action not be required for this install.
+         */
+        public static final int USER_ACTION_NOT_REQUIRED = 2;
+
         /** {@hide} */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
         public int mode = MODE_INVALID;
@@ -1567,7 +1620,7 @@ public class PackageInstaller {
         /** {@hide} */
         public boolean forceQueryableOverride;
         /** {@hide} */
-        public int requireUserAction = SessionInfo.USER_ACTION_UNSPECIFIED;
+        public int requireUserAction = USER_ACTION_UNSPECIFIED;
 
         /**
          * Construct parameters for a new package install session.
@@ -1808,7 +1861,10 @@ public class PackageInstaller {
          * If user explicitly enabled or disabled it via settings, this call is ignored.
          *
          * @param shouldAutoRevoke whether permissions should be auto-revoked.
+         *
+         * @deprecated No longer used
          */
+        @Deprecated
         public void setAutoRevokePermissionsMode(boolean shouldAutoRevoke) {
             autoRevokePermissionsMode = shouldAutoRevoke ? MODE_ALLOWED : MODE_IGNORED;
         }
@@ -1958,6 +2014,14 @@ public class PackageInstaller {
         }
 
         /**
+         * @hide
+         */
+        @TestApi
+        public void setInstallFlagAllowTest() {
+            installFlags |= PackageManager.INSTALL_ALLOW_TEST;
+        }
+
+        /**
          * Set the installer package for the app.
          *
          * By default this is the app that created the {@link PackageInstaller} object.
@@ -2018,11 +2082,17 @@ public class PackageInstaller {
 
         /**
          * Set the data loader params for the session.
-         * This also switches installation into data provider mode and disallow direct writes into
+         * This also switches installation into data loading mode and disallow direct writes into
          * staging folder.
          *
          * @see android.service.dataloader.DataLoaderService.DataLoader
+         *
+         * {@hide}
          */
+        @SystemApi
+        @RequiresPermission(allOf = {
+                Manifest.permission.INSTALL_PACKAGES,
+                Manifest.permission.USE_INSTALLER_V2})
         public void setDataLoaderParams(@NonNull DataLoaderParams dataLoaderParams) {
             this.dataLoaderParams = dataLoaderParams;
         }
@@ -2039,11 +2109,14 @@ public class PackageInstaller {
          * Optionally indicate whether user action should be required when the session is
          * committed.
          * <p>
-         * Defaults to {@code true} for installers using the
+         * Defaults to {@link #USER_ACTION_UNSPECIFIED} unless otherwise set. When unspecified for
+         * installers using the
          * {@link android.Manifest.permission#REQUEST_INSTALL_PACKAGES android.permission
-         * #REQUEST_INSTALL_PACKAGES} permission, and {@code false} otherwise. When {@code true},
-         * installers will receive a {@link #STATUS_PENDING_USER_ACTION} callback once the
-         * session is committed, indicating that user action is required for the install to proceed.
+         * #REQUEST_INSTALL_PACKAGES} permission will behave as if set to
+         * {@link #USER_ACTION_REQUIRED}, and {@link #USER_ACTION_NOT_REQUIRED} otherwise.
+         * When {@code requireUserAction} is set to {@link #USER_ACTION_REQUIRED}, installers will
+         * receive a {@link #STATUS_PENDING_USER_ACTION} callback once the session is committed,
+         * indicating that user action is required for the install to proceed.
          * <p>
          * For installers that have been granted the
          * {@link android.Manifest.permission#REQUEST_INSTALL_PACKAGES android.permission
@@ -2051,7 +2124,7 @@ public class PackageInstaller {
          * the following conditions are met:
          *
          * <ul>
-         *     <li>{@code requireUserAction} is set to {@code false}.</li>
+         *     <li>{@code requireUserAction} is set to {@link #USER_ACTION_NOT_REQUIRED}.</li>
          *     <li>The app being installed targets {@link android.os.Build.VERSION_CODES#Q API 29}
          *     or higher.</li>
          *     <li>The installer is the {@link InstallSourceInfo#getInstallingPackageName()
@@ -2067,10 +2140,17 @@ public class PackageInstaller {
          *
          * @param requireUserAction whether user action should be required.
          */
-        public void setRequireUserAction(boolean requireUserAction) {
-            this.requireUserAction = requireUserAction
-                    ? SessionInfo.USER_ACTION_REQUIRED
-                    : SessionInfo.USER_ACTION_NOT_REQUIRED;
+        public void setRequireUserAction(
+                @SessionParams.UserActionRequirement int requireUserAction) {
+            if (requireUserAction != USER_ACTION_UNSPECIFIED
+                    && requireUserAction != USER_ACTION_REQUIRED
+                    && requireUserAction != USER_ACTION_NOT_REQUIRED) {
+                throw new IllegalArgumentException("requireUserAction set as invalid value of "
+                        + requireUserAction + ", but must be one of ["
+                        + "USER_ACTION_UNSPECIFIED, USER_ACTION_REQUIRED, USER_ACTION_NOT_REQUIRED"
+                        + "]");
+            }
+            this.requireUserAction = requireUserAction;
         }
 
         /**
@@ -2212,36 +2292,11 @@ public class PackageInstaller {
          */
         public static final int STAGED_SESSION_CONFLICT = 4;
 
-        /** @hide */
-        @IntDef(prefix = {"USER_ACTION"}, value = {
-                USER_ACTION_UNSPECIFIED,
-                USER_ACTION_REQUIRED,
-                USER_ACTION_NOT_REQUIRED
-        })
-        @Retention(RetentionPolicy.SOURCE)
-        public @interface UserActionRequirement {}
-
-        /**
-         * The installer did not call {@link SessionParams#setRequireUserAction(boolean)} to
-         * specify whether user action should be required for the install.
-         */
-        public static final int USER_ACTION_UNSPECIFIED = 0;
-        /**
-         * The installer called {@link SessionParams#setRequireUserAction(boolean)} with
-         * {@code true} to require user action for the install to complete.
-         */
-        public static final int USER_ACTION_REQUIRED = 1;
-        /**
-         * The installer called {@link SessionParams#setRequireUserAction(boolean)} with
-         * {@code false} to request that user action not be required for this install.
-         */
-        public static final int USER_ACTION_NOT_REQUIRED = 2;
-
         private static String userActionToString(int requireUserAction) {
             switch(requireUserAction) {
-                case SessionInfo.USER_ACTION_REQUIRED:
+                case SessionParams.USER_ACTION_REQUIRED:
                     return "REQUIRED";
-                case SessionInfo.USER_ACTION_NOT_REQUIRED:
+                case SessionParams.USER_ACTION_NOT_REQUIRED:
                     return "NOT_REQUIRED";
                 default:
                     return "UNSPECIFIED";
@@ -2898,10 +2953,11 @@ public class PackageInstaller {
          * Note: a return value of {@code USER_ACTION_NOT_REQUIRED} does not guarantee that the
          * install will not result in user action.
          *
-         * @return {@link #USER_ACTION_NOT_REQUIRED}, {@link #USER_ACTION_REQUIRED} or
-         *         {@link #USER_ACTION_UNSPECIFIED}
+         * @return {@link SessionParams#USER_ACTION_NOT_REQUIRED},
+         *         {@link SessionParams#USER_ACTION_REQUIRED} or
+         *         {@link SessionParams#USER_ACTION_UNSPECIFIED}
          */
-        @UserActionRequirement
+        @SessionParams.UserActionRequirement
         public int getRequireUserAction() {
             return requireUserAction;
         }

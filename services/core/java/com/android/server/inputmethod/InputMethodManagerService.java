@@ -248,6 +248,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     static final int MSG_CREATE_SESSION = 1050;
     static final int MSG_REMOVE_IME_SURFACE = 1060;
     static final int MSG_REMOVE_IME_SURFACE_FROM_WINDOW = 1061;
+    static final int MSG_UPDATE_IME_WINDOW_STATUS = 1070;
 
     static final int MSG_START_INPUT = 2000;
 
@@ -2623,8 +2624,9 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 }
                 if (DEBUG) Slog.v(TAG, "Initiating attach with token: " + mCurToken);
                 // Dispatch display id for InputMethodService to update context display.
-                executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOO(
-                        MSG_INITIALIZE_IME, mCurTokenDisplayId, mCurMethod, mCurToken));
+                executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOOO(
+                        MSG_INITIALIZE_IME, mCurTokenDisplayId, mCurMethod, mCurToken,
+                        mMethodMap.get(mCurMethodId).getConfigChanges()));
                 scheduleNotifyImeUidToAudioService(mCurMethodUid);
                 if (mCurClient != null) {
                     clearClientSessionLocked(mCurClient);
@@ -2939,6 +2941,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
+    private void updateImeWindowStatus() {
+        synchronized (mMethodMap) {
+            updateSystemUiLocked();
+        }
+    }
+
     void updateSystemUiLocked() {
         updateSystemUiLocked(mImeWindowVis, mBackDisposition);
     }
@@ -3176,7 +3184,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     @BinderThread
     @Override
-    public void reportPerceptible(IBinder windowToken, boolean perceptible) {
+    public void reportPerceptibleAsync(IBinder windowToken, boolean perceptible) {
         Objects.requireNonNull(windowToken, "windowToken must not be null");
         int uid = Binder.getCallingUid();
         synchronized (mMethodMap) {
@@ -3540,15 +3548,16 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         InputBindResult res = null;
         // We shows the IME when the system allows the IME focused target window to restore the
         // IME visibility (e.g. switching to the app task when last time the IME is visible).
-        if (isTextEditor && mWindowManagerInternal.shouldRestoreImeVisibility(windowToken)) {
-            if (attribute != null) {
-                res = startInputUncheckedLocked(cs, inputContext, missingMethods,
-                        attribute, startInputFlags, startInputReason);
-                showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null,
-                        SoftInputShowHideReason.SHOW_RESTORE_IME_VISIBILITY);
-            } else {
-                res = InputBindResult.NULL_EDITOR_INFO;
-            }
+        // Note that we don't restore IME visibility for some cases (e.g. when the soft input
+        // state is ALWAYS_HIDDEN or STATE_HIDDEN with forward navigation).
+        // Because the app might leverage these flags to hide soft-keyboard with showing their own
+        // UI for input.
+        if (isTextEditor && attribute != null
+                && shouldRestoreImeVisibility(windowToken, softInputMode)) {
+            res = startInputUncheckedLocked(cs, inputContext, missingMethods, attribute,
+                    startInputFlags, startInputReason);
+            showCurrentInputLocked(windowToken, InputMethodManager.SHOW_IMPLICIT, null,
+                    SoftInputShowHideReason.SHOW_RESTORE_IME_VISIBILITY);
             return res;
         }
 
@@ -3670,6 +3679,19 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
             }
         }
         return res;
+    }
+
+    private boolean shouldRestoreImeVisibility(IBinder windowToken,
+            @SoftInputModeFlags int softInputMode) {
+        switch (softInputMode & LayoutParams.SOFT_INPUT_MASK_STATE) {
+            case LayoutParams.SOFT_INPUT_STATE_ALWAYS_HIDDEN:
+                return false;
+            case LayoutParams.SOFT_INPUT_STATE_HIDDEN:
+                if ((softInputMode & LayoutParams.SOFT_INPUT_IS_FORWARD_NAVIGATION) != 0) {
+                    return false;
+                }
+        }
+        return mWindowManagerInternal.shouldRestoreImeVisibility(windowToken);
     }
 
     private boolean isImeVisible() {
@@ -4085,13 +4107,10 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     }
 
     @Override
-    public void removeImeSurfaceFromWindow(IBinder windowToken,
-            IVoidResultCallback resultCallback) {
-        CallbackUtils.onResult(resultCallback, () -> {
-            // No permission check, because we'll only execute the request if the calling window is
-            // also the current IME client.
-            mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE_FROM_WINDOW, windowToken).sendToTarget();
-        });
+    public void removeImeSurfaceFromWindowAsync(IBinder windowToken) {
+        // No permission check, because we'll only execute the request if the calling window is
+        // also the current IME client.
+        mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE_FROM_WINDOW, windowToken).sendToTarget();
     }
 
     /**
@@ -4477,7 +4496,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                     }
                     final IBinder token = (IBinder) args.arg2;
                     ((IInputMethod) args.arg1).initializeInternal(token, msg.arg1,
-                            new InputMethodPrivilegedOperationsImpl(this, token));
+                            new InputMethodPrivilegedOperationsImpl(this, token),
+                            (int) args.arg3);
                 } catch (RemoteException e) {
                 }
                 args.recycle();
@@ -4521,6 +4541,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                         }
                     } catch (RemoteException e) {
                     }
+                }
+                return true;
+            }
+            case MSG_UPDATE_IME_WINDOW_STATUS: {
+                synchronized (mMethodMap) {
+                    updateSystemUiLocked();
                 }
                 return true;
             }
@@ -5188,6 +5214,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @Override
         public void removeImeSurface() {
             mService.mHandler.sendMessage(mService.mHandler.obtainMessage(MSG_REMOVE_IME_SURFACE));
+        }
+
+        @Override
+        public void updateImeWindowStatus() {
+            mService.mHandler.sendMessage(
+                    mService.mHandler.obtainMessage(MSG_UPDATE_IME_WINDOW_STATUS));
         }
     }
 
@@ -5973,17 +6005,14 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         @BinderThread
         @Override
-        public void setImeWindowStatus(int vis, int backDisposition,
-                IVoidResultCallback resultCallback) {
-            CallbackUtils.onResult(resultCallback,
-                    () -> mImms.setImeWindowStatus(mToken, vis, backDisposition));
+        public void setImeWindowStatusAsync(int vis, int backDisposition) {
+            mImms.setImeWindowStatus(mToken, vis, backDisposition);
         }
 
         @BinderThread
         @Override
-        public void reportStartInput(IBinder startInputToken, IVoidResultCallback resultCallback) {
-            CallbackUtils.onResult(resultCallback,
-                    () -> mImms.reportStartInput(mToken, startInputToken));
+        public void reportStartInputAsync(IBinder startInputToken) {
+            mImms.reportStartInput(mToken, startInputToken);
         }
 
         @BinderThread
@@ -5996,9 +6025,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
         @BinderThread
         @Override
-        public void reportFullscreenMode(boolean fullscreen, IVoidResultCallback resultCallback) {
-            CallbackUtils.onResult(resultCallback,
-                    () -> mImms.reportFullscreenMode(mToken, fullscreen));
+        public void reportFullscreenModeAsync(boolean fullscreen) {
+            mImms.reportFullscreenMode(mToken, fullscreen);
         }
 
         @BinderThread

@@ -58,8 +58,7 @@ public class VcnGatewayConnectionConnectingStateTest extends VcnGatewayConnectio
                 ArgumentCaptor.forClass(IkeSessionParams.class);
         verify(mDeps).newIkeSession(any(), paramsCaptor.capture(), any(), any(), any());
         assertEquals(
-                TEST_UNDERLYING_NETWORK_RECORD_1.network,
-                paramsCaptor.getValue().getConfiguredNetwork());
+                TEST_UNDERLYING_NETWORK_RECORD_1.network, paramsCaptor.getValue().getNetwork());
     }
 
     @Test
@@ -118,8 +117,9 @@ public class VcnGatewayConnectionConnectingStateTest extends VcnGatewayConnectio
     }
 
     @Test
-    public void testSafeModeTimeoutNotifiesCallback() {
-        verifySafeModeTimeoutNotifiesCallback(mGatewayConnection.mConnectingState);
+    public void testSafeModeTimeoutNotifiesCallbackAndUnregistersNetworkAgent() {
+        verifySafeModeTimeoutNotifiesCallbackAndUnregistersNetworkAgent(
+                mGatewayConnection.mConnectingState);
     }
 
     @Test

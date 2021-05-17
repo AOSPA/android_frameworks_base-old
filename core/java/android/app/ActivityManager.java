@@ -794,6 +794,9 @@ public class ActivityManager {
     /** @hide Flag for registerUidObserver: report uid cached state has changed. */
     public static final int UID_OBSERVER_CACHED = 1<<4;
 
+    /** @hide Flag for registerUidObserver: report uid capability has changed. */
+    public static final int UID_OBSERVER_CAPABILITY = 1<<5;
+
     /** @hide Mode for {@link IActivityManager#isAppStartModeDisabled}: normal free-to-run operation. */
     public static final int APP_START_MODE_NORMAL = 0;
 
@@ -4269,7 +4272,8 @@ public class ActivityManager {
         try {
             getService().broadcastIntentWithFeature(
                     null, null, intent, null, null, Activity.RESULT_OK, null, null,
-                    null /*permission*/, appOp, null, false, true, userId);
+                    null /*requiredPermissions*/, null /*excludedPermissions*/, appOp, null, false,
+                    true, userId);
         } catch (RemoteException ex) {
         }
     }

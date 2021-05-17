@@ -22,9 +22,13 @@ public interface IndividualSensorPrivacyController extends
         CallbackController<IndividualSensorPrivacyController.Callback> {
     void init();
 
+    boolean supportsSensorToggle(@Sensor int sensor);
+
     boolean isSensorBlocked(@Sensor int sensor);
 
     void setSensorBlocked(@Sensor int sensor, boolean blocked);
+
+    void suppressSensorPrivacyReminders(String packageName, boolean suppress);
 
     interface Callback {
         void onSensorBlockedChanged(@Sensor int sensor, boolean blocked);

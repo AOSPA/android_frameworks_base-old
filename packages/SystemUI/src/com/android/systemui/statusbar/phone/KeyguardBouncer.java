@@ -59,8 +59,8 @@ public class KeyguardBouncer {
     private static final String TAG = "KeyguardBouncer";
     static final long BOUNCER_FACE_DELAY = 1200;
     public static final float ALPHA_EXPANSION_THRESHOLD = 0.95f;
-    static final float EXPANSION_HIDDEN = 1f;
-    static final float EXPANSION_VISIBLE = 0f;
+    public static final float EXPANSION_HIDDEN = 1f;
+    public static final float EXPANSION_VISIBLE = 0f;
 
     protected final Context mContext;
     protected final ViewMediatorCallback mCallback;
@@ -553,6 +553,13 @@ public class KeyguardBouncer {
         pw.println("  mShowingSoon: " + mShowingSoon);
         pw.println("  mBouncerPromptReason: " + mBouncerPromptReason);
         pw.println("  mIsAnimatingAway: " + mIsAnimatingAway);
+    }
+
+    /** Update keyguard position based on a tapped X coordinate. */
+    public void updateKeyguardPosition(float x) {
+        if (mKeyguardViewController != null) {
+            mKeyguardViewController.updateKeyguardPosition(x);
+        }
     }
 
     public interface BouncerExpansionCallback {

@@ -225,7 +225,7 @@ import java.util.concurrent.CountDownLatch;
  */
 @SuppressWarnings({"EmptyCatchBlock", "PointlessBooleanExpression"})
 public final class ViewRootImpl implements ViewParent,
-        View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks {
+        View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks, ViewRoot {
     private static final String TAG = "ViewRootImpl";
     private static final boolean DBG = false;
     private static final boolean LOCAL_LOGV = false;
@@ -722,6 +722,13 @@ public final class ViewRootImpl implements ViewParent,
      * has been sent to SurfaceFlinger.
      */
     private boolean mNextDrawUseBlastSync = false;
+
+    /**
+     * Wait for the blast sync transaction complete callback before drawing and queuing up more
+     * frames. This will prevent out of order buffers submissions when WM has requested to
+     * synchronize with the client.
+     */
+    private boolean mWaitForBlastSyncComplete = false;
 
     /**
      * Keeps track of whether a traverse was triggered while the UI thread was paused. This can
@@ -1350,6 +1357,16 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    private void addASurfaceTransactionCallback() {
+        HardwareRenderer.ASurfaceTransactionCallback callback = (nativeTransactionObj,
+                                                                 nativeSurfaceControlObj,
+                                                                 frameNr) -> {
+            Transaction t = new Transaction(nativeTransactionObj);
+            mergeWithNextTransaction(t, frameNr);
+        };
+        mAttachInfo.mThreadedRenderer.setASurfaceTransactionCallback(callback);
+    }
+
     @UnsupportedAppUsage
     private void enableHardwareAcceleration(WindowManager.LayoutParams attrs) {
         mAttachInfo.mHardwareAccelerated = false;
@@ -1386,6 +1403,7 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean translucent = attrs.format != PixelFormat.OPAQUE || hasSurfaceInsets;
                 mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent,
                         attrs.getTitle().toString());
+                addASurfaceTransactionCallback();
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
                 updateColorModeIfNeeded(attrs.getColorMode());
                 updateForceDarkMode();
@@ -2463,7 +2481,7 @@ public final class ViewRootImpl implements ViewParent,
         //
         // When the callback is invoked, it will trigger a traversal request if
         // mRequestedTraverseWhilePaused is set so there's no need to attempt a retry here.
-        if (mNextDrawUseBlastSync) {
+        if (mWaitForBlastSyncComplete) {
             if (DEBUG_BLAST) {
                 Log.w(mTag, "Can't perform draw while waiting for a transaction complete");
             }
@@ -2771,8 +2789,8 @@ public final class ViewRootImpl implements ViewParent,
                 if (!mPendingMergedConfiguration.equals(mLastReportedMergedConfiguration)) {
                     if (DEBUG_CONFIGURATION) Log.v(mTag, "Visible with new config: "
                             + mPendingMergedConfiguration.getMergedConfiguration());
-                    performConfigurationChange(mPendingMergedConfiguration, !mFirst,
-                            INVALID_DISPLAY /* same display */);
+                    performConfigurationChange(new MergedConfiguration(mPendingMergedConfiguration),
+                            !mFirst, INVALID_DISPLAY /* same display */);
                     updatedConfiguration = true;
                 }
 
@@ -2838,7 +2856,6 @@ public final class ViewRootImpl implements ViewParent,
                             return;
                         }
                     }
-                    notifySurfaceCreated();
                 } else if (surfaceDestroyed) {
                     // If the surface has been removed, then reset the scroll
                     // positions.
@@ -2876,10 +2893,6 @@ public final class ViewRootImpl implements ViewParent,
                         handleOutOfResourcesException(e);
                         return;
                     }
-                }
-
-                if (!surfaceCreated && surfaceReplaced) {
-                    notifySurfaceReplaced();
                 }
 
                 if (mDragResizing != dragResizing) {
@@ -3094,7 +3107,14 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        if (surfaceDestroyed) {
+        // These callbacks will trigger SurfaceView SurfaceHolder.Callbacks and must be invoked
+        // after the measure pass. If its invoked before the measure pass and the app modifies
+        // the view hierarchy in the callbacks, we could leave the views in a broken state.
+        if (surfaceCreated) {
+            notifySurfaceCreated();
+        } else if (surfaceReplaced) {
+            notifySurfaceReplaced();
+        } else if (surfaceDestroyed)  {
             notifySurfaceDestroyed();
         }
 
@@ -3209,7 +3229,9 @@ public final class ViewRootImpl implements ViewParent,
                 Log.d(mTag, "Relayout called with blastSync");
             }
             reportNextDraw();
-            mNextDrawUseBlastSync = true;
+            if (isHardwareEnabled()) {
+                mNextDrawUseBlastSync = true;
+            }
         }
 
         boolean cancelDraw = mAttachInfo.mTreeObserver.dispatchOnPreDraw() || !isViewVisible;
@@ -3242,10 +3264,6 @@ public final class ViewRootImpl implements ViewParent,
                     pendingDrawFinished();
                 }
             }
-
-            // We were unable to draw this traversal. Unset this flag since we'll block without
-            // ever being able to draw again
-            mNextDrawUseBlastSync = false;
         }
 
         if (mAttachInfo.mContentCaptureEvents != null) {
@@ -3903,7 +3921,10 @@ public final class ViewRootImpl implements ViewParent,
             mDrawsNeededToReport = 0;
             mWindowSession.finishDrawing(mWindow, mSurfaceChangedTransaction);
         } catch (RemoteException e) {
-            // Have fun!
+            Log.e(mTag, "Unable to report draw finished", e);
+            mSurfaceChangedTransaction.apply();
+        } finally {
+            mSurfaceChangedTransaction.clear();
         }
     }
 
@@ -3988,7 +4009,7 @@ public final class ViewRootImpl implements ViewParent,
                     + " reportNextDraw=" + reportNextDraw
                     + " hasBlurUpdates=" + hasBlurUpdates);
         }
-
+        mWaitForBlastSyncComplete = nextDrawUseBlastSync;
         final BackgroundBlurDrawable.BlurRegion[] blurRegionsForFrame =
                 needsCallbackForBlur ?  mBlurRegionAggregator.getBlurRegionsCopyForRT() : null;
 
@@ -4023,6 +4044,7 @@ public final class ViewRootImpl implements ViewParent,
                     }
                     mHandler.postAtFrontOfQueue(() -> {
                         mNextDrawUseBlastSync = false;
+                        mWaitForBlastSyncComplete = false;
                         if (DEBUG_BLAST) {
                             Log.d(mTag, "Scheduling a traversal=" + mRequestedTraverseWhilePaused
                                     + " due to a previous skipped traversal.");
@@ -5312,8 +5334,8 @@ public final class ViewRootImpl implements ViewParent,
                     mPendingMergedConfiguration.setConfiguration(config,
                             mLastReportedMergedConfiguration.getOverrideConfiguration());
 
-                    performConfigurationChange(mPendingMergedConfiguration, false /* force */,
-                            INVALID_DISPLAY /* same display */);
+                    performConfigurationChange(new MergedConfiguration(mPendingMergedConfiguration),
+                            false /* force */, INVALID_DISPLAY /* same display */);
                 } break;
                 case MSG_CLEAR_ACCESSIBILITY_FOCUS_HOST: {
                     setAccessibilityFocus(null, null);
@@ -8608,8 +8630,6 @@ public final class ViewRootImpl implements ViewParent,
                 // available, we cannot compute end-to-end input latency metrics.
                 return;
             }
-            final long gpuCompletedTime = data[FrameMetrics.Index.GPU_COMPLETED];
-            mReceiver.reportLatencyInfo(inputEventId, gpuCompletedTime, presentTime);
         }
     }
     HardwareRendererObserver mHardwareRendererObserver;
@@ -9310,11 +9330,11 @@ public final class ViewRootImpl implements ViewParent,
      * Handles an inbound request for scroll capture from the system. A search will be
      * dispatched through the view tree to locate scrolling content.
      * <p>
-     * A call to {@link IScrollCaptureCallbacks#onScrollCaptureResponse(ScrollCaptureResponse)}
-     * will follow.
+     * A call to
+     * {@link IScrollCaptureResponseListener#onScrollCaptureResponse} will follow.
      *
      * @param listener to receive responses
-     * @see ScrollCaptureTargetSelector
+     * @see ScrollCaptureSearchResults
      */
     public void handleScrollCaptureRequest(@NonNull IScrollCaptureResponseListener listener) {
         ScrollCaptureSearchResults results =
@@ -10212,9 +10232,6 @@ public final class ViewRootImpl implements ViewParent,
 
         if (useBLAST() && mBlastBufferQueue != null) {
             mBlastBufferQueue.mergeWithNextTransaction(transaction, frameNumber);
-        } else {
-            transaction.deferTransactionUntil(surfaceControl, surfaceControl, frameNumber);
-            transaction.apply();
         }
     }
 
@@ -10256,5 +10273,22 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             t.apply();
         }
+    }
+
+    @Override
+    @Nullable public SurfaceControl.Transaction buildReparentTransaction(
+        @NonNull SurfaceControl child) {
+        if (mSurfaceControl.isValid()) {
+            return new SurfaceControl.Transaction().reparent(child, mSurfaceControl);
+        }
+        return null;
+    }
+
+    @Override
+    public boolean applyTransactionOnDraw(@NonNull SurfaceControl.Transaction t) {
+        registerRtFrameCallback(frame -> {
+            mergeWithNextTransaction(t, frame);
+        });
+        return true;
     }
 }

@@ -28,6 +28,7 @@ import java.util.Arrays;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 
 /**
@@ -94,10 +95,10 @@ public final class SetSchemaRequest {
             @NonNull Map<String, Migrator> migrators,
             boolean forceOverride,
             int version) {
-        mSchemas = Preconditions.checkNotNull(schemas);
-        mSchemasNotDisplayedBySystem = Preconditions.checkNotNull(schemasNotDisplayedBySystem);
-        mSchemasVisibleToPackages = Preconditions.checkNotNull(schemasVisibleToPackages);
-        mMigrators = Preconditions.checkNotNull(migrators);
+        mSchemas = Objects.requireNonNull(schemas);
+        mSchemasNotDisplayedBySystem = Objects.requireNonNull(schemasNotDisplayedBySystem);
+        mSchemasVisibleToPackages = Objects.requireNonNull(schemasVisibleToPackages);
+        mMigrators = Objects.requireNonNull(migrators);
         mForceOverride = forceOverride;
         mVersion = version;
     }
@@ -192,7 +193,7 @@ public final class SetSchemaRequest {
          */
         @NonNull
         public Builder addSchemas(@NonNull AppSearchSchema... schemas) {
-            Preconditions.checkNotNull(schemas);
+            Objects.requireNonNull(schemas);
             return addSchemas(Arrays.asList(schemas));
         }
 
@@ -206,7 +207,7 @@ public final class SetSchemaRequest {
         @NonNull
         public Builder addSchemas(@NonNull Collection<AppSearchSchema> schemas) {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            Preconditions.checkNotNull(schemas);
+            Objects.requireNonNull(schemas);
             mSchemas.addAll(schemas);
             return this;
         }
@@ -231,7 +232,7 @@ public final class SetSchemaRequest {
         @NonNull
         public Builder setSchemaTypeDisplayedBySystem(
                 @NonNull String schemaType, boolean displayed) {
-            Preconditions.checkNotNull(schemaType);
+            Objects.requireNonNull(schemaType);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
 
             if (displayed) {
@@ -270,8 +271,8 @@ public final class SetSchemaRequest {
                 @NonNull String schemaType,
                 boolean visible,
                 @NonNull PackageIdentifier packageIdentifier) {
-            Preconditions.checkNotNull(schemaType);
-            Preconditions.checkNotNull(packageIdentifier);
+            Objects.requireNonNull(schemaType);
+            Objects.requireNonNull(packageIdentifier);
             Preconditions.checkState(!mBuilt, "Builder has already been used");
 
             Set<PackageIdentifier> packageIdentifiers = mSchemasVisibleToPackages.get(schemaType);
@@ -297,30 +298,60 @@ public final class SetSchemaRequest {
         }
 
         /**
-         * Sets the {@link Migrator}.
+         * Sets the {@link Migrator} associated with the given SchemaType.
+         *
+         * <p>The {@link Migrator} migrates all {@link GenericDocument}s under given schema type
+         * from the current version number stored in AppSearch to the final version set via {@link
+         * #setVersion}.
+         *
+         * <p>A {@link Migrator} will be invoked if the current version number stored in AppSearch
+         * is different from the final version set via {@link #setVersion} and {@link
+         * Migrator#shouldMigrate} returns {@code true}.
+         *
+         * <p>The target schema type of the output {@link GenericDocument} of {@link
+         * Migrator#onUpgrade} or {@link Migrator#onDowngrade} must exist in this {@link
+         * SetSchemaRequest}.
          *
          * @param schemaType The schema type to set migrator on.
-         * @param migrator The migrator translate a document from it's old version to a new
-         *     incompatible version.
+         * @param migrator The migrator translates a document from its current version to the final
+         *     version set via {@link #setVersion}.
+         * @see SetSchemaRequest.Builder#setVersion
+         * @see SetSchemaRequest.Builder#addSchemas
+         * @see AppSearchSession#setSchema
          */
         @NonNull
         @SuppressLint("MissingGetterMatchingBuilder") // Getter return plural objects.
         public Builder setMigrator(@NonNull String schemaType, @NonNull Migrator migrator) {
-            Preconditions.checkNotNull(schemaType);
-            Preconditions.checkNotNull(migrator);
+            Objects.requireNonNull(schemaType);
+            Objects.requireNonNull(migrator);
             mMigrators.put(schemaType, migrator);
             return this;
         }
 
         /**
-         * Sets {@link Migrator}s.
+         * Sets a Map of {@link Migrator}s.
          *
-         * @param migrators A {@link Map} of migrators that translate a document from its old
-         *     version to a new incompatible version.
+         * <p>The {@link Migrator} migrates all {@link GenericDocument}s under given schema type
+         * from the current version number stored in AppSearch to the final version set via {@link
+         * #setVersion}.
+         *
+         * <p>A {@link Migrator} will be invoked if the current version number stored in AppSearch
+         * is different from the final version set via {@link #setVersion} and {@link
+         * Migrator#shouldMigrate} returns {@code true}.
+         *
+         * <p>The target schema type of the output {@link GenericDocument} of {@link
+         * Migrator#onUpgrade} or {@link Migrator#onDowngrade} must exist in this {@link
+         * SetSchemaRequest}.
+         *
+         * @param migrators A {@link Map} of migrators that translate a document from it's current
+         *     version to the final version set via {@link #setVersion}.
+         * @see SetSchemaRequest.Builder#setVersion
+         * @see SetSchemaRequest.Builder#addSchemas
+         * @see AppSearchSession#setSchema
          */
         @NonNull
         public Builder setMigrators(@NonNull Map<String, Migrator> migrators) {
-            Preconditions.checkNotNull(migrators);
+            Objects.requireNonNull(migrators);
             mMigrators.putAll(migrators);
             return this;
         }
@@ -383,7 +414,6 @@ public final class SetSchemaRequest {
         @NonNull
         public SetSchemaRequest build() {
             Preconditions.checkState(!mBuilt, "Builder has already been used");
-            mBuilt = true;
 
             // Verify that any schema types with display or visibility settings refer to a real
             // schema.
@@ -401,6 +431,7 @@ public final class SetSchemaRequest {
                         "Schema types " + referencedSchemas + " referenced, but were not added.");
             }
 
+            mBuilt = true;
             return new SetSchemaRequest(
                     mSchemas,
                     mSchemasNotDisplayedBySystem,

@@ -43,12 +43,14 @@ import android.content.res.Configuration;
 import android.graphics.Bitmap;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.Icon;
+import android.icu.text.MeasureFormat;
+import android.icu.util.Measure;
+import android.icu.util.MeasureUnit;
 import android.net.Uri;
 import android.os.Bundle;
 import android.text.TextUtils;
 import android.util.IconDrawableFactory;
 import android.util.Log;
-import android.util.TypedValue;
 import android.view.View;
 import android.widget.RemoteViews;
 import android.widget.TextView;
@@ -59,6 +61,7 @@ import com.android.systemui.people.widget.LaunchConversationActivity;
 import com.android.systemui.people.widget.PeopleSpaceWidgetProvider;
 
 import java.text.NumberFormat;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
@@ -68,10 +71,15 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import java.util.stream.Collectors;
 
-class PeopleTileViewHelper {
+/** Functions that help creating the People tile layouts. */
+public class PeopleTileViewHelper {
     /** Turns on debugging information about People Space. */
     public static final boolean DEBUG = true;
     private static final String TAG = "PeopleTileView";
+
+    private static final int DAYS_IN_A_WEEK = 7;
+    private static final int ONE_DAY = 1;
+    private static final int MAX_WEEKS = 2;
 
     public static final int LAYOUT_SMALL = 0;
     public static final int LAYOUT_MEDIUM = 1;
@@ -80,11 +88,13 @@ class PeopleTileViewHelper {
     private static final int MIN_CONTENT_MAX_LINES = 2;
 
     private static final int FIXED_HEIGHT_DIMENS_FOR_LARGE_CONTENT = 14 + 12 + 4 + 16;
-    private static final int FIXED_HEIGHT_DIMENS_FOR_MEDIUM_CONTENT = 8 + 4 + 4 + 8;
+    private static final int MIN_MEDIUM_VERTICAL_PADDING = 4;
+    private static final int MAX_MEDIUM_PADDING = 16;
+    private static final int FIXED_HEIGHT_DIMENS_FOR_MEDIUM_CONTENT_BEFORE_PADDING = 4 + 4;
     private static final int FIXED_HEIGHT_DIMENS_FOR_SMALL = 6 + 4 + 8;
     private static final int FIXED_WIDTH_DIMENS_FOR_SMALL = 4 + 4;
 
-    private static final int MESSAGES_COUNT_OVERFLOW = 7;
+    private static final int MESSAGES_COUNT_OVERFLOW = 6;
 
     private static final Pattern DOUBLE_EXCLAMATION_PATTERN = Pattern.compile("[!][!]+");
     private static final Pattern DOUBLE_QUESTION_PATTERN = Pattern.compile("[?][?]+");
@@ -92,6 +102,8 @@ class PeopleTileViewHelper {
     private static final Pattern MIXED_MARK_PATTERN = Pattern.compile("![?].*|.*[?]!");
 
     public static final String EMPTY_STRING = "";
+
+    private int mMediumVerticalPadding;
 
     private Context mContext;
     private PeopleSpaceTile mTile;
@@ -104,7 +116,7 @@ class PeopleTileViewHelper {
     private Locale mLocale;
     private NumberFormat mIntegerFormat;
 
-    PeopleTileViewHelper(Context context, PeopleSpaceTile tile,
+    public PeopleTileViewHelper(Context context, PeopleSpaceTile tile,
             int appWidgetId, Bundle options) {
         mContext = context;
         mTile = tile;
@@ -192,13 +204,18 @@ class PeopleTileViewHelper {
     }
 
     private int getSizeInDp(int dimenResourceId) {
-        return (int) (mContext.getResources().getDimension(dimenResourceId) / mDensity);
+        return getSizeInDp(mContext, dimenResourceId, mDensity);
+    }
+
+    public static int getSizeInDp(Context context, int dimenResourceId, float density) {
+        return (int) (context.getResources().getDimension(dimenResourceId) / density);
     }
 
     private int getContentHeightForLayout(int lineHeight) {
         switch (mLayoutSize) {
             case LAYOUT_MEDIUM:
-                return mHeight - (lineHeight + FIXED_HEIGHT_DIMENS_FOR_MEDIUM_CONTENT);
+                return mHeight - (lineHeight + FIXED_HEIGHT_DIMENS_FOR_MEDIUM_CONTENT_BEFORE_PADDING
+                        + mMediumVerticalPadding * 2);
             case LAYOUT_LARGE:
                 return mHeight - (getSizeInDp(
                         R.dimen.max_people_avatar_size_for_large_content) + lineHeight
@@ -217,7 +234,16 @@ class PeopleTileViewHelper {
         }
         // Small layout used below a certain minimum mWidth with any mHeight.
         if (mWidth >= getSizeInDp(R.dimen.required_width_for_medium)) {
-            if (DEBUG) Log.d(TAG, "Medium view for mWidth: " + mWidth + " mHeight: " + mHeight);
+            int spaceAvailableForPadding =
+                    mHeight - (getSizeInDp(R.dimen.avatar_size_for_medium) + 4 + getLineHeight(
+                            getSizeInDp(R.dimen.name_text_size_for_medium)));
+            if (DEBUG) {
+                Log.d(TAG, "Medium view for mWidth: " + mWidth + " mHeight: " + mHeight
+                        + " with padding space: " + spaceAvailableForPadding);
+            }
+            int maxVerticalPadding = Math.min(Math.floorDiv(spaceAvailableForPadding, 2),
+                    MAX_MEDIUM_PADDING);
+            mMediumVerticalPadding = Math.max(MIN_MEDIUM_VERTICAL_PADDING, maxVerticalPadding);
             return LAYOUT_MEDIUM;
         }
         // Small layout can always handle our minimum mWidth and mHeight for our widget.
@@ -278,24 +304,13 @@ class PeopleTileViewHelper {
             } else {
                 views.setViewVisibility(R.id.availability, View.GONE);
             }
-            boolean hasNewStory =
-                    mTile.getStatuses() != null && mTile.getStatuses().stream().anyMatch(
-                            c -> c.getActivity() == ACTIVITY_NEW_STORY);
-            views.setTextViewText(R.id.name, mTile.getUserName().toString());
+
+            if (mTile.getUserName() != null) {
+                views.setTextViewText(R.id.name, mTile.getUserName().toString());
+            }
             views.setBoolean(R.id.image, "setClipToOutline", true);
-
-            Icon icon = mTile.getUserIcon();
-            PeopleStoryIconFactory storyIcon = new PeopleStoryIconFactory(mContext,
-                    mContext.getPackageManager(),
-                    IconDrawableFactory.newInstance(mContext, false),
-                    maxAvatarSize);
-            Drawable drawable = icon.loadDrawable(mContext);
-            Drawable personDrawable = storyIcon.getPeopleTileDrawable(drawable,
-                    mTile.getPackageName(), getUserId(mTile), mTile.isImportantConversation(),
-                    hasNewStory);
-            Bitmap bitmap = convertDrawableToBitmap(personDrawable);
-            views.setImageViewBitmap(R.id.person_icon, bitmap);
-
+            views.setImageViewBitmap(R.id.person_icon,
+                    getPersonIconBitmap(mContext, mTile, maxAvatarSize));
             return views;
         } catch (Exception e) {
             Log.e(TAG, "Failed to set common fields: " + e);
@@ -334,6 +349,7 @@ class PeopleTileViewHelper {
     private RemoteViews createMissedCallRemoteViews() {
         RemoteViews views = getViewForContentLayout();
         views.setViewVisibility(R.id.predefined_icon, View.VISIBLE);
+        views.setViewVisibility(R.id.messages_count, View.GONE);
         setMaxLines(views);
         views.setTextViewText(R.id.text_content, mTile.getNotificationContent());
         views.setImageViewResource(R.id.predefined_icon, R.drawable.ic_phone_missed);
@@ -353,10 +369,7 @@ class PeopleTileViewHelper {
             setMaxLines(views);
             CharSequence content = mTile.getNotificationContent();
             views = setPunctuationRemoteViewsFields(views, content);
-            TypedValue typedValue = new TypedValue();
-            mContext.getTheme().resolveAttribute(android.R.attr.textColorPrimary, typedValue, true);
-            int primaryTextColor = mContext.getColor(typedValue.resourceId);
-            views.setInt(R.id.text_content, "setTextColor", primaryTextColor);
+            views.setColorAttr(R.id.text_content, "setTextColor", android.R.attr.textColorPrimary);
             views.setTextViewText(R.id.text_content, mTile.getNotificationContent());
             views.setViewVisibility(R.id.image, View.GONE);
             views.setImageViewResource(R.id.predefined_icon, R.drawable.ic_message);
@@ -375,7 +388,7 @@ class PeopleTileViewHelper {
         return views;
     }
 
-    // Some messaging apps only include up to 7 messages in their notifications.
+    // Some messaging apps only include up to 6 messages in their notifications.
     private String getMessagesCountText(int count) {
         if (count >= MESSAGES_COUNT_OVERFLOW) {
             return mContext.getResources().getString(
@@ -400,12 +413,10 @@ class PeopleTileViewHelper {
             statusText = getStatusTextByType(status.getActivity());
         }
         views.setViewVisibility(R.id.predefined_icon, View.VISIBLE);
+        views.setViewVisibility(R.id.messages_count, View.GONE);
         setMaxLines(views);
         // Secondary text color for statuses.
-        TypedValue typedValue = new TypedValue();
-        mContext.getTheme().resolveAttribute(android.R.attr.textColorSecondary, typedValue, true);
-        int secondaryTextColor = mContext.getColor(typedValue.resourceId);
-        views.setInt(R.id.text_content, "setTextColor", secondaryTextColor);
+        views.setColorAttr(R.id.text_content, "setTextColor", android.R.attr.textColorSecondary);
         views.setTextViewText(R.id.text_content, statusText);
 
         Icon statusIcon = status.getIcon();
@@ -545,6 +556,15 @@ class PeopleTileViewHelper {
             views.setViewVisibility(R.id.text_content, View.VISIBLE);
             views.setViewVisibility(R.id.subtext, View.GONE);
         }
+
+        if (mLayoutSize == LAYOUT_MEDIUM) {
+            if (DEBUG) Log.d(TAG, "Set vertical padding: " + mMediumVerticalPadding);
+            int horizontalPadding = (int) Math.floor(MAX_MEDIUM_PADDING * mDensity);
+            int verticalPadding = (int) Math.floor(mMediumVerticalPadding * mDensity);
+            views.setViewPadding(R.id.item, horizontalPadding, verticalPadding, horizontalPadding,
+                    verticalPadding);
+        }
+        views.setViewVisibility(R.id.messages_count, View.GONE);
         return views;
     }
 
@@ -553,10 +573,18 @@ class PeopleTileViewHelper {
         if (mLayoutSize == LAYOUT_SMALL) {
             views.setViewVisibility(R.id.name, View.VISIBLE);
             views.setViewVisibility(R.id.predefined_icon, View.GONE);
+            views.setViewVisibility(R.id.messages_count, View.GONE);
         }
-        String status = PeopleSpaceUtils.getLastInteractionString(mContext,
+        String status = getLastInteractionString(mContext,
                 mTile.getLastInteractionTimestamp());
-        views.setTextViewText(R.id.last_interaction, status);
+        if (status != null) {
+            if (DEBUG) Log.d(TAG, "Show last interaction");
+            views.setViewVisibility(R.id.last_interaction, View.VISIBLE);
+            views.setTextViewText(R.id.last_interaction, status);
+        } else {
+            if (DEBUG) Log.d(TAG, "Hide last interaction");
+            views.setViewVisibility(R.id.last_interaction, View.GONE);
+        }
         return views;
     }
 
@@ -581,6 +609,55 @@ class PeopleTileViewHelper {
             case LAYOUT_SMALL:
             default:
                 return R.layout.people_tile_small;
+        }
+    }
+
+    /** Returns a bitmap with the user icon and package icon. */
+    public static Bitmap getPersonIconBitmap(
+            Context context, PeopleSpaceTile tile, int maxAvatarSize) {
+        boolean hasNewStory =
+                tile.getStatuses() != null && tile.getStatuses().stream().anyMatch(
+                        c -> c.getActivity() == ACTIVITY_NEW_STORY);
+
+        Icon icon = tile.getUserIcon();
+        PeopleStoryIconFactory storyIcon = new PeopleStoryIconFactory(context,
+                context.getPackageManager(),
+                IconDrawableFactory.newInstance(context, false),
+                maxAvatarSize);
+        Drawable drawable = icon.loadDrawable(context);
+        Drawable personDrawable = storyIcon.getPeopleTileDrawable(drawable,
+                tile.getPackageName(), getUserId(tile), tile.isImportantConversation(),
+                hasNewStory);
+        return convertDrawableToBitmap(personDrawable);
+    }
+
+    /** Returns a readable status describing the {@code lastInteraction}. */
+    @Nullable
+    public static String getLastInteractionString(Context context, long lastInteraction) {
+        if (lastInteraction == 0L) {
+            Log.e(TAG, "Could not get valid last interaction");
+            return null;
+        }
+        long now = System.currentTimeMillis();
+        Duration durationSinceLastInteraction = Duration.ofMillis(now - lastInteraction);
+        MeasureFormat formatter = MeasureFormat.getInstance(Locale.getDefault(),
+                MeasureFormat.FormatWidth.WIDE);
+        if (durationSinceLastInteraction.toDays() <= ONE_DAY) {
+            return null;
+        } else if (durationSinceLastInteraction.toDays() < DAYS_IN_A_WEEK) {
+            return context.getString(R.string.timestamp, formatter.formatMeasures(
+                    new Measure(durationSinceLastInteraction.toHours(),
+                            MeasureUnit.DAY)));
+        } else if (durationSinceLastInteraction.toDays() <= DAYS_IN_A_WEEK * 2) {
+            return context.getString(durationSinceLastInteraction.toDays() == DAYS_IN_A_WEEK
+                            ? R.string.timestamp : R.string.over_timestamp,
+                    formatter.formatMeasures(
+                            new Measure(durationSinceLastInteraction.toDays() / DAYS_IN_A_WEEK,
+                                    MeasureUnit.WEEK)));
+        } else {
+            // Over 2 weeks ago
+            return context.getString(R.string.over_timestamp,
+                    formatter.formatMeasures(new Measure(MAX_WEEKS, MeasureUnit.WEEK)));
         }
     }
 }

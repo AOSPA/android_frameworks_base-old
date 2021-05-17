@@ -193,6 +193,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1906387645": {
+      "message": "SURFACE controller=%s alpha=%f HScale=%f, VScale=%f: %s",
+      "level": "INFO",
+      "group": "WM_SHOW_TRANSACTIONS",
+      "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
+    },
     "-1905191109": {
       "message": "SyncGroup %d: Finished!",
       "level": "VERBOSE",
@@ -360,12 +366,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
-    },
-    "-1729340764": {
-      "message": "setFinishTaskBounds(%d): bounds=%s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
-      "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
     },
     "-1715268616": {
       "message": "Last window, removing starting window %s",
@@ -1699,6 +1699,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-163974242": {
+      "message": "setFinishTaskTransaction(%d): transaction=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_RECENTS_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
+    },
     "-143556958": {
       "message": "resumeNextFocusableActivityWhenRootTaskIsEmpty: %s, go home",
       "level": "DEBUG",
@@ -1728,6 +1734,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_IME",
       "at": "com\/android\/server\/wm\/InsetsSourceProvider.java"
+    },
+    "-108977760": {
+      "message": "Sandbox max bounds for uid %s to bounds %s. config to never sandbox = %s, config to always sandbox = %s, letterboxing from mismatch with parent bounds = %s, has mCompatDisplayInsets = %s, should create compatDisplayInsets = %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_CONFIGURATION",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
     "-106400104": {
       "message": "Preload recents with %s",
@@ -1819,6 +1831,12 @@
       "group": "WM_DEBUG_IME",
       "at": "com\/android\/server\/wm\/InsetsSourceProvider.java"
     },
+    "35398067": {
+      "message": "goodToGo(): onAnimationStart, transit=%s, apps=%d, wallpapers=%d, nonApps=%d",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_REMOTE_ANIMATIONS",
+      "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+    },
     "38267433": {
       "message": "Attempted to reset replacing window on non-existing app token %s",
       "level": "WARN",
@@ -1878,12 +1896,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
-    },
-    "86989930": {
-      "message": "setTaskWindowingMode: moving task=%d to windowingMode=%d toTop=%b",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_TASKS",
-      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
     },
     "90764070": {
       "message": "Could not report token removal to the window token client.",
@@ -2022,12 +2034,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_WINDOW_ORGANIZER",
       "at": "com\/android\/server\/wm\/TaskOrganizerController.java"
-    },
-    "236210101": {
-      "message": "registerWindowContextListener: trying to add listener to a non-existing display:%d",
-      "level": "WARN",
-      "group": "WM_ERROR",
-      "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
     "240271590": {
       "message": "moveFocusableActivityToTop: unfocusable activity=%s",
@@ -2467,6 +2473,12 @@
       "group": "WM_DEBUG_SCREEN_ON",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "666937535": {
+      "message": "attachWindowContextToDisplayArea: trying to attach to a non-existing display:%d",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
     "674932310": {
       "message": "Setting Intent of %s to target %s",
       "level": "VERBOSE",
@@ -2875,12 +2887,6 @@
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "1237719089": {
-      "message": "Sandbox max bounds for uid %s to bounds %s. letterboxing from mismatch with parent bounds = %s, has mCompatDisplayInsets = %s, should create compatDisplayInsets = %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_CONFIGURATION",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
     "1246035185": {
       "message": "stopFreezingDisplayLocked: Returning waitingForConfig=%b, waitingForRemoteRotation=%b, mAppsFreezingScreen=%d, mWindowsFreezingScreen=%d, mClientFreezingScreen=%b, mOpeningApps.size()=%d",
       "level": "DEBUG",
@@ -3283,12 +3289,6 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
-    "1747941491": {
-      "message": "SURFACE controller=%s alpha=%f matrix=[%f*%f,%f*%f][%f*%f,%f*%f]: %s",
-      "level": "INFO",
-      "group": "WM_SHOW_TRANSACTIONS",
-      "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
-    },
     "1756082882": {
       "message": "Orientation change skips hidden %s",
       "level": "VERBOSE",
@@ -3306,6 +3306,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
+    },
+    "1789321832": {
+      "message": "Then token:%s is invalid. It might be removed",
+      "level": "WARN",
+      "group": "WM_ERROR",
+      "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
     "1789603530": {
       "message": "Removing activity %s hasSavedState=%b stateNotNeeded=%s finishing=%b state=%s callers=%s",

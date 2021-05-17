@@ -16,7 +16,7 @@
 
 package com.android.systemui.navigationbar.buttons;
 
-import static com.android.systemui.Interpolators.LINEAR;
+import static com.android.systemui.animation.Interpolators.LINEAR;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
@@ -196,8 +196,6 @@ public class ButtonDispatcher {
         if (animate) {
             setVisibility(View.VISIBLE);
             mFadeAnimator = ValueAnimator.ofFloat(getAlpha(), alpha);
-            mFadeAnimator.setStartDelay(
-                    mAssistManager.getAssistHandleShowAndGoRemainingDurationMs());
             mFadeAnimator.setDuration(duration);
             mFadeAnimator.setInterpolator(LINEAR);
             mFadeAnimator.addListener(mFadeListener);

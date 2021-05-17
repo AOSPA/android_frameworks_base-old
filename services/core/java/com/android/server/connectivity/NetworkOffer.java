@@ -40,7 +40,7 @@ import java.util.Set;
  *
  * @hide
  */
-public class NetworkOffer {
+public class NetworkOffer implements NetworkRanker.Scoreable {
     @NonNull public final FullScore score;
     @NonNull public final NetworkCapabilities caps;
     @NonNull public final INetworkOfferCallback callback;
@@ -64,6 +64,20 @@ public class NetworkOffer {
         this.caps = Objects.requireNonNull(caps);
         this.callback = Objects.requireNonNull(callback);
         this.providerId = providerId;
+    }
+
+    /**
+     * Get the score filter of this offer
+     */
+    @Override @NonNull public FullScore getScore() {
+        return score;
+    }
+
+    /**
+     * Get the capabilities filter of this offer
+     */
+    @Override @NonNull public NetworkCapabilities getCapsNoCopy() {
+        return caps;
     }
 
     /**
@@ -119,7 +133,7 @@ public class NetworkOffer {
      * @param previousOffer the previous offer
      */
     public void migrateFrom(@NonNull final NetworkOffer previousOffer) {
-        if (!callback.equals(previousOffer.callback)) {
+        if (!callback.asBinder().equals(previousOffer.callback.asBinder())) {
             throw new IllegalArgumentException("Can only migrate from a previous version of"
                     + " the same offer");
         }

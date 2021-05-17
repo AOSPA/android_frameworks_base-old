@@ -273,6 +273,11 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     static final int VERY_LONG_PRESS_POWER_NOTHING = 0;
     static final int VERY_LONG_PRESS_POWER_GLOBAL_ACTIONS = 1;
 
+    // must match: config_keyChordPowerVolumeUp in config.xml
+    static final int POWER_VOLUME_UP_BEHAVIOR_NOTHING = 0;
+    static final int POWER_VOLUME_UP_BEHAVIOR_MUTE = 1;
+    static final int POWER_VOLUME_UP_BEHAVIOR_GLOBAL_ACTIONS = 2;
+
     // must match: config_doublePressOnPowerBehavior in config.xml
     static final int MULTI_PRESS_POWER_NOTHING = 0;
     static final int MULTI_PRESS_POWER_THEATER_MODE = 1;
@@ -405,6 +410,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     private boolean mEnableCarDockHomeCapture = true;
 
     boolean mBootMessageNeedsHiding;
+    volatile boolean mBootAnimationDismissable;
     private KeyguardServiceDelegate mKeyguardDelegate;
     private boolean mKeyguardBound;
     final Runnable mWindowManagerDrawCallback = new Runnable() {
@@ -488,6 +494,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     int mLongPressOnBackBehavior;
     int mShortPressOnSleepBehavior;
     int mShortPressOnWindowBehavior;
+    int mPowerVolUpBehavior;
     boolean mHasSoftInput = false;
     boolean mHapticTextHandleEnabled;
     boolean mUseTvRouting;
@@ -735,6 +742,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.POWER_BUTTON_VERY_LONG_PRESS), false, this,
+                    UserHandle.USER_ALL);
+            resolver.registerContentObserver(Settings.Global.getUriFor(
+                    Settings.Global.KEY_CHORD_POWER_VOLUME_UP), false, this,
                     UserHandle.USER_ALL);
             resolver.registerContentObserver(Settings.Global.getUriFor(
                     Settings.Global.POWER_BUTTON_SUPPRESSION_DELAY_AFTER_GESTURE_WAKE), false, this,
@@ -1101,7 +1111,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 break;
             case LONG_PRESS_POWER_ASSISTANT:
                 mPowerKeyHandled = true;
-                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
+                performHapticFeedback(HapticFeedbackConstants.ASSISTANT_BUTTON, false,
                         "Power - Long Press - Go To Assistant");
                 final int powerKeyDeviceId = Integer.MIN_VALUE;
                 launchAssistAction(null, powerKeyDeviceId, eventTime);
@@ -1274,6 +1284,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // since it took two seconds of long press to bring this up,
         // poke the wake lock so they have some time to see the dialog.
         mPowerManager.userActivity(SystemClock.uptimeMillis(), false);
+    }
+
+    private void cancelGlobalActionsAction() {
+        mHandler.removeMessages(MSG_DISPATCH_SHOW_GLOBAL_ACTIONS);
     }
 
     boolean isDeviceProvisioned() {
@@ -1844,20 +1858,48 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     }
                 });
 
+        // Volume up + power can either be the "ringer toggle chord" or as another way to
+        // launch GlobalActions. This behavior can change at runtime so we must check behavior
+        // inside the TwoKeysCombinationRule.
         mKeyCombinationManager.addRule(
                 new TwoKeysCombinationRule(KEYCODE_VOLUME_UP, KEYCODE_POWER) {
                     @Override
                     boolean preCondition() {
-                        return mRingerToggleChord != VOLUME_HUSH_OFF;
+                        switch (mPowerVolUpBehavior) {
+                            case POWER_VOLUME_UP_BEHAVIOR_MUTE:
+                                return mRingerToggleChord != VOLUME_HUSH_OFF;
+                            default:
+                                return true;
+                        }
                     }
                     @Override
                     void execute() {
-                        mPowerKeyHandled = true;
-                        interceptRingerToggleChord();
+                        switch (mPowerVolUpBehavior) {
+                            case POWER_VOLUME_UP_BEHAVIOR_MUTE:
+                                // no haptic feedback here since
+                                interceptRingerToggleChord();
+                                mPowerKeyHandled = true;
+                                break;
+                            case POWER_VOLUME_UP_BEHAVIOR_GLOBAL_ACTIONS:
+                                performHapticFeedback(HapticFeedbackConstants.LONG_PRESS, false,
+                                        "Power + Volume Up - Global Actions");
+                                showGlobalActions();
+                                mPowerKeyHandled = true;
+                                break;
+                            default:
+                                break;
+                        }
                     }
                     @Override
                     void cancel() {
-                        cancelPendingRingerToggleChordAction();
+                        switch (mPowerVolUpBehavior) {
+                            case POWER_VOLUME_UP_BEHAVIOR_MUTE:
+                                cancelPendingRingerToggleChordAction();
+                                break;
+                            case POWER_VOLUME_UP_BEHAVIOR_GLOBAL_ACTIONS:
+                                cancelGlobalActionsAction();
+                                break;
+                        }
                     }
                 });
 
@@ -2063,6 +2105,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     Settings.Global.POWER_BUTTON_VERY_LONG_PRESS,
                     mContext.getResources().getInteger(
                             com.android.internal.R.integer.config_veryLongPressOnPowerBehavior));
+            mPowerVolUpBehavior = Settings.Global.getInt(resolver,
+                    Settings.Global.KEY_CHORD_POWER_VOLUME_UP,
+                    mContext.getResources().getInteger(
+                            com.android.internal.R.integer.config_keyChordPowerVolumeUp));
         }
         if (updateRotation) {
             updateRotation(true);
@@ -3418,8 +3464,12 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             return interceptKeyBeforeQueueing(event, policyFlags);
         }
 
+        // This could prevent some wrong state in multi-displays environment,
+        // the default display may turned off but interactive is true.
+        final boolean isDefaultDisplayOn = Display.isOnState(mDefaultDisplay.getState());
+        final boolean interactiveAndOn = interactive && isDefaultDisplayOn;
         if ((event.getFlags() & KeyEvent.FLAG_FALLBACK) == 0) {
-            handleKeyGesture(event, interactive);
+            handleKeyGesture(event, interactiveAndOn);
         }
 
         // Enable haptics if down and virtual key without multiple repetitions. If this is a hard
@@ -3566,8 +3616,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 // Any activity on the power button stops the accessibility shortcut
                 result &= ~ACTION_PASS_TO_USER;
                 isWakeKey = false; // wake-up will be handled separately
-                final boolean isDefaultDisplayOn = Display.isOnState(mDefaultDisplay.getState());
-                final boolean interactiveAndOn = interactive && isDefaultDisplayOn;
                 if (down) {
                     interceptPowerKeyDown(event, interactiveAndOn);
                 } else {
@@ -4315,6 +4363,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                     0 /* cookie */);
             updateScreenOffSleepToken(false);
             mDefaultDisplayPolicy.screenTurnedOn(screenOnListener);
+            mBootAnimationDismissable = false;
 
             synchronized (mLock) {
                 if (mKeyguardDelegate != null && mKeyguardDelegate.hasKeyguard()) {
@@ -4389,6 +4438,10 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         Trace.asyncTraceEnd(Trace.TRACE_TAG_WINDOW_MANAGER, "screenTurningOn", 0 /* cookie */);
 
+        enableScreen(listener, true /* report */);
+    }
+
+    private void enableScreen(ScreenOnListener listener, boolean report) {
         final boolean enableScreen;
         final boolean awake = mDefaultDisplayPolicy.isAwake();
         synchronized (mLock) {
@@ -4406,17 +4459,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         }
 
-        if (listener != null) {
-            listener.onScreenOn();
-        }
-
-        for (int i = mScreenOnListeners.size() - 1; i >= 0; i--) {
-            final ScreenOnListener screenOnListener = mScreenOnListeners.valueAt(i);
-            if (screenOnListener != null) {
-                screenOnListener.onScreenOn();
+        if (report) {
+            if (listener != null) {
+                listener.onScreenOn();
             }
+
+            for (int i = mScreenOnListeners.size() - 1; i >= 0; i--) {
+                final ScreenOnListener screenOnListener = mScreenOnListeners.valueAt(i);
+                if (screenOnListener != null) {
+                    screenOnListener.onScreenOn();
+                }
+            }
+            mScreenOnListeners.clear();
         }
-        mScreenOnListeners.clear();
 
         if (enableScreen) {
             try {
@@ -4447,8 +4502,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     @Override
-    public boolean okToAnimate() {
-        return mDefaultDisplayPolicy.isAwake() && !mDeviceGoingToSleep;
+    public boolean okToAnimate(boolean ignoreScreenOn) {
+        return (ignoreScreenOn || mDefaultDisplayPolicy.isAwake()) && !mDeviceGoingToSleep;
     }
 
     /** {@inheritDoc} */
@@ -4624,13 +4679,28 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         }
         startedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
         finishedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
-        screenTurningOn(DEFAULT_DISPLAY, mDefaultDisplayPolicy.getScreenOnListener());
-        screenTurnedOn(DEFAULT_DISPLAY);
+
+        int defaultDisplayState = mDisplayManager.getDisplay(DEFAULT_DISPLAY).getState();
+        boolean defaultDisplayOn = defaultDisplayState == Display.STATE_ON;
+        boolean defaultScreenTurningOn = mDefaultDisplayPolicy.getScreenOnListener() != null;
+        if (defaultDisplayOn || defaultScreenTurningOn) {
+            // Now that system is booted, wait for keyguard and windows to be drawn before
+            // updating the orientation listener, stopping the boot animation and enabling screen.
+            screenTurningOn(DEFAULT_DISPLAY, mDefaultDisplayPolicy.getScreenOnListener());
+            screenTurnedOn(DEFAULT_DISPLAY);
+        } else {
+            // We're not turning the screen on, so don't wait for keyguard to be drawn
+            // to dismiss the boot animation and finish booting
+            mBootAnimationDismissable = true;
+            enableScreen(null, false /* report */);
+        }
     }
 
     @Override
     public boolean canDismissBootAnimation() {
-        return mDefaultDisplayPolicy.isKeyguardDrawComplete();
+        // Allow to dismiss the boot animation if the keyguard has finished drawing,
+        // or mBootAnimationDismissable has been set
+        return mDefaultDisplayPolicy.isKeyguardDrawComplete() || mBootAnimationDismissable;
     }
 
     ProgressDialog mBootMsgDialog = null;
@@ -5083,6 +5153,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 pattern = mSafeModeEnabledVibePattern;
                 break;
 
+            case HapticFeedbackConstants.ASSISTANT_BUTTON:
+                if (mVibrator.areAllPrimitivesSupported(
+                        VibrationEffect.Composition.PRIMITIVE_QUICK_RISE)) {
+                    // quiet ramp, short pause, then sharp tick
+                    return VibrationEffect.startComposition()
+                            .addPrimitive(VibrationEffect.Composition.PRIMITIVE_QUICK_RISE, 0.25f)
+                            .addPrimitive(VibrationEffect.Composition.PRIMITIVE_TICK, 1f, 50)
+                            .compose();
+                }
+                // fallback for devices without composition support
+                return VibrationEffect.get(VibrationEffect.EFFECT_DOUBLE_CLICK);
+
             default:
                 return null;
         }
@@ -5202,6 +5284,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         pw.print(prefix);
                 pw.print("mTriplePressOnPowerBehavior=");
                 pw.println(multiPressOnPowerBehaviorToString(mTriplePressOnPowerBehavior));
+        pw.print(prefix);
+        pw.print("mPowerVolUpBehavior=");
+        pw.println(powerVolumeUpBehaviorToString(mPowerVolUpBehavior));
         pw.print(prefix);
                 pw.print("mShortPressOnSleepBehavior=");
                 pw.println(shortPressOnSleepBehaviorToString(mShortPressOnSleepBehavior));
@@ -5371,6 +5456,19 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 return "VERY_LONG_PRESS_POWER_NOTHING";
             case VERY_LONG_PRESS_POWER_GLOBAL_ACTIONS:
                 return "VERY_LONG_PRESS_POWER_GLOBAL_ACTIONS";
+            default:
+                return Integer.toString(behavior);
+        }
+    }
+
+    private static String powerVolumeUpBehaviorToString(int behavior) {
+        switch (behavior) {
+            case POWER_VOLUME_UP_BEHAVIOR_NOTHING:
+                return "POWER_VOLUME_UP_BEHAVIOR_NOTHING";
+            case POWER_VOLUME_UP_BEHAVIOR_MUTE:
+                return "POWER_VOLUME_UP_BEHAVIOR_MUTE";
+            case POWER_VOLUME_UP_BEHAVIOR_GLOBAL_ACTIONS:
+                return "POWER_VOLUME_UP_BEHAVIOR_GLOBAL_ACTIONS";
             default:
                 return Integer.toString(behavior);
         }

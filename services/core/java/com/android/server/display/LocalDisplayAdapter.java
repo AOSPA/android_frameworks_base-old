@@ -592,7 +592,7 @@ final class LocalDisplayAdapter extends DisplayAdapter {
 
                 final Resources res = getOverlayContext().getResources();
                 final boolean isBuiltIn = ((mInfo.address) != null) ?
-                   (((DisplayAddress.Physical) mInfo.address).getPort() < 0) : false;
+                   ((((DisplayAddress.Physical) mInfo.address).getPort() & 0x80) == 0x80) : false;
 
                 if (mIsDefaultDisplay) {
                     mInfo.flags |= DisplayDeviceInfo.FLAG_DEFAULT_DISPLAY;

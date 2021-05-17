@@ -51,6 +51,7 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.os.SystemProperties;
 import android.util.AndroidException;
 import android.util.ArraySet;
 import android.util.Log;
@@ -140,6 +141,10 @@ public final class PendingIntent implements Parcelable {
     @ChangeId
     @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.R)
     static final long PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED = 160794467L;
+
+    static final boolean flagMutableImmutableHandled = SystemProperties.getBoolean(
+                                                       "pending.intent.mutable.enforcement",
+                                                       false);
 
     /** @hide */
     @IntDef(flag = true,
@@ -359,31 +364,27 @@ public final class PendingIntent implements Parcelable {
     private static void checkFlags(int flags, String packageName) {
         final boolean flagImmutableSet = (flags & PendingIntent.FLAG_IMMUTABLE) != 0;
         final boolean flagMutableSet = (flags & PendingIntent.FLAG_MUTABLE) != 0;
-        String msg = packageName + ": Targeting S+ (version " + Build.VERSION_CODES.S
-                    + " and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE"
-                    + " be specified when creating a PendingIntent.\nStrongly consider"
-                    + " using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality"
-                    + " depends on the PendingIntent being mutable, e.g. if it needs to"
-                    + " be used with inline replies or bubbles.";
 
-        if (flagImmutableSet && flagMutableSet) {
-            throw new IllegalArgumentException(
-                "Cannot set both FLAG_IMMUTABLE and FLAG_MUTABLE for PendingIntent");
-        }
+        if (flagMutableImmutableHandled) {
+            if (flagImmutableSet && flagMutableSet) {
+                throw new IllegalArgumentException(
+                    "Cannot set both FLAG_IMMUTABLE and FLAG_MUTABLE for PendingIntent");
+            }
 
-        // TODO(b/178092897) Remove the below instrumentation check and enforce
-        // the explicit mutability requirement for apps under instrumentation.
-        ActivityThread thread = ActivityThread.currentActivityThread();
-        Instrumentation mInstrumentation = thread.getInstrumentation();
-
-        if (Compatibility.isChangeEnabled(PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED)
-                && !flagImmutableSet && !flagMutableSet) {
-
-            //TODO(b/178065720) Remove check for chrome and enforce this requirement
-            if (packageName.equals("com.android.chrome") || mInstrumentation.isInstrumenting()) {
-                Log.e(TAG, msg);
-            } else {
-                throw new IllegalArgumentException(msg);
+            if (Compatibility.isChangeEnabled(PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED)
+                    && !flagImmutableSet && !flagMutableSet) {
+                String msg = packageName + ": Targeting S+ (version " + Build.VERSION_CODES.S
+                        + " and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE"
+                        + " be specified when creating a PendingIntent.\nStrongly consider"
+                        + " using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality"
+                        + " depends on the PendingIntent being mutable, e.g. if it needs to"
+                        + " be used with inline replies or bubbles.";
+                //TODO(b/178065720) Remove check for chrome and enforce this requirement
+                if (packageName.equals("com.android.chrome")) {
+                    Log.e(TAG, msg);
+                } else {
+                    throw new IllegalArgumentException(msg);
+                }
             }
         }
     }
