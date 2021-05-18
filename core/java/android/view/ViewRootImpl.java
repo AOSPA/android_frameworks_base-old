@@ -1924,6 +1924,7 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             mBlastBufferQueue.update(mSurfaceControl, width, height, format);
         }
+        ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
 
         return ret;
     }
@@ -8386,6 +8387,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void doProcessInputEvents() {
+        ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
         // Deliver all pending input events in the queue.
         while (mPendingInputEventHead != null) {
             QueuedInputEvent q = mPendingInputEventHead;
