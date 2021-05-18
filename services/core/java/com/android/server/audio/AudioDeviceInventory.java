@@ -1143,7 +1143,7 @@ public class AudioDeviceInventory {
     @GuardedBy("mDevicesLock")
     private void makeA2dpSrcUnavailable(String address) {
         final String deviceKey =
-               DeviceInfo.makeDeviceListKey(AudioSystem.DEVICE_OUT_BLUETOOTH_A2DP, address);
+               DeviceInfo.makeDeviceListKey(AudioSystem.DEVICE_IN_BLUETOOTH_A2DP, address);
         final DeviceInfo deviceInfo = mConnectedDevices.get(deviceKey);
         final int a2dpCodec = deviceInfo != null ? deviceInfo.mDeviceCodecFormat :
                   AudioSystem.AUDIO_FORMAT_DEFAULT;
