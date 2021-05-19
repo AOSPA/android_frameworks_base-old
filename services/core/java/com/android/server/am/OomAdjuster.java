@@ -428,6 +428,10 @@ public class OomAdjuster {
             final int pid = msg.arg1;
             final int group = msg.arg2;
             final ProcessRecord app = (ProcessRecord)msg.obj;
+            if (pid == ActivityManagerService.MY_PID) {
+                // Skip setting the process group for system_server, keep it as default.
+                return true;
+            }
             if (Trace.isTagEnabled(Trace.TRACE_TAG_ACTIVITY_MANAGER)) {
                 Trace.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "setProcessGroup "
                         + app.processName + " to " + group);

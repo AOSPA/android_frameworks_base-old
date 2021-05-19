@@ -3452,7 +3452,16 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         // If the key would be handled globally, just return the result, don't worry about special
         // key processing.
         if (isValidGlobalKey(keyCode)
-                && mGlobalKeyManager.shouldHandleGlobalKey(keyCode, event)) {
+                && mGlobalKeyManager.shouldHandleGlobalKey(keyCode)) {
+            // Dispatch if global key defined dispatchWhenNonInteractive.
+            if (!interactive && isWakeKey && down
+                    && mGlobalKeyManager.shouldDispatchFromNonInteractive(keyCode)) {
+                mGlobalKeyManager.setBeganFromNonInteractive();
+                result = ACTION_PASS_TO_USER;
+                // Since we're dispatching the input, reset the pending key
+                mPendingWakeKey = PENDING_KEY_NULL;
+            }
+
             if (isWakeKey) {
                 wakeUpFromWakeKey(event);
             }
@@ -4006,6 +4015,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
                 Slog.e(TAG, "RemoteException when checking if dreaming", e);
             }
         }
+
         // Otherwise, consume events since the user can't see what is being
         // interacted with.
         return false;
@@ -4519,7 +4529,7 @@ public class PhoneWindowManager implements WindowManagerPolicy {
 
     @Override
     public boolean okToAnimate(boolean ignoreScreenOn) {
-        return (ignoreScreenOn || mDefaultDisplayPolicy.isAwake()) && !mDeviceGoingToSleep;
+        return (ignoreScreenOn || isScreenOn()) && !mDeviceGoingToSleep;
     }
 
     /** {@inheritDoc} */

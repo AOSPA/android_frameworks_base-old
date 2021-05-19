@@ -1043,6 +1043,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
         }
     }
 
+    /*package*/ void clearAvrcpAbsoluteVolumeSupported() {
+        setAvrcpAbsoluteVolumeSupported(false);
+        mAudioService.setAvrcpAbsoluteVolumeSupported(false);
+    }
+
     /*package*/ boolean getBluetoothA2dpEnabled() {
         synchronized (mDeviceStateLock) {
             return mBluetoothA2dpEnabled;

@@ -7801,16 +7801,17 @@ public class ActivityManagerService extends IActivityManager.Stub
             ApplicationErrorReport.CrashInfo crashInfo) {
         float loadingProgress = 1;
         IncrementalMetrics incrementalMetrics = null;
-        // Notify package manager service to possibly update package state
+        // Obtain Incremental information if available
         if (r != null && r.info != null && r.info.packageName != null) {
-            final String codePath = r.info.getCodePath();
             IncrementalStatesInfo incrementalStatesInfo =
                     mPackageManagerInt.getIncrementalStatesInfo(r.info.packageName, r.uid,
                             r.userId);
             if (incrementalStatesInfo != null) {
                 loadingProgress = incrementalStatesInfo.getProgress();
             }
-            if (IncrementalManager.isIncrementalPath(codePath)) {
+            final String codePath = r.info.getCodePath();
+            if (codePath != null && !codePath.isEmpty()
+                    && IncrementalManager.isIncrementalPath(codePath)) {
                 // Report in the main log about the incremental package
                 Slog.e(TAG, "App crashed on incremental package " + r.info.packageName
                         + " which is " + ((int) (loadingProgress * 100)) + "% loaded.");
@@ -9409,7 +9410,7 @@ public class ActivityManagerService extends IActivityManager.Stub
             pw.println("  mFgsStartTempAllowList:");
             final long currentTimeNow = System.currentTimeMillis();
             final long elapsedRealtimeNow = SystemClock.elapsedRealtime();
-            final Set<Integer> uids = mFgsStartTempAllowList.keySet();
+            final Set<Integer> uids = new ArraySet<>(mFgsStartTempAllowList.keySet());
             for (Integer uid : uids) {
                 final Pair<Long, FgsTempAllowListItem> entry = mFgsStartTempAllowList.get(uid);
                 if (entry == null) {

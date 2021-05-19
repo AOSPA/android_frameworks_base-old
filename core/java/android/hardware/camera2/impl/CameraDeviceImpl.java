@@ -28,6 +28,7 @@ import android.graphics.ImageFormat;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCaptureSession;
 import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraExtensionCharacteristics;
 import android.hardware.camera2.CameraExtensionSession;
 import android.hardware.camera2.CameraOfflineSession;
 import android.hardware.camera2.CameraDevice;
@@ -143,6 +144,7 @@ public class CameraDeviceImpl extends CameraDevice
 
     private CameraCaptureSessionCore mCurrentSession;
     private CameraExtensionSessionImpl mCurrentExtensionSession;
+    private CameraAdvancedExtensionSessionImpl mCurrentAdvancedExtensionSession;
     private int mNextSessionId = 0;
 
     private final int mAppTargetSdkVersion;
@@ -1355,6 +1357,12 @@ public class CameraDeviceImpl extends CameraDevice
                 mCurrentExtensionSession.release();
                 mCurrentExtensionSession = null;
             }
+
+            if (mCurrentAdvancedExtensionSession != null) {
+                mCurrentAdvancedExtensionSession.release();
+                mCurrentAdvancedExtensionSession = null;
+            }
+
             // Only want to fire the onClosed callback once;
             // either a normal close where the remote device is valid
             // or a close after a startup error (no remote device but in error state)
@@ -2436,9 +2444,14 @@ public class CameraDeviceImpl extends CameraDevice
     public void createExtensionSession(ExtensionSessionConfiguration extensionConfiguration)
             throws CameraAccessException {
         try {
-            mCurrentExtensionSession = CameraExtensionSessionImpl.createCameraExtensionSession(this,
-                    mContext,
-                    extensionConfiguration);
+            if (CameraExtensionCharacteristics.areAdvancedExtensionsSupported()) {
+                mCurrentAdvancedExtensionSession =
+                        CameraAdvancedExtensionSessionImpl.createCameraAdvancedExtensionSession(
+                                this, mContext, extensionConfiguration);
+            } else {
+                mCurrentExtensionSession = CameraExtensionSessionImpl.createCameraExtensionSession(
+                        this, mContext, extensionConfiguration);
+            }
         } catch (RemoteException e) {
             throw new CameraAccessException(CameraAccessException.CAMERA_ERROR);
         }

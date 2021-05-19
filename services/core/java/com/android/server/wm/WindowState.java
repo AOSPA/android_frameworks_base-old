@@ -2682,6 +2682,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
     }
 
+    /**
+     * Move the touch gesture from the currently touched window on this display to this window.
+     */
+    public boolean transferTouch() {
+        return mWmService.mInputManager.transferTouch(mInputChannelToken);
+    }
+
     void disposeInputChannel() {
         if (mDeadWindowEventReceiver != null) {
             mDeadWindowEventReceiver.dispose();
@@ -4842,7 +4849,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // directly above it. The exception is if we are in split screen
         // in which case we process the IME at the DisplayContent level to
         // ensure it is above the docked divider.
-        if (isImeLayeringTarget() && !inSplitScreenWindowingMode()) {
+        // (i.e. Like {@link DisplayContent.ImeContainer#skipImeWindowsDuringTraversal}, the IME
+        // window will be ignored to traverse when the IME target is still in split-screen mode).
+        if (isImeLayeringTarget()
+                && !getDisplayContent().getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
             if (getDisplayContent().forAllImeWindows(callback, traverseTopToBottom)) {
                 return true;
             }
