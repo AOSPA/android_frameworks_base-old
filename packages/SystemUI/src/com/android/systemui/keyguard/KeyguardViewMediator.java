@@ -312,6 +312,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
      */
     private final SparseIntArray mLastSimStates = new SparseIntArray();
     private static SparseIntArray mUnlockTrackSimStates = new SparseIntArray();
+    private static final int STATE_INVALID = -1;
 
     /**
      * Indicates if a SIM card had the SIM PIN enabled during the initialization, before
@@ -522,15 +523,25 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
                         || lastState == TelephonyManager.SIM_STATE_PUK_REQUIRED);
                 mLastSimStates.append(slotId, simState);
 
+                int trackState = mUnlockTrackSimStates.get(slotId, STATE_INVALID);
+                //update the mUnlockTrackSimStates
                 if(simState == TelephonyManager.SIM_STATE_READY){
-                    mUnlockTrackSimStates.put(slotId, simState);
-                }
-                int currentState = mUnlockTrackSimStates.get(slotId);
-                if(currentState == TelephonyManager.SIM_STATE_READY){
+                    if(trackState == TelephonyManager.SIM_STATE_LOADED){
+                        if (DEBUG) Log.e(TAG, "skip the redundant SIM_STATE_READY state");
+                        return;
+                    }else{
+                        mUnlockTrackSimStates.put(slotId, simState);
+                   }
+                }else{
                     if(simState != TelephonyManager.SIM_STATE_PIN_REQUIRED) {
                         mUnlockTrackSimStates.put(slotId, simState);
-                    }else{
-                        if (DEBUG) Log.e(TAG, "ship the unnecessary SIM_STATE_PIN_REQUIRED state");
+                    }
+                }
+
+                //check the SIM_STATE_PIN_REQUIRED
+                if(trackState == TelephonyManager.SIM_STATE_READY){
+                    if(simState == TelephonyManager.SIM_STATE_PIN_REQUIRED) {
+                        if (DEBUG) Log.e(TAG, "skip the unnecessary SIM_STATE_PIN_REQUIRED state");
                         return;
                     }
                 }
