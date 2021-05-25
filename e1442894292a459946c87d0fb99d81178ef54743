@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b41f47fa_83730ee4",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2021-05-25T05:30:57Z",
+      "side": 1,
+      "message": "also merged by los in 305890: [SQUASH]base: Revert secondary home handle | https://review.lineageos.org/c/LineageOS/android_frameworks_base/+/305890 , but original commit is from https://github.com/yaap/frameworks_base/commit/dfffa0834c4ca8cdd250333e7ffdeaa53d50d0eb",
+      "revId": "e1442894292a459946c87d0fb99d81178ef54743",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
