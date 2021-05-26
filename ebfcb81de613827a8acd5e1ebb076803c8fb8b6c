@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8acd5813_d4e56050",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2021-05-26T02:19:37Z",
+      "side": 1,
+      "message": "Required on 7t pro",
+      "revId": "ebfcb81de613827a8acd5e1ebb076803c8fb8b6c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
