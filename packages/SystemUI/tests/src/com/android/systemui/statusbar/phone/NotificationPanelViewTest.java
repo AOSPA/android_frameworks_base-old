@@ -90,6 +90,7 @@ import com.android.systemui.statusbar.PulseExpansionHandler;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
+import com.android.systemui.statusbar.events.PrivacyDotViewController;
 import com.android.systemui.statusbar.notification.ConversationNotificationManager;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -245,6 +246,8 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     @Mock
     private KeyguardMediaController mKeyguardMediaController;
     @Mock
+    private PrivacyDotViewController mPrivacyDotViewController;
+    @Mock
     private EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
 
     private SysuiStatusBarStateController mStatusBarStateController;
@@ -354,6 +357,7 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 mFeatureFlags,
                 mQuickAccessWalletClient,
                 mKeyguardMediaController,
+                mPrivacyDotViewController,
                 new FakeExecutor(new FakeSystemClock()),
                 mEmergencyButtonControllerFactory);
         mNotificationPanelViewController.initDependencies(

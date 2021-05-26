@@ -839,8 +839,17 @@ public final class NetworkCapabilities implements Parcelable {
         final int[] originalAdministratorUids = getAdministratorUids();
         final TransportInfo originalTransportInfo = getTransportInfo();
         clearAll();
-        mTransportTypes = (originalTransportTypes & TEST_NETWORKS_ALLOWED_TRANSPORTS)
-                | (1 << TRANSPORT_TEST);
+        if (0 != (originalCapabilities & NET_CAPABILITY_NOT_RESTRICTED)) {
+            // If the test network is not restricted, then it is only allowed to declare some
+            // specific transports. This is to minimize impact on running apps in case an app
+            // run from the shell creates a test a network.
+            mTransportTypes =
+                    (originalTransportTypes & UNRESTRICTED_TEST_NETWORKS_ALLOWED_TRANSPORTS)
+                            | (1 << TRANSPORT_TEST);
+        } else {
+            // If the test transport is restricted, then it may declare any transport.
+            mTransportTypes = (originalTransportTypes | (1 << TRANSPORT_TEST));
+        }
         mNetworkCapabilities = originalCapabilities & TEST_NETWORKS_ALLOWED_CAPABILITIES;
         mNetworkSpecifier = originalSpecifier;
         mSignalStrength = originalSignalStrength;
@@ -951,9 +960,10 @@ public final class NetworkCapabilities implements Parcelable {
     };
 
     /**
-     * Allowed transports on a test network, in addition to TRANSPORT_TEST.
+     * Allowed transports on an unrestricted test network (in addition to TRANSPORT_TEST).
      */
-    private static final int TEST_NETWORKS_ALLOWED_TRANSPORTS = 1 << TRANSPORT_TEST
+    private static final int UNRESTRICTED_TEST_NETWORKS_ALLOWED_TRANSPORTS =
+            1 << TRANSPORT_TEST
             // Test ethernet networks can be created with EthernetManager#setIncludeTestInterfaces
             | 1 << TRANSPORT_ETHERNET
             // Test VPN networks can be created but their UID ranges must be empty.
@@ -2461,7 +2471,8 @@ public final class NetworkCapabilities implements Parcelable {
          * For example {@code TRANSPORT_WIFI} and {@code TRANSPORT_ETHERNET} added to a
          * {@code NetworkCapabilities} would cause either a Wi-Fi network or an Ethernet network
          * to be selected. This is logically different than
-         * {@code NetworkCapabilities.NET_CAPABILITY_*}.
+         * {@code NetworkCapabilities.NET_CAPABILITY_*}. Also note that multiple networks with the
+         * same transport type may be active concurrently.
          *
          * @param transportType the transport type to be added or removed.
          * @return this builder

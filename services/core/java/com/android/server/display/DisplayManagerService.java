@@ -1291,6 +1291,7 @@ public final class DisplayManagerService extends SystemService {
         // this point.
         sendDisplayEventLocked(displayId, DisplayManagerGlobal.EVENT_DISPLAY_CHANGED);
         scheduleTraversalLocked(false);
+        mPersistentDataStore.saveIfNeeded();
     }
 
     private void handleLogicalDisplayFrameRateOverridesChangedLocked(
@@ -2904,6 +2905,7 @@ public final class DisplayManagerService extends SystemService {
                     if (dpc != null) {
                         dpc.putScreenBrightnessSetting(brightness);
                     }
+                    mPersistentDataStore.saveIfNeeded();
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);

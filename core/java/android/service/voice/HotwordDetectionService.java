@@ -16,9 +16,8 @@
 
 package android.service.voice;
 
-import static com.android.internal.util.function.pooled.PooledLambda.obtainMessage;
+import static java.util.Objects.requireNonNull;
 
-import android.annotation.CallSuper;
 import android.annotation.DurationMillisLong;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -33,10 +32,8 @@ import android.content.Intent;
 import android.hardware.soundtrigger.SoundTrigger;
 import android.media.AudioFormat;
 import android.os.Bundle;
-import android.os.Handler;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
-import android.os.Looper;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
@@ -66,6 +63,8 @@ import java.util.function.IntConsumer;
  * keyphrase was detected, or if applicable uses {@link Callback#onRejected(HotwordRejectedResult)}
  * to inform the system that a keyphrase was not detected. The system then relays this result to
  * the {@link VoiceInteractionService} through {@link HotwordDetector.Callback}.
+ *
+ * Note: Methods in this class may be called concurrently
  *
  * @hide
  */
@@ -138,8 +137,6 @@ public abstract class HotwordDetectionService extends Service {
     public static final String SERVICE_INTERFACE =
             "android.service.voice.HotwordDetectionService";
 
-    private Handler mHandler;
-
     @Nullable
     private ContentCaptureManager mContentCaptureManager;
 
@@ -154,13 +151,12 @@ public abstract class HotwordDetectionService extends Service {
             if (DBG) {
                 Log.d(TAG, "#detectFromDspSource");
             }
-            mHandler.sendMessage(obtainMessage(HotwordDetectionService::onDetect,
-                    HotwordDetectionService.this,
+            HotwordDetectionService.this.onDetect(
                     new AlwaysOnHotwordDetector.EventPayload(
                             event.triggerInData, event.captureAvailable,
                             event.captureFormat, event.captureSession, event.data),
                     timeoutMillis,
-                    new Callback(callback)));
+                    new Callback(callback));
         }
 
         @Override
@@ -169,11 +165,10 @@ public abstract class HotwordDetectionService extends Service {
             if (DBG) {
                 Log.d(TAG, "#updateState");
             }
-            mHandler.sendMessage(obtainMessage(HotwordDetectionService::onUpdateStateInternal,
-                    HotwordDetectionService.this,
+            HotwordDetectionService.this.onUpdateStateInternal(
                     options,
                     sharedMemory,
-                    callback));
+                    callback);
         }
 
         @Override
@@ -189,19 +184,15 @@ public abstract class HotwordDetectionService extends Service {
             }
             switch (audioSource) {
                 case AUDIO_SOURCE_MICROPHONE:
-                    mHandler.sendMessage(obtainMessage(
-                            HotwordDetectionService::onDetect,
-                            HotwordDetectionService.this,
-                            new Callback(callback)));
+                    HotwordDetectionService.this.onDetect(
+                            new Callback(callback));
                     break;
                 case AUDIO_SOURCE_EXTERNAL:
-                    mHandler.sendMessage(obtainMessage(
-                            HotwordDetectionService::onDetect,
-                            HotwordDetectionService.this,
+                    HotwordDetectionService.this.onDetect(
                             audioStream,
                             audioFormat,
                             options,
-                            new Callback(callback)));
+                            new Callback(callback));
                     break;
                 default:
                     Log.i(TAG, "Unsupported audio source " + audioSource);
@@ -215,13 +206,6 @@ public abstract class HotwordDetectionService extends Service {
                     HotwordDetectionService.this, manager, options);
         }
     };
-
-    @CallSuper
-    @Override
-    public void onCreate() {
-        super.onCreate();
-        mHandler = Handler.createAsync(Looper.getMainLooper());
-    }
 
     @Override
     @Nullable
@@ -432,11 +416,15 @@ public abstract class HotwordDetectionService extends Service {
         }
 
         /**
-         * Called when the detected result is valid.
+         * Informs the {@link HotwordDetector} that the keyphrase was detected.
+         *
+         * @param result Info about the detection result. This is provided to the
+         *         {@link HotwordDetector}.
          */
-        public void onDetected(@Nullable HotwordDetectedResult hotwordDetectedResult) {
+        public void onDetected(@NonNull HotwordDetectedResult result) {
+            requireNonNull(result);
             try {
-                mRemoteCallback.onDetected(hotwordDetectedResult);
+                mRemoteCallback.onDetected(result);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
             }
@@ -451,7 +439,8 @@ public abstract class HotwordDetectionService extends Service {
          * @param result Info about the second stage detection result. This is provided to
          *         the {@link HotwordDetector}.
          */
-        public void onRejected(@Nullable HotwordRejectedResult result) {
+        public void onRejected(@NonNull HotwordRejectedResult result) {
+            requireNonNull(result);
             try {
                 mRemoteCallback.onRejected(result);
             } catch (RemoteException e) {

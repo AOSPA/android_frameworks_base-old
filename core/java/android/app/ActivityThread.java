@@ -5888,7 +5888,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
     public final void applyConfigurationToResources(Configuration config) {
         synchronized (mResourcesManager) {
-            mResourcesManager.applyConfigurationToResourcesLocked(config, null);
+            mResourcesManager.applyConfigurationToResources(config, null);
         }
     }
 
@@ -5976,7 +5976,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
         synchronized (mResourcesManager) {
             // Update all affected Resources objects to use new ResourcesImpl
-            mResourcesManager.applyNewResourceDirsLocked(ai, oldResDirs);
+            mResourcesManager.applyNewResourceDirs(ai, oldResDirs);
         }
     }
 
@@ -6232,7 +6232,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
                                 synchronized (mResourcesManager) {
                                     // Update affected Resources objects to use new ResourcesImpl
-                                    mResourcesManager.applyNewResourceDirsLocked(aInfo, oldResDirs);
+                                    mResourcesManager.applyNewResourceDirs(aInfo, oldResDirs);
                                 }
                             } catch (RemoteException e) {
                             }
@@ -6477,7 +6477,7 @@ public final class ActivityThread extends ClientTransactionHandler
              * reflect configuration changes. The configuration object passed
              * in AppBindData can be safely assumed to be up to date
              */
-            mResourcesManager.applyConfigurationToResourcesLocked(data.config, data.compatInfo);
+            mResourcesManager.applyConfigurationToResources(data.config, data.compatInfo);
             mCurDefaultDisplayDpi = data.config.densityDpi;
 
             // This calls mResourcesManager so keep it within the synchronized block.
@@ -7550,7 +7550,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
                 // We need to apply this change to the resources immediately, because upon returning
                 // the view hierarchy will be informed about it.
-                if (mResourcesManager.applyConfigurationToResourcesLocked(globalConfig,
+                if (mResourcesManager.applyConfigurationToResources(globalConfig,
                         null /* compat */,
                         mInitialApplication.getResources().getDisplayAdjustments())) {
                     mConfigurationController.updateLocaleListFromAppContext(
