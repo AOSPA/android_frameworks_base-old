@@ -124,6 +124,7 @@ import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
+import com.android.systemui.statusbar.events.PrivacyDotViewController;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.ConversationNotificationManager;
 import com.android.systemui.statusbar.notification.DynamicPrivacyController;
@@ -308,6 +309,7 @@ public class NotificationPanelViewController extends PanelViewController {
     private final QSDetailDisplayer mQSDetailDisplayer;
     private final FeatureFlags mFeatureFlags;
     private final ScrimController mScrimController;
+    private final PrivacyDotViewController mPrivacyDotViewController;
 
     // Maximum # notifications to show on Keyguard; extras will be collapsed in an overflow card.
     // If there are exactly 1 + mMaxKeyguardNotifications, then still shows all notifications
@@ -607,6 +609,7 @@ public class NotificationPanelViewController extends PanelViewController {
             FeatureFlags featureFlags,
             QuickAccessWalletClient quickAccessWalletClient,
             KeyguardMediaController keyguardMediaController,
+            PrivacyDotViewController privacyDotViewController,
             @Main Executor uiExecutor,
             EmergencyButtonController.Factory emergencyButtonControllerFactory) {
         super(view, falsingManager, dozeLog, keyguardStateController,
@@ -616,6 +619,7 @@ public class NotificationPanelViewController extends PanelViewController {
         mView = view;
         mVibratorHelper = vibratorHelper;
         mKeyguardMediaController = keyguardMediaController;
+        mPrivacyDotViewController = privacyDotViewController;
         mMetricsLogger = metricsLogger;
         mActivityManager = activityManager;
         mConfigurationController = configurationController;
@@ -1906,6 +1910,7 @@ public class NotificationPanelViewController extends PanelViewController {
             mKeyguardBypassController.setQSExpanded(expanded);
             mStatusBarKeyguardViewManager.setQsExpanded(expanded);
             mLockIconViewController.setQsExpanded(expanded);
+            mPrivacyDotViewController.setQsExpanded(expanded);
         }
     }
 
@@ -2078,14 +2083,13 @@ public class NotificationPanelViewController extends PanelViewController {
         final int qsPanelBottomY = calculateQsBottomPosition(getQsExpansionFraction());
         final boolean visible = (getQsExpansionFraction() > 0 || qsPanelBottomY > 0)
                 && !mShouldUseSplitNotificationShade;
-        final float notificationTop = mAmbientState.getStackY()
-                - mNotificationScrimPadding
-                - mAmbientState.getScrollY();
+        final float notificationTop = mAmbientState.getStackY() - mAmbientState.getScrollY();
         setQsExpansionEnabled(mAmbientState.getScrollY() == 0);
 
         int radius = mScrimCornerRadius;
         if (!mShouldUseSplitNotificationShade) {
-            top = (int) Math.min(qsPanelBottomY, notificationTop);
+            top = (int) (isOnKeyguard() ? Math.min(qsPanelBottomY, notificationTop)
+                    : notificationTop);
             bottom = getView().getBottom();
             left = getView().getLeft();
             right = getView().getRight();
@@ -2585,16 +2589,19 @@ public class NotificationPanelViewController extends PanelViewController {
             // Small parallax as we pull down and clip QS
             startHeight = -mQsExpansionHeight * 0.2f;
         }
-        if (mKeyguardBypassController.getBypassEnabled() && isOnKeyguard()
-                && mNotificationStackScrollLayoutController.isPulseExpanding()) {
-            if (!mPulseExpansionHandler.isExpanding()
-                    && !mPulseExpansionHandler.getLeavingLockscreen()) {
-                // If we aborted the expansion we need to make sure the header doesn't reappear
-                // again after the header has animated away
-                appearAmount = 0;
+        if (mKeyguardBypassController.getBypassEnabled() && isOnKeyguard()) {
+            if (mNotificationStackScrollLayoutController.isPulseExpanding()) {
+                if (!mPulseExpansionHandler.isExpanding()
+                        && !mPulseExpansionHandler.getLeavingLockscreen()) {
+                    // If we aborted the expansion we need to make sure the header doesn't reappear
+                    // again after the header has animated away
+                    appearAmount = 0;
+                } else {
+                    appearAmount = mNotificationStackScrollLayoutController
+                            .calculateAppearFractionBypass();
+                }
             } else {
-                appearAmount = mNotificationStackScrollLayoutController
-                        .calculateAppearFractionBypass();
+                appearAmount = 0.0f;
             }
             startHeight = -mQs.getQsMinExpansionHeight();
         }
