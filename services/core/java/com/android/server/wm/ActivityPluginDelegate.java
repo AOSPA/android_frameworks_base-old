@@ -167,7 +167,7 @@ public class ActivityPluginDelegate {
         }
         isEnabled = ((Settings.Global.getInt(ActivityThread.currentApplication().
                                              getApplicationContext().getContentResolver(),
-                                             FOREGROUND_ACTIVITY_TRIGGER, 0)) == 1);
+                                             FOREGROUND_ACTIVITY_TRIGGER, 1)) == 1);
         --mGetFeatureEnableRetryCount;
         return isEnabled;
     }
