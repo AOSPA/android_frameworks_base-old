@@ -134,13 +134,7 @@ public class Nat464Xlat {
         final boolean skip464xlat = (nai.netAgentConfig() != null)
                 && nai.netAgentConfig().skip464xlat;
 
-        boolean doXlat = SystemProperties.getBoolean("persist.vendor.net.doxlat", true);
-        if(!doXlat) {
-            Log.i(TAG, "Android Xlat is disabled");
-        }
-
         return supported && connected && isIpv6OnlyNetwork && !skip464xlat
-            && ((netType == ConnectivityManager.TYPE_MOBILE) ? doXlat : true)
             && (nai.networkCapabilities.hasTransport(TRANSPORT_CELLULAR)
                 ? isCellular464XlatEnabled() : true);
     }

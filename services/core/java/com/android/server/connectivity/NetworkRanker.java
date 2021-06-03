@@ -80,7 +80,7 @@ public class NetworkRanker {
         if (USE_POLICY_RANKING) {
             return getBestNetworkByPolicy(candidates, currentSatisfier);
         } else {
-            return getBestNetworkByLegacyInt(request, candidates);
+            return getBestNetworkByLegacyInt(candidates);
         }
     }
 
@@ -229,26 +229,13 @@ public class NetworkRanker {
     // TODO : switch to the policy implementation and remove
     // Almost equivalent to Collections.max(nais), but allows returning null if no network
     // satisfies the request.
-    private NetworkAgentInfo getBestNetworkByLegacyInt(@NonNull final NetworkRequest request,
+    private NetworkAgentInfo getBestNetworkByLegacyInt(
             @NonNull final Collection<NetworkAgentInfo> nais) {
         NetworkAgentInfo bestNetwork = null;
         int bestScore = Integer.MIN_VALUE;
         for (final NetworkAgentInfo nai : nais) {
-            if (!(nai.connService() != null &&
-                  nai.connService().satisfiesMobileMultiNetworkDataCheck
-                                    (nai.networkCapabilities,
-                                     request.networkCapabilities))) {
-                continue;
-            }
             final int naiScore = nai.getCurrentScore();
-            if (nai.getCurrentScore() > bestScore ||
-                (bestNetwork != null && nai.connService() != null &&
-                 nai.connService().isBestMobileMultiNetwork(
-                         bestNetwork,
-                         bestNetwork.networkCapabilities,
-                         nai,
-                         nai.networkCapabilities,
-                         request.networkCapabilities))) {
+            if (naiScore > bestScore) {
                 bestNetwork = nai;
                 bestScore = naiScore;
             }
