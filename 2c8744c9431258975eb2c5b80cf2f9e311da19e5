@@ -16,6 +16,24 @@
       "message": "pls specify the origin",
       "revId": "2c8744c9431258975eb2c5b80cf2f9e311da19e5",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a80df869_ac898b27",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-06-03T14:58:56Z",
+      "side": 1,
+      "message": "I cherry-picked it from Quartz",
+      "parentUuid": "e94e1487_a25fec39",
+      "revId": "2c8744c9431258975eb2c5b80cf2f9e311da19e5",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
