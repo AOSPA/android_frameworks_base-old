@@ -16,6 +16,24 @@
       "message": "this can be made private",
       "revId": "ecdec4bc611579ceb88567f8bf902d1a8e78ca01",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "e807b992_f61c0d0c",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 303,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-06-03T14:35:46Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "3cc8cb2f_0d61a640",
+      "revId": "ecdec4bc611579ceb88567f8bf902d1a8e78ca01",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }

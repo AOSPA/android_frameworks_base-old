@@ -18,6 +18,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "223d9dd1_2e5f5ad8",
+        "filename": "core/res/res/values/pa_symbols.xml",
+        "patchSetId": 3
+      },
+      "lineNbr": 55,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-06-03T14:35:46Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "75d3306d_399a5921",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "4e5080a6_16795664",
@@ -31,6 +49,24 @@
       "writtenOn": "2021-01-10T14:17:56Z",
       "side": 1,
       "message": "This can be final",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "68132c7e_dd2740e9",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 189,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-06-03T14:35:46Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4e5080a6_16795664",
       "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
