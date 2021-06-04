@@ -328,8 +328,8 @@ final class DisplayPowerController implements AutomaticBrightnessController.Call
     private BrightnessReason mBrightnessReasonTemp = new BrightnessReason();
 
     // Brightness animation ramp rates in brightness units per second
-    private final float mBrightnessRampRateSlow = 0.2352941f;
-    private final float mBrightnessRampRateFast = 0.7058823f;
+    private final float mBrightnessRampRateSlow = 0.1052941f;
+    private final float mBrightnessRampRateFast = 0.4558823f;
 
 
     // Whether or not to skip the initial brightness ramps into STATE_ON.
