@@ -16,6 +16,23 @@
       "message": "not sure I understand. why is this needed when we have advanced reboot?",
       "revId": "9c51df7e9944db66eb3bd124d47af501530dce80",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8e940322_3b98f956",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000373
+      },
+      "writtenOn": "2021-06-07T12:45:05Z",
+      "side": 1,
+      "message": "less use power button prolong its life",
+      "revId": "9c51df7e9944db66eb3bd124d47af501530dce80",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
