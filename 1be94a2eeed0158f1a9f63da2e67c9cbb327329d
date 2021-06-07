@@ -16,6 +16,23 @@
       "message": "let\u0027s use Executors instead of AsyncTask cause it\u0027s deprecated\nhttps://developer.android.com/reference/android/os/AsyncTask",
       "revId": "1be94a2eeed0158f1a9f63da2e67c9cbb327329d",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a65dc643_ca7f47b0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2021-06-07T05:57:55Z",
+      "side": 1,
+      "message": "try this https://del.dog/ocimonyles.go",
+      "revId": "1be94a2eeed0158f1a9f63da2e67c9cbb327329d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
