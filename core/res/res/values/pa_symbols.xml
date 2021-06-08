@@ -93,4 +93,5 @@
     <!-- Whether to to intercept inputs on screen off. -->
     <java-symbol type="bool" name="config_enableKeyHandler" />
 
+    <java-symbol type="bool" name="config_hasOnePlusHapticMotor" />
 </resources>
