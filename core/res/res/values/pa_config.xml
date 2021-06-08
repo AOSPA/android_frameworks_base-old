@@ -133,4 +133,7 @@
 
     <bool name="config_enableKeyHandler">false</bool>
 
+    <!-- OnePlus uses a proprietary vibrator hal to utilize the new powerful motor since the
+         OnePlus 7 Pro. -->
+    <bool name="config_hasOnePlusHapticMotor">false</bool>
 </resources>
