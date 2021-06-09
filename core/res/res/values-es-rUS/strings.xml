@@ -1022,7 +1022,7 @@
     <string name="text_copied" msgid="2531420577879738860">"Texto copiado en el portapapeles."</string>
     <string name="copied" msgid="4675902854553014676">"Copiado"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> pegó contenido de <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g>"</string>
-    <string name="pasted_from_clipboard" msgid="6295556725844421812">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> pegó contenido del portapapeles"</string>
+    <string name="pasted_from_clipboard" msgid="7355790625710831847">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> pegó información del portapapeles"</string>
     <string name="pasted_text" msgid="4298871641549173733">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> accedió a texto del portapapeles"</string>
     <string name="pasted_image" msgid="4729097394781491022">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> accedió a una imagen del portapapeles"</string>
     <string name="pasted_content" msgid="646276353060777131">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> accedió al contenido del portapapeles"</string>
@@ -1259,6 +1259,10 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Preparando <xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Iniciando aplicaciones"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Finalizando el inicio"</string>
+    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"¿Quieres apagar la pantalla?"</string>
+    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Al configurar tu huella dactilar, presionaste el botón de encendido.\n\nPor lo general, esta acción apaga la pantalla."</string>
+    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Apagar"</string>
+    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Cancelar"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> en ejecución"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Presiona para volver al juego"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Elige un juego"</string>
@@ -1354,8 +1358,8 @@
     <string name="no_permissions" msgid="5729199278862516390">"No se requieren permisos"</string>
     <string name="perm_costs_money" msgid="749054595022779685">"esto puede costarte dinero"</string>
     <string name="dlg_ok" msgid="5103447663504839312">"Aceptar"</string>
-    <string name="usb_charging_notification_title" msgid="1674124518282666955">"Cargando dispositivo mediante USB"</string>
-    <string name="usb_supplying_notification_title" msgid="5378546632408101811">"Cargando el dispositivo conectado mediante USB"</string>
+    <string name="usb_charging_notification_title" msgid="1674124518282666955">"Cargando dispositivo por USB"</string>
+    <string name="usb_supplying_notification_title" msgid="5378546632408101811">"Cargando por USB el dispositivo conectado"</string>
     <string name="usb_mtp_notification_title" msgid="1065989144124499810">"Se activó la transferencia de archivos mediante USB"</string>
     <string name="usb_ptp_notification_title" msgid="5043437571863443281">"Se activó el modo PTP mediante USB"</string>
     <string name="usb_tether_notification_title" msgid="8828527870612663771">"Se activó la conexión mediante dispositivo móvil por USB"</string>
@@ -1709,6 +1713,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Usar acceso directo"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Inversión de color"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Corrección de color"</string>
+    <string name="one_handed_mode_feature_name" msgid="2334330034828094891">"Modo de una mano"</string>
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Atenuación extra"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Como mantuviste presionadas las teclas de volumen, se activó <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Se presionaron las teclas de volumen. Se desactivó <xliff:g id="SERVICE_NAME">%1$s</xliff:g>."</string>
@@ -1820,8 +1825,7 @@
     <string name="mediasize_japanese_kahu" msgid="7290232592648122042">"Kahu"</string>
     <string name="mediasize_japanese_kaku2" msgid="7477551750461028312">"Kaku2"</string>
     <string name="mediasize_japanese_you4" msgid="5552111912684384833">"You4"</string>
-    <!-- no translation found for mediasize_japanese_l (1326765321473431817) -->
-    <skip />
+    <string name="mediasize_japanese_l" msgid="1326765321473431817">"L"</string>
     <string name="mediasize_unknown_portrait" msgid="3817016220446495613">"Cualquier tamaño vertical"</string>
     <string name="mediasize_unknown_landscape" msgid="1584741567225095325">"Cualquier tamaño horizontal"</string>
     <string name="write_fail_reason_cancelled" msgid="2344081488493969190">"Cancelada"</string>
@@ -1865,10 +1869,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Tu administrador actualizó este paquete"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Tu administrador borró este paquete"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Aceptar"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (750683025714899363) -->
-    <skip />
-    <!-- no translation found for battery_saver_description (5693741424234005958) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="4877297130366222145">"El Ahorro de batería activa el Tema oscuro y desactiva o restringe la actividad en segundo plano, algunos efectos visuales, algunas conexiones de red y otras funciones determinadas.\n\n"<annotation id="url">"Más información"</annotation></string>
+    <string name="battery_saver_description" msgid="8518809702138617167">"El Ahorro de batería activa el Tema oscuro y desactiva o restringe la actividad en segundo plano, algunos efectos visuales, algunas conexiones de red y otras funciones determinadas."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Para reducir el uso de datos, el modo Ahorro de datos evita que algunas apps envíen y reciban datos en segundo plano. La app que estés usando podrá acceder a los datos, pero con menor frecuencia. De esta forma, por ejemplo, las imágenes no se mostrarán hasta que las presiones."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"¿Deseas activar Ahorro de datos?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Activar"</string>
@@ -1971,8 +1973,8 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> no está disponible en este momento. Esta opción se administra en <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"Más información"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"Reanudar app"</string>
-    <string name="work_mode_off_title" msgid="5503291976647976560">"¿Activar el perfil de trabajo?"</string>
-    <string name="work_mode_off_message" msgid="8417484421098563803">"Se activarán las apps de trabajo, los datos, las notificaciones y otras funciones del perfil de trabajo"</string>
+    <string name="work_mode_off_title" msgid="961171256005852058">"¿Activar apps de trabajo?"</string>
+    <string name="work_mode_off_message" msgid="7319580997683623309">"Obtén acceso a tus apps de trabajo y notificaciones"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Activar"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"La app no está disponible"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> no está disponible en este momento."</string>
@@ -2088,12 +2090,12 @@
     <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Esta notificación descendió de a Silenciada. Presiona para enviar comentarios."</string>
     <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Esta notificación recibió una clasificación superior. Presiona para enviar comentarios."</string>
     <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Esta notificación recibió una clasificación inferior. Presiona para enviar comentarios."</string>
-    <string name="nas_upgrade_notification_title" msgid="4224351129445073051">"Prueba las notif. mejoradas"</string>
-    <string name="nas_upgrade_notification_content" msgid="7036860187157134706">"Activa las notificaciones mejoradas para seguir recibiendo acciones sugeridas, respuestas y mucho más. Ya no se admiten las notificaciones adaptables de Android."</string>
-    <string name="nas_upgrade_notification_enable_action" msgid="4823652531622744798">"Activar"</string>
-    <string name="nas_upgrade_notification_disable_action" msgid="7561210256700811433">"Ahora no"</string>
+    <string name="nas_upgrade_notification_title" msgid="8436359459300146555">"Notificaciones mejoradas"</string>
+    <string name="nas_upgrade_notification_content" msgid="5157550369837103337">"Las notificaciones mejoradas ahora brindan respuestas y acciones sugeridas. Ya no se admiten las notificaciones adaptables de Android."</string>
+    <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"Aceptar"</string>
+    <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"Desactivar"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Más información"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="6276343083934111208">"Las notificaciones mejoradas pueden leer todo el contenido de notificaciones, incluido el que contenga información personal, como nombres de contactos y mensajes. Esta función también podrá descartar notificaciones o realizar acciones en botones de notificaciones, como responder llamadas.\n\nTambién puede activar o desactivar el Modo prioridad y cambiar la configuración relacionada."</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"Las notificaciones mejoradas reemplazaron a las notificaciones adaptables en Android 12. Esta función muestra respuestas y acciones sugeridas, y organiza tus notificaciones.\n\nLas notificaciones mejoradas pueden acceder a todo el contenido de notificaciones, lo que incluye información personal, como nombres de contactos y mensajes. También puede descartar o responder notificaciones, como responder llamadas y controlar la función No interrumpir."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Notificación de información del modo de Rutinas"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Es posible que la batería se agote antes de la carga habitual"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Se activó el Ahorro de batería para extender la duración de la batería"</string>
@@ -2290,4 +2292,6 @@
     <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"Imagen de marca de la aplicación"</string>
     <string name="view_and_control_notification_title" msgid="4300765399209912240">"Verifica la configuración de acceso"</string>
     <string name="view_and_control_notification_content" msgid="8003766498562604034">"<xliff:g id="SERVICE_NAME">%s</xliff:g> puede ver y controlar tu pantalla. Presiona para revisar esta opción."</string>
+    <string name="ui_translation_accessibility_translated_text" msgid="3197547218178944544">"Se tradujo: <xliff:g id="MESSAGE">%1$s</xliff:g>."</string>
+    <string name="ui_translation_accessibility_translation_finished" msgid="3057830947610088465">"Se tradujo el mensaje del <xliff:g id="FROM_LANGUAGE">%1$s</xliff:g> al <xliff:g id="TO_LANGUAGE">%2$s</xliff:g>."</string>
 </resources>

@@ -30,8 +30,8 @@
 package android.util;
 
 import android.content.Context;
+import android.graphics.BLASTBufferQueue;
 import android.os.SystemProperties;
-import android.view.Surface;
 import android.util.Log;
 
 import dalvik.system.PathClassLoader;
@@ -470,7 +470,7 @@ public class BoostFramework {
         private static boolean sQXIsLoaded = false;
         private static Class<?> sQXPerfClass = null;
         private static Method sSetFrameInterval = null;
-        private static Method sSetSurface = null;
+        private static Method sSetBLASTBufferQueue = null;
         private static Method sSetMotionType = null;
         private static Method sSetVsyncTime = null;
         private static Method sSetUITaskStatus = null;
@@ -497,8 +497,8 @@ public class BoostFramework {
                 sSetFrameInterval = sQXPerfClass.getMethod(
                         "setFrameInterval", argClasses);
 
-                argClasses = new Class[]{Surface.class};
-                sSetSurface = sQXPerfClass.getMethod("setSurface", argClasses);
+                argClasses = new Class[]{BLASTBufferQueue.class};
+                sSetBLASTBufferQueue = sQXPerfClass.getMethod("setBLASTBufferQueue", argClasses);
 
                 argClasses = new Class[]{int.class};
                 sSetMotionType = sQXPerfClass.getMethod("setMotionType", argClasses);
@@ -549,10 +549,10 @@ public class BoostFramework {
         }
 
         /** @hide */
-        public static void setSurface(Surface surface) {
-            if (sScrollOptEnable && sSetSurface != null) {
+        public static void setBLASTBufferQueue(BLASTBufferQueue blastBufferQueue) {
+            if (sScrollOptEnable && sSetBLASTBufferQueue != null) {
                 try {
-                    sSetSurface.invoke(null, surface);
+                    sSetBLASTBufferQueue.invoke(null, blastBufferQueue);
                 } catch (Exception e) {
                     e.printStackTrace();
                 }

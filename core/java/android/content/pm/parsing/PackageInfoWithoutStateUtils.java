@@ -397,7 +397,7 @@ public class PackageInfoWithoutStateUtils {
         }
 
         // CompatibilityMode is global state.
-        if (!ParsingPackageUtils.sCompatibilityModeEnabled) {
+        if (!android.content.pm.PackageParser.sCompatibilityModeEnabled) {
             ai.disableCompatibilityMode();
         }
 
@@ -800,6 +800,17 @@ public class PackageInfoWithoutStateUtils {
         }
 
         return privateFlags;
+    }
+
+    /** @see ApplicationInfo#privateFlagsExt */
+    public static int appInfoPrivateFlagsExt(ParsingPackageRead pkg) {
+        // @formatter:off
+        int privateFlagsExt =
+                flag(pkg.isProfileable(), ApplicationInfo.PRIVATE_FLAG_EXT_PROFILEABLE)
+                | flag(pkg.hasRequestForegroundServiceExemption(),
+                        ApplicationInfo.PRIVATE_FLAG_EXT_REQUEST_FOREGROUND_SERVICE_EXEMPTION);
+        // @formatter:on
+        return privateFlagsExt;
     }
 
     private static boolean checkUseInstalled(ParsingPackageRead pkg, PackageUserState state,

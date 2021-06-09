@@ -3581,7 +3581,9 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
         }
 
         structure.setChildCount(childrenCount);
-        ArrayList<View> preorderedList = buildOrderedChildList();
+        ArrayList<View> tempPreorderedList = buildOrderedChildList();
+        ArrayList<View> preorderedList =
+                tempPreorderedList != null ? new ArrayList<>(tempPreorderedList) : null;
         boolean customOrder = preorderedList == null
                 && isChildrenDrawingOrderEnabled();
         for (int i = 0; i < childrenCount; i++) {
@@ -9275,21 +9277,23 @@ public abstract class ViewGroup extends View implements ViewParent, ViewManager 
     /**
      * {@inheritDoc}
      *
-     * The implementation calls {@link #dispatchRequestTranslation} for all the child views.
+     * The implementation calls {@link #dispatchCreateViewTranslationRequest} for all the child
+     * views.
      */
     @Override
-    public void dispatchRequestTranslation(@NonNull Map<AutofillId, long[]> viewIds,
+    public void dispatchCreateViewTranslationRequest(@NonNull Map<AutofillId, long[]> viewIds,
             @NonNull @DataFormat int[] supportedFormats,
             @Nullable TranslationCapability capability,
             @NonNull List<ViewTranslationRequest> requests) {
-        super.dispatchRequestTranslation(viewIds, supportedFormats, capability, requests);
+        super.dispatchCreateViewTranslationRequest(viewIds, supportedFormats, capability, requests);
         final int childCount = getChildCount();
         if (childCount == 0) {
             return;
         }
         for (int i = 0; i < childCount; ++i) {
             final View child = getChildAt(i);
-            child.dispatchRequestTranslation(viewIds, supportedFormats, capability, requests);
+            child.dispatchCreateViewTranslationRequest(viewIds, supportedFormats, capability,
+                    requests);
         }
     }
 }

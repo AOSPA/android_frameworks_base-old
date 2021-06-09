@@ -36,6 +36,7 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Log;
@@ -50,6 +51,7 @@ import androidx.annotation.BinderThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.wm.shell.R;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayChangeController;
 import com.android.wm.shell.common.DisplayController;
@@ -114,13 +116,17 @@ public class PipController implements PipTransitionController.PipTransitionCallb
      */
     private final DisplayChangeController.OnDisplayChangingListener mRotationController = (
             int displayId, int fromRotation, int toRotation, WindowContainerTransaction t) -> {
-        if (!mPipTaskOrganizer.isInPip()
-                || mPipBoundsState.getDisplayLayout().rotation() == toRotation
-                || mPipTaskOrganizer.isDeferringEnterPipAnimation()
-                || mPipTaskOrganizer.isEntryScheduled()) {
-            // Skip if the same rotation has been set or we aren't in PIP or haven't actually
-            // entered PIP yet. We still need to update the display layout in the bounds handler
-            // in this case.
+        if (mPipBoundsState.getDisplayLayout().rotation() == toRotation) {
+            // The same rotation may have been set by auto PiP-able or fixed rotation. So notify
+            // the change with fromRotation=false to apply the rotated destination bounds from
+            // PipTaskOrganizer#onMovementBoundsChanged.
+            updateMovementBounds(null, false /* fromRotation */,
+                    false /* fromImeAdjustment */, false /* fromShelfAdjustment */, t);
+            return;
+        }
+        if (!mPipTaskOrganizer.isInPip() || mPipTaskOrganizer.isEntryScheduled()) {
+            // Update display layout and bounds handler if we aren't in PIP or haven't actually
+            // entered PIP yet.
             onDisplayRotationChangedNotInPip(mContext, toRotation);
             // do not forget to update the movement bounds as well.
             updateMovementBounds(mPipBoundsState.getNormalBounds(), true /* fromRotation */,
@@ -424,6 +430,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
 
     private void onDensityOrFontScaleChanged() {
         mPipTaskOrganizer.onDensityOrFontScaleChanged(mContext);
+        onPipCornerRadiusChanged();
     }
 
     private void onOverlayChanged() {
@@ -460,7 +467,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
             pipSnapAlgorithm.applySnapFraction(postChangeStackBounds, postChangeMovementBounds,
                     snapFraction, mPipBoundsState.getStashedState(),
                     mPipBoundsState.getStashOffset(),
-                    mPipBoundsState.getDisplayBounds());
+                    mPipBoundsState.getDisplayBounds(),
+                    mPipBoundsState.getDisplayLayout().stableInsets());
 
             mTouchHandler.getMotionHelper().movePip(postChangeStackBounds);
         } else {
@@ -481,10 +489,6 @@ public class PipController implements PipTransitionController.PipTransitionCallb
      */
     public void expandPip() {
         mTouchHandler.getMotionHelper().expandLeavePip(false /* skipAnimation */);
-    }
-
-    private PipTouchHandler getPipTouchHandler() {
-        return mTouchHandler;
     }
 
     /**
@@ -526,6 +530,19 @@ public class PipController implements PipTransitionController.PipTransitionCallb
 
     private void setPinnedStackAnimationListener(IPipAnimationListener callback) {
         mPinnedStackAnimationRecentsCallback = callback;
+        onPipCornerRadiusChanged();
+    }
+
+    private void onPipCornerRadiusChanged() {
+        if (mPinnedStackAnimationRecentsCallback != null) {
+            final int cornerRadius =
+                    mContext.getResources().getDimensionPixelSize(R.dimen.pip_corner_radius);
+            try {
+                mPinnedStackAnimationRecentsCallback.onPipCornerRadiusChanged(cornerRadius);
+            } catch (RemoteException e) {
+                Log.e(TAG, "Failed to call onPipCornerRadiusChanged", e);
+            }
+        }
     }
 
     private Rect startSwipePipToHome(ComponentName componentName, ActivityInfo activityInfo,
@@ -664,7 +681,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                 postChangeStackBounds, false /* adjustForIme */);
         pipSnapAlgorithm.applySnapFraction(postChangeStackBounds, postChangeMovementBounds,
                 snapFraction, mPipBoundsState.getStashedState(), mPipBoundsState.getStashOffset(),
-                mPipBoundsState.getDisplayBounds());
+                mPipBoundsState.getDisplayBounds(),
+                mPipBoundsState.getDisplayLayout().stableInsets());
 
         mPipBoundsAlgorithm.getInsetBounds(outInsetBounds);
         outBounds.set(postChangeStackBounds);

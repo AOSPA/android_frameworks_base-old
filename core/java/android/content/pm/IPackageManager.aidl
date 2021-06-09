@@ -310,8 +310,8 @@ interface IPackageManager {
     void restorePreferredActivities(in byte[] backup, int userId);
     byte[] getDefaultAppsBackup(int userId);
     void restoreDefaultApps(in byte[] backup, int userId);
-    byte[] getIntentFilterVerificationBackup(int userId);
-    void restoreIntentFilterVerification(in byte[] backup, int userId);
+    byte[] getDomainVerificationBackup(int userId);
+    void restoreDomainVerification(in byte[] backup, int userId);
 
     /**
      * Report the set of 'Home' activity candidates, plus (if any) which of them
@@ -795,6 +795,10 @@ interface IPackageManager {
     int checkUidPermission(String permName, int uid);
 
     void setMimeGroup(String packageName, String group, in List<String> mimeTypes);
+
+    String getSplashScreenTheme(String packageName, int userId);
+
+    void setSplashScreenTheme(String packageName, String themeName, int userId);
 
     List<String> getMimeGroup(String packageName, String group);
 

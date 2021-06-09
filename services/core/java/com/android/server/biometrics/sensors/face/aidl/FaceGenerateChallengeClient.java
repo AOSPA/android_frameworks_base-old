@@ -35,8 +35,9 @@ public class FaceGenerateChallengeClient extends GenerateChallengeClient<ISessio
 
     FaceGenerateChallengeClient(@NonNull Context context,
             @NonNull LazyDaemon<ISession> lazyDaemon, @NonNull IBinder token,
-            @NonNull ClientMonitorCallbackConverter listener, @NonNull String owner, int sensorId) {
-        super(context, lazyDaemon, token, listener, owner, sensorId);
+            @NonNull ClientMonitorCallbackConverter listener, int userId, @NonNull String owner,
+            int sensorId) {
+        super(context, lazyDaemon, token, listener, userId, owner, sensorId);
     }
 
     @Override
@@ -45,12 +46,13 @@ public class FaceGenerateChallengeClient extends GenerateChallengeClient<ISessio
             getFreshDaemon().generateChallenge();
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to generateChallenge", e);
+            mCallback.onClientFinished(this, false /* success */);
         }
     }
 
     void onChallengeGenerated(int sensorId, int userId, long challenge) {
         try {
-            getListener().onChallengeGenerated(sensorId, challenge);
+            getListener().onChallengeGenerated(sensorId, userId, challenge);
             mCallback.onClientFinished(this, true /* success */);
         } catch (RemoteException e) {
             Slog.e(TAG, "Unable to send challenge", e);

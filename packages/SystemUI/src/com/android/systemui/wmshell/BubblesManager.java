@@ -63,11 +63,11 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
-import com.android.systemui.statusbar.ScrimView;
 import com.android.systemui.statusbar.notification.NotificationChannelHelper;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -675,7 +675,6 @@ public class BubblesManager implements Dumpable {
         }
         try {
             int flags = Notification.BubbleMetadata.FLAG_SUPPRESS_NOTIFICATION;
-            flags |= Notification.BubbleMetadata.FLAG_AUTO_EXPAND_BUBBLE;
             mBarService.onNotificationBubbleChanged(entry.getKey(), true, flags);
         } catch (RemoteException e) {
             Log.e(TAG, e.getMessage());

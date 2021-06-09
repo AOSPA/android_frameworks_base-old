@@ -90,6 +90,7 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.InOrder;
 import org.mockito.Mock;
 
@@ -131,6 +132,8 @@ public class LocationProviderManagerTest {
     private Random mRandom;
 
     @Mock
+    private LocationProviderManager.StateChangedListener mStateChangedListener;
+    @Mock
     private LocationManagerInternal mInternal;
     @Mock
     private Context mContext;
@@ -164,14 +167,14 @@ public class LocationProviderManagerTest {
         mInjector.getUserInfoHelper().startUser(OTHER_USER);
 
         mPassive = new PassiveLocationProviderManager(mContext, mInjector);
-        mPassive.startManager();
+        mPassive.startManager(null);
         mPassive.setRealProvider(new PassiveLocationProvider(mContext));
 
         mProvider = new TestProvider(PROPERTIES, PROVIDER_IDENTITY);
         mProvider.setProviderAllowed(true);
 
         mManager = new LocationProviderManager(mContext, mInjector, NAME, mPassive);
-        mManager.startManager();
+        mManager.startManager(mStateChangedListener);
         mManager.setRealProvider(mProvider);
     }
 
@@ -213,6 +216,21 @@ public class LocationProviderManagerTest {
 
         mManager.setRealProvider(null);
         assertThat(mManager.hasProvider()).isFalse();
+    }
+
+    @Test
+    public void testStateChangedListener() {
+        mProvider.setExtraAttributionTags(Collections.singleton("extra"));
+
+        ArgumentCaptor<AbstractLocationProvider.State> captorOld = ArgumentCaptor.forClass(
+                AbstractLocationProvider.State.class);
+        ArgumentCaptor<AbstractLocationProvider.State> captorNew = ArgumentCaptor.forClass(
+                AbstractLocationProvider.State.class);
+        verify(mStateChangedListener, timeout(TIMEOUT_MS).times(2)).onStateChanged(eq(NAME),
+                captorOld.capture(), captorNew.capture());
+
+        assertThat(captorOld.getAllValues().get(1).extraAttributionTags).isEmpty();
+        assertThat(captorNew.getAllValues().get(1).extraAttributionTags).containsExactly("extra");
     }
 
     @Test

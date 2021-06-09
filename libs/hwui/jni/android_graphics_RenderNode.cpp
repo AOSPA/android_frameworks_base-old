@@ -180,12 +180,10 @@ static jboolean android_view_RenderNode_clearStretch(CRITICAL_JNI_PARAMS_COMMA j
 }
 
 static jboolean android_view_RenderNode_stretch(CRITICAL_JNI_PARAMS_COMMA jlong renderNodePtr,
-                                                jfloat left, jfloat top, jfloat right,
-                                                jfloat bottom, jfloat vX, jfloat vY, jfloat maxX,
+                                                jfloat vX, jfloat vY, jfloat maxX,
                                                 jfloat maxY) {
-    StretchEffect effect = StretchEffect(SkRect::MakeLTRB(left, top, right, bottom),
-                                         {.fX = vX, .fY = vY}, maxX, maxY);
-    RenderNode* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    auto* renderNode = reinterpret_cast<RenderNode*>(renderNodePtr);
+    StretchEffect effect = StretchEffect({.fX = vX, .fY = vY}, maxX, maxY);
     renderNode->mutateStagingProperties().mutateLayerProperties().mutableStretchEffect().mergeWith(
             effect);
     renderNode->setPropertyFieldsDirty(RenderNode::GENERIC);
@@ -574,11 +572,13 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
             info.damageAccumulator->computeCurrentTransform(&transform);
             const RenderProperties& props = node.properties();
 
-            if (info.stretchEffectCount) {
-                handleStretchEffect(info, transform);
+            uirenderer::Rect bounds(props.getWidth(), props.getHeight());
+            bool useStretchShader =
+                    Properties::stretchEffectBehavior != StretchEffectBehavior::UniformScale;
+            if (useStretchShader && info.stretchEffectCount) {
+                handleStretchEffect(info, bounds);
             }
 
-            uirenderer::Rect bounds(props.getWidth(), props.getHeight());
             transform.mapRect(bounds);
 
             if (CC_LIKELY(transform.isPureTranslate())) {
@@ -641,31 +641,71 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
             return env;
         }
 
-        void handleStretchEffect(const TreeInfo& info, const Matrix4& transform) {
+        void stretchTargetBounds(const StretchEffect& stretchEffect,
+                                 float width, float height,
+                                 const SkRect& childRelativeBounds,
+                                 uirenderer::Rect& bounds) {
+              float normalizedLeft = childRelativeBounds.left() / width;
+              float normalizedTop = childRelativeBounds.top() / height;
+              float normalizedRight = childRelativeBounds.right() / width;
+              float normalizedBottom = childRelativeBounds.bottom() / height;
+              float reverseLeft = width *
+                  (stretchEffect.computeStretchedPositionX(normalizedLeft) -
+                    normalizedLeft);
+              float reverseTop = height *
+                  (stretchEffect.computeStretchedPositionY(normalizedTop) -
+                    normalizedTop);
+              float reverseRight = width *
+                  (stretchEffect.computeStretchedPositionX(normalizedRight) -
+                    normalizedLeft);
+              float reverseBottom = height *
+                  (stretchEffect.computeStretchedPositionY(normalizedBottom) -
+                    normalizedTop);
+              bounds.left = reverseLeft;
+              bounds.top = reverseTop;
+              bounds.right = reverseRight;
+              bounds.bottom = reverseBottom;
+        }
+
+        void handleStretchEffect(const TreeInfo& info, uirenderer::Rect& targetBounds) {
             // Search up to find the nearest stretcheffect parent
-            const StretchEffect* effect = info.damageAccumulator->findNearestStretchEffect();
+            const DamageAccumulator::StretchResult result =
+                info.damageAccumulator->findNearestStretchEffect();
+            const StretchEffect* effect = result.stretchEffect;
             if (!effect) {
                 return;
             }
 
-            uirenderer::Rect area = effect->stretchArea;
-            transform.mapRect(area);
-            JNIEnv* env = jnienv();
+            const auto& childRelativeBounds = result.childRelativeBounds;
+            stretchTargetBounds(*effect, result.width, result.height,
+                                childRelativeBounds,targetBounds);
 
-            jobject localref = env->NewLocalRef(mWeakRef);
-            if (CC_UNLIKELY(!localref)) {
-                env->DeleteWeakGlobalRef(mWeakRef);
-                mWeakRef = nullptr;
-                return;
-            }
+            if (Properties::stretchEffectBehavior == StretchEffectBehavior::Shader) {
+                JNIEnv* env = jnienv();
+
+                jobject localref = env->NewLocalRef(mWeakRef);
+                if (CC_UNLIKELY(!localref)) {
+                    env->DeleteWeakGlobalRef(mWeakRef);
+                    mWeakRef = nullptr;
+                    return;
+                }
 #ifdef __ANDROID__  // Layoutlib does not support CanvasContext
-            SkVector stretchDirection = effect->getStretchDirection();
-            env->CallVoidMethod(localref, gPositionListener_ApplyStretchMethod,
-                                info.canvasContext.getFrameNumber(), area.left, area.top,
-                                area.right, area.bottom, stretchDirection.fX, stretchDirection.fY,
-                                effect->maxStretchAmountX, effect->maxStretchAmountY);
+                SkVector stretchDirection = effect->getStretchDirection();
+                env->CallVoidMethod(localref, gPositionListener_ApplyStretchMethod,
+                                    info.canvasContext.getFrameNumber(),
+                                    result.width,
+                                    result.height,
+                                    stretchDirection.fX,
+                                    stretchDirection.fY,
+                                    effect->maxStretchAmountX,
+                                    effect->maxStretchAmountY,
+                                    childRelativeBounds.left(),
+                                    childRelativeBounds.top(),
+                                    childRelativeBounds.right(),
+                                    childRelativeBounds.bottom());
 #endif
-            env->DeleteLocalRef(localref);
+                env->DeleteLocalRef(localref);
+            }
         }
 
         void doUpdatePositionAsync(jlong frameNumber, jint left, jint top,
@@ -739,7 +779,7 @@ static const JNINativeMethod gMethods[] = {
         {"nSetOutlineEmpty", "(J)Z", (void*)android_view_RenderNode_setOutlineEmpty},
         {"nSetOutlineNone", "(J)Z", (void*)android_view_RenderNode_setOutlineNone},
         {"nClearStretch", "(J)Z", (void*)android_view_RenderNode_clearStretch},
-        {"nStretch", "(JFFFFFFFF)Z", (void*)android_view_RenderNode_stretch},
+        {"nStretch", "(JFFFF)Z", (void*)android_view_RenderNode_stretch},
         {"nHasShadow", "(J)Z", (void*)android_view_RenderNode_hasShadow},
         {"nSetSpotShadowColor", "(JI)Z", (void*)android_view_RenderNode_setSpotShadowColor},
         {"nGetSpotShadowColor", "(J)I", (void*)android_view_RenderNode_getSpotShadowColor},
@@ -814,7 +854,7 @@ int register_android_view_RenderNode(JNIEnv* env) {
     gPositionListener_PositionChangedMethod = GetMethodIDOrDie(env, clazz,
             "positionChanged", "(JIIII)V");
     gPositionListener_ApplyStretchMethod =
-            GetMethodIDOrDie(env, clazz, "applyStretch", "(JFFFFFFF)V");
+            GetMethodIDOrDie(env, clazz, "applyStretch", "(JFFFFFFFFFF)V");
     gPositionListener_PositionLostMethod = GetMethodIDOrDie(env, clazz,
             "positionLost", "(J)V");
     return RegisterMethodsOrDie(env, kClassPathName, gMethods, NELEM(gMethods));

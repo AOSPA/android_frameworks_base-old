@@ -349,7 +349,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
         private final HotwordDetectedResult mHotwordDetectedResult;
         private final ParcelFileDescriptor mAudioStream;
 
-        private EventPayload(boolean triggerAvailable, boolean captureAvailable,
+        EventPayload(boolean triggerAvailable, boolean captureAvailable,
                 AudioFormat audioFormat, int captureSession, byte[] data) {
             this(triggerAvailable, captureAvailable, audioFormat, captureSession, data, null,
                     null);
@@ -524,7 +524,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
          * @param result Info about the second stage detection result, provided by the
          *         {@link HotwordDetectionService}.
          */
-        public void onRejected(@Nullable HotwordRejectedResult result) {
+        public void onRejected(@NonNull HotwordRejectedResult result) {
         }
 
         /**
@@ -1164,7 +1164,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
         }
 
         @Override
-        public void onRejected(HotwordRejectedResult result) {
+        public void onRejected(@NonNull HotwordRejectedResult result) {
             if (DBG) {
                 Slog.d(TAG, "onRejected(" + result + ")");
             } else {

@@ -61,6 +61,7 @@ import java.util.ArrayList;
 @RunWith(JUnit4.class)
 /** Tests for {@link HdmiCecLocalDeviceTv} class. */
 public class HdmiCecLocalDeviceTvTest {
+    private static final int TIMEOUT_MS = HdmiConfig.TIMEOUT_MS + 1;
 
     private HdmiControlService mHdmiControlService;
     private HdmiCecController mHdmiCecController;
@@ -85,8 +86,6 @@ public class HdmiCecLocalDeviceTvTest {
 
         Context context = InstrumentationRegistry.getTargetContext();
         mMyLooper = mTestLooper.getLooper();
-        PowerManager powerManager = new PowerManager(context, mIPowerManagerMock,
-                mIThermalServiceMock, new Handler(mMyLooper));
 
         mHdmiControlService =
                 new HdmiControlService(InstrumentationRegistry.getTargetContext()) {
@@ -117,7 +116,8 @@ public class HdmiCecLocalDeviceTvTest {
 
                     @Override
                     protected PowerManager getPowerManager() {
-                        return powerManager;
+                        return new PowerManager(context, mIPowerManagerMock,
+                                mIThermalServiceMock, new Handler(mMyLooper));
                     }
 
                     @Override

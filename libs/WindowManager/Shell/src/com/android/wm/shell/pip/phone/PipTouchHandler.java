@@ -25,6 +25,7 @@ import static com.android.wm.shell.pip.PipBoundsState.STASH_TYPE_RIGHT;
 import static com.android.wm.shell.pip.phone.PhonePipMenuController.MENU_STATE_CLOSE;
 import static com.android.wm.shell.pip.phone.PhonePipMenuController.MENU_STATE_FULL;
 import static com.android.wm.shell.pip.phone.PhonePipMenuController.MENU_STATE_NONE;
+import static com.android.wm.shell.pip.phone.PipMenuView.ANIM_TYPE_NONE;
 
 import android.annotation.NonNull;
 import android.annotation.SuppressLint;
@@ -128,8 +129,13 @@ public class PipTouchHandler {
      */
     private class PipMenuListener implements PhonePipMenuController.Listener {
         @Override
-        public void onPipMenuStateChanged(int menuState, boolean resize, Runnable callback) {
-            setMenuState(menuState, resize, callback);
+        public void onPipMenuStateChangeStart(int menuState, boolean resize, Runnable callback) {
+            PipTouchHandler.this.onPipMenuStateChangeStart(menuState, resize, callback);
+        }
+
+        @Override
+        public void onPipMenuStateChangeFinish(int menuState) {
+            setMenuState(menuState);
         }
 
         @Override
@@ -613,7 +619,7 @@ public class PipTouchHandler {
             }
         }
 
-        shouldDeliverToMenu |= !mPipBoundsState.isStashed();
+        shouldDeliverToMenu &= !mPipBoundsState.isStashed();
 
         // Deliver the event to PipMenuActivity to handle button click if the menu has shown.
         if (shouldDeliverToMenu) {
@@ -645,9 +651,9 @@ public class PipTouchHandler {
     }
 
     /**
-     * Sets the menu visibility.
+     * Called when the PiP menu state is in the process of animating/changing from one to another.
      */
-    private void setMenuState(int menuState, boolean resize, Runnable callback) {
+    private void onPipMenuStateChangeStart(int menuState, boolean resize, Runnable callback) {
         if (mMenuState == menuState && !resize) {
             return;
         }
@@ -685,6 +691,9 @@ public class PipTouchHandler {
                 mSavedSnapFraction = -1f;
             }
         }
+    }
+
+    private void setMenuState(int menuState) {
         mMenuState = menuState;
         updateMovementBounds();
         // If pip menu has dismissed, we should register the A11y ActionReplacingConnection for pip
@@ -881,7 +890,7 @@ public class PipTouchHandler {
                             && mPipBoundsState.getBounds().height()
                             < mPipBoundsState.getMaxSize().y;
                     if (mMenuController.isMenuVisible()) {
-                        mMenuController.hideMenu(false /* animate */, false /* resize */);
+                        mMenuController.hideMenu(ANIM_TYPE_NONE, false /* resize */);
                     }
                     if (toExpand) {
                         mPipResizeGestureHandler.setUserResizeBounds(mPipBoundsState.getBounds());

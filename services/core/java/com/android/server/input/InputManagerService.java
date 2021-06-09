@@ -16,6 +16,8 @@
 
 package com.android.server.input;
 
+import static android.view.Surface.ROTATION_0;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
@@ -38,6 +40,7 @@ import android.content.res.Resources.NotFoundException;
 import android.content.res.TypedArray;
 import android.content.res.XmlResourceParser;
 import android.database.ContentObserver;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.hardware.display.DisplayViewport;
@@ -97,6 +100,7 @@ import android.view.InputDevice;
 import android.view.InputEvent;
 import android.view.InputMonitor;
 import android.view.KeyEvent;
+import android.view.MotionEvent;
 import android.view.PointerIcon;
 import android.view.Surface;
 import android.view.VerifiedInputEvent;
@@ -309,6 +313,7 @@ public class InputManagerService extends IInputManager.Stub
     private static native void nativeSetFocusedDisplay(long ptr, int displayId);
     private static native boolean nativeTransferTouchFocus(long ptr,
             IBinder fromChannelToken, IBinder toChannelToken, boolean isDragDrop);
+    private static native boolean nativeTransferTouch(long ptr, IBinder destChannelToken);
     private static native void nativeSetPointerSpeed(long ptr, int speed);
     private static native void nativeSetShowTouches(long ptr, boolean enabled);
     private static native void nativeSetInteractive(long ptr, boolean interactive);
@@ -672,6 +677,19 @@ public class InputManagerService extends IInputManager.Stub
     }
 
     /**
+     * Transfer the current touch gesture to the provided window.
+     *
+     * @param destChannelToken The token of the window or input channel that should receive the
+     * gesture
+     * @return True if the transfer succeeded, false if there was no active touch gesture happening
+     */
+    public boolean transferTouch(IBinder destChannelToken) {
+        // TODO(b/162194035): Replace this with a SPY window
+        Objects.requireNonNull(destChannelToken, "destChannelToken must not be null.");
+        return nativeTransferTouch(mPtr, destChannelToken);
+    }
+
+    /**
      * Creates an input channel that will receive all input from the input dispatcher.
      * @param inputChannelName The input channel name.
      * @param displayId Target display id.
@@ -819,6 +837,28 @@ public class InputManagerService extends IInputManager.Stub
                 && mode != InputEventInjectionSync.WAIT_FOR_FINISHED
                 && mode != InputEventInjectionSync.WAIT_FOR_RESULT) {
             throw new IllegalArgumentException("mode is invalid");
+        }
+        if (ENABLE_PER_WINDOW_INPUT_ROTATION) {
+            if (event instanceof MotionEvent) {
+                final Context dispCtx = getContextForDisplay(event.getDisplayId());
+                final Display display = dispCtx.getDisplay();
+                final int rotation = display.getRotation();
+                if (rotation != ROTATION_0) {
+                    final MotionEvent motion = (MotionEvent) event;
+                    // Injections are currently expected to be in the space of the injector (ie.
+                    // usually assumed to be post-rotated). Thus we need to unrotate into raw
+                    // input coordinates for dispatch.
+                    final Point sz = new Point();
+                    display.getRealSize(sz);
+                    if ((rotation % 2) != 0) {
+                        final int tmpX = sz.x;
+                        sz.x = sz.y;
+                        sz.y = tmpX;
+                    }
+                    motion.applyTransform(MotionEvent.createRotateMatrix(
+                            (4 - rotation), sz.x, sz.y));
+                }
+            }
         }
 
         final int pid = Binder.getCallingPid();

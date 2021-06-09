@@ -18,6 +18,8 @@ package com.android.wm.shell.pip.phone;
 
 import static android.view.WindowManager.SHELL_ROOT_LAYER_PIP;
 
+import static com.android.wm.shell.pip.phone.PipMenuView.ANIM_TYPE_HIDE;
+
 import android.annotation.Nullable;
 import android.app.RemoteAction;
 import android.content.Context;
@@ -68,12 +70,19 @@ public class PhonePipMenuController implements PipMenuController {
      */
     public interface Listener {
         /**
-         * Called when the PIP menu visibility changes.
+         * Called when the PIP menu visibility change has started.
          *
-         * @param menuState the current state of the menu
+         * @param menuState the new, about-to-change state of the menu
          * @param resize whether or not to resize the PiP with the state change
          */
-        void onPipMenuStateChanged(int menuState, boolean resize, Runnable callback);
+        void onPipMenuStateChangeStart(int menuState, boolean resize, Runnable callback);
+
+        /**
+         * Called when the PIP menu state has finished changing/animating.
+         *
+         * @param menuState the new state of the menu.
+         */
+        void onPipMenuStateChangeFinish(int menuState);
 
         /**
          * Called when the PIP requested to be expanded.
@@ -397,26 +406,26 @@ public class PhonePipMenuController implements PipMenuController {
      * Hides the menu view.
      */
     public void hideMenu() {
-        hideMenu(true /* animate */, true /* resize */);
+        hideMenu(ANIM_TYPE_HIDE, true /* resize */);
     }
 
     /**
      * Hides the menu view.
      *
-     * @param animate whether to animate the menu fadeout
+     * @param animationType the animation type to use upon hiding the menu
      * @param resize whether or not to resize the PiP with the state change
      */
-    public void hideMenu(boolean animate, boolean resize) {
+    public void hideMenu(@PipMenuView.AnimationType int animationType, boolean resize) {
         final boolean isMenuVisible = isMenuVisible();
         if (DEBUG) {
             Log.d(TAG, "hideMenu() state=" + mMenuState
                     + " isMenuVisible=" + isMenuVisible
-                    + " animate=" + animate
+                    + " animationType=" + animationType
                     + " resize=" + resize
                     + " callers=\n" + Debug.getCallers(5, "    "));
         }
         if (isMenuVisible) {
-            mPipMenuView.hideMenu(animate, resize);
+            mPipMenuView.hideMenu(resize, animationType);
         }
     }
 
@@ -483,15 +492,15 @@ public class PhonePipMenuController implements PipMenuController {
     /**
      * Handles changes in menu visibility.
      */
-    void onMenuStateChanged(int menuState, boolean resize, Runnable callback) {
+    void onMenuStateChangeStart(int menuState, boolean resize, Runnable callback) {
         if (DEBUG) {
-            Log.d(TAG, "onMenuStateChanged() mMenuState=" + mMenuState
+            Log.d(TAG, "onMenuStateChangeStart() mMenuState=" + mMenuState
                     + " menuState=" + menuState + " resize=" + resize
                     + " callers=\n" + Debug.getCallers(5, "    "));
         }
 
         if (menuState != mMenuState) {
-            mListeners.forEach(l -> l.onPipMenuStateChanged(menuState, resize, callback));
+            mListeners.forEach(l -> l.onPipMenuStateChangeStart(menuState, resize, callback));
             if (menuState == MENU_STATE_FULL) {
                 // Once visible, start listening for media action changes. This call will trigger
                 // the menu actions to be updated again.
@@ -508,6 +517,12 @@ public class PhonePipMenuController implements PipMenuController {
             } catch (RemoteException e) {
                 Log.e(TAG, "Unable to update focus as menu appears/disappears", e);
             }
+        }
+    }
+
+    void onMenuStateChangeFinish(int menuState) {
+        if (menuState != mMenuState) {
+            mListeners.forEach(l -> l.onPipMenuStateChangeFinish(menuState));
         }
         mMenuState = menuState;
     }

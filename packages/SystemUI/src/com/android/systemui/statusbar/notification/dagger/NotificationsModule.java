@@ -69,7 +69,6 @@ import com.android.systemui.statusbar.notification.logging.NotificationPanelLogg
 import com.android.systemui.statusbar.notification.row.ChannelEditorDialogController;
 import com.android.systemui.statusbar.notification.row.NotificationGutsManager;
 import com.android.systemui.statusbar.notification.row.OnUserInteractionCallback;
-import com.android.systemui.statusbar.notification.row.PriorityOnboardingDialogController;
 import com.android.systemui.statusbar.notification.stack.NotificationSectionsManager;
 import com.android.systemui.statusbar.notification.stack.StackScrollAlgorithm;
 import com.android.systemui.statusbar.phone.ShadeController;
@@ -80,8 +79,6 @@ import com.android.systemui.wmshell.BubblesManager;
 
 import java.util.Optional;
 import java.util.concurrent.Executor;
-
-import javax.inject.Provider;
 
 import dagger.Binds;
 import dagger.Lazy;
@@ -103,7 +100,7 @@ public interface NotificationsModule {
     static NotificationEntryManager provideNotificationEntryManager(
             NotificationEntryManagerLogger logger,
             NotificationGroupManagerLegacy groupManager,
-            NotificationRankingManager rankingManager,
+            Lazy<NotificationRankingManager> rankingManager,
             NotificationEntryManager.KeyguardEnvironment keyguardEnvironment,
             FeatureFlags featureFlags,
             Lazy<NotificationRowBinder> notificationRowBinderLazy,
@@ -141,7 +138,6 @@ public interface NotificationsModule {
             ShortcutManager shortcutManager,
             ChannelEditorDialogController channelEditorDialogController,
             UserContextProvider contextTracker,
-            Provider<PriorityOnboardingDialogController.Builder> builderProvider,
             AssistantFeedbackController assistantFeedbackController,
             Optional<BubblesManager> bubblesManagerOptional,
             UiEventLogger uiEventLogger,
@@ -161,7 +157,6 @@ public interface NotificationsModule {
                 shortcutManager,
                 channelEditorDialogController,
                 contextTracker,
-                builderProvider,
                 assistantFeedbackController,
                 bubblesManagerOptional,
                 uiEventLogger,

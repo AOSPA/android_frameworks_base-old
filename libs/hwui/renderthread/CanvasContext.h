@@ -58,12 +58,6 @@ class RenderState;
 
 namespace renderthread {
 
-enum {
-    DEFAULT_MODE = -1,
-    AUTO_TIME_MODE = 0,
-    SET_CURRENT_TIME_MODE = 1
-};
-
 class Frame;
 
 // This per-renderer class manages the bridge between the global EGL context
@@ -133,7 +127,8 @@ public:
     void setColorMode(ColorMode mode);
     bool makeCurrent();
     void prepareTree(TreeInfo& info, int64_t* uiFrameInfo, int64_t syncQueued, RenderNode* target);
-    void draw();
+    // Returns the DequeueBufferDuration.
+    nsecs_t draw();
     void destroy();
 
     // IFrameCallback, Choreographer-driven frame callback entry point

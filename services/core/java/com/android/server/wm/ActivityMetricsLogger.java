@@ -81,6 +81,7 @@ import android.content.pm.dex.ArtManagerInternal;
 import android.content.pm.dex.PackageOptimizationInfo;
 import android.metrics.LogMaker;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.os.Trace;
@@ -94,9 +95,9 @@ import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.os.BackgroundThread;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.util.function.pooled.PooledLambda;
+import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.apphibernation.AppHibernationManagerInternal;
 import com.android.server.apphibernation.AppHibernationService;
@@ -152,6 +153,7 @@ class ActivityMetricsLogger {
     private long mLastLogTimeSecs;
     private final ActivityTaskSupervisor mSupervisor;
     private final MetricsLogger mMetricsLogger = new MetricsLogger();
+    private final Handler mLoggerHandler = FgThread.getHandler();
 
     /** All active transitions. */
     private final ArrayList<TransitionInfo> mTransitionInfoList = new ArrayList<>();
@@ -252,13 +254,14 @@ class ActivityMetricsLogger {
         @Nullable
         static TransitionInfo create(@NonNull ActivityRecord r,
                 @NonNull LaunchingState launchingState, @Nullable ActivityOptions options,
-                boolean processRunning, boolean processSwitch, int startResult) {
+                boolean processRunning, boolean processSwitch, boolean newActivityCreated,
+                int startResult) {
             if (startResult != START_SUCCESS && startResult != START_TASK_TO_FRONT) {
                 return null;
             }
             final int transitionType;
             if (processRunning) {
-                transitionType = r.attachedToProcess()
+                transitionType = !newActivityCreated && r.attachedToProcess()
                         ? TYPE_TRANSITION_HOT_LAUNCH
                         : TYPE_TRANSITION_WARM_LAUNCH;
             } else {
@@ -565,10 +568,12 @@ class ActivityMetricsLogger {
      * @param resultCode One of the {@link android.app.ActivityManager}.START_* flags, indicating
      *                   the result of the launch.
      * @param launchedActivity The activity that is being launched
+     * @param newActivityCreated Whether a new activity instance is created.
      * @param options The given options of the launching activity.
      */
     void notifyActivityLaunched(@NonNull LaunchingState launchingState, int resultCode,
-            @Nullable ActivityRecord launchedActivity, @Nullable ActivityOptions options) {
+            boolean newActivityCreated, @Nullable ActivityRecord launchedActivity,
+            @Nullable ActivityOptions options) {
         if (launchedActivity == null) {
             // The launch is aborted, e.g. intent not resolved, class not found.
             abort(null /* info */, "nothing launched");
@@ -592,7 +597,8 @@ class ActivityMetricsLogger {
         if (DEBUG_METRICS) {
             Slog.i(TAG, "notifyActivityLaunched" + " resultCode=" + resultCode
                     + " launchedActivity=" + launchedActivity + " processRunning=" + processRunning
-                    + " processSwitch=" + processSwitch + " info=" + info);
+                    + " processSwitch=" + processSwitch
+                    + " newActivityCreated=" + newActivityCreated + " info=" + info);
         }
 
         if (launchedActivity.isReportedDrawn() && launchedActivity.isVisible()) {
@@ -613,7 +619,7 @@ class ActivityMetricsLogger {
         }
 
         final TransitionInfo newInfo = TransitionInfo.create(launchedActivity, launchingState,
-                options, processRunning, processSwitch, resultCode);
+                options, processRunning, processSwitch, newActivityCreated, resultCode);
         if (newInfo == null) {
             abort(info, "unrecognized launch");
             return;
@@ -900,11 +906,11 @@ class ActivityMetricsLogger {
         // This will avoid any races with other operations that modify the ActivityRecord.
         final TransitionInfoSnapshot infoSnapshot = new TransitionInfoSnapshot(info);
         if (info.isInterestingToLoggerAndObserver()) {
-            BackgroundThread.getHandler().post(() -> logAppTransition(
+            mLoggerHandler.post(() -> logAppTransition(
                     info.mCurrentTransitionDeviceUptime, info.mCurrentTransitionDelayMs,
                     infoSnapshot, isHibernating));
         }
-        BackgroundThread.getHandler().post(() -> logAppDisplayed(infoSnapshot));
+        mLoggerHandler.post(() -> logAppDisplayed(infoSnapshot));
         if (info.mPendingFullyDrawn != null) {
             info.mPendingFullyDrawn.run();
         }
@@ -912,7 +918,7 @@ class ActivityMetricsLogger {
         info.mLastLaunchedActivity.info.launchToken = null;
     }
 
-    // This gets called on a background thread without holding the activity manager lock.
+    // This gets called on another thread without holding the activity manager lock.
     private void logAppTransition(int currentTransitionDeviceUptime, int currentTransitionDelayMs,
             TransitionInfoSnapshot info, boolean isHibernating) {
         final LogMaker builder = new LogMaker(APP_TRANSITION);
@@ -1066,7 +1072,7 @@ class ActivityMetricsLogger {
                 : TimeUnit.NANOSECONDS.toMillis(currentTimestampNs - info.mTransitionStartTimeNs);
         final TransitionInfoSnapshot infoSnapshot =
                 new TransitionInfoSnapshot(info, r, (int) startupTimeMs);
-        BackgroundThread.getHandler().post(() -> logAppFullyDrawn(infoSnapshot));
+        mLoggerHandler.post(() -> logAppFullyDrawn(infoSnapshot));
         mLastTransitionInfo.remove(r);
 
         if (!info.isInterestingToLoggerAndObserver()) {

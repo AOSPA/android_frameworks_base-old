@@ -2022,12 +2022,9 @@ public class Intent implements Parcelable, Cloneable {
      * <p>
      * Output: Nothing.
      * </p>
-     *
-     * @hide
      */
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @RequiresPermission(android.Manifest.permission.START_VIEW_PERMISSION_USAGE)
-    @SystemApi
     public static final String ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD =
             "android.intent.action.VIEW_PERMISSION_USAGE_FOR_PERIOD";
 
@@ -2188,10 +2185,7 @@ public class Intent implements Parcelable, Cloneable {
      * <p>
      * Type: String
      * </p>
-     *
-     * @hide
      */
-    @SystemApi
     public static final String EXTRA_PERMISSION_GROUP_NAME =
             "android.intent.extra.PERMISSION_GROUP_NAME";
 
@@ -5351,27 +5345,20 @@ public class Intent implements Parcelable, Cloneable {
      * A String[] holding attribution tags when used with
      * {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
      *
-     * @hide
+     * E.g. an attribution tag could be location_provider, com.google.android.gms.*, etc.
      */
-    @SystemApi
     public static final String EXTRA_ATTRIBUTION_TAGS = "android.intent.extra.ATTRIBUTION_TAGS";
 
     /**
      * A long representing the start timestamp (epoch time in millis) of the permission usage
      * when used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
-     *
-     * @hide
      */
-    @SystemApi
     public static final String EXTRA_START_TIME = "android.intent.extra.START_TIME";
 
     /**
      * A long representing the end timestamp (epoch time in millis) of the permission usage when
      * used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
-     *
-     * @hide
      */
-    @SystemApi
     public static final String EXTRA_END_TIME = "android.intent.extra.END_TIME";
 
     /**
@@ -6405,7 +6392,9 @@ public class Intent implements Parcelable, Cloneable {
     public static final int FLAG_ACTIVITY_NO_HISTORY = 0x40000000;
     /**
      * If set, the activity will not be launched if it is already running
-     * at the top of the history stack.
+     * at the top of the history stack.  See
+     * <a href="{@docRoot}guide/topics/fundamentals/tasks-and-back-stack.html#TaskLaunchModes">
+     * Tasks and Back Stack</a> for more information.
      */
     public static final int FLAG_ACTIVITY_SINGLE_TOP = 0x20000000;
     /**
@@ -6545,8 +6534,7 @@ public class Intent implements Parcelable, Cloneable {
     public static final int FLAG_ACTIVITY_RESET_TASK_IF_NEEDED = 0x00200000;
     /**
      * This flag is not normally set by application code, but set for you by
-     * the system if this activity is being launched from history
-     * (longpress home key).
+     * the system if this activity is being launched from history.
      */
     public static final int FLAG_ACTIVITY_LAUNCHED_FROM_HISTORY = 0x00100000;
     /**
@@ -6579,7 +6567,9 @@ public class Intent implements Parcelable, Cloneable {
      * equivalent of the Activity manifest specifying {@link
      * android.R.attr#documentLaunchMode}="intoExisting". When used with
      * FLAG_ACTIVITY_MULTIPLE_TASK it is the equivalent of the Activity manifest specifying
-     * {@link android.R.attr#documentLaunchMode}="always".
+     * {@link android.R.attr#documentLaunchMode}="always". The flag is ignored even in
+     * conjunction with {@link #FLAG_ACTIVITY_MULTIPLE_TASK} when the Activity manifest specifies
+     * {@link android.R.attr#documentLaunchMode}="never".
      *
      * Refer to {@link android.R.attr#documentLaunchMode} for more information.
      *

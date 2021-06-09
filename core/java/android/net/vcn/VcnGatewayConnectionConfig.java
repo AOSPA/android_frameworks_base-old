@@ -15,6 +15,8 @@
  */
 package android.net.vcn;
 
+import static android.net.ipsec.ike.IkeSessionParams.IKE_OPTION_MOBIKE;
+
 import static com.android.internal.annotations.VisibleForTesting.Visibility;
 
 import android.annotation.IntDef;
@@ -24,7 +26,7 @@ import android.annotation.Nullable;
 import android.annotation.SuppressLint;
 import android.net.Network;
 import android.net.NetworkCapabilities;
-import android.net.TunnelConnectionParams;
+import android.net.ipsec.ike.IkeTunnelConnectionParams;
 import android.net.vcn.persistablebundleutils.TunnelConnectionParamsUtils;
 import android.os.PersistableBundle;
 import android.util.ArraySet;
@@ -141,7 +143,7 @@ public final class VcnGatewayConnectionConfig {
      * <p>To ensure the device is not constantly being woken up, this retry interval MUST be greater
      * than this value.
      *
-     * @see {@link Builder#setRetryIntervalsMs()}
+     * @see {@link Builder#setRetryIntervalsMillis()}
      */
     private static final long MINIMUM_REPEATING_RETRY_INTERVAL_MS = TimeUnit.MINUTES.toMillis(15);
 
@@ -159,7 +161,7 @@ public final class VcnGatewayConnectionConfig {
     @NonNull private final String mGatewayConnectionName;
 
     private static final String TUNNEL_CONNECTION_PARAMS_KEY = "mTunnelConnectionParams";
-    @NonNull private TunnelConnectionParams mTunnelConnectionParams;
+    @NonNull private IkeTunnelConnectionParams mTunnelConnectionParams;
 
     private static final String EXPOSED_CAPABILITIES_KEY = "mExposedCapabilities";
     @NonNull private final SortedSet<Integer> mExposedCapabilities;
@@ -176,7 +178,7 @@ public final class VcnGatewayConnectionConfig {
     /** Builds a VcnGatewayConnectionConfig with the specified parameters. */
     private VcnGatewayConnectionConfig(
             @NonNull String gatewayConnectionName,
-            @NonNull TunnelConnectionParams tunnelConnectionParams,
+            @NonNull IkeTunnelConnectionParams tunnelConnectionParams,
             @NonNull Set<Integer> exposedCapabilities,
             @NonNull Set<Integer> underlyingCapabilities,
             @NonNull long[] retryIntervalsMs,
@@ -276,7 +278,7 @@ public final class VcnGatewayConnectionConfig {
      * @hide
      */
     @NonNull
-    public TunnelConnectionParams getTunnelConnectionParams() {
+    public IkeTunnelConnectionParams getTunnelConnectionParams() {
         return mTunnelConnectionParams;
     }
 
@@ -342,10 +344,10 @@ public final class VcnGatewayConnectionConfig {
     /**
      * Retrieves the configured retry intervals.
      *
-     * @see Builder#setRetryIntervalsMs(long[])
+     * @see Builder#setRetryIntervalsMillis(long[])
      */
     @NonNull
-    public long[] getRetryIntervalsMs() {
+    public long[] getRetryIntervalsMillis() {
         return Arrays.copyOf(mRetryIntervalsMs, mRetryIntervalsMs.length);
     }
 
@@ -419,7 +421,7 @@ public final class VcnGatewayConnectionConfig {
      */
     public static final class Builder {
         @NonNull private final String mGatewayConnectionName;
-        @NonNull private final TunnelConnectionParams mTunnelConnectionParams;
+        @NonNull private final IkeTunnelConnectionParams mTunnelConnectionParams;
         @NonNull private final Set<Integer> mExposedCapabilities = new ArraySet();
         @NonNull private final Set<Integer> mUnderlyingCapabilities = new ArraySet();
         @NonNull private long[] mRetryIntervalsMs = DEFAULT_RETRY_INTERVALS_MS;
@@ -437,15 +439,21 @@ public final class VcnGatewayConnectionConfig {
          *     VcnConfig} must be given a unique name. This name is used by the caller to
          *     distinguish between VcnGatewayConnectionConfigs configured on a single {@link
          *     VcnConfig}. This will be used as the identifier in VcnStatusCallback invocations.
-         * @param tunnelConnectionParams the tunnel connection configuration
-         * @see TunnelConnectionParams
+         * @param tunnelConnectionParams the IKE tunnel connection configuration
+         * @throws IllegalArgumentException if the provided IkeTunnelConnectionParams is not
+         *     configured to support MOBIKE
+         * @see IkeTunnelConnectionParams
          * @see VcnManager.VcnStatusCallback#onGatewayConnectionError
          */
         public Builder(
                 @NonNull String gatewayConnectionName,
-                @NonNull TunnelConnectionParams tunnelConnectionParams) {
+                @NonNull IkeTunnelConnectionParams tunnelConnectionParams) {
             Objects.requireNonNull(gatewayConnectionName, "gatewayConnectionName was null");
             Objects.requireNonNull(tunnelConnectionParams, "tunnelConnectionParams was null");
+            if (!tunnelConnectionParams.getIkeSessionParams().hasIkeOption(IKE_OPTION_MOBIKE)) {
+                throw new IllegalArgumentException(
+                        "MOBIKE must be configured for the provided IkeSessionParams");
+            }
 
             mGatewayConnectionName = gatewayConnectionName;
             mTunnelConnectionParams = tunnelConnectionParams;
@@ -555,7 +563,7 @@ public final class VcnGatewayConnectionConfig {
          * @see VcnManager for additional discussion on fail-safe mode
          */
         @NonNull
-        public Builder setRetryIntervalsMs(@NonNull long[] retryIntervalsMs) {
+        public Builder setRetryIntervalsMillis(@NonNull long[] retryIntervalsMs) {
             validateRetryInterval(retryIntervalsMs);
 
             mRetryIntervalsMs = retryIntervalsMs;

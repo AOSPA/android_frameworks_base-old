@@ -200,6 +200,8 @@ public interface ParsingPackage extends ParsingPackageRead {
 
     ParsingPackage setProfileableByShell(boolean profileableByShell);
 
+    ParsingPackage setProfileable(boolean profileable);
+
     ParsingPackage setRequestLegacyExternalStorage(boolean requestLegacyExternalStorage);
 
     ParsingPackage setAllowNativeHeapPointerTagging(boolean allowNativeHeapPointerTagging);
@@ -335,6 +337,8 @@ public interface ParsingPackage extends ParsingPackageRead {
     ParsingPackage setTargetSandboxVersion(int targetSandboxVersion);
 
     ParsingPackage setTheme(int theme);
+
+    ParsingPackage setRequestForegroundServiceExemption(boolean requestForegroundServiceExemption);
 
     ParsingPackage setUpgradeKeySets(@NonNull Set<String> upgradeKeySets);
 

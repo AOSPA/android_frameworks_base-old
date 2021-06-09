@@ -19,8 +19,14 @@ package android.app.appsearch;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.UserIdInt;
+import android.app.appsearch.aidl.AppSearchBatchResultParcel;
+import android.app.appsearch.aidl.AppSearchResultParcel;
+import android.app.appsearch.aidl.IAppSearchBatchResultCallback;
+import android.app.appsearch.aidl.IAppSearchManager;
+import android.app.appsearch.aidl.IAppSearchResultCallback;
 import android.app.appsearch.exceptions.AppSearchException;
 import android.app.appsearch.util.SchemaMigrationUtil;
+import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.SystemClock;
@@ -28,7 +34,6 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
 
-import com.android.internal.infra.AndroidFuture;
 import com.android.internal.util.Preconditions;
 
 import java.io.Closeable;
@@ -37,6 +42,7 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -85,13 +91,15 @@ public final class AppSearchSession implements Closeable {
             @NonNull Consumer<AppSearchResult<AppSearchSession>> callback) {
         try {
             mService.initialize(mUserId, new IAppSearchResultCallback.Stub() {
-                public void onResult(AppSearchResult result) {
+                @Override
+                public void onResult(AppSearchResultParcel resultParcel) {
                     executor.execute(() -> {
+                        AppSearchResult<Void> result = resultParcel.getResult();
                         if (result.isSuccess()) {
                             callback.accept(
                                     AppSearchResult.newSuccessfulResult(AppSearchSession.this));
                         } else {
-                            callback.accept(result);
+                            callback.accept(AppSearchResult.newFailedResult(result));
                         }
                     });
                 }
@@ -190,15 +198,16 @@ public final class AppSearchSession implements Closeable {
                     mDatabaseName,
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
-                        public void onResult(AppSearchResult result) {
+                        @Override
+                        public void onResult(AppSearchResultParcel resultParcel) {
                             executor.execute(() -> {
+                                AppSearchResult<Bundle> result = resultParcel.getResult();
                                 if (result.isSuccess()) {
-                                    Bundle responseBundle = (Bundle) result.getResultValue();
                                     GetSchemaResponse response =
-                                            new GetSchemaResponse(responseBundle);
+                                            new GetSchemaResponse(result.getResultValue());
                                     callback.accept(AppSearchResult.newSuccessfulResult(response));
                                 } else {
-                                    callback.accept(result);
+                                    callback.accept(AppSearchResult.newFailedResult(result));
                                 }
                             });
                         }
@@ -226,15 +235,17 @@ public final class AppSearchSession implements Closeable {
                     mDatabaseName,
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
-                        public void onResult(AppSearchResult result) {
+                        @Override
+                        public void onResult(AppSearchResultParcel resultParcel) {
                             executor.execute(() -> {
+                                AppSearchResult<List<String>> result = resultParcel.getResult();
                                 if (result.isSuccess()) {
                                     Set<String> namespaces =
-                                            new ArraySet<>((List<String>) result.getResultValue());
+                                            new ArraySet<>(result.getResultValue());
                                     callback.accept(
                                             AppSearchResult.newSuccessfulResult(namespaces));
                                 } else {
-                                    callback.accept(result);
+                                    callback.accept(AppSearchResult.newFailedResult(result));
                                 }
                             });
                         }
@@ -279,19 +290,33 @@ public final class AppSearchSession implements Closeable {
                     /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
                     new IAppSearchBatchResultCallback.Stub() {
                         @Override
-                        public void onResult(AppSearchBatchResult result) {
-                            executor.execute(() -> callback.onResult(result));
+                        public void onResult(AppSearchBatchResultParcel resultParcel) {
+                            executor.execute(() -> callback.onResult(resultParcel.getResult()));
                         }
 
                         @Override
-                        public void onSystemError(AppSearchResult result) {
-                            executor.execute(() -> sendSystemErrorToCallback(result, callback));
+                        public void onSystemError(AppSearchResultParcel resultParcel) {
+                            executor.execute(() -> sendSystemErrorToCallback(
+                                    resultParcel.getResult(), callback));
                         }
                     });
             mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * @deprecated TODO(b/181887768): Exists for dogfood transition; must be removed.
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage
+    public void getByUri(
+            @NonNull GetByUriRequest request,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull BatchResultCallback<String, GenericDocument> callback) {
+        getByDocumentId(request.toGetByDocumentIdRequest(), executor, callback);
     }
 
     /**
@@ -327,15 +352,17 @@ public final class AppSearchSession implements Closeable {
                     mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         @Override
-                        public void onResult(AppSearchBatchResult result) {
+                        public void onResult(AppSearchBatchResultParcel resultParcel) {
                             executor.execute(() -> {
+                                AppSearchBatchResult<String, Bundle> result =
+                                        resultParcel.getResult();
                                 AppSearchBatchResult.Builder<String, GenericDocument>
                                         documentResultBuilder =
                                         new AppSearchBatchResult.Builder<>();
 
                                 // Translate successful results
                                 for (Map.Entry<String, Bundle> bundleEntry :
-                                        ((Map<String, Bundle>) result.getSuccesses()).entrySet()) {
+                                        result.getSuccesses().entrySet()) {
                                     GenericDocument document;
                                     try {
                                         document = new GenericDocument(bundleEntry.getValue());
@@ -366,8 +393,9 @@ public final class AppSearchSession implements Closeable {
                         }
 
                         @Override
-                        public void onSystemError(AppSearchResult result) {
-                            executor.execute(() -> sendSystemErrorToCallback(result, callback));
+                        public void onSystemError(AppSearchResultParcel result) {
+                            executor.execute(
+                                    () -> sendSystemErrorToCallback(result.getResult(), callback));
                         }
                     });
         } catch (RemoteException e) {
@@ -478,14 +506,28 @@ public final class AppSearchSession implements Closeable {
                     /*systemUsage=*/ false,
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
-                        public void onResult(AppSearchResult result) {
-                            executor.execute(() -> callback.accept(result));
+                        @Override
+                        public void onResult(AppSearchResultParcel resultParcel) {
+                            executor.execute(() -> callback.accept(resultParcel.getResult()));
                         }
                     });
             mIsMutated = true;
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * @deprecated TODO(b/181887768): Exists for dogfood transition; must be removed.
+     * @hide
+     */
+    @Deprecated
+    @UnsupportedAppUsage
+    public void remove(
+            @NonNull RemoveByUriRequest request,
+            @NonNull @CallbackExecutor Executor executor,
+            @NonNull BatchResultCallback<String, Void> callback) {
+        remove(request.toRemoveByDocumentIdRequest(), executor, callback);
     }
 
     /**
@@ -523,13 +565,14 @@ public final class AppSearchSession implements Closeable {
                     new ArrayList<>(request.getIds()), mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         @Override
-                        public void onResult(AppSearchBatchResult result) {
-                            executor.execute(() -> callback.onResult(result));
+                        public void onResult(AppSearchBatchResultParcel resultParcel) {
+                            executor.execute(() -> callback.onResult(resultParcel.getResult()));
                         }
 
                         @Override
-                        public void onSystemError(AppSearchResult result) {
-                            executor.execute(() -> sendSystemErrorToCallback(result, callback));
+                        public void onSystemError(AppSearchResultParcel resultParcel) {
+                            executor.execute(() -> sendSystemErrorToCallback(
+                                    resultParcel.getResult(), callback));
                         }
                     });
             mIsMutated = true;
@@ -571,8 +614,9 @@ public final class AppSearchSession implements Closeable {
             mService.removeByQuery(mPackageName, mDatabaseName, queryExpression,
                     searchSpec.getBundle(), mUserId,
                     new IAppSearchResultCallback.Stub() {
-                        public void onResult(AppSearchResult result) {
-                            executor.execute(() -> callback.accept(result));
+                        @Override
+                        public void onResult(AppSearchResultParcel resultParcel) {
+                            executor.execute(() -> callback.accept(resultParcel.getResult()));
                         }
                     });
             mIsMutated = true;
@@ -602,15 +646,15 @@ public final class AppSearchSession implements Closeable {
                     mDatabaseName,
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
-                        public void onResult(AppSearchResult result) {
+                        @Override
+                        public void onResult(AppSearchResultParcel resultParcel) {
                             executor.execute(() -> {
+                                AppSearchResult<Bundle> result = resultParcel.getResult();
                                 if (result.isSuccess()) {
-                                    Bundle responseBundle = (Bundle) result.getResultValue();
-                                    StorageInfo response =
-                                            new StorageInfo(responseBundle);
+                                    StorageInfo response = new StorageInfo(result.getResultValue());
                                     callback.accept(AppSearchResult.newSuccessfulResult(response));
                                 } else {
-                                    callback.accept(result);
+                                    callback.accept(AppSearchResult.newFailedResult(result));
                                 }
                             });
                         }
@@ -659,13 +703,14 @@ public final class AppSearchSession implements Closeable {
                     request.getVersion(),
                     mUserId,
                     new IAppSearchResultCallback.Stub() {
-                        public void onResult(AppSearchResult result) {
+                        @Override
+                        public void onResult(AppSearchResultParcel resultParcel) {
                             executor.execute(() -> {
+                                AppSearchResult<Bundle> result = resultParcel.getResult();
                                 if (result.isSuccess()) {
                                     try {
                                         SetSchemaResponse setSchemaResponse =
-                                                new SetSchemaResponse(
-                                                        (Bundle) result.getResultValue());
+                                                new SetSchemaResponse(result.getResultValue());
                                         if (!request.isForceOverride()) {
                                             // Throw exception if there is any deleted types or
                                             // incompatible types. That's the only case we swallowed
@@ -680,7 +725,7 @@ public final class AppSearchSession implements Closeable {
                                         callback.accept(AppSearchResult.throwableToFailedResult(t));
                                     }
                                 } else {
-                                    callback.accept(result);
+                                    callback.accept(AppSearchResult.newFailedResult(result));
                                 }
                             });
                         }
@@ -708,8 +753,8 @@ public final class AppSearchSession implements Closeable {
             try {
                 // Migration process
                 // 1. Validate and retrieve all active migrators.
-                AndroidFuture<AppSearchResult<GetSchemaResponse>> getSchemaFuture =
-                        new AndroidFuture<>();
+                CompletableFuture<AppSearchResult<GetSchemaResponse>> getSchemaFuture =
+                        new CompletableFuture<>();
                 getSchema(callbackExecutor, getSchemaFuture::complete);
                 AppSearchResult<GetSchemaResponse> getSchemaResult = getSchemaFuture.get();
                 if (!getSchemaResult.isSuccess()) {
@@ -733,7 +778,8 @@ public final class AppSearchSession implements Closeable {
 
                 // 2. SetSchema with forceOverride=false, to retrieve the list of
                 // incompatible/deleted types.
-                AndroidFuture<AppSearchResult<Bundle>> setSchemaFuture = new AndroidFuture<>();
+                CompletableFuture<AppSearchResult<Bundle>> setSchemaFuture =
+                        new CompletableFuture<>();
                 mService.setSchema(
                         mPackageName,
                         mDatabaseName,
@@ -744,8 +790,9 @@ public final class AppSearchSession implements Closeable {
                         request.getVersion(),
                         mUserId,
                         new IAppSearchResultCallback.Stub() {
-                            public void onResult(AppSearchResult result) {
-                                setSchemaFuture.complete(result);
+                            @Override
+                            public void onResult(AppSearchResultParcel resultParcel) {
+                                setSchemaFuture.complete(resultParcel.getResult());
                             }
                         });
                 AppSearchResult<Bundle> setSchemaResult = setSchemaFuture.get();
@@ -781,8 +828,8 @@ public final class AppSearchSession implements Closeable {
                     // failed.
                     if (!setSchemaResponse.getIncompatibleTypes().isEmpty()
                             || !setSchemaResponse.getDeletedTypes().isEmpty()) {
-                        AndroidFuture<AppSearchResult<Bundle>> setSchema2Future =
-                                new AndroidFuture<>();
+                        CompletableFuture<AppSearchResult<Bundle>> setSchema2Future =
+                                new CompletableFuture<>();
                         // only trigger second setSchema() call if the first one is fail.
                         mService.setSchema(
                                 mPackageName,
@@ -795,8 +842,8 @@ public final class AppSearchSession implements Closeable {
                                 mUserId,
                                 new IAppSearchResultCallback.Stub() {
                                     @Override
-                                    public void onResult(AppSearchResult result) {
-                                        setSchema2Future.complete(result);
+                                    public void onResult(AppSearchResultParcel resultParcel) {
+                                        setSchema2Future.complete(resultParcel.getResult());
                                     }
                                 });
                         AppSearchResult<Bundle> setSchema2Result = setSchema2Future.get();

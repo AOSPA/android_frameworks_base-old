@@ -246,7 +246,7 @@
     <string name="global_action_lock" msgid="6949357274257655383">"स्क्रिन बन्द"</string>
     <string name="global_action_power_off" msgid="4404936470711393203">"बन्द गर्नुहोस्"</string>
     <string name="global_action_power_options" msgid="1185286119330160073">"पावर"</string>
-    <string name="global_action_restart" msgid="4678451019561687074">"पुनः सुरु गर्नुहोस्"</string>
+    <string name="global_action_restart" msgid="4678451019561687074">"रिस्टार्ट गर्नुहोस्"</string>
     <string name="global_action_emergency" msgid="1387617624177105088">"आपत्‌कालीन"</string>
     <string name="global_action_bug_report" msgid="5127867163044170003">"बग रिपोर्ट"</string>
     <string name="global_action_logout" msgid="6093581310002476511">"सत्रको अन्त्य गर्नुहोस्"</string>
@@ -1022,7 +1022,8 @@
     <string name="text_copied" msgid="2531420577879738860">"क्लिपबोर्डमा प्रतिलिप गरिएको पाठ।"</string>
     <string name="copied" msgid="4675902854553014676">"प्रतिलिपि गरियो"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g> मा रहेको डेटा कपी गरी <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> मा पेस्ट गरियो"</string>
-    <string name="pasted_from_clipboard" msgid="6295556725844421812">"क्लिपबोर्डमा रहेको डेटा कपी गरी <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> मा पेस्ट गरियो"</string>
+    <!-- no translation found for pasted_from_clipboard (7355790625710831847) -->
+    <skip />
     <string name="pasted_text" msgid="4298871641549173733">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> ले तपाईंले कपी गरेको टेक्स्ट पेस्ट गरेको छ"</string>
     <string name="pasted_image" msgid="4729097394781491022">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> ले तपाईंले कपी गरेको एउटा फोटो पेस्ट गरेको छ"</string>
     <string name="pasted_content" msgid="646276353060777131">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> ले तपाईंले कपी गरेको सामग्री पेस्ट गरेको छ"</string>
@@ -1259,6 +1260,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> तयारी गर्दै।"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"सुरुवात एपहरू।"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"बुट पुरा हुँदै।"</string>
+    <!-- no translation found for fp_enrollment_powerbutton_intent_title (3385634173366119903) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_message (6582149052513682522) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_positive_button (5963520983910436791) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_negative_button (6465764183480190748) -->
+    <skip />
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> चलिरहेको छ"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"खेलमा फर्कन ट्याप गर्नुहोस्"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"खेल छनौट गर्नुहोस्‌"</string>
@@ -1709,6 +1718,8 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"सर्टकट प्रयोग गर्नुहोस्"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"रङ्ग उल्टाउने सुविधा"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"रङ्ग सच्याउने सुविधा"</string>
+    <!-- no translation found for one_handed_mode_feature_name (2334330034828094891) -->
+    <skip />
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"अझै मधुरो"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"तपाईंले भोल्युम बटनहरू थिचिराख्नुभयो। <xliff:g id="SERVICE_NAME">%1$s</xliff:g> अन भयो।"</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"तपाईंले भोल्युम बटनहरू थिचिराख्नुभयो। <xliff:g id="SERVICE_NAME">%1$s</xliff:g> अफ भयो।"</string>
@@ -1773,28 +1784,17 @@
     <string name="mediasize_na_monarch" msgid="4396943937986136896">"मोनार्क"</string>
     <string name="mediasize_na_quarto" msgid="2119101847712239885">"क्वार्टो"</string>
     <string name="mediasize_na_foolscap" msgid="5011612828564394648">"फुलस्केप"</string>
-    <!-- no translation found for mediasize_na_ansi_c (3104916921818289618) -->
-    <skip />
-    <!-- no translation found for mediasize_na_ansi_d (254005964819282724) -->
-    <skip />
-    <!-- no translation found for mediasize_na_ansi_e (4424174989686785675) -->
-    <skip />
-    <!-- no translation found for mediasize_na_ansi_f (146980362213260987) -->
-    <skip />
-    <!-- no translation found for mediasize_na_arch_a (5280681822380032361) -->
-    <skip />
-    <!-- no translation found for mediasize_na_arch_b (2113344093437297427) -->
-    <skip />
-    <!-- no translation found for mediasize_na_arch_c (971002546186856623) -->
-    <skip />
-    <!-- no translation found for mediasize_na_arch_d (6450996075335049806) -->
-    <skip />
-    <!-- no translation found for mediasize_na_arch_e (6782708486949266519) -->
-    <skip />
-    <!-- no translation found for mediasize_na_arch_e1 (4707138568738504275) -->
-    <skip />
-    <!-- no translation found for mediasize_na_super_b (6964127155618393178) -->
-    <skip />
+    <string name="mediasize_na_ansi_c" msgid="3104916921818289618">"ANSI C"</string>
+    <string name="mediasize_na_ansi_d" msgid="254005964819282724">"ANSI D"</string>
+    <string name="mediasize_na_ansi_e" msgid="4424174989686785675">"ANSI E"</string>
+    <string name="mediasize_na_ansi_f" msgid="146980362213260987">"ANSI F"</string>
+    <string name="mediasize_na_arch_a" msgid="5280681822380032361">"Arch A"</string>
+    <string name="mediasize_na_arch_b" msgid="2113344093437297427">"Arch B"</string>
+    <string name="mediasize_na_arch_c" msgid="971002546186856623">"Arch C"</string>
+    <string name="mediasize_na_arch_d" msgid="6450996075335049806">"Arch D"</string>
+    <string name="mediasize_na_arch_e" msgid="6782708486949266519">"Arch E"</string>
+    <string name="mediasize_na_arch_e1" msgid="4707138568738504275">"Arch E1"</string>
+    <string name="mediasize_na_super_b" msgid="6964127155618393178">"Super-B"</string>
     <string name="mediasize_chinese_roc_8k" msgid="411670106572707544">"ROC 8K"</string>
     <string name="mediasize_chinese_roc_16k" msgid="7496706798725321898">"ROC 16K"</string>
     <string name="mediasize_chinese_prc_1" msgid="946949835711037253">"PRC 1"</string>
@@ -1831,8 +1831,7 @@
     <string name="mediasize_japanese_kahu" msgid="7290232592648122042">"Kahu"</string>
     <string name="mediasize_japanese_kaku2" msgid="7477551750461028312">"Kaku2"</string>
     <string name="mediasize_japanese_you4" msgid="5552111912684384833">"You4"</string>
-    <!-- no translation found for mediasize_japanese_l (1326765321473431817) -->
-    <skip />
+    <string name="mediasize_japanese_l" msgid="1326765321473431817">"L"</string>
     <string name="mediasize_unknown_portrait" msgid="3817016220446495613">"अज्ञात चित्र"</string>
     <string name="mediasize_unknown_landscape" msgid="1584741567225095325">"अज्ञात परिदृश्य"</string>
     <string name="write_fail_reason_cancelled" msgid="2344081488493969190">"रद्द गरियो"</string>
@@ -1876,9 +1875,9 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"तपाईंका प्रशासकले अद्यावधिक गर्नुभएको"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"तपाईंका प्रशासकले मेट्नुभएको"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ठिक छ"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (750683025714899363) -->
+    <!-- no translation found for battery_saver_description_with_learn_more (4877297130366222145) -->
     <skip />
-    <!-- no translation found for battery_saver_description (5693741424234005958) -->
+    <!-- no translation found for battery_saver_description (8518809702138617167) -->
     <skip />
     <string name="data_saver_description" msgid="4995164271550590517">"डेटा सेभरले डेटा खपत कम गर्न केही एपहरूलाई ब्याकग्राउन्डमा डेटा पठाउन वा प्राप्त गर्न दिँदैन। तपाईंले अहिले प्रयोग गरिरहनुभएको एपले सीमित रूपमा मात्र डेटा चलाउन पाउँछ। उदाहरणका लागि, तपाईंले फोटोमा ट्याप गर्नुभयो भने मात्र फोटो देखिन्छ नत्र देखिँदैन।"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"डेटा सेभर अन गर्ने हो?"</string>
@@ -1982,8 +1981,10 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"<xliff:g id="APP_NAME_0">%1$s</xliff:g> अहिले उपलब्ध छैन। यो <xliff:g id="APP_NAME_1">%2$s</xliff:g> द्वारा व्यवस्थित छ।"</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"थप जान्नुहोस्"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"एपको पज हटाउनुहोस्"</string>
-    <string name="work_mode_off_title" msgid="5503291976647976560">"कार्य प्रोफाइल सक्रिय गर्ने?"</string>
-    <string name="work_mode_off_message" msgid="8417484421098563803">"तपाईंका कार्यसम्बन्धी एप, सूचना, डेटा र कार्य प्रोफाइलका अन्य सुविधाहरू सक्रिय गरिने छन्‌"</string>
+    <!-- no translation found for work_mode_off_title (961171256005852058) -->
+    <skip />
+    <!-- no translation found for work_mode_off_message (7319580997683623309) -->
+    <skip />
     <string name="work_mode_turn_on" msgid="3662561662475962285">"सक्रिय गर्नुहोस्"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"एप उपलब्ध छैन"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> अहिले उपलब्ध छैन।"</string>
@@ -2099,18 +2100,12 @@
     <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"यस सूचनालाई कम महत्त्वपूर्ण ठानी यसका लागि साइलेन्ट मोड सेट गरिएको छ। प्रतिक्रिया दिन ट्याप गर्नुहोस्।"</string>
     <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"यस सूचनालाई धेरै महत्त्वपूर्ण सूचनाका रूपमा सेट गरिएको छ। प्रतिक्रिया दिन ट्याप गर्नुहोस्।"</string>
     <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"यस सूचनालाई कम महत्त्वपूर्ण सूचनाका रूपमा सेट गरिएको छ। प्रतिक्रिया दिन ट्याप गर्नुहोस्।"</string>
-    <!-- no translation found for nas_upgrade_notification_title (4224351129445073051) -->
-    <skip />
-    <!-- no translation found for nas_upgrade_notification_content (7036860187157134706) -->
-    <skip />
-    <!-- no translation found for nas_upgrade_notification_enable_action (4823652531622744798) -->
-    <skip />
-    <!-- no translation found for nas_upgrade_notification_disable_action (7561210256700811433) -->
-    <skip />
-    <!-- no translation found for nas_upgrade_notification_learn_more_action (7011130656195423947) -->
-    <skip />
-    <!-- no translation found for nas_upgrade_notification_learn_more_content (6276343083934111208) -->
-    <skip />
+    <string name="nas_upgrade_notification_title" msgid="8436359459300146555">"परिष्कृत सूचनाहरू"</string>
+    <string name="nas_upgrade_notification_content" msgid="5157550369837103337">"अब परिष्कृत सूचनाहरू नामक सुविधाले कारबाही तथा जवाफहरूसम्बन्धी सुझाव देखाउँछ। Android को अनुकूल पार्न मिल्ने सूचनाहरू नामक सुविधाले अब उप्रान्त काम गर्दैन।"</string>
+    <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"ठिक छ"</string>
+    <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"अफ गर्नुहोस्"</string>
+    <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"थप जान्नुहोस्"</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"Android 12 मा Android को अनुकूल पार्न मिल्ने सूचनाहरू नामक सुविधालाई परिष्कृत सूचनाहरू नामक सुविधाले प्रतिस्थापन गरेको छ। यो सुविधाले कारबाही तथा जवाफसम्बन्धी सुझाव देखाउँछ र तपाईंका सूचनाहरू व्यवस्थित गर्छ।\n\nपरिष्कृत सूचनाहरू नामक सुविधाले सूचनामा उल्लिखित सम्पर्क व्यक्तिको नाम र म्यासेज जस्ता व्यक्तिगत जानकारीलगायतका सामग्री हेर्न तथा प्रयोग गर्न सक्छ। यो सुविधाले फोन उठाउने तथा \'बाधा नपुऱ्याउनुहोस्\' मोड नियन्त्रण गर्ने कार्यसहित सूचनाहरू हटाउने वा सूचनाहरूको जवाफ दिने कार्य पनि गर्न सक्छ।"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"दिनचर्या मोडको जानकारीमूलक सूचना"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"प्रायः चार्ज गर्ने समय हुनुभन्दा पहिले नै ब्याट्री सकिन सक्छ"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"ब्याट्रीको आयु बढाउन ब्याट्री सेभर सक्रिय गरियो"</string>
@@ -2305,6 +2300,8 @@
     <string name="sensor_privacy_notification_channel_label" msgid="936036783155261349">"सेन्सरसम्बन्धी गोपनीयता"</string>
     <string name="splash_screen_view_icon_description" msgid="180638751260598187">"एप जनाउने आइकन"</string>
     <string name="splash_screen_view_branding_description" msgid="7911129347402728216">"एपको ब्रान्डिङ फोटो"</string>
-    <string name="view_and_control_notification_title" msgid="4300765399209912240">"हेराइ र नियन्त्रणसम्बन्धी सेटिङ जाँच्नुहोस्"</string>
+    <string name="view_and_control_notification_title" msgid="4300765399209912240">"भ्यु र नियन्त्रणसम्बन्धी सेटिङ जाँच्नुहोस्"</string>
     <string name="view_and_control_notification_content" msgid="8003766498562604034">"<xliff:g id="SERVICE_NAME">%s</xliff:g> तपाईंको स्क्रिन हेर्न र नियन्त्रण गर्न सक्छ। सेटिङ मिलाउन ट्याप गर्नुहोस्।"</string>
+    <string name="ui_translation_accessibility_translated_text" msgid="3197547218178944544">"<xliff:g id="MESSAGE">%1$s</xliff:g> अनुवाद गरिएको छ।"</string>
+    <string name="ui_translation_accessibility_translation_finished" msgid="3057830947610088465">"म्यासेज <xliff:g id="FROM_LANGUAGE">%1$s</xliff:g> भाषाबाट <xliff:g id="TO_LANGUAGE">%2$s</xliff:g> भाषामा अनुवाद गरिएको छ।"</string>
 </resources>

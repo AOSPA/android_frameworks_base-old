@@ -16,6 +16,7 @@
 
 #include "RenderNodeDrawable.h"
 #include <SkPaintFilterCanvas.h>
+#include "StretchMask.h"
 #include "RenderNode.h"
 #include "SkiaDisplayList.h"
 #include "TransformCanvas.h"
@@ -174,7 +175,7 @@ static bool layerNeedsPaint(const sk_sp<SkImage>& snapshotImage, const LayerProp
                             float alphaMultiplier, SkPaint* paint) {
     if (alphaMultiplier < 1.0f || properties.alpha() < 255 ||
         properties.xferMode() != SkBlendMode::kSrcOver || properties.getColorFilter() != nullptr ||
-        properties.getImageFilter() != nullptr || !properties.getStretchEffect().isEmpty()) {
+        properties.getImageFilter() != nullptr || properties.getStretchEffect().requiresLayer()) {
         paint->setAlpha(properties.alpha() * alphaMultiplier);
         paint->setBlendMode(properties.xferMode());
         paint->setColorFilter(sk_ref_sp(properties.getColorFilter()));
@@ -245,17 +246,38 @@ void RenderNodeDrawable::drawContent(SkCanvas* canvas) const {
                     "SurfaceID|%" PRId64, renderNode->uniqueId()).c_str(), nullptr);
             }
 
-            if (renderNode->hasHolePunches()) {
-                TransformCanvas transformCanvas(canvas);
-                displayList->draw(&transformCanvas);
-            }
-
             const StretchEffect& stretch = properties.layerProperties().getStretchEffect();
-            if (stretch.isEmpty()) {
+            if (stretch.isEmpty() ||
+                Properties::stretchEffectBehavior == StretchEffectBehavior::UniformScale) {
+                // If we don't have any stretch effects, issue the filtered
+                // canvas draw calls to make sure we still punch a hole
+                // with the same canvas transformation + clip into the target
+                // canvas then draw the layer on top
+                if (renderNode->hasHolePunches()) {
+                    TransformCanvas transformCanvas(canvas, SkBlendMode::kClear);
+                    displayList->draw(&transformCanvas);
+                }
                 canvas->drawImageRect(snapshotImage, bounds, bounds, sampling, &paint,
                                       SkCanvas::kStrict_SrcRectConstraint);
             } else {
-                sk_sp<SkShader> stretchShader = stretch.getShader(snapshotImage);
+                // If we do have stretch effects and have hole punches,
+                // then create a mask and issue the filtered draw calls to
+                // get the corresponding hole punches.
+                // Then apply the stretch to the mask and draw the mask to
+                // the destination
+                if (renderNode->hasHolePunches()) {
+                    GrRecordingContext* context = canvas->recordingContext();
+                    StretchMask& stretchMask = renderNode->getStretchMask();
+                    stretchMask.draw(context,
+                                     stretch,
+                                     bounds,
+                                     displayList,
+                                     canvas);
+                }
+
+                sk_sp<SkShader> stretchShader = stretch.getShader(bounds.width(),
+                                                                  bounds.height(),
+                                                                  snapshotImage);
                 paint.setShader(stretchShader);
                 canvas->drawRect(bounds, paint);
             }
@@ -303,6 +325,13 @@ void RenderNodeDrawable::setViewProperties(const RenderProperties& properties, S
             canvas->translate(properties.getTranslationX(), properties.getTranslationY());
         } else {
             canvas->concat(*properties.getTransformMatrix());
+        }
+    }
+    if (Properties::stretchEffectBehavior == StretchEffectBehavior::UniformScale) {
+        const StretchEffect& stretch = properties.layerProperties().getStretchEffect();
+        if (!stretch.isEmpty()) {
+            canvas->concat(
+                    stretch.makeLinearStretch(properties.getWidth(), properties.getHeight()));
         }
     }
     const bool isLayer = properties.effectiveLayerType() != LayerType::None;

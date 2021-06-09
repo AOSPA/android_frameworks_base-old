@@ -19,12 +19,7 @@ package com.android.keyguard;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
-import android.app.PendingIntent;
 import android.app.WallpaperManager;
-import android.app.smartspace.SmartspaceConfig;
-import android.app.smartspace.SmartspaceManager;
-import android.app.smartspace.SmartspaceSession;
-import android.content.Intent;
 import android.content.res.Resources;
 import android.text.TextUtils;
 import android.text.format.DateFormat;
@@ -32,34 +27,25 @@ import android.view.View;
 import android.widget.FrameLayout;
 import android.widget.RelativeLayout;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.colorextraction.ColorExtractor;
 import com.android.keyguard.clock.ClockManager;
-import com.android.settingslib.Utils;
 import com.android.systemui.R;
-import com.android.systemui.SystemUIFactory;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.dagger.qualifiers.Main;
-import com.android.systemui.plugins.ActivityStarter;
-import com.android.systemui.plugins.BcSmartspaceDataPlugin;
-import com.android.systemui.plugins.BcSmartspaceDataPlugin.IntentStarter;
 import com.android.systemui.plugins.ClockPlugin;
-import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.FeatureFlags;
+import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
+import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.statusbar.phone.NotificationIconAreaController;
 import com.android.systemui.statusbar.phone.NotificationIconContainer;
 import com.android.systemui.statusbar.policy.BatteryController;
-import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.util.ViewController;
 
 import java.util.Locale;
 import java.util.TimeZone;
-import java.util.concurrent.Executor;
 
 import javax.inject.Inject;
 
@@ -75,10 +61,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private final KeyguardSliceViewController mKeyguardSliceViewController;
     private final NotificationIconAreaController mNotificationIconAreaController;
     private final BroadcastDispatcher mBroadcastDispatcher;
-    private final Executor mUiExecutor;
     private final BatteryController mBatteryController;
-    private final FeatureFlags mFeatureFlags;
-    private final SystemUIFactory mSystemUIFactory;
+    private final LockscreenSmartspaceController mSmartspaceController;
 
     /**
      * Clock for both small and large sizes
@@ -88,12 +72,8 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     private AnimatableClockController mLargeClockViewController;
     private FrameLayout mLargeClockFrame;
 
-    private SmartspaceSession mSmartspaceSession;
-    private SmartspaceSession.OnTargetsAvailableListener mSmartspaceCallback;
-    private int mWallpaperTextColor;
-    private ConfigurationController mConfigurationController;
-    private ActivityStarter mActivityStarter;
-    private FalsingManager mFalsingManager;
+    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final KeyguardBypassController mBypassController;
 
     /**
      * Listener for changes to the color palette.
@@ -101,53 +81,30 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
      * The color palette changes when the wallpaper is changed.
      */
     private final ColorExtractor.OnColorsChangedListener mColorsListener =
-            new ColorExtractor.OnColorsChangedListener() {
-        @Override
-        public void onColorsChanged(ColorExtractor extractor, int which) {
-            if ((which & WallpaperManager.FLAG_LOCK) != 0) {
-                mView.updateColors(getGradientColors());
-            }
-        }
-    };
-
-    private final ConfigurationController.ConfigurationListener mConfigurationListener =
-            new ConfigurationController.ConfigurationListener() {
-        @Override
-        public void onThemeChanged() {
-            updateWallpaperColor();
-        }
-    };
-
-    private ClockManager.ClockChangedListener mClockChangedListener = this::setClockPlugin;
-
-    private final StatusBarStateController.StateListener mStatusBarStateListener =
-            new StatusBarStateController.StateListener() {
-                @Override
-                public void onDozeAmountChanged(float linear, float eased) {
-                    if (mSmartspaceView != null) {
-                        mSmartspaceView.setDozeAmount(eased);
-                    }
+            (extractor, which) -> {
+                if ((which & WallpaperManager.FLAG_LOCK) != 0) {
+                    mView.updateColors(getGradientColors());
                 }
             };
 
+    private final ClockManager.ClockChangedListener mClockChangedListener = this::setClockPlugin;
+
     // If set, will replace keyguard_status_area
-    private BcSmartspaceDataPlugin.SmartspaceView mSmartspaceView;
+    private View mSmartspaceView;
 
     @Inject
     public KeyguardClockSwitchController(
             KeyguardClockSwitch keyguardClockSwitch,
             StatusBarStateController statusBarStateController,
-            SysuiColorExtractor colorExtractor, ClockManager clockManager,
+            SysuiColorExtractor colorExtractor,
+            ClockManager clockManager,
             KeyguardSliceViewController keyguardSliceViewController,
             NotificationIconAreaController notificationIconAreaController,
             BroadcastDispatcher broadcastDispatcher,
-            FeatureFlags featureFlags,
-            @Main Executor uiExecutor,
             BatteryController batteryController,
-            ConfigurationController configurationController,
-            SystemUIFactory systemUIFactory,
-            ActivityStarter activityStarter,
-            FalsingManager falsingManager) {
+            KeyguardUpdateMonitor keyguardUpdateMonitor,
+            KeyguardBypassController bypassController,
+            LockscreenSmartspaceController smartspaceController) {
         super(keyguardClockSwitch);
         mStatusBarStateController = statusBarStateController;
         mColorExtractor = colorExtractor;
@@ -155,13 +112,10 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mKeyguardSliceViewController = keyguardSliceViewController;
         mNotificationIconAreaController = notificationIconAreaController;
         mBroadcastDispatcher = broadcastDispatcher;
-        mFeatureFlags = featureFlags;
-        mUiExecutor = uiExecutor;
         mBatteryController = batteryController;
-        mConfigurationController = configurationController;
-        mSystemUIFactory = systemUIFactory;
-        mActivityStarter = activityStarter;
-        mFalsingManager = falsingManager;
+        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mBypassController = bypassController;
+        mSmartspaceController = smartspaceController;
     }
 
     /**
@@ -185,82 +139,52 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mLargeClockFrame = mView.findViewById(R.id.lockscreen_clock_view_large);
 
         mClockViewController =
-            new AnimatableClockController(
-                mView.findViewById(R.id.animatable_clock_view),
-                mStatusBarStateController,
-                mBroadcastDispatcher,
-                mBatteryController);
+                new AnimatableClockController(
+                        mView.findViewById(R.id.animatable_clock_view),
+                        mStatusBarStateController,
+                        mBroadcastDispatcher,
+                        mBatteryController,
+                        mKeyguardUpdateMonitor,
+                        mBypassController);
         mClockViewController.init();
 
         mLargeClockViewController =
-            new AnimatableClockController(
-                mView.findViewById(R.id.animatable_clock_view_large),
-                mStatusBarStateController,
-                mBroadcastDispatcher,
-                mBatteryController);
+                new AnimatableClockController(
+                        mView.findViewById(R.id.animatable_clock_view_large),
+                        mStatusBarStateController,
+                        mBroadcastDispatcher,
+                        mBatteryController,
+                        mKeyguardUpdateMonitor,
+                        mBypassController);
         mLargeClockViewController.init();
 
-        mStatusBarStateController.addCallback(mStatusBarStateListener);
-        mConfigurationController.addCallback(mConfigurationListener);
+        if (mSmartspaceController.isEnabled()) {
+            mSmartspaceView = mSmartspaceController.buildAndConnectView(mView);
 
-        BcSmartspaceDataPlugin smartspaceDataPlugin = mSystemUIFactory.getSmartspaceDataProvider();
-        if (mFeatureFlags.isSmartspaceEnabled() && smartspaceDataPlugin != null) {
             View ksa = mView.findViewById(R.id.keyguard_status_area);
             int ksaIndex = mView.indexOfChild(ksa);
             ksa.setVisibility(View.GONE);
-
-            mSmartspaceView = smartspaceDataPlugin.getView(mView);
-            mSmartspaceView.registerDataProvider(smartspaceDataPlugin);
-            mSmartspaceView.setIntentStarter(new IntentStarter() {
-                public void startIntent(View v, Intent i) {
-                    mActivityStarter.startActivity(i, true /* dismissShade */);
-                }
-
-                public void startPendingIntent(PendingIntent pi) {
-                    mActivityStarter.startPendingIntentDismissingKeyguard(pi);
-                }
-            });
-            mSmartspaceView.setFalsingManager(mFalsingManager);
-            updateWallpaperColor();
-            View asView = (View) mSmartspaceView;
 
             // Place smartspace view below normal clock...
             RelativeLayout.LayoutParams lp = new RelativeLayout.LayoutParams(
                     MATCH_PARENT, WRAP_CONTENT);
             lp.addRule(RelativeLayout.BELOW, R.id.lockscreen_clock_view);
 
-            mView.addView(asView, ksaIndex, lp);
+            mView.addView(mSmartspaceView, ksaIndex, lp);
             int padding = getContext().getResources()
                     .getDimensionPixelSize(R.dimen.below_clock_padding_start);
-            asView.setPadding(padding, 0, padding, 0);
+            mSmartspaceView.setPadding(padding, 0, padding, 0);
 
             // ... but above the large clock
             lp = new RelativeLayout.LayoutParams(MATCH_PARENT, WRAP_CONTENT);
-            lp.addRule(RelativeLayout.BELOW, asView.getId());
+            lp.addRule(RelativeLayout.BELOW, mSmartspaceView.getId());
             mLargeClockFrame.setLayoutParams(lp);
 
             View nic = mView.findViewById(
                     R.id.left_aligned_notification_icon_container);
             lp = (RelativeLayout.LayoutParams) nic.getLayoutParams();
-            lp.addRule(RelativeLayout.BELOW, asView.getId());
+            lp.addRule(RelativeLayout.BELOW, mSmartspaceView.getId());
             nic.setLayoutParams(lp);
-
-            mSmartspaceSession = getContext().getSystemService(SmartspaceManager.class)
-                    .createSmartspaceSession(
-                            new SmartspaceConfig.Builder(getContext(), "lockscreen").build());
-            mSmartspaceCallback = targets -> smartspaceDataPlugin.onTargetsAvailable(targets);
-            mSmartspaceSession.addOnTargetsAvailableListener(mUiExecutor, mSmartspaceCallback);
-            mSmartspaceSession.requestSmartspaceUpdate();
-        }
-
-        float dozeAmount = mStatusBarStateController.getDozeAmount();
-        mStatusBarStateListener.onDozeAmountChanged(dozeAmount, dozeAmount);
-    }
-
-    private void updateWallpaperColor() {
-        if (mSmartspaceView != null) {
-            int color = Utils.getColorAttrDefaultColor(getContext(), R.attr.wallpaperTextColor);
-            mSmartspaceView.setPrimaryTextColor(color);
         }
     }
 
@@ -272,13 +196,17 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         mColorExtractor.removeOnColorsChangedListener(mColorsListener);
         mView.setClockPlugin(null, mStatusBarStateController.getState());
 
-        if (mSmartspaceSession != null) {
-            mSmartspaceSession.removeOnTargetsAvailableListener(mSmartspaceCallback);
-            mSmartspaceSession.close();
-            mSmartspaceSession = null;
+        mSmartspaceController.disconnect();
+
+        // TODO: This is an unfortunate necessity since smartspace plugin retains a single instance
+        // of the smartspace view -- if we don't remove the view, it can't be reused by a later
+        // instance of this class. In order to fix this, we need to modify the plugin so that
+        // (a) we get a new view each time and (b) we can properly clean up an old view by making
+        // it unregister itself as a plugin listener.
+        if (mSmartspaceView != null) {
+            mView.removeView(mSmartspaceView);
+            mSmartspaceView = null;
         }
-        mStatusBarStateController.removeCallback(mStatusBarStateListener);
-        mConfigurationController.removeCallback(mConfigurationListener);
     }
 
     /**
@@ -348,7 +276,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
                 scale, props, animate);
 
         if (mSmartspaceView != null) {
-            PropertyAnimator.setProperty((View) mSmartspaceView, AnimatableProperty.TRANSLATION_X,
+            PropertyAnimator.setProperty(mSmartspaceView, AnimatableProperty.TRANSLATION_X,
                     x, props, animate);
         }
 
@@ -421,10 +349,5 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
 
     private int getCurrentLayoutDirection() {
         return TextUtils.getLayoutDirectionFromLocale(Locale.getDefault());
-    }
-
-    @VisibleForTesting
-    ConfigurationController.ConfigurationListener getConfigurationListener() {
-        return mConfigurationListener;
     }
 }

@@ -75,10 +75,14 @@ public class SnippetTest {
                                         .setPropertyName(propertyKeyString)
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setExactMatchPosition(29)
-                                                        .setExactMatchBytes(3)
-                                                        .setWindowPosition(26)
-                                                        .setWindowBytes(6)))
+                                                        .setExactMatchBytePosition(29)
+                                                        .setExactMatchByteLength(3)
+                                                        .setExactMatchUtf16Position(29)
+                                                        .setExactMatchUtf16Length(3)
+                                                        .setWindowBytePosition(26)
+                                                        .setWindowByteLength(6)
+                                                        .setWindowUtf16Position(26)
+                                                        .setWindowUtf16Length(6)))
                         .build();
         SearchResultProto searchResultProto =
                 SearchResultProto.newBuilder()
@@ -96,7 +100,7 @@ public class SnippetTest {
                         Collections.singletonList(DATABASE_NAME),
                         SCHEMA_MAP);
         assertThat(searchResultPage.getResults()).hasSize(1);
-        SearchResult.MatchInfo match = searchResultPage.getResults().get(0).getMatches().get(0);
+        SearchResult.MatchInfo match = searchResultPage.getResults().get(0).getMatchInfos().get(0);
         assertThat(match.getPropertyPath()).isEqualTo(propertyKeyString);
         assertThat(match.getFullText()).isEqualTo(propertyValueString);
         assertThat(match.getExactMatch()).isEqualTo(exactMatch);
@@ -142,7 +146,7 @@ public class SnippetTest {
                         Collections.singletonList(DATABASE_NAME),
                         SCHEMA_MAP);
         assertThat(searchResultPage.getResults()).hasSize(1);
-        assertThat(searchResultPage.getResults().get(0).getMatches()).isEmpty();
+        assertThat(searchResultPage.getResults().get(0).getMatchInfos()).isEmpty();
     }
 
     @Test
@@ -168,19 +172,27 @@ public class SnippetTest {
                                         .setPropertyName("senderName")
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setExactMatchPosition(0)
-                                                        .setExactMatchBytes(4)
-                                                        .setWindowPosition(0)
-                                                        .setWindowBytes(9)))
+                                                        .setExactMatchBytePosition(0)
+                                                        .setExactMatchByteLength(4)
+                                                        .setExactMatchUtf16Position(0)
+                                                        .setExactMatchUtf16Length(4)
+                                                        .setWindowBytePosition(0)
+                                                        .setWindowByteLength(9)
+                                                        .setWindowUtf16Position(0)
+                                                        .setWindowUtf16Length(9)))
                         .addEntries(
                                 SnippetProto.EntryProto.newBuilder()
                                         .setPropertyName("senderEmail")
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setExactMatchPosition(0)
-                                                        .setExactMatchBytes(20)
-                                                        .setWindowPosition(0)
-                                                        .setWindowBytes(20)))
+                                                        .setExactMatchBytePosition(0)
+                                                        .setExactMatchByteLength(20)
+                                                        .setExactMatchUtf16Position(0)
+                                                        .setExactMatchUtf16Length(20)
+                                                        .setWindowBytePosition(0)
+                                                        .setWindowByteLength(20)
+                                                        .setWindowUtf16Position(0)
+                                                        .setWindowUtf16Length(20)))
                         .build();
         SearchResultProto searchResultProto =
                 SearchResultProto.newBuilder()
@@ -198,7 +210,7 @@ public class SnippetTest {
                         Collections.singletonList(DATABASE_NAME),
                         SCHEMA_MAP);
         assertThat(searchResultPage.getResults()).hasSize(1);
-        SearchResult.MatchInfo match1 = searchResultPage.getResults().get(0).getMatches().get(0);
+        SearchResult.MatchInfo match1 = searchResultPage.getResults().get(0).getMatchInfos().get(0);
         assertThat(match1.getPropertyPath()).isEqualTo("senderName");
         assertThat(match1.getFullText()).isEqualTo("Test Name Jr.");
         assertThat(match1.getExactMatchRange())
@@ -208,7 +220,7 @@ public class SnippetTest {
                 .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 0, /*upper=*/ 9));
         assertThat(match1.getSnippet()).isEqualTo("Test Name");
 
-        SearchResult.MatchInfo match2 = searchResultPage.getResults().get(0).getMatches().get(1);
+        SearchResult.MatchInfo match2 = searchResultPage.getResults().get(0).getMatchInfos().get(1);
         assertThat(match2.getPropertyPath()).isEqualTo("senderEmail");
         assertThat(match2.getFullText()).isEqualTo("TestNameJr@gmail.com");
         assertThat(match2.getExactMatchRange())
@@ -251,19 +263,27 @@ public class SnippetTest {
                                         .setPropertyName("sender.name")
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setExactMatchPosition(0)
-                                                        .setExactMatchBytes(4)
-                                                        .setWindowPosition(0)
-                                                        .setWindowBytes(9)))
+                                                        .setExactMatchBytePosition(0)
+                                                        .setExactMatchByteLength(4)
+                                                        .setExactMatchUtf16Position(0)
+                                                        .setExactMatchUtf16Length(4)
+                                                        .setWindowBytePosition(0)
+                                                        .setWindowByteLength(9)
+                                                        .setWindowUtf16Position(0)
+                                                        .setWindowUtf16Length(9)))
                         .addEntries(
                                 SnippetProto.EntryProto.newBuilder()
                                         .setPropertyName("sender.email[1]")
                                         .addSnippetMatches(
                                                 SnippetMatchProto.newBuilder()
-                                                        .setExactMatchPosition(0)
-                                                        .setExactMatchBytes(21)
-                                                        .setWindowPosition(0)
-                                                        .setWindowBytes(21)))
+                                                        .setExactMatchBytePosition(0)
+                                                        .setExactMatchByteLength(21)
+                                                        .setExactMatchUtf16Position(0)
+                                                        .setExactMatchUtf16Length(21)
+                                                        .setWindowBytePosition(0)
+                                                        .setWindowByteLength(21)
+                                                        .setWindowUtf16Position(0)
+                                                        .setWindowUtf16Length(21)))
                         .build();
         SearchResultProto searchResultProto =
                 SearchResultProto.newBuilder()
@@ -281,7 +301,7 @@ public class SnippetTest {
                         Collections.singletonList(DATABASE_NAME),
                         SCHEMA_MAP);
         assertThat(searchResultPage.getResults()).hasSize(1);
-        SearchResult.MatchInfo match1 = searchResultPage.getResults().get(0).getMatches().get(0);
+        SearchResult.MatchInfo match1 = searchResultPage.getResults().get(0).getMatchInfos().get(0);
         assertThat(match1.getPropertyPath()).isEqualTo("sender.name");
         assertThat(match1.getFullText()).isEqualTo("Test Name Jr.");
         assertThat(match1.getExactMatchRange())
@@ -291,7 +311,7 @@ public class SnippetTest {
                 .isEqualTo(new SearchResult.MatchRange(/*lower=*/ 0, /*upper=*/ 9));
         assertThat(match1.getSnippet()).isEqualTo("Test Name");
 
-        SearchResult.MatchInfo match2 = searchResultPage.getResults().get(0).getMatches().get(1);
+        SearchResult.MatchInfo match2 = searchResultPage.getResults().get(0).getMatchInfos().get(1);
         assertThat(match2.getPropertyPath()).isEqualTo("sender.email[1]");
         assertThat(match2.getFullText()).isEqualTo("TestNameJr2@gmail.com");
         assertThat(match2.getExactMatchRange())

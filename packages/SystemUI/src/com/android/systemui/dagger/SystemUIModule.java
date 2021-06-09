@@ -29,6 +29,7 @@ import com.android.systemui.BootCompleteCacheImpl;
 import com.android.systemui.SystemUIFactory;
 import com.android.systemui.appops.dagger.AppOpsModule;
 import com.android.systemui.assist.AssistModule;
+import com.android.systemui.biometrics.UdfpsHbmCallback;
 import com.android.systemui.classifier.FalsingModule;
 import com.android.systemui.controls.dagger.ControlsModule;
 import com.android.systemui.dagger.qualifiers.Main;
@@ -38,6 +39,7 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.log.dagger.LogModule;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.plugins.BcSmartspaceDataPlugin;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.power.dagger.PowerModule;
 import com.android.systemui.recents.Recents;
@@ -151,10 +153,16 @@ public abstract class SystemUIModule {
     abstract HeadsUpManager optionalHeadsUpManager();
 
     @BindsOptionalOf
+    abstract BcSmartspaceDataPlugin optionalBcSmartspaceDataPlugin();
+
+    @BindsOptionalOf
     abstract Recents optionalRecents();
 
     @BindsOptionalOf
     abstract StatusBar optionalStatusBar();
+
+    @BindsOptionalOf
+    abstract UdfpsHbmCallback optionalUdfpsHbmCallback();
 
     @SysUISingleton
     @Binds

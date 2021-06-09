@@ -453,6 +453,9 @@ public interface ParsingPackageRead extends Parcelable {
     /** @see ApplicationInfo#PRIVATE_FLAG_PROFILEABLE_BY_SHELL */
     boolean isProfileableByShell();
 
+    /** @see ApplicationInfo#PRIVATE_FLAG_EXT_PROFILEABLE */
+    boolean isProfileable();
+
     /** @see ApplicationInfo#PRIVATE_FLAG_REQUEST_LEGACY_EXTERNAL_STORAGE */
     boolean isRequestLegacyExternalStorage();
 
@@ -903,9 +906,14 @@ public interface ParsingPackageRead extends Parcelable {
      */
     @ApplicationInfo.NativeHeapZeroInitialized
     int getNativeHeapZeroInitialized();
-
     @Nullable
     Boolean hasRequestRawExternalStorageAccess();
+
+    /**
+     * @see ApplicationInfo#hasRequestForegroundServiceExemption()
+     * @see R.styleable#AndroidManifest_requestForegroundServiceExemption
+     */
+    boolean hasRequestForegroundServiceExemption();
 
     // TODO(b/135203078): Hide and enforce going through PackageInfoUtils
     ApplicationInfo toAppInfoWithoutState();

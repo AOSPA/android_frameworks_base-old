@@ -4417,11 +4417,20 @@ public final class ActivityThread extends ClientTransactionHandler
             if (localLOGV) Slog.v(TAG, "Creating service " + data.info.name);
 
             Application app = packageInfo.makeApplication(false, mInstrumentation);
-            java.lang.ClassLoader cl = packageInfo.getClassLoader();
+
+            final java.lang.ClassLoader cl;
+            if (data.info.splitName != null) {
+                cl = packageInfo.getSplitClassLoader(data.info.splitName);
+            } else {
+                cl = packageInfo.getClassLoader();
+            }
             service = packageInfo.getAppFactory()
                     .instantiateService(cl, data.info.name, data.intent);
-            final ContextImpl context = ContextImpl.getImpl(service
+            ContextImpl context = ContextImpl.getImpl(service
                     .createServiceBaseContext(this, packageInfo));
+            if (data.info.splitName != null) {
+                context = (ContextImpl) context.createContextForSplit(data.info.splitName);
+            }
             // Service resources must be initialized with the same loaders as the application
             // context.
             context.getResources().addLoaders(
@@ -5605,7 +5614,7 @@ public final class ActivityThread extends ClientTransactionHandler
     }
 
     /** Performs the activity relaunch locally vs. requesting from system-server. */
-    private void handleRelaunchActivityLocally(IBinder token) {
+    public void handleRelaunchActivityLocally(IBinder token) {
         final ActivityClientRecord r = mActivities.get(token);
         if (r == null) {
             Log.w(TAG, "Activity to relaunch no longer exists");
@@ -5879,7 +5888,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
     public final void applyConfigurationToResources(Configuration config) {
         synchronized (mResourcesManager) {
-            mResourcesManager.applyConfigurationToResourcesLocked(config, null);
+            mResourcesManager.applyConfigurationToResources(config, null);
         }
     }
 
@@ -5967,22 +5976,8 @@ public final class ActivityThread extends ClientTransactionHandler
 
         synchronized (mResourcesManager) {
             // Update all affected Resources objects to use new ResourcesImpl
-            mResourcesManager.applyNewResourceDirsLocked(ai, oldResDirs);
+            mResourcesManager.applyNewResourceDirs(ai, oldResDirs);
         }
-
-        ApplicationPackageManager.configurationChanged();
-
-        // Trigger a regular Configuration change event, only with a different assetsSeq number
-        // so that we actually call through to all components.
-        // TODO(adamlesinski): Change this to make use of ActivityManager's upcoming ability to
-        // store configurations per-process.
-        final Configuration config = mConfigurationController.getConfiguration();
-        Configuration newConfig = new Configuration();
-        newConfig.assetsSeq = (config != null ? config.assetsSeq : 0) + 1;
-        mConfigurationController.handleConfigurationChanged(newConfig, null /* compat */);
-
-        // Preserve windows to avoid black flickers when overlays change.
-        relaunchAllActivities(true /* preserveWindows */, "handleApplicationInfoChanged");
     }
 
     /**
@@ -6237,7 +6232,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
                                 synchronized (mResourcesManager) {
                                     // Update affected Resources objects to use new ResourcesImpl
-                                    mResourcesManager.applyNewResourceDirsLocked(aInfo, oldResDirs);
+                                    mResourcesManager.applyNewResourceDirs(aInfo, oldResDirs);
                                 }
                             } catch (RemoteException e) {
                             }
@@ -6482,7 +6477,7 @@ public final class ActivityThread extends ClientTransactionHandler
              * reflect configuration changes. The configuration object passed
              * in AppBindData can be safely assumed to be up to date
              */
-            mResourcesManager.applyConfigurationToResourcesLocked(data.config, data.compatInfo);
+            mResourcesManager.applyConfigurationToResources(data.config, data.compatInfo);
             mCurDefaultDisplayDpi = data.config.densityDpi;
 
             // This calls mResourcesManager so keep it within the synchronized block.
@@ -6559,7 +6554,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
         // Allow binder tracing, and application-generated systrace messages if we're profileable.
         boolean isAppDebuggable = (data.appInfo.flags & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-        boolean isAppProfileable = isAppDebuggable || data.appInfo.isProfileableByShell();
+        boolean isAppProfileable = isAppDebuggable || data.appInfo.isProfileable();
         Trace.setAppTracingAllowed(isAppProfileable);
         if ((isAppProfileable || Build.IS_DEBUGGABLE) && data.enableBinderTracking) {
             Binder.enableTracing();
@@ -7555,7 +7550,7 @@ public final class ActivityThread extends ClientTransactionHandler
 
                 // We need to apply this change to the resources immediately, because upon returning
                 // the view hierarchy will be informed about it.
-                if (mResourcesManager.applyConfigurationToResourcesLocked(globalConfig,
+                if (mResourcesManager.applyConfigurationToResources(globalConfig,
                         null /* compat */,
                         mInitialApplication.getResources().getDisplayAdjustments())) {
                     mConfigurationController.updateLocaleListFromAppContext(

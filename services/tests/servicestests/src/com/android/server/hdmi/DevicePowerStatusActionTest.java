@@ -80,10 +80,12 @@ public class DevicePowerStatusActionTest {
 
         mContextSpy = spy(new ContextWrapper(InstrumentationRegistry.getTargetContext()));
 
-        PowerManager powerManager = new PowerManager(mContextSpy, mIPowerManagerMock,
-                mIThermalServiceMock, new Handler(mTestLooper.getLooper()));
-        when(mContextSpy.getSystemService(Context.POWER_SERVICE)).thenReturn(powerManager);
-        when(mContextSpy.getSystemService(PowerManager.class)).thenReturn(powerManager);
+        when(mContextSpy.getSystemService(Context.POWER_SERVICE)).thenAnswer(i ->
+                new PowerManager(mContextSpy, mIPowerManagerMock,
+                mIThermalServiceMock, new Handler(mTestLooper.getLooper())));
+        when(mContextSpy.getSystemService(PowerManager.class)).thenAnswer(i ->
+                new PowerManager(mContextSpy, mIPowerManagerMock,
+                mIThermalServiceMock, new Handler(mTestLooper.getLooper())));
         when(mIPowerManagerMock.isInteractive()).thenReturn(true);
 
         mHdmiControlService = new HdmiControlService(mContextSpy) {
@@ -109,7 +111,8 @@ public class DevicePowerStatusActionTest {
 
             @Override
             protected PowerManager getPowerManager() {
-                return powerManager;
+                return new PowerManager(mContextSpy, mIPowerManagerMock,
+                        mIThermalServiceMock, new Handler(mTestLooper.getLooper()));
             }
 
             @Override
@@ -138,6 +141,7 @@ public class DevicePowerStatusActionTest {
         mDevicePowerStatusAction = DevicePowerStatusAction.create(mPlaybackDevice, ADDR_TV,
                 mCallbackMock);
         mTestLooper.dispatchAll();
+        mNativeWrapper.clearResultMessages();
     }
 
     @Test
@@ -280,5 +284,18 @@ public class DevicePowerStatusActionTest {
         mTestLooper.dispatchAll();
 
         verify(mCallbackMock).onComplete(HdmiControlManager.POWER_STATUS_STANDBY);
+    }
+
+    @Test
+    public void pendingActionDoesNotBlockSendingStandby() throws Exception {
+        mPlaybackDevice.addAndStartAction(mDevicePowerStatusAction);
+        mTestLooper.dispatchAll();
+        mNativeWrapper.clearResultMessages();
+
+        mHdmiControlService.onStandby(HdmiControlService.STANDBY_SCREEN_OFF);
+        mTestLooper.dispatchAll();
+        HdmiCecMessage standbyMessage = HdmiCecMessageBuilder.buildStandby(
+                mPlaybackDevice.mAddress, ADDR_TV);
+        assertThat(mNativeWrapper.getResultMessages()).contains(standbyMessage);
     }
 }

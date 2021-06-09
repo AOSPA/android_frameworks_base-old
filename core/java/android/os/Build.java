@@ -174,15 +174,13 @@ public class Build {
      * <ul>
      *     <li>If the calling app has been granted the READ_PRIVILEGED_PHONE_STATE permission; this
      *     is a privileged permission that can only be granted to apps preloaded on the device.
-     *     <li>If the calling app is the device or profile owner and has been granted the
-     *     {@link Manifest.permission#READ_PHONE_STATE} permission. The profile owner is an app that
-     *     owns a managed profile on the device; for more details see <a
-     *     href="https://developer.android.com/work/managed-profiles">Work profiles</a>.
-     *     Profile owner access is deprecated and will be removed in a future release.
      *     <li>If the calling app has carrier privileges (see {@link
      *     android.telephony.TelephonyManager#hasCarrierPrivileges}) on any active subscription.
      *     <li>If the calling app is the default SMS role holder (see {@link
      *     android.app.role.RoleManager#isRoleHeld(String)}).
+     *     <li>If the calling app is the device owner of a fully-managed device, a profile
+     *     owner of an organization-owned device, or their delegates (see {@link
+     *     android.app.admin.DevicePolicyManager#getEnrollmentSpecificId()}).
      * </ul>
      *
      * <p>If the calling app does not meet one of these requirements then this method will behave
@@ -311,7 +309,7 @@ public class Build {
          * booted, but it may increase when the hardware manufacturer provides an OTA update.
          * <p>
          * Possible non-zero values are defined in {@link Build.VERSION_CODES} starting with
-         * {@link Build.VERSION_CODES#S}.
+         * {@link Build.VERSION_CODES#R}.
          */
         public static final int MEDIA_PERFORMANCE_CLASS =
                 DeviceProperties.media_performance_class().orElse(0);
@@ -439,7 +437,8 @@ public class Build {
          * Magic version number for a current development build, which has
          * not yet turned into an official release.
          */
-        public static final int CUR_DEVELOPMENT = VMRuntime.SDK_VERSION_CUR_DEVELOPMENT;
+        // This must match VMRuntime.SDK_VERSION_CUR_DEVELOPMENT.
+        public static final int CUR_DEVELOPMENT = 10000;
 
         /**
          * October 2008: The original, first, version of Android.  Yay!
@@ -1326,6 +1325,7 @@ public class Build {
      * selinux into "permissive" mode in particular.
      * @hide
      */
+    @UnsupportedAppUsage
     public static final boolean IS_DEBUGGABLE =
             SystemProperties.getInt("ro.debuggable", 0) == 1;
 

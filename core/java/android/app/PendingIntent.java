@@ -379,12 +379,7 @@ public final class PendingIntent implements Parcelable {
                         + " using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality"
                         + " depends on the PendingIntent being mutable, e.g. if it needs to"
                         + " be used with inline replies or bubbles.";
-                //TODO(b/178065720) Remove check for chrome and enforce this requirement
-                if (packageName.equals("com.android.chrome")) {
-                    Log.e(TAG, msg);
-                } else {
                     throw new IllegalArgumentException(msg);
-                }
             }
         }
     }

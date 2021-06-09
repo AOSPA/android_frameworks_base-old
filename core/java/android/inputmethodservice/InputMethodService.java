@@ -1042,8 +1042,14 @@ public class InputMethodService extends AbstractInputMethodService {
         }
         
         /**
-         * 
+         * Handles a request to toggle the IME visibility.
+         *
+         * @deprecated Starting in {@link Build.VERSION_CODES#S} the system no longer invokes this
+         * method, instead it explicitly shows or hides the IME. An {@code InputMethodService}
+         * wishing to toggle its own visibility should instead invoke {@link
+         * InputMethodService#requestShowSelf} or {@link InputMethodService#requestHideSelf}
          */
+        @Deprecated
         public void toggleSoftInput(int showFlags, int hideFlags) {
             InputMethodService.this.onToggleSoftInput(showFlags, hideFlags);
         }
@@ -1323,6 +1329,7 @@ public class InputMethodService extends AbstractInputMethodService {
                 WindowManager.LayoutParams.TYPE_INPUT_METHOD, Gravity.BOTTOM, false);
         mWindow.getWindow().getAttributes().setFitInsetsTypes(statusBars() | navigationBars());
         mWindow.getWindow().getAttributes().setFitInsetsSides(Side.all() & ~Side.BOTTOM);
+        mWindow.getWindow().getAttributes().receiveInsetsIgnoringZOrder = true;
 
         // Automotive devices may request the navigation bar to be hidden when the IME shows up
         // (controlled via config_automotiveHideNavBarForKeyboard) in order to maximize the visible
@@ -1941,12 +1948,12 @@ public class InputMethodService extends AbstractInputMethodService {
 
     public void showStatusIcon(@DrawableRes int iconResId) {
         mStatusIcon = iconResId;
-        mPrivOps.updateStatusIcon(getPackageName(), iconResId);
+        mPrivOps.updateStatusIconAsync(getPackageName(), iconResId);
     }
 
     public void hideStatusIcon() {
         mStatusIcon = 0;
-        mPrivOps.updateStatusIcon(null, 0);
+        mPrivOps.updateStatusIconAsync(null, 0);
     }
 
     /**
@@ -2306,7 +2313,7 @@ public class InputMethodService extends AbstractInputMethodService {
         if (setVisible) {
             cancelImeSurfaceRemoval();
         }
-        mPrivOps.applyImeVisibility(setVisible
+        mPrivOps.applyImeVisibilityAsync(setVisible
                 ? mCurShowInputToken : mCurHideInputToken, setVisible);
     }
 
@@ -3313,7 +3320,7 @@ public class InputMethodService extends AbstractInputMethodService {
             if (mNotifyUserActionSent) {
                 return;
             }
-            mPrivOps.notifyUserAction();
+            mPrivOps.notifyUserActionAsync();
             mNotifyUserActionSent = true;
         }
     }

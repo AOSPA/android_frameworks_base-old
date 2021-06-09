@@ -16,29 +16,27 @@
 
 #pragma once
 
+#include "Properties.h"
 #include "utils/MathUtils.h"
 
 #include <SkImage.h>
 #include <SkImageFilter.h>
+#include <SkMatrix.h>
 #include <SkPoint.h>
 #include <SkRect.h>
 #include <SkRuntimeEffect.h>
 
 namespace android::uirenderer {
 
-// TODO: Inherit from base RenderEffect type?
 class StretchEffect {
 public:
-    enum class StretchInterpolator {
-        SmoothStep,
-    };
 
-    StretchEffect(const SkRect& area, const SkVector& direction, float maxStretchAmountX,
+    StretchEffect(const SkVector& direction,
+                  float maxStretchAmountX,
                   float maxStretchAmountY)
-            : stretchArea(area)
-            , maxStretchAmountX(maxStretchAmountX)
+            : maxStretchAmountX(maxStretchAmountX)
             , maxStretchAmountY(maxStretchAmountY)
-            , mStretchDirection(direction) {}
+            , mStretchDirection(direction) { }
 
     StretchEffect() {}
 
@@ -51,12 +49,16 @@ public:
     }
 
     StretchEffect& operator=(const StretchEffect& other) {
-        this->stretchArea = other.stretchArea;
         this->mStretchDirection = other.mStretchDirection;
-        this->mStretchShader = other.mStretchShader;
         this->maxStretchAmountX = other.maxStretchAmountX;
         this->maxStretchAmountY = other.maxStretchAmountY;
         return *this;
+    }
+
+    bool operator==(const StretchEffect& other) const {
+        return mStretchDirection == other.mStretchDirection &&
+                maxStretchAmountX == other.maxStretchAmountX &&
+                maxStretchAmountY == other.maxStretchAmountY;
     }
 
     void mergeWith(const StretchEffect& other) {
@@ -67,33 +69,55 @@ public:
             *this = other;
             return;
         }
-        setStretchDirection(mStretchDirection + other.mStretchDirection);
+        mStretchDirection += other.mStretchDirection;
         if (isEmpty()) {
             return setEmpty();
         }
-        stretchArea.join(other.stretchArea);
         maxStretchAmountX = std::max(maxStretchAmountX, other.maxStretchAmountX);
         maxStretchAmountY = std::max(maxStretchAmountY, other.maxStretchAmountY);
     }
 
-    sk_sp<SkShader> getShader(const sk_sp<SkImage>& snapshotImage) const;
+    /**
+     * Return the stretched x position given the normalized x position with
+     * the current horizontal stretch direction
+     * @param normalizedX x position on the input texture from 0 to 1
+     * @return x position when the horizontal stretch direction applied
+     */
+    float computeStretchedPositionX(float normalizedX) const;
 
-    SkRect stretchArea {0, 0, 0, 0};
+    /**
+     * Return the stretched y position given the normalized y position with
+     * the current horizontal stretch direction
+     * @param normalizedX y position on the input texture from 0 to 1
+     * @return y position when the horizontal stretch direction applied
+     */
+    float computeStretchedPositionY(float normalizedY) const;
+
+    sk_sp<SkShader> getShader(float width, float height,
+                              const sk_sp<SkImage>& snapshotImage) const;
+
     float maxStretchAmountX = 0;
     float maxStretchAmountY = 0;
 
-    void setStretchDirection(const SkVector& direction) {
-        mStretchShader = nullptr;
-        mStretchDirection = direction;
+    const SkVector getStretchDirection() const { return mStretchDirection; }
+
+    SkMatrix makeLinearStretch(float width, float height) const {
+        SkMatrix matrix;
+        auto [sX, sY] = getStretchDirection();
+        matrix.setScale(1 + std::abs(sX), 1 + std::abs(sY), sX > 0 ? 0 : width,
+                        sY > 0 ? 0 : height);
+        return matrix;
     }
 
-    const SkVector getStretchDirection() const { return mStretchDirection; }
+    bool requiresLayer() const {
+        return !(isEmpty() ||
+                 Properties::stretchEffectBehavior == StretchEffectBehavior::UniformScale);
+    }
 
 private:
     static sk_sp<SkRuntimeEffect> getStretchEffect();
     mutable SkVector mStretchDirection{0, 0};
     mutable std::unique_ptr<SkRuntimeShaderBuilder> mBuilder;
-    mutable sk_sp<SkShader> mStretchShader;
 };
 
 } // namespace android::uirenderer

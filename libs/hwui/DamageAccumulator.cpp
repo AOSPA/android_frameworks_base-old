@@ -150,9 +150,19 @@ static inline void applyMatrix(const SkMatrix* transform, SkRect* rect) {
     }
 }
 
+static inline void applyMatrix(const SkMatrix& transform, SkRect* rect) {
+    return applyMatrix(&transform, rect);
+}
+
 static inline void mapRect(const RenderProperties& props, const SkRect& in, SkRect* out) {
     if (in.isEmpty()) return;
     SkRect temp(in);
+    if (Properties::stretchEffectBehavior == StretchEffectBehavior::UniformScale) {
+        const StretchEffect& stretch = props.layerProperties().getStretchEffect();
+        if (!stretch.isEmpty()) {
+            applyMatrix(stretch.makeLinearStretch(props.getWidth(), props.getHeight()), &temp);
+        }
+    }
     applyMatrix(props.getTransformMatrix(), &temp);
     if (props.getStaticMatrix()) {
         applyMatrix(props.getStaticMatrix(), &temp);
@@ -195,6 +205,27 @@ static void applyTransforms(DirtyStack* frame, DirtyStack* end) {
         }
         frame = frame->prev;
     }
+}
+
+static void computeTransformImpl(const DirtyStack* frame, const DirtyStack* end,
+                                 Matrix4* outMatrix) {
+  while (frame != end) {
+    switch (frame->type) {
+        case TransformRenderNode:
+            frame->renderNode->applyViewPropertyTransforms(*outMatrix);
+            break;
+        case TransformMatrix4:
+            outMatrix->multiply(*frame->matrix4);
+            break;
+        case TransformNone:
+            // nothing to be done
+            break;
+        default:
+            LOG_ALWAYS_FATAL("Tried to compute transform with an invalid type: %d",
+                             frame->type);
+    }
+    frame = frame->prev;
+  }
 }
 
 void DamageAccumulator::applyRenderNodeTransform(DirtyStack* frame) {
@@ -249,19 +280,41 @@ void DamageAccumulator::finish(SkRect* totalDirty) {
     mHead->pendingDirty.setEmpty();
 }
 
-const StretchEffect* DamageAccumulator::findNearestStretchEffect() const {
+DamageAccumulator::StretchResult DamageAccumulator::findNearestStretchEffect() const {
     DirtyStack* frame = mHead;
+    const auto& headProperties = mHead->renderNode->properties();
+    float startWidth = headProperties.getWidth();
+    float startHeight = headProperties.getHeight();
     while (frame->prev != frame) {
-        frame = frame->prev;
         if (frame->type == TransformRenderNode) {
+            const auto& renderNode = frame->renderNode;
+            const auto& frameRenderNodeProperties = renderNode->properties();
             const auto& effect =
-                    frame->renderNode->properties().layerProperties().getStretchEffect();
+                    frameRenderNodeProperties.layerProperties().getStretchEffect();
+            const float width = (float) frameRenderNodeProperties.getWidth();
+            const float height = (float) frameRenderNodeProperties.getHeight();
             if (!effect.isEmpty()) {
-                return &effect;
+                Matrix4 stretchMatrix;
+                computeTransformImpl(mHead, frame, &stretchMatrix);
+                Rect stretchRect = Rect(0.f, 0.f, startWidth, startHeight);
+                stretchMatrix.mapRect(stretchRect);
+
+                return StretchResult{
+                    .stretchEffect = &effect,
+                    .childRelativeBounds = SkRect::MakeLTRB(
+                        stretchRect.left,
+                        stretchRect.top,
+                        stretchRect.right,
+                        stretchRect.bottom
+                    ),
+                    .width = width,
+                    .height = height
+                };
             }
         }
+        frame = frame->prev;
     }
-    return nullptr;
+    return StretchResult{};
 }
 
 } /* namespace uirenderer */

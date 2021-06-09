@@ -43,6 +43,12 @@ import java.util.List;
  */
 public class PeopleSpaceTile implements Parcelable {
 
+    public static final int SHOW_CONVERSATIONS = 1 << 0;
+    public static final int BLOCK_CONVERSATIONS =  1 << 1;
+    public static final int SHOW_IMPORTANT_CONVERSATIONS = 1 << 2;
+    public static final int SHOW_STARRED_CONTACTS = 1 << 3;
+    public static final int SHOW_CONTACTS = 1 << 4;
+
     private String mId;
     private CharSequence mUserName;
     private Icon mUserIcon;
@@ -54,12 +60,18 @@ public class PeopleSpaceTile implements Parcelable {
     private boolean mIsImportantConversation;
     private String mNotificationKey;
     private CharSequence mNotificationContent;
+    private CharSequence mNotificationSender;
     private String mNotificationCategory;
     private Uri mNotificationDataUri;
     private int mMessagesCount;
     private Intent mIntent;
     private long mNotificationTimestamp;
     private List<ConversationStatus> mStatuses;
+    private boolean mCanBypassDnd;
+    private boolean mIsPackageSuspended;
+    private boolean mIsUserQuieted;
+    private int mNotificationPolicyState;
+    private float mContactAffinity;
 
     private PeopleSpaceTile(Builder b) {
         mId = b.mId;
@@ -73,12 +85,18 @@ public class PeopleSpaceTile implements Parcelable {
         mIsImportantConversation = b.mIsImportantConversation;
         mNotificationKey = b.mNotificationKey;
         mNotificationContent = b.mNotificationContent;
+        mNotificationSender = b.mNotificationSender;
         mNotificationCategory = b.mNotificationCategory;
         mNotificationDataUri = b.mNotificationDataUri;
         mMessagesCount = b.mMessagesCount;
         mIntent = b.mIntent;
         mNotificationTimestamp = b.mNotificationTimestamp;
         mStatuses = b.mStatuses;
+        mCanBypassDnd = b.mCanBypassDnd;
+        mIsPackageSuspended = b.mIsPackageSuspended;
+        mIsUserQuieted = b.mIsUserQuieted;
+        mNotificationPolicyState = b.mNotificationPolicyState;
+        mContactAffinity = b.mContactAffinity;
     }
 
     public String getId() {
@@ -134,6 +152,10 @@ public class PeopleSpaceTile implements Parcelable {
         return mNotificationContent;
     }
 
+    public CharSequence getNotificationSender() {
+        return mNotificationSender;
+    }
+
     public String getNotificationCategory() {
         return mNotificationCategory;
     }
@@ -167,6 +189,41 @@ public class PeopleSpaceTile implements Parcelable {
         return mStatuses;
     }
 
+    /**
+     * Whether the app associated with the conversation can bypass DND.
+     */
+    public boolean canBypassDnd() {
+        return mCanBypassDnd;
+    }
+
+    /**
+     * Whether the app associated with the conversation is suspended.
+     */
+    public boolean isPackageSuspended() {
+        return mIsPackageSuspended;
+    }
+
+    /**
+     * Whether the user associated with the conversation is quieted.
+     */
+    public boolean isUserQuieted() {
+        return mIsUserQuieted;
+    }
+
+    /**
+     * Returns the state of notifications for the conversation.
+     */
+    public int getNotificationPolicyState() {
+        return mNotificationPolicyState;
+    }
+
+    /**
+     * Returns the contact affinity (whether the contact is starred).
+     */
+    public float getContactAffinity() {
+        return mContactAffinity;
+    }
+
     /** Converts a {@link PeopleSpaceTile} into a {@link PeopleSpaceTile.Builder}. */
     public Builder toBuilder() {
         Builder builder =
@@ -179,12 +236,18 @@ public class PeopleSpaceTile implements Parcelable {
         builder.setIsImportantConversation(mIsImportantConversation);
         builder.setNotificationKey(mNotificationKey);
         builder.setNotificationContent(mNotificationContent);
+        builder.setNotificationSender(mNotificationSender);
         builder.setNotificationCategory(mNotificationCategory);
         builder.setNotificationDataUri(mNotificationDataUri);
         builder.setMessagesCount(mMessagesCount);
         builder.setIntent(mIntent);
         builder.setNotificationTimestamp(mNotificationTimestamp);
         builder.setStatuses(mStatuses);
+        builder.setCanBypassDnd(mCanBypassDnd);
+        builder.setIsPackageSuspended(mIsPackageSuspended);
+        builder.setIsUserQuieted(mIsUserQuieted);
+        builder.setNotificationPolicyState(mNotificationPolicyState);
+        builder.setContactAffinity(mContactAffinity);
         return builder;
     }
 
@@ -201,12 +264,18 @@ public class PeopleSpaceTile implements Parcelable {
         private boolean mIsImportantConversation;
         private String mNotificationKey;
         private CharSequence mNotificationContent;
+        private CharSequence mNotificationSender;
         private String mNotificationCategory;
         private Uri mNotificationDataUri;
         private int mMessagesCount;
         private Intent mIntent;
         private long mNotificationTimestamp;
         private List<ConversationStatus> mStatuses;
+        private boolean mCanBypassDnd;
+        private boolean mIsPackageSuspended;
+        private boolean mIsUserQuieted;
+        private int mNotificationPolicyState;
+        private float mContactAffinity;
 
         /** Builder for use only if a shortcut is not available for the tile. */
         public Builder(String id, CharSequence userName, Icon userIcon, Intent intent) {
@@ -215,6 +284,7 @@ public class PeopleSpaceTile implements Parcelable {
             mUserIcon = userIcon;
             mIntent = intent;
             mPackageName = intent == null ? null : intent.getPackage();
+            mNotificationPolicyState = SHOW_CONVERSATIONS;
         }
 
         public Builder(ShortcutInfo info, LauncherApps launcherApps) {
@@ -224,6 +294,7 @@ public class PeopleSpaceTile implements Parcelable {
             mUserHandle = info.getUserHandle();
             mPackageName = info.getPackage();
             mContactUri = getContactUri(info);
+            mNotificationPolicyState = SHOW_CONVERSATIONS;
         }
 
         public Builder(ConversationChannel channel, LauncherApps launcherApps) {
@@ -238,6 +309,9 @@ public class PeopleSpaceTile implements Parcelable {
             mLastInteractionTimestamp = channel.getLastEventTimestamp();
             mIsImportantConversation = channel.getParentNotificationChannel() != null
                     && channel.getParentNotificationChannel().isImportantConversation();
+            mCanBypassDnd = channel.getParentNotificationChannel() != null
+                    && channel.getParentNotificationChannel().canBypassDnd();
+            mNotificationPolicyState = SHOW_CONVERSATIONS;
         }
 
         /** Returns the Contact's Uri if present. */
@@ -316,6 +390,12 @@ public class PeopleSpaceTile implements Parcelable {
             return this;
         }
 
+        /** Sets the associated notification's sender. */
+        public Builder setNotificationSender(CharSequence notificationSender) {
+            mNotificationSender = notificationSender;
+            return this;
+        }
+
         /** Sets the associated notification's category. */
         public Builder setNotificationCategory(String notificationCategory) {
             mNotificationCategory = notificationCategory;
@@ -352,6 +432,36 @@ public class PeopleSpaceTile implements Parcelable {
             return this;
         }
 
+        /** Sets whether the conversation channel can bypass DND. */
+        public Builder setCanBypassDnd(boolean canBypassDnd) {
+            mCanBypassDnd = canBypassDnd;
+            return this;
+        }
+
+        /** Sets whether the package is suspended. */
+        public Builder setIsPackageSuspended(boolean isPackageSuspended) {
+            mIsPackageSuspended = isPackageSuspended;
+            return this;
+        }
+
+        /** Sets whether the user has been quieted. */
+        public Builder setIsUserQuieted(boolean isUserQuieted) {
+            mIsUserQuieted = isUserQuieted;
+            return this;
+        }
+
+        /** Sets the state of blocked notifications for the conversation. */
+        public Builder setNotificationPolicyState(int notificationPolicyState) {
+            mNotificationPolicyState = notificationPolicyState;
+            return this;
+        }
+
+        /** Sets the contact's affinity. */
+        public Builder setContactAffinity(float contactAffinity) {
+            mContactAffinity = contactAffinity;
+            return this;
+        }
+
         /** Builds a {@link PeopleSpaceTile}. */
         @NonNull
         public PeopleSpaceTile build() {
@@ -371,6 +481,7 @@ public class PeopleSpaceTile implements Parcelable {
         mIsImportantConversation = in.readBoolean();
         mNotificationKey = in.readString();
         mNotificationContent = in.readCharSequence();
+        mNotificationSender = in.readCharSequence();
         mNotificationCategory = in.readString();
         mNotificationDataUri = in.readParcelable(Uri.class.getClassLoader());
         mMessagesCount = in.readInt();
@@ -378,6 +489,11 @@ public class PeopleSpaceTile implements Parcelable {
         mNotificationTimestamp = in.readLong();
         mStatuses = new ArrayList<>();
         in.readParcelableList(mStatuses, ConversationStatus.class.getClassLoader());
+        mCanBypassDnd = in.readBoolean();
+        mIsPackageSuspended = in.readBoolean();
+        mIsUserQuieted = in.readBoolean();
+        mNotificationPolicyState = in.readInt();
+        mContactAffinity = in.readFloat();
     }
 
     @Override
@@ -398,12 +514,18 @@ public class PeopleSpaceTile implements Parcelable {
         dest.writeBoolean(mIsImportantConversation);
         dest.writeString(mNotificationKey);
         dest.writeCharSequence(mNotificationContent);
+        dest.writeCharSequence(mNotificationSender);
         dest.writeString(mNotificationCategory);
         dest.writeParcelable(mNotificationDataUri, flags);
         dest.writeInt(mMessagesCount);
         dest.writeParcelable(mIntent, flags);
         dest.writeLong(mNotificationTimestamp);
         dest.writeParcelableList(mStatuses, flags);
+        dest.writeBoolean(mCanBypassDnd);
+        dest.writeBoolean(mIsPackageSuspended);
+        dest.writeBoolean(mIsUserQuieted);
+        dest.writeInt(mNotificationPolicyState);
+        dest.writeFloat(mContactAffinity);
     }
 
     public static final @android.annotation.NonNull
@@ -411,7 +533,6 @@ public class PeopleSpaceTile implements Parcelable {
                 public PeopleSpaceTile createFromParcel(Parcel source) {
                     return new PeopleSpaceTile(source);
                 }
-
                 public PeopleSpaceTile[] newArray(int size) {
                     return new PeopleSpaceTile[size];
                 }

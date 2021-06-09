@@ -20,6 +20,7 @@ import static com.android.systemui.statusbar.phone.ScrimController.OPAQUE;
 import static com.android.systemui.statusbar.phone.ScrimController.SEMI_TRANSPARENT;
 import static com.android.systemui.statusbar.phone.ScrimController.TRANSPARENT;
 
+import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
@@ -49,8 +50,7 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.DejankUtils;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dock.DockManager;
-import com.android.systemui.statusbar.FeatureFlags;
-import com.android.systemui.statusbar.ScrimView;
+import com.android.systemui.scrim.ScrimView;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.FakeExecutor;
@@ -69,6 +69,7 @@ import org.mockito.stubbing.Answer;
 
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.Map;
 
@@ -91,7 +92,7 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Mock
     private AlarmManager mAlarmManager;
     @Mock
-    private DozeParameters mDozeParamenters;
+    private DozeParameters mDozeParameters;
     @Mock
     LightBarController mLightBarController;
     @Mock
@@ -106,8 +107,6 @@ public class ScrimControllerTest extends SysuiTestCase {
     private DockManager mDockManager;
     @Mock
     private ConfigurationController mConfigurationController;
-    @Mock
-    private FeatureFlags mFeatureFlags;
 
 
     private static class AnimatorListener implements Animator.AnimatorListener {
@@ -167,7 +166,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         endAnimation(mScrimInFront);
         endAnimation(mScrimForBubble);
 
-        Assert.assertEquals("Animators did not finish",
+        assertEquals("Animators did not finish",
                 mAnimatorListener.getNumStarts(), mAnimatorListener.getNumEnds());
     }
 
@@ -200,8 +199,8 @@ public class ScrimControllerTest extends SysuiTestCase {
             return null;
         }).when(mScrimBehind).postOnAnimationDelayed(any(Runnable.class), anyLong());
 
-        when(mDozeParamenters.getAlwaysOn()).thenAnswer(invocation -> mAlwaysOnEnabled);
-        when(mDozeParamenters.getDisplayNeedsBlanking()).thenReturn(true);
+        when(mDozeParameters.getAlwaysOn()).thenAnswer(invocation -> mAlwaysOnEnabled);
+        when(mDozeParameters.getDisplayNeedsBlanking()).thenReturn(true);
 
         doAnswer((Answer<Void>) invocation -> {
             mScrimState = invocation.getArgument(0);
@@ -216,14 +215,12 @@ public class ScrimControllerTest extends SysuiTestCase {
         when(mDelayedWakeLockBuilder.setTag(any(String.class)))
                 .thenReturn(mDelayedWakeLockBuilder);
         when(mDelayedWakeLockBuilder.build()).thenReturn(mWakeLock);
-        when(mFeatureFlags.isShadeOpaque()).thenReturn(true);
         when(mDockManager.isDocked()).thenReturn(false);
 
         mScrimController = new ScrimController(mLightBarController,
-                mDozeParamenters, mAlarmManager, mKeyguardStateController, mDelayedWakeLockBuilder,
+                mDozeParameters, mAlarmManager, mKeyguardStateController, mDelayedWakeLockBuilder,
                 new FakeHandler(mLooper.getLooper()), mKeyguardUpdateMonitor,
-                mDockManager, mConfigurationController, mFeatureFlags,
-                new FakeExecutor(new FakeSystemClock()));
+                mDockManager, mConfigurationController, new FakeExecutor(new FakeSystemClock()));
         mScrimController.setScrimVisibleListener(visible -> mScrimVisibility = visible);
         mScrimController.attachViews(mScrimBehind, mNotificationsScrim, mScrimInFront,
                 mScrimForBubble);
@@ -238,6 +235,10 @@ public class ScrimControllerTest extends SysuiTestCase {
     @After
     public void tearDown() {
         finishAnimationsImmediately();
+        Arrays.stream(ScrimState.values()).forEach((scrim) -> {
+            scrim.setAodFrontScrimAlpha(0f);
+            scrim.setClipQsScrim(false);
+        });
         DejankUtils.setImmediate(false);
     }
 
@@ -259,9 +260,30 @@ public class ScrimControllerTest extends SysuiTestCase {
     @Test
     public void transitionToShadeLocked() {
         mScrimController.transitionTo(ScrimState.SHADE_LOCKED);
+        mScrimController.setQsPosition(1f, 0);
         finishAnimationsImmediately();
 
         assertScrimAlpha(Map.of(
+                mNotificationsScrim, OPAQUE,
+                mScrimInFront, TRANSPARENT,
+                mScrimBehind, OPAQUE));
+
+        assertScrimTinted(Map.of(
+                mScrimInFront, false,
+                mScrimBehind, true,
+                mScrimForBubble, false
+        ));
+    }
+
+    @Test
+    public void transitionToShadeLocked_clippingQs() {
+        mScrimController.setClipsQsScrim(true);
+        mScrimController.transitionTo(ScrimState.SHADE_LOCKED);
+        mScrimController.setQsPosition(1f, 0);
+        finishAnimationsImmediately();
+
+        assertScrimAlpha(Map.of(
+                mNotificationsScrim, OPAQUE,
                 mScrimInFront, TRANSPARENT,
                 mScrimBehind, OPAQUE));
 
@@ -401,11 +423,8 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.transitionTo(ScrimState.AOD);
         finishAnimationsImmediately();
         mScrimController.setAodFrontScrimAlpha(0.3f);
-        Assert.assertEquals(ScrimState.AOD.getFrontAlpha(), mScrimInFront.getViewAlpha(), 0.001f);
+        assertEquals(ScrimState.AOD.getFrontAlpha(), mScrimInFront.getViewAlpha(), 0.001f);
         Assert.assertNotEquals(0.3f, mScrimInFront.getViewAlpha(), 0.001f);
-
-        // Reset value since enums are static.
-        mScrimController.setAodFrontScrimAlpha(0f);
     }
 
     @Test
@@ -500,11 +519,34 @@ public class ScrimControllerTest extends SysuiTestCase {
         // Back scrim should be visible without tint
         assertScrimAlpha(Map.of(
                 mScrimInFront, TRANSPARENT,
+                mNotificationsScrim, TRANSPARENT,
                 mScrimBehind, OPAQUE));
 
         assertScrimTinted(Map.of(
                 mScrimInFront, false,
                 mScrimBehind, false,
+                mNotificationsScrim, false,
+                mScrimForBubble, false
+        ));
+    }
+
+    @Test
+    public void transitionToKeyguardBouncer_clippingQs() {
+        mScrimController.setClipsQsScrim(true);
+        mScrimController.transitionTo(ScrimState.BOUNCER);
+        finishAnimationsImmediately();
+        // Front scrim should be transparent
+        // Back scrim should be clipping QS
+        // Notif scrim should be visible without tint
+        assertScrimAlpha(Map.of(
+                mScrimInFront, TRANSPARENT,
+                mNotificationsScrim, OPAQUE,
+                mScrimBehind, OPAQUE));
+
+        assertScrimTinted(Map.of(
+                mScrimInFront, false,
+                mScrimBehind, true,
+                mNotificationsScrim, false,
                 mScrimForBubble, false
         ));
     }
@@ -530,9 +572,11 @@ public class ScrimControllerTest extends SysuiTestCase {
         finishAnimationsImmediately();
         assertScrimAlpha(Map.of(
                 mScrimInFront, TRANSPARENT,
+                mNotificationsScrim, TRANSPARENT,
                 mScrimBehind, TRANSPARENT));
 
         assertScrimTinted(Map.of(
+                mNotificationsScrim, false,
                 mScrimInFront, false,
                 mScrimBehind, true,
                 mScrimForBubble, false
@@ -542,6 +586,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setPanelExpansion(0.5f);
         assertScrimAlpha(Map.of(
                 mScrimInFront, TRANSPARENT,
+                mNotificationsScrim, SEMI_TRANSPARENT,
                 mScrimBehind, SEMI_TRANSPARENT));
     }
 
@@ -553,17 +598,17 @@ public class ScrimControllerTest extends SysuiTestCase {
         assertScrimTinted(Map.of(
                 mScrimInFront, false,
                 mScrimBehind, false,
-                mScrimForBubble, false
+                mScrimForBubble, true
         ));
 
         // Front scrim should be transparent
-        Assert.assertEquals(ScrimController.TRANSPARENT,
+        assertEquals(ScrimController.TRANSPARENT,
                 mScrimInFront.getViewAlpha(), 0.0f);
         // Back scrim should be visible
-        Assert.assertEquals(ScrimController.BUSY_SCRIM_ALPHA,
+        assertEquals(ScrimController.BUSY_SCRIM_ALPHA,
                 mScrimBehind.getViewAlpha(), 0.0f);
         // Bubble scrim should be visible
-        Assert.assertEquals(ScrimController.BUBBLE_SCRIM_ALPHA,
+        assertEquals(ScrimController.BUBBLE_SCRIM_ALPHA,
                 mScrimForBubble.getViewAlpha(), 0.0f);
     }
 
@@ -571,15 +616,15 @@ public class ScrimControllerTest extends SysuiTestCase {
     public void scrimStateCallback() {
         mScrimController.transitionTo(ScrimState.UNLOCKED);
         finishAnimationsImmediately();
-        Assert.assertEquals(mScrimState, ScrimState.UNLOCKED);
+        assertEquals(mScrimState, ScrimState.UNLOCKED);
 
         mScrimController.transitionTo(ScrimState.BOUNCER);
         finishAnimationsImmediately();
-        Assert.assertEquals(mScrimState, ScrimState.BOUNCER);
+        assertEquals(mScrimState, ScrimState.BOUNCER);
 
         mScrimController.transitionTo(ScrimState.BOUNCER_SCRIMMED);
         finishAnimationsImmediately();
-        Assert.assertEquals(mScrimState, ScrimState.BOUNCER_SCRIMMED);
+        assertEquals(mScrimState, ScrimState.BOUNCER_SCRIMMED);
     }
 
     @Test
@@ -594,13 +639,13 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setPanelExpansion(1.0f);
         finishAnimationsImmediately();
 
-        Assert.assertEquals("Scrim alpha should change after setPanelExpansion",
+        assertEquals("Scrim alpha should change after setPanelExpansion",
                 mScrimBehindAlpha, mScrimBehind.getViewAlpha(), 0.01f);
 
         mScrimController.setPanelExpansion(0f);
         finishAnimationsImmediately();
 
-        Assert.assertEquals("Scrim alpha should change after setPanelExpansion",
+        assertEquals("Scrim alpha should change after setPanelExpansion",
                 mScrimBehindAlpha, mScrimBehind.getViewAlpha(), 0.01f);
     }
 
@@ -617,6 +662,32 @@ public class ScrimControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void qsExpansion_clippingQs() {
+        reset(mScrimBehind);
+        mScrimController.setClipsQsScrim(true);
+        mScrimController.setQsPosition(1f, 999 /* value doesn't matter */);
+        finishAnimationsImmediately();
+
+        assertScrimAlpha(Map.of(
+                mScrimInFront, TRANSPARENT,
+                mScrimBehind, OPAQUE,
+                mNotificationsScrim, OPAQUE));
+    }
+
+    @Test
+    public void qsExpansion_half_clippingQs() {
+        reset(mScrimBehind);
+        mScrimController.setClipsQsScrim(true);
+        mScrimController.setQsPosition(0.5f, 999 /* value doesn't matter */);
+        finishAnimationsImmediately();
+
+        assertScrimAlpha(Map.of(
+                mScrimInFront, TRANSPARENT,
+                mScrimBehind, OPAQUE,
+                mNotificationsScrim, SEMI_TRANSPARENT));
+    }
+
+    @Test
     public void panelExpansionAffectsAlpha() {
         mScrimController.setPanelExpansion(0f);
         mScrimController.setPanelExpansion(0.5f);
@@ -628,7 +699,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setExpansionAffectsAlpha(false);
         mScrimController.setPanelExpansion(0.8f);
         verifyZeroInteractions(mScrimBehind);
-        Assert.assertEquals("Scrim opacity shouldn't change when setExpansionAffectsAlpha "
+        assertEquals("Scrim opacity shouldn't change when setExpansionAffectsAlpha "
                 + "is false", scrimAlpha, mScrimBehind.getViewAlpha(), 0.01f);
 
         mScrimController.setExpansionAffectsAlpha(true);
@@ -731,9 +802,9 @@ public class ScrimControllerTest extends SysuiTestCase {
             }
         });
         finishAnimationsImmediately();
-        Assert.assertEquals("onStart called in wrong order", 1, callOrder[0]);
-        Assert.assertEquals("onDisplayBlanked called in wrong order", 2, callOrder[1]);
-        Assert.assertEquals("onFinished called in wrong order", 3, callOrder[2]);
+        assertEquals("onStart called in wrong order", 1, callOrder[0]);
+        assertEquals("onDisplayBlanked called in wrong order", 2, callOrder[1]);
+        assertEquals("onFinished called in wrong order", 3, callOrder[2]);
     }
 
     @Test
@@ -841,7 +912,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.transitionTo(ScrimState.UNLOCKED);
         finishAnimationsImmediately();
 
-        Assert.assertEquals("Scrim expansion opacity wasn't conserved when transitioning back",
+        assertEquals("Scrim expansion opacity wasn't conserved when transitioning back",
                 expandedAlpha, mScrimBehind.getViewAlpha(), 0.01f);
     }
 
@@ -911,7 +982,7 @@ public class ScrimControllerTest extends SysuiTestCase {
             }
             mScrimController.transitionTo(state);
             finishAnimationsImmediately();
-            Assert.assertEquals("Should be clickable unless AOD or PULSING, was: " + state,
+            assertEquals("Should be clickable unless AOD or PULSING, was: " + state,
                     mScrimBehind.getViewAlpha() != 0 && !eatsTouches.contains(state),
                     mScrimBehind.isClickable());
         }
@@ -919,13 +990,13 @@ public class ScrimControllerTest extends SysuiTestCase {
 
     @Test
     public void testAnimatesTransitionToAod() {
-        when(mDozeParamenters.shouldControlScreenOff()).thenReturn(false);
+        when(mDozeParameters.shouldControlScreenOff()).thenReturn(false);
         ScrimState.AOD.prepare(ScrimState.KEYGUARD);
         Assert.assertFalse("No animation when ColorFade kicks in",
                 ScrimState.AOD.getAnimateChange());
 
-        reset(mDozeParamenters);
-        when(mDozeParamenters.shouldControlScreenOff()).thenReturn(true);
+        reset(mDozeParameters);
+        when(mDozeParameters.shouldControlScreenOff()).thenReturn(true);
         ScrimState.AOD.prepare(ScrimState.KEYGUARD);
         Assert.assertTrue("Animate scrims when ColorFade won't be triggered",
                 ScrimState.AOD.getAnimateChange());
@@ -965,9 +1036,9 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setQsPosition(0, 300);
         finishAnimationsImmediately();
 
-        Assert.assertEquals("Behind scrim should be opaque",
+        assertEquals("Behind scrim should be opaque",
                 mScrimBehind.getViewAlpha(), 1, 0.0);
-        Assert.assertEquals("Notifications scrim should be opaque",
+        assertEquals("Notifications scrim should be opaque",
                 mNotificationsScrim.getViewAlpha(), 1, 0.0);
     }
 
@@ -977,9 +1048,25 @@ public class ScrimControllerTest extends SysuiTestCase {
         mScrimController.setPanelExpansion(0.5f);
         // notifications scrim alpha change require calling setQsPosition
         mScrimController.setQsPosition(0, 300);
+        finishAnimationsImmediately();
 
         assertScrimAlpha(Map.of(
                 mScrimBehind, SEMI_TRANSPARENT,
+                mNotificationsScrim, SEMI_TRANSPARENT,
+                mScrimInFront, TRANSPARENT));
+    }
+
+    @Test
+    public void testScrimsVisible_whenShadeVisible_clippingQs() {
+        mScrimController.setClipsQsScrim(true);
+        mScrimController.transitionTo(ScrimState.UNLOCKED);
+        mScrimController.setPanelExpansion(0.5f);
+        // notifications scrim alpha change require calling setQsPosition
+        mScrimController.setQsPosition(0.5f, 300);
+        finishAnimationsImmediately();
+
+        assertScrimAlpha(Map.of(
+                mScrimBehind, OPAQUE,
                 mNotificationsScrim, SEMI_TRANSPARENT,
                 mScrimInFront, TRANSPARENT));
     }
@@ -1007,9 +1094,41 @@ public class ScrimControllerTest extends SysuiTestCase {
                 mNotificationsScrim, TRANSPARENT));
     }
 
+    @Test
+    public void testNotificationScrimVisible_afterOpeningShadeFromLockscreen() {
+        mScrimController.setPanelExpansion(1);
+        mScrimController.transitionTo(ScrimState.SHADE_LOCKED);
+        finishAnimationsImmediately();
+
+        assertScrimAlpha(Map.of(
+                mScrimBehind, OPAQUE,
+                mNotificationsScrim, OPAQUE));
+    }
+
+    @Test
+    public void testNotificationTransparency_followsPanelExpansionInShadeLockedState() {
+        mScrimController.transitionTo(ScrimState.SHADE_LOCKED);
+
+        assertAlphaAfterExpansion(mNotificationsScrim, /* alpha */ 0.8f, /* expansion */ 0.8f);
+        assertAlphaAfterExpansion(mNotificationsScrim, /* alpha */ 0.2f, /* expansion */ 0.2f);
+    }
+
+    @Test
+    public void testNotificationTransparency_inKeyguardState() {
+        mScrimController.transitionTo(ScrimState.KEYGUARD);
+
+        assertAlphaAfterExpansion(mNotificationsScrim, /* alpha */ 0.2f, /* expansion */ 0.8f);
+        assertAlphaAfterExpansion(mNotificationsScrim, /* alpha */ 0.8f, /* expansion */ 0.2f);
+    }
+
+    private void assertAlphaAfterExpansion(ScrimView scrim, float expectedAlpha, float expansion) {
+        mScrimController.setPanelExpansion(expansion);
+        finishAnimationsImmediately();
+        // alpha is not changing linearly thus 0.2 of leeway when asserting
+        assertEquals(expectedAlpha, mNotificationsScrim.getViewAlpha(), 0.2);
+    }
+
     private void assertScrimTinted(Map<ScrimView, Boolean> scrimToTint) {
-        // notifications scrim should have always transparent tint
-        assertScrimTint(mNotificationsScrim, false);
         scrimToTint.forEach((scrim, hasTint) -> assertScrimTint(scrim, hasTint));
     }
 
@@ -1017,7 +1136,7 @@ public class ScrimControllerTest extends SysuiTestCase {
         String message = "Tint test failed at state " + mScrimController.getState()
                 + " with scrim: " + getScrimName(scrim) + " and tint: "
                 + Integer.toHexString(scrim.getTint());
-        Assert.assertEquals(message, hasTint, scrim.getTint() != Color.TRANSPARENT);
+        assertEquals(message, hasTint, scrim.getTint() != Color.TRANSPARENT);
     }
 
     private String getScrimName(ScrimView scrim) {
@@ -1047,6 +1166,12 @@ public class ScrimControllerTest extends SysuiTestCase {
         }
         scrimToAlpha.forEach((scrimView, alpha) -> assertScrimAlpha(scrimView, alpha));
 
+        // When clipping, QS scrim should not affect combined visibility.
+        if (mScrimController.getClipQsScrim() && scrimToAlpha.get(mScrimBehind) == OPAQUE) {
+            scrimToAlpha = new HashMap<>(scrimToAlpha);
+            scrimToAlpha.remove(mScrimBehind);
+        }
+
         // Check combined scrim visibility.
         final int visibility;
         if (scrimToAlpha.values().contains(OPAQUE)) {
@@ -1056,13 +1181,13 @@ public class ScrimControllerTest extends SysuiTestCase {
         } else {
             visibility = TRANSPARENT;
         }
-        Assert.assertEquals("Invalid visibility.",
+        assertEquals("Invalid visibility.",
                 visibility /* expected */,
                 mScrimVisibility);
     }
 
     private void assertScrimAlpha(ScrimView scrim, int expectedAlpha) {
-        Assert.assertEquals("Unexpected " + getScrimName(scrim) + " scrim alpha: "
+        assertEquals("Unexpected " + getScrimName(scrim) + " scrim alpha: "
                         + scrim.getViewAlpha(),
                 expectedAlpha != TRANSPARENT /* expected */,
                 scrim.getViewAlpha() > TRANSPARENT /* actual */);

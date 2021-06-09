@@ -475,10 +475,13 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     }
 
     /**
+     * Callbacks for generate challenge operations.
+     *
      * @hide
      */
     public interface GenerateChallengeCallback {
-        void onChallengeGenerated(int sensorId, long challenge);
+        /** Called when a challenged has been generated. */
+        void onChallengeGenerated(int sensorId, int userId, long challenge);
     }
 
     /**
@@ -926,6 +929,23 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     }
 
     /**
+     * @hide
+     */
+    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
+    public void onUiReady(int sensorId) {
+        if (mService == null) {
+            Slog.w(TAG, "onUiReady: no fingerprint service");
+            return;
+        }
+
+        try {
+            mService.onUiReady(sensorId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Determine if there is at least one fingerprint enrolled.
      *
      * @return true if at least one fingerprint is enrolled, false otherwise
@@ -1013,6 +1033,31 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
     }
 
     /**
+     * Adds a callback that gets called when the service registers all of the fingerprint
+     * authenticators (HALs).
+     *
+     * If the fingerprint authenticators are already registered when the callback is added, the
+     * callback is invoked immediately.
+     *
+     * The callback is automatically removed after it's invoked.
+     *
+     * @hide
+     */
+    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
+    public void addAuthenticatorsRegisteredCallback(
+            IFingerprintAuthenticatorsRegisteredCallback callback) {
+        if (mService != null) {
+            try {
+                mService.addAuthenticatorsRegisteredCallback(callback);
+            } catch (RemoteException e) {
+                throw e.rethrowFromSystemServer();
+            }
+        } else {
+            Slog.w(TAG, "addProvidersAvailableCallback(): Service not connected!");
+        }
+    }
+
+    /**
      * @hide
      */
     public void addLockoutResetCallback(final LockoutResetCallback callback) {
@@ -1082,7 +1127,8 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
                     sendRemovedResult((Fingerprint) msg.obj, msg.arg1 /* remaining */);
                     break;
                 case MSG_CHALLENGE_GENERATED:
-                    sendChallengeGenerated(msg.arg1 /* sensorId */, (long) msg.obj /* challenge */);
+                    sendChallengeGenerated(msg.arg1 /* sensorId */, msg.arg2 /* userId */,
+                            (long) msg.obj /* challenge */);
                     break;
                 case MSG_FINGERPRINT_DETECTED:
                     sendFingerprintDetected(msg.arg1 /* sensorId */, msg.arg2 /* userId */,
@@ -1191,12 +1237,12 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         }
     }
 
-    private void sendChallengeGenerated(int sensorId, long challenge) {
+    private void sendChallengeGenerated(int sensorId, int userId, long challenge) {
         if (mGenerateChallengeCallback == null) {
             Slog.e(TAG, "sendChallengeGenerated, callback null");
             return;
         }
-        mGenerateChallengeCallback.onChallengeGenerated(sensorId, challenge);
+        mGenerateChallengeCallback.onChallengeGenerated(sensorId, userId, challenge);
     }
 
     private void sendFingerprintDetected(int sensorId, int userId, boolean isStrongBiometric) {
@@ -1412,8 +1458,8 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         }
 
         @Override // binder call
-        public void onChallengeGenerated(int sensorId, long challenge) {
-            mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, sensorId, 0, challenge)
+        public void onChallengeGenerated(int sensorId, int userId, long challenge) {
+            mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, sensorId, userId, challenge)
                     .sendToTarget();
         }
 
@@ -1425,7 +1471,6 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
         @Override // binder call
         public void onUdfpsPointerUp(int sensorId) {
             mHandler.obtainMessage(MSG_UDFPS_POINTER_UP, sensorId, 0).sendToTarget();
-
         }
     };
 

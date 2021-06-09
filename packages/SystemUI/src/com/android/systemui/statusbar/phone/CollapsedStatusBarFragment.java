@@ -23,6 +23,7 @@ import static android.app.StatusBarManager.DISABLE_SYSTEM_INFO;
 import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.ANIMATING_IN;
 import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.ANIMATING_OUT;
 import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.IDLE;
+import static com.android.systemui.statusbar.events.SystemStatusAnimationSchedulerKt.SHOWING_PERSISTENT_DOT;
 
 import android.animation.ValueAnimator;
 import android.annotation.Nullable;
@@ -43,7 +44,6 @@ import com.android.systemui.animation.Interpolators;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.StatusBarState;
-import com.android.systemui.statusbar.events.PrivacyDotViewController;
 import com.android.systemui.statusbar.events.SystemStatusAnimationCallback;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.phone.StatusBarIconController.DarkIconManager;
@@ -92,7 +92,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     private CommandQueue mCommandQueue;
     private OngoingCallController mOngoingCallController;
     private final SystemStatusAnimationScheduler mAnimationScheduler;
-    private final PrivacyDotViewController mDotViewController;
+    private final StatusBarLocationPublisher mLocationPublisher;
     private NotificationIconAreaController mNotificationIconAreaController;
 
     private List<String> mBlockedIcons = new ArrayList<>();
@@ -106,12 +106,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
 
     private final OngoingCallListener mOngoingCallListener = new OngoingCallListener() {
         @Override
-        public void onOngoingCallStarted(boolean animate) {
-            disable(getContext().getDisplayId(), mDisabled1, mDisabled2, animate);
-        }
-
-        @Override
-        public void onOngoingCallEnded(boolean animate) {
+        public void onOngoingCallStateChanged(boolean animate) {
             disable(getContext().getDisplayId(), mDisabled1, mDisabled2, animate);
         }
     };
@@ -120,12 +115,12 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     public CollapsedStatusBarFragment(
             OngoingCallController ongoingCallController,
             SystemStatusAnimationScheduler animationScheduler,
-            PrivacyDotViewController dotViewController,
+            StatusBarLocationPublisher locationPublisher,
             NotificationIconAreaController notificationIconAreaController
     ) {
         mOngoingCallController = ongoingCallController;
         mAnimationScheduler = animationScheduler;
-        mDotViewController = dotViewController;
+        mLocationPublisher = locationPublisher;
         mNotificationIconAreaController = notificationIconAreaController;
     }
 
@@ -331,11 +326,13 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         // Show the ongoing call chip only if there is an ongoing call *and* notification icons
         // are allowed. (The ongoing call chip occupies the same area as the notification icons,
         // so if the icons are disabled then the call chip should be, too.)
-        if (hasOngoingCall && !disableNotifications) {
+        boolean showOngoingCallChip = hasOngoingCall && !disableNotifications;
+        if (showOngoingCallChip) {
             showOngoingCallChip(animate);
         } else {
             hideOngoingCallChip(animate);
         }
+        mOngoingCallController.notifyChipVisibilityChanged(showOngoingCallChip);
     }
 
     private boolean shouldHideNotificationIcons() {
@@ -354,7 +351,8 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
 
     private void showSystemIconArea(boolean animate) {
         // Only show the system icon area if we are not currently animating
-        if (mAnimationScheduler.getAnimationState() == IDLE) {
+        int state = mAnimationScheduler.getAnimationState();
+        if (state == IDLE || state == SHOWING_PERSISTENT_DOT) {
             animateShow(mSystemIconArea, animate);
         }
     }
@@ -540,7 +538,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         int leftMargin = left - mStatusBar.getLeft();
         int rightMargin = mStatusBar.getRight() - right;
 
-        mDotViewController.setStatusBarMargins(leftMargin, rightMargin);
+        mLocationPublisher.updateStatusBarMargin(leftMargin, rightMargin);
     }
 
     // Listen for view end changes of PhoneStatusBarView and publish that to the privacy dot

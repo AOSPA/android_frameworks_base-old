@@ -133,6 +133,7 @@ import static com.android.server.wm.MoveAnimationSpecProto.TO;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_RECENTS;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_STARTING_REVEAL;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_WINDOW_ANIMATION;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -906,6 +907,12 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // The transform of its surface is handled by fixed rotation.
             return;
         }
+        final Task task = getTask();
+        if (task != null && task.inPinnedWindowingMode()) {
+            // It is handled by PinnedTaskController. Note that the windowing mode of activity
+            // and windows may still be fullscreen.
+            return;
+        }
 
         if (mPendingSeamlessRotate != null) {
             oldRotation = mPendingSeamlessRotate.getOldRotation();
@@ -1259,7 +1266,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mHaveFrame = true;
 
         final Task task = getTask();
-        final boolean isFullscreenAndFillsDisplay = !inMultiWindowMode() && matchesDisplayBounds();
+        final boolean isFullscreenAndFillsArea = !inMultiWindowMode() && matchesDisplayAreaBounds();
         final boolean windowsAreFloating = task != null && task.isFloating();
         final DisplayContent dc = getDisplayContent();
         final DisplayInfo displayInfo = getDisplayInfo();
@@ -1284,7 +1291,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 : isImeLayeringTarget();
         final boolean isImeTarget =
                 imeWin != null && imeWin.isVisibleNow() && isInputMethodAdjustTarget;
-        if (isFullscreenAndFillsDisplay || layoutInParentFrame()) {
+        if (isFullscreenAndFillsArea || layoutInParentFrame()) {
             // We use the parent frame as the containing frame for fullscreen and child windows
             windowFrames.mContainingFrame.set(windowFrames.mParentFrame);
             layoutDisplayFrame = windowFrames.mDisplayFrame;
@@ -2266,19 +2273,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 && mWindowFrames.mFrame.bottom >= displayInfo.appHeight;
     }
 
-    private boolean matchesDisplayBounds() {
-        final Rect displayBounds = mToken.getFixedRotationTransformDisplayBounds();
-        if (displayBounds != null) {
-            // If the rotated display bounds are available, the window bounds are also rotated.
-            return displayBounds.equals(getBounds());
-        }
-        return getDisplayContent().getBounds().equals(getBounds());
-    }
-
     boolean matchesDisplayAreaBounds() {
+        final Rect rotatedDisplayBounds = mToken.getFixedRotationTransformDisplayBounds();
+        if (rotatedDisplayBounds != null) {
+            // If the rotated display bounds are available, the window bounds are also rotated.
+            return rotatedDisplayBounds.equals(getBounds());
+        }
         final DisplayArea displayArea = getDisplayArea();
         if (displayArea == null) {
-            return matchesDisplayBounds();
+            return getDisplayContent().getBounds().equals(getBounds());
         }
         return displayArea.getBounds().equals(getBounds());
     }
@@ -2289,6 +2292,27 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      */
     boolean isLastConfigReportedToClient() {
         return mLastConfigReportedToClient;
+    }
+
+    @Override
+    public void onConfigurationChanged(Configuration newParentConfig) {
+        if (getDisplayContent().getImeTarget(IME_TARGET_INPUT) != this && !isImeLayeringTarget()) {
+            super.onConfigurationChanged(newParentConfig);
+            return;
+        }
+
+        mTempConfiguration.setTo(getConfiguration());
+        super.onConfigurationChanged(newParentConfig);
+        final boolean windowConfigChanged = mTempConfiguration.windowConfiguration
+                .diff(newParentConfig.windowConfiguration, false) != 0;
+
+        // When the window configuration changed, we need to update the IME control target in
+        // case the app may lose the IME inets control when exiting from split-screen mode, or the
+        // IME parent may failed to attach to the app during rotating the screen.
+        // See DisplayContent#isImeAttachedToApp, DisplayContent#isImeControlledByApp
+        if (windowConfigChanged) {
+            getDisplayContent().updateImeControlTarget();
+        }
     }
 
     @Override
@@ -2385,6 +2409,18 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean startingWindow = mAttrs.type == TYPE_APPLICATION_STARTING;
         if (startingWindow) {
             ProtoLog.d(WM_DEBUG_STARTING_WINDOW, "Starting window removed %s", this);
+        }
+
+        if (startingWindow && StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
+            // cancel the remove starting window animation on shell
+            if (mActivityRecord != null) {
+                final WindowState mainWindow =
+                        mActivityRecord.findMainWindow(false/* includeStartingApp */);
+                if (mainWindow != null && mainWindow.isSelfAnimating(0 /* flags */,
+                        ANIMATION_TYPE_STARTING_REVEAL)) {
+                    mainWindow.cancelAnimation();
+                }
+            }
         }
 
         ProtoLog.v(WM_DEBUG_FOCUS, "Remove client=%x, surfaceController=%s Callers=%s",
@@ -2644,6 +2680,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             // Create fake event receiver that simply reports all events as handled.
             mDeadWindowEventReceiver = new DeadWindowEventReceiver(mInputChannel);
         }
+    }
+
+    /**
+     * Move the touch gesture from the currently touched window on this display to this window.
+     */
+    public boolean transferTouch() {
+        return mWmService.mInputManager.transferTouch(mInputChannelToken);
     }
 
     void disposeInputChannel() {
@@ -4806,7 +4849,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // directly above it. The exception is if we are in split screen
         // in which case we process the IME at the DisplayContent level to
         // ensure it is above the docked divider.
-        if (isImeLayeringTarget() && !inSplitScreenWindowingMode()) {
+        // (i.e. Like {@link DisplayContent.ImeContainer#skipImeWindowsDuringTraversal}, the IME
+        // window will be ignored to traverse when the IME target is still in split-screen mode).
+        if (isImeLayeringTarget()
+                && !getDisplayContent().getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
             if (getDisplayContent().forAllImeWindows(callback, traverseTopToBottom)) {
                 return true;
             }
@@ -5348,7 +5394,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     }
 
     private boolean shouldDrawBlurBehind() {
-        return (mAttrs.flags & FLAG_BLUR_BEHIND) != 0 && mWmService.mBlurController.mBlurEnabled;
+        return (mAttrs.flags & FLAG_BLUR_BEHIND) != 0
+            && mWmService.mBlurController.getBlurEnabled();
     }
 
     /**

@@ -17,7 +17,6 @@
 package com.android.wm.shell.startingsurface;
 
 import static android.content.Context.CONTEXT_RESTRICTED;
-import static android.content.res.Configuration.EMPTY;
 import static android.view.Choreographer.CALLBACK_INSETS_ANIMATION;
 import static android.view.Display.DEFAULT_DISPLAY;
 
@@ -35,7 +34,7 @@ import android.graphics.PixelFormat;
 import android.graphics.Rect;
 import android.hardware.display.DisplayManager;
 import android.os.IBinder;
-import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.util.Slog;
 import android.util.SparseArray;
@@ -54,7 +53,6 @@ import com.android.internal.policy.PhoneWindow;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.TransactionPool;
 
-import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -92,8 +90,6 @@ import java.util.function.Supplier;
  * => makeSplashScreenContentView -> cachePaint(=AdaptiveIconDrawable#draw)
  * => WM#addView -> .. waiting for Choreographer#doFrame -> relayout -> draw -> (draw the Paint
  * directly).
- *
- * @hide
  */
 public class StartingSurfaceDrawer {
     static final String TAG = StartingSurfaceDrawer.class.getSimpleName();
@@ -106,6 +102,8 @@ public class StartingSurfaceDrawer {
     private final SplashscreenContentDrawer mSplashscreenContentDrawer;
     private Choreographer mChoreographer;
 
+    private static final boolean DEBUG_ENABLE_REVEAL_ANIMATION =
+            SystemProperties.getBoolean("persist.debug.enable_reveal_animation", false);
     /**
      * @param splashScreenExecutor The thread used to control add and remove starting window.
      */
@@ -114,14 +112,7 @@ public class StartingSurfaceDrawer {
         mContext = context;
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
         mSplashScreenExecutor = splashScreenExecutor;
-        final int maxAnimatableIconDuration = context.getResources().getInteger(
-                com.android.wm.shell.R.integer.max_starting_window_intro_icon_anim_duration);
-        final int iconExitAnimDuration = context.getResources().getInteger(
-                com.android.wm.shell.R.integer.starting_window_icon_exit_anim_duration);
-        final int appRevealAnimDuration = context.getResources().getInteger(
-                com.android.wm.shell.R.integer.starting_window_app_reveal_anim_duration);
-        mSplashscreenContentDrawer = new SplashscreenContentDrawer(mContext,
-                maxAnimatableIconDuration, iconExitAnimDuration, appRevealAnimDuration, pool);
+        mSplashscreenContentDrawer = new SplashscreenContentDrawer(mContext, pool);
         mSplashScreenExecutor.execute(() -> mChoreographer = Choreographer.getInstance());
     }
 
@@ -202,7 +193,7 @@ public class StartingSurfaceDrawer {
         }
 
         final Configuration taskConfig = taskInfo.getConfiguration();
-        if (taskConfig != null && !taskConfig.equals(EMPTY)) {
+        if (taskConfig.diffPublicOnly(context.getResources().getConfiguration()) != 0) {
             if (DEBUG_SPLASH_SCREEN) {
                 Slog.d(TAG, "addSplashScreen: creating context based"
                         + " on task Configuration " + taskConfig + " for splash screen");
@@ -231,24 +222,11 @@ public class StartingSurfaceDrawer {
             typedArray.recycle();
         }
 
-        int windowFlags = 0;
-        windowFlags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
-
-        final boolean[] showWallpaper = new boolean[1];
-        final int[] splashscreenContentResId = new int[1];
-        getWindowResFromContext(context, a -> {
-            splashscreenContentResId[0] =
-                    a.getResourceId(R.styleable.Window_windowSplashscreenContent, 0);
-            showWallpaper[0] = a.getBoolean(R.styleable.Window_windowShowWallpaper, false);
-        });
-        if (showWallpaper[0]) {
-            windowFlags |= WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
-        }
-
         final PhoneWindow win = new PhoneWindow(context);
         win.setIsStartingWindow(true);
 
-        CharSequence label = context.getResources().getText(labelRes, null);
+        final Resources res = context.getResources();
+        final CharSequence label = res.getText(labelRes, null);
         // Only change the accessibility title if the label is localized
         if (label != null) {
             win.setTitle(label, true);
@@ -256,7 +234,12 @@ public class StartingSurfaceDrawer {
             win.setTitle(nonLocalizedLabel, false);
         }
 
-        win.setType(WindowManager.LayoutParams.TYPE_APPLICATION_STARTING);
+        int windowFlags = WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
+        final TypedArray a = context.obtainStyledAttributes(R.styleable.Window);
+        if (a.getBoolean(R.styleable.Window_windowShowWallpaper, false)) {
+            windowFlags |= WindowManager.LayoutParams.FLAG_SHOW_WALLPAPER;
+        }
+        a.recycle();
 
         // Assumes it's safe to show starting windows of launched apps while
         // the keyguard is being hidden. This is okay because starting windows never show
@@ -270,24 +253,20 @@ public class StartingSurfaceDrawer {
         // touchable or focusable by the user.  We also add in the ALT_FOCUSABLE_IM
         // flag because we do know that the next window will take input
         // focus, so we want to get the IME window up on top of us right away.
-        win.setFlags(windowFlags
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM,
-                windowFlags
-                        | WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-                        | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM);
+        windowFlags |= WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
+                | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
+                | WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
+        win.setFlags(windowFlags, windowFlags);
 
         final int iconRes = activityInfo.getIconResource();
         final int logoRes = activityInfo.getLogoResource();
         win.setDefaultIcon(iconRes);
         win.setDefaultLogo(logoRes);
 
-        win.setLayout(WindowManager.LayoutParams.MATCH_PARENT,
-                WindowManager.LayoutParams.MATCH_PARENT);
-
         final WindowManager.LayoutParams params = win.getAttributes();
+        params.type = WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
+        params.width = WindowManager.LayoutParams.MATCH_PARENT;
+        params.height = WindowManager.LayoutParams.MATCH_PARENT;
         params.token = appToken;
         params.packageName = activityInfo.packageName;
         params.windowAnimations = win.getWindowStyle().getResourceId(
@@ -298,10 +277,7 @@ public class StartingSurfaceDrawer {
         params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
         params.format = PixelFormat.RGBA_8888;
 
-        final Resources res = context.getResources();
-        final boolean supportsScreen = res != null && (res.getCompatibilityInfo() != null
-                && res.getCompatibilityInfo().supportsScreen());
-        if (!supportsScreen) {
+        if (!res.getCompatibilityInfo().supportsScreen()) {
             params.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
         }
 
@@ -341,12 +317,12 @@ public class StartingSurfaceDrawer {
                 record.setSplashScreenView(contentView);
             }
         };
-        mSplashscreenContentDrawer.createContentView(context, emptyView,
-                splashscreenContentResId[0], activityInfo, taskId, viewSupplier::setView);
+        mSplashscreenContentDrawer.createContentView(context, emptyView, activityInfo, taskId,
+                viewSupplier::setView);
 
         try {
             final View view = win.getDecorView();
-            final WindowManager wm = mContext.getSystemService(WindowManager.class);
+            final WindowManager wm = context.getSystemService(WindowManager.class);
             postAddWindow(taskId, appToken, view, wm, params);
 
             // We use the splash screen worker thread to create SplashScreenView while adding the
@@ -473,20 +449,24 @@ public class StartingSurfaceDrawer {
                 if (DEBUG_SPLASH_SCREEN) {
                     Slog.v(TAG, "Removing splash screen window for task: " + taskId);
                 }
-                if (record.mContentView != null) {
-                    if (leash != null || playRevealAnimation) {
-                        mSplashscreenContentDrawer.applyExitAnimation(record.mContentView,
-                                leash, frame, record.isEarlyExit(),
-                                () -> removeWindowInner(record.mDecorView, true));
+                if (record.mContentView != null
+                        && record.mContentView.isRevealAnimationSupported()) {
+                    if (playRevealAnimation) {
+                        if (DEBUG_ENABLE_REVEAL_ANIMATION) {
+                            mSplashscreenContentDrawer.applyExitAnimation(record.mContentView,
+                                    leash, frame,
+                                    () -> removeWindowInner(record.mDecorView, true));
+                        } else {
+                            // using the default exit animation from framework
+                            removeWindowInner(record.mDecorView, false);
+                        }
                     } else {
-                        // TODO(183004107) Always hide decorView when playRevealAnimation is enabled
-                        //  from TaskOrganizerController#removeStartingWindow
-                        // the SplashScreenView has been copied to client, skip default exit
-                        // animation
-                        removeWindowInner(record.mDecorView, false);
+                        // the SplashScreenView has been copied to client, hide the view to skip
+                        // default exit animation
+                        removeWindowInner(record.mDecorView, true);
                     }
                 } else {
-                    // no animation will be applied
+                    // this is a blank splash screen, don't apply reveal animation
                     removeWindowInner(record.mDecorView, false);
                 }
             }
@@ -510,22 +490,14 @@ public class StartingSurfaceDrawer {
         }
     }
 
-    private void getWindowResFromContext(Context ctx, Consumer<TypedArray> consumer) {
-        final TypedArray a = ctx.obtainStyledAttributes(R.styleable.Window);
-        consumer.accept(a);
-        a.recycle();
-    }
-
     /**
      * Record the view or surface for a starting window.
      */
     private static class StartingWindowRecord {
-        private static final long EARLY_START_MINIMUM_TIME_MS = 250;
         private final View mDecorView;
         private final TaskSnapshotWindow mTaskSnapshotWindow;
         private SplashScreenView mContentView;
         private boolean mSetSplashScreen;
-        private long mContentCreateTime;
 
         StartingWindowRecord(View decorView, TaskSnapshotWindow taskSnapshotWindow) {
             mDecorView = decorView;
@@ -537,12 +509,7 @@ public class StartingSurfaceDrawer {
                 return;
             }
             mContentView = splashScreenView;
-            mContentCreateTime = SystemClock.uptimeMillis();
             mSetSplashScreen = true;
-        }
-
-        boolean isEarlyExit() {
-            return SystemClock.uptimeMillis() - mContentCreateTime < EARLY_START_MINIMUM_TIME_MS;
         }
     }
 }

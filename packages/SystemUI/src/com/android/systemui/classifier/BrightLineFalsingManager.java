@@ -16,6 +16,8 @@
 
 package com.android.systemui.classifier;
 
+import static com.android.systemui.classifier.Classifier.BACK_GESTURE;
+import static com.android.systemui.classifier.Classifier.GENERIC;
 import static com.android.systemui.classifier.FalsingManagerProxy.FALSING_SUCCESS;
 import static com.android.systemui.classifier.FalsingModule.BRIGHT_LINE_GESTURE_CLASSIFERS;
 
@@ -33,7 +35,6 @@ import com.android.systemui.dagger.qualifiers.TestHarness;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
-import com.android.systemui.util.sensors.ThresholdSensor;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -79,6 +80,7 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     private final Collection<FalsingClassifier> mClassifiers;
     private final List<FalsingBeliefListener> mFalsingBeliefListeners = new ArrayList<>();
+    private List<FalsingTapListener> mFalsingTapListeners = new ArrayList<>();
 
     private final SessionListener mSessionListener = new SessionListener() {
         @Override
@@ -195,32 +197,26 @@ public class BrightLineFalsingManager implements FalsingManager {
     @Override
     public boolean isFalseTouch(@Classifier.InteractionType int interactionType) {
         mPriorInteractionType = interactionType;
-        if (skipFalsing()) {
+        if (skipFalsing(interactionType)) {
+            mPriorResults = getPassedResult(1);
+            logDebug("Skipped falsing");
             return false;
         }
 
-        final boolean booleanResult;
+        final boolean[] localResult = {false};
+        mPriorResults = mClassifiers.stream().map(falsingClassifier -> {
+            FalsingClassifier.Result r = falsingClassifier.classifyGesture(
+                    interactionType,
+                    mHistoryTracker.falseBelief(),
+                    mHistoryTracker.falseConfidence());
+            localResult[0] |= r.isFalse();
 
-        if (!mTestHarness && !mDataProvider.isJustUnlockedWithFace() && !mDockManager.isDocked()) {
-            final boolean[] localResult = {false};
-            mPriorResults = mClassifiers.stream().map(falsingClassifier -> {
-                FalsingClassifier.Result r = falsingClassifier.classifyGesture(
-                        interactionType,
-                        mHistoryTracker.falseBelief(),
-                        mHistoryTracker.falseConfidence());
-                localResult[0] |= r.isFalse();
+            return r;
+        }).collect(Collectors.toList());
 
-                return r;
-            }).collect(Collectors.toList());
-            booleanResult = localResult[0];
-        } else {
-            booleanResult = false;
-            mPriorResults = Collections.singleton(FalsingClassifier.Result.passed(1));
-        }
+        logDebug("False Gesture: " + localResult[0]);
 
-        logDebug("False Gesture: " + booleanResult);
-
-        return booleanResult;
+        return localResult[0];
     }
 
     @Override
@@ -234,7 +230,9 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public boolean isFalseTap(@Penalty int penalty) {
-        if (skipFalsing()) {
+        if (skipFalsing(GENERIC)) {
+            mPriorResults = getPassedResult(1);
+            logDebug("Skipped falsing");
             return false;
         }
 
@@ -263,7 +261,7 @@ public class BrightLineFalsingManager implements FalsingManager {
         if (!singleTapResult.isFalse()) {
             if (mDataProvider.isJustUnlockedWithFace()) {
                 // Immediately pass if a face is detected.
-                mPriorResults = Collections.singleton(FalsingClassifier.Result.passed(1));
+                mPriorResults = getPassedResult(1);
                 logDebug("False Single Tap: false (face detected)");
                 return false;
             } else if (!isFalseDoubleTap()) {
@@ -277,9 +275,10 @@ public class BrightLineFalsingManager implements FalsingManager {
                         FalsingClassifier.Result.falsed(
                                 0, getClass().getSimpleName(), "bad history"));
                 logDebug("False Single Tap: true (bad history)");
+                mFalsingTapListeners.forEach(FalsingTapListener::onDoubleTapRequired);
                 return true;
             } else {
-                mPriorResults = Collections.singleton(FalsingClassifier.Result.passed(0.1));
+                mPriorResults = getPassedResult(0.1);
                 logDebug("False Single Tap: false (default)");
                 return false;
             }
@@ -293,7 +292,9 @@ public class BrightLineFalsingManager implements FalsingManager {
 
     @Override
     public boolean isFalseDoubleTap() {
-        if (skipFalsing()) {
+        if (skipFalsing(GENERIC)) {
+            mPriorResults = getPassedResult(1);
+            logDebug("Skipped falsing");
             return false;
         }
 
@@ -306,12 +307,16 @@ public class BrightLineFalsingManager implements FalsingManager {
         return result.isFalse();
     }
 
-    private boolean skipFalsing() {
-        return !mKeyguardStateController.isShowing();
+    private boolean skipFalsing(@Classifier.InteractionType  int interactionType) {
+        return interactionType == BACK_GESTURE
+                || !mKeyguardStateController.isShowing()
+                || mTestHarness
+                || mDataProvider.isJustUnlockedWithFace()
+                || mDockManager.isDocked();
     }
 
     @Override
-    public void onProximityEvent(ThresholdSensor.ThresholdSensorEvent proximityEvent) {
+    public void onProximityEvent(ProximityEvent proximityEvent) {
         // TODO: some of these classifiers might allow us to abort early, meaning we don't have to
         // make these calls.
         mClassifiers.forEach((classifier) -> classifier.onProximityEvent(proximityEvent));
@@ -356,6 +361,16 @@ public class BrightLineFalsingManager implements FalsingManager {
     }
 
     @Override
+    public void addTapListener(FalsingTapListener listener) {
+        mFalsingTapListeners.add(listener);
+    }
+
+    @Override
+    public void removeTapListener(FalsingTapListener listener) {
+        mFalsingTapListeners.remove(listener);
+    }
+
+    @Override
     public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
         IndentingPrintWriter ipw = new IndentingPrintWriter(pw, "  ");
         ipw.println("BRIGHTLINE FALSING MANAGER");
@@ -397,6 +412,10 @@ public class BrightLineFalsingManager implements FalsingManager {
         mClassifiers.forEach(FalsingClassifier::cleanup);
         mFalsingBeliefListeners.clear();
         mHistoryTracker.removeBeliefListener(mBeliefListener);
+    }
+
+    private static Collection<FalsingClassifier.Result> getPassedResult(double confidence) {
+        return Collections.singleton(FalsingClassifier.Result.passed(confidence));
     }
 
     static void logDebug(String msg) {

@@ -225,7 +225,8 @@ import java.util.concurrent.CountDownLatch;
  */
 @SuppressWarnings({"EmptyCatchBlock", "PointlessBooleanExpression"})
 public final class ViewRootImpl implements ViewParent,
-        View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks, ViewRoot {
+        View.AttachInfo.Callbacks, ThreadedRenderer.DrawCallbacks,
+        AttachedSurfaceControl {
     private static final String TAG = "ViewRootImpl";
     private static final boolean DBG = false;
     private static final boolean LOCAL_LOGV = false;
@@ -1924,6 +1925,7 @@ public final class ViewRootImpl implements ViewParent,
         } else {
             mBlastBufferQueue.update(mSurfaceControl, width, height, format);
         }
+        ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
 
         return ret;
     }
@@ -2766,7 +2768,9 @@ public final class ViewRootImpl implements ViewParent,
                         // to resume them
                         mDirty.set(0, 0, mWidth, mHeight);
                     }
-                    mViewFrameInfo.flags |= FrameInfo.FLAG_WINDOW_LAYOUT_CHANGED;
+                }
+                if (mFirst || viewVisibilityChanged) {
+                    mViewFrameInfo.flags |= FrameInfo.FLAG_WINDOW_VISIBILITY_CHANGED;
                 }
                 relayoutResult = relayoutWindow(params, viewVisibility, insetsPending);
                 final boolean freeformResizing = (relayoutResult
@@ -5193,6 +5197,17 @@ public final class ViewRootImpl implements ViewParent,
 
         @Override
         public void handleMessage(Message msg) {
+            if (Trace.isTagEnabled(Trace.TRACE_TAG_VIEW)) {
+                Trace.traceBegin(Trace.TRACE_TAG_VIEW, getMessageName(msg));
+            }
+            try {
+                handleMessageImpl(msg);
+            } finally {
+                Trace.traceEnd(Trace.TRACE_TAG_VIEW);
+            }
+        }
+
+        private void handleMessageImpl(Message msg) {
             switch (msg.what) {
                 case MSG_INVALIDATE:
                     ((View) msg.obj).invalidate();
@@ -8373,6 +8388,7 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     void doProcessInputEvents() {
+        ScrollOptimizer.setBLASTBufferQueue(mBlastBufferQueue);
         // Deliver all pending input events in the queue.
         while (mPendingInputEventHead != null) {
             QueuedInputEvent q = mPendingInputEventHead;

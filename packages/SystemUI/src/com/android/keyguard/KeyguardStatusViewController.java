@@ -16,6 +16,7 @@
 
 package com.android.keyguard;
 
+import android.graphics.Rect;
 import android.os.UserHandle;
 import android.util.Slog;
 
@@ -48,8 +49,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     private final ConfigurationController mConfigurationController;
     private final DozeParameters mDozeParameters;
     private final KeyguardVisibilityHelper mKeyguardVisibilityHelper;
-
-    private int mLockScreenMode = KeyguardUpdateMonitor.LOCK_SCREEN_MODE_NORMAL;
+    private final Rect mClipBounds = new Rect();
 
     @Inject
     public KeyguardStatusViewController(
@@ -190,28 +190,11 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
      * Update position of the view with an optional animation
      */
     public void updatePosition(int x, int y, float scale, boolean animate) {
-        // We animate the status view visible/invisible using Y translation, so don't change it
-        // while the animation is running.
-        if (!mKeyguardVisibilityHelper.isVisibilityAnimating()) {
-            PropertyAnimator.setProperty(mView, AnimatableProperty.Y, y, CLOCK_ANIMATION_PROPERTIES,
-                    animate);
-        }
+        PropertyAnimator.setProperty(mView, AnimatableProperty.Y, y, CLOCK_ANIMATION_PROPERTIES,
+                animate);
 
-        if (mLockScreenMode == KeyguardUpdateMonitor.LOCK_SCREEN_MODE_LAYOUT_1) {
-            // reset any prior movement
-            PropertyAnimator.setProperty(mView, AnimatableProperty.X, 0,
-                    CLOCK_ANIMATION_PROPERTIES, animate);
-
-            mKeyguardClockSwitchController.updatePosition(x, scale, CLOCK_ANIMATION_PROPERTIES,
-                    animate);
-        } else {
-            // reset any prior movement
-            mKeyguardClockSwitchController.updatePosition(0, 0f, CLOCK_ANIMATION_PROPERTIES,
-                    animate);
-
-            PropertyAnimator.setProperty(mView, AnimatableProperty.X, x,
-                    CLOCK_ANIMATION_PROPERTIES, animate);
-        }
+        mKeyguardClockSwitchController.updatePosition(x, scale, CLOCK_ANIMATION_PROPERTIES,
+                animate);
     }
 
     /**
@@ -252,7 +235,6 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     private KeyguardUpdateMonitorCallback mInfoCallback = new KeyguardUpdateMonitorCallback() {
         @Override
         public void onLockScreenModeChanged(int mode) {
-            mLockScreenMode = mode;
             mKeyguardSliceViewController.updateLockScreenMode(mode);
             mView.setCanShowOwnerInfo(false);
             mView.updateLogoutView(false);
@@ -299,4 +281,17 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             mView.updateLogoutView(shouldShowLogout());
         }
     };
+
+    /**
+     * Rect that specifies how KSV should be clipped, on its parent's coordinates.
+     */
+    public void setClipBounds(Rect clipBounds) {
+        if (clipBounds != null) {
+            mClipBounds.set(clipBounds.left, (int) (clipBounds.top - mView.getY()),
+                    clipBounds.right, (int) (clipBounds.bottom - mView.getY()));
+            mView.setClipBounds(mClipBounds);
+        } else {
+            mView.setClipBounds(null);
+        }
+    }
 }

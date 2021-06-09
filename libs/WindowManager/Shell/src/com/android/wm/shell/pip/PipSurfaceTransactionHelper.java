@@ -17,11 +17,9 @@
 package com.android.wm.shell.pip;
 
 import android.content.Context;
-import android.content.res.Resources;
 import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.os.SystemProperties;
 import android.view.SurfaceControl;
 
 import com.android.wm.shell.R;
@@ -30,10 +28,6 @@ import com.android.wm.shell.R;
  * Abstracts the common operations on {@link SurfaceControl.Transaction} for PiP transition.
  */
 public class PipSurfaceTransactionHelper {
-
-    private final boolean mEnableCornerRadius;
-    private int mCornerRadius;
-
     /** for {@link #scale(SurfaceControl.Transaction, SurfaceControl, Rect, Rect)} operation */
     private final Matrix mTmpTransform = new Matrix();
     private final float[] mTmpFloat9 = new float[9];
@@ -41,11 +35,7 @@ public class PipSurfaceTransactionHelper {
     private final RectF mTmpDestinationRectF = new RectF();
     private final Rect mTmpDestinationRect = new Rect();
 
-    public PipSurfaceTransactionHelper(Context context) {
-        final Resources res = context.getResources();
-        mEnableCornerRadius = res.getBoolean(R.bool.config_pipEnableRoundCorner)
-            || SystemProperties.getBoolean("debug.sf.enable_hole_punch_pip", false);
-    }
+    private int mCornerRadius;
 
     /**
      * Called when display size or font size of settings changed
@@ -53,10 +43,7 @@ public class PipSurfaceTransactionHelper {
      * @param context the current context
      */
     public void onDensityOrFontScaleChanged(Context context) {
-        if (mEnableCornerRadius) {
-            final Resources res = context.getResources();
-            mCornerRadius = res.getDimensionPixelSize(R.dimen.pip_corner_radius);
-        }
+        mCornerRadius = context.getResources().getDimensionPixelSize(R.dimen.pip_corner_radius);
     }
 
     /**
@@ -137,23 +124,41 @@ public class PipSurfaceTransactionHelper {
      * @return same {@link PipSurfaceTransactionHelper} instance for method chaining
      */
     public PipSurfaceTransactionHelper rotateAndScaleWithCrop(SurfaceControl.Transaction tx,
-            SurfaceControl leash, Rect sourceBounds, Rect destinationBounds, float degrees,
-            float positionX, float positionY) {
+            SurfaceControl leash, Rect sourceBounds, Rect destinationBounds, Rect insets,
+            float degrees, float positionX, float positionY, boolean isExpanding,
+            boolean clockwise) {
         mTmpDestinationRect.set(sourceBounds);
-        final int dw = destinationBounds.width();
-        final int dh = destinationBounds.height();
+        mTmpDestinationRect.inset(insets);
+        final int srcW = mTmpDestinationRect.width();
+        final int srcH = mTmpDestinationRect.height();
+        final int destW = destinationBounds.width();
+        final int destH = destinationBounds.height();
         // Scale by the short side so there won't be empty area if the aspect ratio of source and
         // destination are different.
-        final float scale = dw <= dh
-                ? (float) sourceBounds.width() / dw
-                : (float) sourceBounds.height() / dh;
+        final float scale = srcW <= srcH ? (float) destW / srcW : (float) destH / srcH;
+        final Rect crop = mTmpDestinationRect;
+        crop.set(0, 0, destW, destH);
         // Inverse scale for crop to fit in screen coordinates.
-        mTmpDestinationRect.scale(1 / scale);
-        mTmpTransform.setRotate(degrees);
-        mTmpTransform.postScale(scale, scale);
+        crop.scale(1 / scale);
+        crop.offset(insets.left, insets.top);
+        if (isExpanding) {
+            // Expand bounds (shrink insets) in source orientation.
+            positionX -= insets.left * scale;
+            positionY -= insets.top * scale;
+        } else {
+            // Shrink bounds (expand insets) in destination orientation.
+            if (clockwise) {
+                positionX -= insets.top * scale;
+                positionY -= insets.left * scale;
+            } else {
+                positionX += insets.top * scale;
+                positionY += insets.left * scale;
+            }
+        }
+        mTmpTransform.setScale(scale, scale);
+        mTmpTransform.postRotate(degrees);
         mTmpTransform.postTranslate(positionX, positionY);
-        tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
-                .setWindowCrop(leash, mTmpDestinationRect.width(), mTmpDestinationRect.height());
+        tx.setMatrix(leash, mTmpTransform, mTmpFloat9).setWindowCrop(leash, crop);
         return this;
     }
 
@@ -176,9 +181,7 @@ public class PipSurfaceTransactionHelper {
      */
     public PipSurfaceTransactionHelper round(SurfaceControl.Transaction tx, SurfaceControl leash,
             boolean applyCornerRadius) {
-        if (mEnableCornerRadius) {
-            tx.setCornerRadius(leash, applyCornerRadius ? mCornerRadius : 0);
-        }
+        tx.setCornerRadius(leash, applyCornerRadius ? mCornerRadius : 0);
         return this;
     }
 

@@ -18,8 +18,7 @@ package android.app.appsearch;
 
 import android.annotation.CurrentTimeMillisLong;
 import android.annotation.NonNull;
-
-import com.android.internal.util.Preconditions;
+import android.compat.annotation.UnsupportedAppUsage;
 
 import java.util.Objects;
 
@@ -68,14 +67,48 @@ public final class ReportUsageRequest {
     /** Builder for {@link ReportUsageRequest} objects. */
     public static final class Builder {
         private final String mNamespace;
-        private final String mDocumentId;
+        // TODO(b/181887768): Make this final
+        private String mDocumentId;
         private Long mUsageTimestampMillis;
-        private boolean mBuilt = false;
 
         /** Creates a {@link ReportUsageRequest.Builder} instance. */
         public Builder(@NonNull String namespace, @NonNull String documentId) {
             mNamespace = Objects.requireNonNull(namespace);
             mDocumentId = Objects.requireNonNull(documentId);
+        }
+
+        /**
+         * @deprecated TODO(b/181887768): Exists for dogfood transition; must be removed.
+         * @hide
+         */
+        @Deprecated
+        @UnsupportedAppUsage
+        public Builder(@NonNull String namespace) {
+            mNamespace = Objects.requireNonNull(namespace);
+        }
+
+        /**
+         * @deprecated TODO(b/181887768): Exists for dogfood transition; must be removed.
+         * @hide
+         */
+        @Deprecated
+        @UnsupportedAppUsage
+        @NonNull
+        public Builder setUri(@NonNull String uri) {
+            mDocumentId = uri;
+            return this;
+        }
+
+        /**
+         * @deprecated TODO(b/181887768): Exists for dogfood transition; must be removed.
+         * @hide
+         */
+        @Deprecated
+        @UnsupportedAppUsage
+        @NonNull
+        public ReportUsageRequest.Builder setUsageTimeMillis(
+                @CurrentTimeMillisLong long usageTimestampMillis) {
+            return setUsageTimestampMillis(usageTimestampMillis);
         }
 
         /**
@@ -86,29 +119,20 @@ public final class ReportUsageRequest {
          *
          * <p>If unset, this defaults to the current timestamp at the time that the {@link
          * ReportUsageRequest} is constructed.
-         *
-         * @throws IllegalStateException if the builder has already been used
          */
         @NonNull
         public ReportUsageRequest.Builder setUsageTimestampMillis(
                 @CurrentTimeMillisLong long usageTimestampMillis) {
-            Preconditions.checkState(!mBuilt, "Builder has already been used");
             mUsageTimestampMillis = usageTimestampMillis;
             return this;
         }
 
-        /**
-         * Builds a new {@link ReportUsageRequest}.
-         *
-         * @throws IllegalStateException if the builder has already been used
-         */
+        /** Builds a new {@link ReportUsageRequest}. */
         @NonNull
         public ReportUsageRequest build() {
-            Preconditions.checkState(!mBuilt, "Builder has already been used");
             if (mUsageTimestampMillis == null) {
                 mUsageTimestampMillis = System.currentTimeMillis();
             }
-            mBuilt = true;
             return new ReportUsageRequest(mNamespace, mDocumentId, mUsageTimestampMillis);
         }
     }

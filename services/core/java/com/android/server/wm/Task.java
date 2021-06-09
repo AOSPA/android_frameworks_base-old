@@ -176,12 +176,14 @@ import android.app.servertransaction.NewIntentItem;
 import android.app.servertransaction.PauseActivityItem;
 import android.app.servertransaction.ResumeActivityItem;
 import android.content.ComponentName;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.ActivityInfo;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.graphics.Matrix;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -220,6 +222,7 @@ import android.window.WindowContainerToken;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.app.ActivityTrigger;
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.XmlUtils;
@@ -313,6 +316,9 @@ class Task extends WindowContainer<WindowContainer> {
     // Current version of the task record we persist. Used to check if we need to run any upgrade
     // code.
     static final int PERSIST_TASK_VERSION = 1;
+
+    //ActivityTrigger
+    static final ActivityTrigger mActivityTrigger = new ActivityTrigger();
 
     static final int INVALID_MIN_SIZE = -1;
     private float mShadowRadius = 0;
@@ -1998,7 +2004,25 @@ class Task extends WindowContainer<WindowContainer> {
 
     boolean supportsMultiWindow() {
         return mAtmService.mSupportsMultiWindow
-                && (isResizeable() || mAtmService.mSupportsNonResizableMultiWindow);
+                && (isResizeable() || mAtmService.mDevEnableNonResizableMultiWindow);
+    }
+
+    // TODO(b/176061101) replace supportsMultiWindow() after fixing tests.
+    boolean supportsMultiWindow2() {
+        if (!mAtmService.mSupportsMultiWindow) {
+            return false;
+        }
+        final TaskDisplayArea tda = getDisplayArea();
+        if (tda == null) {
+            return false;
+        }
+
+        if (!isResizeable() && !tda.supportsNonResizableMultiWindow()) {
+            // Not support non-resizable in multi window.
+            return false;
+        }
+
+        return tda.supportsActivityMinWidthHeightMultiWindow(mMinWidth, mMinHeight);
     }
 
     /**
@@ -2244,7 +2268,6 @@ class Task extends WindowContainer<WindowContainer> {
         mTmpPrevBounds.set(getBounds());
         final boolean wasInMultiWindowMode = inMultiWindowMode();
         final boolean wasInPictureInPicture = inPinnedWindowingMode();
-        final int oldOrientation = getOrientation();
         super.onConfigurationChanged(newParentConfig);
         // Only need to update surface size here since the super method will handle updating
         // surface position.
@@ -2273,7 +2296,6 @@ class Task extends WindowContainer<WindowContainer> {
         }
 
         if (pipChanging) {
-            mDisplayContent.getPinnedTaskController().setPipWindowingModeChanging(true);
             // If the top activity is using fixed rotation, it should be changing from PiP to
             // fullscreen with display orientation change. Do not notify fullscreen task organizer
             // because the restoration of task surface and the transformation of activity surface
@@ -2282,29 +2304,10 @@ class Task extends WindowContainer<WindowContainer> {
             if (r != null && mDisplayContent.isFixedRotationLaunchingApp(r)) {
                 mForceNotOrganized = true;
             }
-        } else if (mForceNotOrganized) {
+        } else {
             // If the display orientation change is done, let the corresponding task organizer take
             // back the control of this task.
-            final ActivityRecord r = topRunningActivity();
-            if (r == null || !mDisplayContent.isFixedRotationLaunchingApp(r)) {
-                mForceNotOrganized = false;
-            }
-        }
-        try {
-            // We have 2 reasons why we need to report orientation change here.
-            // 1. In some cases (e.g. freeform -> fullscreen) we don't have other ways of reporting.
-            // 2. Report orientation as soon as possible so that the display can freeze earlier if
-            // the display orientation will be changed. Because the surface bounds of activity
-            // may have been set to fullscreen but the activity hasn't redrawn its content yet,
-            // the rotation animation needs to capture snapshot earlier to avoid animating from
-            // an intermediate state.
-            if (oldOrientation != getOrientation()) {
-                onDescendantOrientationChanged(this);
-            }
-        } finally {
-            if (pipChanging) {
-                mDisplayContent.getPinnedTaskController().setPipWindowingModeChanging(false);
-            }
+            mForceNotOrganized = false;
         }
 
         saveLaunchingStateIfNeeded();
@@ -2327,6 +2330,15 @@ class Task extends WindowContainer<WindowContainer> {
 
     @Override
     public void onConfigurationChanged(Configuration newParentConfig) {
+        if (mDisplayContent != null
+                && mDisplayContent.mPinnedTaskController.isFreezingTaskConfig(this)) {
+            // It happens when animating from fullscreen to PiP with orientation change. Because
+            // the activity in this pinned task is in fullscreen windowing mode (see
+            // RootWindowContainer#moveActivityToPinnedRootTask) and the activity will be set to
+            // pinned mode after the animation is done, the configuration change by orientation
+            // change is just an intermediate state that should be ignored to avoid flickering.
+            return;
+        }
         // Calling Task#onConfigurationChanged() for leaf task since the ops in this method are
         // particularly for root tasks, like preventing bounds changes when inheriting certain
         // windowing mode.
@@ -2846,14 +2858,13 @@ class Task extends WindowContainer<WindowContainer> {
             getResolvedOverrideConfiguration().windowConfiguration.setWindowingMode(windowingMode);
         }
 
-        // Do not allow non-resizable tasks to be in a multi-window mode, unless it is in pinned
-        // windowing mode or supports non-resizable tasks in multi-window mode.
-        if (!isResizeable()) {
+        // Do not allow tasks not support multi window to be in a multi-window mode, unless it is in
+        // pinned windowing mode.
+        if (!supportsMultiWindow()) {
             final int candidateWindowingMode =
                     windowingMode != WINDOWING_MODE_UNDEFINED ? windowingMode : parentWindowingMode;
             if (WindowConfiguration.inMultiWindowMode(candidateWindowingMode)
-                    && candidateWindowingMode != WINDOWING_MODE_PINNED
-                    && !mTaskSupervisor.mService.mSupportsNonResizableMultiWindow) {
+                    && candidateWindowingMode != WINDOWING_MODE_PINNED) {
                 getResolvedOverrideConfiguration().windowConfiguration.setWindowingMode(
                         WINDOWING_MODE_FULLSCREEN);
             }
@@ -4089,6 +4100,7 @@ class Task extends WindowContainer<WindowContainer> {
         info.lastActiveTime = lastActiveTime;
         info.taskDescription = new ActivityManager.TaskDescription(getTaskDescription());
         info.supportsSplitScreenMultiWindow = supportsSplitScreenWindowingMode();
+        info.supportsMultiWindow = supportsMultiWindow();
         info.configuration.setTo(getConfiguration());
         // Update to the task's current activity type and windowing mode which may differ from the
         // window configuration
@@ -4477,10 +4489,10 @@ class Task extends WindowContainer<WindowContainer> {
         pw.print(" mSupportsPictureInPicture="); pw.print(mSupportsPictureInPicture);
         pw.print(" isResizeable="); pw.println(isResizeable());
         pw.print(prefix); pw.print("lastActiveTime="); pw.print(lastActiveTime);
+        pw.println(" (inactive for " + (getInactiveDuration() / 1000) + "s)");
         if (mForceNotOrganized) {
             pw.print(prefix); pw.println("mForceNotOrganized=true");
         }
-        pw.println(" (inactive for " + (getInactiveDuration() / 1000) + "s)");
     }
 
     @Override
@@ -5443,6 +5455,13 @@ class Task extends WindowContainer<WindowContainer> {
                 // Nothing else to do if we don't have a window container yet. E.g. call from ctor.
                 return;
             }
+
+            // From fullscreen to PiP.
+            if (topActivity != null && currentMode == WINDOWING_MODE_FULLSCREEN
+                    && windowingMode == WINDOWING_MODE_PINNED) {
+                mDisplayContent.mPinnedTaskController
+                        .deferOrientationChangeForEnteringPipFromFullScreenIfNeeded();
+            }
         } finally {
             mAtmService.continueWindowLayout();
         }
@@ -5721,6 +5740,12 @@ class Task extends WindowContainer<WindowContainer> {
             return false;
         }
 
+        //Trigger Activity Pause
+        if (mActivityTrigger != null) {
+            mActivityTrigger.activityPauseTrigger(prev.intent, prev.info,
+                                                  prev.info.applicationInfo);
+        }
+
         if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activitySuspendNotification
                 (prev.info.packageName, getWindowingMode() == WINDOWING_MODE_FULLSCREEN, true);
@@ -5837,8 +5862,13 @@ class Task extends WindowContainer<WindowContainer> {
             final boolean wasStopping = prev.isState(STOPPING);
             prev.setState(PAUSED, "completePausedLocked");
             if (prev.finishing) {
+                // We will update the activity visibility later, no need to do in
+                // completeFinishing(). Updating visibility here might also making the next
+                // activities to be resumed, and could result in wrong app transition due to
+                // lack of previous activity information.
                 ProtoLog.v(WM_DEBUG_STATES, "Executing finish of activity: %s", prev);
-                prev = prev.completeFinishing("completePausedLocked");
+                prev = prev.completeFinishing(false /* updateVisibility */,
+                        "completePausedLocked");
             } else if (prev.hasProcess()) {
                 ProtoLog.v(WM_DEBUG_STATES, "Enqueue pending stop if needed: %s "
                         + "wasStopping=%b visibleRequested=%b",  prev,  wasStopping,
@@ -6224,6 +6254,13 @@ class Task extends WindowContainer<WindowContainer> {
             next.launching = true;
 
         if (DEBUG_SWITCH) Slog.v(TAG_SWITCH, "Resuming " + next);
+
+        //Trigger Activity Resume
+        if (mActivityTrigger != null) {
+            mActivityTrigger.activityResumeTrigger(next.intent, next.info,
+                                                   next.info.applicationInfo,
+                                                   next.occludesParent());
+        }
 
         if (mActivityPluginDelegate != null && getWindowingMode() != WINDOWING_MODE_UNDEFINED) {
             mActivityPluginDelegate.activityInvokeNotification
@@ -6710,8 +6747,30 @@ class Task extends WindowContainer<WindowContainer> {
                         prev = null;
                     }
                 }
-                final int splashScreenThemeResId = options != null
+
+                // TODO(185200798): Persist theme name instead of theme if
+                int splashScreenThemeResId = options != null
                         ? options.getSplashScreenThemeResId() : 0;
+
+                // User can override the splashscreen theme. The theme name is used to persist
+                // the setting, so if no theme is set in the ActivityOptions, we check if has
+                // been persisted here.
+                if (splashScreenThemeResId == 0) {
+                    try {
+                        String themeName = mAtmService.getPackageManager()
+                                .getSplashScreenTheme(r.packageName, r.mUserId);
+                        if (themeName != null) {
+                            Context packageContext = mAtmService.mContext
+                                    .createPackageContext(r.packageName, 0);
+                            splashScreenThemeResId = packageContext.getResources()
+                                    .getIdentifier(themeName, null, null);
+                        }
+                    } catch (RemoteException | PackageManager.NameNotFoundException
+                            | Resources.NotFoundException ignore) {
+                        // Just use the default theme
+                    }
+                }
+
                 r.showStartingWindow(prev, newTask, isTaskSwitch(r, focusedTopActivity),
                         splashScreenThemeResId, samePackage);
             }
@@ -7185,8 +7244,11 @@ class Task extends WindowContainer<WindowContainer> {
         if (DEBUG_TRANSITION) Slog.v(TAG_TRANSITION, "Prepare to back transition: task="
                 + tr.mTaskId);
 
-        mDisplayContent.prepareAppTransition(TRANSIT_TO_BACK);
-        mDisplayContent.requestTransitionAndLegacyPrepare(TRANSIT_TO_BACK, tr);
+        // Skip the transition for pinned task.
+        if (!inPinnedWindowingMode()) {
+            mDisplayContent.prepareAppTransition(TRANSIT_TO_BACK);
+            mDisplayContent.requestTransitionAndLegacyPrepare(TRANSIT_TO_BACK, tr);
+        }
         moveToBack("moveTaskToBackLocked", tr);
 
         if (inPinnedWindowingMode()) {
@@ -7968,12 +8030,33 @@ class Task extends WindowContainer<WindowContainer> {
         private boolean mHasBeenVisible;
         private boolean mRemoveWithTaskOrganizer;
 
+        /**
+         * Records the source task that requesting to build a new task, used to determine which of
+         * the adjacent roots should be launch root of the new task.
+         */
+        private Task mSourceTask;
+
+        /**
+         * Records launch flags to apply when launching new task.
+         */
+        private int mLaunchFlags;
+
         Builder(ActivityTaskManagerService atm) {
             mAtmService = atm;
         }
 
         Builder setParent(WindowContainer parent) {
             mParent = parent;
+            return this;
+        }
+
+        Builder setSourceTask(Task sourceTask) {
+            mSourceTask = sourceTask;
+            return this;
+        }
+
+        Builder setLaunchFlags(int launchFlags) {
+            mLaunchFlags = launchFlags;
             return this;
         }
 
@@ -8231,9 +8314,14 @@ class Task extends WindowContainer<WindowContainer> {
                 tda.getRootPinnedTask().dismissPip();
             }
 
+            if (mIntent != null) {
+                mLaunchFlags |= mIntent.getFlags();
+            }
+
             // Task created by organizer are added as root.
             final Task launchRootTask = mCreatedByOrganizer
-                    ? null : tda.getLaunchRootTask(mWindowingMode, mActivityType, mActivityOptions);
+                    ? null : tda.getLaunchRootTask(mWindowingMode, mActivityType, mActivityOptions,
+                    mSourceTask, mLaunchFlags);
             if (launchRootTask != null) {
                 // Since this task will be put into a root task, its windowingMode will be
                 // inherited.

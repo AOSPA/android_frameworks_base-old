@@ -68,7 +68,7 @@ class SystemStatusAnimationScheduler @Inject constructor(
     }
     private fun isImmersiveIndicatorEnabled(): Boolean {
         return DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_PRIVACY,
-                PROPERTY_ENABLE_IMMERSIVE_INDICATOR, false)
+                PROPERTY_ENABLE_IMMERSIVE_INDICATOR, true)
     }
 
     /** True from the time a scheduled event starts until it's animation finishes */
@@ -98,11 +98,17 @@ class SystemStatusAnimationScheduler @Inject constructor(
 
         // Don't deal with threading for now (no need let's be honest)
         Assert.isMainThread()
-        if (event.priority > scheduledEvent?.priority ?: -1) {
+        if (event.priority > scheduledEvent?.priority ?: -1 ||
+            scheduledEvent?.shouldUpdateFromEvent(event) == true) {
             if (DEBUG) {
                 Log.d(TAG, "scheduling event $event")
             }
-            scheduleEvent(event)
+            if (event.showAnimation) {
+                scheduleEvent(event)
+            } else if (event.forceVisible) {
+                hasPersistentDot = true
+                notifyTransitionToPersistentDot()
+            }
         } else {
             if (DEBUG) {
                 Log.d(TAG, "ignoring event $event")
@@ -127,7 +133,6 @@ class SystemStatusAnimationScheduler @Inject constructor(
     }
 
     private fun isTooEarly(): Boolean {
-        Log.d(TAG, "time=> ${systemClock.uptimeMillis() - Process.getStartUptimeMillis()}")
         return systemClock.uptimeMillis() - Process.getStartUptimeMillis() < MIN_UPTIME
     }
 
@@ -135,7 +140,20 @@ class SystemStatusAnimationScheduler @Inject constructor(
      * Clear the scheduled event (if any) and schedule a new one
      */
     private fun scheduleEvent(event: StatusEvent) {
-        scheduledEvent = event
+        if (animationState == ANIMATING_OUT ||
+            (animationState == SHOWING_PERSISTENT_DOT && event.forceVisible)) {
+            // do not schedule an event or change the current one
+            return
+        }
+
+        // If we are showing the chip, possibly update the current event, rather than replacing
+        if (scheduledEvent?.shouldUpdateFromEvent(event) == true) {
+            scheduledEvent?.updateFromEvent(event)
+            return
+        } else {
+            scheduledEvent = event
+        }
+
         if (scheduledEvent!!.forceVisible) {
             hasPersistentDot = true
         }
@@ -171,7 +189,13 @@ class SystemStatusAnimationScheduler @Inject constructor(
 
                 val chipAnimator = ValueAnimator.ofFloat(1f, 0f)
                 chipAnimator.duration = CHIP_ANIM_LENGTH
-                chipAnimator.addListener(ChipAnimatorAdapter(IDLE, scheduledEvent!!.viewCreator))
+                val endState = if (hasPersistentDot) {
+                    SHOWING_PERSISTENT_DOT
+                } else {
+                    IDLE
+                }
+                chipAnimator.addListener(
+                    ChipAnimatorAdapter(endState, scheduledEvent!!.viewCreator))
                 chipAnimator.addUpdateListener(chipUpdateListener)
 
                 val aSet2 = AnimatorSet()
@@ -206,6 +230,10 @@ class SystemStatusAnimationScheduler @Inject constructor(
     private fun notifyHidePersistentDot(): Animator? {
         val anims: List<Animator> = listeners.mapNotNull {
             it.onHidePersistentDot()
+        }
+
+        if (animationState == SHOWING_PERSISTENT_DOT) {
+            animationState = IDLE
         }
 
         if (anims.isNotEmpty()) {
@@ -331,6 +359,8 @@ const val ANIMATING_IN = 1
 const val RUNNING_CHIP_ANIM = 2
 /** Chip is animating away and system is animating back */
 const val ANIMATING_OUT = 3
+/** Chip has animated away, and the persistent dot is showing */
+const val SHOWING_PERSISTENT_DOT = 4
 
 private const val TAG = "SystemStatusAnimationScheduler"
 private const val DELAY: Long = 100

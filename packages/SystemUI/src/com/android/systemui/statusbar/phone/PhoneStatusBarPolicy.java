@@ -675,11 +675,14 @@ public class PhoneStatusBarPolicy
             }
         }
 
+        // Disabling for now, but keeping the log
+        /*
         mIconController.setIconVisibility(mSlotCamera, showCamera);
         mIconController.setIconVisibility(mSlotMicrophone, showMicrophone);
         if (mPrivacyItemController.getLocationAvailable()) {
             mIconController.setIconVisibility(mSlotLocation, showLocation);
         }
+         */
         mPrivacyLogger.logStatusBarIconsVisible(showCamera, showMicrophone,  showLocation);
     }
 

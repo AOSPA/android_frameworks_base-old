@@ -91,7 +91,7 @@ public class DualDisplayAreaGroupPolicyTest extends WindowTestsBase {
         doReturn(policyProvider).when(mWm).getDisplayAreaPolicyProvider();
 
         // Display: 1920x1200 (landscape). First and second display are both 860x1200 (portrait).
-        mDisplay = (DualDisplayContent) new DualDisplayContent.Builder(mAtm, 1920, 1200).build();
+        mDisplay = new DualDisplayContent.Builder(mAtm, 1920, 1200).build();
         mFirstRoot = mDisplay.mFirstRoot;
         mSecondRoot = mDisplay.mSecondRoot;
         mFirstTda = mDisplay.getTaskDisplayArea(FEATURE_FIRST_TASK_CONTAINER);
@@ -268,7 +268,7 @@ public class DualDisplayAreaGroupPolicyTest extends WindowTestsBase {
 
         // By default, the ime container is attached to DC as defined in DAPolicy.
         assertThat(imeContainer.getRootDisplayArea()).isEqualTo(mDisplay);
-        assertThat(mDisplay.findAreaForToken(imeToken)).isEqualTo(imeContainer);
+        assertThat(mDisplay.findAreaForTokenInLayer(imeToken)).isEqualTo(imeContainer);
 
         final WindowState firstActivityWin =
                 createWindow(null /* parent */, TYPE_APPLICATION_STARTING, mFirstActivity,
@@ -290,9 +290,9 @@ public class DualDisplayAreaGroupPolicyTest extends WindowTestsBase {
         assertThat(imeContainer.getRootDisplayArea()).isEqualTo(mFirstRoot);
         assertThat(imeContainer.getParent().asDisplayArea().mFeatureId)
                 .isEqualTo(FEATURE_IME_PLACEHOLDER);
-        assertThat(mDisplay.findAreaForToken(imeToken)).isNull();
-        assertThat(mFirstRoot.findAreaForToken(imeToken)).isEqualTo(imeContainer);
-        assertThat(mSecondRoot.findAreaForToken(imeToken)).isNull();
+        assertThat(mDisplay.findAreaForTokenInLayer(imeToken)).isNull();
+        assertThat(mFirstRoot.findAreaForTokenInLayer(imeToken)).isEqualTo(imeContainer);
+        assertThat(mSecondRoot.findAreaForTokenInLayer(imeToken)).isNull();
 
         // secondActivityWin should be the target
         doReturn(false).when(firstActivityWin).canBeImeTarget();
@@ -305,9 +305,9 @@ public class DualDisplayAreaGroupPolicyTest extends WindowTestsBase {
         assertThat(imeContainer.getRootDisplayArea()).isEqualTo(mSecondRoot);
         assertThat(imeContainer.getParent().asDisplayArea().mFeatureId)
                 .isEqualTo(FEATURE_IME_PLACEHOLDER);
-        assertThat(mDisplay.findAreaForToken(imeToken)).isNull();
-        assertThat(mFirstRoot.findAreaForToken(imeToken)).isNull();
-        assertThat(mSecondRoot.findAreaForToken(imeToken)).isEqualTo(imeContainer);
+        assertThat(mDisplay.findAreaForTokenInLayer(imeToken)).isNull();
+        assertThat(mFirstRoot.findAreaForTokenInLayer(imeToken)).isNull();
+        assertThat(mSecondRoot.findAreaForTokenInLayer(imeToken)).isEqualTo(imeContainer);
     }
 
     @Test
@@ -395,7 +395,7 @@ public class DualDisplayAreaGroupPolicyTest extends WindowTestsBase {
     }
 
     /** Display with two {@link DisplayAreaGroup}. Each of them take half of the screen. */
-    private static class DualDisplayContent extends TestDisplayContent {
+    static class DualDisplayContent extends TestDisplayContent {
         final DisplayAreaGroup mFirstRoot;
         final DisplayAreaGroup mSecondRoot;
         final Rect mLastDisplayBounds;
@@ -476,11 +476,15 @@ public class DualDisplayAreaGroupPolicyTest extends WindowTestsBase {
             TestDisplayContent createInternal(Display display) {
                 return new DualDisplayContent(mService.mRootWindowContainer, display);
             }
+
+            DualDisplayContent build() {
+                return (DualDisplayContent) super.build();
+            }
         }
     }
 
     /** Policy to create a dual {@link DisplayAreaGroup} policy in test. */
-    private static class DualDisplayTestPolicyProvider implements DisplayAreaPolicy.Provider {
+    static class DualDisplayTestPolicyProvider implements DisplayAreaPolicy.Provider {
 
         @Override
         public DisplayAreaPolicy instantiate(WindowManagerService wmService, DisplayContent content,

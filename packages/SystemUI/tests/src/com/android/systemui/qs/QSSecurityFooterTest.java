@@ -21,6 +21,7 @@ import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNotNull;
 
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.any;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -81,10 +82,10 @@ public class QSSecurityFooterTest extends SysuiTestCase {
     private static final String PARENTAL_CONTROLS_LABEL = "Parental Control App";
     private static final ComponentName DEVICE_OWNER_COMPONENT =
             new ComponentName("TestDPC", "Test");
+    private static final int DEFAULT_ICON_ID = R.drawable.ic_info_outline;
 
     private ViewGroup mRootView;
     private TextView mFooterText;
-    private TestableImageView mFooterIcon;
     private TestableImageView mPrimaryFooterIcon;
     private QSSecurityFooter mFooter;
     @Mock
@@ -101,11 +102,10 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         when(mUserTracker.getUserInfo()).thenReturn(mock(UserInfo.class));
         mRootView = (ViewGroup) new LayoutInflaterBuilder(mContext)
                 .replace("ImageView", TestableImageView.class)
-                .build().inflate(R.layout.quick_settings_footer, null, false);
+                .build().inflate(R.layout.quick_settings_security_footer, null, false);
         mFooter = new QSSecurityFooter(mRootView, mUserTracker, new Handler(looper),
                 mActivityStarter, mSecurityController, looper);
         mFooterText = mRootView.findViewById(R.id.footer_text);
-        mFooterIcon = mRootView.findViewById(R.id.footer_icon);
         mPrimaryFooterIcon = mRootView.findViewById(R.id.primary_footer_icon);
         mFooter.setHostEnvironment(null);
 
@@ -135,10 +135,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_management),
                      mFooterText.getText());
         assertEquals(View.VISIBLE, mRootView.getVisibility());
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        // -1 == never set.
-        assertEquals(-1, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
     }
 
     @Test
@@ -153,10 +151,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
                                         MANAGING_ORGANIZATION),
                 mFooterText.getText());
         assertEquals(View.VISIBLE, mRootView.getVisibility());
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        // -1 == never set.
-        assertEquals(-1, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
     }
 
     @Test
@@ -174,10 +170,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
                 R.string.quick_settings_financed_disclosure_named_management,
                 MANAGING_ORGANIZATION), mFooterText.getText());
         assertEquals(View.VISIBLE, mRootView.getVisibility());
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        // -1 == never set.
-        assertEquals(-1, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
     }
 
     @Test
@@ -196,6 +190,29 @@ public class QSSecurityFooterTest extends SysuiTestCase {
     }
 
     @Test
+    public void testUntappableView_profileOwnerOfOrgOwnedDevice() {
+        when(mSecurityController.isProfileOwnerOfOrganizationOwnedDevice()).thenReturn(true);
+
+        mFooter.refreshState();
+
+        TestableLooper.get(this).processAllMessages();
+        assertFalse(mRootView.isClickable());
+        assertEquals(View.GONE, mRootView.findViewById(R.id.footer_icon).getVisibility());
+    }
+
+    @Test
+    public void testTappableView_profileOwnerOfOrgOwnedDevice_networkLoggingEnabled() {
+        when(mSecurityController.isProfileOwnerOfOrganizationOwnedDevice()).thenReturn(true);
+        when(mSecurityController.isNetworkLoggingEnabled()).thenReturn(true);
+
+        mFooter.refreshState();
+
+        TestableLooper.get(this).processAllMessages();
+        assertTrue(mRootView.isClickable());
+        assertEquals(View.VISIBLE, mRootView.findViewById(R.id.footer_icon).getVisibility());
+    }
+
+    @Test
     public void testNetworkLoggingEnabled_deviceOwner() {
         when(mSecurityController.isDeviceManaged()).thenReturn(true);
         when(mSecurityController.isNetworkLoggingEnabled()).thenReturn(true);
@@ -204,10 +221,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         TestableLooper.get(this).processAllMessages();
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_management_monitoring),
                 mFooterText.getText());
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        // -1 == never set.
-        assertEquals(-1, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
 
         // Same situation, but with organization name set
         when(mSecurityController.getDeviceOwnerOrganizationName())
@@ -255,9 +270,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_management_named_vpn,
                                         VPN_PACKAGE),
                      mFooterText.getText());
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        assertEquals(R.drawable.stat_sys_vpn_ic, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(R.drawable.stat_sys_vpn_ic, mPrimaryFooterIcon.getLastImageResource());
 
         // Same situation, but with organization name set
         when(mSecurityController.getDeviceOwnerOrganizationName())
@@ -282,9 +296,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         TestableLooper.get(this).processAllMessages();
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_management_vpns),
                      mFooterText.getText());
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        assertEquals(R.drawable.stat_sys_vpn_ic, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(R.drawable.stat_sys_vpn_ic, mPrimaryFooterIcon.getLastImageResource());
 
         // Same situation, but with organization name set
         when(mSecurityController.getDeviceOwnerOrganizationName())
@@ -306,9 +319,8 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mFooter.refreshState();
 
         TestableLooper.get(this).processAllMessages();
-        assertEquals(View.VISIBLE, mFooterIcon.getVisibility());
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
-        assertEquals(R.drawable.stat_sys_vpn_ic, mFooterIcon.getLastImageResource());
+        assertEquals(View.VISIBLE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(R.drawable.stat_sys_vpn_ic, mPrimaryFooterIcon.getLastImageResource());
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_management_monitoring),
                 mFooterText.getText());
     }
@@ -320,8 +332,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mFooter.refreshState();
 
         TestableLooper.get(this).processAllMessages();
-        // -1 == never set.
-        assertEquals(-1, mFooterIcon.getLastImageResource());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
         assertEquals(mContext.getString(
                              R.string.quick_settings_disclosure_managed_profile_monitoring),
                      mFooterText.getText());
@@ -345,8 +356,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mFooter.refreshState();
 
         TestableLooper.get(this).processAllMessages();
-        // -1 == never set.
-        assertEquals(-1, mFooterIcon.getLastImageResource());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_monitoring),
                      mFooterText.getText());
     }
@@ -359,7 +369,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mFooter.refreshState();
 
         TestableLooper.get(this).processAllMessages();
-        assertEquals(R.drawable.stat_sys_vpn_ic, mFooterIcon.getLastImageResource());
+        assertEquals(R.drawable.stat_sys_vpn_ic, mPrimaryFooterIcon.getLastImageResource());
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_vpns),
                      mFooterText.getText());
     }
@@ -371,7 +381,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mFooter.refreshState();
 
         TestableLooper.get(this).processAllMessages();
-        assertEquals(R.drawable.stat_sys_vpn_ic, mFooterIcon.getLastImageResource());
+        assertEquals(R.drawable.stat_sys_vpn_ic, mPrimaryFooterIcon.getLastImageResource());
         assertEquals(mContext.getString(
                              R.string.quick_settings_disclosure_managed_profile_named_vpn,
                              VPN_PACKAGE_2),
@@ -412,7 +422,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         mFooter.refreshState();
 
         TestableLooper.get(this).processAllMessages();
-        assertEquals(R.drawable.stat_sys_vpn_ic, mFooterIcon.getLastImageResource());
+        assertEquals(R.drawable.stat_sys_vpn_ic, mPrimaryFooterIcon.getLastImageResource());
         assertEquals(mContext.getString(R.string.quick_settings_disclosure_named_vpn,
                                         VPN_PACKAGE),
                      mFooterText.getText());
@@ -449,10 +459,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
     @Test
     public void testGetManagementMessage_noManagement() {
         assertEquals(null, mFooter.getManagementMessage(
-                /* isDeviceManaged= */ false,
-                MANAGING_ORGANIZATION,
-                /* isProfileOwnerOfOrganizationOwnedDevice= */ false,
-                MANAGING_ORGANIZATION));
+                /* isDeviceManaged= */ false, MANAGING_ORGANIZATION));
     }
 
     @Test
@@ -460,16 +467,11 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         assertEquals(mContext.getString(R.string.monitoring_description_named_management,
                                         MANAGING_ORGANIZATION),
                      mFooter.getManagementMessage(
-                             /* isDeviceManaged= */ true,
-                             MANAGING_ORGANIZATION,
-                             /* isProfileOwnerOfOrganizationOwnedDevice= */ false,
-                             /* workProfileOrganizationName= */ null));
+                             /* isDeviceManaged= */ true, MANAGING_ORGANIZATION));
         assertEquals(mContext.getString(R.string.monitoring_description_management),
                      mFooter.getManagementMessage(
                              /* isDeviceManaged= */ true,
-                             /* organizationName= */ null,
-                             /* isProfileOwnerOfOrganizationOwnedDevice= */ false,
-                             /* workProfileOrganizationName= */ null));
+                             /* organizationName= */ null));
     }
 
     @Test
@@ -481,27 +483,7 @@ public class QSSecurityFooterTest extends SysuiTestCase {
         assertEquals(mContext.getString(R.string.monitoring_financed_description_named_management,
                 MANAGING_ORGANIZATION, MANAGING_ORGANIZATION),
                 mFooter.getManagementMessage(
-                        /* isDeviceManaged= */ true,
-                        MANAGING_ORGANIZATION,
-                        /* isProfileOwnerOfOrganizationOwnedDevice= */ false,
-                        /* workProfileOrganizationName= */ null));
-    }
-
-    @Test
-    public void testGetManagementMessage_profileOwnerOfOrganizationOwnedDevice() {
-        assertEquals(mContext.getString(R.string.monitoring_description_named_management,
-                MANAGING_ORGANIZATION),
-                mFooter.getManagementMessage(
-                        /* isDeviceManaged= */ false,
-                        /* organizationName= */ null,
-                        /* isProfileOwnerOfOrganizationOwnedDevice= */ true,
-                        MANAGING_ORGANIZATION));
-        assertEquals(mContext.getString(R.string.monitoring_description_management),
-                mFooter.getManagementMessage(
-                        /* isDeviceManaged= */ false,
-                        /* organizationName= */ null,
-                        /* isProfileOwnerOfOrganizationOwnedDevice= */ true,
-                        /* workProfileOrganizationName= */ null));
+                        /* isDeviceManaged= */ true, MANAGING_ORGANIZATION));
     }
 
     @Test
@@ -648,12 +630,12 @@ public class QSSecurityFooterTest extends SysuiTestCase {
 
         assertEquals(testDrawable, mPrimaryFooterIcon.getDrawable());
 
-        // Ensure the primary icon is set to gone when parental controls is disabled.
+        // Ensure the primary icon is back to default after parental controls are gone
         when(mSecurityController.isParentalControlsEnabled()).thenReturn(false);
         mFooter.refreshState();
         TestableLooper.get(this).processAllMessages();
 
-        assertEquals(View.GONE, mPrimaryFooterIcon.getVisibility());
+        assertEquals(DEFAULT_ICON_ID, mPrimaryFooterIcon.getLastImageResource());
     }
 
     @Test

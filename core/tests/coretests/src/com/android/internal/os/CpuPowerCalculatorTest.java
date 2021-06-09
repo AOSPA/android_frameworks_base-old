@@ -144,7 +144,7 @@ public class CpuPowerCalculatorTest {
         mStatsRule.apply(BatteryUsageStatsRule.POWER_PROFILE_MODEL_ONLY, calculator);
 
         UidBatteryConsumer uidConsumer1 = mStatsRule.getUidBatteryConsumer(APP_UID1);
-        assertThat(uidConsumer1.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_CPU))
+        assertThat(uidConsumer1.getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isEqualTo(3333);
         assertThat(uidConsumer1.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isWithin(PRECISION).of(1.092233);
@@ -153,13 +153,25 @@ public class CpuPowerCalculatorTest {
         assertThat(uidConsumer1.getPackageWithHighestDrain()).isEqualTo("bar");
 
         UidBatteryConsumer uidConsumer2 = mStatsRule.getUidBatteryConsumer(APP_UID2);
-        assertThat(uidConsumer2.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_CPU))
+        assertThat(uidConsumer2.getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isEqualTo(7777);
         assertThat(uidConsumer2.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isWithin(PRECISION).of(2.672322);
         assertThat(uidConsumer2.getPowerModel(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isEqualTo(BatteryConsumer.POWER_MODEL_POWER_PROFILE);
         assertThat(uidConsumer2.getPackageWithHighestDrain()).isNull();
+
+        final BatteryConsumer deviceBatteryConsumer = mStatsRule.getDeviceBatteryConsumer();
+        assertThat(deviceBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isWithin(PRECISION).of(3.76455);
+        assertThat(deviceBatteryConsumer.getPowerModel(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isEqualTo(BatteryConsumer.POWER_MODEL_POWER_PROFILE);
+
+        final BatteryConsumer appsBatteryConsumer = mStatsRule.getAppsBatteryConsumer();
+        assertThat(appsBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isWithin(PRECISION).of(3.76455);
+        assertThat(appsBatteryConsumer.getPowerModel(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isEqualTo(BatteryConsumer.POWER_MODEL_POWER_PROFILE);
     }
 
     @Test
@@ -208,7 +220,7 @@ public class CpuPowerCalculatorTest {
         mStatsRule.apply(calculator);
 
         UidBatteryConsumer uidConsumer1 = mStatsRule.getUidBatteryConsumer(APP_UID1);
-        assertThat(uidConsumer1.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_CPU))
+        assertThat(uidConsumer1.getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isEqualTo(3333);
         assertThat(uidConsumer1.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isWithin(PRECISION).of(3.18877);
@@ -217,12 +229,24 @@ public class CpuPowerCalculatorTest {
         assertThat(uidConsumer1.getPackageWithHighestDrain()).isEqualTo("bar");
 
         UidBatteryConsumer uidConsumer2 = mStatsRule.getUidBatteryConsumer(APP_UID2);
-        assertThat(uidConsumer2.getUsageDurationMillis(BatteryConsumer.TIME_COMPONENT_CPU))
+        assertThat(uidConsumer2.getUsageDurationMillis(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isEqualTo(7777);
         assertThat(uidConsumer2.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isWithin(PRECISION).of(7.44072);
         assertThat(uidConsumer2.getPowerModel(BatteryConsumer.POWER_COMPONENT_CPU))
                 .isEqualTo(BatteryConsumer.POWER_MODEL_MEASURED_ENERGY);
         assertThat(uidConsumer2.getPackageWithHighestDrain()).isNull();
+
+        final BatteryConsumer deviceBatteryConsumer = mStatsRule.getDeviceBatteryConsumer();
+        assertThat(deviceBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isWithin(PRECISION).of(10.62949);
+        assertThat(deviceBatteryConsumer.getPowerModel(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isEqualTo(BatteryConsumer.POWER_MODEL_MEASURED_ENERGY);
+
+        final BatteryConsumer appsBatteryConsumer = mStatsRule.getDeviceBatteryConsumer();
+        assertThat(appsBatteryConsumer.getConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isWithin(PRECISION).of(10.62949);
+        assertThat(appsBatteryConsumer.getPowerModel(BatteryConsumer.POWER_COMPONENT_CPU))
+                .isEqualTo(BatteryConsumer.POWER_MODEL_MEASURED_ENERGY);
     }
 }

@@ -33,6 +33,7 @@ import android.hardware.biometrics.face.SensorProps;
 import android.hardware.face.Face;
 import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.face.IFaceServiceReceiver;
+import android.os.Binder;
 import android.os.Handler;
 import android.os.IBinder;
 import android.os.Looper;
@@ -173,7 +174,9 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
         Slog.d(getTag(), "Daemon was null, reconnecting");
 
         mDaemon = IFace.Stub.asInterface(
-                ServiceManager.waitForDeclaredService(IFace.DESCRIPTOR + "/" + mHalInstanceName));
+                Binder.allowBlocking(
+                        ServiceManager.waitForDeclaredService(
+                                IFace.DESCRIPTOR + "/" + mHalInstanceName)));
         if (mDaemon == null) {
             Slog.e(getTag(), "Unable to get daemon");
             return null;
@@ -297,7 +300,7 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
         mHandler.post(() -> {
             final FaceGenerateChallengeClient client = new FaceGenerateChallengeClient(mContext,
                     mSensors.get(sensorId).getLazySession(), token,
-                    new ClientMonitorCallbackConverter(receiver), opPackageName, sensorId);
+                    new ClientMonitorCallbackConverter(receiver), userId, opPackageName, sensorId);
             scheduleForSensor(sensorId, client);
         });
     }
@@ -307,7 +310,7 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
             @NonNull String opPackageName, long challenge) {
         mHandler.post(() -> {
             final FaceRevokeChallengeClient client = new FaceRevokeChallengeClient(mContext,
-                    mSensors.get(sensorId).getLazySession(), token, opPackageName, sensorId,
+                    mSensors.get(sensorId).getLazySession(), token, userId, opPackageName, sensorId,
                     challenge);
             scheduleForSensor(sensorId, client);
         });
@@ -435,13 +438,36 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
     public void scheduleSetFeature(int sensorId, @NonNull IBinder token, int userId, int feature,
             boolean enabled, @NonNull byte[] hardwareAuthToken,
             @NonNull IFaceServiceReceiver receiver, @NonNull String opPackageName) {
-        // TODO(b/171335732): implement this.
+        mHandler.post(() -> {
+            final List<Face> faces = FaceUtils.getInstance(sensorId)
+                    .getBiometricsForUser(mContext, userId);
+            if (faces.isEmpty()) {
+                Slog.w(getTag(), "Ignoring setFeature, no templates enrolled for user: " + userId);
+                return;
+            }
+            final FaceSetFeatureClient client = new FaceSetFeatureClient(mContext,
+                    mSensors.get(sensorId).getLazySession(), token,
+                    new ClientMonitorCallbackConverter(receiver), userId,
+                    mContext.getOpPackageName(), sensorId, feature, enabled, hardwareAuthToken);
+            scheduleForSensor(sensorId, client);
+        });
     }
 
     @Override
     public void scheduleGetFeature(int sensorId, @NonNull IBinder token, int userId, int feature,
             @NonNull ClientMonitorCallbackConverter callback, @NonNull String opPackageName) {
-        // TODO(b/171335732): implement this.
+        mHandler.post(() -> {
+            final List<Face> faces = FaceUtils.getInstance(sensorId)
+                    .getBiometricsForUser(mContext, userId);
+            if (faces.isEmpty()) {
+                Slog.w(getTag(), "Ignoring getFeature, no templates enrolled for user: " + userId);
+                return;
+            }
+            final FaceGetFeatureClient client = new FaceGetFeatureClient(mContext,
+                    mSensors.get(sensorId).getLazySession(), token, callback, userId,
+                    mContext.getOpPackageName(), sensorId);
+            scheduleForSensor(sensorId, client);
+        });
     }
 
     @Override

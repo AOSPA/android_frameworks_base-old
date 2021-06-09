@@ -42,13 +42,16 @@ import com.android.systemui.dagger.qualifiers.UiBackground;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.DismissCallbackRegistry;
 import com.android.systemui.keyguard.FaceAuthScreenBrightnessController;
+import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.navigationbar.NavigationModeController;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
+import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.KeyguardLiftController;
 import com.android.systemui.statusbar.phone.StatusBar;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.sensors.AsyncSensorManager;
 import com.android.systemui.util.settings.GlobalSettings;
@@ -92,7 +95,9 @@ public class KeyguardModule {
             NavigationModeController navigationModeController,
             KeyguardDisplayManager keyguardDisplayManager,
             DozeParameters dozeParameters,
-            StatusBarStateController statusBarStateController) {
+            SysuiStatusBarStateController statusBarStateController,
+            KeyguardStateController keyguardStateController,
+            Lazy<KeyguardUnlockAnimationController> keyguardUnlockAnimationController) {
         return new KeyguardViewMediator(
                 context,
                 falsingCollector,
@@ -109,7 +114,9 @@ public class KeyguardModule {
                 navigationModeController,
                 keyguardDisplayManager,
                 dozeParameters,
-                statusBarStateController
+                statusBarStateController,
+                keyguardStateController,
+                keyguardUnlockAnimationController
         );
     }
 

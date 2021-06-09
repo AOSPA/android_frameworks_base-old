@@ -16,13 +16,17 @@
 
 package android.net.vcn;
 
+import static android.net.ipsec.ike.IkeSessionParams.IKE_OPTION_MOBIKE;
+
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
 import android.net.NetworkCapabilities;
-import android.net.TunnelConnectionParams;
+import android.net.ipsec.ike.IkeSessionParams;
+import android.net.ipsec.ike.IkeTunnelConnectionParams;
+import android.net.vcn.persistablebundleutils.IkeSessionParamsUtilsTest;
 import android.net.vcn.persistablebundleutils.TunnelConnectionParamsUtilsTest;
 
 import androidx.test.filters.SmallTest;
@@ -60,7 +64,7 @@ public class VcnGatewayConnectionConfigTest {
             };
     public static final int MAX_MTU = 1360;
 
-    public static final TunnelConnectionParams TUNNEL_CONNECTION_PARAMS =
+    public static final IkeTunnelConnectionParams TUNNEL_CONNECTION_PARAMS =
             TunnelConnectionParamsUtilsTest.buildTestParams();
 
     public static final String GATEWAY_CONNECTION_NAME_PREFIX = "gatewayConnectionName-";
@@ -82,7 +86,7 @@ public class VcnGatewayConnectionConfigTest {
     // Public for use in VcnGatewayConnectionTest
     public static VcnGatewayConnectionConfig buildTestConfigWithExposedCaps(int... exposedCaps) {
         final VcnGatewayConnectionConfig.Builder builder =
-                newBuilder().setRetryIntervalsMs(RETRY_INTERVALS_MS).setMaxMtu(MAX_MTU);
+                newBuilder().setRetryIntervalsMillis(RETRY_INTERVALS_MS).setMaxMtu(MAX_MTU);
 
         for (int caps : exposedCaps) {
             builder.addExposedCapability(caps);
@@ -120,6 +124,21 @@ public class VcnGatewayConnectionConfigTest {
     }
 
     @Test
+    public void testBuilderRequiresMobikeEnabled() {
+        try {
+            final IkeSessionParams ikeParams =
+                    IkeSessionParamsUtilsTest.createBuilderMinimum()
+                            .removeIkeOption(IKE_OPTION_MOBIKE)
+                            .build();
+            final IkeTunnelConnectionParams tunnelParams =
+                    TunnelConnectionParamsUtilsTest.buildTestParams(ikeParams);
+            new VcnGatewayConnectionConfig.Builder(GATEWAY_CONNECTION_NAME_PREFIX, tunnelParams);
+            fail("Expected exception due to MOBIKE not enabled");
+        } catch (IllegalArgumentException e) {
+        }
+    }
+
+    @Test
     public void testBuilderRequiresNonEmptyExposedCaps() {
         try {
             newBuilder()
@@ -134,7 +153,7 @@ public class VcnGatewayConnectionConfigTest {
     @Test
     public void testBuilderRequiresNonNullRetryInterval() {
         try {
-            newBuilder().setRetryIntervalsMs(null);
+            newBuilder().setRetryIntervalsMillis(null);
             fail("Expected exception due to invalid retryIntervalMs");
         } catch (IllegalArgumentException e) {
         }
@@ -143,7 +162,7 @@ public class VcnGatewayConnectionConfigTest {
     @Test
     public void testBuilderRequiresNonEmptyRetryInterval() {
         try {
-            newBuilder().setRetryIntervalsMs(new long[0]);
+            newBuilder().setRetryIntervalsMillis(new long[0]);
             fail("Expected exception due to invalid retryIntervalMs");
         } catch (IllegalArgumentException e) {
         }
@@ -174,7 +193,7 @@ public class VcnGatewayConnectionConfigTest {
 
         assertEquals(TUNNEL_CONNECTION_PARAMS, config.getTunnelConnectionParams());
 
-        assertArrayEquals(RETRY_INTERVALS_MS, config.getRetryIntervalsMs());
+        assertArrayEquals(RETRY_INTERVALS_MS, config.getRetryIntervalsMillis());
         assertEquals(MAX_MTU, config.getMaxMtu());
     }
 

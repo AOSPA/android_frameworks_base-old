@@ -45,6 +45,7 @@ namespace aapt {
 namespace {
 constexpr const char* kPublicGroupTag = "public-group";
 constexpr const char* kStagingPublicGroupTag = "staging-public-group";
+constexpr const char* kStagingPublicGroupFinalTag = "staging-public-group-final";
 }  // namespace
 
 constexpr const char* sXliffNamespaceUri = "urn:oasis:names:tc:xliff:document:1.2";
@@ -109,6 +110,7 @@ struct ParsedResource {
   bool staged_api = false;
   bool allow_new = false;
   Maybe<OverlayableItem> overlayable_item;
+  Maybe<StagedId> staged_alias;
 
   std::string comment;
   std::unique_ptr<Value> value;
@@ -153,6 +155,10 @@ static bool AddResourcesToTable(ResourceTable* table, IDiagnostics* diag, Parsed
     res->value->SetComment(std::move(res->comment));
     res->value->SetSource(std::move(res->source));
     res_builder.SetValue(std::move(res->value), res->config, res->product);
+  }
+
+  if (res->staged_alias) {
+    res_builder.SetStagedId(res->staged_alias.value());
   }
 
   bool error = false;
@@ -532,6 +538,7 @@ bool ResourceParser::ParseResource(xml::XmlPullParser* parser,
       {"public", std::mem_fn(&ResourceParser::ParsePublic)},
       {"public-group", std::mem_fn(&ResourceParser::ParsePublicGroup)},
       {"staging-public-group", std::mem_fn(&ResourceParser::ParseStagingPublicGroup)},
+      {"staging-public-group-final", std::mem_fn(&ResourceParser::ParseStagingPublicGroupFinal)},
       {"string-array", std::mem_fn(&ResourceParser::ParseStringArray)},
       {"style", std::bind(&ResourceParser::ParseStyle, std::placeholders::_1, ResourceType::kStyle,
                           std::placeholders::_2, std::placeholders::_3)},
@@ -627,6 +634,16 @@ bool ResourceParser::ParseResource(xml::XmlPullParser* parser,
     }
 
     return true;
+  } else if (resource_type == "macro") {
+    if (!maybe_name) {
+      diag_->Error(DiagMessage(out_resource->source)
+                   << "<" << parser->element_name() << "> missing 'name' attribute");
+      return false;
+    }
+
+    out_resource->name.type = ResourceType::kMacro;
+    out_resource->name.entry = maybe_name.value().to_string();
+    return ParseMacro(parser, out_resource);
   }
 
   if (can_be_item) {
@@ -661,7 +678,7 @@ bool ResourceParser::ParseResource(xml::XmlPullParser* parser,
     if (bag_iter != elToBagMap.end()) {
       // Ensure we have a name (unless this is a <public-group> or <overlayable>).
       if (resource_type != kPublicGroupTag && resource_type != kStagingPublicGroupTag &&
-          resource_type != "overlayable") {
+          resource_type != kStagingPublicGroupFinalTag && resource_type != "overlayable") {
         if (!maybe_name) {
           diag_->Error(DiagMessage(out_resource->source)
                        << "<" << parser->element_name() << "> missing 'name' attribute");
@@ -726,16 +743,8 @@ bool ResourceParser::ParseItem(xml::XmlPullParser* parser,
   return true;
 }
 
-/**
- * Reads the entire XML subtree and attempts to parse it as some Item,
- * with typeMask denoting which items it can be. If allowRawValue is
- * true, a RawString is returned if the XML couldn't be parsed as
- * an Item. If allowRawValue is false, nullptr is returned in this
- * case.
- */
-std::unique_ptr<Item> ResourceParser::ParseXml(xml::XmlPullParser* parser,
-                                               const uint32_t type_mask,
-                                               const bool allow_raw_value) {
+std::optional<FlattenedXmlSubTree> ResourceParser::CreateFlattenSubTree(
+    xml::XmlPullParser* parser) {
   const size_t begin_xml_line = parser->line_number();
 
   std::string raw_value;
@@ -745,30 +754,60 @@ std::unique_ptr<Item> ResourceParser::ParseXml(xml::XmlPullParser* parser,
     return {};
   }
 
-  if (!style_string.spans.empty()) {
+  return FlattenedXmlSubTree{.raw_value = raw_value,
+                             .style_string = style_string,
+                             .untranslatable_sections = untranslatable_sections,
+                             .namespace_resolver = parser,
+                             .source = source_.WithLine(begin_xml_line)};
+}
+
+/**
+ * Reads the entire XML subtree and attempts to parse it as some Item,
+ * with typeMask denoting which items it can be. If allowRawValue is
+ * true, a RawString is returned if the XML couldn't be parsed as
+ * an Item. If allowRawValue is false, nullptr is returned in this
+ * case.
+ */
+std::unique_ptr<Item> ResourceParser::ParseXml(xml::XmlPullParser* parser, const uint32_t type_mask,
+                                               const bool allow_raw_value) {
+  auto sub_tree = CreateFlattenSubTree(parser);
+  if (!sub_tree.has_value()) {
+    return {};
+  }
+  return ParseXml(sub_tree.value(), type_mask, allow_raw_value, *table_, config_, *diag_);
+}
+
+std::unique_ptr<Item> ResourceParser::ParseXml(const FlattenedXmlSubTree& xmlsub_tree,
+                                               const uint32_t type_mask, const bool allow_raw_value,
+                                               ResourceTable& table,
+                                               const android::ConfigDescription& config,
+                                               IDiagnostics& diag) {
+  if (!xmlsub_tree.style_string.spans.empty()) {
     // This can only be a StyledString.
     std::unique_ptr<StyledString> styled_string =
-        util::make_unique<StyledString>(table_->string_pool.MakeRef(
-            style_string, StringPool::Context(StringPool::Context::kNormalPriority, config_)));
-    styled_string->untranslatable_sections = std::move(untranslatable_sections);
+        util::make_unique<StyledString>(table.string_pool.MakeRef(
+            xmlsub_tree.style_string,
+            StringPool::Context(StringPool::Context::kNormalPriority, config)));
+    styled_string->untranslatable_sections = xmlsub_tree.untranslatable_sections;
     return std::move(styled_string);
   }
 
   auto on_create_reference = [&](const ResourceName& name) {
     // name.package can be empty here, as it will assume the package name of the
     // table.
-    std::unique_ptr<Id> id = util::make_unique<Id>();
-    id->SetSource(source_.WithLine(begin_xml_line));
-    table_->AddResource(NewResourceBuilder(name).SetValue(std::move(id)).Build(), diag_);
+    auto id = util::make_unique<Id>();
+    id->SetSource(xmlsub_tree.source);
+    return table.AddResource(NewResourceBuilder(name).SetValue(std::move(id)).Build(), &diag);
   };
 
   // Process the raw value.
-  std::unique_ptr<Item> processed_item =
-      ResourceUtils::TryParseItemForAttribute(raw_value, type_mask, on_create_reference);
+  std::unique_ptr<Item> processed_item = ResourceUtils::TryParseItemForAttribute(
+      xmlsub_tree.raw_value, type_mask, on_create_reference);
   if (processed_item) {
     // Fix up the reference.
-    if (Reference* ref = ValueCast<Reference>(processed_item.get())) {
-      ResolvePackage(parser, ref);
+    if (auto ref = ValueCast<Reference>(processed_item.get())) {
+      ref->allow_raw = allow_raw_value;
+      ResolvePackage(xmlsub_tree.namespace_resolver, ref);
     }
     return processed_item;
   }
@@ -777,17 +816,16 @@ std::unique_ptr<Item> ResourceParser::ParseXml(xml::XmlPullParser* parser,
   if (type_mask & android::ResTable_map::TYPE_STRING) {
     // Use the trimmed, escaped string.
     std::unique_ptr<String> string = util::make_unique<String>(
-        table_->string_pool.MakeRef(style_string.str, StringPool::Context(config_)));
-    string->untranslatable_sections = std::move(untranslatable_sections);
+        table.string_pool.MakeRef(xmlsub_tree.style_string.str, StringPool::Context(config)));
+    string->untranslatable_sections = xmlsub_tree.untranslatable_sections;
     return std::move(string);
   }
 
   if (allow_raw_value) {
     // We can't parse this so return a RawString if we are allowed.
-    return util::make_unique<RawString>(
-        table_->string_pool.MakeRef(util::TrimWhitespace(raw_value),
-                                    StringPool::Context(config_)));
-  } else if (util::TrimWhitespace(raw_value).empty()) {
+    return util::make_unique<RawString>(table.string_pool.MakeRef(
+        util::TrimWhitespace(xmlsub_tree.raw_value), StringPool::Context(config)));
+  } else if (util::TrimWhitespace(xmlsub_tree.raw_value).empty()) {
     // If the text is empty, and the value is not allowed to be a string, encode it as a @null.
     return ResourceUtils::MakeNull();
   }
@@ -847,6 +885,35 @@ bool ResourceParser::ParseString(xml::XmlPullParser* parser,
   } else if (StyledString* string_value = ValueCast<StyledString>(out_resource->value.get())) {
     string_value->SetTranslatable(translatable);
   }
+  return true;
+}
+
+bool ResourceParser::ParseMacro(xml::XmlPullParser* parser, ParsedResource* out_resource) {
+  auto sub_tree = CreateFlattenSubTree(parser);
+  if (!sub_tree) {
+    return false;
+  }
+
+  if (out_resource->config != ConfigDescription::DefaultConfig()) {
+    diag_->Error(DiagMessage(out_resource->source)
+                 << "<macro> tags cannot be declared in configurations other than the default "
+                    "configuration'");
+    return false;
+  }
+
+  auto macro = std::make_unique<Macro>();
+  macro->raw_value = std::move(sub_tree->raw_value);
+  macro->style_string = std::move(sub_tree->style_string);
+  macro->untranslatable_sections = std::move(sub_tree->untranslatable_sections);
+
+  for (const auto& decl : parser->package_decls()) {
+    macro->alias_namespaces.emplace_back(
+        Macro::Namespace{.alias = decl.prefix,
+                         .package_name = decl.package.package,
+                         .is_private = decl.package.private_namespace});
+  }
+
+  out_resource->value = std::move(macro);
   return true;
 }
 
@@ -974,7 +1041,6 @@ bool static ParseGroupImpl(xml::XmlPullParser* parser, ParsedResource* out_resou
       ParsedResource& entry_res = out_resource->child_resources.emplace_back(ParsedResource{
           .name = ResourceName{{}, *parsed_type, maybe_name.value().to_string()},
           .source = item_source,
-          .id = next_id,
           .comment = std::move(comment),
       });
 
@@ -997,6 +1063,14 @@ bool ResourceParser::ParseStagingPublicGroup(xml::XmlPullParser* parser,
                           parsed_entry.id = id;
                           parsed_entry.staged_api = true;
                           parsed_entry.visibility_level = Visibility::Level::kPublic;
+                        });
+}
+
+bool ResourceParser::ParseStagingPublicGroupFinal(xml::XmlPullParser* parser,
+                                                  ParsedResource* out_resource) {
+  return ParseGroupImpl(parser, out_resource, kStagingPublicGroupFinalTag, diag_,
+                        [](ParsedResource& parsed_entry, ResourceId id) {
+                          parsed_entry.staged_alias = StagedId{id, parsed_entry.source};
                         });
 }
 

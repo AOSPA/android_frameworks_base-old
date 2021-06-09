@@ -845,9 +845,7 @@ public final class Choreographer {
             }
 
             ScrollOptimizer.setUITaskStatus(true);
-            long adjustedTime =
-                    ScrollOptimizer.getAdjustedAnimationClock(frameTimeNanos);
-            AnimationUtils.lockAnimationClock(adjustedTime / TimeUtils.NANOS_PER_MS);
+            AnimationUtils.lockAnimationClock(frameTimeNanos / TimeUtils.NANOS_PER_MS);
 
             mFrameInfo.markInputHandlingStart();
             doCallbacks(Choreographer.CALLBACK_INPUT, frameTimeNanos, frameIntervalNanos);

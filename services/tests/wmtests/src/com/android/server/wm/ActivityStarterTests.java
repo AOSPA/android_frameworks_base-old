@@ -340,8 +340,8 @@ public class ActivityStarterTests extends WindowTestsBase {
             // Direct starter to use spy stack.
             doReturn(stack).when(mRootWindowContainer)
                     .getLaunchRootTask(any(), any(), any(), anyBoolean());
-            doReturn(stack).when(mRootWindowContainer).getLaunchRootTask(any(), any(), any(),
-                    anyBoolean(), any(), anyInt(), anyInt());
+            doReturn(stack).when(mRootWindowContainer).getLaunchRootTask(any(), any(), any(), any(),
+                    anyBoolean(), any(), anyInt(), anyInt(), anyInt());
         }
 
         // Set up mock package manager internal and make sure no unmocked methods are called
@@ -875,7 +875,8 @@ public class ActivityStarterTests extends WindowTestsBase {
         verify(secondaryTaskContainer, times(2)).createRootTask(anyInt(), anyInt(), anyBoolean());
         // The metrics logger should receive the same result and non-null options.
         verify(mActivityMetricsLogger).notifyActivityLaunched(any() /* launchingState */,
-                eq(result), eq(singleTaskActivity), notNull() /* options */);
+                eq(result), eq(false) /* newActivityCreated */, eq(singleTaskActivity),
+                notNull() /* options */);
     }
 
     @Test
@@ -1124,8 +1125,8 @@ public class ActivityStarterTests extends WindowTestsBase {
 
         stack.addChild(targetRecord);
 
-        doReturn(stack).when(mRootWindowContainer)
-                .getLaunchRootTask(any(), any(), any(), anyBoolean(), any(), anyInt(), anyInt());
+        doReturn(stack).when(mRootWindowContainer).getLaunchRootTask(any(), any(), any(), any(),
+                anyBoolean(), any(), anyInt(), anyInt(), anyInt());
 
         starter.mStartActivity = new ActivityBuilder(mAtm).build();
 

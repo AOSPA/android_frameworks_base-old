@@ -20,6 +20,9 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 
+import com.android.internal.os.PowerCalculator;
+
+import java.io.PrintWriter;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
@@ -112,6 +115,18 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
         dest.writeLong(mTimeInBackgroundMs);
     }
 
+    @Override
+    public void dump(PrintWriter pw, boolean skipEmptyComponents) {
+        final double consumedPower = getConsumedPower();
+        pw.print("UID ");
+        UserHandle.formatUid(pw, getUid());
+        pw.print(": ");
+        PowerCalculator.printPowerMah(pw, consumedPower);
+        pw.print(" ( ");
+        mPowerComponents.dump(pw, skipEmptyComponents  /* skipTotalPowerComponent */);
+        pw.print(" ) ");
+    }
+
     @NonNull
     public static final Creator<UidBatteryConsumer> CREATOR = new Creator<UidBatteryConsumer>() {
         public UidBatteryConsumer createFromParcel(@NonNull Parcel source) {
@@ -139,9 +154,9 @@ public final class UidBatteryConsumer extends BatteryConsumer implements Parcela
         public long mTimeInBackgroundMs;
         private boolean mExcludeFromBatteryUsageStats;
 
-        public Builder(@NonNull String[] customPowerComponentNames, int customTimeComponentCount,
+        public Builder(@NonNull String[] customPowerComponentNames,
                 boolean includePowerModels, @NonNull BatteryStats.Uid batteryStatsUid) {
-            super(customPowerComponentNames, customTimeComponentCount, includePowerModels);
+            super(customPowerComponentNames, includePowerModels);
             mBatteryStatsUid = batteryStatsUid;
             mUid = batteryStatsUid.getUid();
         }

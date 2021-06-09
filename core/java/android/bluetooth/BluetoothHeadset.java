@@ -31,6 +31,7 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.content.AttributionSource;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Binder;
 import android.os.Build;
 import android.os.Handler;
@@ -411,6 +412,15 @@ public final class BluetoothHeadset implements BluetoothProfile {
         mAdapter = adapter;
         mAttributionSource = adapter.getAttributionSource();
 
+        // Preserve legacy compatibility where apps were depending on
+        // registerStateChangeCallback() performing a permissions check which
+        // has been relaxed in modern platform versions
+        if (context.getApplicationInfo().targetSdkVersion <= Build.VERSION_CODES.R
+                && context.checkSelfPermission(android.Manifest.permission.BLUETOOTH)
+                        != PackageManager.PERMISSION_GRANTED) {
+            throw new SecurityException("Need BLUETOOTH permission");
+        }
+
         IBluetoothManager mgr = mAdapter.getBluetoothManager();
         if (mgr != null) {
             try {
@@ -602,7 +612,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
         if (service != null && isEnabled()) {
             try {
                 return BluetoothDevice.setAttributionSource(
-                        service.getDevicesMatchingConnectionStates(states), mAttributionSource);
+                        service.getDevicesMatchingConnectionStates(states, mAttributionSource),
+                        mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return new ArrayList<BluetoothDevice>();
@@ -665,7 +676,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
             }
             try {
                 return service.setPriority(
-                        device, BluetoothAdapter.priorityToConnectionPolicy(priority));
+                        device, BluetoothAdapter.priorityToConnectionPolicy(priority),
+                        mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return false;
@@ -704,7 +716,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
                 return false;
             }
             try {
-                return service.setConnectionPolicy(device, connectionPolicy);
+                return service.setConnectionPolicy(device, connectionPolicy, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return false;
@@ -734,7 +746,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return BluetoothAdapter.connectionPolicyToPriority(service.getPriority(device));
+                return BluetoothAdapter.connectionPolicyToPriority(
+                        service.getPriority(device, mAttributionSource));
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return BluetoothProfile.PRIORITY_OFF;
@@ -756,13 +769,17 @@ public final class BluetoothHeadset implements BluetoothProfile {
      * @hide
      */
     @SystemApi
-    @RequiresPermission(Manifest.permission.BLUETOOTH_PRIVILEGED)
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public @ConnectionPolicy int getConnectionPolicy(@NonNull BluetoothDevice device) {
         if (VDBG) log("getConnectionPolicy(" + device + ")");
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return service.getConnectionPolicy(device);
+                return service.getConnectionPolicy(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 return BluetoothProfile.CONNECTION_POLICY_FORBIDDEN;
@@ -786,7 +803,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return service.isNoiseReductionSupported(device);
+                return service.isNoiseReductionSupported(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -809,7 +826,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return service.isVoiceRecognitionSupported(device);
+                return service.isVoiceRecognitionSupported(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -848,7 +865,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return service.startVoiceRecognition(device);
+                return service.startVoiceRecognition(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -877,7 +894,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return service.stopVoiceRecognition(device);
+                return service.stopVoiceRecognition(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -902,7 +919,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
             mServiceLock.readLock().lock();
             if (service != null && isEnabled() && isValidDevice(device)) {
                 try {
-                    return service.isAudioConnected(device);
+                    return service.isAudioConnected(device, mAttributionSource);
                 } catch (RemoteException e) {
                     Log.e(TAG, Log.getStackTraceString(new Throwable()));
                 }
@@ -939,7 +956,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && !isDisabled()) {
             try {
-                return service.getAudioState(device);
+                return service.getAudioState(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -967,7 +984,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                service.setAudioRouteAllowed(allowed);
+                service.setAudioRouteAllowed(allowed, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -990,7 +1007,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.getAudioRouteAllowed();
+                return service.getAudioRouteAllowed(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1015,7 +1032,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                service.setForceScoAudio(forced);
+                service.setForceScoAudio(forced, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1040,7 +1057,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.isAudioOn();
+                return service.isAudioOn(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -1075,7 +1092,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.connectAudio();
+                return service.connectAudio(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1104,7 +1121,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.disconnectAudio();
+                return service.disconnectAudio(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1148,7 +1165,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.startScoUsingVirtualVoiceCall();
+                return service.startScoUsingVirtualVoiceCall(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1183,7 +1200,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.stopScoUsingVirtualVoiceCall();
+                return service.stopScoUsingVirtualVoiceCall(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1213,7 +1230,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                service.phoneStateChanged(numActive, numHeld, callState, number, type, name);
+                service.phoneStateChanged(numActive, numHeld, callState, number, type, name,
+                        mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1238,7 +1256,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                service.clccResponse(index, direction, status, mode, mpty, number, type);
+                service.clccResponse(index, direction, status, mode, mpty, number, type,
+                        mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -1278,7 +1297,8 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && isValidDevice(device)) {
             try {
-                return service.sendVendorSpecificResultCode(device, command, arg);
+                return service.sendVendorSpecificResultCode(device, command, arg,
+                        mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -1322,7 +1342,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled() && (device == null || isValidDevice(device))) {
             try {
-                return service.setActiveDevice(device);
+                return service.setActiveDevice(device, mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -1352,7 +1372,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.getActiveDevice();
+                return service.getActiveDevice(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }
@@ -1380,7 +1400,7 @@ public final class BluetoothHeadset implements BluetoothProfile {
         final IBluetoothHeadset service = mService;
         if (service != null && isEnabled()) {
             try {
-                return service.isInbandRingingEnabled();
+                return service.isInbandRingingEnabled(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
             }

@@ -21,10 +21,10 @@ import static junit.framework.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.hardware.biometrics.ComponentInfoInternal;
 import android.hardware.biometrics.SensorProperties;
@@ -35,11 +35,13 @@ import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.hardware.fingerprint.IUdfpsOverlayControllerCallback;
 import android.os.PowerManager;
 import android.os.RemoteException;
+import android.os.Vibrator;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 import android.view.LayoutInflater;
 import android.view.MotionEvent;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
 
 import androidx.test.filters.SmallTest;
 
@@ -48,6 +50,7 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -67,6 +70,7 @@ import org.mockito.junit.MockitoRule;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
@@ -85,13 +89,13 @@ public class UdfpsControllerTest extends SysuiTestCase {
 
     // Dependencies
     @Mock
-    private Resources mResources;
-    @Mock
     private LayoutInflater mLayoutInflater;
     @Mock
     private FingerprintManager mFingerprintManager;
     @Mock
     private WindowManager mWindowManager;
+    @Mock
+    private UdfpsHbmCallback mHbmCallback;
     @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
@@ -110,6 +114,12 @@ public class UdfpsControllerTest extends SysuiTestCase {
     private FalsingManager mFalsingManager;
     @Mock
     private PowerManager mPowerManager;
+    @Mock
+    private AccessibilityManager mAccessibilityManager;
+    @Mock
+    private ScreenLifecycle mScreenLifecycle;
+    @Mock
+    private Vibrator mVibrator;
 
     private FakeExecutor mFgExecutor;
 
@@ -126,6 +136,8 @@ public class UdfpsControllerTest extends SysuiTestCase {
     private IUdfpsOverlayController mOverlayController;
     @Captor private ArgumentCaptor<UdfpsView.OnTouchListener> mTouchListenerCaptor;
     @Captor private ArgumentCaptor<Runnable> mOnIlluminatedRunnableCaptor;
+    @Captor private ArgumentCaptor<ScreenLifecycle.Observer> mScreenObserverCaptor;
+    private ScreenLifecycle.Observer mScreenObserver;
 
     @Before
     public void setUp() {
@@ -151,7 +163,6 @@ public class UdfpsControllerTest extends SysuiTestCase {
         mFgExecutor = new FakeExecutor(new FakeSystemClock());
         mUdfpsController = new UdfpsController(
                 mContext,
-                mResources,
                 mLayoutInflater,
                 mFingerprintManager,
                 mWindowManager,
@@ -163,9 +174,15 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mKeyguardUpdateMonitor,
                 mKeyguardViewMediator,
                 mFalsingManager,
-                mPowerManager);
+                mPowerManager,
+                mAccessibilityManager,
+                mScreenLifecycle,
+                mVibrator,
+                Optional.of(mHbmCallback));
         verify(mFingerprintManager).setUdfpsOverlayController(mOverlayCaptor.capture());
         mOverlayController = mOverlayCaptor.getValue();
+        verify(mScreenLifecycle).addObserver(mScreenObserverCaptor.capture());
+        mScreenObserver = mScreenObserverCaptor.getValue();
 
         assertEquals(TEST_UDFPS_SENSOR_ID, mUdfpsController.mSensorProps.sensorId);
     }
@@ -174,16 +191,9 @@ public class UdfpsControllerTest extends SysuiTestCase {
         when(mBrightnessValues.length()).thenReturn(2);
         when(mBrightnessValues.getFloat(0, PowerManager.BRIGHTNESS_OFF_FLOAT)).thenReturn(1f);
         when(mBrightnessValues.getFloat(1, PowerManager.BRIGHTNESS_OFF_FLOAT)).thenReturn(2f);
-        when(mResources.obtainTypedArray(com.android.internal.R.array.config_screenBrightnessNits))
-                .thenReturn(mBrightnessValues);
         when(mBrightnessBacklight.length()).thenReturn(2);
         when(mBrightnessBacklight.getFloat(0, PowerManager.BRIGHTNESS_OFF_FLOAT)).thenReturn(1f);
         when(mBrightnessBacklight.getFloat(1, PowerManager.BRIGHTNESS_OFF_FLOAT)).thenReturn(2f);
-        when(mResources.obtainTypedArray(
-                com.android.internal.R.array.config_autoBrightnessDisplayValuesNits))
-                .thenReturn(mBrightnessBacklight);
-        when(mResources.getIntArray(com.android.internal.R.array.config_screenBrightnessBacklight))
-                .thenReturn(new int[]{1, 2});
     }
 
     @Test
@@ -230,19 +240,22 @@ public class UdfpsControllerTest extends SysuiTestCase {
         MotionEvent moveEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 0, 0, 0);
         mTouchListenerCaptor.getValue().onTouch(mUdfpsView, moveEvent);
         moveEvent.recycle();
-        // THEN illumination begins
-        // AND onIlluminatedRunnable that notifies FingerprintManager is set
-        verify(mUdfpsView).startIllumination(mOnIlluminatedRunnableCaptor.capture());
-        mOnIlluminatedRunnableCaptor.getValue().run();
+        // THEN FingerprintManager is notified about onPointerDown
         verify(mFingerprintManager).onPointerDown(eq(mUdfpsController.mSensorProps.sensorId), eq(0),
                 eq(0), eq(0f), eq(0f));
+        // AND illumination begins
+        verify(mUdfpsView).startIllumination(mOnIlluminatedRunnableCaptor.capture());
+        // AND onIlluminatedRunnable notifies FingerprintManager about onUiReady
+        mOnIlluminatedRunnableCaptor.getValue().run();
+        verify(mFingerprintManager).onUiReady(eq(mUdfpsController.mSensorProps.sensorId));
     }
 
     @Test
     public void aodInterrupt() throws RemoteException {
-        // GIVEN that the overlay is showing
+        // GIVEN that the overlay is showing and screen is on
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
                 IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mScreenObserver.onScreenTurnedOn();
         mFgExecutor.runAllReady();
         // WHEN fingerprint is requested because of AOD interrupt
         mUdfpsController.onAodInterrupt(0, 0, 2f, 3f);
@@ -259,6 +272,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
         // GIVEN AOD interrupt
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
                 IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mScreenObserver.onScreenTurnedOn();
         mFgExecutor.runAllReady();
         mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
         // WHEN it is cancelled
@@ -272,6 +286,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
         // GIVEN AOD interrupt
         mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
                 IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mScreenObserver.onScreenTurnedOn();
         mFgExecutor.runAllReady();
         mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
         // WHEN it times out
@@ -279,5 +294,45 @@ public class UdfpsControllerTest extends SysuiTestCase {
         mFgExecutor.runAllReady();
         // THEN the illumination is hidden
         verify(mUdfpsView).stopIllumination();
+    }
+
+    @Test
+    public void aodInterruptScreenOff() throws RemoteException {
+        // GIVEN screen off
+        mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mScreenObserver.onScreenTurnedOff();
+        mFgExecutor.runAllReady();
+
+        // WHEN aod interrupt is received
+        mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
+
+        // THEN no illumination because screen is off
+        verify(mUdfpsView, never()).startIllumination(any());
+    }
+
+    @Test
+    public void playHapticOnTouchUdfpsArea() throws RemoteException {
+        // Configure UdfpsView to accept the ACTION_DOWN event
+        when(mUdfpsView.isIlluminationRequested()).thenReturn(false);
+        when(mUdfpsView.isWithinSensorArea(anyFloat(), anyFloat())).thenReturn(true);
+
+        // GIVEN that the overlay is showing
+        mOverlayController.showUdfpsOverlay(TEST_UDFPS_SENSOR_ID,
+                IUdfpsOverlayController.REASON_AUTH_FPM_KEYGUARD, mUdfpsOverlayControllerCallback);
+        mFgExecutor.runAllReady();
+
+        // WHEN ACTION_DOWN is received
+        verify(mUdfpsView).setOnTouchListener(mTouchListenerCaptor.capture());
+        MotionEvent downEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, downEvent);
+        downEvent.recycle();
+        MotionEvent moveEvent = MotionEvent.obtain(0, 0, MotionEvent.ACTION_MOVE, 0, 0, 0);
+        mTouchListenerCaptor.getValue().onTouch(mUdfpsView, moveEvent);
+        moveEvent.recycle();
+
+        // THEN click haptic is played
+        verify(mVibrator).vibrate(mUdfpsController.mEffectClick,
+                UdfpsController.VIBRATION_SONIFICATION_ATTRIBUTES);
     }
 }

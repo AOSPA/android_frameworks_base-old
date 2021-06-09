@@ -99,7 +99,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
 
     @Override
     public SignalState newTileState() {
-        return new SignalState();
+        SignalState s = new SignalState();
+        s.forceExpandIcon = true;
+        return s;
     }
 
     @Override
@@ -317,10 +319,18 @@ public class InternetTile extends QSTileImpl<SignalState> {
                 Log.d(TAG, "setIsAirplaneMode: "
                         + "icon = " + (icon == null ? "" : icon.toString()));
             }
+            if (mCellularInfo.mAirplaneModeEnabled == icon.visible) {
+                return;
+            }
             mCellularInfo.mAirplaneModeEnabled = icon.visible;
             mWifiInfo.mAirplaneModeEnabled = icon.visible;
             if (!mSignalCallback.mEthernetInfo.mConnected) {
-                refreshState(mCellularInfo);
+                if (mWifiInfo.mEnabled && (mWifiInfo.mWifiSignalIconId > 0)
+                        && (mWifiInfo.mSsid != null)) {
+                    refreshState(mWifiInfo);
+                } else {
+                    refreshState(mCellularInfo);
+                }
             }
         }
 
@@ -454,6 +464,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
         state.dualLabelContentDescription = r.getString(
                 R.string.accessibility_quick_settings_open_settings, getTileLabel());
         state.expandedAccessibilityClassName = Switch.class.getName();
+        if (DEBUG) {
+            Log.d(TAG, "handleUpdateWifiState: " + "SignalState = " + state.toString());
+        }
     }
 
     private void handleUpdateCellularState(SignalState state, Object arg) {
@@ -494,6 +507,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
         } else {
             state.stateDescription = state.secondaryLabel;
         }
+        if (DEBUG) {
+            Log.d(TAG, "handleUpdateCellularState: " + "SignalState = " + state.toString());
+        }
     }
 
     private void handleUpdateEthernetState(SignalState state, Object arg) {
@@ -506,6 +522,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
         state.state = Tile.STATE_ACTIVE;
         state.icon = ResourceIcon.get(cb.mEthernetSignalIconId);
         state.secondaryLabel = cb.mEthernetContentDescription;
+        if (DEBUG) {
+            Log.d(TAG, "handleUpdateEthernetState: " + "SignalState = " + state.toString());
+        }
     }
 
     private CharSequence appendMobileDataType(CharSequence current, CharSequence dataType) {

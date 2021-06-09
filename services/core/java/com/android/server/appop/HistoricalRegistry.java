@@ -246,10 +246,10 @@ final class HistoricalRegistry {
                                     + " by which to push history on next write");
                         }
                     }
-                    mDiscreteRegistry.systemReady();
                 }
             }
         }
+        mDiscreteRegistry.systemReady();
     }
 
     private boolean isPersistenceInitializedMLocked() {
@@ -553,6 +553,9 @@ final class HistoricalRegistry {
                     if (mMode == AppOpsManager.HISTORICAL_MODE_DISABLED) {
                         clearHistoryOnDiskDLocked();
                     }
+                    if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_PASSIVE) {
+                        mDiscreteRegistry.setDebugMode(true);
+                    }
                 }
                 if (mBaseSnapshotInterval != baseSnapshotInterval) {
                     mBaseSnapshotInterval = baseSnapshotInterval;
@@ -591,6 +594,7 @@ final class HistoricalRegistry {
                 mPersistence.persistHistoricalOpsDLocked(history);
             }
         }
+        mDiscreteRegistry.offsetHistory(offsetMillis);
     }
 
     void addHistoricalOps(HistoricalOps ops) {
@@ -621,6 +625,7 @@ final class HistoricalRegistry {
         }
         setHistoryParameters(DEFAULT_MODE, DEFAULT_SNAPSHOT_INTERVAL_MILLIS,
                 DEFAULT_COMPRESSION_STEP);
+        mDiscreteRegistry.setDebugMode(false);
     }
 
     void clearHistory(int uid, String packageName) {

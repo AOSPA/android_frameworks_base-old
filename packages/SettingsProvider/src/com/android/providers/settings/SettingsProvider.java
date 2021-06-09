@@ -34,8 +34,11 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.backup.BackupManager;
+import android.app.compat.CompatChanges;
 import android.app.job.JobInfo;
 import android.app.job.JobScheduler;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledSince;
 import android.content.BroadcastReceiver;
 import android.content.ComponentName;
 import android.content.ContentProvider;
@@ -350,6 +353,9 @@ public class SettingsProvider extends ContentProvider {
     public static String keyToString(int key) {
         return SettingsState.keyToString(key);
     }
+    @ChangeId
+    @EnabledSince(targetSdkVersion=android.os.Build.VERSION_CODES.S)
+    private static final long ENFORCE_READ_PERMISSION_FOR_MULTI_SIM_DATA_CALL = 172670679L;
 
     @Override
     public boolean onCreate() {
@@ -1950,6 +1956,25 @@ public class SettingsProvider extends ContentProvider {
             // Skip checking readable annotations for test_only apps
             checkReadableAnnotation(settingsType, settingName);
         }
+        /**
+         * some settings need additional permission check, this is to have a matching security
+         * control from other API alternatives returning the same settings values.
+         * note, the permission enforcement should be based on app's targetSDKlevel to better handle
+         * app-compat.
+         */
+        switch (settingName) {
+            // missing READ_PRIVILEGED_PHONE_STATE permission protection
+            // see alternative API {@link SubscriptionManager#getPreferredDataSubscriptionId()
+            case Settings.Global.MULTI_SIM_DATA_CALL_SUBSCRIPTION:
+                // app-compat handling, not break apps targeting on previous SDKs.
+                if (CompatChanges.isChangeEnabled(
+                        ENFORCE_READ_PERMISSION_FOR_MULTI_SIM_DATA_CALL)) {
+                    getContext().enforceCallingOrSelfPermission(
+                            Manifest.permission.READ_PRIVILEGED_PHONE_STATE,
+                            "access global settings MULTI_SIM_DATA_CALL_SUBSCRIPTION");
+                }
+                break;
+        }
         if (!ai.isInstantApp()) {
             return;
         }
@@ -3401,7 +3426,7 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private final class UpgradeController {
-            private static final int SETTINGS_VERSION = 201;
+            private static final int SETTINGS_VERSION = 202;
 
             private final int mUserId;
 
@@ -4929,6 +4954,15 @@ public class SettingsProvider extends ContentProvider {
                                     String.valueOf(defAccessibilityButtonMode), /* tag= */
                                     null, /* makeDefault= */ true,
                                     SettingsState.SYSTEM_PACKAGE_NAME);
+
+                            if (hasValueInA11yButtonTargets(secureSettings)) {
+                                secureSettings.insertSettingLocked(
+                                        Secure.ACCESSIBILITY_FLOATING_MENU_MIGRATION_TOOLTIP_PROMPT,
+                                        /* enabled */ "1",
+                                        /* tag= */ null,
+                                        /* makeDefault= */ false,
+                                        SettingsState.SYSTEM_PACKAGE_NAME);
+                            }
                         }
                     }
 
@@ -4967,6 +5001,22 @@ public class SettingsProvider extends ContentProvider {
                     // version 199.
                     getGlobalSettingsLocked().deleteSettingLocked("notification_bubbles");
                     currentVersion = 201;
+                }
+
+                if (currentVersion == 201) {
+                    // Version 201: Set the default value for Secure Settings:
+                    final SettingsState secureSettings = getSecureSettingsLocked(userId);
+                    final Setting oneHandedModeActivated = secureSettings.getSettingLocked(
+                            Secure.ONE_HANDED_MODE_ACTIVATED);
+                    if (oneHandedModeActivated.isNull()) {
+                        final boolean defOneHandedModeActivated = getContext().getResources()
+                                .getBoolean(R.bool.def_one_handed_mode_activated);
+                        secureSettings.insertSettingLocked(
+                                Secure.ONE_HANDED_MODE_ACTIVATED,
+                                defOneHandedModeActivated ? "1" : "0", null, true,
+                                SettingsState.SYSTEM_PACKAGE_NAME);
+                    }
+                    currentVersion = 202;
                 }
 
                 // vXXX: Add new settings above this point.
@@ -5139,13 +5189,21 @@ public class SettingsProvider extends ContentProvider {
         }
 
         private boolean isAccessibilityButtonInNavigationBarOn(SettingsState secureSettings) {
-            final boolean hasValueInA11yBtnTargets = !TextUtils.isEmpty(
-                    secureSettings.getSettingLocked(
-                            Secure.ACCESSIBILITY_BUTTON_TARGETS).getValue());
+            return hasValueInA11yButtonTargets(secureSettings) && !isGestureNavigateEnabled();
+        }
+
+        private boolean isGestureNavigateEnabled() {
             final int navigationMode = getContext().getResources().getInteger(
                     com.android.internal.R.integer.config_navBarInteractionMode);
+            return navigationMode == NAV_BAR_MODE_GESTURAL;
+        }
 
-            return hasValueInA11yBtnTargets && (navigationMode != NAV_BAR_MODE_GESTURAL);
+        private boolean hasValueInA11yButtonTargets(SettingsState secureSettings) {
+            final Setting a11yButtonTargetsSettings =
+                    secureSettings.getSettingLocked(Secure.ACCESSIBILITY_BUTTON_TARGETS);
+
+            return !a11yButtonTargetsSettings.isNull()
+                    && !TextUtils.isEmpty(a11yButtonTargetsSettings.getValue());
         }
     }
 }

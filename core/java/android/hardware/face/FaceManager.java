@@ -69,8 +69,6 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     private static final int MSG_SET_FEATURE_COMPLETED = 107;
     private static final int MSG_CHALLENGE_GENERATED = 108;
     private static final int MSG_FACE_DETECTED = 109;
-    private static final int MSG_CHALLENGE_INTERRUPTED = 110;
-    private static final int MSG_CHALLENGE_INTERRUPT_FINISHED = 111;
     private static final int MSG_AUTHENTICATION_FRAME = 112;
     private static final int MSG_ENROLLMENT_FRAME = 113;
 
@@ -102,8 +100,8 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
 
         @Override // binder call
         public void onAuthenticationSucceeded(Face face, int userId, boolean isStrongBiometric) {
-            mHandler.obtainMessage(MSG_AUTHENTICATION_SUCCEEDED, userId, isStrongBiometric ? 1 : 0,
-                    face).sendToTarget();
+            mHandler.obtainMessage(MSG_AUTHENTICATION_SUCCEEDED, userId,
+                    isStrongBiometric ? 1 : 0, face).sendToTarget();
         }
 
         @Override // binder call
@@ -133,28 +131,18 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         @Override
-        public void onFeatureGet(boolean success, int feature, boolean value) {
+        public void onFeatureGet(boolean success, int[] features, boolean[] featureState) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = success;
-            args.argi1 = feature;
-            args.arg2 = value;
+            args.arg2 = features;
+            args.arg3 = featureState;
             mHandler.obtainMessage(MSG_GET_FEATURE_COMPLETED, args).sendToTarget();
         }
 
         @Override
-        public void onChallengeGenerated(int sensorId, long challenge) {
-            mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, sensorId, 0, challenge)
+        public void onChallengeGenerated(int sensorId, int userId, long challenge) {
+            mHandler.obtainMessage(MSG_CHALLENGE_GENERATED, sensorId, userId, challenge)
                     .sendToTarget();
-        }
-
-        @Override
-        public void onChallengeInterrupted(int sensorId) {
-            mHandler.obtainMessage(MSG_CHALLENGE_INTERRUPTED, sensorId).sendToTarget();
-        }
-
-        @Override
-        public void onChallengeInterruptFinished(int sensorId) {
-            mHandler.obtainMessage(MSG_CHALLENGE_INTERRUPT_FINISHED, sensorId).sendToTarget();
         }
 
         @Override
@@ -434,16 +422,14 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      *
      * @see com.android.server.locksettings.LockSettingsService
      *
-     * TODO(b/171335732): should take userId
-     *
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
-    public void generateChallenge(int sensorId, GenerateChallengeCallback callback) {
+    public void generateChallenge(int sensorId, int userId, GenerateChallengeCallback callback) {
         if (mService != null) {
             try {
                 mGenerateChallengeCallback = callback;
-                mService.generateChallenge(mToken, sensorId, 0 /* userId */, mServiceReceiver,
+                mService.generateChallenge(mToken, sensorId, userId, mServiceReceiver,
                         mContext.getOpPackageName());
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -452,12 +438,13 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
     }
 
     /**
-     * Same as {@link #generateChallenge(int, GenerateChallengeCallback)}, but assumes the first
-     * enumerated sensor.
+     * Same as {@link #generateChallenge(int, int, GenerateChallengeCallback)}, but assumes the
+     * first enumerated sensor.
+     *
      * @hide
      */
     @RequiresPermission(MANAGE_BIOMETRIC)
-    public void generateChallenge(GenerateChallengeCallback callback) {
+    public void generateChallenge(int userId, GenerateChallengeCallback callback) {
         final List<FaceSensorPropertiesInternal> faceSensorProperties =
                 getSensorPropertiesInternal();
         if (faceSensorProperties.isEmpty()) {
@@ -466,7 +453,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         final int sensorId = faceSensorProperties.get(0).sensorId;
-        generateChallenge(sensorId, callback);
+        generateChallenge(sensorId, userId, callback);
     }
 
     /**
@@ -1023,6 +1010,34 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         }
 
         /**
+         * Called each time a single frame is captured during enrollment.
+         *
+         * <p>For older, non-AIDL implementations, only {@code helpCode} and {@code helpMessage} are
+         * supported. Sensible default values will be provided for all other arguments.
+         *
+         * @param helpCode    An integer identifying the capture status for this frame.
+         * @param helpMessage A human-readable help string that can be shown in UI.
+         * @param cell        The cell captured during this frame of enrollment, if any.
+         * @param stage       An integer representing the current stage of enrollment.
+         * @param pan         The horizontal pan of the detected face. Values in the range [-1, 1]
+         *                    indicate a good capture.
+         * @param tilt        The vertical tilt of the detected face. Values in the range [-1, 1]
+         *                    indicate a good capture.
+         * @param distance    The distance of the detected face from the device. Values in
+         *                    the range [-1, 1] indicate a good capture.
+         */
+        public void onEnrollmentFrame(
+                int helpCode,
+                @Nullable CharSequence helpMessage,
+                @Nullable FaceEnrollCell cell,
+                @FaceEnrollStages.FaceEnrollStage int stage,
+                float pan,
+                float tilt,
+                float distance) {
+            onEnrollmentHelp(helpCode, helpMessage);
+        }
+
+        /**
          * Called as each enrollment step progresses. Enrollment is considered complete when
          * remaining reaches 0. This function will not be called if enrollment fails. See
          * {@link EnrollmentCallback#onEnrollmentError(int, CharSequence)}
@@ -1088,29 +1103,20 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
      * @hide
      */
     public abstract static class GetFeatureCallback {
-        public abstract void onCompleted(boolean success, int feature, boolean value);
+        public abstract void onCompleted(boolean success, int[] features, boolean[] featureState);
     }
 
     /**
-     * Callback structure provided to {@link #generateChallenge(int, GenerateChallengeCallback)}.
+     * Callback structure provided to {@link #generateChallenge(int, int,
+     * GenerateChallengeCallback)}.
+     *
      * @hide
      */
     public interface GenerateChallengeCallback {
         /**
          * Invoked when a challenge has been generated.
          */
-        void onGenerateChallengeResult(int sensorId, long challenge);
-
-        /**
-         * Invoked if the challenge has not been revoked and a subsequent caller/owner invokes
-         * {@link #generateChallenge(int, GenerateChallengeCallback)}, but
-         */
-        default void onChallengeInterrupted(int sensorId) {}
-
-        /**
-         * Invoked when the interrupting client has finished (e.g. revoked its challenge).
-         */
-        default void onChallengeInterruptFinished(int sensorId) {}
+        void onGenerateChallengeResult(int sensorId, int userId, long challenge);
     }
 
     private class OnEnrollCancelListener implements OnCancelListener {
@@ -1179,22 +1185,17 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
                 case MSG_GET_FEATURE_COMPLETED:
                     SomeArgs args = (SomeArgs) msg.obj;
                     sendGetFeatureCompleted((boolean) args.arg1 /* success */,
-                            args.argi1 /* feature */,
-                            (boolean) args.arg2 /* value */);
+                            (int[]) args.arg2 /* features */,
+                            (boolean[]) args.arg3 /* featureState */);
                     args.recycle();
                     break;
                 case MSG_CHALLENGE_GENERATED:
-                    sendChallengeGenerated(msg.arg1 /* sensorId */, (long) msg.obj /* challenge */);
+                    sendChallengeGenerated(msg.arg1 /* sensorId */, msg.arg2 /* userId */,
+                            (long) msg.obj /* challenge */);
                     break;
                 case MSG_FACE_DETECTED:
                     sendFaceDetected(msg.arg1 /* sensorId */, msg.arg2 /* userId */,
                             (boolean) msg.obj /* isStrongBiometric */);
-                    break;
-                case MSG_CHALLENGE_INTERRUPTED:
-                    sendChallengeInterrupted((int) msg.obj /* sensorId */);
-                    break;
-                case MSG_CHALLENGE_INTERRUPT_FINISHED:
-                    sendChallengeInterruptFinished((int) msg.obj /* sensorId */);
                     break;
                 case MSG_AUTHENTICATION_FRAME:
                     sendAuthenticationFrame((FaceAuthenticationFrame) msg.obj /* frame */);
@@ -1216,18 +1217,18 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         mSetFeatureCallback.onCompleted(success, feature);
     }
 
-    private void sendGetFeatureCompleted(boolean success, int feature, boolean value) {
+    private void sendGetFeatureCompleted(boolean success, int[] features, boolean[] featureState) {
         if (mGetFeatureCallback == null) {
             return;
         }
-        mGetFeatureCallback.onCompleted(success, feature, value);
+        mGetFeatureCallback.onCompleted(success, features, featureState);
     }
 
-    private void sendChallengeGenerated(int sensorId, long challenge) {
+    private void sendChallengeGenerated(int sensorId, int userId, long challenge) {
         if (mGenerateChallengeCallback == null) {
             return;
         }
-        mGenerateChallengeCallback.onGenerateChallengeResult(sensorId, challenge);
+        mGenerateChallengeCallback.onGenerateChallengeResult(sensorId, userId, challenge);
     }
 
     private void sendFaceDetected(int sensorId, int userId, boolean isStrongBiometric) {
@@ -1236,22 +1237,6 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
             return;
         }
         mFaceDetectionCallback.onFaceDetected(sensorId, userId, isStrongBiometric);
-    }
-
-    private void sendChallengeInterrupted(int sensorId) {
-        if (mGenerateChallengeCallback == null) {
-            Slog.e(TAG, "sendChallengeInterrupted, callback null");
-            return;
-        }
-        mGenerateChallengeCallback.onChallengeInterrupted(sensorId);
-    }
-
-    private void sendChallengeInterruptFinished(int sensorId) {
-        if (mGenerateChallengeCallback == null) {
-            Slog.e(TAG, "sendChallengeInterruptFinished, callback null");
-            return;
-        }
-        mGenerateChallengeCallback.onChallengeInterruptFinished(sensorId);
     }
 
     private void sendRemovedResult(Face face, int remaining) {
@@ -1305,7 +1290,7 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         } else if (mEnrollmentCallback != null) {
             final FaceEnrollFrame frame = new FaceEnrollFrame(
                     null /* cell */,
-                    FaceEnrollStage.UNKNOWN,
+                    FaceEnrollStages.UNKNOWN,
                     new FaceDataFrame(acquireInfo, vendorCode));
             sendEnrollmentFrame(frame);
         }
@@ -1333,12 +1318,19 @@ public class FaceManager implements BiometricAuthenticator, BiometricFaceConstan
         if (frame == null) {
             Slog.w(TAG, "Received null enrollment frame");
         } else if (mEnrollmentCallback != null) {
-            // TODO(b/178414967): Send additional frame data to callback
-            final int acquireInfo = frame.getData().getAcquiredInfo();
-            final int vendorCode = frame.getData().getVendorCode();
+            final FaceDataFrame data = frame.getData();
+            final int acquireInfo = data.getAcquiredInfo();
+            final int vendorCode = data.getVendorCode();
             final int helpCode = getHelpCode(acquireInfo, vendorCode);
             final String helpMessage = getEnrollHelpMessage(mContext, acquireInfo, vendorCode);
-            mEnrollmentCallback.onEnrollmentHelp(helpCode, helpMessage);
+            mEnrollmentCallback.onEnrollmentFrame(
+                    helpCode,
+                    helpMessage,
+                    frame.getCell(),
+                    frame.getStage(),
+                    data.getPan(),
+                    data.getTilt(),
+                    data.getDistance());
         }
     }
 

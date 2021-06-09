@@ -326,6 +326,8 @@ interface IAudioService {
 
     oneway void setMultiAudioFocusEnabled(in boolean enabled);
 
+    void cacheParameters(in String keyValuePairs);
+
     int setPreferredDevicesForCapturePreset(
             in int capturePreset, in List<AudioDeviceAttributes> devices);
 

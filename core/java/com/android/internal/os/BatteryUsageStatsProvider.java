@@ -54,7 +54,7 @@ public class BatteryUsageStatsProvider {
                 mPowerCalculators = new ArrayList<>();
 
                 // Power calculators are applied in the order of registration
-                mPowerCalculators.add(new BatteryChargeCalculator(mPowerProfile));
+                mPowerCalculators.add(new BatteryChargeCalculator());
                 mPowerCalculators.add(new CpuPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new MemoryPowerCalculator(mPowerProfile));
                 mPowerCalculators.add(new WakelockPowerCalculator(mPowerProfile));
@@ -124,16 +124,11 @@ public class BatteryUsageStatsProvider {
         final long realtimeUs = elapsedRealtime() * 1000;
         final long uptimeUs = uptimeMillis() * 1000;
 
-        final String[] customPowerComponentNames = mStats.getCustomEnergyConsumerNames();
-
-        // TODO(b/174186358): read extra time component number from configuration
-        final int customTimeComponentCount = 0;
-
         final boolean includePowerModels = (query.getFlags()
                 & BatteryUsageStatsQuery.FLAG_BATTERY_USAGE_STATS_INCLUDE_POWER_MODELS) != 0;
 
         final BatteryUsageStats.Builder batteryUsageStatsBuilder = new BatteryUsageStats.Builder(
-                customPowerComponentNames, customTimeComponentCount, includePowerModels);
+                mStats.getCustomEnergyConsumerNames(), includePowerModels);
         batteryUsageStatsBuilder.setStatsStartTimestamp(mStats.getStartClockTime());
 
         SparseArray<? extends BatteryStats.Uid> uidStats = mStats.getUidStats();

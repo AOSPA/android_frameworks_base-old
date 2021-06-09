@@ -18,11 +18,19 @@ package com.android.server.biometrics.sensors.face.hidl;
 
 import static junit.framework.Assert.assertEquals;
 
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.isA;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import android.content.Context;
-import android.hardware.biometrics.BiometricManager;
+import android.hardware.biometrics.ComponentInfoInternal;
+import android.hardware.biometrics.SensorProperties;
+import android.hardware.face.FaceSensorProperties;
+import android.hardware.face.FaceSensorPropertiesInternal;
+import android.hardware.face.IFaceServiceReceiver;
 import android.os.Binder;
 import android.os.IBinder;
 import android.os.UserManager;
@@ -39,7 +47,12 @@ import org.junit.Test;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import java.time.Clock;
+import java.time.Instant;
+import java.time.ZoneId;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.stream.IntStream;
 
 @Presubmit
 @SmallTest
@@ -47,6 +60,7 @@ public class Face10Test {
 
     private static final String TAG = "Face10Test";
     private static final int SENSOR_ID = 1;
+    private static final int USER_ID = 20;
 
     @Mock
     private Context mContext;
@@ -71,10 +85,27 @@ public class Face10Test {
         when(mUserManager.getAliveUsers()).thenReturn(new ArrayList<>());
 
         mLockoutResetDispatcher = new LockoutResetDispatcher(mContext);
-        mFace10 = new Face10(mContext, SENSOR_ID, BiometricManager.Authenticators.BIOMETRIC_STRONG,
-                mLockoutResetDispatcher, false /* supportsSelfIllumination */,
-                1 /* maxTemplatesAllowed */, mScheduler);
+
+        final int maxEnrollmentsPerUser = 1;
+        final List<ComponentInfoInternal> componentInfo = new ArrayList<>();
+        final boolean supportsFaceDetection = false;
+        final boolean supportsSelfIllumination = false;
+        final boolean resetLockoutRequiresChallenge = false;
+        final FaceSensorPropertiesInternal sensorProps = new FaceSensorPropertiesInternal(SENSOR_ID,
+                SensorProperties.STRENGTH_STRONG, maxEnrollmentsPerUser, componentInfo,
+                FaceSensorProperties.TYPE_UNKNOWN, supportsFaceDetection, supportsSelfIllumination,
+                resetLockoutRequiresChallenge);
+
+        Face10.sSystemClock = Clock.fixed(Instant.ofEpochMilli(100), ZoneId.of("PST"));
+        mFace10 = new Face10(mContext, sensorProps, mLockoutResetDispatcher, mScheduler);
         mBinder = new Binder();
+    }
+
+    private void tick(long seconds) {
+        waitForIdle();
+        Face10.sSystemClock = Clock.fixed(Instant.ofEpochSecond(
+                Face10.sSystemClock.instant().getEpochSecond() + seconds),
+                ZoneId.of("PST"));
     }
 
     @Test
@@ -88,6 +119,59 @@ public class Face10Test {
         mFace10.scheduleRevokeChallenge(0 /* sensorId */, 0 /* userId */, mBinder, TAG,
                 0 /* challenge */);
         waitForIdle();
+    }
+
+    @Test
+    public void scheduleGenerateChallenge_cachesResult() {
+        final IFaceServiceReceiver[] mocks = IntStream.range(0, 3)
+                .mapToObj(i -> mock(IFaceServiceReceiver.class))
+                .toArray(IFaceServiceReceiver[]::new);
+        for (IFaceServiceReceiver mock : mocks) {
+            mFace10.scheduleGenerateChallenge(SENSOR_ID, USER_ID, mBinder, mock, TAG);
+            tick(10);
+        }
+        tick(120);
+        mFace10.scheduleGenerateChallenge(
+                SENSOR_ID, USER_ID, mBinder, mock(IFaceServiceReceiver.class), TAG);
+        waitForIdle();
+
+        verify(mScheduler, times(2))
+                .scheduleClientMonitor(isA(FaceGenerateChallengeClient.class), any());
+    }
+
+    @Test
+    public void scheduleRevokeChallenge_waitsUntilEmpty() {
+        final long challenge = 22;
+        final IFaceServiceReceiver[] mocks = IntStream.range(0, 3)
+                .mapToObj(i -> mock(IFaceServiceReceiver.class))
+                .toArray(IFaceServiceReceiver[]::new);
+        for (IFaceServiceReceiver mock : mocks) {
+            mFace10.scheduleGenerateChallenge(SENSOR_ID, USER_ID, mBinder, mock, TAG);
+            tick(10);
+        }
+        for (IFaceServiceReceiver mock : mocks) {
+            mFace10.scheduleRevokeChallenge(SENSOR_ID, USER_ID, mBinder, TAG, challenge);
+            tick(10);
+        }
+        waitForIdle();
+
+        verify(mScheduler).scheduleClientMonitor(isA(FaceRevokeChallengeClient.class), any());
+    }
+
+    @Test
+    public void scheduleRevokeChallenge_doesNotWaitForever() {
+        mFace10.scheduleGenerateChallenge(
+                SENSOR_ID, USER_ID, mBinder, mock(IFaceServiceReceiver.class), TAG);
+        mFace10.scheduleGenerateChallenge(
+                SENSOR_ID, USER_ID, mBinder, mock(IFaceServiceReceiver.class), TAG);
+        tick(10000);
+        mFace10.scheduleGenerateChallenge(
+                SENSOR_ID, USER_ID, mBinder, mock(IFaceServiceReceiver.class), TAG);
+        mFace10.scheduleRevokeChallenge(
+                SENSOR_ID, USER_ID, mBinder, TAG, 8 /* challenge */);
+        waitForIdle();
+
+        verify(mScheduler).scheduleClientMonitor(isA(FaceRevokeChallengeClient.class), any());
     }
 
     @Test

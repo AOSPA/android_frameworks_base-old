@@ -90,6 +90,10 @@ public final class UpdatableFontDirTest {
             String content = FileUtils.readTextFile(file, 100, "");
             return Long.parseLong(content.split(",")[1]);
         }
+
+        @Override
+        public void tryToCreateTypeface(File file) throws Throwable {
+        }
     }
 
     // FakeFsverityUtil will successfully set up fake fs-verity if the signature is GOOD_SIGNATURE.
@@ -717,6 +721,10 @@ public final class UpdatableFontDirTest {
                     public long getRevision(File file) throws IOException {
                         return 0;
                     }
+
+                    @Override
+                    public void tryToCreateTypeface(File file) throws IOException {
+                    }
                 }, fakeFsverityUtil, mConfigFile, mCurrentTimeSupplier, mConfigSupplier);
         dir.loadFontFileMap();
 
@@ -750,6 +758,50 @@ public final class UpdatableFontDirTest {
                     @Override
                     public long getRevision(File file) throws IOException {
                         return 0;
+                    }
+
+                    @Override
+                    public void tryToCreateTypeface(File file) throws IOException {
+                    }
+                }, fakeFsverityUtil, mConfigFile, mCurrentTimeSupplier, mConfigSupplier);
+        dir.loadFontFileMap();
+
+        try {
+            dir.update(Collections.singletonList(newFontUpdateRequest("foo.ttf,1,foo",
+                    GOOD_SIGNATURE)));
+            fail("Expect SystemFontException");
+        } catch (FontManagerService.SystemFontException e) {
+            assertThat(e.getErrorCode())
+                    .isEqualTo(FontManager.RESULT_ERROR_INVALID_FONT_FILE);
+        }
+        assertThat(dir.getPostScriptMap()).isEmpty();
+    }
+
+    @Test
+    public void installFontFile_failedToCreateTypeface() throws Exception {
+        FakeFsverityUtil fakeFsverityUtil = new FakeFsverityUtil();
+        FakeFontFileParser parser = new FakeFontFileParser();
+        UpdatableFontDir dir = new UpdatableFontDir(
+                mUpdatableFontFilesDir,
+                new UpdatableFontDir.FontFileParser() {
+                    @Override
+                    public String getPostScriptName(File file) throws IOException {
+                        return parser.getPostScriptName(file);
+                    }
+
+                    @Override
+                    public String buildFontFileName(File file) throws IOException {
+                        return parser.buildFontFileName(file);
+                    }
+
+                    @Override
+                    public long getRevision(File file) throws IOException {
+                        return parser.getRevision(file);
+                    }
+
+                    @Override
+                    public void tryToCreateTypeface(File file) throws IOException {
+                        throw new IOException();
                     }
                 }, fakeFsverityUtil, mConfigFile, mCurrentTimeSupplier, mConfigSupplier);
         dir.loadFontFileMap();
@@ -857,14 +909,15 @@ public final class UpdatableFontDirTest {
                 mConfigFile, mCurrentTimeSupplier, mConfigSupplier);
         dir.loadFontFileMap();
 
+        List<FontUpdateRequest> requests = Arrays.asList(
+                newFontUpdateRequest("test.ttf,1,test", GOOD_SIGNATURE),
+                newAddFontFamilyRequest("<family lang='en'>"
+                        + "  <font>test.ttf</font>"
+                        + "</family>"));
         try {
-            dir.update(Arrays.asList(
-                    newFontUpdateRequest("test.ttf,1,test", GOOD_SIGNATURE),
-                    newAddFontFamilyRequest("<family lang='en'>"
-                            + "  <font>test.ttf</font>"
-                            + "</family>")));
+            dir.update(requests);
             fail("Expect NullPointerException");
-        } catch (FontManagerService.SystemFontException e) {
+        } catch (NullPointerException e) {
             // Expect
         }
     }
@@ -963,7 +1016,7 @@ public final class UpdatableFontDirTest {
         parser.setInput(is, "UTF-8");
         parser.nextTag();
 
-        FontConfig.FontFamily fontFamily = FontListParser.readFamily(parser, "", null);
+        FontConfig.FontFamily fontFamily = FontListParser.readFamily(parser, "", null, true);
         List<FontUpdateRequest.Font> fonts = new ArrayList<>();
         for (FontConfig.Font font : fontFamily.getFontList()) {
             String name = font.getFile().getName();

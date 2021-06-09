@@ -936,13 +936,13 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
         }
         GetWalletCardsRequest request =
                 new GetWalletCardsRequest(1 /* cardWidth */, 1 /* cardHeight */,
-                        1 /* iconSizePx */, 2 /* maxCards */);
+                        1 /* iconSizePx */, 1 /* maxCards */);
         mQuickAccessWalletClient.getWalletCards(mUiExecutor, request, mCardRetriever);
     }
 
     private void onWalletClick(View v) {
         // More coming here; need to inform the user about how to proceed
-        if (!mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
+        if (mFalsingManager.isFalseTap(FalsingManager.LOW_PENALTY)) {
             return;
         }
 
