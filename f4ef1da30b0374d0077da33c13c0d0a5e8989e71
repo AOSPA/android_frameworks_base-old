@@ -16,6 +16,23 @@
       "message": "Please provide more detail as to why this change is necessary",
       "revId": "f4ef1da30b0374d0077da33c13c0d0a5e8989e71",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "6e777578_33a4d58b",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000551
+      },
+      "writtenOn": "2021-06-11T02:45:28Z",
+      "side": 1,
+      "message": "This change is required with the dependency change in frameworks/opt/net/wifi for IMS to actually work, if I recall correctly. It is a proprietary MediaTek class, that in order for IMS to work, had to be reversed out and implemented into framework. phhusson had removed the class completely in his IMS package for it to work on MediaTek, and that is a hack which I would not suggest.",
+      "revId": "f4ef1da30b0374d0077da33c13c0d0a5e8989e71",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
