@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a41ef463_1af755c0",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 2
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000447
+      },
+      "writtenOn": "2021-06-12T21:45:34Z",
+      "side": 1,
+      "message": "Is the property really required? Can\u0027t we just fail out when it sees the service tracker HAL doesn\u0027t exist?",
+      "revId": "4c3344edb4c257e09736bcde20873c0ad09b9f63",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
