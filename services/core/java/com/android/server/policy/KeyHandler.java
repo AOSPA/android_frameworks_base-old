@@ -77,7 +77,7 @@ public class KeyHandler {
     private static final boolean DEBUG = Log.isLoggable(TAG, Log.DEBUG);
 
     private static final int GESTURE_REQUEST = 1;
-    private static final int GESTURE_WAKE_LOCK_DURATION = 250; // ms
+    private static final int WAKE_LOCK_DURATION = 250; // ms
 
     private static final int MAX_SUPPORTED_GESTURES = 15;
 
@@ -614,10 +614,10 @@ public class KeyHandler {
                 break;
             default:
                 handled = false;
-                releaseGestureWakeLock();
                 break;
         }
 
+        releaseGestureWakeLock();
         doHapticFeedback(handled);
     }
 
@@ -625,12 +625,18 @@ public class KeyHandler {
         if (mGestureWakeLock.isHeld()) {
             mGestureWakeLock.release();
         }
-        mGestureWakeLock.acquire(KeyHandler.GESTURE_WAKE_LOCK_DURATION);
+        mGestureWakeLock.acquire(WAKE_LOCK_DURATION);
     }
 
     private void releaseGestureWakeLock() {
         if (mGestureWakeLock.isHeld()) {
             mGestureWakeLock.release();
+        }
+    }
+
+    private void releaseProximityWakeLock() {
+        if (mProximityWakeLock.isHeld()) {
+            mProximityWakeLock.release();
         }
     }
 
@@ -693,11 +699,11 @@ public class KeyHandler {
     }
 
     private void processEvent(final KeyEvent keyEvent) {
-        mProximityWakeLock.acquire();
+        mProximityWakeLock.acquire(WAKE_LOCK_DURATION);
         mSensorManager.registerListener(new SensorEventListener() {
             @Override
             public void onSensorChanged(SensorEvent event) {
-                mProximityWakeLock.release();
+                releaseProximityWakeLock();
                 mSensorManager.unregisterListener(this);
                 if (!mHandler.hasMessages(GESTURE_REQUEST)) {
                     // The sensor took to long, ignoring.
