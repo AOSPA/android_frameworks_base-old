@@ -351,7 +351,7 @@ public class BrightnessController implements ToggleSlider.Listener {
         mDisplayManager = context.getSystemService(DisplayManager.class);
         mVrManager = IVrManager.Stub.asInterface(ServiceManager.getService(
                 Context.VR_SERVICE));
-        
+
         updateIcon(mAutomatic);
     }
 
@@ -469,18 +469,21 @@ public class BrightnessController implements ToggleSlider.Listener {
         if (levelIcon == null) {
             return;
         }
+        mSliderValue = mControl.getValue();
         if (mIsVrModeEnabled) {
-            if (((float) mSliderValue) <= mMinimumBacklightForVr) {
+            if (convertGammaToLinearFloat(mSliderValue, mMinimumBacklightForVr,
+                    mMaximumBacklightForVr) <= mMinimumBacklightForVr) {
                 levelIcon.setImageResource(R.drawable.ic_qs_brightness_low);
-            } else if (mSliderValue >= mSliderMax - 1) {
+            } else if (mSliderValue >= mSliderMax/1.2) {
                 levelIcon.setImageResource(R.drawable.ic_qs_brightness_high);
             } else {
                 levelIcon.setImageResource(R.drawable.ic_qs_brightness_medium);
             }
         } else {
-            if (((float) mSliderValue) <= mMinimumBacklight) {
+            if (convertGammaToLinearFloat(mSliderValue, mMinimumBacklight,
+                    mMaximumBacklight) <= mMinimumBacklight*5) {
                 levelIcon.setImageResource(R.drawable.ic_qs_brightness_low);
-            } else if (mSliderValue >= mSliderMax - 1) {
+            } else if (mSliderValue >= mSliderMax/1.2) {
                 levelIcon.setImageResource(R.drawable.ic_qs_brightness_high);
             } else {
                 levelIcon.setImageResource(R.drawable.ic_qs_brightness_medium);
@@ -510,6 +513,7 @@ public class BrightnessController implements ToggleSlider.Listener {
                 convertGammaToLinearFloat(mControl.getValue(), min, max))) {
             // If the value in the slider is equal to the value on the current brightness
             // then the slider does not need to animate, since the brightness will not change.
+            mControlValueInitialized = true;
             return;
         }
         // Returns GAMMA_SPACE_MIN - GAMMA_SPACE_MAX

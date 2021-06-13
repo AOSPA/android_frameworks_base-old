@@ -49,8 +49,6 @@ import com.android.systemui.util.InjectionInflationController;
 import com.android.systemui.util.LifecycleFragment;
 import com.android.systemui.util.Utils;
 
-import com.android.systemui.qs.OPQSFooter;
-
 import javax.inject.Inject;
 
 public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Callbacks,
@@ -79,9 +77,10 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private QSContainerImpl mContainer;
     private int mLayoutDirection;
     private QSFooter mFooter;
-    private OPQSFooter mOPFooter;
+    private PAQSFooter mPAFooter;
     private float mLastQSExpansion = -1;
     private boolean mQsDisabled;
+    private boolean mFullyCollapsed;
 
     private final RemoteInputQuickSettingsDisabler mRemoteInputQuickSettingsDisabler;
     private final InjectionInflationController mInjectionInflater;
@@ -140,7 +139,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mHeader = view.findViewById(R.id.header);
         mQSPanel.setHeaderContainer(view.findViewById(R.id.header_text_container));
         mFooter = view.findViewById(R.id.qs_footer);
-        mOPFooter = view.findViewById(R.id.op_qs_footer);
+        mPAFooter = mQSPanel.findViewById(R.id.pa_qs_footer);
         mContainer = view.findViewById(id.quick_settings_container);
 
         mQSContainerImplController = mQSContainerImplControllerBuilder
@@ -342,7 +341,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void setExpanded(boolean expanded) {
         if (DEBUG) Log.d(TAG, "setExpanded " + expanded);
         mQsExpanded = expanded;
-        mOPFooter.setExpanded(mQsExpanded);
+        mPAFooter.setExpanded(mQsExpanded);
         mQSPanel.setListening(mListening, mQsExpanded);
         updateQsState();
     }
@@ -369,6 +368,9 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     @Override
     public void setListening(boolean listening) {
         if (DEBUG) Log.d(TAG, "setListening " + listening);
+        if (mListening != listening) {
+            mHeader.getHeaderQsPanel().setBrightnessSliderVisible(listening);
+        }
         mListening = listening;
         mQSContainerImplController.setListening(listening);
         mHeader.setListening(listening);
@@ -378,6 +380,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     @Override
     public void setHeaderListening(boolean listening) {
+        mHeader.getHeaderQsPanel().setBrightnessListening(listening);
         mHeader.setListening(listening);
         mFooter.setListening(listening);
     }
@@ -395,6 +398,10 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                             : headerTranslation);
         }
         int currentHeight = getView().getHeight();
+        if (mLastHeaderTranslation != headerTranslation || mLastQSExpansion != expansion) {
+            mQSPanel.notifyExpansion();
+            mHeader.getHeaderQsPanel().notifyExpansion();
+        }
         mLastHeaderTranslation = headerTranslation;
         if (expansion == mLastQSExpansion && mLastKeyguardAndExpanded == onKeyguardAndExpanded
                 && mLastViewHeight == currentHeight) {
@@ -414,7 +421,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         mHeader.setExpansion(onKeyguardAndExpanded, expansion,
                 panelTranslationY);
         mFooter.setExpansion(onKeyguardAndExpanded ? 1 : expansion);
-        mOPFooter.setExpansion(onKeyguardAndExpanded ? 1 : expansion);
+        mPAFooter.setExpansion(onKeyguardAndExpanded ? 1 : expansion);
         mQSPanel.getQsTileRevealController().setExpansion(expansion);
         mQSPanel.getTileLayout().setExpansion(expansion);
         mQSPanelScrollView.setTranslationY(translationScaleY * heightDiff);
@@ -422,6 +429,11 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             mQSPanelScrollView.setScrollY(0);
         }
         mQSDetail.setFullyExpanded(fullyExpanded);
+        if (mFullyCollapsed != fullyCollapsed) {
+            mQSPanel.setBrightnessSliderVisible(!fullyCollapsed);
+            mHeader.getHeaderQsPanel().setBrightnessSliderVisible(fullyCollapsed);
+        }
+        mFullyCollapsed = fullyCollapsed;
 
         if (!fullyExpanded) {
             // Set bounds on the QS panel so it doesn't run over the header when animating.

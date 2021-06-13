@@ -43,6 +43,7 @@ public class ToggleSliderView extends RelativeLayout implements ToggleSlider {
 
     private ToggleSliderView mMirror;
     private BrightnessMirrorController mMirrorController;
+    private ToggleSliderView mOtherSlider;
 
     public ToggleSliderView(Context context) {
         this(context, null);
@@ -86,6 +87,20 @@ public class ToggleSliderView extends RelativeLayout implements ToggleSlider {
 
     public void setMirrorController(BrightnessMirrorController c) {
         mMirrorController = c;
+    }
+
+    public void setOtherSlider(ToggleSliderView toggleSlider) {
+        mOtherSlider = toggleSlider;
+        if (mOtherSlider != null) {
+            mSlider.setOnSeekBarChangeListener(mSeekListener);
+            mToggle.setOnCheckedChangeListener(mCheckListener);
+        } else {
+            // If mOtherSlider is null, that means we are receiving touchEvent copies
+            // from the slider that is visible, so we don't want to pass these to
+            // the listeners
+            mSlider.setOnSeekBarChangeListener(null);
+            mToggle.setOnCheckedChangeListener(null);
+        }
     }
 
     @Override
@@ -139,9 +154,14 @@ public class ToggleSliderView extends RelativeLayout implements ToggleSlider {
 
     @Override
     public boolean dispatchTouchEvent(MotionEvent ev) {
-        if (mMirror != null) {
+        if (mMirror != null && mOtherSlider != null) {
             MotionEvent copy = ev.copy();
             mMirror.dispatchTouchEvent(copy);
+            copy.recycle();
+        }
+        if (mOtherSlider != null) {
+            MotionEvent copy = ev.copy();
+            mOtherSlider.dispatchTouchEvent(copy);
             copy.recycle();
         }
         return super.dispatchTouchEvent(ev);
@@ -200,7 +220,6 @@ public class ToggleSliderView extends RelativeLayout implements ToggleSlider {
 
             if (mMirrorController != null) {
                 mMirrorController.hideMirror();
-                mMirrorController.hideMirrorImmediately();
             }
         }
     };
