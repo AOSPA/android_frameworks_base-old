@@ -48,6 +48,7 @@ import android.os.Process;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.os.UserHandle;
+import android.os.VibrationEffect;
 import android.os.Vibrator;
 import android.provider.Settings;
 import android.telecom.TelecomManager;
@@ -156,8 +157,6 @@ public class KeyHandler {
     private int mDrawMGesture;
     private int mDrawWGesture;
     private int mDrawSGesture;
-
-    private long[] mVibePattern;
 
     private boolean mGesturesEnabled;
     private boolean mSingleDoubleSpecialCase;
@@ -414,8 +413,6 @@ public class KeyHandler {
     private void ensureVibrator() {
         if (mVibrator == null) {
             mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
-            mVibePattern = getLongIntArray(mContext.getResources(),
-                    R.array.config_longPressVibePattern);
             if (!mVibrator.hasVibrator()) {
                 mVibrator = null;
             }
@@ -741,9 +738,9 @@ public class KeyHandler {
                 Settings.System.HAPTIC_FEEDBACK_ENABLED, 0, UserHandle.USER_CURRENT) != 0;
         if (hapticsEnabled && mVibrator != null) {
             if (success) {
-                mVibrator.vibrate(mVibePattern, -1, VIBRATION_ATTRIBUTES);
+                mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_CLICK), VIBRATION_ATTRIBUTES);
             } else {
-                mVibrator.vibrate(350L, VIBRATION_ATTRIBUTES);
+                mVibrator.vibrate(VibrationEffect.get(VibrationEffect.EFFECT_DOUBLE_CLICK), VIBRATION_ATTRIBUTES);
             }
         }
     }
