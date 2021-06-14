@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "5aa440fb_d973180c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2021-06-14T10:14:12Z",
+      "side": 1,
+      "message": "We were against it in quartz.\nPut a screenshot and i think i will ask andrew again.\nbut jake was in favour of those klondike texts saying \nmany people uses those to remember the pin (as much i remember the convo)\nlike if PIN is 4040 there try to remember it with those texts.",
+      "revId": "8db358216a53d03eab1f5e948112cf8d529d9e5c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
