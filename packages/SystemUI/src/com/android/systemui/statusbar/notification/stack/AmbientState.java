@@ -75,6 +75,7 @@ public class AmbientState {
     private int mExpandAnimationTopChange;
     private ExpandableNotificationRow mExpandingNotification;
     private float mHideAmount;
+    private float mNotificationScrimTop;
     private boolean mAppearing;
     private float mPulseHeight = MAX_PULSE_HEIGHT;
     private float mDozeAmount = 0.0f;
@@ -95,6 +96,7 @@ public class AmbientState {
 
     /** Height of the notifications panel without top padding when expansion completes. */
     private float mStackEndHeight;
+    private float mTransitionToFullShadeAmount;
 
     /**
      * @return Height of the notifications panel without top padding when expansion completes.
@@ -252,6 +254,20 @@ public class AmbientState {
     /** Returns the hide ratio of the status bar */
     public float getHideAmount() {
         return mHideAmount;
+    }
+
+    /**
+     * Set y position of top of notifications background scrim, relative to top of screen.
+     */
+    public void setNotificationScrimTop(float notificationScrimTop) {
+        mNotificationScrimTop = notificationScrimTop;
+    }
+
+    /**
+     * @return Y position of top of notifications background scrim, relative to top of screen.
+     */
+    public float getNotificationScrimTop() {
+        return mNotificationScrimTop;
     }
 
     public void setHideSensitive(boolean hideSensitive) {
@@ -592,6 +608,21 @@ public class AmbientState {
 
     public void setTrackedHeadsUpRow(ExpandableNotificationRow row) {
         mTrackedHeadsUpRow = row;
+    }
+
+    /**
+     * Set the amount of pixels we have currently dragged down if we're transitioning to the full
+     * shade. 0.0f means we're not transitioning yet.
+     */
+    public void setTransitionToFullShadeAmount(float transitionToFullShadeAmount) {
+        mTransitionToFullShadeAmount = transitionToFullShadeAmount;
+    }
+
+    /**
+     * get
+     */
+    public float getTransitionToFullShadeAmount() {
+        return mTransitionToFullShadeAmount;
     }
 
     /**

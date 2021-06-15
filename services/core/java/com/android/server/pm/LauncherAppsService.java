@@ -25,6 +25,7 @@ import static android.content.pm.LauncherApps.FLAG_CACHE_BUBBLE_SHORTCUTS;
 import static android.content.pm.LauncherApps.FLAG_CACHE_NOTIFICATION_SHORTCUTS;
 import static android.content.pm.LauncherApps.FLAG_CACHE_PEOPLE_TILE_SHORTCUTS;
 
+import android.annotation.AppIdInt;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -1206,8 +1207,16 @@ public class LauncherAppsService extends SystemService {
             final long ident = Binder.clearCallingIdentity();
             try {
                 String packageName = component.getPackageName();
+                int uId = -1;
+                try {
+                    uId = mContext.getPackageManager().getApplicationInfo(
+                            packageName, PackageManager.MATCH_ANY_USER).uid;
+                } catch (PackageManager.NameNotFoundException e) {
+                    Log.d(TAG, "package not found: " + e);
+                }
                 intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", packageName, null));
+                intent.putExtra("uId", uId);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 intent.setSourceBounds(sourceBounds);
             } finally {
@@ -1232,12 +1241,12 @@ public class LauncherAppsService extends SystemService {
                     cookie.user.getIdentifier());
         }
 
-        /** Returns whether or not the given UID is in allow list */
-        private static boolean isCallingUidAllowed(int[] allowList, int callingUid) {
-            if (allowList == null) {
+        /** Returns whether or not the given appId is in allow list */
+        private static boolean isCallingAppIdAllowed(int[] appIdAllowList, @AppIdInt int appId) {
+            if (appIdAllowList == null) {
                 return true;
             }
-            return Arrays.binarySearch(allowList, callingUid) > -1;
+            return Arrays.binarySearch(appIdAllowList, appId) > -1;
         }
 
         private String[] getFilteredPackageNames(String[] packageNames, BroadcastCookie cookie) {
@@ -1432,7 +1441,7 @@ public class LauncherAppsService extends SystemService {
                 // Handle onPackageRemoved.
                 if (Intent.ACTION_PACKAGE_REMOVED_INTERNAL.equals(action)) {
                     final String packageName = getPackageName(intent);
-                    final int[] allowList =
+                    final int[] appIdAllowList =
                             intent.getIntArrayExtra(Intent.EXTRA_VISIBILITY_ALLOW_LIST);
                     // If {@link #EXTRA_REPLACING} is true, that will be onPackageChanged case.
                     if (packageName != null && !intent.getBooleanExtra(
@@ -1448,7 +1457,8 @@ public class LauncherAppsService extends SystemService {
                                 if (!isEnabledProfileOf(cookie.user, user, "onPackageRemoved")) {
                                     continue;
                                 }
-                                if (!isCallingUidAllowed(allowList, cookie.callingUid)) {
+                                if (!isCallingAppIdAllowed(appIdAllowList, UserHandle.getAppId(
+                                        cookie.callingUid))) {
                                     continue;
                                 }
                                 try {

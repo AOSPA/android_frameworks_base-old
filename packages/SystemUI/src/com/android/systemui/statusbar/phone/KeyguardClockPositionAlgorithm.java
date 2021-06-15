@@ -140,7 +140,7 @@ public class KeyguardClockPositionAlgorithm {
      */
     private float mQsExpansion;
 
-    private float mEmptyDragAmount;
+    private float mOverStretchAmount;
 
     /**
      * Setting if bypass is enabled. If true the clock should always be positioned like it's dark
@@ -181,7 +181,7 @@ public class KeyguardClockPositionAlgorithm {
             int notificationStackHeight, float panelExpansion, int parentHeight,
             int keyguardStatusHeight, int userSwitchHeight, int clockPreferredY,
             int userSwitchPreferredY, boolean hasCustomClock, boolean hasVisibleNotifs, float dark,
-            float emptyDragAmount, boolean bypassEnabled, int unlockedStackScrollerPadding,
+            float overStrechAmount, boolean bypassEnabled, int unlockedStackScrollerPadding,
             float qsExpansion, int cutoutTopInset, boolean isSplitShade) {
         mMinTopMargin = keyguardStatusBarHeaderHeight + Math.max(mContainerTopPadding,
                 userSwitchHeight);
@@ -196,7 +196,7 @@ public class KeyguardClockPositionAlgorithm {
         mHasCustomClock = hasCustomClock;
         mHasVisibleNotifs = hasVisibleNotifs;
         mDarkAmount = dark;
-        mEmptyDragAmount = emptyDragAmount;
+        mOverStretchAmount = overStrechAmount;
         mBypassEnabled = bypassEnabled;
         mUnlockedStackScrollerPadding = unlockedStackScrollerPadding;
         mQsExpansion = qsExpansion;
@@ -301,7 +301,7 @@ public class KeyguardClockPositionAlgorithm {
             }
             clockYDark = clockY + burnInPreventionOffsetY() + shift;
         }
-        return (int) (MathUtils.lerp(clockY, clockYDark, darkAmount) + mEmptyDragAmount);
+        return (int) (MathUtils.lerp(clockY, clockYDark, darkAmount) + mOverStretchAmount);
     }
 
     private int getUserSwitcherY(float panelExpansion) {
@@ -312,7 +312,7 @@ public class KeyguardClockPositionAlgorithm {
         float shadeExpansion = Interpolators.FAST_OUT_LINEAR_IN.getInterpolation(panelExpansion);
         float userSwitchY = MathUtils.lerp(userSwitchYBouncer, userSwitchYRegular, shadeExpansion);
 
-        return (int) (userSwitchY + mEmptyDragAmount);
+        return (int) (userSwitchY + mOverStretchAmount);
     }
 
     /**
@@ -325,7 +325,9 @@ public class KeyguardClockPositionAlgorithm {
      */
     private float getClockAlpha(int y) {
         float alphaKeyguard = Math.max(0, y / Math.max(1f, getClockY(1f, mDarkAmount)));
-        alphaKeyguard *= (1f - mQsExpansion);
+        float qsAlphaFactor = MathUtils.saturate(mQsExpansion / 0.3f);
+        qsAlphaFactor = 1f - qsAlphaFactor;
+        alphaKeyguard *= qsAlphaFactor;
         alphaKeyguard = Interpolators.ACCELERATE.getInterpolation(alphaKeyguard);
         return MathUtils.lerp(alphaKeyguard, 1f, mDarkAmount);
     }

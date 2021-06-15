@@ -258,6 +258,7 @@ import com.android.internal.util.ToBooleanFunction;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
+import com.android.server.wm.utils.CoordinateTransforms;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -638,6 +639,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private PowerManager.WakeLock mDrawLock;
 
     private final Rect mTmpRect = new Rect();
+    private final Rect mTmpRect2 = new Rect();
     private final Point mTmpPoint = new Point();
 
     private final Transaction mTmpTransaction;
@@ -751,11 +753,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     int mFrameRateSelectionPriority = RefreshRatePolicy.LAYER_PRIORITY_UNSET;
 
     /**
-     * This is the frame rate which is passed to SurfaceFlinger if the window is part of the
-     * high refresh rate deny list. The variable is cached, so we do not send too many updates to
-     * SF.
+     * This is the frame rate which is passed to SurfaceFlinger if the window set a
+     * preferredDisplayModeId or is part of the high refresh rate deny list.
+     * The variable is cached, so we do not send too many updates to SF.
      */
-    float mDenyListFrameRate = 0f;
+    float mAppPreferredFrameRate = 0f;
 
     static final int BLAST_TIMEOUT_DURATION = 5000; /* milliseconds */
 
@@ -1160,13 +1162,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     /**
      * @return {@code true} if the application runs in size compatibility mode or has an app level
-     * scaling override set.
+     * scaling override set. This method always returns {@code false} on child window because it
+     * should follow parent's scale.
      * @see CompatModePackages#getCompatScale
      * @see android.content.res.CompatibilityInfo#supportsScreen
      * @see ActivityRecord#hasSizeCompatBounds()
      */
     boolean hasCompatScale() {
-        return mOverrideScale != 1f || hasCompatScale(mAttrs, mActivityRecord);
+        return (mOverrideScale != 1f || hasCompatScale(mAttrs, mActivityRecord)) && !mIsChildWindow;
     }
 
     /**
@@ -1338,7 +1341,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
 
-            layoutDisplayFrame = new Rect(windowFrames.mDisplayFrame);
+            layoutDisplayFrame = mTmpRect2;
+            layoutDisplayFrame.set(windowFrames.mDisplayFrame);
             windowFrames.mDisplayFrame.set(windowFrames.mContainingFrame);
             layoutXDiff = mInsetFrame.left - windowFrames.mContainingFrame.left;
             layoutYDiff = mInsetFrame.top - windowFrames.mContainingFrame.top;
@@ -1500,7 +1504,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         boolean didFrameInsetsChange = setReportResizeHints();
-        boolean configChanged = !isLastConfigReportedToClient();
+        // The latest configuration will be returned by the out parameter of relayout, so it is
+        // unnecessary to report resize if this window is running relayout.
+        final boolean configChanged = !mInRelayout && !isLastConfigReportedToClient();
         if (DEBUG_CONFIGURATION && configChanged) {
             Slog.v(TAG_WM, "Win " + this + " config changed: " + getConfiguration());
         }
@@ -2309,7 +2315,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // When the window configuration changed, we need to update the IME control target in
         // case the app may lose the IME inets control when exiting from split-screen mode, or the
         // IME parent may failed to attach to the app during rotating the screen.
-        // See DisplayContent#isImeAttachedToApp, DisplayContent#isImeControlledByApp
+        // See DisplayContent#shouldImeAttachedToApp, DisplayContent#isImeControlledByApp
         if (windowConfigChanged) {
             getDisplayContent().updateImeControlTarget();
         }
@@ -2409,25 +2415,28 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean startingWindow = mAttrs.type == TYPE_APPLICATION_STARTING;
         if (startingWindow) {
             ProtoLog.d(WM_DEBUG_STARTING_WINDOW, "Starting window removed %s", this);
-        }
-
-        if (startingWindow && StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
-            // cancel the remove starting window animation on shell
+            // Cancel the remove starting window animation on shell. The main window might changed
+            // during animating, checking for all windows would be safer.
             if (mActivityRecord != null) {
-                final WindowState mainWindow =
-                        mActivityRecord.findMainWindow(false/* includeStartingApp */);
-                if (mainWindow != null && mainWindow.isSelfAnimating(0 /* flags */,
-                        ANIMATION_TYPE_STARTING_REVEAL)) {
-                    mainWindow.cancelAnimation();
-                }
+                mActivityRecord.forAllWindowsUnchecked(w -> {
+                    if (w.isSelfAnimating(0, ANIMATION_TYPE_STARTING_REVEAL)) {
+                        w.cancelAnimation();
+                        return true;
+                    }
+                    return false;
+                }, true);
             }
+        } else if (mAttrs.type == TYPE_BASE_APPLICATION
+                && isSelfAnimating(0, ANIMATION_TYPE_STARTING_REVEAL)) {
+            // Cancel the remove starting window animation in case the binder dead before remove
+            // splash window.
+            cancelAnimation();
         }
 
         ProtoLog.v(WM_DEBUG_FOCUS, "Remove client=%x, surfaceController=%s Callers=%s",
                     System.identityHashCode(mClient.asBinder()),
                     mWinAnimator.mSurfaceController,
                     Debug.getCallers(5));
-
 
         final long origId = Binder.clearCallingIdentity();
 
@@ -3835,8 +3844,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         fillClientWindowFramesAndConfiguration(mClientWindowFrames, mLastReportedConfiguration,
                 true /* useLatestConfig */, false /* relayoutVisible */);
-        final boolean reportDraw = drawPending || useBLASTSync() || !mRedrawForSyncReported;
-        final boolean forceRelayout = reportOrientation || isDragResizeChanged() || !mRedrawForSyncReported;
+        final boolean syncRedraw = shouldSendRedrawForSync();
+        final boolean reportDraw = syncRedraw || drawPending;
+        final boolean forceRelayout = syncRedraw || reportOrientation || isDragResizeChanged();
         final DisplayContent displayContent = getDisplayContent();
         final boolean alwaysConsumeSystemBars =
                 displayContent.getDisplayPolicy().areSystemBarsForcedShownLw(this);
@@ -3991,24 +4001,15 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mActivityRecord == null || (mActivityRecord.matchParentBounds() && !inMultiWindowMode());
     }
 
-    /** @return true when the window should be letterboxed. */
-    boolean isLetterboxedAppWindow() {
-        // Fullscreen mode but doesn't fill display area.
-        if (!inMultiWindowMode() && !matchesDisplayAreaBounds()) {
-            return true;
-        }
-        if (mActivityRecord != null) {
-            // Activity in size compat.
-            if (mActivityRecord.inSizeCompatMode()) {
-                return true;
-            }
-            // Letterbox for fixed orientation.
-            if (mActivityRecord.isLetterboxedForFixedOrientationAndAspectRatio()) {
-                return true;
-            }
-        }
-        // Letterboxed for display cutout.
-        return isLetterboxedForDisplayCutout();
+    /**
+     * @return true if activity bounds are letterboxed or letterboxed for diplay cutout.
+     *
+     * <p>Note that letterbox UI may not be shown even when this returns {@code true}. See {@link
+     * LetterboxUiController#shouldShowLetterboxUi} for more context.
+     */
+    boolean areAppWindowBoundsLetterboxed() {
+        return mActivityRecord != null
+                && (mActivityRecord.areBoundsLetterboxed() || isLetterboxedForDisplayCutout());
     }
 
     /** Returns {@code true} if the window is letterboxed for the display cutout. */
@@ -4445,6 +4446,22 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             h = Math.min(h, ph);
         }
 
+        if (mIsChildWindow) {
+            final WindowState parent = getTopParentWindow();
+            if (parent.hasCompatScale()) {
+                // Scale the containing and display frames because they are in screen coordinates.
+                // The position of frames are already relative to parent so only size is scaled.
+                mTmpRect.set(containingFrame);
+                containingFrame = mTmpRect;
+                CoordinateTransforms.scaleRectSize(containingFrame, parent.mInvGlobalScale);
+                if (fitToDisplay) {
+                    mTmpRect2.set(displayFrame);
+                    displayFrame = mTmpRect2;
+                    CoordinateTransforms.scaleRectSize(displayFrame, parent.mInvGlobalScale);
+                }
+            }
+        }
+
         // Set mFrame
         Gravity.apply(mAttrs.gravity, w, h, containingFrame,
                 (int) (x + mAttrs.horizontalMargin * pw),
@@ -4852,8 +4869,9 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // (i.e. Like {@link DisplayContent.ImeContainer#skipImeWindowsDuringTraversal}, the IME
         // window will be ignored to traverse when the IME target is still in split-screen mode).
         if (isImeLayeringTarget()
-                && !getDisplayContent().getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
-            if (getDisplayContent().forAllImeWindows(callback, traverseTopToBottom)) {
+                && (!mDisplayContent.getDefaultTaskDisplayArea().isSplitScreenModeActivated()
+                         || getTask() == null)) {
+            if (mDisplayContent.forAllImeWindows(callback, traverseTopToBottom)) {
                 return true;
             }
         }
@@ -5416,10 +5434,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         final float refreshRate = refreshRatePolicy.getPreferredRefreshRate(this);
-        if (mDenyListFrameRate != refreshRate) {
-            mDenyListFrameRate = refreshRate;
+        if (mAppPreferredFrameRate != refreshRate) {
+            mAppPreferredFrameRate = refreshRate;
             getPendingTransaction().setFrameRate(
-                    mSurfaceControl, mDenyListFrameRate, Surface.FRAME_RATE_COMPATIBILITY_EXACT);
+                    mSurfaceControl, mAppPreferredFrameRate,
+                    Surface.FRAME_RATE_COMPATIBILITY_EXACT, Surface.CHANGE_FRAME_RATE_ALWAYS);
         }
     }
 
@@ -5819,7 +5838,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // the status bar). In that case we need to use the final frame.
         if (inFreeformWindowingMode()) {
             outFrame.set(getFrame());
-        } else if (isLetterboxedAppWindow() || mToken.isFixedRotationTransforming()) {
+        } else if (areAppWindowBoundsLetterboxed() || mToken.isFixedRotationTransforming()) {
             // 1. The letterbox surfaces should be animated with the owner activity, so use task
             //    bounds to include them.
             // 2. If the activity has fixed rotation transform, its windows are rotated in activity
@@ -5941,10 +5960,14 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * for Windows involved in these Syncs
      */
     private boolean shouldSendRedrawForSync() {
+        if (mRedrawForSyncReported) {
+            return false;
+        }
         final Task task = getTask();
-        if (task != null && task.getMainWindowSizeChangeTransaction() != null)
-            return !mRedrawForSyncReported;
-        return useBLASTSync() && !mRedrawForSyncReported;
+        if (task != null && task.getMainWindowSizeChangeTransaction() != null) {
+            return true;
+        }
+        return useBLASTSync();
     }
 
     void requestRedrawForSync() {

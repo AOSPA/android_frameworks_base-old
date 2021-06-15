@@ -1538,6 +1538,9 @@
 
     <attr name="usesNonSdkApi" format="boolean" />
 
+    <!-- Whether attributions provided are meant to be user-visible. -->
+    <attr name="attributionsAreUserVisible" format="boolean" />
+
     <!-- Specify the type of foreground service. Multiple types can be specified by ORing the flags
          together. -->
     <attr name="foregroundServiceType">
@@ -1546,7 +1549,8 @@
         <flag name="dataSync" value="0x01" />
         <!-- Music, video, news or other media play. -->
         <flag name="mediaPlayback" value="0x02" />
-        <!-- Ongoing phone call or video conference. -->
+        <!-- Ongoing operations related to phone calls, video conferencing,
+             or similar interactive communication. -->
         <flag name="phoneCall" value="0x04" />
         <!-- GPS, map, navigation location update. -->
         <flag name="location" value="0x08" />
@@ -1961,6 +1965,9 @@
         there's no way to be exempted (without using a privileged permission).
         -->
         <attr name="requestForegroundServiceExemption" format="boolean" />
+
+        <!-- Whether attributions provided are meant to be user-visible. -->
+        <attr name="attributionsAreUserVisible" format="boolean" />
     </declare-styleable>
 
     <!-- An attribution is a logical part of an app and is identified by a tag.
@@ -2593,6 +2600,12 @@
         <!-- The code for this component is located in the given split.
              <p>NOTE: This is only applicable to instant app. -->
         <attr name="splitName" />
+        <!-- Set of attribution tags that should be automatically applied to this component.
+             <p>
+             Each instance of this ContentProvider will be automatically configured with
+             Context.createAttributionContext() using the first attribution tag
+             contained here. -->
+        <attr name="attributionTags" />
     </declare-styleable>
 
     <!-- Attributes that can be supplied in an AndroidManifest.xml
@@ -2728,6 +2741,12 @@
         <attr name="useAppZygote" format="boolean" />
         <!-- If this is a foreground service, specify its category. -->
         <attr name="foregroundServiceType" />
+        <!-- Set of attribution tags that should be automatically applied to this component.
+             <p>
+             Each instance of this Service will be automatically configured with
+             Context.createAttributionContext() using the first attribution tag
+             contained here. -->
+        <attr name="attributionTags" />
     </declare-styleable>
 
     <!-- The <code>receiver</code> tag declares an
@@ -2765,6 +2784,12 @@
         <attr name="exported" />
         <attr name="singleUser" />
         <attr name="directBootAware" />
+        <!-- Set of attribution tags that should be automatically applied to this component.
+             <p>
+             Each instance of this BroadcastReceiver will be automatically configured with
+             Context.createAttributionContext() using the first attribution tag
+             contained here. -->
+        <attr name="attributionTags" />
     </declare-styleable>
 
     <!-- The <code>activity</code> tag declares an
@@ -2892,10 +2917,12 @@
 
              <p> See {@link android.content.pm.ActivityInfo#FLAG_PREFER_MINIMAL_POST_PROCESSING} -->
         <attr name="preferMinimalPostProcessing" format="boolean"/>
-        <!-- Specify the attributionTags to be used if a permission is required due to
-            {@link android.content.Context#sendBroadcast(Intent, String)} being used.
-            Multiple tags can be specified separated by '|'. -->
-        <attr name="attributionTags"/>
+        <!-- Set of attribution tags that should be automatically applied to this component.
+             <p>
+             Each instance of this Activity will be automatically configured with
+             Context.createAttributionContext() using the first attribution tag
+             contained here. -->
+        <attr name="attributionTags" />
         <!-- Specifies whether a home sound effect should be played if the home app moves to
              front after an activity with this flag set to <code>true</code>.
              <p>The default value of this attribute is <code>true</code>.
@@ -2942,6 +2969,7 @@
         <attr name="enabled" />
         <attr name="exported" />
         <attr name="parentActivityName" />
+        <attr name="attributionTags" />
     </declare-styleable>
 
     <!-- The <code>meta-data</code> tag is used to attach additional

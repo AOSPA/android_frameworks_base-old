@@ -131,8 +131,14 @@ public class WalletScreenController implements
             if (data.isEmpty()) {
                 showEmptyStateView();
             } else {
-                mWalletView.showCardCarousel(
-                        data, response.getSelectedIndex(), !mKeyguardStateController.isUnlocked());
+                int selectedIndex = response.getSelectedIndex();
+                if (selectedIndex >= data.size()) {
+                    Log.w(TAG, "Invalid selected card index, showing empty state.");
+                    showEmptyStateView();
+                } else {
+                    mWalletView.showCardCarousel(
+                            data, selectedIndex, !mKeyguardStateController.isUnlocked());
+                }
             }
             removeMinHeightAndRecordHeightOnLayout();
         });
@@ -174,6 +180,11 @@ public class WalletScreenController implements
 
     @Override
     public void onKeyguardFadingAwayChanged() {
+        queryWalletCards();
+    }
+
+    @Override
+    public void onUnlockedChanged() {
         queryWalletCards();
     }
 
@@ -249,7 +260,6 @@ public class WalletScreenController implements
         mIsDismissed = true;
         mSelectedCardId = null;
         mHandler.removeCallbacks(mSelectionRunnable);
-        mFalsingManager.cleanup();
         mWalletClient.notifyWalletDismissed();
         mWalletClient.removeWalletServiceEventListener(this);
         mWalletView.animateDismissal();

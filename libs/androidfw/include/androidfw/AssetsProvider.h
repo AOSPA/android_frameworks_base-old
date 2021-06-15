@@ -80,9 +80,12 @@ struct AssetsProvider {
 
 // Supplies assets from a zip archive.
 struct ZipAssetsProvider : public AssetsProvider {
-  static std::unique_ptr<ZipAssetsProvider> Create(std::string path);
+  static std::unique_ptr<ZipAssetsProvider> Create(std::string path,
+                                                   package_property_t flags);
+
   static std::unique_ptr<ZipAssetsProvider> Create(base::unique_fd fd,
                                                    std::string friendly_name,
+                                                   package_property_t flags,
                                                    off64_t offset = 0,
                                                    off64_t len = kUnknownLength);
 
@@ -101,7 +104,8 @@ struct ZipAssetsProvider : public AssetsProvider {
 
  private:
   struct PathOrDebugName;
-  ZipAssetsProvider(ZipArchive* handle, PathOrDebugName&& path, time_t last_mod_time);
+  ZipAssetsProvider(ZipArchive* handle, PathOrDebugName&& path, package_property_t flags,
+                    time_t last_mod_time);
 
   struct PathOrDebugName {
     PathOrDebugName(std::string&& value, bool is_path);
@@ -119,6 +123,7 @@ struct ZipAssetsProvider : public AssetsProvider {
 
   std::unique_ptr<ZipArchive, void (*)(ZipArchive*)> zip_handle_;
   PathOrDebugName name_;
+  package_property_t flags_;
   time_t last_mod_time_;
 };
 
@@ -176,6 +181,7 @@ struct MultiAssetsProvider : public AssetsProvider {
 // Does not provide any assets.
 struct EmptyAssetsProvider : public AssetsProvider {
   static std::unique_ptr<AssetsProvider> Create();
+  static std::unique_ptr<AssetsProvider> Create(const std::string& path);
 
   bool ForEachFile(const std::string& path,
                   const std::function<void(const StringPiece&, FileType)>& f) const override;
@@ -188,6 +194,10 @@ struct EmptyAssetsProvider : public AssetsProvider {
  protected:
   std::unique_ptr<Asset> OpenInternal(const std::string& path, Asset::AccessMode mode,
                                       bool* file_exists) const override;
+
+ private:
+  explicit EmptyAssetsProvider(std::optional<std::string>&& path);
+  std::optional<std::string> path_;
 };
 
 }  // namespace android

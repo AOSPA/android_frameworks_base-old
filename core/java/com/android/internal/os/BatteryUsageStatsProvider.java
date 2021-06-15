@@ -108,9 +108,9 @@ public class BatteryUsageStatsProvider {
         ArrayList<BatteryUsageStats> results = new ArrayList<>(queries.size());
         synchronized (mStats) {
             mStats.prepareForDumpLocked();
-
+            final long currentTimeMillis = currentTimeMillis();
             for (int i = 0; i < queries.size(); i++) {
-                results.add(getBatteryUsageStats(queries.get(i)));
+                results.add(getBatteryUsageStats(queries.get(i), currentTimeMillis));
             }
         }
         return results;
@@ -121,6 +121,11 @@ public class BatteryUsageStatsProvider {
      */
     @VisibleForTesting
     public BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query) {
+        return getBatteryUsageStats(query, currentTimeMillis());
+    }
+
+    private BatteryUsageStats getBatteryUsageStats(BatteryUsageStatsQuery query,
+            long currentTimeMs) {
         final long realtimeUs = elapsedRealtime() * 1000;
         final long uptimeUs = uptimeMillis() * 1000;
 
@@ -129,7 +134,10 @@ public class BatteryUsageStatsProvider {
 
         final BatteryUsageStats.Builder batteryUsageStatsBuilder = new BatteryUsageStats.Builder(
                 mStats.getCustomEnergyConsumerNames(), includePowerModels);
+        // TODO(b/188068523): use a monotonic clock to ensure resilience of order and duration
+        // of stats sessions to wall-clock adjustments
         batteryUsageStatsBuilder.setStatsStartTimestamp(mStats.getStartClockTime());
+        batteryUsageStatsBuilder.setStatsEndTimestamp(currentTimeMs);
 
         SparseArray<? extends BatteryStats.Uid> uidStats = mStats.getUidStats();
         for (int i = uidStats.size() - 1; i >= 0; i--) {
@@ -172,29 +180,28 @@ public class BatteryUsageStatsProvider {
     }
 
     private long getProcessForegroundTimeMs(BatteryStats.Uid uid, long realtimeUs) {
-        final long topStateDurationMs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_TOP,
-                realtimeUs, BatteryStats.STATS_SINCE_CHARGED) / 1000;
-
-        long foregroundActivityDurationMs = 0;
+        final long topStateDurationUs = uid.getProcessStateTime(BatteryStats.Uid.PROCESS_STATE_TOP,
+                realtimeUs, BatteryStats.STATS_SINCE_CHARGED);
+        long foregroundActivityDurationUs = 0;
         final BatteryStats.Timer foregroundActivityTimer = uid.getForegroundActivityTimer();
         if (foregroundActivityTimer != null) {
-            foregroundActivityDurationMs = foregroundActivityTimer.getTotalTimeLocked(realtimeUs,
-                    BatteryStats.STATS_SINCE_CHARGED) / 1000;
+            foregroundActivityDurationUs = foregroundActivityTimer.getTotalTimeLocked(realtimeUs,
+                    BatteryStats.STATS_SINCE_CHARGED);
         }
 
         // Use the min value of STATE_TOP time and foreground activity time, since both of these
         // times are imprecise
-        final long foregroundDurationMs = Math.min(topStateDurationMs,
-                foregroundActivityDurationMs);
+        long totalForegroundDurationUs = Math.min(topStateDurationUs, foregroundActivityDurationUs);
 
-        long foregroundServiceDurationMs = 0;
-        final BatteryStats.Timer foregroundServiceTimer = uid.getForegroundServiceTimer();
-        if (foregroundServiceTimer != null) {
-            foregroundServiceDurationMs = foregroundServiceTimer.getTotalTimeLocked(realtimeUs,
-                    BatteryStats.STATS_SINCE_CHARGED) / 1000;
-        }
+        totalForegroundDurationUs += uid.getProcessStateTime(
+                BatteryStats.Uid.PROCESS_STATE_FOREGROUND, realtimeUs,
+                BatteryStats.STATS_SINCE_CHARGED);
 
-        return foregroundDurationMs + foregroundServiceDurationMs;
+        totalForegroundDurationUs += uid.getProcessStateTime(
+                BatteryStats.Uid.PROCESS_STATE_FOREGROUND_SERVICE, realtimeUs,
+                BatteryStats.STATS_SINCE_CHARGED);
+
+        return totalForegroundDurationUs / 1000;
     }
 
     private long getProcessBackgroundTimeMs(BatteryStats.Uid uid, long realtimeUs) {
@@ -215,6 +222,14 @@ public class BatteryUsageStatsProvider {
             return ((BatteryStatsImpl) mStats).mClocks.uptimeMillis();
         } else {
             return SystemClock.uptimeMillis();
+        }
+    }
+
+    private long currentTimeMillis() {
+        if (mStats instanceof BatteryStatsImpl) {
+            return ((BatteryStatsImpl) mStats).mClocks.currentTimeMillis();
+        } else {
+            return System.currentTimeMillis();
         }
     }
 }
