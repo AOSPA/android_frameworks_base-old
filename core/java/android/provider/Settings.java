@@ -10969,6 +10969,15 @@ public final class Settings {
         public static final String MOBILE_DATA_ALWAYS_ON = "mobile_data_always_on";
 
         /**
+        * Whether to allow modem to intelligently switch DDS without user direction
+        *
+        * (0 = disabled, 1 = enabled)
+        * @hide
+        */
+        @Readable
+        public static final String SMART_DDS_SWITCH = "smart_dds_switch";
+
+        /**
          * Whether the wifi data connection should remain active even when higher
          * priority networks like Ethernet are active, to keep both networks.
          * In the case where higher priority networks are connected, wifi will be
