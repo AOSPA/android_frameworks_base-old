@@ -51,6 +51,24 @@
       "message": "Go ahead, i like the idea. It looks clean.\nAso, isn\u0027t it originally from Wave?",
       "revId": "8db358216a53d03eab1f5e948112cf8d529d9e5c",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "edf54ff6_3eb82e90",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2021-06-16T12:49:35Z",
+      "side": 1,
+      "message": "no!\noriginal is there abandoned few days before in quartz branch.\n\nhttps://gerrit.aospa.co/c/AOSPA/android_frameworks_base/+/12033/1",
+      "parentUuid": "ac0c2707_9feaafed",
+      "revId": "8db358216a53d03eab1f5e948112cf8d529d9e5c",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
