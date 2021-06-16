@@ -16,6 +16,23 @@
       "message": "lets wait on LOS",
       "revId": "c62472a4f24ef107a17c0f940bec1b3885b6e109",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "da9f6134_ed47a6cc",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-06-16T14:09:55Z",
+      "side": 1,
+      "message": "fyi, seems fine with op9, no conflicts.",
+      "revId": "c62472a4f24ef107a17c0f940bec1b3885b6e109",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
