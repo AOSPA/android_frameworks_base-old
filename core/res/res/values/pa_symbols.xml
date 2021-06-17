@@ -93,4 +93,7 @@
     <!-- Whether to to intercept inputs on screen off. -->
     <java-symbol type="bool" name="config_enableKeyHandler" />
 
+    <!-- Whether device supports in-display fingerprint when screen is turned off -->
+    <java-symbol type="bool" name="config_supportsScreenOffInDisplayFingerprint" />
+
 </resources>

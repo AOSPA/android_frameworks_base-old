@@ -133,4 +133,7 @@
 
     <bool name="config_enableKeyHandler">false</bool>
 
+    <!-- Whether device supports in-display fingerprint when screen is turned off -->
+    <bool name="config_supportsScreenOffInDisplayFingerprint">false</bool>
+
 </resources>
