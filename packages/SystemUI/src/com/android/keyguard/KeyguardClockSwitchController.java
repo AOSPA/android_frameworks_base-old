@@ -257,16 +257,6 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
     }
 
     /**
-     * Returns the preferred Y position of the clock.
-     *
-     * @param totalHeight The height available to position the clock.
-     * @return Y position of clock.
-     */
-    public int getClockPreferredY(int totalHeight) {
-        return mView.getPreferredY(totalHeight);
-    }
-
-    /**
      * Refresh clock. Called in response to TIME_TICK broadcasts.
      */
     void refresh() {
@@ -342,7 +332,7 @@ public class KeyguardClockSwitchController extends ViewController<KeyguardClockS
         }
     }
 
-    void refreshFormat(String timeFormat) {
+    void refreshFormat() {
         if (mClockViewController != null) {
             mClockViewController.refreshFormat();
             mLargeClockViewController.refreshFormat();

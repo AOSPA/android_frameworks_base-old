@@ -749,7 +749,10 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         super.dispatchStartTemporaryDetach();
         // Detach the EditText temporarily such that it doesn't get onDetachedFromWindow and
         // won't lose IME focus.
-        detachViewFromParent(mEditText);
+        final int iEditText = indexOfChild(mEditText);
+        if (iEditText != -1) {
+            detachViewFromParent(iEditText);
+        }
     }
 
     @Override
@@ -777,7 +780,8 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
             mOnVisibilityChangedListener.accept(visibility == VISIBLE);
             // Hide soft-keyboard when the input view became invisible
             // (i.e. The notification shade collapsed by pressing the home key)
-            if (visibility != VISIBLE && !mEditText.isVisibleToUser()) {
+            if (visibility != VISIBLE && !mEditText.isVisibleToUser()
+                    && !mController.isRemoteInputActive()) {
                 mEditText.hideIme();
             }
         }

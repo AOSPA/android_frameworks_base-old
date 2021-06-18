@@ -254,6 +254,9 @@ public abstract class ActivityManagerInternal {
     /** Returns the current user id. */
     public abstract int getCurrentUserId();
 
+    /** Returns the currently started user ids. */
+    public abstract int[] getStartedUserIds();
+
     /** Returns true if the user is running. */
     public abstract boolean isUserRunning(@UserIdInt int userId, int flags);
 
@@ -486,11 +489,11 @@ public abstract class ActivityManagerInternal {
 
     /**
      * Callback from the notification subsystem that the given FGS notification has
-     * been shown or updated.  This can happen after either Service.startForeground()
-     * or NotificationManager.notify().
+     * been evaluated, and either shown or explicitly overlooked.  This can happen
+     * after either Service.startForeground() or NotificationManager.notify().
      */
-    public abstract void onForegroundServiceNotificationUpdate(Notification notification,
-            int id, String pkg, @UserIdInt int userId);
+    public abstract void onForegroundServiceNotificationUpdate(boolean shown,
+            Notification notification, int id, String pkg, @UserIdInt int userId);
 
     /**
      * If the given app has any FGSs whose notifications are in the given channel,
@@ -601,6 +604,14 @@ public abstract class ActivityManagerInternal {
      */
     public abstract PendingIntent getPendingIntentActivityAsApp(
             int requestCode, @NonNull Intent intent, int flags, Bundle options,
+            String ownerPkgName, int ownerUid);
+
+    /**
+     * Effectively PendingIntent.getActivityForUser(), but the PendingIntent is
+     * owned by the given uid rather than by the caller (i.e. the system).
+     */
+    public abstract PendingIntent getPendingIntentActivityAsApp(
+            int requestCode, @NonNull Intent[] intents, int flags, Bundle options,
             String ownerPkgName, int ownerUid);
 
     /**

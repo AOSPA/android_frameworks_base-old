@@ -77,7 +77,7 @@ package android.accessibilityservice {
   }
 
   public abstract class AccessibilityService extends android.app.Service {
-    field public static final int ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS = 1000; // 0x3e8
+    field public static final int ACCESSIBILITY_TAKE_SCREENSHOT_REQUEST_INTERVAL_TIMES_MS = 333; // 0x14d
   }
 
   public class AccessibilityServiceInfo implements android.os.Parcelable {
@@ -838,6 +838,7 @@ package android.content.pm {
 
   public final class SharedLibraryInfo implements android.os.Parcelable {
     method @NonNull public java.util.List<java.lang.String> getAllCodePaths();
+    method public boolean isNative();
   }
 
   public final class ShortcutInfo implements android.os.Parcelable {
@@ -1110,6 +1111,10 @@ package android.hardware.camera2 {
   public abstract static class CameraManager.AvailabilityCallback {
     method @RequiresPermission(android.Manifest.permission.CAMERA_OPEN_CLOSE_LISTENER) public void onCameraClosed(@NonNull String);
     method @RequiresPermission(android.Manifest.permission.CAMERA_OPEN_CLOSE_LISTENER) public void onCameraOpened(@NonNull String, @NonNull String);
+  }
+
+  public abstract class CameraMetadata<TKey> {
+    field public static final int SENSOR_TEST_PATTERN_MODE_BLACK = 5; // 0x5
   }
 
 }
@@ -1405,6 +1410,7 @@ package android.media {
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int abandonAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String);
     method @Nullable public static android.media.AudioDeviceInfo getDeviceInfoFromType(int);
     method @IntRange(from=0) @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public long getFadeOutDurationOnFocusLossMillis(@NonNull android.media.AudioAttributes);
+    method @NonNull public java.util.Map<java.lang.Integer,java.lang.Boolean> getSurroundFormats();
     method public boolean hasRegisteredDynamicPolicy();
     method @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_AUDIO_ROUTING, android.Manifest.permission.QUERY_AUDIO_STATE}) public boolean isFullVolumeDevice();
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int requestAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String, int, int);

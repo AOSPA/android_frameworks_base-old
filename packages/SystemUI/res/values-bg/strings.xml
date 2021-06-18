@@ -117,7 +117,7 @@
     <string name="screenrecord_cancel_label" msgid="7850926573274483294">"Отказ"</string>
     <string name="screenrecord_share_label" msgid="5025590804030086930">"Споделяне"</string>
     <string name="screenrecord_cancel_success" msgid="1775448688137393901">"Записването на екрана е анулирано"</string>
-    <string name="screenrecord_save_title" msgid="1886652605520893850">"Записът на екрана е запазен"</string>
+    <string name="screenrecord_save_title" msgid="1886652605520893850">"Записът е запазен"</string>
     <string name="screenrecord_save_text" msgid="3008973099800840163">"Докоснете за преглед"</string>
     <string name="screenrecord_delete_error" msgid="2870506119743013588">"При изтриването на записа на екрана възникна грешка"</string>
     <string name="screenrecord_permission_error" msgid="7856841237023137686">"Извличането на разрешенията не бе успешно."</string>
@@ -666,6 +666,7 @@
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Будилник"</string>
     <string name="wallet_title" msgid="5369767670735827105">"Портфейл"</string>
+    <string name="wallet_empty_state_label" msgid="7776761245237530394">"Купувайте по-бързо и по-сигурно с телефона си"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Показване на всички"</string>
     <string name="wallet_action_button_label_unlock" msgid="8663239748726774487">"Отключване с цел плащане"</string>
     <string name="wallet_secondary_label_no_card" msgid="1282609666895946317">"Не е настроено"</string>
@@ -1084,7 +1085,11 @@
     <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Отхвърляне"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Възобновяване"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Настройки"</string>
+    <string name="controls_media_playing_item_description" msgid="4531853311504359098">"<xliff:g id="SONG_NAME">%1$s</xliff:g> на <xliff:g id="ARTIST_NAME">%2$s</xliff:g> се възпроизвежда от <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"Google Play"</string>
+    <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"Отваряне на <xliff:g id="APP_LABEL">%1$s</xliff:g>"</string>
+    <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"Пускане на <xliff:g id="SONG_NAME">%1$s</xliff:g> на <xliff:g id="ARTIST_NAME">%2$s</xliff:g> от <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
+    <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"Пускане на <xliff:g id="SONG_NAME">%1$s</xliff:g> от <xliff:g id="APP_LABEL">%2$s</xliff:g>"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Неактивно, проверете прилож."</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Грешка. Извършва се нов опит…"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"Не е намерено"</string>
@@ -1129,7 +1134,7 @@
     <string name="new_story_status" msgid="9012195158584846525">"Нова история"</string>
     <string name="new_story_status_content_description" msgid="4963137422622516708">"<xliff:g id="NAME">%1$s</xliff:g> сподели нова история"</string>
     <string name="video_status" msgid="4548544654316843225">"Гледате"</string>
-    <string name="audio_status" msgid="4237055636967709208">"Слуша се"</string>
+    <string name="audio_status" msgid="4237055636967709208">"Слушате"</string>
     <string name="game_status" msgid="1340694320630973259">"Играете"</string>
     <string name="empty_user_name" msgid="3389155775773578300">"Приятели"</string>
     <string name="empty_status" msgid="5938893404951307749">"Да поговорим!"</string>

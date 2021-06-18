@@ -16,19 +16,17 @@
 package com.android.server.appsearch.visibilitystore;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.appsearch.AppSearchSchema;
 import android.app.appsearch.GenericDocument;
 import android.app.appsearch.PackageIdentifier;
-
-import androidx.annotation.Nullable;
 
 /**
  * Holds configuration about a package+cert that can access a schema.
  *
  * @see android.app.appsearch.SetSchemaRequest.Builder#setSchemaTypeVisibilityForPackage
- * @hide
  */
-public class PackageAccessibleDocument extends GenericDocument {
+class PackageAccessibleDocument extends GenericDocument {
     /** Schema type for nested documents that hold package accessible information. */
     public static final String SCHEMA_TYPE = "PackageAccessibleType";
 

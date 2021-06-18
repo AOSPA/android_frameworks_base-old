@@ -20,15 +20,14 @@ import android.content.Context;
 import android.content.res.Configuration;
 import android.content.res.Resources;
 import android.graphics.Rect;
-import android.os.SystemProperties;
 import android.util.AttributeSet;
 import android.util.MathUtils;
-import android.view.DisplayCutout;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewTreeObserver;
-import android.view.WindowInsets;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.animation.Interpolator;
+import android.view.animation.PathInterpolator;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
@@ -55,6 +54,11 @@ public class NotificationShelf extends ActivatableNotificationView implements
 
     private static final int TAG_CONTINUOUS_CLIPPING = R.id.continuous_clipping_tag;
     private static final String TAG = "NotificationShelf";
+
+    // More extreme version of SLOW_OUT_LINEAR_IN which keeps the icon nearly invisible until after
+    // the next icon has translated out of the way, to avoid overlapping.
+    private static final Interpolator ICON_ALPHA_INTERPOLATOR =
+            new PathInterpolator(0.6f, 0f, 0.6f, 0f);
 
     private NotificationIconContainer mShelfIcons;
     private int[] mTmp = new int[2];
@@ -255,11 +259,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
             final float inShelfAmount = updateShelfTransformation(i, child, scrollingFast,
                     expandingAnimated, isLastChild);
 
-            final float stackEnd = mAmbientState.getStackY()
-                    + mAmbientState.getStackHeight();
             // TODO(b/172289889) scale mPaddingBetweenElements with expansion amount
             if ((isLastChild && !child.isInShelf()) || aboveShelf || backgroundForceHidden) {
-                notificationClipEnd = stackEnd;
+                notificationClipEnd = shelfStart + getIntrinsicHeight();
             } else {
                 notificationClipEnd = shelfStart - mPaddingBetweenElements;
             }
@@ -372,6 +374,9 @@ public class NotificationShelf extends ActivatableNotificationView implements
             return;
         }
 
+        final float smallCornerRadius =
+                getResources().getDimension(R.dimen.notification_corner_radius_small)
+                /  getResources().getDimension(R.dimen.notification_corner_radius);
         final float viewEnd = viewStart + anv.getActualHeight();
         final float cornerAnimationDistance = mCornerAnimationDistance
                 * mAmbientState.getExpansionFraction();
@@ -387,7 +392,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         } else if (viewEnd < cornerAnimationTop) {
             // Fast scroll skips frames and leaves corners with unfinished rounding.
             // Reset top and bottom corners outside of animation bounds.
-            anv.setBottomRoundness(anv.isLastInSection() ? 1f : 0f,
+            anv.setBottomRoundness(anv.isLastInSection() ? 1f : smallCornerRadius,
                     false /* animate */);
         }
 
@@ -401,7 +406,7 @@ public class NotificationShelf extends ActivatableNotificationView implements
         } else if (viewStart < cornerAnimationTop) {
             // Fast scroll skips frames and leaves corners with unfinished rounding.
             // Reset top and bottom corners outside of animation bounds.
-            anv.setTopRoundness(anv.isFirstInSection() ? 1f : 0f,
+            anv.setTopRoundness(anv.isFirstInSection() ? 1f : smallCornerRadius,
                     false /* animate */);
         }
     }
@@ -659,12 +664,12 @@ public class NotificationShelf extends ActivatableNotificationView implements
         if (iconState == null) {
             return;
         }
-        iconState.alpha = transitionAmount;
+        iconState.alpha = ICON_ALPHA_INTERPOLATOR.getInterpolation(transitionAmount);
         boolean isAppearing = row.isDrawingAppearAnimation() && !row.isInShelf();
         iconState.hidden = isAppearing
                 || (view instanceof ExpandableNotificationRow
-                    && ((ExpandableNotificationRow) view).isLowPriority()
-                    && mShelfIcons.hasMaxNumDot())
+                && ((ExpandableNotificationRow) view).isLowPriority()
+                && mShelfIcons.hasMaxNumDot())
                 || (transitionAmount == 0.0f && !iconState.isAnimating(icon))
                 || row.isAboveShelf()
                 || row.showingPulsing()

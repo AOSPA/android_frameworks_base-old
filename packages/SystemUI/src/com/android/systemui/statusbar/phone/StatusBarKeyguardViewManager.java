@@ -26,6 +26,7 @@ import static com.android.systemui.statusbar.phone.BiometricUnlockController.MOD
 import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.hardware.biometrics.BiometricSourceType;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.KeyEvent;
@@ -446,7 +447,16 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
             mAfterKeyguardGoneAction = r;
             mKeyguardGoneCancelAction = cancelAction;
+
+            // If there is an an alternate auth interceptor (like the UDFPS), show that one instead
+            // of the bouncer.
             if (mAlternateAuthInterceptor != null) {
+                if (!afterKeyguardGone) {
+                    mBouncer.setDismissAction(mAfterKeyguardGoneAction, mKeyguardGoneCancelAction);
+                    mAfterKeyguardGoneAction = null;
+                    mKeyguardGoneCancelAction = null;
+                }
+
                 if (mAlternateAuthInterceptor.showAlternateAuthBouncer()) {
                     mStatusBar.updateScrimController();
                 }
@@ -614,6 +624,10 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (mBouncer.isShowing()) {
             mBouncer.startPreHideAnimation(finishRunnable);
             mStatusBar.onBouncerPreHideAnimation();
+
+            // startPreHideAnimation() will change the visibility of the bouncer, so we have to
+            // make sure to update its state.
+            updateStates();
         } else if (finishRunnable != null) {
             finishRunnable.run();
         }
@@ -768,9 +782,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private void wakeAndUnlockDejank() {
         if (mBiometricUnlockController.getMode() == MODE_WAKE_AND_UNLOCK
                 && LatencyTracker.isEnabled(mContext)) {
-            DejankUtils.postAfterTraversal(() ->
+            BiometricSourceType type = mBiometricUnlockController.getBiometricType();
+            DejankUtils.postAfterTraversal(() -> {
                     LatencyTracker.getInstance(mContext).onActionEnd(
-                            LatencyTracker.ACTION_FINGERPRINT_WAKE_AND_UNLOCK));
+                            type == BiometricSourceType.FACE
+                                    ? LatencyTracker.ACTION_FACE_WAKE_AND_UNLOCK
+                                    : LatencyTracker.ACTION_FINGERPRINT_WAKE_AND_UNLOCK);
+            });
         }
     }
 

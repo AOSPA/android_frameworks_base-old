@@ -521,6 +521,8 @@ public final class DisplayManagerService extends SystemService {
                     }
                 }
             }
+        } else if (phase == PHASE_BOOT_COMPLETED) {
+            mDisplayModeDirector.onBootCompleted();
         }
     }
 
@@ -3269,6 +3271,11 @@ public final class DisplayManagerService extends SystemService {
         public void ignoreProximitySensorUntilChanged() {
             mDisplayPowerControllers.get(Display.DEFAULT_DISPLAY)
                     .ignoreProximitySensorUntilChanged();
+        }
+
+        @Override
+        public int getRefreshRateSwitchingType() {
+            return getRefreshRateSwitchingTypeInternal();
         }
     }
 

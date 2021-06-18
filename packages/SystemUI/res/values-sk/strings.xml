@@ -117,7 +117,7 @@
     <string name="screenrecord_cancel_label" msgid="7850926573274483294">"Zrušiť"</string>
     <string name="screenrecord_share_label" msgid="5025590804030086930">"Zdieľať"</string>
     <string name="screenrecord_cancel_success" msgid="1775448688137393901">"Záznam obrazovky bol zrušený"</string>
-    <string name="screenrecord_save_title" msgid="1886652605520893850">"Nahrávka obrazovky bola uložená"</string>
+    <string name="screenrecord_save_title" msgid="1886652605520893850">"Nahrávka bola uložená"</string>
     <string name="screenrecord_save_text" msgid="3008973099800840163">"Zobrazte klepnutím"</string>
     <string name="screenrecord_delete_error" msgid="2870506119743013588">"Pri odstraňovaní záznamu obrazovky sa vyskytla chyba"</string>
     <string name="screenrecord_permission_error" msgid="7856841237023137686">"Nepodarilo sa získať povolenia"</string>
@@ -672,6 +672,7 @@
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Budík"</string>
     <string name="wallet_title" msgid="5369767670735827105">"Peňaženka"</string>
+    <string name="wallet_empty_state_label" msgid="7776761245237530394">"Nastavte si všetko potrebné na rýchlejšie a bezpečnejšie nákupy telefónom"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Zobraziť všetko"</string>
     <string name="wallet_action_button_label_unlock" msgid="8663239748726774487">"Odomknúť a zaplatiť"</string>
     <string name="wallet_secondary_label_no_card" msgid="1282609666895946317">"Nenastavené"</string>
@@ -1010,7 +1011,7 @@
     <string name="auto_saver_enabled_text" msgid="7889491183116752719">"Keď batéria klesne pod <xliff:g id="PERCENTAGE">%d</xliff:g> %%, automaticky sa aktivujte Šetrič batérie."</string>
     <string name="open_saver_setting_action" msgid="2111461909782935190">"Nastavenia"</string>
     <string name="auto_saver_okay_action" msgid="7815925750741935386">"Dobre"</string>
-    <string name="heap_dump_tile_name" msgid="2464189856478823046">"Dump SysUI Heap"</string>
+    <string name="heap_dump_tile_name" msgid="2464189856478823046">"V7pis haldy SysUI"</string>
     <string name="ongoing_privacy_chip_content_single_app" msgid="2969750601815230385">"<xliff:g id="APP">%1$s</xliff:g> používa zoznam <xliff:g id="TYPES_LIST">%2$s</xliff:g>."</string>
     <string name="ongoing_privacy_chip_content_multiple_apps" msgid="8341216022442383954">"Aplikácie používajú zoznam <xliff:g id="TYPES_LIST">%s</xliff:g>."</string>
     <string name="ongoing_privacy_dialog_separator" msgid="1866222499727706187">", "</string>
@@ -1096,7 +1097,11 @@
     <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Zavrieť"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Pokračovať"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Nastavenia"</string>
+    <string name="controls_media_playing_item_description" msgid="4531853311504359098">"<xliff:g id="SONG_NAME">%1$s</xliff:g> od interpreta <xliff:g id="ARTIST_NAME">%2$s</xliff:g> sa prehráva z aplikácie <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"Prehrať"</string>
+    <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"Otvoriť <xliff:g id="APP_LABEL">%1$s</xliff:g>"</string>
+    <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"Prehrať skladbu <xliff:g id="SONG_NAME">%1$s</xliff:g> od interpreta <xliff:g id="ARTIST_NAME">%2$s</xliff:g> z aplikácie <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
+    <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"Prehrať skladbu <xliff:g id="SONG_NAME">%1$s</xliff:g> z aplikácie <xliff:g id="APP_LABEL">%2$s</xliff:g>"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Neaktívne, preverte aplikáciu"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Chyba, skúša sa znova…"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"Nenájdené"</string>
@@ -1136,13 +1141,13 @@
     <string name="upcoming_birthday_status_content_description" msgid="2165036816803797148">"<xliff:g id="NAME">%1$s</xliff:g> má čoskoro narodeniny"</string>
     <string name="anniversary_status" msgid="1790034157507590838">"Výročie"</string>
     <string name="anniversary_status_content_description" msgid="8212171790843327442">"<xliff:g id="NAME">%1$s</xliff:g> má výročie"</string>
-    <string name="location_status" msgid="1294990572202541812">"Zdieľa sa poloha"</string>
+    <string name="location_status" msgid="1294990572202541812">"Zdieľam polohu"</string>
     <string name="location_status_content_description" msgid="2982386178160071305">"<xliff:g id="NAME">%1$s</xliff:g> zdieľa polohu"</string>
     <string name="new_story_status" msgid="9012195158584846525">"Nová správa"</string>
     <string name="new_story_status_content_description" msgid="4963137422622516708">"<xliff:g id="NAME">%1$s</xliff:g> zdieľal(a) nový príbeh"</string>
-    <string name="video_status" msgid="4548544654316843225">"Pozerá sa video"</string>
+    <string name="video_status" msgid="4548544654316843225">"Pozerám video"</string>
     <string name="audio_status" msgid="4237055636967709208">"Počúvam"</string>
-    <string name="game_status" msgid="1340694320630973259">"Hrá sa hra"</string>
+    <string name="game_status" msgid="1340694320630973259">"Hrám hru"</string>
     <string name="empty_user_name" msgid="3389155775773578300">"Priatelia"</string>
     <string name="empty_status" msgid="5938893404951307749">"Poďme sa rozprávať."</string>
     <string name="status_before_loading" msgid="1500477307859631381">"Obsah sa čoskoro zobrazí"</string>

@@ -76,7 +76,7 @@
     <string name="learn_more" msgid="4690632085667273811">"瞭解詳情"</string>
     <string name="compat_mode_on" msgid="4963711187149440884">"放大為全螢幕"</string>
     <string name="compat_mode_off" msgid="7682459748279487945">"放大為全螢幕"</string>
-    <string name="global_action_screenshot" msgid="2760267567509131654">"擷取螢幕畫面"</string>
+    <string name="global_action_screenshot" msgid="2760267567509131654">"螢幕截圖"</string>
     <string name="remote_input_image_insertion_text" msgid="4850791636452521123">"傳送了一張圖片"</string>
     <string name="screenshot_saving_ticker" msgid="6519186952674544916">"正在儲存螢幕截圖…"</string>
     <string name="screenshot_saving_title" msgid="2298349784913287333">"正在儲存螢幕截圖…"</string>
@@ -666,6 +666,7 @@
     <string name="status_bar_ethernet" msgid="5690979758988647484">"乙太網路"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"鬧鐘"</string>
     <string name="wallet_title" msgid="5369767670735827105">"電子錢包"</string>
+    <string name="wallet_empty_state_label" msgid="7776761245237530394">"完成相關設定之後，就能以更快速安全的方式透過手機消費"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"顯示全部"</string>
     <string name="wallet_action_button_label_unlock" msgid="8663239748726774487">"解鎖裝置才能付款"</string>
     <string name="wallet_secondary_label_no_card" msgid="1282609666895946317">"未設定"</string>
@@ -731,7 +732,7 @@
     <string name="notification_alert_title" msgid="3656229781017543655">"預設"</string>
     <string name="notification_automatic_title" msgid="3745465364578762652">"自動"</string>
     <string name="notification_channel_summary_low" msgid="4860617986908931158">"不震動或發出聲音"</string>
-    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"不震動或發出聲音，並調整排序到其他對話下方"</string>
+    <string name="notification_conversation_summary_low" msgid="1734433426085468009">"不震動或發出聲音，並顯示在對話區的下方"</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"根據手機的設定響鈴或震動"</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"可能會根據手機的設定響鈴或震動。根據預設，來自「<xliff:g id="APP_NAME">%1$s</xliff:g>」的對話會以對話框形式顯示。"</string>
     <string name="notification_channel_summary_bubble" msgid="7235935211580860537">"利用浮動式捷徑快速存取這項內容。"</string>
@@ -890,7 +891,7 @@
     <string name="left_icon" msgid="5036278531966897006">"向左圖示"</string>
     <string name="right_icon" msgid="1103955040645237425">"向右圖示"</string>
     <string name="drag_to_add_tiles" msgid="8933270127508303672">"按住並拖曳即可新增設定方塊"</string>
-    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"按住並拖曳即可重新排列圖塊"</string>
+    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"按住並拖曳即可重新排列設定方塊"</string>
     <string name="drag_to_remove_tiles" msgid="4682194717573850385">"拖曳到這裡即可移除"</string>
     <string name="drag_to_remove_disabled" msgid="933046987838658850">"你至少必須要有 <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> 個設定方塊"</string>
     <string name="qs_edit" msgid="5583565172803472437">"編輯"</string>
@@ -1055,7 +1056,7 @@
     <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"從收藏中移除"</string>
     <string name="accessibility_control_move" msgid="8980344493796647792">"移到位置 <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"控制項"</string>
-    <string name="controls_favorite_subtitle" msgid="6481675111056961083">"選擇要透過快速設定存取的控制項"</string>
+    <string name="controls_favorite_subtitle" msgid="6481675111056961083">"選擇要顯示在「快速設定」選單中的控制項"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"按住並拖曳即可重新排列控制項"</string>
     <string name="controls_favorite_removed" msgid="5276978408529217272">"所有控制項都已移除"</string>
     <string name="controls_favorite_toast_no_changes" msgid="7094494210840877931">"未儲存變更"</string>
@@ -1084,7 +1085,11 @@
     <string name="controls_media_dismiss_button" msgid="9081375542265132213">"關閉"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"繼續播放"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"設定"</string>
+    <string name="controls_media_playing_item_description" msgid="4531853311504359098">"系統正透過「<xliff:g id="APP_LABEL">%3$s</xliff:g>」播放<xliff:g id="ARTIST_NAME">%2$s</xliff:g>的〈<xliff:g id="SONG_NAME">%1$s</xliff:g>〉"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"播放"</string>
+    <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"開啟「<xliff:g id="APP_LABEL">%1$s</xliff:g>」"</string>
+    <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"透過「<xliff:g id="APP_LABEL">%3$s</xliff:g>」播放<xliff:g id="ARTIST_NAME">%2$s</xliff:g>的〈<xliff:g id="SONG_NAME">%1$s</xliff:g>〉"</string>
+    <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"透過「<xliff:g id="APP_LABEL">%2$s</xliff:g>」播放〈<xliff:g id="SONG_NAME">%1$s</xliff:g>〉"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"無效，請查看應用程式"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"發生錯誤，正在重試…"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"找不到控制項"</string>

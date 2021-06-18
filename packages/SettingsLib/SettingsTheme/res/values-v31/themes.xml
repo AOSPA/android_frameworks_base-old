@@ -20,9 +20,12 @@
     <style name="Theme.SettingsBase" parent="@android:style/Theme.DeviceDefault.Settings" >
         <item name="android:textAppearanceListItem">@style/TextAppearance.PreferenceTitle.SettingsLib</item>
         <item name="android:listPreferredItemPaddingStart">24dp</item>
+        <item name="android:listPreferredItemPaddingLeft">24dp</item>
         <item name="android:listPreferredItemPaddingEnd">16dp</item>
+        <item name="android:listPreferredItemPaddingRight">16dp</item>
         <item name="preferenceTheme">@style/PreferenceTheme.SettingsLib</item>
         <item name="android:switchStyle">@style/Switch.SettingsLib</item>
+        <item name="android:progressBarStyleHorizontal">@style/HorizontalProgressBar.SettingsLib</item>
     </style>
 
     <!-- Using in SubSettings page including injected settings page -->
@@ -33,5 +36,20 @@
         <!-- Set up edge-to-edge configuration for top app bar -->
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="colorControlNormal">?android:attr/colorControlNormal</item>
+        <!-- For AndroidX AlertDialog -->
+        <item name="alertDialogTheme">@style/Theme.AlertDialog.SettingsLib</item>
+    </style>
+
+    <style name="Theme.AlertDialog.SettingsLib" parent="@style/Theme.AppCompat.DayNight.Dialog.Alert">
+        <item name="colorAccent">@*android:color/accent_device_default_light</item>
+        <item name="android:colorError">@color/settingslib_dialog_colorError</item>
+        <item name="android:colorBackground">@color/settingslib_dialog_background</item>
+
+        <item name="android:windowSoftInputMode">adjustResize</item>
+        <item name="android:clipToPadding">true</item>
+        <item name="android:clipChildren">true</item>
+
+        <item name="dialogCornerRadius">@*android:dimen/config_dialogCornerRadius</item>
     </style>
 </resources>

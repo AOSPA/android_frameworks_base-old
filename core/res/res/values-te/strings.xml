@@ -247,7 +247,7 @@
     <string name="global_action_power_off" msgid="4404936470711393203">"పవర్ ఆఫ్ చేయి"</string>
     <string name="global_action_power_options" msgid="1185286119330160073">"పవర్"</string>
     <string name="global_action_restart" msgid="4678451019561687074">"రీస్టార్ట్ చేయి"</string>
-    <string name="global_action_emergency" msgid="1387617624177105088">"అత్యవసరం"</string>
+    <string name="global_action_emergency" msgid="1387617624177105088">"ఎమర్జెన్సీ"</string>
     <string name="global_action_bug_report" msgid="5127867163044170003">"బగ్ నివేదిక"</string>
     <string name="global_action_logout" msgid="6093581310002476511">"సెషన్‌ను ముగించు"</string>
     <string name="global_action_screenshot" msgid="2610053466156478564">"స్క్రీన్‌షాట్"</string>
@@ -1458,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"ప్యాకేజీల తొలగింపును అభ్యర్థించడానికి యాప్‌ను అనుమతిస్తుంది."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"బ్యాటరీ అనుకూలీకరణలను విస్మరించడానికి అడగాలి"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"ఆ యాప్ కోసం బ్యాటరీ అనుకూలీకరణలు విస్మరించేలా అనుమతి కోరడానికి యాప్‌ను అనుమతిస్తుంది."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"జూమ్ నియంత్రణ కోసం రెండుసార్లు నొక్కండి"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"విడ్జెట్‌ను జోడించడం సాధ్యపడలేదు."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"వెళ్లు"</string>
@@ -1866,8 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"మీ నిర్వాహకులు నవీకరించారు"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"మీ నిర్వాహకులు తొలగించారు"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"సరే"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (5444908404021316250) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"బ్యాటరీ సేవర్ ముదురు రంగు రూపాన్ని ఆన్ చేసి, బ్యాక్‌గ్రౌండ్ యాక్టివిటీ, కొన్ని విజువల్ ఎఫెక్ట్‌లు, నిర్దిష్ట ఫీచర్‌లు, ఇంకా కొన్ని నెట్‌వర్క్ కనెక్షన్‌లను పరిమితం చేస్తుంది లేదా ఆఫ్ చేస్తుంది."</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"బ్యాటరీ సేవర్ ముదురు రంగు రూపాన్ని ఆన్ చేసి, బ్యాక్‌గ్రౌండ్ యాక్టివిటీ, కొన్ని విజువల్ ఎఫెక్ట్‌లు, నిర్దిష్ట ఫీచర్‌లు, ఇంకా కొన్ని నెట్‌వర్క్ కనెక్షన్‌లను పరిమితం చేస్తుంది లేదా ఆఫ్ చేస్తుంది."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"డేటా వినియోగాన్ని తగ్గించడంలో డేటా సేవర్ సహాయకరంగా ఉంటుంది. బ్యాక్‌గ్రౌండ్‌లో కొన్ని యాప్‌లు డేటాను పంపకుండా లేదా స్వీకరించకుండా నిరోధిస్తుంది. మీరు ప్రస్తుతం ఉపయోగిస్తోన్న యాప్‌, డేటాను యాక్సెస్ చేయగలదు. కానీ త‌క్కువ సార్లు మాత్ర‌మే అలా చేయవచ్చు. ఉదాహరణకు, మీరు నొక్కే వరకు ఫోటోలు ప్రదర్శించబడవు."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"డేటా సేవర్‌ను ఆన్ చేయాలా?"</string>
@@ -2157,7 +2160,7 @@
     <string name="resolver_cant_access_work_apps_explanation" msgid="1129960195389373279">"ఈ కంటెంట్ వర్క్ యాప్‌తో తెరవడం సాధ్యం కాదు"</string>
     <string name="resolver_cant_share_with_personal_apps_explanation" msgid="6349766201904601544">"ఈ కంటెంట్ వ్యక్తిగత యాప్‌తో షేర్ చేయడం సాధ్యం కాదు"</string>
     <string name="resolver_cant_access_personal_apps_explanation" msgid="1679399548862724359">"ఈ కంటెంట్ వ్యక్తిగత యాప్‌తో తెరవడం సాధ్యం కాదు"</string>
-    <string name="resolver_turn_on_work_apps" msgid="884910835250037247">"కార్యాలయ ప్రొఫైల్ పాజ్ చేయబడింది"</string>
+    <string name="resolver_turn_on_work_apps" msgid="884910835250037247">"వర్క్ ప్రొఫైల్ పాజ్ చేయబడింది"</string>
     <string name="resolver_switch_on_work" msgid="463709043650610420">"ఆన్ చేయడానికి ట్యాప్ చేయి"</string>
     <string name="resolver_no_work_apps_available" msgid="3298291360133337270">"వర్క్ యాప్‌లు లేవు"</string>
     <string name="resolver_no_personal_apps_available" msgid="6284837227019594881">"వ్యక్తిగత యాప్‌లు లేవు"</string>
