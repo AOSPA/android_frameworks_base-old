@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "fb216b86_8568395c",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-06-18T21:51:09Z",
+      "side": 1,
+      "message": "think this should be enough for normal usage, i think battery wont be affected much as we release the perflock on \u0027OnHideFODView\u0027\n\nplease hit me up if you face any issues, also before and after speed comparisions are welcome :)",
+      "revId": "060fa470ae96dfdb8297fb89651aebd2d2e6211d",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
