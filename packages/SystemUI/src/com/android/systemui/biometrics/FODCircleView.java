@@ -31,6 +31,7 @@ import android.os.Handler;
 import android.os.Looper;
 import android.os.RemoteException;
 import android.provider.Settings;
+import android.util.BoostFramework;
 import android.view.Display;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -81,6 +82,10 @@ public class FODCircleView extends ImageView {
     private boolean mTouchedOutside;
     private boolean mCanUnlockWithFp;
     private boolean mFpDisabled;
+
+    private BoostFramework mPerfBoost = null;
+    private boolean mIsPerfLockAcquired = false;
+    private static final int BOOST_DURATION_TIMEOUT = 5000;
 
     private Handler mHandler;
 
@@ -359,6 +364,13 @@ public class FODCircleView extends ImageView {
         } catch (RemoteException e) {
             // do nothing
         }
+        if (mPerfBoost == null) {
+            mPerfBoost = new BoostFramework();
+        }
+        if (mPerfBoost != null && !mIsPerfLockAcquired) {
+            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_LAUNCH_BOOST, null, BOOST_DURATION_TIMEOUT, -1);
+            mIsPerfLockAcquired = true;
+        }
     }
 
     public void dispatchRelease() {
@@ -385,6 +397,10 @@ public class FODCircleView extends ImageView {
             daemon.onHideFODView();
         } catch (RemoteException e) {
             // do nothing
+        }
+        if (mIsPerfLockAcquired && mPerfBoost != null) {
+            mPerfBoost.perfLockRelease();
+            mIsPerfLockAcquired = false;
         }
     }
 
