@@ -20,14 +20,20 @@ import android.Manifest;
 import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.os.RemoteException;
 import android.provider.Settings;
+import android.util.DisplayMetrics;
 import android.view.View;
+import android.view.WindowManager;
 
 import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.CommandQueue;
 
+import vendor.aospa.biometrics.fingerprint.inscreen.V1_0.IFingerprintInscreen;
+
 import java.util.List;
 import java.util.function.Consumer;
+import java.util.NoSuchElementException;
 
 public class Utils {
 
@@ -140,5 +146,33 @@ public class Utils {
         int flag = Settings.Secure.getInt(context.getContentResolver(),
                 Settings.Secure.MEDIA_CONTROLS_RESUME, 1);
         return useQsMediaPlayer(context) && flag > 0;
+    }
+    
+    public static int getFODHeight(Context context, boolean includeDecor) {
+        IFingerprintInscreen daemon = getFingerprintInScreenDaemon();
+        if (daemon == null) {
+            return 0;
+        }
+        DisplayMetrics dm = new DisplayMetrics();
+        if (includeDecor) {
+            context.getSystemService(WindowManager.class).getDefaultDisplay().getMetrics(dm);
+        } else {
+            context.getSystemService(WindowManager.class).getDefaultDisplay().getRealMetrics(dm);
+        }
+        try {
+            return dm.heightPixels - daemon.getPositionY() + daemon.getSize()/2;
+        } catch (NoSuchElementException | RemoteException e) {
+            return 0;
+        }
+    }
+
+    private static IFingerprintInscreen getFingerprintInScreenDaemon() {
+        try {
+            IFingerprintInscreen daemon = IFingerprintInscreen.getService();
+            return daemon;
+        } catch (NoSuchElementException | RemoteException e) {
+            // do nothing
+        }
+        return null;
     }
 }
