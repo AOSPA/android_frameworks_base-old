@@ -197,11 +197,12 @@
 
     <style name="TextAppearance.QS.TileLabel">
         <item name="android:textSize">@dimen/qs_tile_text_size</item>
-        <item name="android:fontFamily">@string/qs_tile_label_fontFamily</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:lineHeight">20sp</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
     </style>
 
     <style name="TextAppearance.QS.TileLabel.Secondary">
-        <item name="android:textSize">@dimen/qs_tile_text_size</item>
         <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
     </style>
 
@@ -221,27 +222,29 @@
         <item name="android:textSize">@dimen/celltile_rat_type_size</item>
     </style>
 
-    <style name="TextAppearance.QS.SecurityFooter">
-        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
-        <item name="android:textSize">@dimen/qs_tile_text_size</item>
-    </style>
-
     <style name="TextAppearance.QS.Status">
-        <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamilyMedium</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
         <item name="android:textSize">14sp</item>
         <item name="android:letterSpacing">0.01</item>
         <item name="android:lineHeight">20sp</item>
     </style>
 
-    <style name="TextAppearance.QS.Status.NoCarrierText">
-        <item name="android:textColor">?android:attr/textColorTertiary</item>
+    <style name="TextAppearance.QS.SecurityFooter" parent="@style/TextAppearance.QS.Status">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
     </style>
 
-    <style name="TextAppearance.QS.Build">
-        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
+    <style name="TextAppearance.QS.Status.Carriers" />
+
+    <style name="TextAppearance.QS.Status.Carriers.NoCarrierText">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
         <item name="android:textColor">?android:attr/textColorSecondary</item>
-        <item name="android:textSize">14sp</item>
+    </style>
+
+    <style name="TextAppearance.QS.Status.Build">
+        <item name="android:fontFamily">@*android:string/config_bodyFontFamily</item>
+        <item name="android:textColor">?android:attr/textColorSecondary</item>
     </style>
 
     <style name="TextAppearance.DeviceManagementDialog">
@@ -603,11 +606,12 @@
            parent="@*android:style/TextAppearance.DeviceDefault.Notification.Info">
     </style>
 
-    <style name="TextAppearance.QSEdit.Headers"
-        parent="@*android:style/TextAppearance.DeviceDefault.Body2">
-        <item name="android:textSize">11sp</item>
+    <style name="TextAppearance.QSEdit" >
+        <item name="android:textSize">14sp</item>
+        <item name="android:letterSpacing">0.01</item>
+        <item name="android:lineHeight">20sp</item>
+        <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
         <item name="android:textColor">?android:attr/textColorSecondary</item>
-        <item name="android:textAllCaps">true</item>
     </style>
 
     <style name="QSCustomizeToolbar" parent="@*android:style/Widget.DeviceDefault.Toolbar">
@@ -638,7 +642,7 @@
         <item name="android:tint">?android:attr/textColorPrimary</item>
         <item name="android:stateListAnimator">@anim/media_button_state_list_animator</item>
         <item name="android:padding">12dp</item>
-        <item name="android:scaleType">fitCenter</item>
+        <item name="android:scaleType">centerInside</item>
     </style>
 
     <style name="MediaPlayer.OutlineButton">
@@ -646,6 +650,8 @@
         <item name="android:textColor">?android:attr/textColorPrimary</item>
         <item name="android:backgroundTint">@color/media_player_outline_button_bg</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamilyMedium</item>
+        <item name="android:layout_gravity">center</item>
+        <item name="android:singleLine">true</item>
     </style>
 
     <style name="MediaPlayer.SolidButton">
@@ -656,7 +662,8 @@
 
     <style name="MediaPlayer.AppIcon">
         <item name="android:background">@drawable/qs_media_icon_background</item>
-        <item name="android:backgroundTint">?android:attr/textColorPrimary</item>
+        <item name="android:backgroundTint">@color/media_player_solid_button_bg</item>
+        <item name="android:padding">4dp</item>
     </style>
 
     <style name="MediaPlayer.Album">
@@ -677,7 +684,8 @@
     </style>
 
     <!-- Screen recording -->
-    <style name="ScreenRecord" parent="Theme.SystemUI.Dialog.GlobalActions">
+    <style name="ScreenRecord" parent="@android:style/Theme.DeviceDefault.DayNight">
+        <item name="android:windowNoTitle">true</item>
         <item name="android:windowIsTranslucent">true</item>
         <item name="android:windowBackground">@android:color/transparent</item>
         <item name="android:windowIsFloating">true</item>
@@ -690,8 +698,11 @@
         <item name="android:windowNoTitle">true</item>
         <item name="android:windowLightStatusBar">true</item>
         <item name="android:windowLightNavigationBar">true</item>
+        <item name="android:navigationBarColor">?android:attr/colorBackgroundFloating</item>
         <item name="android:windowActivityTransitions">true</item>
     </style>
+
+    <style name="Screenshot" parent="@android:style/Theme.DeviceDefault.DayNight"/>
 
     <!-- Privacy dialog -->
     <style name="PrivacyDialog" parent="Theme.SystemUI.QuickSettings.Dialog">
@@ -858,14 +869,6 @@
         <item name="android:textSize">14sp</item>
         <item name="android:fontFamily">@*android:string/config_headlineFontFamily</item>
         <item name="android:textColor">?android:attr/textColorPrimary</item>
-    </style>
-
-    <style name="UdfpsProgressBarStyle"
-        parent="android:style/Widget.Material.ProgressBar.Horizontal">
-        <item name="android:indeterminate">false</item>
-        <item name="android:max">10000</item>
-        <item name="android:mirrorForRtl">false</item>
-        <item name="android:progressDrawable">@drawable/udfps_progress_bar</item>
     </style>
 
     <!-- Wallet styles -->

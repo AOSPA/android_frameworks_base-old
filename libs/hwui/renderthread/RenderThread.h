@@ -145,12 +145,14 @@ public:
 
     GrDirectContext* getGrContext() const { return mGrContext.get(); }
     void setGrContext(sk_sp<GrDirectContext> cxt);
+    sk_sp<GrDirectContext> requireGrContext();
 
     CacheManager& cacheManager() { return *mCacheManager; }
     VulkanManager& vulkanManager();
 
     sk_sp<Bitmap> allocateHardwareBitmap(SkBitmap& skBitmap);
     void dumpGraphicsMemory(int fd, bool includeProfileData);
+    void getMemoryUsage(size_t* cpuUsage, size_t* gpuUsage);
 
     void requireGlContext();
     void requireVkContext();

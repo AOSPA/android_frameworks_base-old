@@ -121,6 +121,7 @@ import java.io.PrintWriter;
 import java.net.URISyntaxException;
 import java.security.SecureRandom;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Base64;
 import java.util.Collection;
 import java.util.Collections;
@@ -253,6 +254,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runSuspend(true);
                 case "unsuspend":
                     return runSuspend(false);
+                case "set-distracting-restriction":
+                    return runSetDistractingRestriction();
                 case "grant":
                     return runGrantRevokePermission(true);
                 case "revoke":
@@ -304,6 +307,8 @@ class PackageManagerShellCommand extends ShellCommand {
                     return runLogVisibility();
                 case "bypass-staged-installer-check":
                     return runBypassStagedInstallerCheck();
+                case "allow-unlimited-silent-updates":
+                    return runAllowUnlimitedSilentUpdates();
                 default: {
                     Boolean domainVerificationResult =
                             mDomainVerificationShell.runCommand(this, cmd);
@@ -2205,6 +2210,57 @@ class PackageManagerShellCommand extends ShellCommand {
         return 0;
     }
 
+    private int runSetDistractingRestriction() {
+        final PrintWriter pw = getOutPrintWriter();
+        int userId = UserHandle.USER_SYSTEM;
+        String opt;
+        int flags = 0;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--user":
+                    userId = UserHandle.parseUserArg(getNextArgRequired());
+                    break;
+                case "--flag":
+                    final String flag = getNextArgRequired();
+                    switch (flag) {
+                        case "hide-notifications":
+                            flags |= PackageManager.RESTRICTION_HIDE_NOTIFICATIONS;
+                            break;
+                        case "hide-from-suggestions":
+                            flags |= PackageManager.RESTRICTION_HIDE_FROM_SUGGESTIONS;
+                            break;
+                        default:
+                            pw.println("Unrecognized flag: " + flag);
+                            return 1;
+                    }
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return 1;
+            }
+        }
+
+        final List<String> packageNames = getRemainingArgs();
+        if (packageNames.isEmpty()) {
+            pw.println("Error: package name not specified");
+            return 1;
+        }
+        try {
+            final int translatedUserId = translateUserId(userId, UserHandle.USER_NULL,
+                    "set-distracting");
+            final String[] errored = mInterface.setDistractingPackageRestrictionsAsUser(
+                    packageNames.toArray(new String[]{}), flags, translatedUserId);
+            if (errored.length > 0) {
+                pw.println("Could not set restriction for: " + Arrays.toString(errored));
+                return 1;
+            }
+            return 0;
+        } catch (RemoteException | IllegalArgumentException e) {
+            pw.println(e.toString());
+            return 1;
+        }
+    }
+
     private int runSuspend(boolean suspendedState) {
         final PrintWriter pw = getOutPrintWriter();
         int userId = UserHandle.USER_SYSTEM;
@@ -2687,6 +2743,7 @@ class PackageManagerShellCommand extends ShellCommand {
 
         String opt;
         boolean replaceExisting = true;
+        boolean forceNonStaged = false;
         while ((opt = getNextOption()) != null) {
             switch (opt) {
                 case "-r": // ignore
@@ -2781,6 +2838,9 @@ class PackageManagerShellCommand extends ShellCommand {
                     sessionParams.setInstallAsApex();
                     sessionParams.setStaged();
                     break;
+                case "--force-non-staged":
+                    forceNonStaged = true;
+                    break;
                 case "--multi-package":
                     sessionParams.setMultiPackage();
                     break;
@@ -2815,6 +2875,9 @@ class PackageManagerShellCommand extends ShellCommand {
         }
         if (replaceExisting) {
             sessionParams.installFlags |= PackageManager.INSTALL_REPLACE_EXISTING;
+        }
+        if (forceNonStaged) {
+            sessionParams.isStaged = false;
         }
         return params;
     }
@@ -2976,6 +3039,33 @@ class PackageManagerShellCommand extends ShellCommand {
         } else {
             return 1;
         }
+    }
+
+    private int runAllowUnlimitedSilentUpdates() {
+        final PrintWriter pw = getOutPrintWriter();
+        String opt;
+        boolean reset = false;
+        while ((opt = getNextOption()) != null) {
+            switch (opt) {
+                case "--reset":
+                    reset = true;
+                    break;
+                default:
+                    pw.println("Error: Unknown option: " + opt);
+                    return -1;
+            }
+        }
+
+        final String installerPackageName = reset ? null : getNextArgRequired();
+        try {
+            mInterface.getPackageInstaller().setAllowUnlimitedSilentUpdates(installerPackageName);
+        } catch (RemoteException e) {
+            pw.println("Failure ["
+                    + e.getClass().getName() + " - "
+                    + e.getMessage() + "]");
+            return -1;
+        }
+        return 1;
     }
 
     private static String checkAbiArgument(String abi) {
@@ -3652,6 +3742,16 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("  unsuspend [--user USER_ID] PACKAGE [PACKAGE...]");
         pw.println("    Unsuspends the specified package(s) (as user).");
         pw.println("");
+        pw.println("  set-distracting-restriction [--user USER_ID] [--flag FLAG ...]");
+        pw.println("      PACKAGE [PACKAGE...]");
+        pw.println("    Sets the specified restriction flags to given package(s) (for user).");
+        pw.println("    Flags are:");
+        pw.println("      hide-notifications: Hides notifications from this package");
+        pw.println("      hide-from-suggestions: Hides this package from suggestions");
+        pw.println("        (by the launcher, etc.)");
+        pw.println("    Any existing flags are overwritten, which also means that if no flags are");
+        pw.println("    specified then all existing flags will be cleared.");
+        pw.println("");
         pw.println("  grant [--user USER_ID] PACKAGE PERMISSION");
         pw.println("  revoke [--user USER_ID] PACKAGE PERMISSION");
         pw.println("    These commands either grant or revoke permissions to apps.  The permissions");
@@ -3791,6 +3891,12 @@ class PackageManagerShellCommand extends ShellCommand {
         pw.println("    Turns on debug logging when visibility is blocked for the given package.");
         pw.println("      --enable: turn on debug logging (default)");
         pw.println("      --disable: turn off debug logging");
+        pw.println("");
+        pw.println("  allow-unlimited-silent-updates (--reset | <INSTALLER>)");
+        pw.println("    Allows unlimited silent updated installation requests from the installer");
+        pw.println("    without the throttle time.");
+        pw.println("      --reset: clear the allowed installer and tracks of silent updates in");
+        pw.println("        the system.");
         pw.println("");
         mDomainVerificationShell.printHelp(pw);
         pw.println("");

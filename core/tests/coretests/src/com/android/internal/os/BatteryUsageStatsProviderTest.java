@@ -45,7 +45,7 @@ public class BatteryUsageStatsProviderTest {
     private static final long MINUTE_IN_MS = 60 * 1000;
 
     @Rule
-    public final BatteryUsageStatsRule mStatsRule = new BatteryUsageStatsRule();
+    public final BatteryUsageStatsRule mStatsRule = new BatteryUsageStatsRule(12345);
 
     @Test
     public void test_getBatteryUsageStats() {
@@ -59,8 +59,16 @@ public class BatteryUsageStatsProviderTest {
                 30 * MINUTE_IN_MS, 30 * MINUTE_IN_MS);
         batteryStats.noteUidProcessStateLocked(APP_UID, ActivityManager.PROCESS_STATE_SERVICE,
                 30 * MINUTE_IN_MS, 30 * MINUTE_IN_MS);
-        batteryStats.noteUidProcessStateLocked(APP_UID, ActivityManager.PROCESS_STATE_CACHED_EMPTY,
+        batteryStats.noteUidProcessStateLocked(APP_UID,
+                ActivityManager.PROCESS_STATE_FOREGROUND_SERVICE,
                 40 * MINUTE_IN_MS, 40 * MINUTE_IN_MS);
+        batteryStats.noteUidProcessStateLocked(APP_UID,
+                ActivityManager.PROCESS_STATE_BOUND_FOREGROUND_SERVICE,
+                50 * MINUTE_IN_MS, 50 * MINUTE_IN_MS);
+        batteryStats.noteUidProcessStateLocked(APP_UID, ActivityManager.PROCESS_STATE_CACHED_EMPTY,
+                80 * MINUTE_IN_MS, 80 * MINUTE_IN_MS);
+
+        mStatsRule.setCurrentTime(54321);
 
         Context context = InstrumentationRegistry.getContext();
         BatteryUsageStatsProvider provider = new BatteryUsageStatsProvider(context, batteryStats);
@@ -72,9 +80,12 @@ public class BatteryUsageStatsProviderTest {
                 batteryUsageStats.getUidBatteryConsumers();
         final UidBatteryConsumer uidBatteryConsumer = uidBatteryConsumers.get(0);
         assertThat(uidBatteryConsumer.getTimeInStateMs(UidBatteryConsumer.STATE_FOREGROUND))
-                .isEqualTo(20 * MINUTE_IN_MS);
+                .isEqualTo(60 * MINUTE_IN_MS);
         assertThat(uidBatteryConsumer.getTimeInStateMs(UidBatteryConsumer.STATE_BACKGROUND))
                 .isEqualTo(10 * MINUTE_IN_MS);
+
+        assertThat(batteryUsageStats.getStatsStartTimestamp()).isEqualTo(12345);
+        assertThat(batteryUsageStats.getStatsEndTimestamp()).isEqualTo(54321);
     }
 
     @Test

@@ -19,7 +19,6 @@ package android.service.voice;
 import static android.Manifest.permission.CAPTURE_AUDIO_HOTWORD;
 import static android.Manifest.permission.RECORD_AUDIO;
 
-import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -28,7 +27,6 @@ import android.media.AudioFormat;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.SharedMemory;
-import android.service.voice.HotwordDetectionService.InitializationStatus;
 
 /**
  * Basic functionality for hotword detectors.
@@ -37,28 +35,6 @@ import android.service.voice.HotwordDetectionService.InitializationStatus;
  */
 @SystemApi
 public interface HotwordDetector {
-
-    /** No confidence in hotword detector result. */
-    int CONFIDENCE_LEVEL_NONE = 0;
-
-    /** Small confidence in hotword detector result. */
-    int CONFIDENCE_LEVEL_LOW = 1;
-
-    /** Medium confidence in hotword detector result. */
-    int CONFIDENCE_LEVEL_MEDIUM = 2;
-
-    /** High confidence in hotword detector result. */
-    int CONFIDENCE_LEVEL_HIGH = 3;
-
-    /** @hide */
-    @IntDef(prefix = {"CONFIDENCE_LEVEL_"}, value = {
-            CONFIDENCE_LEVEL_NONE,
-            CONFIDENCE_LEVEL_LOW,
-            CONFIDENCE_LEVEL_MEDIUM,
-            CONFIDENCE_LEVEL_HIGH
-    })
-    @interface HotwordConfidenceLevelValue {
-    }
 
     /**
      * Starts hotword recognition.
@@ -166,9 +142,12 @@ public interface HotwordDetector {
          * Called when the {@link HotwordDetectionService} is created by the system and given a
          * short amount of time to report it's initialization state.
          *
-         * @param status Info about initialization state of {@link HotwordDetectionService}.
+         * @param status Info about initialization state of {@link HotwordDetectionService}; the
+         * allowed values are {@link HotwordDetectionService#INITIALIZATION_STATUS_SUCCESS},
+         * 1<->{@link HotwordDetectionService#getMaxCustomInitializationStatus()},
+         * {@link HotwordDetectionService#INITIALIZATION_STATUS_UNKNOWN}.
          */
-        void onHotwordDetectionServiceInitialized(@InitializationStatus int status);
+        void onHotwordDetectionServiceInitialized(int status);
 
         /**
          * Called with the {@link HotwordDetectionService} is restarted.

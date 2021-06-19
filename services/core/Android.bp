@@ -21,8 +21,7 @@ filegroup {
     name: "services.core-sources",
     srcs: ["java/**/*.java"],
     exclude_srcs: [
-        ":connectivity-service-srcs",
-        ":services.core-sources-am-wm"
+        ":services.core-sources-am-wm",
     ],
     path: "java",
     visibility: [
@@ -39,13 +38,13 @@ genrule {
     ],
     tools: ["protologtool"],
     cmd: "$(location protologtool) transform-protolog-calls " +
-      "--protolog-class com.android.internal.protolog.common.ProtoLog " +
-      "--protolog-impl-class com.android.internal.protolog.ProtoLogImpl " +
-      "--protolog-cache-class 'com.android.server.wm.ProtoLogCache' " +
-      "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
-      "--loggroups-jar $(location :protolog-groups) " +
-      "--output-srcjar $(out) " +
-      "$(locations :services.core-sources-am-wm)",
+        "--protolog-class com.android.internal.protolog.common.ProtoLog " +
+        "--protolog-impl-class com.android.internal.protolog.ProtoLogImpl " +
+        "--protolog-cache-class 'com.android.server.wm.ProtoLogCache' " +
+        "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
+        "--loggroups-jar $(location :protolog-groups) " +
+        "--output-srcjar $(out) " +
+        "$(locations :services.core-sources-am-wm)",
     out: ["services.core.protolog.srcjar"],
 }
 
@@ -57,11 +56,11 @@ genrule {
     ],
     tools: ["protologtool"],
     cmd: "$(location protologtool) generate-viewer-config " +
-      "--protolog-class com.android.internal.protolog.common.ProtoLog " +
-      "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
-      "--loggroups-jar $(location :protolog-groups) " +
-      "--viewer-conf $(out) " +
-      "$(locations :services.core-sources-am-wm)",
+        "--protolog-class com.android.internal.protolog.common.ProtoLog " +
+        "--loggroups-class com.android.internal.protolog.ProtoLogGroup " +
+        "--loggroups-jar $(location :protolog-groups) " +
+        "--viewer-conf $(out) " +
+        "$(locations :services.core-sources-am-wm)",
     out: ["services.core.protolog.json"],
 }
 
@@ -72,12 +71,12 @@ genrule {
         ":services.core.protolog.json",
     ],
     cmd: "cp $(location :generate-protolog.json) $(out) && " +
-      "{ ! (diff $(out) $(location :services.core.protolog.json) | grep -q '^<') || " +
-      "{ echo -e '\\n\\n################################################################\\n#\\n" +
-      "#  ERROR: ProtoLog viewer config is stale.  To update it, run:\\n#\\n" +
-      "#  cp $(location :generate-protolog.json) " +
-      "$(location :services.core.protolog.json)\\n#\\n" +
-      "################################################################\\n\\n' >&2 && false; } }",
+        "{ ! (diff $(out) $(location :services.core.protolog.json) | grep -q '^<') || " +
+        "{ echo -e '\\n\\n################################################################\\n#\\n" +
+        "#  ERROR: ProtoLog viewer config is stale.  To update it, run:\\n#\\n" +
+        "#  cp $(location :generate-protolog.json) " +
+        "$(location :services.core.protolog.json)\\n#\\n" +
+        "################################################################\\n\\n' >&2 && false; } }",
     out: ["services.core.protolog.json"],
 }
 
@@ -85,7 +84,7 @@ genrule {
     name: "statslog-art-java-gen",
     tools: ["stats-log-api-gen"],
     cmd: "$(location stats-log-api-gen) --java $(out) --module art" +
-         " --javaPackage com.android.internal.art --javaClass ArtStatsLog --worksource",
+        " --javaPackage com.android.internal.art --javaClass ArtStatsLog --worksource",
     out: ["com/android/internal/art/ArtStatsLog.java"],
 }
 
@@ -191,7 +190,7 @@ java_library {
 
 java_library_host {
     name: "core_cts_test_resources",
-    srcs: ["java/com/android/server/notification/SmallHash.java"]
+    srcs: ["java/com/android/server/notification/SmallHash.java"],
 }
 
 prebuilt_etc {
@@ -215,36 +214,6 @@ prebuilt_etc {
 filegroup {
     name: "services.core-sources-deviceconfig-interface",
     srcs: [
-         "java/com/android/server/utils/DeviceConfigInterface.java"
-    ],
-}
-
-// TODO: Move connectivity service sources to independent directory.
-filegroup {
-    name: "connectivity-service-srcs",
-    srcs: [
-        "java/com/android/server/ConnectivityService.java",
-        "java/com/android/server/ConnectivityServiceInitializer.java",
-        "java/com/android/server/NetIdManager.java",
-        "java/com/android/server/TestNetworkService.java",
-        "java/com/android/server/connectivity/AutodestructReference.java",
-        "java/com/android/server/connectivity/DnsManager.java",
-        "java/com/android/server/connectivity/FullScore.java",
-        "java/com/android/server/connectivity/KeepaliveTracker.java",
-        "java/com/android/server/connectivity/LingerMonitor.java",
-        "java/com/android/server/connectivity/MockableSystemProperties.java",
-        "java/com/android/server/connectivity/Nat464Xlat.java",
-        "java/com/android/server/connectivity/NetworkAgentInfo.java",
-        "java/com/android/server/connectivity/NetworkDiagnostics.java",
-        "java/com/android/server/connectivity/NetworkNotificationManager.java",
-        "java/com/android/server/connectivity/NetworkOffer.java",
-        "java/com/android/server/connectivity/NetworkRanker.java",
-        "java/com/android/server/connectivity/OsCompat.java",
-        "java/com/android/server/connectivity/PermissionMonitor.java",
-        "java/com/android/server/connectivity/ProfileNetworkPreferences.java",
-        "java/com/android/server/connectivity/ProxyTracker.java",
-        "java/com/android/server/connectivity/QosCallbackAgentConnection.java",
-        "java/com/android/server/connectivity/QosCallbackTracker.java",
-        "java/com/android/server/connectivity/TcpKeepaliveController.java",
+        "java/com/android/server/utils/DeviceConfigInterface.java",
     ],
 }

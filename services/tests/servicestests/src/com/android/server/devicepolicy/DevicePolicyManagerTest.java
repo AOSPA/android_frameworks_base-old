@@ -4030,7 +4030,7 @@ public class DevicePolicyManagerTest extends DpmTestBase {
     }
 
     @Test
-    public void testUpdateNetworkPreferenceOnStartOnStopUser() throws Exception {
+    public void testUpdateNetworkPreferenceOnStartUser() throws Exception {
         final int managedProfileUserId = 15;
         final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
         addManagedProfile(admin1, managedProfileAdminUid, admin1);
@@ -4044,6 +4044,15 @@ public class DevicePolicyManagerTest extends DpmTestBase {
                 any(),
                 any()
         );
+    }
+
+    @Test
+    public void testUpdateNetworkPreferenceOnStopUser() throws Exception {
+        final int managedProfileUserId = 15;
+        final int managedProfileAdminUid = UserHandle.getUid(managedProfileUserId, 19436);
+        addManagedProfile(admin1, managedProfileAdminUid, admin1);
+        mContext.binder.callingUid = managedProfileAdminUid;
+        mServiceContext.permissions.add(permission.INTERACT_ACROSS_USERS_FULL);
 
         dpms.handleStopUser(managedProfileUserId);
         verify(getServices().connectivityManager, times(1)).setProfileNetworkPreference(
@@ -6542,29 +6551,26 @@ public class DevicePolicyManagerTest extends DpmTestBase {
         final List<String> testPackages = new ArrayList<>();
         testPackages.add("package_1");
         testPackages.add("package_2");
-
-        mContext.callerPermissions.add(android.Manifest.permission.MANAGE_DEVICE_ADMINS);
+        mServiceContext.permissions.add(permission.MANAGE_DEVICE_ADMINS);
         setDeviceOwner();
 
         dpm.setUserControlDisabledPackages(admin1, testPackages);
 
-        verify(getServices().packageManagerInternal).setDeviceOwnerProtectedPackages(testPackages);
-
+        verify(getServices().packageManagerInternal)
+                .setDeviceOwnerProtectedPackages(admin1.getPackageName(), testPackages);
         assertThat(dpm.getUserControlDisabledPackages(admin1)).isEqualTo(testPackages);
     }
 
     @Test
-    public void testSetUserControlDisabledPackages_failingAsPO() throws Exception {
+    public void testSetUserControlDisabledPackages_failingAsPO() {
         final List<String> testPackages = new ArrayList<>();
         testPackages.add("package_1");
         testPackages.add("package_2");
-
-        mContext.callerPermissions.add(android.Manifest.permission.MANAGE_DEVICE_ADMINS);
+        mServiceContext.permissions.add(permission.MANAGE_DEVICE_ADMINS);
         setAsProfileOwner(admin1);
 
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
                 () -> dpm.setUserControlDisabledPackages(admin1, testPackages));
-
         assertExpectException(SecurityException.class, /* messageRegex= */ null,
                 () -> dpm.getUserControlDisabledPackages(admin1));
     }

@@ -61,10 +61,6 @@ public class FeatureFlags {
         return mFlagReader.isEnabled(R.bool.flag_conversations);
     }
 
-    public boolean isToastStyleEnabled() {
-        return mFlagReader.isEnabled(R.bool.flag_toast_style);
-    }
-
     public boolean isMonetEnabled() {
         return mFlagReader.isEnabled(R.bool.flag_monet);
     }
@@ -91,5 +87,9 @@ public class FeatureFlags {
 
     public boolean isSmartspaceEnabled() {
         return mFlagReader.isEnabled(R.bool.flag_smartspace);
+    }
+
+    public boolean isSmartspaceDedupingEnabled() {
+        return isSmartspaceEnabled() && mFlagReader.isEnabled(R.bool.flag_smartspace_deduping);
     }
 }

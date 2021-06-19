@@ -338,21 +338,24 @@ public final class CompanionDeviceManager {
      *
      * @param packageName the package name of the calling app
      * @param deviceMacAddress the bluetooth device's mac address
-     * @param userId the calling user's identifier
+     * @param user the user handle that currently hosts the package being queried for a companion
+     *             device association
      * @return true if it was recently associated and we can bypass the dialog, false otherwise
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.MANAGE_COMPANION_DEVICES)
     public boolean canPairWithoutPrompt(@NonNull String packageName,
-            @NonNull String deviceMacAddress, int userId) {
+            @NonNull String deviceMacAddress, @NonNull UserHandle user) {
         if (!checkFeaturePresent()) {
             return false;
         }
         Objects.requireNonNull(packageName, "package name cannot be null");
         Objects.requireNonNull(deviceMacAddress, "device mac address cannot be null");
+        Objects.requireNonNull(user, "user handle cannot be null");
         try {
-            return mService.canPairWithoutPrompt(packageName, deviceMacAddress, userId);
+            return mService.canPairWithoutPrompt(packageName, deviceMacAddress,
+                    user.getIdentifier());
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -439,13 +442,18 @@ public final class CompanionDeviceManager {
     /**
      * Associates given device with given app for the given user directly, without UI prompt.
      *
+     * @param packageName package name of the companion app
+     * @param macAddress mac address of the device to associate
+     * @param certificate The SHA256 digest of the companion app's signing certificate
+     *
      * @hide
      */
     @SystemApi
     @RequiresPermission(android.Manifest.permission.ASSOCIATE_COMPANION_DEVICES)
     public void associate(
             @NonNull String packageName,
-            @NonNull MacAddress macAddress) {
+            @NonNull MacAddress macAddress,
+            @NonNull byte[] certificate) {
         if (!checkFeaturePresent()) {
             return;
         }
@@ -455,7 +463,7 @@ public final class CompanionDeviceManager {
         UserHandle user = android.os.Process.myUserHandle();
         try {
             mService.createAssociation(
-                    packageName, macAddress.toString(), user.getIdentifier());
+                    packageName, macAddress.toString(), user.getIdentifier(), certificate);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

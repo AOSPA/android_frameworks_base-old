@@ -2352,6 +2352,12 @@ interface ITelephony {
     void setActiveDeviceToDeviceTransport(String transport);
 
     /**
+     * Forces Device to Device communication to be enabled, even if the device config has it
+     * disabled.
+     */
+    void setDeviceToDeviceForceEnabled(boolean isForceEnabled);
+
+    /**
      * Gets the config of RCS VoLTE single registration enabled for the carrier/subscription.
      */
     boolean getCarrierSingleRegistrationEnabled(int subId);
@@ -2432,6 +2438,12 @@ interface ITelephony {
       * Note: This is designed for a SHELL command only.
       */
     boolean removeUceRequestDisallowedStatus(int subId);
+
+    /**
+     * Set the timeout for contact capabilities request.
+     * Note: This is designed for a SHELL command only.
+     */
+    boolean setCapabilitiesRequestTimeout(int subId, long timeoutAfterMs);
 
     /**
      * Set a SignalStrengthUpdateRequest to receive notification when Signal Strength breach the

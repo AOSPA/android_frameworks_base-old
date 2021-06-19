@@ -56,7 +56,6 @@ import android.os.ShellCallback;
 import android.provider.DeviceConfig;
 import android.provider.DeviceConfig.Properties;
 import android.util.ArrayMap;
-import android.util.ArraySet;
 import android.util.KeyValueListParser;
 import android.util.Slog;
 
@@ -268,7 +267,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     mAllowDownscale = true;
                 }
             } catch (PackageManager.NameNotFoundException e) {
-                Slog.e(TAG, "Failed to get package metadata", e);
+                // Not all packages are installed, hence ignore those that are not installed yet.
+                Slog.v(TAG, "Failed to get package metadata");
             }
             final String configString = DeviceConfig.getProperty(
                     DeviceConfig.NAMESPACE_GAME_OVERLAY, packageName);
@@ -363,19 +363,42 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     || (mPerfModeOptedIn && gameMode == GameManager.GAME_MODE_PERFORMANCE);
         }
 
-        public @GameMode int[] getAvailableGameModes() {
-            ArraySet<Integer> modeSet = new ArraySet<>(mModeConfigs.keySet());
+        private int getAvailableGameModesBitfield() {
+            int field = 0;
+            for (final int mode : mModeConfigs.keySet()) {
+                field |= modeToBitmask(mode);
+            }
             if (mBatteryModeOptedIn) {
-                modeSet.add(GameManager.GAME_MODE_BATTERY);
+                field |= modeToBitmask(GameManager.GAME_MODE_BATTERY);
             }
             if (mPerfModeOptedIn) {
-                modeSet.add(GameManager.GAME_MODE_PERFORMANCE);
+                field |= modeToBitmask(GameManager.GAME_MODE_PERFORMANCE);
             }
-            if (modeSet.size() > 0) {
-                modeSet.add(GameManager.GAME_MODE_STANDARD);
-                return modeSet.stream().mapToInt(Integer::intValue).toArray();
+            // The lowest bit is reserved for UNSUPPORTED, STANDARD is supported if we support any
+            // other mode.
+            if (field > 1) {
+                field |= modeToBitmask(GameManager.GAME_MODE_STANDARD);
+            } else {
+                field |= modeToBitmask(GameManager.GAME_MODE_UNSUPPORTED);
             }
-            return new int[]{GameManager.GAME_MODE_UNSUPPORTED};
+            return field;
+        }
+
+        /**
+         * Get an array of a package's available game modes.
+         */
+        public @GameMode int[] getAvailableGameModes() {
+            final int modesBitfield = getAvailableGameModesBitfield();
+            int[] modes = new int[Integer.bitCount(modesBitfield)];
+            int i = 0;
+            final int gameModeInHighestBit =
+                    Integer.numberOfTrailingZeros(Integer.highestOneBit(modesBitfield));
+            for (int mode = 0; mode <= gameModeInHighestBit; ++mode) {
+                if (((modesBitfield >> mode) & 1) != 0) {
+                    modes[i++] = mode;
+                }
+            }
+            return modes;
         }
 
         /**
@@ -509,9 +532,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
             final ApplicationInfo applicationInfo = mPackageManager
                     .getApplicationInfoAsUser(packageName, PackageManager.MATCH_ALL, userId);
             if (applicationInfo.category != ApplicationInfo.CATEGORY_GAME) {
-                Slog.e(TAG, "Ignoring attempt to get the Game Mode for '" + packageName
-                        + "' which is not categorized as a game: applicationInfo.flags = "
-                        + applicationInfo.flags + ", category = " + applicationInfo.category);
+                // The game mode for applications that are not identified as game is always
+                // UNSUPPORTED. See {@link PackageManager#setApplicationCategoryHint(String, int)}
                 return GameManager.GAME_MODE_UNSUPPORTED;
             }
         } catch (PackageManager.NameNotFoundException e) {
@@ -549,9 +571,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
             final ApplicationInfo applicationInfo = mPackageManager
                     .getApplicationInfoAsUser(packageName, PackageManager.MATCH_ALL, userId);
             if (applicationInfo.category != ApplicationInfo.CATEGORY_GAME) {
-                Slog.e(TAG, "Ignoring attempt to set the Game Mode for '" + packageName
-                        + "' which is not categorized as a game: applicationInfo.flags = "
-                        + applicationInfo.flags + ", category = " + applicationInfo.category);
+                // Ignore attempt to set the game mode for applications that are not identified
+                // as game. See {@link PackageManager#setApplicationCategoryHint(String, int)}
                 return;
             }
         } catch (PackageManager.NameNotFoundException e) {
@@ -696,6 +717,14 @@ public final class GameManagerService extends IGameManagerService.Stub {
         }
     }
 
+    private int modeToBitmask(@GameMode int gameMode) {
+        return (1 << gameMode);
+    }
+
+    private boolean bitFieldContainsModeBitmask(int bitField, @GameMode int gameMode) {
+        return (bitField & modeToBitmask(gameMode)) != 0;
+    }
+
     /**
      * @hide
      */
@@ -703,8 +732,8 @@ public final class GameManagerService extends IGameManagerService.Stub {
     public void updateConfigsForUser(int userId, String ...packageNames) {
         try {
             synchronized (mDeviceConfigLock) {
-                for (String packageName : packageNames) {
-                    GamePackageConfiguration config =
+                for (final String packageName : packageNames) {
+                    final GamePackageConfiguration config =
                             new GamePackageConfiguration(packageName, userId);
                     if (config.isValid()) {
                         if (DEBUG) {
@@ -718,13 +747,42 @@ public final class GameManagerService extends IGameManagerService.Stub {
                     }
                 }
             }
-            for (String packageName : packageNames) {
-                synchronized (mLock) {
-                    if (mSettings.containsKey(userId)) {
-                        GameManagerSettings userSettings = mSettings.get(userId);
-                        updateCompatModeDownscale(packageName,
-                                userSettings.getGameModeLocked(packageName));
+            for (final String packageName : packageNames) {
+                if (mSettings.containsKey(userId)) {
+                    int gameMode = getGameMode(packageName, userId);
+                    int newGameMode = gameMode;
+                    // Make sure the user settings and package configs don't conflict. I.e. the
+                    // user setting is set to a mode that no longer available due to config/manifest
+                    // changes. Most of the time we won't have to change anything.
+                    GamePackageConfiguration config;
+                    synchronized (mDeviceConfigLock) {
+                        config = mConfigs.get(packageName);
                     }
+                    if (config != null) {
+                        int modesBitfield = config.getAvailableGameModesBitfield();
+                        // Remove UNSUPPORTED to simplify the logic here, since we really just
+                        // want to check if we support selectable game modes
+                        modesBitfield &= ~modeToBitmask(GameManager.GAME_MODE_UNSUPPORTED);
+                        if (!bitFieldContainsModeBitmask(modesBitfield, gameMode)) {
+                            if (bitFieldContainsModeBitmask(modesBitfield,
+                                    GameManager.GAME_MODE_STANDARD)) {
+                                // If the current set mode isn't supported, but we support STANDARD,
+                                // then set the mode to STANDARD.
+                                newGameMode = GameManager.GAME_MODE_STANDARD;
+                            } else {
+                                // If we don't support any game modes, then set to UNSUPPORTED
+                                newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
+                            }
+                        }
+                    } else if (gameMode != GameManager.GAME_MODE_UNSUPPORTED) {
+                        // If we have no config for the package, but the configured mode is not
+                        // UNSUPPORTED, then set to UNSUPPORTED
+                        newGameMode = GameManager.GAME_MODE_UNSUPPORTED;
+                    }
+                    if (newGameMode != gameMode) {
+                        setGameMode(packageName, newGameMode, userId);
+                    }
+                    updateCompatModeDownscale(packageName, gameMode);
                 }
             }
         } catch (Exception e) {

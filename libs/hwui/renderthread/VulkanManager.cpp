@@ -29,11 +29,11 @@
 
 #include <cstring>
 
+#include <gui/TraceUtils.h>
 #include "Properties.h"
 #include "RenderThread.h"
 #include "pipeline/skia/ShaderCache.h"
 #include "renderstate/RenderState.h"
-#include "utils/TraceUtils.h"
 
 namespace android {
 namespace uirenderer {
@@ -340,6 +340,8 @@ void VulkanManager::setupDevice(GrVkExtensions& grExtensions, VkPhysicalDeviceFe
 }
 
 void VulkanManager::initialize() {
+    std::lock_guard _lock{mInitializeLock};
+
     if (mDevice != VK_NULL_HANDLE) {
         return;
     }

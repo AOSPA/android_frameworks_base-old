@@ -17,6 +17,7 @@
 package com.android.systemui.biometrics;
 
 import static android.hardware.biometrics.BiometricManager.Authenticators;
+import static android.hardware.biometrics.BiometricManager.BIOMETRIC_MULTI_SENSOR_FACE_THEN_FINGERPRINT;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNull;
@@ -41,6 +42,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
+import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.ComponentInfoInternal;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
@@ -60,7 +62,6 @@ import android.testing.TestableLooper.RunWithLooper;
 
 import com.android.internal.R;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 
 import org.junit.Before;
@@ -94,8 +95,6 @@ public class AuthControllerTest extends SysuiTestCase {
     @Mock
     private CommandQueue mCommandQueue;
     @Mock
-    private StatusBarStateController mStatusBarStateController;
-    @Mock
     private ActivityTaskManager mActivityTaskManager;
     @Mock
     private FingerprintManager mFingerprintManager;
@@ -103,6 +102,8 @@ public class AuthControllerTest extends SysuiTestCase {
     private FaceManager mFaceManager;
     @Mock
     private UdfpsController mUdfpsController;
+    @Mock
+    private SidefpsController mSidefpsController;
     @Captor
     ArgumentCaptor<IFingerprintAuthenticatorsRegisteredCallback> mAuthenticatorsRegisteredCaptor;
 
@@ -148,8 +149,8 @@ public class AuthControllerTest extends SysuiTestCase {
         when(mFingerprintManager.getSensorPropertiesInternal()).thenReturn(props);
 
         mAuthController = new TestableAuthController(context, mCommandQueue,
-                mStatusBarStateController, mActivityTaskManager, mFingerprintManager, mFaceManager,
-                () -> mUdfpsController);
+                mActivityTaskManager, mFingerprintManager, mFaceManager,
+                () -> mUdfpsController, () -> mSidefpsController);
 
         mAuthController.start();
         verify(mFingerprintManager).addAuthenticatorsRegisteredCallback(
@@ -526,7 +527,8 @@ public class AuthControllerTest extends SysuiTestCase {
                 true /* requireConfirmation */,
                 0 /* userId */,
                 "testPackage",
-                0 /* operationId */);
+                0 /* operationId */,
+                BIOMETRIC_MULTI_SENSOR_FACE_THEN_FINGERPRINT);
     }
 
     private PromptInfo createTestPromptInfo() {
@@ -556,19 +558,21 @@ public class AuthControllerTest extends SysuiTestCase {
         private PromptInfo mLastBiometricPromptInfo;
 
         TestableAuthController(Context context, CommandQueue commandQueue,
-                StatusBarStateController statusBarStateController,
                 ActivityTaskManager activityTaskManager,
                 FingerprintManager fingerprintManager,
                 FaceManager faceManager,
-                Provider<UdfpsController> udfpsControllerFactory) {
-            super(context, commandQueue, statusBarStateController, activityTaskManager,
-                    fingerprintManager, faceManager, udfpsControllerFactory);
+                Provider<UdfpsController> udfpsControllerFactory,
+                Provider<SidefpsController> sidefpsControllerFactory) {
+            super(context, commandQueue, activityTaskManager,
+                    fingerprintManager, faceManager, udfpsControllerFactory,
+                    sidefpsControllerFactory);
         }
 
         @Override
         protected AuthDialog buildDialog(PromptInfo promptInfo,
                 boolean requireConfirmation, int userId, int[] sensorIds, boolean credentialAllowed,
-                String opPackageName, boolean skipIntro, long operationId) {
+                String opPackageName, boolean skipIntro, long operationId,
+                @BiometricManager.BiometricMultiSensorMode int multiSensorConfig) {
 
             mLastBiometricPromptInfo = promptInfo;
 

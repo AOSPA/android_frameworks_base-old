@@ -17,22 +17,24 @@
 package com.android.server.appsearch.stats;
 
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.appsearch.exceptions.AppSearchException;
 import android.content.Context;
 import android.content.pm.PackageManager;
 import android.os.Process;
 import android.os.SystemClock;
+import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.Log;
 import android.util.SparseIntArray;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.appsearch.external.localstorage.AppSearchLogger;
 import com.android.server.appsearch.external.localstorage.stats.CallStats;
 import com.android.server.appsearch.external.localstorage.stats.InitializeStats;
 import com.android.server.appsearch.external.localstorage.stats.PutDocumentStats;
+import com.android.server.appsearch.external.localstorage.stats.RemoveStats;
 import com.android.server.appsearch.external.localstorage.stats.SearchStats;
 
 import java.io.UnsupportedEncodingException;
@@ -55,8 +57,8 @@ public final class PlatformLogger implements AppSearchLogger {
     // Context of the system service.
     private final Context mContext;
 
-    // User ID of the caller who we're logging for.
-    private final int mUserId;
+    // User we're logging for.
+    private final UserHandle mUserHandle;
 
     // Configuration for the logger
     private final Config mConfig;
@@ -70,7 +72,7 @@ public final class PlatformLogger implements AppSearchLogger {
      *
      * <p> We can have correct extrapolated number by adding those counts back when we log
      * the same type of stats next time. E.g. the true count of an event could be estimated as:
-     * SUM(sampling_ratio * (num_skipped_sample + 1)) as est_count
+     * SUM(sampling_interval * (num_skipped_sample + 1)) as est_count
      *
      * <p>The key to the SparseArray is {@link CallStats.CallType}
      */
@@ -103,42 +105,42 @@ public final class PlatformLogger implements AppSearchLogger {
         // logging again.
         private final long mMinTimeIntervalBetweenSamplesMillis;
 
-        // Default sampling ratio for all types of stats
-        private final int mDefaultSamplingRatio;
+        // Default sampling interval for all types of stats
+        private final int mDefaultSamplingInterval;
 
         /**
-         * Sampling ratios for different types of stats
+         * Sampling intervals for different types of stats
          *
          * <p>This SparseArray is passed by client and is READ-ONLY. The key to that SparseArray is
          * {@link CallStats.CallType}
          *
-         * <p>If sampling ratio is missing for certain stats type,
-         * {@link Config#mDefaultSamplingRatio} will be used.
+         * <p>If sampling interval is missing for certain stats type,
+         * {@link Config#mDefaultSamplingInterval} will be used.
          *
-         * <p>E.g. sampling ratio=10 means that one out of every 10 stats was logged. If sampling
-         * ratio is 1, we will log each sample and it acts as if the sampling is disabled.
+         * <p>E.g. sampling interval=10 means that one out of every 10 stats was logged. If sampling
+         * interval is 1, we will log each sample and it acts as if the sampling is disabled.
          */
         @NonNull
-        private final SparseIntArray mSamplingRatios;
+        private final SparseIntArray mSamplingIntervals;
 
         /**
          * Configuration for {@link PlatformLogger}
          *
          * @param minTimeIntervalBetweenSamplesMillis minimum time interval apart in Milliseconds
          *                                            required for two consecutive stats logged
-         * @param defaultSamplingRatio                default sampling ratio
-         * @param samplingRatios                      SparseArray to customize sampling ratio for
+         * @param defaultSamplingInterval             default sampling interval
+         * @param samplingIntervals                   SparseArray to customize sampling interval for
          *                                            different stat types
          */
         public Config(long minTimeIntervalBetweenSamplesMillis,
-                int defaultSamplingRatio,
-                @NonNull SparseIntArray samplingRatios) {
+                int defaultSamplingInterval,
+                @NonNull SparseIntArray samplingIntervals) {
             // TODO(b/173532925) Probably we can get rid of those three after we have p/h flags
             // for them.
-            // e.g. we can just call DeviceConfig.get(SAMPLING_RATIO_FOR_PUT_DOCUMENTS).
+            // e.g. we can just call DeviceConfig.get(SAMPLING_INTERVAL_FOR_PUT_DOCUMENTS).
             mMinTimeIntervalBetweenSamplesMillis = minTimeIntervalBetweenSamplesMillis;
-            mDefaultSamplingRatio = defaultSamplingRatio;
-            mSamplingRatios = samplingRatios;
+            mDefaultSamplingInterval = defaultSamplingInterval;
+            mSamplingIntervals = samplingIntervals;
         }
     }
 
@@ -148,14 +150,14 @@ public final class PlatformLogger implements AppSearchLogger {
     static final class ExtraStats {
         // UID for the calling package of the stats.
         final int mPackageUid;
-        // sampling ratio for the call type of the stats.
-        final int mSamplingRatio;
+        // sampling interval for the call type of the stats.
+        final int mSamplingInterval;
         // number of samplings skipped before the current one for the same call type.
         final int mSkippedSampleCount;
 
-        ExtraStats(int packageUid, int samplingRatio, int skippedSampleCount) {
+        ExtraStats(int packageUid, int samplingInterval, int skippedSampleCount) {
             mPackageUid = packageUid;
-            mSamplingRatio = samplingRatio;
+            mSamplingInterval = samplingInterval;
             mSkippedSampleCount = skippedSampleCount;
         }
     }
@@ -163,10 +165,11 @@ public final class PlatformLogger implements AppSearchLogger {
     /**
      * Westworld constructor
      */
-    public PlatformLogger(@NonNull Context context, int userId, @NonNull Config config) {
+    public PlatformLogger(
+            @NonNull Context context, @NonNull UserHandle userHandle, @NonNull Config config) {
         mContext = Objects.requireNonNull(context);
+        mUserHandle = Objects.requireNonNull(userHandle);
         mConfig = Objects.requireNonNull(config);
-        mUserId = userId;
     }
 
     /** Logs {@link CallStats}. */
@@ -193,12 +196,27 @@ public final class PlatformLogger implements AppSearchLogger {
 
     @Override
     public void logStats(@NonNull InitializeStats stats) throws AppSearchException {
-        // TODO(b/173532925): Implement
+        Objects.requireNonNull(stats);
+        synchronized (mLock) {
+            if (shouldLogForTypeLocked(CallStats.CALL_TYPE_INITIALIZE)) {
+                logStatsImplLocked(stats);
+            }
+        }
     }
 
     @Override
     public void logStats(@NonNull SearchStats stats) throws AppSearchException {
-        // TODO(b/173532925): Implement
+        Objects.requireNonNull(stats);
+        synchronized (mLock) {
+            if (shouldLogForTypeLocked(CallStats.CALL_TYPE_SEARCH)) {
+                logStatsImplLocked(stats);
+            }
+        }
+    }
+
+    @Override
+    public void logStats(@androidx.annotation.NonNull RemoveStats stats) throws AppSearchException {
+        // TODO(b/173532925): Log stats
     }
 
     /**
@@ -206,7 +224,7 @@ public final class PlatformLogger implements AppSearchLogger {
      *
      * @return removed UID for the package, or {@code INVALID_UID} if package was not previously
      * cached.
-    */
+     */
     public int removeCachedUidForPackage(@NonNull String packageName) {
         // TODO(b/173532925) This needs to be called when we get PACKAGE_REMOVED intent
         Objects.requireNonNull(packageName);
@@ -224,8 +242,8 @@ public final class PlatformLogger implements AppSearchLogger {
         String database = stats.getGeneralStats().getDatabase();
         try {
             int hashCodeForDatabase = calculateHashCodeMd5(database);
-            FrameworkStatsLog.write(FrameworkStatsLog.APP_SEARCH_CALL_STATS_REPORTED,
-                    extraStats.mSamplingRatio,
+            AppSearchStatsLog.write(AppSearchStatsLog.APP_SEARCH_CALL_STATS_REPORTED,
+                    extraStats.mSamplingInterval,
                     extraStats.mSkippedSampleCount,
                     extraStats.mPackageUid,
                     hashCodeForDatabase,
@@ -242,7 +260,9 @@ public final class PlatformLogger implements AppSearchLogger {
             //
             // Something is wrong while calculating the hash code for database
             // this shouldn't happen since we always use "MD5" and "UTF-8"
-            Log.e(TAG, "Error calculating hash code for database " + database, e);
+            if (database != null) {
+                Log.e(TAG, "Error calculating hash code for database " + database, e);
+            }
         }
     }
 
@@ -254,8 +274,8 @@ public final class PlatformLogger implements AppSearchLogger {
         String database = stats.getGeneralStats().getDatabase();
         try {
             int hashCodeForDatabase = calculateHashCodeMd5(database);
-            FrameworkStatsLog.write(FrameworkStatsLog.APP_SEARCH_PUT_DOCUMENT_STATS_REPORTED,
-                    extraStats.mSamplingRatio,
+            AppSearchStatsLog.write(AppSearchStatsLog.APP_SEARCH_PUT_DOCUMENT_STATS_REPORTED,
+                    extraStats.mSamplingInterval,
                     extraStats.mSkippedSampleCount,
                     extraStats.mPackageUid,
                     hashCodeForDatabase,
@@ -277,21 +297,102 @@ public final class PlatformLogger implements AppSearchLogger {
             //
             // Something is wrong while calculating the hash code for database
             // this shouldn't happen since we always use "MD5" and "UTF-8"
-            Log.e(TAG, "Error calculating hash code for database " + database, e);
+            if (database != null) {
+                Log.e(TAG, "Error calculating hash code for database " + database, e);
+            }
         }
+    }
+
+    @GuardedBy("mLock")
+    private void logStatsImplLocked(@NonNull SearchStats stats) {
+        mLastPushTimeMillisLocked = SystemClock.elapsedRealtime();
+        ExtraStats extraStats = createExtraStatsLocked(stats.getPackageName(),
+                CallStats.CALL_TYPE_SEARCH);
+        String database = stats.getDatabase();
+        try {
+            int hashCodeForDatabase = calculateHashCodeMd5(database);
+            AppSearchStatsLog.write(AppSearchStatsLog.APP_SEARCH_QUERY_STATS_REPORTED,
+                    extraStats.mSamplingInterval,
+                    extraStats.mSkippedSampleCount,
+                    extraStats.mPackageUid,
+                    hashCodeForDatabase,
+                    stats.getStatusCode(),
+                    stats.getTotalLatencyMillis(),
+                    stats.getRewriteSearchSpecLatencyMillis(),
+                    stats.getRewriteSearchResultLatencyMillis(),
+                    stats.getVisibilityScope(),
+                    stats.getNativeLatencyMillis(),
+                    stats.getTermCount(),
+                    stats.getQueryLength(),
+                    stats.getFilteredNamespaceCount(),
+                    stats.getFilteredSchemaTypeCount(),
+                    stats.getRequestedPageSize(),
+                    stats.getCurrentPageReturnedResultCount(),
+                    stats.isFirstPage(),
+                    stats.getParseQueryLatencyMillis(),
+                    stats.getRankingStrategy(),
+                    stats.getScoredDocumentCount(),
+                    stats.getScoringLatencyMillis(),
+                    stats.getRankingLatencyMillis(),
+                    stats.getDocumentRetrievingLatencyMillis(),
+                    stats.getResultWithSnippetsCount());
+        } catch (NoSuchAlgorithmException | UnsupportedEncodingException e) {
+            // TODO(b/184204720) report hashing error to Westworld
+            //  We need to set a special value(e.g. 0xFFFFFFFF) for the hashing of the database,
+            //  so in the dashboard we know there is some error for hashing.
+            //
+            // Something is wrong while calculating the hash code for database
+            // this shouldn't happen since we always use "MD5" and "UTF-8"
+            if (database != null) {
+                Log.e(TAG, "Error calculating hash code for database " + database, e);
+            }
+        }
+    }
+
+    @GuardedBy("mLock")
+    private void logStatsImplLocked(@NonNull InitializeStats stats) {
+        mLastPushTimeMillisLocked = SystemClock.elapsedRealtime();
+        ExtraStats extraStats = createExtraStatsLocked(/*packageName=*/ null,
+                CallStats.CALL_TYPE_INITIALIZE);
+        AppSearchStatsLog.write(AppSearchStatsLog.APP_SEARCH_INITIALIZE_STATS_REPORTED,
+                extraStats.mSamplingInterval,
+                extraStats.mSkippedSampleCount,
+                extraStats.mPackageUid,
+                stats.getStatusCode(),
+                stats.getTotalLatencyMillis(),
+                stats.hasDeSync(),
+                stats.getPrepareSchemaAndNamespacesLatencyMillis(),
+                stats.getPrepareVisibilityStoreLatencyMillis(),
+                stats.getNativeLatencyMillis(),
+                stats.getDocumentStoreRecoveryCause(),
+                stats.getIndexRestorationCause(),
+                stats.getSchemaStoreRecoveryCause(),
+                stats.getDocumentStoreRecoveryLatencyMillis(),
+                stats.getIndexRestorationLatencyMillis(),
+                stats.getSchemaStoreRecoveryLatencyMillis(),
+                stats.getDocumentStoreDataStatus(),
+                stats.getDocumentCount(),
+                stats.getSchemaTypeCount());
     }
 
     /**
      * Calculate the hash code as an integer by returning the last four bytes of its MD5.
      *
      * @param str a string
-     * @return hash code as an integer
+     * @return hash code as an integer. returns -1 if str is null.
      * @throws AppSearchException if either algorithm or encoding does not exist.
      */
     @VisibleForTesting
     @NonNull
-    static int calculateHashCodeMd5(@NonNull String str) throws
+    static int calculateHashCodeMd5(@Nullable String str) throws
             NoSuchAlgorithmException, UnsupportedEncodingException {
+        if (str == null) {
+            // Just return -1 if caller doesn't have database name
+            // For some stats like globalQuery, databaseName can be null.
+            // Since in atom it is an integer, we have to return something here.
+            return -1;
+        }
+
         MessageDigest md = MessageDigest.getInstance("MD5");
         md.update(str.getBytes(/*charsetName=*/ "UTF-8"));
         byte[] digest = md.digest();
@@ -314,20 +415,27 @@ public final class PlatformLogger implements AppSearchLogger {
      * <p>This method is called by most of logToWestworldLocked functions to reduce code
      * duplication.
      */
+    // TODO(b/173532925) Once we add CTS test for logging atoms and can inspect the result, we can
+    // remove this @VisibleForTesting and directly use PlatformLogger.logStats to test sampling and
+    // rate limiting.
     @VisibleForTesting
     @GuardedBy("mLock")
     @NonNull
-    ExtraStats createExtraStatsLocked(@NonNull String packageName,
+    ExtraStats createExtraStatsLocked(@Nullable String packageName,
             @CallStats.CallType int callType) {
-        int packageUid = getPackageUidAsUserLocked(packageName);
-        int samplingRatio = mConfig.mSamplingRatios.get(callType,
-                mConfig.mDefaultSamplingRatio);
+        int packageUid = Process.INVALID_UID;
+        if (packageName != null) {
+            packageUid = getPackageUidAsUserLocked(packageName);
+        }
+
+        int samplingInterval = mConfig.mSamplingIntervals.get(callType,
+                mConfig.mDefaultSamplingInterval);
 
         int skippedSampleCount = mSkippedSampleCountLocked.get(callType,
                 /*valueOfKeyIfNotFound=*/ 0);
         mSkippedSampleCountLocked.put(callType, 0);
 
-        return new ExtraStats(packageUid, samplingRatio, skippedSampleCount);
+        return new ExtraStats(packageUid, samplingInterval, skippedSampleCount);
     }
 
     /**
@@ -337,13 +445,16 @@ public final class PlatformLogger implements AppSearchLogger {
      * stats.
      */
     @GuardedBy("mLock")
+    // TODO(b/173532925) Once we add CTS test for logging atoms and can inspect the result, we can
+    // remove this @VisibleForTesting and directly use PlatformLogger.logStats to test sampling and
+    // rate limiting.
     @VisibleForTesting
     boolean shouldLogForTypeLocked(@CallStats.CallType int callType) {
-        int samplingRatio = mConfig.mSamplingRatios.get(callType,
-                mConfig.mDefaultSamplingRatio);
+        int samplingInterval = mConfig.mSamplingIntervals.get(callType,
+                mConfig.mDefaultSamplingInterval);
 
         // Sampling
-        if (!shouldSample(samplingRatio)) {
+        if (!shouldSample(samplingInterval)) {
             return false;
         }
 
@@ -364,15 +475,15 @@ public final class PlatformLogger implements AppSearchLogger {
     /**
      * Checks if the stats should be "sampled"
      *
-     * @param samplingRatio sampling ratio
+     * @param samplingInterval sampling interval
      * @return if the stats should be sampled
      */
-    private boolean shouldSample(int samplingRatio) {
-        if (samplingRatio <= 0) {
+    private boolean shouldSample(int samplingInterval) {
+        if (samplingInterval <= 0) {
             return false;
         }
 
-        return mRng.nextInt((int) samplingRatio) == 0;
+        return mRng.nextInt((int) samplingInterval) == 0;
     }
 
     /**
@@ -389,7 +500,8 @@ public final class PlatformLogger implements AppSearchLogger {
         // TODO(b/173532925) since VisibilityStore has the same method, we can make this a
         //  utility function
         try {
-            packageUid = mContext.getPackageManager().getPackageUidAsUser(packageName, mUserId);
+            packageUid = mContext.getPackageManager().getPackageUidAsUser(
+                    packageName, mUserHandle.getIdentifier());
             mPackageUidCacheLocked.put(packageName, packageUid);
             return packageUid;
         } catch (PackageManager.NameNotFoundException e) {

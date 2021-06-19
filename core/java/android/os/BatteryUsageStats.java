@@ -20,6 +20,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.util.Range;
 import android.util.SparseArray;
+import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.os.BatteryStatsHistory;
 import com.android.internal.os.BatteryStatsHistoryIterator;
@@ -75,8 +76,10 @@ public final class BatteryUsageStats implements Parcelable {
     public static final int AGGREGATE_BATTERY_CONSUMER_SCOPE_COUNT = 2;
 
     private final int mDischargePercentage;
-    private final long mStatsStartTimestampMs;
     private final double mBatteryCapacityMah;
+    private final long mStatsStartTimestampMs;
+    private final long mStatsEndTimestampMs;
+    private final long mStatsDurationMs;
     private final double mDischargedPowerLowerBound;
     private final double mDischargedPowerUpperBound;
     private final long mBatteryTimeRemainingMs;
@@ -90,6 +93,12 @@ public final class BatteryUsageStats implements Parcelable {
 
     private BatteryUsageStats(@NonNull Builder builder) {
         mStatsStartTimestampMs = builder.mStatsStartTimestampMs;
+        mStatsEndTimestampMs = builder.mStatsEndTimestampMs;
+        if (builder.mStatsDurationMs != -1) {
+            mStatsDurationMs = builder.mStatsDurationMs;
+        } else {
+            mStatsDurationMs = mStatsEndTimestampMs - mStatsStartTimestampMs;
+        }
         mBatteryCapacityMah = builder.mBatteryCapacityMah;
         mDischargePercentage = builder.mDischargePercentage;
         mDischargedPowerLowerBound = builder.mDischargedPowerLowerBoundMah;
@@ -141,6 +150,24 @@ public final class BatteryUsageStats implements Parcelable {
     }
 
     /**
+     * Timestamp (as returned by System.currentTimeMillis()) of when the stats snapshot was taken,
+     * in milliseconds.
+     */
+    public long getStatsEndTimestamp() {
+        return mStatsEndTimestampMs;
+    }
+
+    /**
+     * Returns the duration of the stats session captured by this BatteryUsageStats.
+     * In rare cases, statsDuration != statsEndTimestamp - statsStartTimestamp.  This may
+     * happen when BatteryUsageStats represents an accumulation of data across multiple
+     * non-contiguous sessions.
+     */
+    public long getStatsDuration() {
+        return mStatsDurationMs;
+    }
+
+    /**
      * Total amount of battery charge drained since BatteryStats reset (e.g. due to being fully
      * charged), in mAh
      */
@@ -158,7 +185,8 @@ public final class BatteryUsageStats implements Parcelable {
 
     /**
      * Portion of battery charge drained since BatteryStats reset (e.g. due to being fully
-     * charged), as percentage of the full charge in the range [0:100]
+     * charged), as percentage of the full charge in the range [0:100]. May exceed 100 if
+     * the device repeatedly charged and discharged prior to the reset.
      */
     public int getDischargePercentage() {
         return mDischargePercentage;
@@ -229,6 +257,8 @@ public final class BatteryUsageStats implements Parcelable {
 
     private BatteryUsageStats(@NonNull Parcel source) {
         mStatsStartTimestampMs = source.readLong();
+        mStatsEndTimestampMs = source.readLong();
+        mStatsDurationMs = source.readLong();
         mBatteryCapacityMah = source.readDouble();
         mDischargePercentage = source.readInt();
         mDischargedPowerLowerBound = source.readDouble();
@@ -287,6 +317,8 @@ public final class BatteryUsageStats implements Parcelable {
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
         dest.writeLong(mStatsStartTimestampMs);
+        dest.writeLong(mStatsEndTimestampMs);
+        dest.writeLong(mStatsDurationMs);
         dest.writeDouble(mBatteryCapacityMah);
         dest.writeInt(mDischargePercentage);
         dest.writeDouble(mDischargedPowerLowerBound);
@@ -334,6 +366,62 @@ public final class BatteryUsageStats implements Parcelable {
             return new BatteryUsageStats[size];
         }
     };
+
+    /** Returns a proto (as used for atoms.proto) corresponding to this BatteryUsageStats. */
+    public byte[] getStatsProto() {
+        final BatteryConsumer deviceBatteryConsumer = getAggregateBatteryConsumer(
+                AGGREGATE_BATTERY_CONSUMER_SCOPE_DEVICE);
+
+        final ProtoOutputStream proto = new ProtoOutputStream();
+        proto.write(BatteryUsageStatsAtomsProto.SESSION_START_MILLIS, getStatsStartTimestamp());
+        proto.write(BatteryUsageStatsAtomsProto.SESSION_END_MILLIS, getStatsEndTimestamp());
+        proto.write(BatteryUsageStatsAtomsProto.SESSION_DURATION_MILLIS, getStatsDuration());
+        deviceBatteryConsumer.writeStatsProto(proto,
+                BatteryUsageStatsAtomsProto.DEVICE_BATTERY_CONSUMER);
+        writeUidBatteryConsumersProto(proto);
+        proto.write(BatteryUsageStatsAtomsProto.SESSION_DISCHARGE_PERCENTAGE,
+                getDischargePercentage());
+        return proto.getBytes();
+    }
+
+    /**
+     * Writes the UidBatteryConsumers data, held by this BatteryUsageStats, to the proto (as used
+     * for atoms.proto).
+     */
+    private void writeUidBatteryConsumersProto(ProtoOutputStream proto) {
+        final List<UidBatteryConsumer> consumers = getUidBatteryConsumers();
+
+        // TODO(b/189225426): Sort the list by power consumption. If during the for,
+        //                    proto.getRawSize() > 45kb, truncate the remainder of the list.
+        final int size = consumers.size();
+        for (int i = 0; i < size; i++) {
+            final UidBatteryConsumer consumer = consumers.get(i);
+
+            final long fgMs = consumer.getTimeInStateMs(UidBatteryConsumer.STATE_FOREGROUND);
+            final long bgMs = consumer.getTimeInStateMs(UidBatteryConsumer.STATE_BACKGROUND);
+            final boolean hasBaseData = consumer.hasStatsProtoData();
+
+            if (fgMs == 0 && bgMs == 0 && !hasBaseData) {
+                continue;
+            }
+
+            final long token = proto.start(BatteryUsageStatsAtomsProto.UID_BATTERY_CONSUMERS);
+            proto.write(
+                    BatteryUsageStatsAtomsProto.UidBatteryConsumer.UID,
+                    consumer.getUid());
+            if (hasBaseData) {
+                consumer.writeStatsProto(proto,
+                        BatteryUsageStatsAtomsProto.UidBatteryConsumer.BATTERY_CONSUMER_DATA);
+            }
+            proto.write(
+                    BatteryUsageStatsAtomsProto.UidBatteryConsumer.TIME_IN_FOREGROUND_MILLIS,
+                    fgMs);
+            proto.write(
+                    BatteryUsageStatsAtomsProto.UidBatteryConsumer.TIME_IN_BACKGROUND_MILLIS,
+                    bgMs);
+            proto.end(token);
+        }
+    }
 
     /**
      * Prints the stats in a human-readable format.
@@ -441,6 +529,8 @@ public final class BatteryUsageStats implements Parcelable {
         private final String[] mCustomPowerComponentNames;
         private final boolean mIncludePowerModels;
         private long mStatsStartTimestampMs;
+        private long mStatsEndTimestampMs;
+        private long mStatsDurationMs = -1;
         private double mBatteryCapacityMah;
         private int mDischargePercentage;
         private double mDischargedPowerLowerBoundMah;
@@ -490,6 +580,23 @@ public final class BatteryUsageStats implements Parcelable {
          */
         public Builder setStatsStartTimestamp(long statsStartTimestampMs) {
             mStatsStartTimestampMs = statsStartTimestampMs;
+            return this;
+        }
+
+        /**
+         * Sets the timestamp of when the battery stats snapshot was taken, in milliseconds.
+         */
+        public Builder setStatsEndTimestamp(long statsEndTimestampMs) {
+            mStatsEndTimestampMs = statsEndTimestampMs;
+            return this;
+        }
+
+        /**
+         * Sets the duration of the stats session.  The default value of this field is
+         * statsEndTimestamp - statsStartTimestamp.
+         */
+        public Builder setStatsDuration(long statsDurationMs) {
+            mStatsDurationMs = statsDurationMs;
             return this;
         }
 

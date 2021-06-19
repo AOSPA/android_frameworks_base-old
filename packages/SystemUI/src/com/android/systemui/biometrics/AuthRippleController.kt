@@ -27,6 +27,8 @@ import com.android.settingslib.Utils
 import com.android.systemui.statusbar.NotificationShadeWindowController
 import com.android.systemui.statusbar.commandline.Command
 import com.android.systemui.statusbar.commandline.CommandRegistry
+import com.android.systemui.statusbar.phone.KeyguardBypassController
+import com.android.systemui.statusbar.phone.StatusBar
 import com.android.systemui.statusbar.phone.dagger.StatusBarComponent.StatusBarScope
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.util.ViewController
@@ -39,21 +41,24 @@ import javax.inject.Inject
  */
 @StatusBarScope
 class AuthRippleController @Inject constructor(
+    private val statusBar: StatusBar,
     private val sysuiContext: Context,
     private val authController: AuthController,
     private val configurationController: ConfigurationController,
     private val keyguardUpdateMonitor: KeyguardUpdateMonitor,
     private val commandRegistry: CommandRegistry,
     private val notificationShadeWindowController: NotificationShadeWindowController,
+    private val bypassController: KeyguardBypassController,
     rippleView: AuthRippleView?
 ) : ViewController<AuthRippleView>(rippleView) {
-    private var fingerprintSensorLocation: PointF? = null
+    var fingerprintSensorLocation: PointF? = null
     private var faceSensorLocation: PointF? = null
 
     @VisibleForTesting
     public override fun onViewAttached() {
         updateRippleColor()
         updateSensorLocation()
+        authController.addCallback(authControllerCallback)
         configurationController.addCallback(configurationChangedListener)
         keyguardUpdateMonitor.registerCallback(keyguardUpdateMonitorCallback)
         commandRegistry.registerCommand("auth-ripple") { AuthRippleCommand() }
@@ -61,6 +66,7 @@ class AuthRippleController @Inject constructor(
 
     @VisibleForTesting
     public override fun onViewDetached() {
+        authController.removeCallback(authControllerCallback)
         keyguardUpdateMonitor.removeCallback(keyguardUpdateMonitorCallback)
         configurationController.removeCallback(configurationChangedListener)
         commandRegistry.unregisterCommand("auth-ripple")
@@ -69,12 +75,20 @@ class AuthRippleController @Inject constructor(
     }
 
     private fun showRipple(biometricSourceType: BiometricSourceType?) {
+        if (!keyguardUpdateMonitor.isKeyguardVisible ||
+            keyguardUpdateMonitor.userNeedsStrongAuth()) {
+            return
+        }
+
         if (biometricSourceType == BiometricSourceType.FINGERPRINT &&
             fingerprintSensorLocation != null) {
             mView.setSensorLocation(fingerprintSensorLocation!!)
             showRipple()
         } else if (biometricSourceType == BiometricSourceType.FACE &&
             faceSensorLocation != null) {
+            if (!bypassController.canBypass()) {
+                return
+            }
             mView.setSensorLocation(faceSensorLocation!!)
             showRipple()
         }
@@ -87,9 +101,10 @@ class AuthRippleController @Inject constructor(
         })
     }
 
-    private fun updateSensorLocation() {
-        fingerprintSensorLocation = authController.udfpsSensorLocation
+    fun updateSensorLocation() {
+        fingerprintSensorLocation = authController.fingerprintSensorLocation
         faceSensorLocation = authController.faceAuthSensorLocation
+        statusBar.updateCircleReveal()
     }
 
     private fun updateRippleColor() {
@@ -123,6 +138,8 @@ class AuthRippleController @Inject constructor(
                 updateRippleColor()
             }
     }
+
+    private val authControllerCallback = AuthController.Callback { updateSensorLocation() }
 
     inner class AuthRippleCommand : Command {
         override fun execute(pw: PrintWriter, args: List<String>) {

@@ -24,6 +24,7 @@
 #include <Properties.h>
 #include <RootRenderNode.h>
 #include <dlfcn.h>
+#include <gui/TraceUtils.h>
 #include <inttypes.h>
 #include <media/NdkImage.h>
 #include <media/NdkImageReader.h>
@@ -39,7 +40,6 @@
 #include <utils/RefBase.h>
 #include <utils/StrongPointer.h>
 #include <utils/Timers.h>
-#include <utils/TraceUtils.h>
 
 #include <pthread.h>
 
@@ -322,6 +322,11 @@ static void android_view_ThreadedRenderer_setColorMode(JNIEnv* env, jobject claz
 static void android_view_ThreadedRenderer_setSdrWhitePoint(JNIEnv* env, jobject clazz,
         jlong proxyPtr, jfloat sdrWhitePoint) {
     Properties::defaultSdrWhitePoint = sdrWhitePoint;
+}
+
+static void android_view_ThreadedRenderer_setIsHighEndGfx(JNIEnv* env, jobject clazz,
+        jboolean jIsHighEndGfx) {
+    Properties::setIsHighEndGfx(jIsHighEndGfx);
 }
 
 static int android_view_ThreadedRenderer_syncAndDrawFrame(JNIEnv* env, jobject clazz,
@@ -795,6 +800,7 @@ static const JNINativeMethod gMethods[] = {
         {"nSetOpaque", "(JZ)V", (void*)android_view_ThreadedRenderer_setOpaque},
         {"nSetColorMode", "(JI)V", (void*)android_view_ThreadedRenderer_setColorMode},
         {"nSetSdrWhitePoint", "(JF)V", (void*)android_view_ThreadedRenderer_setSdrWhitePoint},
+        {"nSetIsHighEndGfx", "(Z)V", (void*)android_view_ThreadedRenderer_setIsHighEndGfx},
         {"nSyncAndDrawFrame", "(J[JI)I", (void*)android_view_ThreadedRenderer_syncAndDrawFrame},
         {"nDestroy", "(JJ)V", (void*)android_view_ThreadedRenderer_destroy},
         {"nRegisterAnimatingRenderNode", "(JJ)V",

@@ -1203,8 +1203,7 @@ public final class ViewRootImpl implements ViewParent,
                             Looper.myLooper());
 
                     if (mAttachInfo.mThreadedRenderer != null) {
-                        InputMetricsListener listener =
-                                new InputMetricsListener(mInputEventReceiver);
+                        InputMetricsListener listener = new InputMetricsListener();
                         mHardwareRendererObserver = new HardwareRendererObserver(
                                 listener, listener.data, mHandler, true /*waitForPresentTime*/);
                         mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
@@ -1358,6 +1357,11 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
+    /**
+     * Register a callback to be executed when Webview overlay needs to merge a transaction.
+     * This callback will be executed on RenderThread worker thread, and released inside native code
+     * when CanvasContext is destroyed.
+     */
     private void addASurfaceTransactionCallback() {
         HardwareRenderer.ASurfaceTransactionCallback callback = (nativeTransactionObj,
                                                                  nativeSurfaceControlObj,
@@ -1411,6 +1415,9 @@ public final class ViewRootImpl implements ViewParent,
                 if (mAttachInfo.mThreadedRenderer != null) {
                     mAttachInfo.mHardwareAccelerated =
                             mAttachInfo.mHardwareAccelerationRequested = true;
+                    if (mHardwareRendererObserver != null) {
+                        mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
+                    }
                 }
             }
         }
@@ -2779,7 +2786,7 @@ public final class ViewRootImpl implements ViewParent,
                         & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED) != 0;
                 final boolean dragResizing = freeformResizing || dockedResizing;
                 if (mSurfaceControl.isValid()) {
-                    updateOpacity(params, dragResizing);
+                    updateOpacity(mWindowAttributes, dragResizing);
                 }
 
                 if (DEBUG_LAYOUT) Log.v(mTag, "relayout: frame=" + frame.toShortString()
@@ -3368,9 +3375,9 @@ public final class ViewRootImpl implements ViewParent,
         }
         // TODO (b/131181940): Make sure this doesn't leak Activity with mActivityConfigCallback
         // config changes.
-        final View focusedView = mView != null ? mView.findFocus() : null;
         if (hasWindowFocus) {
-            mInsetsController.onWindowFocusGained(focusedView != null /* hasViewFocused */);
+            mInsetsController.onWindowFocusGained(
+                    getFocusedViewOrNull() != null /* hasViewFocused */);
         } else {
             mInsetsController.onWindowFocusLost();
         }
@@ -3419,7 +3426,8 @@ public final class ViewRootImpl implements ViewParent,
 
             // Note: must be done after the focus change callbacks,
             // so all of the view state is set up correctly.
-            mImeFocusController.onPostWindowFocus(focusedView, hasWindowFocus, mWindowAttributes);
+            mImeFocusController.onPostWindowFocus(
+                    getFocusedViewOrNull(), hasWindowFocus, mWindowAttributes);
 
             if (hasWindowFocus) {
                 // Clear the forward bit.  We can just do this directly, since
@@ -6394,6 +6402,11 @@ public final class ViewRootImpl implements ViewParent,
         mView.dispatchTooltipHoverEvent(event);
     }
 
+    @Nullable
+    private View getFocusedViewOrNull() {
+        return mView != null ? mView.findFocus() : null;
+    }
+
     /**
      * Performs synthesis of new input events from unhandled input events.
      */
@@ -7509,7 +7522,8 @@ public final class ViewRootImpl implements ViewParent,
                 final View prevDragView = mCurrentDragView;
 
                 if (what == DragEvent.ACTION_DROP && event.mClipData != null) {
-                    event.mClipData.prepareToEnterProcess();
+                    event.mClipData.prepareToEnterProcess(
+                            mView.getContext().getAttributionSource());
                 }
 
                 // Now dispatch the drag/drop event
@@ -7719,6 +7733,7 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
             if (mAttachInfo.mThreadedRenderer != null) {
+                addASurfaceTransactionCallback();
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
             }
         } else {
@@ -7743,9 +7758,10 @@ public final class ViewRootImpl implements ViewParent,
         return relayoutResult;
     }
 
-    private void updateOpacity(@Nullable WindowManager.LayoutParams params, boolean dragResizing) {
+    private void updateOpacity(WindowManager.LayoutParams params, boolean dragResizing) {
         boolean opaque = false;
-        if (params != null && !PixelFormat.formatHasAlpha(params.format)
+
+        if (!PixelFormat.formatHasAlpha(params.format)
                 // Don't make surface with surfaceInsets opaque as they display a
                 // translucent shadow.
                 && params.surfaceInsets.left == 0
@@ -8120,6 +8136,9 @@ public final class ViewRootImpl implements ViewParent,
         ThreadedRenderer hardwareRenderer = mAttachInfo.mThreadedRenderer;
 
         if (hardwareRenderer != null) {
+            if (mHardwareRendererObserver != null) {
+                hardwareRenderer.removeObserver(mHardwareRendererObserver);
+            }
             if (mView != null) {
                 hardwareRenderer.destroyHardwareResources(mView);
             }
@@ -8622,17 +8641,11 @@ public final class ViewRootImpl implements ViewParent,
             super.dispose();
         }
     }
-    WindowInputEventReceiver mInputEventReceiver;
+    private WindowInputEventReceiver mInputEventReceiver;
 
     final class InputMetricsListener
             implements HardwareRendererObserver.OnFrameMetricsAvailableListener {
         public long[] data = new long[FrameMetrics.Index.FRAME_STATS_COUNT];
-
-        private InputEventReceiver mReceiver;
-
-        InputMetricsListener(InputEventReceiver receiver) {
-            mReceiver = receiver;
-        }
 
         @Override
         public void onFrameMetricsAvailable(int dropCountSinceLastInvocation) {
@@ -8646,6 +8659,20 @@ public final class ViewRootImpl implements ViewParent,
                 // available, we cannot compute end-to-end input latency metrics.
                 return;
             }
+            final long gpuCompletedTime = data[FrameMetrics.Index.GPU_COMPLETED];
+            if (mInputEventReceiver == null) {
+                return;
+            }
+            if (gpuCompletedTime >= presentTime) {
+                final double discrepancyMs = (gpuCompletedTime - presentTime) * 1E-6;
+                final long vsyncId = data[FrameMetrics.Index.FRAME_TIMELINE_VSYNC_ID];
+                Log.w(TAG, "Not reporting timeline because gpuCompletedTime is " + discrepancyMs
+                        + "ms ahead of presentTime. FRAME_TIMELINE_VSYNC_ID=" + vsyncId
+                        + ", INPUT_EVENT_ID=" + inputEventId);
+                // TODO(b/186664409): figure out why this sometimes happens
+                return;
+            }
+            mInputEventReceiver.reportTimeline(inputEventId, gpuCompletedTime, presentTime);
         }
     }
     HardwareRendererObserver mHardwareRendererObserver;

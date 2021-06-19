@@ -36,7 +36,6 @@ import android.content.res.Configuration;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.util.Log;
@@ -44,6 +43,7 @@ import android.util.Pair;
 import android.util.Size;
 import android.util.Slog;
 import android.view.DisplayInfo;
+import android.view.SurfaceControl;
 import android.view.WindowManagerGlobal;
 import android.window.WindowContainerTransaction;
 
@@ -51,6 +51,7 @@ import androidx.annotation.BinderThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.wm.shell.R;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayChangeController;
@@ -168,7 +169,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         }
     };
 
-    private final DisplayController.OnDisplaysChangedListener mDisplaysChangedListener =
+    @VisibleForTesting
+    final DisplayController.OnDisplaysChangedListener mDisplaysChangedListener =
             new DisplayController.OnDisplaysChangedListener() {
                 @Override
                 public void onFixedRotationStarted(int displayId, int newRotation) {
@@ -450,7 +452,7 @@ public class PipController implements PipTransitionController.PipTransitionCallb
                     null /* windowContainerTransaction */);
         };
 
-        if (saveRestoreSnapFraction) {
+        if (mPipTaskOrganizer.isInPip() && saveRestoreSnapFraction) {
             // Calculate the snap fraction of the current stack along the old movement bounds
             final PipSnapAlgorithm pipSnapAlgorithm = mPipBoundsAlgorithm.getSnapAlgorithm();
             final Rect postChangeStackBounds = new Rect(mPipBoundsState.getBounds());
@@ -557,8 +559,9 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         return entryBounds;
     }
 
-    private void stopSwipePipToHome(ComponentName componentName, Rect destinationBounds) {
-        mPipTaskOrganizer.stopSwipePipToHome(componentName, destinationBounds);
+    private void stopSwipePipToHome(ComponentName componentName, Rect destinationBounds,
+            SurfaceControl overlay) {
+        mPipTaskOrganizer.stopSwipePipToHome(componentName, destinationBounds, overlay);
     }
 
     @Override
@@ -604,7 +607,6 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         // Re-enable touches after the animation completes
         mTouchHandler.setTouchEnabled(true);
         mTouchHandler.onPinnedStackAnimationEnded(direction);
-        mMenuController.onPinnedStackAnimationEnded();
     }
 
     private void updateMovementBounds(@Nullable Rect toBounds, boolean fromRotation,
@@ -850,10 +852,11 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         }
 
         @Override
-        public void stopSwipePipToHome(ComponentName componentName, Rect destinationBounds) {
+        public void stopSwipePipToHome(ComponentName componentName, Rect destinationBounds,
+                SurfaceControl overlay) {
             executeRemoteCallWithTaskPermission(mController, "stopSwipePipToHome",
                     (controller) -> {
-                        controller.stopSwipePipToHome(componentName, destinationBounds);
+                        controller.stopSwipePipToHome(componentName, destinationBounds, overlay);
                     });
         }
 

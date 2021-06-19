@@ -73,7 +73,6 @@ import com.android.internal.widget.CachingIconView;
 import com.android.internal.widget.CallLayout;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
-import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.plugins.FalsingManager;
@@ -134,6 +133,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     private boolean mUpdateBackgroundOnUpdate;
     private boolean mNotificationTranslationFinished = false;
+    private ArrayList<MenuItem> mSnoozedMenuItems;
 
     /**
      * Listener for when {@link ExpandableNotificationRow} is laid out.
@@ -1102,7 +1102,13 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
     /** The click listener for the snooze button. */
     public View.OnClickListener getSnoozeClickListener(MenuItem item) {
         return v -> {
+            // Dismiss a snoozed notification if one is still left behind
+            mNotificationGutsManager.closeAndSaveGuts(true /* removeLeavebehind */,
+                    false /* force */, false /* removeControls */, -1 /* x */, -1 /* y */,
+                    false /* resetMenu */);
             mNotificationGutsManager.openGuts(this, 0, 0, item);
+            mSnoozedMenuItems = mMenuRow.getMenuItems(mMenuRow.getMenuView().getContext());
+            mMenuRow.resetMenu();
         };
     }
 
@@ -1821,6 +1827,10 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
 
     void onGutsClosed() {
         updateContentAccessibilityImportanceForGuts(true /* isEnabled */);
+        if (mSnoozedMenuItems != null && mSnoozedMenuItems.size() > 0) {
+            mMenuRow.setMenuItems(mSnoozedMenuItems);
+            mSnoozedMenuItems = null;
+        }
     }
 
     /**
@@ -2009,6 +2019,14 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         if (params == null) {
             return;
         }
+
+        if (!params.getVisible()) {
+            if (getVisibility() == View.VISIBLE) {
+                setVisibility(View.INVISIBLE);
+            }
+            return;
+        }
+
         float zProgress = Interpolators.FAST_OUT_SLOW_IN.getInterpolation(
                 params.getProgress(0, 50));
         float translationZ = MathUtils.lerp(params.getStartTranslationZ(),
@@ -2066,10 +2084,6 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
             contentView = mGuts;
         }
         if (expandAnimationRunning) {
-            contentView.animate()
-                    .alpha(0f)
-                    .setDuration(ActivityLaunchAnimator.ANIMATION_DURATION_FADE_OUT_CONTENT)
-                    .setInterpolator(ActivityLaunchAnimator.CONTENT_FADE_OUT_INTERPOLATOR);
             setAboveShelf(true);
             mExpandAnimationRunning = true;
             getViewState().cancelAnimations(this);
@@ -2077,6 +2091,7 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         } else {
             mExpandAnimationRunning = false;
             setAboveShelf(isAboveShelf());
+            setVisibility(View.VISIBLE);
             if (mGuts != null) {
                 mGuts.setAlpha(1.0f);
             }
@@ -2277,6 +2292,23 @@ public class ExpandableNotificationRow extends ActivatableNotificationView
         boolean allowed = isOnKeyguard()
                 || mEntry.getSbn().getNotification().contentIntent == null;
         setRippleAllowed(allowed);
+    }
+
+    @Override
+    public void onTap() {
+        // This notification will expand and animates into the content activity, so we disable the
+        // ripple. We will restore its value once the tap/click is actually performed.
+        if (mEntry.getSbn().getNotification().contentIntent != null) {
+            setRippleAllowed(false);
+        }
+    }
+
+    @Override
+    public boolean performClick() {
+        // We force-disabled the ripple in onTap. When this method is called, the code drawing the
+        // ripple will already have been called so we can restore its value now.
+        updateRippleAllowed();
+        return super.performClick();
     }
 
     @Override

@@ -1174,7 +1174,8 @@ int IncrementalService::makeFile(StorageId storage, std::string_view path, int m
         return -EINVAL;
     }
     if (auto err = mIncFs->makeFile(ifs->control, normPath, mode, id, params); err) {
-        LOG(ERROR) << "Internal error: storageId " << storage << " failed to makeFile: " << err;
+        LOG(ERROR) << "Internal error: storageId " << storage << " failed to makeFile [" << normPath
+                   << "]: " << err;
         return err;
     }
     if (params.size > 0) {
@@ -2494,6 +2495,9 @@ void IncrementalService::getMetrics(StorageId storageId, android::os::Persistabl
         const auto& kMetricsLastReadErrorNo =
                 os::incremental::BnIncrementalService::METRICS_LAST_READ_ERROR_NUMBER();
         result->putInt(String16(kMetricsLastReadErrorNo.c_str()), lastReadError->errorNo);
+        const auto& kMetricsLastReadUid =
+                os::incremental::BnIncrementalService::METRICS_LAST_READ_ERROR_UID();
+        result->putInt(String16(kMetricsLastReadUid.c_str()), lastReadError->uid);
     }
     std::unique_lock l(ifs->lock);
     if (!ifs->dataLoaderStub) {

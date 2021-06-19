@@ -28,10 +28,12 @@ import java.util.concurrent.Executor;
 public interface UiTranslationStateCallback {
 
     /**
-     * @deprecated use {@link #onStarted(ULocale, ULocale)} instead.
+     * @removed use {@link #onStarted(ULocale, ULocale)} instead.
      */
     @Deprecated
-    void onStarted(@NonNull String sourceLocale, @NonNull String targetLocale);
+    default void onStarted(@NonNull String sourceLocale, @NonNull String targetLocale) {
+        // no-op
+    }
 
     /**
      * The system is requesting translation of the UI from {@code sourceLocale} to {@code

@@ -26,6 +26,7 @@
 #include <cstdlib>
 #include <functional>
 
+#include <gui/TraceUtils.h>
 #include "../Properties.h"
 #include "AnimationContext.h"
 #include "Frame.h"
@@ -39,7 +40,6 @@
 #include "thread/CommonPool.h"
 #include "utils/GLUtils.h"
 #include "utils/TimeUtils.h"
-#include "utils/TraceUtils.h"
 
 #define TRIM_MEMORY_COMPLETE 80
 #define TRIM_MEMORY_UI_HIDDEN 20
@@ -194,6 +194,10 @@ void CanvasContext::setSurfaceControl(ASurfaceControl* surfaceControl) {
     if (surfaceControl == mSurfaceControl) return;
 
     auto funcs = mRenderThread.getASurfaceControlFunctions();
+
+    if (surfaceControl == nullptr) {
+        setASurfaceTransactionCallback(nullptr);
+    }
 
     if (mSurfaceControl != nullptr) {
         funcs.unregisterListenerFunc(this, &onSurfaceStatsAvailable);
@@ -673,20 +677,8 @@ void CanvasContext::onSurfaceStatsAvailable(void* context, ASurfaceControl* cont
     }
 
     if (frameInfo != nullptr) {
-        if (gpuCompleteTime == -1) {
-            gpuCompleteTime = frameInfo->get(FrameInfoIndex::SwapBuffersCompleted);
-        }
-        if (gpuCompleteTime < frameInfo->get(FrameInfoIndex::IssueDrawCommandsStart)) {
-            // On Vulkan the GPU commands are flushed to the GPU during IssueDrawCommands rather
-            // than after SwapBuffers. So if the GPU signals before issue draw commands, then
-            // something probably went wrong. Anything after that could just be expected
-            // pipeline differences
-            ALOGW("Impossible GPU complete time issueCommandsStart=%" PRIi64
-                  " gpuComplete=%" PRIi64,
-                  frameInfo->get(FrameInfoIndex::IssueDrawCommandsStart), gpuCompleteTime);
-            gpuCompleteTime = frameInfo->get(FrameInfoIndex::SwapBuffersCompleted);
-        }
-        frameInfo->set(FrameInfoIndex::FrameCompleted) = gpuCompleteTime;
+        frameInfo->set(FrameInfoIndex::FrameCompleted) = std::max(gpuCompleteTime,
+                frameInfo->get(FrameInfoIndex::SwapBuffersCompleted));
         frameInfo->set(FrameInfoIndex::GpuCompleted) = gpuCompleteTime;
         instance->mJankTracker.finishFrame(*frameInfo, instance->mFrameMetricsReporter);
     }

@@ -19,6 +19,8 @@ package com.android.keyguard;
 import static android.telephony.SubscriptionManager.DATA_ROAMING_DISABLE;
 import static android.telephony.SubscriptionManager.NAME_SOURCE_CARRIER_ID;
 
+import static com.android.internal.widget.LockPatternUtils.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT;
+
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
@@ -477,7 +479,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void testFingerprintDoesNotAuth_whenEncrypted() {
         testFingerprintWhenStrongAuth(
-                KeyguardUpdateMonitor.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT);
+                STRONG_AUTH_REQUIRED_AFTER_BOOT);
     }
 
     @Test
@@ -576,7 +578,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void skipsAuthentication_whenEncryptedKeyguard() {
         when(mStrongAuthTracker.getStrongAuthForUser(anyInt())).thenReturn(
-                KeyguardUpdateMonitor.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT);
+                STRONG_AUTH_REQUIRED_AFTER_BOOT);
         mKeyguardUpdateMonitor.setKeyguardBypassController(mKeyguardBypassController);
 
         mKeyguardUpdateMonitor.dispatchStartedWakingUp();
@@ -588,7 +590,7 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void requiresAuthentication_whenEncryptedKeyguard_andBypass() {
         testStrongAuthExceptOnBouncer(
-                KeyguardUpdateMonitor.StrongAuthTracker.STRONG_AUTH_REQUIRED_AFTER_BOOT);
+                STRONG_AUTH_REQUIRED_AFTER_BOOT);
     }
 
     @Test
@@ -842,10 +844,8 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void testStartUdfpsServiceBeginsOnKeyguard() {
         // GIVEN
-        // - bouncer isn't showing
         // - status bar state is on the keyguard
         // - user has authenticated since boot
-        setKeyguardBouncerVisibility(false /* isVisible */);
         mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
         when(mStrongAuthTracker.hasUserAuthenticatedSinceBoot()).thenReturn(true);
 
@@ -854,15 +854,49 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     }
 
     @Test
+    public void testOccludingAppFingerprintListeningState() {
+        // GIVEN keyguard isn't visible (app occluding)
+        mKeyguardUpdateMonitor.dispatchStartedWakingUp();
+        mKeyguardUpdateMonitor.setKeyguardOccluded(true);
+        mKeyguardUpdateMonitor.onKeyguardVisibilityChanged(false);
+        when(mStrongAuthTracker.hasUserAuthenticatedSinceBoot()).thenReturn(true);
+
+        // THEN we shouldn't listen for fingerprints
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(false)).isEqualTo(false);
+
+        // THEN we should listen for udfps (hiding of mechanism to actually auth is
+        // controlled by UdfpsKeyguardViewController)
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(true)).isEqualTo(true);
+    }
+
+    @Test
+    public void testOccludingAppRequestsFingerprint() {
+        // GIVEN keyguard isn't visible (app occluding)
+        mKeyguardUpdateMonitor.dispatchStartedWakingUp();
+        mKeyguardUpdateMonitor.setKeyguardOccluded(true);
+        mKeyguardUpdateMonitor.onKeyguardVisibilityChanged(false);
+
+        // WHEN an occluding app requests fp
+        mKeyguardUpdateMonitor.requestFingerprintAuthOnOccludingApp(true);
+
+        // THEN we should listen for fingerprints
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(false)).isEqualTo(true);
+
+        // WHEN an occluding app stops requesting fp
+        mKeyguardUpdateMonitor.requestFingerprintAuthOnOccludingApp(false);
+
+        // THEN we shouldn't listen for fingeprints
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(false)).isEqualTo(false);
+    }
+
+    @Test
     public void testStartUdfpsServiceNoAuthenticationSinceLastBoot() {
-        // GIVEN
-        // - bouncer isn't showing
-        // - status bar state is on the keyguard
-        setKeyguardBouncerVisibility(false /* isVisible */);
+        // GIVEN status bar state is on the keyguard
         mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
 
         // WHEN user hasn't authenticated since last boot
-        when(mStrongAuthTracker.hasUserAuthenticatedSinceBoot()).thenReturn(false);
+        when(mStrongAuthTracker.getStrongAuthForUser(KeyguardUpdateMonitor.getCurrentUser()))
+                .thenReturn(STRONG_AUTH_REQUIRED_AFTER_BOOT);
 
         // THEN we shouldn't listen for udfps
         assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(true)).isEqualTo(false);
@@ -871,7 +905,6 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void testShouldNotListenForUdfps_whenTrustEnabled() {
         // GIVEN a "we should listen for udfps" state
-        setKeyguardBouncerVisibility(false /* isVisible */);
         mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
         when(mStrongAuthTracker.hasUserAuthenticatedSinceBoot()).thenReturn(true);
 
@@ -886,7 +919,6 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
     @Test
     public void testShouldNotListenForUdfps_whenFaceAuthenticated() {
         // GIVEN a "we should listen for udfps" state
-        setKeyguardBouncerVisibility(false /* isVisible */);
         mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
         when(mStrongAuthTracker.hasUserAuthenticatedSinceBoot()).thenReturn(true);
 
@@ -911,6 +943,34 @@ public class KeyguardUpdateMonitorTest extends SysuiTestCase {
 
         // THEN we shouldn't listen for udfps
         assertThat(mKeyguardUpdateMonitor.shouldListenForFingerprint(true)).isEqualTo(false);
+    }
+
+    @Test
+    public void testShouldNotUpdateBiometricListeningStateOnStatusBarStateChange() {
+        // GIVEN state for face auth should run aside from StatusBarState
+        when(mDevicePolicyManager.getKeyguardDisabledFeatures(null,
+                KeyguardUpdateMonitor.getCurrentUser())).thenReturn(0);
+        mStatusBarStateListener.onStateChanged(StatusBarState.SHADE_LOCKED);
+        setKeyguardBouncerVisibility(false /* isVisible */);
+        mKeyguardUpdateMonitor.dispatchStartedWakingUp();
+        when(mKeyguardBypassController.canBypass()).thenReturn(true);
+        mKeyguardUpdateMonitor.onKeyguardVisibilityChanged(true);
+
+        // WHEN status bar state reports a change to the keyguard that would normally indicate to
+        // start running face auth
+        mStatusBarStateListener.onStateChanged(StatusBarState.KEYGUARD);
+        assertThat(mKeyguardUpdateMonitor.shouldListenForFace()).isEqualTo(true);
+
+        // THEN face unlock is not running b/c status bar state changes don't cause biometric
+        // listening state to update
+        assertThat(mKeyguardUpdateMonitor.isFaceUnlockRunning(
+                KeyguardUpdateMonitor.getCurrentUser())).isEqualTo(false);
+
+        // WHEN biometric listening state is updated
+        mKeyguardUpdateMonitor.onKeyguardVisibilityChanged(true);
+
+        // THEN face unlock is running
+        assertThat(mKeyguardUpdateMonitor.isFaceDetectionRunning()).isEqualTo(true);
     }
 
     @Test

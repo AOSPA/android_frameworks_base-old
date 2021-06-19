@@ -76,6 +76,7 @@ import android.os.Binder;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ICancellationSignal;
+import android.os.PackageTagsList;
 import android.os.ParcelFileDescriptor;
 import android.os.Process;
 import android.os.RemoteException;
@@ -275,7 +276,7 @@ public class LocationManagerService extends ILocationManager.Stub implements
 
         mInjector.getSettingsHelper().addOnLocationEnabledChangedListener(
                 this::onLocationModeChanged);
-        mInjector.getSettingsHelper().addOnIgnoreSettingsPackageWhitelistChangedListener(
+        mInjector.getSettingsHelper().addIgnoreSettingsAllowlistChangedListener(
                 () -> refreshAppOpsRestrictions(UserHandle.USER_ALL));
         mInjector.getUserInfoHelper().addListener((userId, change) -> {
             if (change == UserInfoHelper.UserListener.USER_STARTED) {
@@ -652,9 +653,8 @@ public class LocationManagerService extends ILocationManager.Stub implements
     }
 
     @Override
-    public String[] getIgnoreSettingsWhitelist() {
-        return mInjector.getSettingsHelper().getIgnoreSettingsPackageWhitelist().toArray(
-                new String[0]);
+    public PackageTagsList getIgnoreSettingsAllowlist() {
+        return mInjector.getSettingsHelper().getIgnoreSettingsAllowlist();
     }
 
     @Nullable
@@ -1417,21 +1417,19 @@ public class LocationManagerService extends ILocationManager.Stub implements
 
         Preconditions.checkArgument(userId >= 0);
 
-
         boolean enabled = mInjector.getSettingsHelper().isLocationEnabled(userId);
 
-        String[] allowedPackages = null;
+        PackageTagsList allowedPackages = null;
         if (!enabled) {
-            ArraySet<String> packages = new ArraySet<>();
+            PackageTagsList.Builder builder = new PackageTagsList.Builder();
             for (LocationProviderManager manager : mProviderManagers) {
                 CallerIdentity identity = manager.getIdentity();
                 if (identity != null) {
-                    packages.add(identity.getPackageName());
+                    builder.add(identity.getPackageName(), identity.getAttributionTag());
                 }
             }
-            packages.add(mContext.getPackageName());
-            packages.addAll(mInjector.getSettingsHelper().getIgnoreSettingsPackageWhitelist());
-            allowedPackages = packages.toArray(new String[0]);
+            builder.add(mInjector.getSettingsHelper().getIgnoreSettingsAllowlist());
+            allowedPackages = builder.build();
         }
 
         AppOpsManager appOpsManager = Objects.requireNonNull(

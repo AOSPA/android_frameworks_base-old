@@ -98,7 +98,6 @@ extern int register_android_media_AudioVolumeGroupChangeHandler(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
 extern int register_android_media_midi(JNIEnv *env);
-extern int register_android_media_permission_Identity(JNIEnv* env);
 
 namespace android {
 extern int register_android_util_SeempLog(JNIEnv* env);
@@ -128,6 +127,7 @@ extern int register_android_view_SurfaceControlHdrLayerInfoListener(JNIEnv* env)
 extern int register_android_view_SurfaceSession(JNIEnv* env);
 extern int register_android_view_CompositionSamplingListener(JNIEnv* env);
 extern int register_android_view_TextureView(JNIEnv* env);
+extern int register_android_view_TunnelModeEnabledListener(JNIEnv* env);
 extern int register_android_database_CursorWindow(JNIEnv* env);
 extern int register_android_database_SQLiteConnection(JNIEnv* env);
 extern int register_android_database_SQLiteGlobal(JNIEnv* env);
@@ -1524,6 +1524,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_view_SurfaceSession),
         REG_JNI(register_android_view_CompositionSamplingListener),
         REG_JNI(register_android_view_TextureView),
+        REG_JNI(register_android_view_TunnelModeEnabledListener),
         REG_JNI(register_com_google_android_gles_jni_EGLImpl),
         REG_JNI(register_com_google_android_gles_jni_GLImpl),
         REG_JNI(register_android_opengl_jni_EGL14),
@@ -1592,7 +1593,6 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_media_RemoteDisplay),
         REG_JNI(register_android_media_ToneGenerator),
         REG_JNI(register_android_media_midi),
-        REG_JNI(register_android_media_permission_Identity),
 
         REG_JNI(register_android_opengl_classes),
         REG_JNI(register_android_server_NetworkManagementSocketTagger),
