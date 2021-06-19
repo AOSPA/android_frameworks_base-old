@@ -16,6 +16,24 @@
       "message": "the null check can removed i guess, since you are already checking above if it\u0027s null and assigning it.",
       "revId": "be1dbc7faa18f4c9eea4e8a70bab46a525008979",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "4954716b_d066d05e",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/FODCircleView.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 370,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2021-06-19T11:30:34Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "9f5eed2b_a79966ff",
+      "revId": "be1dbc7faa18f4c9eea4e8a70bab46a525008979",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
