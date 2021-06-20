@@ -50,6 +50,24 @@
       "message": "true?",
       "revId": "ed233fb2e81baff256ceaa97d627257547756f25",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "b70845db_a41f004a",
+        "filename": "packages/SystemUI/src/com/android/systemui/biometrics/FODCircleView.java",
+        "patchSetId": 1
+      },
+      "lineNbr": 186,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2021-06-20T07:00:05Z",
+      "side": 1,
+      "message": "fixed",
+      "parentUuid": "7737db06_0fc870be",
+      "revId": "ed233fb2e81baff256ceaa97d627257547756f25",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
