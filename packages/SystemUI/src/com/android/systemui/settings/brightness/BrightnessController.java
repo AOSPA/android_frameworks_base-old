@@ -115,6 +115,7 @@ public class BrightnessController implements ToggleSlider.Listener {
     private float mBrightnessMax = PowerManager.BRIGHTNESS_MAX;
 
     private ValueAnimator mSliderAnimator;
+    private float mBrightnessRampRate;
 
     public interface BrightnessStateChangeCallback {
         /** Indicates that some of the brightness settings have changed */
@@ -321,6 +322,8 @@ public class BrightnessController implements ToggleSlider.Listener {
                 Context.VR_SERVICE));
         mAutomaticAvailable = context.getResources().getBoolean(
                 com.android.internal.R.bool.config_automatic_brightness_available);
+        mBrightnessRampRate = mContext.getResources().getFloat(
+                com.android.internal.R.dimen.config_brightnessRampRateFastFloat);
 
         if (mIcon != null) {
             if (mAutomaticAvailable) {
@@ -476,8 +479,8 @@ public class BrightnessController implements ToggleSlider.Listener {
             mControl.setValue((int) animation.getAnimatedValue());
             mExternalChange = false;
         });
-        final long animationDuration = SLIDER_ANIMATION_DURATION * Math.abs(
-                mControl.getValue() - target) / GAMMA_SPACE_MAX;
+        final long animationDuration = Math.round(SLIDER_ANIMATION_DURATION * Math.abs(
+                mControl.getValue() - target)/mBrightnessRampRate) / GAMMA_SPACE_MAX;
         mSliderAnimator.setDuration(animationDuration);
         mSliderAnimator.start();
     }
