@@ -1462,11 +1462,12 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
                 state = TelephonyManager.SIM_STATE_NETWORK_LOCKED;
             } else if (Intent.SIM_STATE_CARD_IO_ERROR.equals(stateExtra)) {
                 state = TelephonyManager.SIM_STATE_CARD_IO_ERROR;
-            } else if (Intent.SIM_STATE_LOADED.equals(stateExtra)
-                    || Intent.SIM_STATE_IMSI.equals(stateExtra)) {
+            } else if (Intent.SIM_STATE_IMSI.equals(stateExtra)) {
                 // This is required because telephony doesn't return to "READY" after
                 // these state transitions. See bug 7197471.
                 state = TelephonyManager.SIM_STATE_READY;
+            } else if (Intent.SIM_STATE_LOADED.equals(stateExtra)) {
+                state = TelephonyManager.SIM_STATE_LOADED;
             } else {
                 state = TelephonyManager.SIM_STATE_UNKNOWN;
             }

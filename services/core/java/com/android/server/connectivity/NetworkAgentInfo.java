@@ -1004,15 +1004,6 @@ public class NetworkAgentInfo implements Comparable<NetworkAgentInfo>, NetworkRa
             Log.wtf(TAG, toShortString() + ": request " + requestId + " already lingered");
         }
         final long expiryMs = now + duration;
-        final long oldExpiryMs = mInactivityTimers.isEmpty() ? 0 : mInactivityTimers.last().expiryMs;
-
-        if(!mConnService.satisfiesMobileNetworkDataCheck(networkCapabilities) &&
-                oldExpiryMs > expiryMs) {
-            if (VDBG) Log.d(TAG, "Network on non DDS should not linger for more than 5 sec."
-                    + "Removing the existing inactivity timers.");
-            mInactivityTimers.clear();
-        }
-
         InactivityTimer timer = new InactivityTimer(requestId, expiryMs);
         if (VDBG) Log.d(TAG, "Adding InactivityTimer " + timer + " to " + toShortString());
         mInactivityTimers.add(timer);
