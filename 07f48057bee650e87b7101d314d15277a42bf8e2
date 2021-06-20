@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "881447f0_8f117610",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 3
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2021-06-20T02:52:14Z",
+      "side": 1,
+      "message": "fixes the weird padding when you just have volume and battery icon",
+      "revId": "07f48057bee650e87b7101d314d15277a42bf8e2",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
