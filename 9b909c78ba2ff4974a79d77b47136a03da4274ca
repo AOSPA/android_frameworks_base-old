@@ -16,6 +16,24 @@
       "message": "I like this in general but personally, I find the tile background too bright/dark. It doesn\u0027t really differ from the QS background.",
       "revId": "9b909c78ba2ff4974a79d77b47136a03da4274ca",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "c7d9066f_ddeca1ca",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 5
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000465
+      },
+      "writtenOn": "2021-06-21T17:12:27Z",
+      "side": 1,
+      "message": "Oh, forgot to mention it: This only applies to disabled tiles.",
+      "parentUuid": "5b5c0cfc_4867221d",
+      "revId": "9b909c78ba2ff4974a79d77b47136a03da4274ca",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
