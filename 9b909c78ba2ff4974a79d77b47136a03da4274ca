@@ -34,6 +34,23 @@
       "parentUuid": "5b5c0cfc_4867221d",
       "revId": "9b909c78ba2ff4974a79d77b47136a03da4274ca",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "f6f007cd_2dac20bf",
+        "filename": "packages/SystemUI/src/com/android/systemui/qs/tileimpl/QSTileBaseView.java",
+        "patchSetId": 5
+      },
+      "lineNbr": 72,
+      "author": {
+        "id": 1000468
+      },
+      "writtenOn": "2021-06-22T05:29:44Z",
+      "side": 1,
+      "message": "both can be final, no?",
+      "revId": "9b909c78ba2ff4974a79d77b47136a03da4274ca",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
