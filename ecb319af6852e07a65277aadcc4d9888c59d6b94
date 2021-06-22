@@ -121,6 +121,24 @@
       "message": "synchronize this on mLock instead of the instance itself",
       "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "8c2467b2_935ad2f5",
+        "filename": "services/core/java/com/android/server/BatteryService.java",
+        "patchSetId": 3
+      },
+      "lineNbr": 281,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-06-22T19:23:36Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "8e289471_fa9fbb71",
+      "revId": "ecb319af6852e07a65277aadcc4d9888c59d6b94",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
   ]
 }
