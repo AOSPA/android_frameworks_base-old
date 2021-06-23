@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "9fb1d781_cee0ad21",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 7
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000579
+      },
+      "writtenOn": "2021-06-23T15:13:35Z",
+      "side": 1,
+      "message": "I would rather not have this merged unless the toggle is added like commit message says and is disabled by default\nsince it looks ugly with some accent colours",
+      "revId": "6ef5a8bfe709e2d7755d50a43606378b846efd69",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
