@@ -341,4 +341,8 @@ public class KeyguardUpdateMonitorCallback {
      */
     public void onRequireUnlockForNfc() { }
 
+    /**
+     * Called when the notification shade is expanded or collapsed.
+     */
+    public void onShadeExpandedChanged(boolean expanded) { }
 }
