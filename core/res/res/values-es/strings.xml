@@ -148,7 +148,7 @@
     <string name="wfc_mode_wifi_only_summary" msgid="104951993894678665">"Solo Wi-Fi"</string>
     <!-- no translation found for crossSimFormat_spn (9125246077491634262) -->
     <skip />
-    <string name="crossSimFormat_spn_cross_sim_calling" msgid="5620807020002879057">"Llamadas de reserva de <xliff:g id="SPN">%s</xliff:g>"</string>
+    <string name="crossSimFormat_spn_cross_sim_calling" msgid="5620807020002879057">"Alternativa para llamadas de <xliff:g id="SPN">%s</xliff:g>"</string>
     <string name="cfTemplateNotForwarded" msgid="862202427794270501">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: No desviada"</string>
     <string name="cfTemplateForwarded" msgid="9132506315842157860">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g>"</string>
     <string name="cfTemplateForwardedTime" msgid="735042369233323609">"<xliff:g id="BEARER_SERVICE_CODE">{0}</xliff:g>: <xliff:g id="DIALING_NUMBER">{1}</xliff:g> transcurridos <xliff:g id="TIME_DELAY">{2}</xliff:g> segundos"</string>
@@ -1458,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"Permite a una aplicación solicitar la eliminación de paquetes."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"solicitar permiso para ignorar las optimizaciones de la batería"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"Permite que una aplicación solicite permiso para ignorar las optimizaciones de la batería."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"Da dos toques para acceder al control de zoom."</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"No se ha podido añadir el widget."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"Ir"</string>
@@ -1866,8 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Actualizado por el administrador"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Eliminado por el administrador"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Aceptar"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (5444908404021316250) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"El modo Ahorro de batería activa el tema oscuro y limita o desactiva la actividad en segundo plano, algunos efectos visuales, ciertas funciones y algunas conexiones de red."</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"El modo Ahorro de batería activa el tema oscuro y limita o desactiva la actividad en segundo plano, algunos efectos visuales, ciertas funciones y algunas conexiones de red."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Ahorro de datos evita que algunas aplicaciones envíen o reciban datos en segundo plano, lo que puede reducir el uso de datos. Una aplicación activa puede acceder a los datos, aunque con menos frecuencia. Esto significa que es posible que, por ejemplo, algunas imágenes no se muestren hasta que las toques."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"¿Activar Ahorro de datos?"</string>

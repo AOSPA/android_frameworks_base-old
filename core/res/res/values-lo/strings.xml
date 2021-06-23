@@ -1458,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"ອະນຸຍາດໃຫ້ແອັບພລິເຄຊັນຮ້ອງຂໍການລຶບແພັກເກດ."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"ຖາມເພື່ອໃຫ້ເພີກເສີຍການປັບແຕ່ງແບັດເຕີຣີ"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"ອະນຸຍາດໃຫ້ແອັບຖາມສິດອະນຸຍາດເພື່ອເພີກເສີຍຕໍ່ການປັບແຕ່ງແບັດເຕີຣີສຳລັບແອັບນັ້ນ."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"ແຕະສອງເທື່ອເພື່ອຄວບຄຸມການຊູມ"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"ບໍ່ສາມາດເພີ່ມວິດເຈັດໄດ້."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"ໄປ"</string>
@@ -1866,8 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"ຖືກອັບໂຫລດໂດຍຜູ້ເບິ່ງແຍງລະບົບຂອງທ່ານ"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"ຖືກລຶບອອກໂດຍຜູ້ເບິ່ງແຍງລະບົບຂອງທ່ານ"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ຕົກລົງ"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (5444908404021316250) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"ຕົວປະຢັດແບັດເຕີຣີຈະເປີດໃຊ້ຮູບແບບສີສັນມືດ ແລະ ຈຳກັດ ຫຼື ປິດການເຄື່ອນໄຫວໃນພື້ນຫຼັງ, ເອັບເຟັກທາງພາບຈຳນວນໜຶ່ງ, ຄຸນສົມບັດບາງຢ່າງ ແລະ ການເຊື່ອມຕໍ່ເຄືອຂ່າຍບາງອັນ."</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"ຕົວປະຢັດແບັດເຕີຣີຈະເປີດໃຊ້ຮູບແບບສີສັນມືດ ແລະ ຈຳກັດ ຫຼື ປິດການເຄື່ອນໄຫວໃນພື້ນຫຼັງ, ເອັບເຟັກທາງພາບຈຳນວນໜຶ່ງ, ຄຸນສົມບັດບາງຢ່າງ ແລະ ການເຊື່ອມຕໍ່ເຄືອຂ່າຍບາງອັນ."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"ເພື່ອຊ່ວຍຫຼຸດຜ່ອນການນຳໃຊ້ຂໍ້ມູນ, ຕົວປະຢັດອິນເຕີເນັດຈະປ້ອງກັນບໍ່ໃຫ້ບາງແອັບສົ່ງ ຫຼື ຮັບຂໍ້ມູນໃນພື້ນຫຼັງ. ແອັບໃດໜຶ່ງທີ່ທ່ານກຳລັງໃຊ້ຢູ່ຈະສາມາດເຂົ້າເຖິງຂໍ້ມູນໄດ້ ແຕ່ອາດເຂົ້າເຖິງໄດ້ຖີ່ໜ້ອຍລົງ. ນີ້ອາດໝາຍຄວາມວ່າ ຮູບພາບຕ່າງໆອາດບໍ່ສະແດງຈົນກວ່າທ່ານຈະແຕະໃສ່ກ່ອນ."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"ເປີດຕົວປະຢັດອິນເຕີເນັດບໍ?"</string>

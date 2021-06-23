@@ -18,8 +18,6 @@ package com.android.systemui.biometrics;
 
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FACE;
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRINT;
-import static android.hardware.biometrics.BiometricManager.Authenticators;
-import static android.hardware.biometrics.BiometricManager.BiometricMultiSensorMode;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -33,7 +31,10 @@ import android.content.IntentFilter;
 import android.content.res.Configuration;
 import android.graphics.PointF;
 import android.graphics.RectF;
+import android.hardware.biometrics.BiometricAuthenticator.Modality;
 import android.hardware.biometrics.BiometricConstants;
+import android.hardware.biometrics.BiometricManager.Authenticators;
+import android.hardware.biometrics.BiometricManager.BiometricMultiSensorMode;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
@@ -42,6 +43,7 @@ import android.hardware.face.FaceSensorPropertiesInternal;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.IFingerprintAuthenticatorsRegisteredCallback;
+import android.hardware.fingerprint.IUdfpsHbmListener;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -98,6 +100,8 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     private WindowManager mWindowManager;
     @Nullable
     private UdfpsController mUdfpsController;
+    @Nullable
+    private IUdfpsHbmListener mUdfpsHbmListener;
     @Nullable
     private SidefpsController mSidefpsController;
     @VisibleForTesting
@@ -469,6 +473,24 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         mActivityTaskManager.registerTaskStackListener(mTaskStackListener);
     }
 
+    /**
+     * Stores the listener received from {@link com.android.server.display.DisplayModeDirector}.
+     *
+     * DisplayModeDirector implements {@link IUdfpsHbmListener} and registers it with this class by
+     * calling {@link CommandQueue#setUdfpsHbmListener(IUdfpsHbmListener)}.
+     */
+    @Override
+    public void setUdfpsHbmListener(IUdfpsHbmListener listener) {
+        mUdfpsHbmListener = listener;
+    }
+
+    /**
+     * @return IUdfpsHbmListener that can be set by DisplayModeDirector.
+     */
+    @Nullable public IUdfpsHbmListener getUdfpsHbmListener() {
+        return mUdfpsHbmListener;
+    }
+
     @Override
     public void showAuthenticationDialog(PromptInfo promptInfo, IBiometricSysuiReceiver receiver,
             int[] sensorIds, boolean credentialAllowed, boolean requireConfirmation,
@@ -525,11 +547,11 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
     }
 
     @Override
-    public void onBiometricHelp(String message) {
+    public void onBiometricHelp(@Modality int modality, String message) {
         if (DEBUG) Log.d(TAG, "onBiometricHelp: " + message);
 
         if (mCurrentDialog != null) {
-            mCurrentDialog.onHelp(message);
+            mCurrentDialog.onHelp(modality, message);
         } else {
             Log.w(TAG, "onBiometricHelp callback but dialog gone");
         }
@@ -540,7 +562,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
         return mUdfpsProps;
     }
 
-    private String getErrorString(int modality, int error, int vendorCode) {
+    private String getErrorString(@Modality int modality, int error, int vendorCode) {
         switch (modality) {
             case TYPE_FACE:
                 return FaceManager.getErrorString(mContext, error, vendorCode);
@@ -559,7 +581,7 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
      * example, KeyguardUpdateMonitor has its own {@link FingerprintManager.AuthenticationCallback}.
      */
     @Override
-    public void onBiometricError(int modality, int error, int vendorCode) {
+    public void onBiometricError(@Modality int modality, int error, int vendorCode) {
         if (DEBUG) {
             Log.d(TAG, String.format("onBiometricError(%d, %d, %d)", modality, error, vendorCode));
         }
@@ -580,11 +602,11 @@ public class AuthController extends SystemUI implements CommandQueue.Callbacks,
                         ? mContext.getString(R.string.biometric_not_recognized)
                         : getErrorString(modality, error, vendorCode);
                 if (DEBUG) Log.d(TAG, "onBiometricError, soft error: " + errorMessage);
-                mCurrentDialog.onAuthenticationFailed(errorMessage);
+                mCurrentDialog.onAuthenticationFailed(modality, errorMessage);
             } else {
                 final String errorMessage = getErrorString(modality, error, vendorCode);
                 if (DEBUG) Log.d(TAG, "onBiometricError, hard error: " + errorMessage);
-                mCurrentDialog.onError(errorMessage);
+                mCurrentDialog.onError(modality, errorMessage);
             }
         } else {
             Log.w(TAG, "onBiometricError callback but dialog is gone");

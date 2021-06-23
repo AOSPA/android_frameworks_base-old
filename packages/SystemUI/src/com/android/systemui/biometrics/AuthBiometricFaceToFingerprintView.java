@@ -22,7 +22,7 @@ import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRIN
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.hardware.biometrics.BiometricAuthenticator;
+import android.hardware.biometrics.BiometricAuthenticator.Modality;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -87,9 +87,11 @@ public class AuthBiometricFaceToFingerprintView extends AuthBiometricFaceView {
         }
     }
 
-    @BiometricAuthenticator.Modality private int mActiveSensorType = TYPE_FACE;
+    @Modality
+    private int mActiveSensorType = TYPE_FACE;
 
-    @Nullable UdfpsDialogMeasureAdapter mUdfpsMeasureAdapter;
+    @Nullable
+    private UdfpsDialogMeasureAdapter mUdfpsMeasureAdapter;
 
     public AuthBiometricFaceToFingerprintView(Context context) {
         super(context);
@@ -126,11 +128,31 @@ public class AuthBiometricFaceToFingerprintView extends AuthBiometricFaceView {
     }
 
     @Override
+    public void onAuthenticationFailed(
+            @Modality int modality, @Nullable String failureReason) {
+        super.onAuthenticationFailed(modality, checkErrorForFallback(failureReason));
+    }
+
+    @Override
+    public void onError(int modality, String error) {
+        super.onError(modality, checkErrorForFallback(error));
+    }
+
+    private String checkErrorForFallback(String message) {
+        if (mActiveSensorType == TYPE_FACE) {
+            Log.d(TAG, "Falling back to fingerprint: " + message);
+
+            // switching from face -> fingerprint mode, suppress root error messages
+            mCallback.onAction(Callback.ACTION_START_DELAYED_FINGERPRINT_SENSOR);
+            return mContext.getString(R.string.fingerprint_dialog_use_fingerprint_instead);
+        }
+        return message;
+    }
+
+    @Override
     @BiometricState
     protected int getStateForAfterError() {
         if (mActiveSensorType == TYPE_FACE) {
-            mHandler.post(() -> mCallback.onAction(
-                    Callback.ACTION_START_DELAYED_FINGERPRINT_SENSOR));
             return STATE_AUTHENTICATING;
         }
 
@@ -155,7 +177,7 @@ public class AuthBiometricFaceToFingerprintView extends AuthBiometricFaceView {
     }
 
     @Override
-    public void updateState(int newState) {
+    public void updateState(@BiometricState int newState) {
         if (mState == STATE_HELP || mState == STATE_ERROR) {
             mActiveSensorType = TYPE_FINGERPRINT;
 

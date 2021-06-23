@@ -2661,8 +2661,10 @@ public class NotificationManagerService extends SystemService {
             mRoleObserver = roleObserver;
             LauncherApps launcherApps =
                     (LauncherApps) getContext().getSystemService(Context.LAUNCHER_APPS_SERVICE);
+            UserManager userManager = (UserManager) getContext().getSystemService(
+                    Context.USER_SERVICE);
             mShortcutHelper = new ShortcutHelper(launcherApps, mShortcutListener, getLocalService(
-                    ShortcutServiceInternal.class));
+                    ShortcutServiceInternal.class), userManager);
             BubbleExtractor bubbsExtractor = mRankingHelper.findExtractor(BubbleExtractor.class);
             if (bubbsExtractor != null) {
                 bubbsExtractor.setShortcutHelper(mShortcutHelper);
@@ -3052,17 +3054,19 @@ public class NotificationManagerService extends SystemService {
         }
     }
 
-    protected void maybeReportForegroundServiceUpdate(final NotificationRecord r) {
+    protected void reportForegroundServiceUpdate(boolean shown,
+            final Notification notification, final int id, final String pkg, final int userId) {
+        mHandler.post(() -> {
+            mAmi.onForegroundServiceNotificationUpdate(shown, notification, id, pkg, userId);
+        });
+    }
+
+    protected void maybeReportForegroundServiceUpdate(final NotificationRecord r, boolean shown) {
         if (r.isForegroundService()) {
             // snapshot live state for the asynchronous operation
             final StatusBarNotification sbn = r.getSbn();
-            final Notification notification = sbn.getNotification();
-            final int id = sbn.getId();
-            final String pkg = sbn.getPackageName();
-            final int userId = sbn.getUser().getIdentifier();
-            mHandler.post(() -> {
-                mAmi.onForegroundServiceNotificationUpdate(notification, id, pkg, userId);
-            });
+            reportForegroundServiceUpdate(shown, sbn.getNotification(), sbn.getId(),
+                    sbn.getPackageName(), sbn.getUser().getIdentifier());
         }
     }
 
@@ -6194,6 +6198,7 @@ public class NotificationManagerService extends SystemService {
             // because the service lifecycle logic has retained responsibility for its
             // handling.
             if (!isNotificationShownInternal(pkg, tag, id, userId)) {
+                reportForegroundServiceUpdate(false, notification, id, pkg, userId);
                 return;
             }
         }
@@ -7121,7 +7126,7 @@ public class NotificationManagerService extends SystemService {
 
                     maybeRecordInterruptionLocked(r);
                     maybeRegisterMessageSent(r);
-                    maybeReportForegroundServiceUpdate(r);
+                    maybeReportForegroundServiceUpdate(r, true);
 
                     // Log event to statsd
                     mNotificationRecordLogger.maybeLogNotificationPosted(r, old, position,

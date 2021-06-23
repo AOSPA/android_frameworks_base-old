@@ -342,7 +342,7 @@
     <string name="quick_settings_bluetooth_secondary_label_hearing_aids" msgid="3003338571871392293">"Eshitish apparatlari"</string>
     <string name="quick_settings_bluetooth_secondary_label_transient" msgid="3882884317600669650">"Yoqilmoqda…"</string>
     <string name="quick_settings_brightness_label" msgid="680259653088849563">"Yorqinlik"</string>
-    <string name="quick_settings_rotation_unlocked_label" msgid="2359922767950346112">"Avtomatik burilish"</string>
+    <string name="quick_settings_rotation_unlocked_label" msgid="2359922767950346112">"Avto-burilish"</string>
     <string name="accessibility_quick_settings_rotation" msgid="4800050198392260738">"Ekranning avtomatik burilishi"</string>
     <string name="accessibility_quick_settings_rotation_value" msgid="2916484894750819251">"<xliff:g id="ID_1">%s</xliff:g> rejimi"</string>
     <string name="quick_settings_rotation_locked_label" msgid="4420863550666310319">"Aylanmaydigan qilingan"</string>
@@ -408,7 +408,7 @@
     <string name="quick_settings_cellular_detail_data_used" msgid="6798849610647988987">"<xliff:g id="DATA_USED">%s</xliff:g> sarflandi"</string>
     <string name="quick_settings_cellular_detail_data_limit" msgid="1791389609409211628">"Cheklov: <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
     <string name="quick_settings_cellular_detail_data_warning" msgid="7957253810481086455">"Ogohlantirish: <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
-    <string name="quick_settings_work_mode_label" msgid="6440531507319809121">"Ishga oid ilovalar"</string>
+    <string name="quick_settings_work_mode_label" msgid="6440531507319809121">"Ish ilovalari"</string>
     <string name="quick_settings_night_display_label" msgid="8180030659141778180">"Tungi rejim"</string>
     <string name="quick_settings_night_secondary_label_on_at_sunset" msgid="3358706312129866626">"Kunbotarda yoqish"</string>
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4063448287758262485">"Quyosh chiqqunicha"</string>
@@ -423,7 +423,7 @@
     <string name="quick_settings_nfc_label" msgid="1054317416221168085">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="3465000058515424663">"NFC o‘chiq"</string>
     <string name="quick_settings_nfc_on" msgid="1004976611203202230">"NFC yoniq"</string>
-    <string name="quick_settings_screen_record_label" msgid="8650355346742003694">"Ekranni yozib olish"</string>
+    <string name="quick_settings_screen_record_label" msgid="8650355346742003694">"Ekran yozuvi"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"Boshlash"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"Toʻxtatish"</string>
     <string name="sensor_privacy_start_use_mic_dialog_title" msgid="563796653825944944">"Qurilma mikrofoni blokdan chiqarilsinmi?"</string>
@@ -666,6 +666,7 @@
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Signal"</string>
     <string name="wallet_title" msgid="5369767670735827105">"Wallet"</string>
+    <string name="wallet_empty_state_label" msgid="7776761245237530394">"Telefonda tezroq va xavfsizroq xarid qilish uchun sozlang"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Hammasi"</string>
     <string name="wallet_action_button_label_unlock" msgid="8663239748726774487">"Toʻlov uchun qulfdan chiqarish"</string>
     <string name="wallet_secondary_label_no_card" msgid="1282609666895946317">"Sozlanmagan"</string>
@@ -1084,7 +1085,11 @@
     <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Yopish"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Davom etish"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Sozlamalar"</string>
+    <string name="controls_media_playing_item_description" msgid="4531853311504359098">"<xliff:g id="APP_LABEL">%3$s</xliff:g> ilovasida ijro etilmoqda: <xliff:g id="SONG_NAME">%1$s</xliff:g> – <xliff:g id="ARTIST_NAME">%2$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"Ijro"</string>
+    <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"<xliff:g id="APP_LABEL">%1$s</xliff:g> ilovasini ochish"</string>
+    <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"<xliff:g id="APP_LABEL">%3$s</xliff:g> ilovasida ijro etish: <xliff:g id="SONG_NAME">%1$s</xliff:g> – <xliff:g id="ARTIST_NAME">%2$s</xliff:g>"</string>
+    <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"<xliff:g id="APP_LABEL">%2$s</xliff:g> ilovasida ijro etilmoqda: <xliff:g id="SONG_NAME">%1$s</xliff:g>"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Nofaol. Ilovani tekshiring"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Xato, qayta urinilmoqda…"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"Topilmadi"</string>
@@ -1128,9 +1133,9 @@
     <string name="location_status_content_description" msgid="2982386178160071305">"<xliff:g id="NAME">%1$s</xliff:g> joylashuvni ulashmoqda"</string>
     <string name="new_story_status" msgid="9012195158584846525">"Yangi hikoya"</string>
     <string name="new_story_status_content_description" msgid="4963137422622516708">"<xliff:g id="NAME">%1$s</xliff:g> yangi hikoyani ulashdi"</string>
-    <string name="video_status" msgid="4548544654316843225">"Tomosha"</string>
-    <string name="audio_status" msgid="4237055636967709208">"Gapiring"</string>
-    <string name="game_status" msgid="1340694320630973259">"Ijro etilmoqda"</string>
+    <string name="video_status" msgid="4548544654316843225">"Tomosha qilmoqda"</string>
+    <string name="audio_status" msgid="4237055636967709208">"Tinglamoqda"</string>
+    <string name="game_status" msgid="1340694320630973259">"Oʻynamoqda"</string>
     <string name="empty_user_name" msgid="3389155775773578300">"Doʻstlar"</string>
     <string name="empty_status" msgid="5938893404951307749">"Bugun yozishaylik!"</string>
     <string name="status_before_loading" msgid="1500477307859631381">"Kontent tezda chiqadi"</string>

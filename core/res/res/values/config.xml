@@ -1759,6 +1759,13 @@
         <item>com.android.location.fused</item>
     </string-array>
 
+    <!-- Package name(s) of Advanced Driver Assistance applications. These packages have additional
+    management of access to location, specific to driving assistance use-cases. They must be system
+    packages. This configuration is only applicable to devices that declare
+    PackageManager.FEATURE_AUTOMOTIVE. -->
+    <string-array name="config_locationDriverAssistancePackageNames" translatable="false">
+    </string-array>
+
     <!-- This string array can be overriden to enable test location providers initially. -->
     <!-- Array of "[locationProviderName],[requiresNetwork],
          [requiresSatellite],[requiresCell],[hasMonetaryCost],
@@ -4991,6 +4998,15 @@
 
     <!-- List containing the allowed install sources for accessibility service. -->
     <string-array name="config_accessibility_allowed_install_source" translatable="false"/>
+
+    <!-- Default value for Settings.ASSIST_LONG_PRESS_HOME_ENABLED -->
+    <bool name="config_assistLongPressHomeEnabledDefault">true</bool>
+    <!-- Default value for Settings.ASSIST_TOUCH_GESTURE_ENABLED -->
+    <bool name="config_assistTouchGestureEnabledDefault">true</bool>
+
+    <!-- The amount of dimming to apply to wallpapers with mid range luminance. 0 displays
+         the wallpaper at full brightness. 1 displays the wallpaper as fully black. -->
+    <item name="config_wallpaperDimAmount" format="float" type="dimen">0.05</item>
 
     <!-- Configure emergency apn -->
     <string name="config_emergency_apn" translatable="false">sos</string>

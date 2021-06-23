@@ -151,12 +151,12 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     private final int mDialogShowAnimationDurationMs;
     private final int mDialogHideAnimationDurationMs;
-    private final int mDialogWidth;
-    private final int mDialogCornerRadius;
-    private final int mRingerDrawerItemSize;
-    private final int mRingerRowsPadding;
-    private final boolean mShowVibrate;
-    private final int mRingerCount;
+    private int mDialogWidth;
+    private int mDialogCornerRadius;
+    private int mRingerDrawerItemSize;
+    private int mRingerRowsPadding;
+    private boolean mShowVibrate;
+    private int mRingerCount;
     private final boolean mShowLowMediaVolumeIcon;
     private final boolean mChangeVolumeRowTintWhenInactive;
 
@@ -288,18 +288,8 @@ public class VolumeDialogImpl implements VolumeDialog,
                 mDialogRowsView.invalidate();
             };
         }
-        mDialogWidth = mContext.getResources().getDimensionPixelSize(
-                R.dimen.volume_dialog_panel_width);
-        mDialogCornerRadius = mContext.getResources().getDimensionPixelSize(
-                R.dimen.volume_dialog_panel_width_half);
-        mRingerDrawerItemSize = mContext.getResources().getDimensionPixelSize(
-                R.dimen.volume_ringer_drawer_item_size);
-        mRingerRowsPadding = mContext.getResources().getDimensionPixelSize(
-                R.dimen.volume_dialog_ringer_rows_padding);
-        mShowVibrate = mController.hasVibrator();
 
-        // Normal, mute, and possibly vibrate.
-        mRingerCount = mShowVibrate ? 3 : 2;
+        initDimens();
     }
 
     @Override
@@ -377,6 +367,8 @@ public class VolumeDialogImpl implements VolumeDialog,
 
     private void initDialog() {
         mDialog = new CustomDialog(mContext);
+
+        initDimens();
 
         mConfigurableTexts = new ConfigurableTexts(mContext);
         mHovering = false;
@@ -567,6 +559,21 @@ public class VolumeDialogImpl implements VolumeDialog,
         initRingerH();
         initSettingsH();
         initODICaptionsH();
+    }
+
+    private void initDimens() {
+        mDialogWidth = mContext.getResources().getDimensionPixelSize(
+                R.dimen.volume_dialog_panel_width);
+        mDialogCornerRadius = mContext.getResources().getDimensionPixelSize(
+                R.dimen.volume_dialog_panel_width_half);
+        mRingerDrawerItemSize = mContext.getResources().getDimensionPixelSize(
+                R.dimen.volume_ringer_drawer_item_size);
+        mRingerRowsPadding = mContext.getResources().getDimensionPixelSize(
+                R.dimen.volume_dialog_ringer_rows_padding);
+        mShowVibrate = mController.hasVibrator();
+
+        // Normal, mute, and possibly vibrate.
+        mRingerCount = mShowVibrate ? 3 : 2;
     }
 
     protected ViewGroup getDialogView() {
@@ -932,6 +939,13 @@ public class VolumeDialogImpl implements VolumeDialog,
                     .start();
         }
 
+        // When the ringer drawer is open, tapping the currently selected ringer will set the ringer
+        // to the current ringer mode. Change the content description to that, instead of the 'tap
+        // to change ringer mode' default.
+        mSelectedRingerContainer.setContentDescription(
+                mContext.getString(getStringDescriptionResourceForRingerMode(
+                        mState.ringerModeInternal)));
+
         mIsRingerDrawerOpen = true;
     }
 
@@ -975,6 +989,11 @@ public class VolumeDialogImpl implements VolumeDialog,
                 .translationX(0f)
                 .translationY(0f)
                 .start();
+
+        // When the drawer is closed, tapping the selected ringer drawer will open it, allowing the
+        // user to change the ringer.
+        mSelectedRingerContainer.setContentDescription(
+                mContext.getString(R.string.volume_ringer_change));
 
         mIsRingerDrawerOpen = false;
     }
@@ -1464,20 +1483,8 @@ public class VolumeDialogImpl implements VolumeDialog,
     }
 
     private void addAccessibilityDescription(View view, int currState, String hintLabel) {
-        int currStateResId;
-        switch (currState) {
-            case RINGER_MODE_SILENT:
-                currStateResId = R.string.volume_ringer_status_silent;
-                break;
-            case RINGER_MODE_VIBRATE:
-                currStateResId = R.string.volume_ringer_status_vibrate;
-                break;
-            case RINGER_MODE_NORMAL:
-            default:
-                currStateResId = R.string.volume_ringer_status_normal;
-        }
-
-        view.setContentDescription(mContext.getString(currStateResId));
+        view.setContentDescription(
+                mContext.getString(getStringDescriptionResourceForRingerMode(currState)));
         view.setAccessibilityDelegate(new AccessibilityDelegate() {
             public void onInitializeAccessibilityNodeInfo(View host, AccessibilityNodeInfo info) {
                 super.onInitializeAccessibilityNodeInfo(host, info);
@@ -1485,6 +1492,18 @@ public class VolumeDialogImpl implements VolumeDialog,
                                 AccessibilityNodeInfo.ACTION_CLICK, hintLabel));
             }
         });
+    }
+
+    private int getStringDescriptionResourceForRingerMode(int mode) {
+        switch (mode) {
+            case RINGER_MODE_SILENT:
+                return R.string.volume_ringer_status_silent;
+            case RINGER_MODE_VIBRATE:
+                return R.string.volume_ringer_status_vibrate;
+            case RINGER_MODE_NORMAL:
+            default:
+                return R.string.volume_ringer_status_normal;
+        }
     }
 
     /**

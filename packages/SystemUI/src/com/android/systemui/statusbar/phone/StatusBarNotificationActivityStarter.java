@@ -252,10 +252,11 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         }
 
         boolean isActivityIntent = intent != null && intent.isActivity() && !isBubble;
-        final boolean afterKeyguardGone = isActivityIntent
+        final boolean willLaunchResolverActivity = isActivityIntent
                 && mActivityIntentHelper.wouldLaunchResolverActivity(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
-        final boolean animate = mStatusBar.shouldAnimateLaunch(isActivityIntent);
+        final boolean animate = !willLaunchResolverActivity
+                && mStatusBar.shouldAnimateLaunch(isActivityIntent);
         boolean showOverLockscreen = mKeyguardStateController.isShowing() && intent != null
                 && mActivityIntentHelper.wouldShowOverLockscreen(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
@@ -268,7 +269,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             postKeyguardAction.onDismiss();
         } else {
             mActivityStarter.dismissKeyguardThenExecute(
-                    postKeyguardAction, null /* cancel */, afterKeyguardGone);
+                    postKeyguardAction, null /* cancel */, willLaunchResolverActivity);
         }
     }
 
@@ -281,15 +282,6 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             boolean animate,
             boolean showOverLockscreen) {
         mLogger.logHandleClickAfterKeyguardDismissed(entry.getKey());
-
-        // TODO: Some of this code may be able to move to NotificationEntryManager.
-        String key = row.getEntry().getSbn().getKey();
-        if (mHeadsUpManager != null && mHeadsUpManager.isAlerting(key)) {
-            // Release the HUN notification to the shade.
-            if (mPresenter.isPresenterFullyCollapsed()) {
-                HeadsUpUtil.setIsClickedHeadsUpNotification(row, true);
-            }
-        }
 
         final Runnable runnable = () -> handleNotificationClickAfterPanelCollapsed(
                 entry, row, controller, intent,
@@ -305,7 +297,9 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         } else {
             runnable.run();
         }
-        return !mNotificationPanel.isFullyCollapsed();
+
+        // Always defer the keyguard dismiss when animating.
+        return animate || !mNotificationPanel.isFullyCollapsed();
     }
 
     private void handleNotificationClickAfterPanelCollapsed(
@@ -337,7 +331,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 // bypass work challenge
                 if (mStatusBarRemoteInputCallback.startWorkChallengeIfNecessary(userId,
                         intent.getIntentSender(), notificationKey)) {
-                    removeHUN(row);
+                    removeHunAfterClick(row);
                     // Show work challenge, do not run PendingIntent and
                     // remove notification
                     collapseOnMainThread();
@@ -357,7 +351,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         final boolean canBubble = entry.canBubble();
         if (canBubble) {
             mLogger.logExpandingBubble(notificationKey);
-            removeHUN(row);
+            removeHunAfterClick(row);
             expandBubbleStackOnMainThread(entry);
         } else {
             startNotificationIntent(intent, fillInIntent, entry, row, animate, isActivityIntent);
@@ -508,9 +502,14 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         }, null, false /* afterKeyguardGone */);
     }
 
-    private void removeHUN(ExpandableNotificationRow row) {
+    private void removeHunAfterClick(ExpandableNotificationRow row) {
         String key = row.getEntry().getSbn().getKey();
         if (mHeadsUpManager != null && mHeadsUpManager.isAlerting(key)) {
+            // Release the HUN notification to the shade.
+            if (mPresenter.isPresenterFullyCollapsed()) {
+                HeadsUpUtil.setNeedsHeadsUpDisappearAnimationAfterClick(row, true);
+            }
+
             // In most cases, when FLAG_AUTO_CANCEL is set, the notification will
             // become canceled shortly by NoMan, but we can't assume that.
             mHeadsUpManager.removeNotification(key, true /* releaseImmediately */);
