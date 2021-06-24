@@ -35,6 +35,7 @@ import android.os.Message;
 import android.os.Process;
 import android.os.ServiceManager;
 import android.os.SystemClock;
+import android.os.SystemProperties;
 import android.os.incremental.IIncrementalService;
 import android.os.incremental.IncrementalManager;
 import android.os.incremental.IncrementalMetrics;
@@ -48,6 +49,7 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.os.ProcessCpuTracker;
 import com.android.internal.util.FrameworkStatsLog;
+import com.android.server.am.trace.SmartTraceUtils;
 import com.android.server.MemoryPressureUtil;
 import com.android.server.Watchdog;
 import com.android.server.wm.WindowProcessController;
@@ -90,6 +92,8 @@ class ProcessErrorStateRecord {
     @CompositeRWLock({"mService", "mProcLock"})
     private boolean mNotResponding;
 
+    @CompositeRWLock({"mService", "mProcLock"})
+    private boolean mDefered;
     /**
      * The report about crash of the app, generated &amp; stored when an app gets into a crash.
      * Will be "null" when all is OK.
@@ -163,6 +167,16 @@ class ProcessErrorStateRecord {
     void setNotResponding(boolean notResponding) {
         mNotResponding = notResponding;
         mApp.getWindowProcessController().setNotResponding(notResponding);
+    }
+
+    @GuardedBy(anyOf = {"mService", "mProcLock"})
+    boolean isDefered() {
+        return mDefered;
+    }
+
+    @GuardedBy({"mService", "mProcLock"})
+    void setDefered(boolean defer) {
+         mDefered = defer;
     }
 
     @GuardedBy(anyOf = {"mService", "mProcLock"})
@@ -355,7 +369,11 @@ class ProcessErrorStateRecord {
         report.append(MemoryPressureUtil.currentPsiState());
         ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(true);
         ArrayList<Integer> nativePids = null;
-
+        boolean smTraceEnabled = isSmartTraceEnabled(isSilentAnr);
+        boolean isDefered;
+        synchronized (mProcLock) {
+            isDefered = isDefered();
+        }
         // don't dump native PIDs for background ANRs unless it is the process of interest
         String[] nativeProc = null;
         if (isSilentAnr || onlyDumpSelf) {
@@ -373,7 +391,9 @@ class ProcessErrorStateRecord {
                 }
             }
         } else {
-            nativePids = Watchdog.getInstance().getInterestingNativePids();
+            if (!smTraceEnabled || SmartTraceUtils.isDumpPredefinedPidsEnabled()) {
+                nativePids = Watchdog.getInstance().getInterestingNativePids();
+             }
         }
 
         // For background ANRs, don't pass the ProcessCpuTracker to
@@ -385,6 +405,19 @@ class ProcessErrorStateRecord {
                 isSilentAnr ? null : processCpuTracker, isSilentAnr ? null : lastPids,
                 nativePids, tracesFileException, offsets, annotation);
 
+        long dueTime = SystemClock.uptimeMillis()
+                    + AnrHelper.APP_NOT_RESPONDING_DEFER_TIMEOUT_MILLIS;
+        if (smTraceEnabled && tracesFile != null){
+            long time = SystemClock.uptimeMillis();
+            SmartTraceUtils.dumpStackTraces(pid, firstPids, nativePids, tracesFile);
+            Slog.i(TAG, mApp.processName + " hit anr, dumpStackTraces cost "
+                    +(SystemClock.uptimeMillis() - time) +"  ms");
+        }
+
+        if (isPerfettoDumpEnabled(isSilentAnr) && !isDefered){
+            SmartTraceUtils.traceStart();
+        }
+
         if (isMonitorCpuUsage()) {
             mService.updateCpuStatsNow();
             mService.mAppProfiler.printCurrentCpuState(report, anrTime);
@@ -394,8 +427,37 @@ class ProcessErrorStateRecord {
         report.append(tracesFileException.getBuffer());
 
         info.append(processCpuTracker.printCurrentState(anrTime));
+        if(shouldDeferAppNotResponding(isSilentAnr)) {
+            if(!isDefered){
+                Slog.e(TAG, info.toString());
+                long now = SystemClock.uptimeMillis();
+                long delay = 0;
+                if (dueTime < now){
+                    delay = 2000;
+                }else {
+                    delay = dueTime - now;
+                }
+                Slog.i(TAG, "Defer to handle " + mApp.processName
+                                 + " ANR, delay "+delay+" ms  ");
+                mApp.mService.mAnrHelper.deferAppNotResponding(mApp, activityShortComponentName,
+                      aInfo, parentShortComponentName, parentProcess,
+                      aboveSystem, annotation, delay);
+                synchronized (mProcLock) {
+                    setDefered(true);
+                    setNotResponding(false);
+                    setNotRespondingReport(null);
+                }
+                return;
+            }else {
+                synchronized (mProcLock) {
+                    setDefered(false);
+                }
+                Slog.d(TAG, mApp.processName +" has been defered, handle anr right now  ");
+            }
+        }else {
+            Slog.e(TAG, info.toString());
+        }
 
-        Slog.e(TAG, info.toString());
         if (tracesFile == null) {
             // There is no trace file, so dump (only) the alleged culprit's threads to the log
             Process.sendSignal(pid, Process.SIGNAL_QUIT);
@@ -536,6 +598,21 @@ class ProcessErrorStateRecord {
         }
         startAppProblemLSP();
         mApp.getWindowProcessController().stopFreezingActivities();
+    }
+
+    private boolean isSmartTraceEnabled(boolean isSilentAnr) {
+        return SmartTraceUtils.isSmartTraceEnabled() &&
+             (!isSilentAnr || (isSilentAnr && SmartTraceUtils.isSmartTraceEnabledOnBgApp()));
+    }
+
+    private boolean isPerfettoDumpEnabled(boolean isSilentAnr) {
+        return SmartTraceUtils.isPerfettoDumpEnabled() &&
+             (!isSilentAnr || (isSilentAnr && SmartTraceUtils.isPerfettoDumpEnabledOnBgApp()));
+    }
+
+    private boolean shouldDeferAppNotResponding(boolean isSilentAnr) {
+         return (isSmartTraceEnabled(isSilentAnr) ||
+                    isPerfettoDumpEnabled(isSilentAnr));
     }
 
     @GuardedBy({"mService", "mProcLock"})

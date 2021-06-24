@@ -46,6 +46,7 @@ import com.android.internal.os.ZygoteConnectionConstants;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.am.TraceErrorLogger;
+import com.android.server.am.trace.SmartTraceUtils;
 import com.android.server.wm.SurfaceAnimationThread;
 
 import java.io.BufferedReader;
@@ -667,10 +668,15 @@ public class Watchdog {
             } // END synchronized (mLock)
 
             if (doWaitedHalfDump) {
+                ArrayList<Integer> nativePids = getInterestingNativePids();
                 // We've waited half the deadlock-detection interval.  Pull a stack
                 // trace and wait another half.
-                ActivityManagerService.dumpStackTraces(pids, null, null,
-                        getInterestingNativePids(), null, subject);
+                initialStack = ActivityManagerService.dumpStackTraces(pids, null, null,
+                        nativePids, null, subject);
+                if (initialStack != null){
+                    SmartTraceUtils.dumpStackTraces(Process.myPid(), pids,
+                        nativePids, initialStack);
+                }
                 continue;
             }
 
@@ -691,6 +697,7 @@ public class Watchdog {
             // Perfetto. Ideally, the Perfetto trace capture should happen as close to the
             // point in time when the Watchdog happens as possible.
             FrameworkStatsLog.write(FrameworkStatsLog.SYSTEM_SERVER_WATCHDOG_OCCURRED, subject);
+            ArrayList<Integer> nativePids = getInterestingNativePids();
 
             long anrTime = SystemClock.uptimeMillis();
             StringBuilder report = new StringBuilder();
@@ -698,12 +705,21 @@ public class Watchdog {
             ProcessCpuTracker processCpuTracker = new ProcessCpuTracker(false);
             StringWriter tracesFileException = new StringWriter();
             final File finalStack = ActivityManagerService.dumpStackTraces(
-                    pids, processCpuTracker, new SparseArray<>(), getInterestingNativePids(),
+                    pids, processCpuTracker, new SparseArray<>(), nativePids,
                     tracesFileException, subject);
-
+            if (finalStack != null){
+                SmartTraceUtils.dumpStackTraces(Process.myPid(), pids, nativePids, finalStack);
+            }
             //Collect Binder State logs to get status of all the transactions
             if (Build.IS_DEBUGGABLE) {
                 binderStateRead();
+            }
+
+            long dueTime = 0;
+            if(SmartTraceUtils.isPerfettoDumpEnabled()){
+               SmartTraceUtils.traceStart();
+               //delay 30s to make sure perfetto trace dumped completely
+               dueTime = SystemClock.uptimeMillis() + 30000;
             }
 
             // Give some extra time to make sure the stack traces get written.
@@ -834,6 +850,13 @@ public class Watchdog {
                 Slog.w(TAG, "*** WATCHDOG KILLING SYSTEM PROCESS: " + subject);
                 WatchdogDiagnostics.diagnoseCheckers(blockedCheckers);
                 Slog.w(TAG, "*** GOODBYE!");
+                if(SmartTraceUtils.isPerfettoDumpEnabled() && dueTime > SystemClock.uptimeMillis()){
+                    long timeDelta = dueTime - SystemClock.uptimeMillis();
+                    // wait until perfetto log to be dumped completely
+                    Slog.i(TAG,"Sleep "+ timeDelta
+                            +" ms to make sure perfetto log to be dumped completely");
+                    SystemClock.sleep(timeDelta);
+                }
                 if (!Build.IS_USER && isCrashLoopFound()
                         && !WatchdogProperties.should_ignore_fatal_count().orElse(false)) {
                     breakCrashLoop();
