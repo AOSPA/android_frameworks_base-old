@@ -486,6 +486,9 @@
 
     <dimen name="volume_dialog_slider_height">116dp</dimen>
 
+    <!-- (volume_dialog_panel_width - rounded_slider_icon_size) / 2 -->
+    <dimen name="volume_slider_icon_inset">11dp</dimen>
+
     <dimen name="volume_dialog_track_width">4dp</dimen>
 
     <dimen name="volume_dialog_track_corner_radius">2dp</dimen>
@@ -771,6 +774,9 @@
     <!-- Move distance for the unlock hint animation on the lockscreen -->
     <dimen name="hint_move_distance">75dp</dimen>
 
+    <!-- The overshoot amount when the panel flings open -->
+    <dimen name="panel_overshoot_amount">16dp</dimen>
+
     <!-- The width of the region on the left/right edge of the screen for performing the camera/
          phone hints. -->
     <dimen name="edge_tap_area_width">48dp</dimen>
@@ -892,6 +898,10 @@
     <!-- The width/height of the keyguard bottom area icon view on keyguard. -->
     <dimen name="keyguard_affordance_height">48dp</dimen>
     <dimen name="keyguard_affordance_width">48dp</dimen>
+
+    <dimen name="keyguard_affordance_wallet_height">48dp</dimen>
+    <dimen name="keyguard_affordance_wallet_width">48dp</dimen>
+
     <dimen name="keyguard_affordance_horizontal_offset">32dp</dimen>
     <dimen name="keyguard_affordance_vertical_offset">32dp</dimen>
     <!-- Value should be at least sum of 'keyguard_affordance_width' +
@@ -903,7 +913,7 @@
     <dimen name="keyguard_lock_width">42dp</dimen>
     <dimen name="keyguard_lock_padding">20dp</dimen>
 
-    <dimen name="keyguard_indication_margin_bottom">125dp</dimen>
+    <dimen name="keyguard_indication_margin_bottom">32dp</dimen>
 
     <!-- The text size for battery level -->
     <dimen name="battery_level_text_size">12sp</dimen>
@@ -1229,7 +1239,7 @@
 
     <!--  Blur radius on status bar window and power menu  -->
     <dimen name="min_window_blur_radius">1px</dimen>
-    <dimen name="max_window_blur_radius">150px</dimen>
+    <dimen name="max_window_blur_radius">72px</dimen>
 
     <!-- How much into a DisplayCutout's bounds we can go, on each side -->
     <dimen name="display_cutout_margin_consumption">0px</dimen>
@@ -1275,7 +1285,7 @@
     <dimen name="qs_media_action_spacing">4dp</dimen>
     <dimen name="qs_media_action_top">8dp</dimen>
     <dimen name="qs_seamless_height">24dp</dimen>
-    <dimen name="qs_seamless_icon_size">16dp</dimen>
+    <dimen name="qs_seamless_icon_size">12dp</dimen>
     <dimen name="qs_seamless_fallback_icon_size">@dimen/qs_seamless_icon_size</dimen>
     <dimen name="qs_seamless_fallback_margin">20dp</dimen>
     <dimen name="qs_footer_horizontal_margin">22dp</dimen>
@@ -1285,7 +1295,7 @@
     <dimen name="qs_media_disabled_seekbar_vertical_padding">36dp</dimen>
 
     <!-- Size of Smartspace media recommendations cards in the QSPanel carousel -->
-    <dimen name="qs_aa_media_rec_album_size_collapsed">66dp</dimen>
+    <dimen name="qs_aa_media_rec_album_size_collapsed">72dp</dimen>
     <dimen name="qs_aa_media_rec_album_size_expanded">80dp</dimen>
     <dimen name="qs_aa_media_rec_album_margin">8dp</dimen>
     <dimen name="qq_aa_media_rec_header_text_size">16sp</dimen>
@@ -1324,15 +1334,15 @@
     <dimen name="control_spinner_padding_horizontal">20dp</dimen>
     <dimen name="control_text_size">14sp</dimen>
     <dimen name="control_icon_size">24dp</dimen>
-    <dimen name="control_spacing">4dp</dimen>
+    <dimen name="control_spacing">8dp</dimen>
     <dimen name="control_list_divider">1dp</dimen>
-    <dimen name="control_corner_radius">12dp</dimen>
-    <dimen name="control_height">106dp</dimen>
+    <dimen name="control_corner_radius">14dp</dimen>
+    <dimen name="control_height">104dp</dimen>
     <dimen name="control_padding">12dp</dimen>
     <dimen name="control_padding_adjustment">4dp</dimen>
     <dimen name="control_status_normal">14sp</dimen>
     <dimen name="control_status_expanded">18sp</dimen>
-    <dimen name="control_base_item_margin">2dp</dimen>
+    <dimen name="control_base_item_margin">4dp</dimen>
     <dimen name="control_status_padding">3dp</dimen>
     <fraction name="controls_toggle_bg_intensity">5%</fraction>
     <fraction name="controls_dimmed_alpha">40%</fraction>
@@ -1427,7 +1437,7 @@
 
     <!-- Distance that the full shade transition takes in order for media to fully transition to
          the shade -->
-    <dimen name="lockscreen_shade_media_transition_distance">140dp</dimen>
+    <dimen name="lockscreen_shade_media_transition_distance">120dp</dimen>
 
     <!-- Maximum overshoot for the topPadding of notifications when transitioning to the full
          shade -->
@@ -1449,7 +1459,8 @@
     <dimen name="max_people_avatar_size_for_large_content">64dp</dimen>
     <dimen name="max_people_avatar_size">108dp</dimen>
     <dimen name="name_text_size_for_small">14sp</dimen>
-    <dimen name="name_text_size_for_content">12sp</dimen>
+    <dimen name="name_text_size_for_medium_content">12sp</dimen>
+    <dimen name="name_text_size_for_large_content">14sp</dimen>
     <dimen name="empty_name_text_size_for_medium">12sp</dimen>
     <dimen name="max_name_text_size_for_medium">14sp</dimen>
     <dimen name="medium_height_for_max_name_text_size">104dp</dimen>

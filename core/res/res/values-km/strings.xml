@@ -1458,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"អនុញ្ញាត​ឲ្យ​កម្មវិធី​ស្នើសុំលុប​កញ្ចប់។"</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"ស្នើឲ្យមិនអើពើចំពោះការបង្កើនប្រសិទ្ធភាពថ្ម"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"អនុញ្ញាតឲ្យកម្មវិធីស្នើសុំការអនុញ្ញាត ដើម្បីមិនអើពើចំពោះការបង្កើនប្រសិទ្ធភាពថ្ម។"</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"ប៉ះ ពីរ​ដង​ដើម្បី​ពិនិត្យ​ការ​ពង្រីក"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"មិន​អាច​បន្ថែម​ធាតុ​ក្រាហ្វិក។"</string>
     <string name="ime_action_go" msgid="5536744546326495436">"ទៅ"</string>
@@ -1866,8 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"ធ្វើ​បច្ចុប្បន្នភាព​ដោយ​អ្នកគ្រប់គ្រង​របស់​អ្នក"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"លុប​ដោយ​អ្នកគ្រប់គ្រង​របស់​អ្នក"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"យល់ព្រម"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (5444908404021316250) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"មុខងារ​សន្សំថ្មបើករចនាប័ទ្មងងឹត និងដាក់កំហិត ឬបិទសកម្មភាពផ្ទៃខាងក្រោយ ឥទ្ធិពលរូបភាពមួយចំនួន មុខងារជាក់លាក់ និងការតភ្ជាប់បណ្ដាញមួយចំនួន។"</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"មុខងារ​សន្សំថ្មបើករចនាប័ទ្មងងឹត និងដាក់កំហិត ឬបិទសកម្មភាពផ្ទៃខាងក្រោយ ឥទ្ធិពលរូបភាពមួយចំនួន មុខងារជាក់លាក់ និងការតភ្ជាប់បណ្ដាញមួយចំនួន។"</string>
     <string name="data_saver_description" msgid="4995164271550590517">"ដើម្បីជួយកាត់បន្ថយការប្រើប្រាស់ទិន្នន័យ កម្មវិធីសន្សំសំចៃទិន្នន័យរារាំងកម្មវិធីមួយចំនួនមិនឲ្យបញ្ជូន ឬទទួលទិន្នន័យនៅផ្ទៃខាងក្រោយទេ។ កម្មវិធីដែលអ្នកកំពុងប្រើនាពេលបច្ចុប្បន្នអាចចូលប្រើប្រាស់​ទិន្នន័យបាន ប៉ុន្តែអាចនឹងមិនញឹកញាប់ដូចមុនទេ។ ឧទាហរណ៍ រូបភាពមិនបង្ហាញទេ លុះត្រាតែអ្នកប៉ះរូបភាពទាំងនោះ។"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"បើកកម្មវិធីសន្សំសំចៃទិន្នន័យ?"</string>

@@ -582,12 +582,12 @@ public class ParsingPackageUtils {
      */
     private ParseResult<ParsingPackage> parseBaseApk(ParseInput input, String apkPath,
             String codePath, Resources res, XmlResourceParser parser, int flags)
-            throws XmlPullParserException, IOException, PackageParserException {
+            throws XmlPullParserException, IOException {
         final String splitName;
         final String pkgName;
 
         ParseResult<Pair<String, String>> packageSplitResult =
-                ApkLiteParseUtils.parsePackageSplitNames(input, parser, parser);
+                ApkLiteParseUtils.parsePackageSplitNames(input, parser);
         if (packageSplitResult.isError()) {
             return input.error(packageSplitResult);
         }
@@ -1460,9 +1460,9 @@ public class ParsingPackageUtils {
         if (SDK_VERSION > 0) {
             TypedArray sa = res.obtainAttributes(parser, R.styleable.AndroidManifestUsesSdk);
             try {
-                int minVers = 1;
+                int minVers = ParsingUtils.DEFAULT_MIN_SDK_VERSION;
                 String minCode = null;
-                int targetVers = 0;
+                int targetVers = ParsingUtils.DEFAULT_TARGET_SDK_VERSION;
                 String targetCode = null;
 
                 TypedValue val = sa.peekValue(R.styleable.AndroidManifestUsesSdk_minSdkVersion);
@@ -1609,7 +1609,7 @@ public class ParsingPackageUtils {
             @Nullable String minCode, @IntRange(from = 1) int platformSdkVersion,
             @NonNull String[] platformSdkCodenames, @NonNull ParseInput input) {
         // If it's a release SDK, make sure we meet the minimum SDK requirement.
-        if (minCode == null) {
+        if (minCode == null || true) {
             if (minVers <= platformSdkVersion) {
                 return input.success(minVers);
             }
@@ -1647,7 +1647,7 @@ public class ParsingPackageUtils {
             @Nullable String targetCode, @NonNull String[] platformSdkCodenames,
             @NonNull ParseInput input) {
         // If it's a release SDK, return the version number unmodified.
-        if (targetCode == null) {
+        if (targetCode == null || true) {
             return input.success(targetVers);
         }
 

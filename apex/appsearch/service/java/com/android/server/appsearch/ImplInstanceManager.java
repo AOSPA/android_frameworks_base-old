@@ -16,18 +16,15 @@
 
 package com.android.server.appsearch;
 
-import static android.content.pm.PackageManager.MATCH_FACTORY_ONLY;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.appsearch.exceptions.AppSearchException;
 import android.content.Context;
-import android.content.pm.PackageManager;
 import android.os.Environment;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 
-import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.server.appsearch.external.localstorage.AppSearchImpl;
 import com.android.server.appsearch.external.localstorage.AppSearchLogger;
@@ -49,12 +46,6 @@ public final class ImplInstanceManager {
     @GuardedBy("mInstancesLocked")
     private final Map<UserHandle, AppSearchImpl> mInstancesLocked = new ArrayMap<>();
 
-    private final String mGlobalQuerierPackage;
-
-    private ImplInstanceManager(@NonNull String globalQuerierPackage) {
-        mGlobalQuerierPackage = globalQuerierPackage;
-    }
-
     /**
      * Gets an instance of ImplInstanceManager to be used.
      *
@@ -66,9 +57,7 @@ public final class ImplInstanceManager {
         if (sImplInstanceManager == null) {
             synchronized (ImplInstanceManager.class) {
                 if (sImplInstanceManager == null) {
-                    sImplInstanceManager =
-                            new ImplInstanceManager(
-                                    getGlobalAppSearchDataQuerierPackageName(context));
+                    sImplInstanceManager = new ImplInstanceManager();
                 }
             }
         }
@@ -91,7 +80,7 @@ public final class ImplInstanceManager {
      * <p>If no AppSearchImpl instance exists for the unlocked user, Icing will be initialized and
      * one will be created.
      *
-     * @param context The context
+     * @param context The system context
      * @param userHandle The multi-user handle of the device user calling AppSearch
      * @return An initialized {@link AppSearchImpl} for this user
      */
@@ -106,29 +95,11 @@ public final class ImplInstanceManager {
         synchronized (mInstancesLocked) {
             AppSearchImpl instance = mInstancesLocked.get(userHandle);
             if (instance == null) {
-                instance = createImpl(context, userHandle, logger);
+                Context userContext = context.createContextAsUser(userHandle, /*flags=*/ 0);
+                instance = createImpl(userContext, userHandle, logger);
                 mInstancesLocked.put(userHandle, instance);
             }
             return instance;
-        }
-    }
-
-    /**
-     * Remove an instance of {@link AppSearchImpl} for the given user.
-     *
-     * <p>This method should only be called if {@link AppSearchManagerService} receives an
-     * ACTION_USER_REMOVED, which the instance of given user should be removed.
-     *
-     * <p>If the user is removed, the "credential encrypted" system directory where icing lives will
-     * be auto-deleted. So we shouldn't worry about persist data or close the AppSearchImpl.
-     *
-     * @param userHandle The multi-user user handle of the user that need to be removed.
-     */
-    public void removeAppSearchImplForUser(@NonNull UserHandle userHandle) {
-        Objects.requireNonNull(userHandle);
-        synchronized (mInstancesLocked) {
-            // no need to close and persist data to disk since we are removing them now.
-            mInstancesLocked.remove(userHandle);
         }
     }
 
@@ -177,41 +148,11 @@ public final class ImplInstanceManager {
     }
 
     private AppSearchImpl createImpl(
-            @NonNull Context context,
+            @NonNull Context userContext,
             @NonNull UserHandle userHandle,
             @Nullable AppSearchLogger logger)
             throws AppSearchException {
         File appSearchDir = getAppSearchDir(userHandle);
-        // TODO(b/181787682): Swap AppSearchImpl and VisibilityStore to accept a UserHandle too
-        return AppSearchImpl.create(
-                appSearchDir,
-                context,
-                userHandle.getIdentifier(),
-                mGlobalQuerierPackage,
-                /*logger=*/ null);
-    }
-
-    /**
-     * Returns the global querier package if it's a system package. Otherwise, empty string.
-     *
-     * @param context Context of the system service.
-     */
-    @NonNull
-    private static String getGlobalAppSearchDataQuerierPackageName(@NonNull Context context) {
-        String globalAppSearchDataQuerierPackage =
-                context.getString(R.string.config_globalAppSearchDataQuerierPackage);
-        try {
-            if (context.getPackageManager()
-                    .getPackageInfoAsUser(
-                            globalAppSearchDataQuerierPackage,
-                            MATCH_FACTORY_ONLY,
-                            UserHandle.USER_SYSTEM)
-                    == null) {
-                return "";
-            }
-        } catch (PackageManager.NameNotFoundException e) {
-            return "";
-        }
-        return globalAppSearchDataQuerierPackage;
+        return AppSearchImpl.create(appSearchDir, userContext, /*logger=*/ null);
     }
 }

@@ -21,7 +21,6 @@ import android.animation.AnimatorListenerAdapter;
 import android.animation.ValueAnimator;
 import android.util.Property;
 import android.view.View;
-import android.view.animation.Interpolator;
 
 import com.android.keyguard.KeyguardSliceView;
 import com.android.systemui.R;
@@ -50,11 +49,8 @@ public class StackStateAnimator {
     public static final int ANIMATION_DURATION_SWIPE = 260;
     public static final int ANIMATION_DURATION_DIMMED_ACTIVATED = 220;
     public static final int ANIMATION_DURATION_CLOSE_REMOTE_INPUT = 150;
-    public static final int ANIMATION_DURATION_HEADS_UP_APPEAR = 550;
-    public static final int ANIMATION_DURATION_HEADS_UP_APPEAR_CLOSED
-            = (int) (ANIMATION_DURATION_HEADS_UP_APPEAR
-                    * HeadsUpAppearInterpolator.getFractionUntilOvershoot());
-    public static final int ANIMATION_DURATION_HEADS_UP_DISAPPEAR = 300;
+    public static final int ANIMATION_DURATION_HEADS_UP_APPEAR = 400;
+    public static final int ANIMATION_DURATION_HEADS_UP_DISAPPEAR = 400;
     public static final int ANIMATION_DURATION_PULSE_APPEAR =
             KeyguardSliceView.DEFAULT_ANIM_DURATION;
     public static final int ANIMATION_DURATION_BLOCKING_HELPER_FADE = 240;
@@ -63,11 +59,7 @@ public class StackStateAnimator {
     public static final int ANIMATION_DELAY_PER_ELEMENT_MANUAL = 32;
     public static final int ANIMATION_DELAY_PER_ELEMENT_GO_TO_FULL_SHADE = 48;
     public static final int DELAY_EFFECT_MAX_INDEX_DIFFERENCE = 2;
-    public static final int ANIMATION_DELAY_HEADS_UP = 120;
-    public static final int ANIMATION_DELAY_HEADS_UP_CLICKED= 120;
     private static final int MAX_STAGGER_COUNT = 5;
-    private static final HeadsUpAppearInterpolator HEADS_UP_APPEAR_INTERPOLATOR =
-            new HeadsUpAppearInterpolator();
 
     private final int mGoToFullShadeAppearingTranslation;
     private final int mPulsingAppearingTranslation;
@@ -116,14 +108,6 @@ public class StackStateAnimator {
             @Override
             public boolean wasAdded(View view) {
                 return mNewAddChildren.contains(view);
-            }
-
-            @Override
-            public Interpolator getCustomInterpolator(View child, Property property) {
-                if (mHeadsUpAppearChildren.contains(child) && View.TRANSLATION_Y.equals(property)) {
-                    return HEADS_UP_APPEAR_INTERPOLATOR;
-                }
-                return null;
             }
         };
     }
@@ -424,8 +408,7 @@ public class StackStateAnimator {
                 if (event.headsUpFromBottom) {
                     mTmpState.yTranslation = mHeadsUpAppearHeightBottom;
                 } else {
-                    mTmpState.yTranslation = 0;
-                    changingView.performAddAnimation(0, ANIMATION_DURATION_HEADS_UP_APPEAR_CLOSED,
+                    changingView.performAddAnimation(0, ANIMATION_DURATION_HEADS_UP_APPEAR,
                             true /* isHeadsUpAppear */);
                 }
                 mHeadsUpAppearChildren.add(changingView);
@@ -436,24 +419,11 @@ public class StackStateAnimator {
                             .AnimationEvent.ANIMATION_TYPE_HEADS_UP_DISAPPEAR_CLICK) {
                 mHeadsUpDisappearChildren.add(changingView);
                 Runnable endRunnable = null;
-                // We need some additional delay in case we were removed to make sure we're not
-                // lagging
-                int extraDelay = event.animationType == NotificationStackScrollLayout
-                        .AnimationEvent.ANIMATION_TYPE_HEADS_UP_DISAPPEAR_CLICK
-                        ? ANIMATION_DELAY_HEADS_UP_CLICKED
-                        : 0;
                 if (changingView.getParent() == null) {
                     // This notification was actually removed, so we need to add it transiently
                     mHostLayout.addTransientView(changingView, 0);
                     changingView.setTransientContainer(mHostLayout);
                     mTmpState.initFrom(changingView);
-                    mTmpState.yTranslation = 0;
-                    // We temporarily enable Y animations, the real filter will be combined
-                    // afterwards anyway
-                    mAnimationFilter.animateY = true;
-                    mAnimationProperties.delay = extraDelay + ANIMATION_DELAY_HEADS_UP;
-                    mAnimationProperties.duration = ANIMATION_DURATION_HEADS_UP_DISAPPEAR;
-                    mTmpState.animateTo(changingView, mAnimationProperties);
                     endRunnable = () -> removeTransientView(changingView);
                 }
                 float targetLocation = 0;
@@ -483,8 +453,8 @@ public class StackStateAnimator {
                     // running anymore, the panel will instantly hide itself. We need to wait until
                     // the animation is fully finished for this though.
                     long removeAnimationDelay = changingView.performRemoveAnimation(
-                            ANIMATION_DURATION_HEADS_UP_DISAPPEAR + ANIMATION_DELAY_HEADS_UP,
-                            extraDelay, 0.0f, true /* isHeadsUpAppear */, targetLocation,
+                            ANIMATION_DURATION_HEADS_UP_DISAPPEAR,
+                            0, 0.0f, true /* isHeadsUpAppear */, targetLocation,
                             endRunnable, getGlobalAnimationFinishedListener());
                     mAnimationProperties.delay += removeAnimationDelay;
                 } else if (endRunnable != null) {

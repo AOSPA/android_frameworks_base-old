@@ -712,7 +712,7 @@
     <string name="permdesc_bindCarrierMessagingService" msgid="6316457028173478345">"Permite ao propietario vincularse á interface de nivel superior dun servizo de mensaxaría. As aplicacións normais non deberían necesitar este permiso."</string>
     <string name="permlab_bindCarrierServices" msgid="2395596978626237474">"vincular aos servizos do operador"</string>
     <string name="permdesc_bindCarrierServices" msgid="9185614481967262900">"Permite ao titular vincularse aos servizos do operador. As aplicacións normais non deberían necesitar este permiso."</string>
-    <string name="permlab_access_notification_policy" msgid="5524112842876975537">"acceso ao modo Non molestar"</string>
+    <string name="permlab_access_notification_policy" msgid="5524112842876975537">"acceso a Non molestar"</string>
     <string name="permdesc_access_notification_policy" msgid="8538374112403845013">"Permite á aplicación ler e escribir a configuración do modo Non molestar."</string>
     <string name="permlab_startViewPermissionUsage" msgid="1504564328641112341">"iniciar uso de permiso de vista"</string>
     <string name="permdesc_startViewPermissionUsage" msgid="2820325605959586538">"Permite ao propietario iniciar o uso de permisos dunha aplicación. As aplicacións normais non deberían precisalo nunca."</string>
@@ -1458,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"Permite a unha aplicación solicitar a eliminación dos paquetes."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"pedir que se ignore a optimización da batería"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"Fai que unha aplicación poida solicitar permiso para ignorar as optimizacións da batería."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"Toca dúas veces para controlar o zoom"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"Non se puido engadir o widget."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"Ir"</string>
@@ -1866,8 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Actualizado polo teu administrador"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Eliminado polo teu administrador"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Aceptar"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (5444908404021316250) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"Coa función Aforro de batería, actívase o tema escuro e restrínxense ou desactívanse a actividade en segundo plano, algúns efectos visuais e determinadas funcións e conexións de rede."</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"Coa función Aforro de batería, actívase o tema escuro e restrínxense ou desactívanse a actividade en segundo plano, algúns efectos visuais e determinadas funcións e conexións de rede."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Para contribuír a reducir o uso de datos, o aforro de datos impide que algunhas aplicacións envíen ou reciban datos en segundo plano. Cando esteas utilizando unha aplicación, esta poderá acceder aos datos, pero é posible que o faga con menos frecuencia. Por exemplo, poida que as imaxes non se mostren ata que as toques."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Queres activar o aforro de datos?"</string>

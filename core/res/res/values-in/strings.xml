@@ -1458,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"Mengizinkan aplikasi meminta penghapusan paket."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"meminta mengabaikan pengoptimalan baterai"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"Mengizinkan aplikasi meminta izin untuk mengabaikan pengoptimalan baterai bagi aplikasi tersebut."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"Ketuk dua kali untuk kontrol perbesar/perkecil"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"Tidak dapat menambahkan widget."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"Buka"</string>
@@ -1866,8 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Diupdate oleh admin Anda"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Dihapus oleh admin Anda"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"Oke"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (5444908404021316250) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"Penghemat Baterai akan mengaktifkan Tema gelap dan membatasi atau menonaktifkan aktivitas latar belakang, beberapa efek visual, fitur tertentu, dan beberapa koneksi jaringan."</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"Penghemat Baterai akan mengaktifkan Tema gelap dan membatasi atau menonaktifkan aktivitas latar belakang, beberapa efek visual, fitur tertentu, dan beberapa koneksi jaringan."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Untuk membantu mengurangi penggunaan data, Penghemat Data mencegah beberapa aplikasi mengirim atau menerima data di latar belakang. Aplikasi yang sedang digunakan dapat mengakses data, tetapi frekuensinya agak lebih jarang. Misalnya saja, gambar hanya akan ditampilkan setelah diketuk."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Aktifkan Penghemat Data?"</string>

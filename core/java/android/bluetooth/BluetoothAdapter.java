@@ -17,6 +17,8 @@
 
 package android.bluetooth;
 
+import static java.util.Objects.requireNonNull;
+
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -46,6 +48,7 @@ import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.BatteryStats;
@@ -60,8 +63,6 @@ import android.os.SynchronousResultReceiver;
 import android.os.SystemProperties;
 import android.util.Log;
 import android.util.Pair;
-
-import com.android.internal.util.Preconditions;
 
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -721,8 +722,8 @@ public final class BluetoothAdapter {
 
     private final Object mLock = new Object();
     private final Map<LeScanCallback, ScanCallback> mLeScanClients;
-    private static final Map<BluetoothDevice, List<Pair<OnMetadataChangedListener, Executor>>>
-                sMetadataListeners = new HashMap<>();
+    private final Map<BluetoothDevice, List<Pair<OnMetadataChangedListener, Executor>>>
+                mMetadataListeners = new HashMap<>();
     private final Map<BluetoothConnectionCallback, Executor>
             mBluetoothConnectionCallbackExecutorMap = new HashMap<>();
 
@@ -731,14 +732,15 @@ public final class BluetoothAdapter {
      * implementation.
      */
     @SuppressLint("AndroidFrameworkBluetoothPermission")
-    private static final IBluetoothMetadataListener sBluetoothMetadataListener =
+    private final IBluetoothMetadataListener mBluetoothMetadataListener =
             new IBluetoothMetadataListener.Stub() {
         @Override
         public void onMetadataChanged(BluetoothDevice device, int key, byte[] value) {
-            synchronized (sMetadataListeners) {
-                if (sMetadataListeners.containsKey(device)) {
+            Attributable.setAttributionSource(device, mAttributionSource);
+            synchronized (mMetadataListeners) {
+                if (mMetadataListeners.containsKey(device)) {
                     List<Pair<OnMetadataChangedListener, Executor>> list =
-                            sMetadataListeners.get(device);
+                            mMetadataListeners.get(device);
                     for (Pair<OnMetadataChangedListener, Executor> pair : list) {
                         OnMetadataChangedListener listener = pair.first;
                         Executor executor = pair.second;
@@ -2469,7 +2471,9 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return mService.getMostRecentlyConnectedDevices(mAttributionSource);
+                return Attributable.setAttributionSource(
+                        mService.getMostRecentlyConnectedDevices(mAttributionSource),
+                        mAttributionSource);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
@@ -2495,14 +2499,16 @@ public final class BluetoothAdapter {
     public Set<BluetoothDevice> getBondedDevices() {
         android.util.SeempLog.record(61);
         if (getState() != STATE_ON) {
-            return toDeviceSet(new BluetoothDevice[0]);
+            return toDeviceSet(Arrays.asList());
         }
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return toDeviceSet(mService.getBondedDevices(mAttributionSource));
+                return toDeviceSet(Attributable.setAttributionSource(
+                        Arrays.asList(mService.getBondedDevices(mAttributionSource)),
+                        mAttributionSource));
             }
-            return toDeviceSet(new BluetoothDevice[0]);
+            return toDeviceSet(Arrays.asList());
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         } finally {
@@ -3366,10 +3372,10 @@ public final class BluetoothAdapter {
                             }
                         }
                     }
-                    synchronized (sMetadataListeners) {
-                        sMetadataListeners.forEach((device, pair) -> {
+                    synchronized (mMetadataListeners) {
+                        mMetadataListeners.forEach((device, pair) -> {
                             try {
-                                mService.registerMetadataListener(sBluetoothMetadataListener,
+                                mService.registerMetadataListener(mBluetoothMetadataListener,
                                         device, mAttributionSource);
                             } catch (RemoteException e) {
                                 Log.e(TAG, "Failed to register metadata listener", e);
@@ -3512,8 +3518,8 @@ public final class BluetoothAdapter {
          */
         WrappedOobDataCallback(@NonNull OobDataCallback callback,
                 @NonNull @CallbackExecutor Executor executor) {
-            Preconditions.checkNotNull(callback);
-            Preconditions.checkNotNull(executor);
+            requireNonNull(callback);
+            requireNonNull(executor);
             mCallback = callback;
             mExecutor = executor;
         }
@@ -3583,7 +3589,7 @@ public final class BluetoothAdapter {
                 != BluetoothDevice.TRANSPORT_LE) {
             throw new IllegalArgumentException("Invalid transport '" + transport + "'!");
         }
-        Preconditions.checkNotNull(callback);
+        requireNonNull(callback);
         if (!isEnabled()) {
             Log.w(TAG, "generateLocalOobData(): Adapter isn't enabled!");
             callback.onError(BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED);
@@ -3675,8 +3681,8 @@ public final class BluetoothAdapter {
         }
     }
 
-    private Set<BluetoothDevice> toDeviceSet(BluetoothDevice[] devices) {
-        Set<BluetoothDevice> deviceSet = new HashSet<BluetoothDevice>(Arrays.asList(devices));
+    private Set<BluetoothDevice> toDeviceSet(List<BluetoothDevice> devices) {
+        Set<BluetoothDevice> deviceSet = new HashSet<BluetoothDevice>(devices);
         return Collections.unmodifiableSet(deviceSet);
     }
 
@@ -3736,7 +3742,7 @@ public final class BluetoothAdapter {
      * @hide
      */
     public static boolean isAddressRandomStatic(@NonNull String address) {
-        Preconditions.checkNotNull(address);
+        requireNonNull(address);
         return checkBluetoothAddress(address)
                 && (Integer.parseInt(address.split(":")[5], 16) & 0b11) == 0b11;
     }
@@ -4146,13 +4152,13 @@ public final class BluetoothAdapter {
             throw new NullPointerException("executor is null");
         }
 
-        synchronized (sMetadataListeners) {
+        synchronized (mMetadataListeners) {
             List<Pair<OnMetadataChangedListener, Executor>> listenerList =
-                    sMetadataListeners.get(device);
+                    mMetadataListeners.get(device);
             if (listenerList == null) {
                 // Create new listener/executor list for registeration
                 listenerList = new ArrayList<>();
-                sMetadataListeners.put(device, listenerList);
+                mMetadataListeners.put(device, listenerList);
             } else {
                 // Check whether this device was already registed by the lisenter
                 if (listenerList.stream().anyMatch((pair) -> (pair.first.equals(listener)))) {
@@ -4166,7 +4172,7 @@ public final class BluetoothAdapter {
 
             boolean ret = false;
             try {
-                ret = service.registerMetadataListener(sBluetoothMetadataListener, device,
+                ret = service.registerMetadataListener(mBluetoothMetadataListener, device,
                         mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, "registerMetadataListener fail", e);
@@ -4176,7 +4182,7 @@ public final class BluetoothAdapter {
                     listenerList.remove(listenerPair);
                     if (listenerList.isEmpty()) {
                         // Remove the device if its listener list is empty
-                        sMetadataListeners.remove(device);
+                        mMetadataListeners.remove(device);
                     }
                 }
             }
@@ -4215,17 +4221,17 @@ public final class BluetoothAdapter {
             throw new NullPointerException("listener is null");
         }
 
-        synchronized (sMetadataListeners) {
-            if (!sMetadataListeners.containsKey(device)) {
+        synchronized (mMetadataListeners) {
+            if (!mMetadataListeners.containsKey(device)) {
                 throw new IllegalArgumentException("device was not registered");
             }
             // Remove issued listener from the registered device
-            sMetadataListeners.get(device).removeIf((pair) -> (pair.first.equals(listener)));
+            mMetadataListeners.get(device).removeIf((pair) -> (pair.first.equals(listener)));
 
-            if (sMetadataListeners.get(device).isEmpty()) {
+            if (mMetadataListeners.get(device).isEmpty()) {
                 // Unregister to Bluetooth service if all listeners are removed from
                 // the registered device
-                sMetadataListeners.remove(device);
+                mMetadataListeners.remove(device);
                 final IBluetooth service = mService;
                 if (service == null) {
                     // Bluetooth is OFF, do nothing to Bluetooth service.
@@ -4265,6 +4271,7 @@ public final class BluetoothAdapter {
             new IBluetoothConnectionCallback.Stub() {
         @Override
         public void onDeviceConnected(BluetoothDevice device) {
+            Attributable.setAttributionSource(device, mAttributionSource);
             for (Map.Entry<BluetoothConnectionCallback, Executor> callbackExecutorEntry:
                     mBluetoothConnectionCallbackExecutorMap.entrySet()) {
                 BluetoothConnectionCallback callback = callbackExecutorEntry.getKey();
@@ -4275,6 +4282,7 @@ public final class BluetoothAdapter {
 
         @Override
         public void onDeviceDisconnected(BluetoothDevice device, int hciReason) {
+            Attributable.setAttributionSource(device, mAttributionSource);
             for (Map.Entry<BluetoothConnectionCallback, Executor> callbackExecutorEntry:
                     mBluetoothConnectionCallbackExecutorMap.entrySet()) {
                 BluetoothConnectionCallback callback = callbackExecutorEntry.getKey();

@@ -33,7 +33,10 @@ import android.content.pm.ResolveInfo;
 import android.location.LocationManagerInternal;
 import android.net.Uri;
 import android.os.IBinder;
+import android.os.Process;
 import android.os.UserHandle;
+import android.service.voice.VoiceInteractionManagerInternal;
+import android.service.voice.VoiceInteractionManagerInternal.HotwordDetectionServiceIdentity;
 import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -43,8 +46,6 @@ import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.function.DecFunction;
 import com.android.internal.util.function.HeptFunction;
 import com.android.internal.util.function.HexFunction;
-import com.android.internal.util.function.NonaFunction;
-import com.android.internal.util.function.OctFunction;
 import com.android.internal.util.function.QuadFunction;
 import com.android.internal.util.function.QuintFunction;
 import com.android.internal.util.function.TriFunction;
@@ -66,6 +67,11 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
             "android:activity_recognition_allow_listed_tags";
     private static final String ACTIVITY_RECOGNITION_TAGS_SEPARATOR = ";";
 
+    private static ArraySet<String> sExpectedTags = new ArraySet<>(new String[] {
+            "awareness_provider", "activity_recognition_provider", "network_location_provider",
+            "network_location_calibration", "fused_location_provider", "geofencer_provider"});
+
+
     @NonNull
     private final Object mLock = new Object();
 
@@ -74,6 +80,9 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
 
     @NonNull
     private final RoleManager mRoleManager;
+
+    @NonNull
+    private final VoiceInteractionManagerInternal mVoiceInteractionManagerInternal;
 
     /**
      * The locking policy around the location tags is a bit special. Since we want to
@@ -98,6 +107,8 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
     public AppOpsPolicy(@NonNull Context context) {
         mContext = context;
         mRoleManager = mContext.getSystemService(RoleManager.class);
+        mVoiceInteractionManagerInternal = LocalServices.getService(
+                VoiceInteractionManagerInternal.class);
 
         final LocationManagerInternal locationManagerInternal = LocalServices.getService(
                 LocationManagerInternal.class);
@@ -147,7 +158,7 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
     public int checkOperation(int code, int uid, String packageName,
             @Nullable String attributionTag, boolean raw,
             QuintFunction<Integer, Integer, String, String, Boolean, Integer> superImpl) {
-        return superImpl.apply(code, uid, packageName, attributionTag, raw);
+        return superImpl.apply(code, resolveUid(code, uid), packageName, attributionTag, raw);
     }
 
     @Override
@@ -161,8 +172,8 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
             @Nullable String attributionTag, boolean shouldCollectAsyncNotedOp, @Nullable
             String message, boolean shouldCollectMessage, @NonNull HeptFunction<Integer, Integer,
                     String, String, Boolean, String, Boolean, SyncNotedAppOp> superImpl) {
-        return superImpl.apply(resolveDatasourceOp(code, uid, packageName, attributionTag), uid,
-                packageName, attributionTag, shouldCollectAsyncNotedOp,
+        return superImpl.apply(resolveDatasourceOp(code, uid, packageName, attributionTag),
+                resolveUid(code, uid), packageName, attributionTag, shouldCollectAsyncNotedOp,
                 message, shouldCollectMessage);
     }
 
@@ -187,8 +198,9 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
                     String, Boolean, Boolean, String, Boolean, Integer, Integer,
             SyncNotedAppOp> superImpl) {
         return superImpl.apply(token, resolveDatasourceOp(code, uid, packageName, attributionTag),
-                uid, packageName, attributionTag, startIfModeDefault, shouldCollectAsyncNotedOp,
-                message, shouldCollectMessage, attributionFlags, attributionChainId);
+                resolveUid(code, uid), packageName, attributionTag, startIfModeDefault,
+                shouldCollectAsyncNotedOp, message, shouldCollectMessage, attributionFlags,
+                attributionChainId);
     }
 
     @Override
@@ -224,14 +236,32 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
         if (resolvedCode != code) {
             if (isDatasourceAttributionTag(uid, packageName, attributionTag,
                     mLocationTags)) {
+                if (packageName.equals("com.google.android.gms")
+                        && !sExpectedTags.contains(attributionTag)) {
+                    Log.i("AppOpsDebugRemapping", "remapping " + packageName + " location "
+                            + "for tag " + attributionTag);
+                }
                 return resolvedCode;
+            } else if (packageName.equals("com.google.android.gms")
+                    && sExpectedTags.contains(attributionTag)) {
+                Log.i("AppOpsDebugRemapping", "NOT remapping " + packageName + " code "
+                        + code + " for tag " + attributionTag);
             }
         } else {
             resolvedCode = resolveArOp(code);
             if (resolvedCode != code) {
                 if (isDatasourceAttributionTag(uid, packageName, attributionTag,
                         mActivityRecognitionTags)) {
+                    if (packageName.equals("com.google.android.gms")
+                            && !sExpectedTags.contains(attributionTag)) {
+                        Log.i("AppOpsDebugRemapping", "remapping " + packageName + " "
+                                + "activity recognition for tag " + attributionTag);
+                    }
                     return resolvedCode;
+                } else if (packageName.equals("com.google.android.gms")
+                        && sExpectedTags.contains(attributionTag)) {
+                    Log.i("AppOpsDebugRemapping", "NOT remapping " + packageName
+                            + " code " + code + " for tag " + attributionTag);
                 }
             }
         }
@@ -313,6 +343,17 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
             if (appIdTags == null) {
                 appIdTags = new ArrayMap<>();
             }
+
+            // Remove any invalid tags
+            boolean nullRemoved = packageTags.remove(null);
+            boolean nullStrRemoved = packageTags.remove("null");
+            boolean emptyRemoved = packageTags.remove("");
+            if (nullRemoved || nullStrRemoved || emptyRemoved) {
+                Log.e(LOG_TAG, "Attempted to add invalid source attribution tag, removed "
+                        + "null: " + nullRemoved + " removed \"null\": " + nullStrRemoved
+                        + " removed empty string: " + emptyRemoved);
+            }
+
             appIdTags.put(packageName, packageTags);
             datastore.put(appId, appIdTags);
         } else if (appIdTags != null) {
@@ -334,8 +375,24 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
         if (appIdTags != null) {
             final ArraySet<String> packageTags = appIdTags.get(packageName);
             if (packageTags != null && packageTags.contains(attributionTag)) {
+                if (packageName.equals("com.google.android.gms")
+                        && !sExpectedTags.contains(attributionTag)) {
+                    Log.i("AppOpsDebugRemapping", packageName + " tag "
+                            + attributionTag + " in " + packageTags);
+                }
                 return true;
             }
+            if (packageName.equals("com.google.android.gms")
+                    && sExpectedTags.contains(attributionTag)) {
+                Log.i("AppOpsDebugRemapping", packageName + " tag " + attributionTag
+                        + " NOT in " + packageTags);
+            }
+        } else {
+            if (packageName.equals("com.google.android.gms")) {
+                Log.i("AppOpsDebugRemapping", "no package tags for uid " + uid
+                        + " package " + packageName);
+            }
+
         }
         return false;
     }
@@ -355,5 +412,24 @@ public final class AppOpsPolicy implements AppOpsManagerInternal.CheckOpsDelegat
             return AppOpsManager.OP_ACTIVITY_RECOGNITION_SOURCE;
         }
         return code;
+    }
+
+    private int resolveUid(int code, int uid) {
+        // The HotwordDetectionService is an isolated service, which ordinarily cannot hold
+        // permissions. So we allow it to assume the owning package identity for certain
+        // operations.
+        // Note: The package name coming from the audio server is already the one for the owning
+        // package, so we don't need to modify it.
+        if (Process.isIsolated(uid) // simple check which fails-fast for the common case
+                && (code == AppOpsManager.OP_RECORD_AUDIO
+                || code == AppOpsManager.OP_RECORD_AUDIO_HOTWORD)) {
+            final HotwordDetectionServiceIdentity hotwordDetectionServiceIdentity =
+                    mVoiceInteractionManagerInternal.getHotwordDetectionServiceIdentity();
+            if (hotwordDetectionServiceIdentity != null
+                    && uid == hotwordDetectionServiceIdentity.getIsolatedUid()) {
+                uid = hotwordDetectionServiceIdentity.getOwnerUid();
+            }
+        }
+        return uid;
     }
 }

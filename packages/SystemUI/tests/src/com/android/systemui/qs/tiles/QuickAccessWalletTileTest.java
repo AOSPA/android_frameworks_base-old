@@ -46,7 +46,6 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
 import android.os.Handler;
 import android.service.quickaccesswallet.GetWalletCardsError;
-import android.service.quickaccesswallet.GetWalletCardsRequest;
 import android.service.quickaccesswallet.GetWalletCardsResponse;
 import android.service.quickaccesswallet.QuickAccessWalletClient;
 import android.service.quickaccesswallet.QuickAccessWalletService;
@@ -70,12 +69,9 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.settings.SecureSettings;
 import com.android.systemui.wallet.controller.QuickAccessWalletController;
-
-import com.google.common.util.concurrent.MoreExecutors;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -121,12 +117,8 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
     private SecureSettings mSecureSettings;
     @Mock
     private QuickAccessWalletController mController;
-    @Mock
-    private FeatureFlags mFeatureFlags;
     @Captor
     ArgumentCaptor<Intent> mIntentCaptor;
-    @Captor
-    ArgumentCaptor<GetWalletCardsRequest> mRequestCaptor;
     @Captor
     ArgumentCaptor<QuickAccessWalletClient.OnWalletCardsRetrievedCallback> mCallbackCaptor;
 
@@ -144,7 +136,6 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
         doNothing().when(mSpiedContext).startActivity(any(Intent.class));
         when(mHost.getContext()).thenReturn(mSpiedContext);
         when(mHost.getUiEventLogger()).thenReturn(mUiEventLogger);
-        when(mFeatureFlags.isQuickAccessWalletEnabled()).thenReturn(true);
         when(mQuickAccessWalletClient.getServiceLabel()).thenReturn(LABEL);
         when(mQuickAccessWalletClient.isWalletFeatureAvailable()).thenReturn(true);
         when(mQuickAccessWalletClient.isWalletServiceAvailable()).thenReturn(true);
@@ -163,20 +154,12 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
                 mKeyguardStateController,
                 mPackageManager,
                 mSecureSettings,
-                MoreExecutors.directExecutor(),
-                mController,
-                mFeatureFlags);
+                mController);
     }
 
     @Test
     public void testNewTile() {
         assertFalse(mTile.newTileState().handlesLongClick);
-    }
-
-    @Test
-    public void testIsAvailable_featureFlagIsOff() {
-        when(mFeatureFlags.isQuickAccessWalletEnabled()).thenReturn(false);
-        assertFalse(mTile.isAvailable());
     }
 
     @Test

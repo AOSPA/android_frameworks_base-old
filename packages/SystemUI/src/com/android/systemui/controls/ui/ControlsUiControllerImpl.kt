@@ -399,6 +399,12 @@ class ControlsUiControllerImpl @Inject constructor (
                 val baseLayout = inflater.inflate(
                     R.layout.controls_base_item, lastRow, false) as ViewGroup
                 lastRow.addView(baseLayout)
+
+                // Use ConstraintLayout in the future... for now, manually adjust margins
+                if (lastRow.getChildCount() == 1) {
+                    val lp = baseLayout.getLayoutParams() as ViewGroup.MarginLayoutParams
+                    lp.setMarginStart(0)
+                }
                 val cvh = ControlViewHolder(
                     baseLayout,
                     controlsController.get(),
@@ -416,8 +422,12 @@ class ControlsUiControllerImpl @Inject constructor (
         // add spacers if necessary to keep control size consistent
         val mod = selectedStructure.controls.size % maxColumns
         var spacersToAdd = if (mod == 0) 0 else maxColumns - mod
+        val margin = context.resources.getDimensionPixelSize(R.dimen.control_spacing)
         while (spacersToAdd > 0) {
-            lastRow.addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f))
+            val lp = LinearLayout.LayoutParams(0, 0, 1f).apply {
+                setMarginStart(margin)
+            }
+            lastRow.addView(Space(context), lp)
             spacersToAdd--
         }
     }

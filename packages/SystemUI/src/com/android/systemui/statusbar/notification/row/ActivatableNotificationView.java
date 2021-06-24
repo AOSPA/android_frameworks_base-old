@@ -18,7 +18,6 @@ package com.android.systemui.statusbar.notification.row;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.animation.ObjectAnimator;
 import android.animation.ValueAnimator;
 import android.content.Context;
 import android.graphics.Canvas;
@@ -32,6 +31,7 @@ import android.view.animation.Interpolator;
 import android.view.animation.PathInterpolator;
 
 import com.android.internal.jank.InteractionJankMonitor;
+import com.android.internal.jank.InteractionJankMonitor.Configuration;
 import com.android.settingslib.Utils;
 import com.android.systemui.Gefingerpoken;
 import com.android.systemui.R;
@@ -61,12 +61,6 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private static final float HORIZONTAL_ANIMATION_END = 0.2f;
 
     /**
-     * At which point from [0,1] does the alpha animation end (or start when
-     * expanding)? 1.0 meaning that it ends immediately and 0.0 that it is continuously animated.
-     */
-    private static final float ALPHA_ANIMATION_END = 0.0f;
-
-    /**
      * At which point from [0,1] does the horizontal collapse animation start (or start when
      * expanding)? 1.0 meaning that it starts immediately and 0.0 that it is animated at all.
      */
@@ -83,7 +77,16 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
      * or {@link #setOverrideTintColor(int, float)}.
      */
     protected static final int NO_COLOR = 0;
-
+    /**
+     * The content of the view should start showing at animation progress value of
+     * #ALPHA_APPEAR_START_FRACTION.
+     */
+    private static final float ALPHA_APPEAR_START_FRACTION = .4f;
+    /**
+     * The content should show fully with progress at #ALPHA_APPEAR_END_FRACTION
+     * The start of the animation is at #ALPHA_APPEAR_START_FRACTION
+     */
+    private static final float ALPHA_APPEAR_END_FRACTION = 1;
     private static final Interpolator ACTIVATE_INVERSE_INTERPOLATOR
             = new PathInterpolator(0.6f, 0, 0.5f, 1);
     private static final Interpolator ACTIVATE_INVERSE_ALPHA_INTERPOLATOR
@@ -105,10 +108,8 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private final Interpolator mSlowOutFastInInterpolator;
     private final Interpolator mSlowOutLinearInInterpolator;
     private Interpolator mCurrentAppearInterpolator;
-    private Interpolator mCurrentAlphaInterpolator;
 
     NotificationBackgroundView mBackgroundNormal;
-    private ObjectAnimator mBackgroundAnimator;
     private RectF mAppearAnimationRect = new RectF();
     private float mAnimationTranslationY;
     private boolean mDrawingAppearAnimation;
@@ -474,8 +475,8 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     private void startAppearAnimation(boolean isAppearing, float translationDirection, long delay,
             long duration, final Runnable onFinishedRunnable,
             AnimatorListenerAdapter animationListener) {
-        cancelAppearAnimation();
         mAnimationTranslationY = translationDirection * getActualHeight();
+        cancelAppearAnimation();
         if (mAppearAnimationFraction == -1.0f) {
             // not initialized yet, we start anew
             if (isAppearing) {
@@ -490,16 +491,10 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
 
         float targetValue;
         if (isAppearing) {
-            mCurrentAppearInterpolator = mSlowOutFastInInterpolator;
-            mCurrentAlphaInterpolator = Interpolators.LINEAR_OUT_SLOW_IN;
-            targetValue = 1.0f;
-            if (!mIsHeadsUpAnimation && isChildInGroup()) {
-                // slower fade in of children to avoid visibly overlapping with other children
-                mCurrentAlphaInterpolator = Interpolators.SLOW_OUT_LINEAR_IN;
-            }
-        } else {
             mCurrentAppearInterpolator = Interpolators.FAST_OUT_SLOW_IN;
-            mCurrentAlphaInterpolator = mSlowOutLinearInInterpolator;
+            targetValue = 1.0f;
+        } else {
+            mCurrentAppearInterpolator = mSlowOutFastInInterpolator;
             targetValue = 0.0f;
         }
         mAppearAnimator = ValueAnimator.ofFloat(mAppearAnimationFraction,
@@ -542,8 +537,9 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
             @Override
             public void onAnimationStart(Animator animation) {
                 mWasCancelled = false;
-                InteractionJankMonitor.getInstance().begin(ActivatableNotificationView.this,
-                        getCujType(isAppearing));
+                Configuration.Builder builder = new Configuration.Builder(getCujType(isAppearing))
+                        .setView(ActivatableNotificationView.this);
+                InteractionJankMonitor.getInstance().begin(builder);
             }
 
             @Override
@@ -582,65 +578,29 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
     }
 
     private void updateAppearRect() {
-        float inverseFraction = (1.0f - mAppearAnimationFraction);
-        float translationFraction = mCurrentAppearInterpolator.getInterpolation(inverseFraction);
-        float translateYTotalAmount = translationFraction * mAnimationTranslationY;
-        mAppearAnimationTranslation = translateYTotalAmount;
-
-        // handle width animation
-        float widthFraction = (inverseFraction - (1.0f - HORIZONTAL_ANIMATION_START))
-                / (HORIZONTAL_ANIMATION_START - HORIZONTAL_ANIMATION_END);
-        widthFraction = Math.min(1.0f, Math.max(0.0f, widthFraction));
-        widthFraction = mCurrentAppearInterpolator.getInterpolation(widthFraction);
-        float startWidthFraction = HORIZONTAL_COLLAPSED_REST_PARTIAL;
-        if (mIsHeadsUpAnimation && !mIsAppearing) {
-            startWidthFraction = 0;
-        }
-        if (mIsAppearing && !mIsHeadsUpAnimation && isChildInGroup()) {
-            // Children in a group (when not heads up) should simply fade in.
-            startWidthFraction = 1;
-        }
-        float width = MathUtils.lerp(startWidthFraction, 1.0f, 1.0f - widthFraction)
-                        * getWidth();
-        float left;
-        float right;
-        if (mIsHeadsUpAnimation) {
-            left = MathUtils.lerp(mHeadsUpLocation, 0, 1.0f - widthFraction);
-            right = left + width;
-        } else {
-            left = getWidth() * 0.5f - width / 2.0f;
-            right = getWidth() - left;
-        }
-
-        // handle top animation
-        float heightFraction = (inverseFraction - (1.0f - VERTICAL_ANIMATION_START)) /
-                VERTICAL_ANIMATION_START;
-        heightFraction = Math.max(0.0f, heightFraction);
-        heightFraction = mCurrentAppearInterpolator.getInterpolation(heightFraction);
-
-        float top;
-        float bottom;
+        float interpolatedFraction = mCurrentAppearInterpolator.getInterpolation(
+                mAppearAnimationFraction);
+        mAppearAnimationTranslation = (1.0f - interpolatedFraction) * mAnimationTranslationY;
         final int actualHeight = getActualHeight();
-        if (mAnimationTranslationY > 0.0f) {
-            bottom = actualHeight - heightFraction * mAnimationTranslationY * 0.1f
-                    - translateYTotalAmount;
-            top = bottom * heightFraction;
-        } else {
-            top = heightFraction * (actualHeight + mAnimationTranslationY) * 0.1f -
-                    translateYTotalAmount;
-            bottom = actualHeight * (1 - heightFraction) + top * heightFraction;
-        }
-        mAppearAnimationRect.set(left, top, right, bottom);
-        setOutlineRect(left, top + mAppearAnimationTranslation, right,
+        float bottom = actualHeight * interpolatedFraction;
+
+        setOutlineRect(0, mAppearAnimationTranslation, getWidth(),
                 bottom + mAppearAnimationTranslation);
     }
 
+    private float getInterpolatedAppearAnimationFraction() {
+        if (mAppearAnimationFraction >= 0) {
+            return mCurrentAppearInterpolator.getInterpolation(mAppearAnimationFraction);
+        }
+        return 1.0f;
+    }
+
     private void updateAppearAnimationAlpha() {
-        float contentAlphaProgress = mAppearAnimationFraction;
-        contentAlphaProgress = contentAlphaProgress / (1.0f - ALPHA_ANIMATION_END);
-        contentAlphaProgress = Math.min(1.0f, contentAlphaProgress);
-        contentAlphaProgress = mCurrentAlphaInterpolator.getInterpolation(contentAlphaProgress);
-        setContentAlpha(contentAlphaProgress);
+        float contentAlphaProgress = MathUtils.constrain(mAppearAnimationFraction,
+                ALPHA_APPEAR_START_FRACTION, ALPHA_APPEAR_END_FRACTION);
+        float range = ALPHA_APPEAR_END_FRACTION - ALPHA_APPEAR_START_FRACTION;
+        float alpha = (contentAlphaProgress - ALPHA_APPEAR_START_FRACTION) / range;
+        setContentAlpha(Interpolators.ALPHA_IN.getInterpolation(alpha));
     }
 
     private void setContentAlpha(float contentAlpha) {
@@ -661,6 +621,18 @@ public abstract class ActivatableNotificationView extends ExpandableOutlineView 
         super.applyRoundness();
         applyBackgroundRoundness(getCurrentBackgroundRadiusTop(),
                 getCurrentBackgroundRadiusBottom());
+    }
+
+    @Override
+    public float getCurrentBackgroundRadiusTop() {
+        float fraction = getInterpolatedAppearAnimationFraction();
+        return MathUtils.lerp(0, super.getCurrentBackgroundRadiusTop(), fraction);
+    }
+
+    @Override
+    public float getCurrentBackgroundRadiusBottom() {
+        float fraction = getInterpolatedAppearAnimationFraction();
+        return MathUtils.lerp(0, super.getCurrentBackgroundRadiusBottom(), fraction);
     }
 
     private void applyBackgroundRoundness(float topRadius, float bottomRadius) {
