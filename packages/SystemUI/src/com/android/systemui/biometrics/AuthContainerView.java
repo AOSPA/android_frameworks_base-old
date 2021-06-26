@@ -534,6 +534,11 @@ public class AuthContainerView extends LinearLayout
     }
 
     private void animateAway(boolean sendReason, @AuthDialogCallback.DismissedReason int reason) {
+        if (mContainerState == STATE_GONE) {
+            Log.w(TAG, "animateAway(): View is already gone");
+            return;
+        }
+
         if (mContainerState == STATE_ANIMATING_IN) {
             Log.w(TAG, "startDismiss(): waiting for onDialogAnimatedIn");
             mContainerState = STATE_PENDING_DISMISS;
