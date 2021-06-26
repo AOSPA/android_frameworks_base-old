@@ -1854,7 +1854,7 @@ public class StatusBar extends SystemUI implements DemoMode,
             clearNotificationEffects();
         }
 
-        if (isExpanded && mFodVisibility) {
+        if (isExpanded && mFodVisibility && !mBouncerShowing) {
             mFODCircleViewImpl.hideInDisplayFingerprintView();
         } else if (!isExpanded && getForegroundPackageNameAndClass().equals(mTopPkgClass)) {
             mFODCircleViewImpl.showInDisplayFingerprintView();
