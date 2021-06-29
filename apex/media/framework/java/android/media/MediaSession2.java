@@ -469,9 +469,7 @@ public class MediaSession2 implements AutoCloseable {
         }
         mCallbackExecutor.execute(() -> {
             if (!controllerInfo.removeRequestedCommandSeqNumber(seq)) {
-                if (resultReceiver != null) {
-                    resultReceiver.send(RESULT_INFO_SKIPPED, null);
-                }
+                resultReceiver.send(RESULT_INFO_SKIPPED, null);
                 return;
             }
             Session2Command.Result result = mCallback.onSessionCommand(

@@ -57,7 +57,6 @@ import android.app.AppOpsManager;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
-import android.content.pm.PackageManager;
 import android.net.ConnectivityManager;
 import android.net.LinkProperties;
 import android.net.Network;
@@ -708,9 +707,10 @@ public class VcnManagementServiceTest {
 
     @Test(expected = SecurityException.class)
     public void testAddVcnUnderlyingNetworkPolicyListenerInvalidPermission() {
-        doReturn(PackageManager.PERMISSION_DENIED)
+        doThrow(new SecurityException())
                 .when(mMockContext)
-                .checkCallingOrSelfPermission(any());
+                .enforceCallingOrSelfPermission(
+                        eq(android.Manifest.permission.NETWORK_FACTORY), any());
 
         mVcnMgmtSvc.addVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
     }
@@ -724,9 +724,10 @@ public class VcnManagementServiceTest {
 
     @Test(expected = SecurityException.class)
     public void testRemoveVcnUnderlyingNetworkPolicyListenerInvalidPermission() {
-        doReturn(PackageManager.PERMISSION_DENIED)
+        doThrow(new SecurityException())
                 .when(mMockContext)
-                .checkCallingOrSelfPermission(any());
+                .enforceCallingOrSelfPermission(
+                        eq(android.Manifest.permission.NETWORK_FACTORY), any());
 
         mVcnMgmtSvc.removeVcnUnderlyingNetworkPolicyListener(mMockPolicyListener);
     }
@@ -918,9 +919,10 @@ public class VcnManagementServiceTest {
 
     @Test(expected = SecurityException.class)
     public void testGetUnderlyingNetworkPolicyInvalidPermission() {
-        doReturn(PackageManager.PERMISSION_DENIED)
+        doThrow(new SecurityException())
                 .when(mMockContext)
-                .checkCallingOrSelfPermission(any());
+                .enforceCallingOrSelfPermission(
+                        eq(android.Manifest.permission.NETWORK_FACTORY), any());
 
         mVcnMgmtSvc.getUnderlyingNetworkPolicy(new NetworkCapabilities(), new LinkProperties());
     }

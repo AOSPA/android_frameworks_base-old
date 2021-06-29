@@ -735,7 +735,8 @@ public final class OutputConfiguration implements Parcelable {
         source.readTypedList(surfaces, Surface.CREATOR);
         String physicalCameraId = source.readString();
         boolean isMultiResolutionOutput = source.readInt() == 1;
-        int[] sensorPixelModesUsed = source.createIntArray();
+        ArrayList<Integer> sensorPixelModesUsed = new ArrayList<Integer>();
+        source.readList(sensorPixelModesUsed, Integer.class.getClassLoader());
         checkArgumentInRange(rotation, ROTATION_0, ROTATION_270, "Rotation constant");
 
         mSurfaceGroupId = surfaceSetId;
@@ -759,7 +760,7 @@ public final class OutputConfiguration implements Parcelable {
         }
         mPhysicalCameraId = physicalCameraId;
         mIsMultiResolution = isMultiResolutionOutput;
-        mSensorPixelModesUsed = convertIntArrayToIntegerList(sensorPixelModesUsed);
+        mSensorPixelModesUsed = sensorPixelModesUsed;
     }
 
     /**
@@ -825,7 +826,13 @@ public final class OutputConfiguration implements Parcelable {
             new Parcelable.Creator<OutputConfiguration>() {
         @Override
         public OutputConfiguration createFromParcel(Parcel source) {
-            return new OutputConfiguration(source);
+            try {
+                OutputConfiguration outputConfiguration = new OutputConfiguration(source);
+                return outputConfiguration;
+            } catch (Exception e) {
+                Log.e(TAG, "Exception creating OutputConfiguration from parcel", e);
+                return null;
+            }
         }
 
         @Override
@@ -837,25 +844,6 @@ public final class OutputConfiguration implements Parcelable {
     @Override
     public int describeContents() {
         return 0;
-    }
-
-    private static int[] convertIntegerToIntList(List<Integer> integerList) {
-        int[] integerArray = new int[integerList.size()];
-        for (int i = 0; i < integerList.size(); i++) {
-            integerArray[i] = integerList.get(i);
-        }
-        return integerArray;
-    }
-
-    private static ArrayList<Integer> convertIntArrayToIntegerList(int[] intArray) {
-        ArrayList<Integer> integerList = new ArrayList<Integer>();
-        if (intArray == null) {
-            return integerList;
-        }
-        for (int i = 0; i < intArray.length; i++) {
-            integerList.add(intArray[i]);
-        }
-        return integerList;
     }
 
     @Override
@@ -873,8 +861,7 @@ public final class OutputConfiguration implements Parcelable {
         dest.writeTypedList(mSurfaces);
         dest.writeString(mPhysicalCameraId);
         dest.writeInt(mIsMultiResolution ? 1 : 0);
-        // writeList doesn't seem to work well with Integer list.
-        dest.writeIntArray(convertIntegerToIntList(mSensorPixelModesUsed));
+        dest.writeList(mSensorPixelModesUsed);
     }
 
     /**

@@ -22,7 +22,6 @@ import static android.app.ActivityManager.START_VOICE_HIDDEN_SESSION;
 import static android.app.ActivityManager.START_VOICE_NOT_ACTIVE_SESSION;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_ASSISTANT;
 
-import android.Manifest;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
@@ -37,6 +36,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.ServiceConnection;
+import android.content.pm.IPackageManager;
 import android.content.pm.PackageManager;
 import android.content.pm.ServiceInfo;
 import android.hardware.soundtrigger.IRecognitionStatusCallback;
@@ -98,7 +98,7 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
     final ComponentName mHotwordDetectionComponentName;
     boolean mBound = false;
     IVoiceInteractionService mService;
-    volatile HotwordDetectionConnection mHotwordDetectionConnection;
+    HotwordDetectionConnection mHotwordDetectionConnection;
 
     VoiceInteractionSessionConnection mActiveSession;
     int mDisabledShowContext;
@@ -414,31 +414,11 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
             Slog.w(TAG, "Hotword detection service name not found");
             throw new IllegalStateException("Hotword detection service name not found");
         }
-        ServiceInfo hotwordDetectionServiceInfo = getServiceInfoLocked(
-                mHotwordDetectionComponentName, mUser);
-        if (hotwordDetectionServiceInfo == null) {
-            Slog.w(TAG, "Hotword detection service info not found");
-            throw new IllegalStateException("Hotword detection service info not found");
-        }
-        if (!isIsolatedProcessLocked(hotwordDetectionServiceInfo)) {
+        if (!isIsolatedProcessLocked(mHotwordDetectionComponentName)) {
             Slog.w(TAG, "Hotword detection service not in isolated process");
             throw new IllegalStateException("Hotword detection service not in isolated process");
         }
-        if (!Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE.equals(
-                hotwordDetectionServiceInfo.permission)) {
-            Slog.w(TAG, "Hotword detection service does not require permission "
-                    + Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE);
-            throw new SecurityException("Hotword detection service does not require permission "
-                    + Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE);
-        }
-        if (mContext.getPackageManager().checkPermission(
-                Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE,
-                mInfo.getServiceInfo().packageName) == PackageManager.PERMISSION_GRANTED) {
-            Slog.w(TAG, "Voice interaction service should not hold permission "
-                    + Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE);
-            throw new SecurityException("Voice interaction service should not hold permission "
-                    + Manifest.permission.BIND_HOTWORD_DETECTION_SERVICE);
-        }
+        // TODO : Need to check related permissions for hotword detection service
 
         if (sharedMemory != null && !sharedMemory.setProtect(OsConstants.PROT_READ)) {
             Slog.w(TAG, "Can't set sharedMemory to be read-only");
@@ -447,8 +427,8 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
 
         if (mHotwordDetectionConnection == null) {
             mHotwordDetectionConnection = new HotwordDetectionConnection(mServiceStub, mContext,
-                    mInfo.getServiceInfo().applicationInfo.uid, mHotwordDetectionComponentName,
-                    mUser, /* bindInstantServiceAllowed= */ false, options, sharedMemory, callback);
+                    mHotwordDetectionComponentName, mUser, /* bindInstantServiceAllowed= */ false,
+                    options, sharedMemory, callback);
         } else {
             mHotwordDetectionConnection.updateStateLocked(options, sharedMemory);
         }
@@ -542,24 +522,23 @@ class VoiceInteractionManagerServiceImpl implements VoiceInteractionSessionConne
                 mHotwordDetectionConnection);
     }
 
-    private static ServiceInfo getServiceInfoLocked(@NonNull ComponentName componentName,
-            int userHandle) {
+    boolean isIsolatedProcessLocked(ComponentName componentName) {
+        IPackageManager pm = AppGlobals.getPackageManager();
         try {
-            return AppGlobals.getPackageManager().getServiceInfo(componentName,
+            ServiceInfo serviceInfo = pm.getServiceInfo(componentName,
                     PackageManager.GET_META_DATA
                             | PackageManager.MATCH_DIRECT_BOOT_AWARE
-                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE, userHandle);
+                            | PackageManager.MATCH_DIRECT_BOOT_UNAWARE, mUser);
+            if (serviceInfo != null) {
+                return (serviceInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0
+                        && (serviceInfo.flags & ServiceInfo.FLAG_EXTERNAL_SERVICE) == 0;
+            }
         } catch (RemoteException e) {
             if (DEBUG) {
-                Slog.w(TAG, "getServiceInfoLocked RemoteException : " + e);
+                Slog.w(TAG, "isIsolatedProcess RemoteException : " + e);
             }
         }
-        return null;
-    }
-
-    boolean isIsolatedProcessLocked(@NonNull ServiceInfo serviceInfo) {
-        return (serviceInfo.flags & ServiceInfo.FLAG_ISOLATED_PROCESS) != 0
-                && (serviceInfo.flags & ServiceInfo.FLAG_EXTERNAL_SERVICE) == 0;
+        return false;
     }
 
     public void dumpLocked(FileDescriptor fd, PrintWriter pw, String[] args) {

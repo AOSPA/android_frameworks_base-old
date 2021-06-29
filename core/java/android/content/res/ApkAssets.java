@@ -69,12 +69,6 @@ public final class ApkAssets {
      */
     private static final int PROPERTY_OVERLAY = 1 << 3;
 
-    /**
-     * The apk assets is owned by the application running in this process and incremental crash
-     * protections for this APK must be disabled.
-     */
-    public static final int PROPERTY_DISABLE_INCREMENTAL_HARDENING = 1 << 4;
-
     /** Flags that change the behavior of loaded apk assets. */
     @IntDef(prefix = { "PROPERTY_" }, value = {
             PROPERTY_SYSTEM,
@@ -340,14 +334,13 @@ public final class ApkAssets {
         }
     }
 
-    @Nullable
     CharSequence getStringFromPool(int idx) {
         if (mStringBlock == null) {
             return null;
         }
 
         synchronized (this) {
-            return mStringBlock.getSequence(idx);
+            return mStringBlock.get(idx);
         }
     }
 

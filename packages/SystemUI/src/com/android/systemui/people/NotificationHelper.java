@@ -31,14 +31,12 @@ import android.util.Log;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.util.ArrayUtils;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.wm.shell.bubbles.Bubbles;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
-import java.util.Optional;
 import java.util.Set;
 
 /** Helper functions to handle notifications in People Tiles. */
@@ -198,7 +196,7 @@ public class NotificationHelper {
         if (notification == null) {
             return null;
         }
-        if (notification.isStyle(Notification.MessagingStyle.class)
+        if (Notification.MessagingStyle.class.equals(notification.getNotificationStyle())
                 && notification.extras != null) {
             final Parcelable[] messages = notification.extras.getParcelableArray(EXTRA_MESSAGES);
             if (!ArrayUtils.isEmpty(messages)) {
@@ -235,21 +233,6 @@ public class NotificationHelper {
         }
         if (DEBUG) Log.d(TAG, "Returning sender from group conversation notification.");
         return person.getName();
-    }
-
-    /** Returns whether {@code entry} is suppressed from shade, meaning we should not show it. */
-    public static boolean shouldFilterOut(
-            Optional<Bubbles> bubblesOptional, NotificationEntry entry) {
-        boolean isSuppressed = false;
-        //TODO(b/190822282): Investigate what is causing the NullPointerException
-        try {
-            isSuppressed = bubblesOptional.isPresent()
-                    && bubblesOptional.get().isBubbleNotificationSuppressedFromShade(
-                    entry.getKey(), entry.getSbn().getGroupKey());
-        } catch (Exception e) {
-            Log.e(TAG, "Exception checking if notification is suppressed: " + e);
-        }
-        return isSuppressed;
     }
 }
 

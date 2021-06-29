@@ -613,9 +613,9 @@ public class LocationProviderManager extends
             boolean locationSettingsIgnored = baseRequest.isLocationSettingsIgnored();
             if (locationSettingsIgnored) {
                 // if we are not currently allowed use location settings ignored, disable it
-                if (!mSettingsHelper.getIgnoreSettingsAllowlist().contains(
-                        getIdentity().getPackageName(), getIdentity().getAttributionTag())
-                        && !mLocationManagerInternal.isProvider(null, getIdentity())) {
+                if (!mSettingsHelper.getIgnoreSettingsPackageWhitelist().contains(
+                        getIdentity().getPackageName()) && !mLocationManagerInternal.isProvider(
+                        null, getIdentity())) {
                     builder.setLocationSettingsIgnored(false);
                     locationSettingsIgnored = false;
                 }
@@ -1407,16 +1407,12 @@ public class LocationProviderManager extends
         return mName;
     }
 
-    public AbstractLocationProvider.State getState() {
-        return mProvider.getState();
-    }
-
     public @Nullable CallerIdentity getIdentity() {
-        return mProvider.getState().identity;
+        return mProvider.getIdentity();
     }
 
     public @Nullable ProviderProperties getProperties() {
-        return mProvider.getState().properties;
+        return mProvider.getProperties();
     }
 
     public boolean hasProvider() {
@@ -1531,16 +1527,16 @@ public class LocationProviderManager extends
                 throw new IllegalArgumentException(mName + " provider is not a test provider");
             }
 
-            String locationProvider = location.getProvider();
-            if (!TextUtils.isEmpty(locationProvider) && !mName.equals(locationProvider)) {
-                // The location has an explicit provider that is different from the mock
-                // provider name. The caller may be trying to fool us via b/33091107.
-                EventLog.writeEvent(0x534e4554, "33091107", Binder.getCallingUid(),
-                        mName + "!=" + locationProvider);
-            }
-
             final long identity = Binder.clearCallingIdentity();
             try {
+                String locationProvider = location.getProvider();
+                if (!TextUtils.isEmpty(locationProvider) && !mName.equals(locationProvider)) {
+                    // The location has an explicit provider that is different from the mock
+                    // provider name. The caller may be trying to fool us via b/33091107.
+                    EventLog.writeEvent(0x534e4554, "33091107", Binder.getCallingUid(),
+                            mName + "!=" + locationProvider);
+                }
+
                 mProvider.setMockProviderLocation(location);
             } finally {
                 Binder.restoreCallingIdentity(identity);
@@ -1824,7 +1820,7 @@ public class LocationProviderManager extends
                 mBackgroundThrottlePackageWhitelistChangedListener);
         mSettingsHelper.addOnLocationPackageBlacklistChangedListener(
                 mLocationPackageBlacklistChangedListener);
-        mSettingsHelper.addIgnoreSettingsAllowlistChangedListener(
+        mSettingsHelper.addOnIgnoreSettingsPackageWhitelistChangedListener(
                 mIgnoreSettingsPackageWhitelistChangedListener);
         mLocationPermissionsHelper.addListener(mLocationPermissionsListener);
         mAppForegroundHelper.addListener(mAppForegroundChangedListener);
@@ -1845,7 +1841,7 @@ public class LocationProviderManager extends
                 mBackgroundThrottlePackageWhitelistChangedListener);
         mSettingsHelper.removeOnLocationPackageBlacklistChangedListener(
                 mLocationPackageBlacklistChangedListener);
-        mSettingsHelper.removeIgnoreSettingsAllowlistChangedListener(
+        mSettingsHelper.removeOnIgnoreSettingsPackageWhitelistChangedListener(
                 mIgnoreSettingsPackageWhitelistChangedListener);
         mLocationPermissionsHelper.removeListener(mLocationPermissionsListener);
         mAppForegroundHelper.removeListener(mAppForegroundChangedListener);
@@ -2407,7 +2403,7 @@ public class LocationProviderManager extends
         Preconditions.checkArgument(userId >= 0);
 
         boolean enabled = mState == STATE_STARTED
-                && mProvider.getState().allowed
+                && mProvider.isAllowed()
                 && mSettingsHelper.isLocationEnabled(userId);
 
         int index = mEnabled.indexOfKey(userId);

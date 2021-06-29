@@ -34,7 +34,7 @@ import java.net.InetSocketAddress;
 
 /**
  * @hide
- * @removed Use {@link SipDelegateConfiguration} instead.
+ * @deprecated Use {@link SipDelegateConfiguration} instead.
  */
 @Deprecated
 @SystemApi

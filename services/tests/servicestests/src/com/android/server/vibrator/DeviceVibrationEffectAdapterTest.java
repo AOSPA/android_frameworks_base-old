@@ -17,7 +17,6 @@
 package com.android.server.vibrator;
 
 import static org.junit.Assert.assertEquals;
-import static org.junit.Assert.assertTrue;
 
 import android.hardware.vibrator.IVibrator;
 import android.os.VibrationEffect;
@@ -26,10 +25,7 @@ import android.os.vibrator.PrebakedSegment;
 import android.os.vibrator.PrimitiveSegment;
 import android.os.vibrator.RampSegment;
 import android.os.vibrator.StepSegment;
-import android.os.vibrator.VibrationEffectSegment;
 import android.platform.test.annotations.Presubmit;
-
-import androidx.test.InstrumentationRegistry;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -62,7 +58,7 @@ public class DeviceVibrationEffectAdapterTest {
 
     @Before
     public void setUp() throws Exception {
-        mAdapter = new DeviceVibrationEffectAdapter(InstrumentationRegistry.getContext());
+        mAdapter = new DeviceVibrationEffectAdapter();
     }
 
     @Test
@@ -78,29 +74,6 @@ public class DeviceVibrationEffectAdapterTest {
 
         assertEquals(effect, mAdapter.apply(effect, createVibratorInfo(EMPTY_FREQUENCY_MAPPING)));
         assertEquals(effect, mAdapter.apply(effect, createVibratorInfo(TEST_FREQUENCY_MAPPING)));
-    }
-
-    @Test
-    public void testStepAndRampSegments_withoutPwleCapability_convertsRampsToSteps() {
-        VibrationEffect.Composed effect = new VibrationEffect.Composed(Arrays.asList(
-                new StepSegment(/* amplitude= */ 0, /* frequency= */ 1, /* duration= */ 10),
-                new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ 0, /* duration= */ 100),
-                new RampSegment(/* startAmplitude= */ 1, /* endAmplitude= */ 0.2f,
-                        /* startFrequency= */ -4, /* endFrequency= */ 2, /* duration= */ 10),
-                new RampSegment(/* startAmplitude= */ 0.8f, /* endAmplitude= */ 0.2f,
-                        /* startFrequency= */ 0, /* endFrequency= */ 0, /* duration= */ 100),
-                new RampSegment(/* startAmplitude= */ 0.65f, /* endAmplitude= */ 0.65f,
-                        /* startFrequency= */ 0, /* endFrequency= */ 1, /* duration= */ 1000)),
-                /* repeatIndex= */ 3);
-
-        VibrationEffect.Composed adaptedEffect = (VibrationEffect.Composed) mAdapter.apply(effect,
-                createVibratorInfo(EMPTY_FREQUENCY_MAPPING));
-        assertTrue(adaptedEffect.getSegments().size() > effect.getSegments().size());
-        assertTrue(adaptedEffect.getRepeatIndex() >= effect.getRepeatIndex());
-
-        for (VibrationEffectSegment adaptedSegment : adaptedEffect.getSegments()) {
-            assertTrue(adaptedSegment instanceof StepSegment);
-        }
     }
 
     @Test
@@ -131,7 +104,34 @@ public class DeviceVibrationEffectAdapterTest {
     }
 
     @Test
-    public void testStepAndRampSegments_withEmptyFreqMapping_returnsSameAmplitudesAndZeroFreq() {
+    public void testStepAndRampSegments_withPwleCapabilityAndNoFrequency_keepsOriginalSteps() {
+        VibrationEffect.Composed effect = new VibrationEffect.Composed(Arrays.asList(
+                new StepSegment(/* amplitude= */ 0, /* frequency= */ 0, /* duration= */ 10),
+                new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ 0, /* duration= */ 100),
+                new PrimitiveSegment(VibrationEffect.Composition.PRIMITIVE_TICK, 1, 10),
+                new RampSegment(/* startAmplitude= */ 1, /* endAmplitude= */ 1,
+                        /* startFrequency= */ -4, /* endFrequency= */ 2, /* duration= */ 50),
+                new RampSegment(/* startAmplitude= */ 0.8f, /* endAmplitude= */ 0.2f,
+                        /* startFrequency= */ 10, /* endFrequency= */ -5, /* duration= */ 20)),
+                /* repeatIndex= */ 2);
+
+        VibrationEffect.Composed expected = new VibrationEffect.Composed(Arrays.asList(
+                new StepSegment(/* amplitude= */ 0, /* frequency= */ 150, /* duration= */ 10),
+                new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ 150, /* duration= */ 100),
+                new PrimitiveSegment(VibrationEffect.Composition.PRIMITIVE_TICK, 1, 10),
+                new RampSegment(/* startAmplitude= */ 0.1f, /* endAmplitude= */ 0.8f,
+                        /* startFrequency= */ 50, /* endFrequency= */ 200, /* duration= */ 50),
+                new RampSegment(/* startAmplitude= */ 0.8f, /* endAmplitude= */ 0.1f,
+                        /* startFrequency= */ 200, /* endFrequency= */ 50, /* duration= */ 20)),
+                /* repeatIndex= */ 2);
+
+        VibratorInfo info = createVibratorInfo(TEST_FREQUENCY_MAPPING,
+                IVibrator.CAP_COMPOSE_PWLE_EFFECTS);
+        assertEquals(expected, mAdapter.apply(effect, info));
+    }
+
+    @Test
+    public void testStepAndRampSegments_emptyMapping_returnsSameAmplitudesAndFrequencyZero() {
         VibrationEffect.Composed effect = new VibrationEffect.Composed(Arrays.asList(
                 new StepSegment(/* amplitude= */ 0, /* frequency= */ 1, /* duration= */ 10),
                 new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ 0, /* duration= */ 100),
@@ -142,11 +142,8 @@ public class DeviceVibrationEffectAdapterTest {
                 /* repeatIndex= */ 2);
 
         VibrationEffect.Composed expected = new VibrationEffect.Composed(Arrays.asList(
-                new RampSegment(/* startAmplitude= */ 0, /* endAmplitude= */ 0,
-                        /* startFrequency= */ Float.NaN, /* endFrequency= */ Float.NaN,
-                        /* duration= */ 10),
-                new RampSegment(/* startAmplitude= */ 0.5f, /* endAmplitude= */ 0.5f,
-                        /* startFrequency= */ Float.NaN, /* endFrequency= */ Float.NaN,
+                new StepSegment(/* amplitude= */ 0, /* frequency= */ Float.NaN, /* duration= */ 10),
+                new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ Float.NaN,
                         /* duration= */ 100),
                 new RampSegment(/* startAmplitude= */ 0.8f, /* endAmplitude= */ 1,
                         /* startFrequency= */ Float.NaN, /* endFrequency= */ Float.NaN,
@@ -156,13 +153,11 @@ public class DeviceVibrationEffectAdapterTest {
                         /* duration= */ 20)),
                 /* repeatIndex= */ 2);
 
-        VibratorInfo info = createVibratorInfo(EMPTY_FREQUENCY_MAPPING,
-                IVibrator.CAP_COMPOSE_PWLE_EFFECTS);
-        assertEquals(expected, mAdapter.apply(effect, info));
+        assertEquals(expected, mAdapter.apply(effect, createVibratorInfo(EMPTY_FREQUENCY_MAPPING)));
     }
 
     @Test
-    public void testStepAndRampSegments_withValidFreqMapping_returnsClippedValues() {
+    public void testStepAndRampSegments_nonEmptyMapping_returnsClippedValues() {
         VibrationEffect.Composed effect = new VibrationEffect.Composed(Arrays.asList(
                 new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ 0, /* duration= */ 10),
                 new StepSegment(/* amplitude= */ 1, /* frequency= */ -1, /* duration= */ 100),
@@ -173,21 +168,15 @@ public class DeviceVibrationEffectAdapterTest {
                 /* repeatIndex= */ 2);
 
         VibrationEffect.Composed expected = new VibrationEffect.Composed(Arrays.asList(
-                new RampSegment(/* startAmplitude= */ 0.5f, /* endAmplitude= */ 0.5f,
-                        /* startFrequency= */ 150, /* endFrequency= */ 150,
-                        /* duration= */ 10),
-                new RampSegment(/* startAmplitude= */ 0.8f, /* endAmplitude= */ 0.8f,
-                        /* startFrequency= */ 125, /* endFrequency= */ 125,
-                        /* duration= */ 100),
+                new StepSegment(/* amplitude= */ 0.5f, /* frequency= */ 150, /* duration= */ 10),
+                new StepSegment(/* amplitude= */ 0.8f, /* frequency= */ 125, /* duration= */ 100),
                 new RampSegment(/* startAmplitude= */ 0.1f, /* endAmplitude= */ 0.8f,
                         /* startFrequency= */ 50, /* endFrequency= */ 200, /* duration= */ 50),
                 new RampSegment(/* startAmplitude= */ 0.8f, /* endAmplitude= */ 0.1f,
                         /* startFrequency= */ 200, /* endFrequency= */ 50, /* duration= */ 20)),
                 /* repeatIndex= */ 2);
 
-        VibratorInfo info = createVibratorInfo(TEST_FREQUENCY_MAPPING,
-                IVibrator.CAP_COMPOSE_PWLE_EFFECTS);
-        assertEquals(expected, mAdapter.apply(effect, info));
+        assertEquals(expected, mAdapter.apply(effect, createVibratorInfo(TEST_FREQUENCY_MAPPING)));
     }
 
     private static VibratorInfo createVibratorInfo(VibratorInfo.FrequencyMapping frequencyMapping,

@@ -291,7 +291,6 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
 
     @Override
     public boolean onFailedToRecycleView(Holder holder) {
-        holder.stopDrag();
         holder.clearDrag();
         return true;
     }
@@ -369,7 +368,6 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
         holder.getTileAsCustomizeView().setShowAppLabel(position > mEditIndex && !info.isSystem);
         // Don't show the side view for third party tiles, as we don't have the actual state.
         holder.getTileAsCustomizeView().setShowSideView(position < mEditIndex || info.isSystem);
-        holder.mTileView.setSelected(true);
         holder.mTileView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_YES);
         holder.mTileView.setClickable(true);
         holder.mTileView.setOnClickListener(null);
@@ -567,6 +565,12 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
 
         public void clearDrag() {
             itemView.clearAnimation();
+            if (mTileView instanceof CustomizeTileView) {
+                mTileView.findViewById(R.id.tile_label).clearAnimation();
+                mTileView.findViewById(R.id.tile_label).setAlpha(1);
+                mTileView.getSecondaryLabel().clearAnimation();
+                mTileView.getSecondaryLabel().setAlpha(.6f);
+            }
         }
 
         public void startDrag() {
@@ -574,6 +578,14 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
                     .setDuration(DRAG_LENGTH)
                     .scaleX(DRAG_SCALE)
                     .scaleY(DRAG_SCALE);
+            if (mTileView instanceof CustomizeTileView) {
+                mTileView.findViewById(R.id.tile_label).animate()
+                        .setDuration(DRAG_LENGTH)
+                        .alpha(0);
+                mTileView.getSecondaryLabel().animate()
+                        .setDuration(DRAG_LENGTH)
+                        .alpha(0);
+            }
         }
 
         public void stopDrag() {
@@ -581,6 +593,14 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
                     .setDuration(DRAG_LENGTH)
                     .scaleX(1)
                     .scaleY(1);
+            if (mTileView instanceof CustomizeTileView) {
+                mTileView.findViewById(R.id.tile_label).animate()
+                        .setDuration(DRAG_LENGTH)
+                        .alpha(1);
+                mTileView.getSecondaryLabel().animate()
+                        .setDuration(DRAG_LENGTH)
+                        .alpha(.6f);
+            }
         }
 
         boolean canRemove() {
@@ -691,7 +711,9 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
             if (parent.getLayoutManager() == null) return;
 
             GridLayoutManager lm = ((GridLayoutManager) parent.getLayoutManager());
-            int column = ((GridLayoutManager.LayoutParams) view.getLayoutParams()).getSpanIndex();
+            SpanSizeLookup span = lm.getSpanSizeLookup();
+            ViewHolder holder = parent.getChildViewHolder(view);
+            int column = span.getSpanIndex(holder.getBindingAdapterPosition(), lm.getSpanCount());
 
             if (view instanceof TextView) {
                 super.getItemOffsets(outRect, view, parent, state);
@@ -701,30 +723,14 @@ public class TileAdapter extends RecyclerView.Adapter<Holder> implements TileSta
                     // columns).
                     outRect.left = mHalfMargin;
                     outRect.right = mHalfMargin;
+                } else if (column == 0) {
+                    // Leftmost column when not using side margins. Should only have margin on the
+                    // right.
+                    outRect.right = mHalfMargin;
                 } else {
-                    // Leftmost or rightmost column
-                    if (parent.isLayoutRtl()) {
-                        if (column == 0) {
-                            // Rightmost column
-                            outRect.left = mHalfMargin;
-                            outRect.right = 0;
-                        } else {
-                            // Leftmost column
-                            outRect.left = 0;
-                            outRect.right = mHalfMargin;
-                        }
-                    } else {
-                        // Non RTL
-                        if (column == 0) {
-                            // Leftmost column
-                            outRect.left = 0;
-                            outRect.right = mHalfMargin;
-                        } else {
-                            // Rightmost column
-                            outRect.left = mHalfMargin;
-                            outRect.right = 0;
-                        }
-                    }
+                    // Rightmost column when not using side margins. Should only have margin on the
+                    // left.
+                    outRect.left = mHalfMargin;
                 }
             }
         }

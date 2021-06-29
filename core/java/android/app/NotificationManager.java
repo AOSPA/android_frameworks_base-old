@@ -1182,12 +1182,10 @@ public class NotificationManager {
             List<ZenModeConfig.ZenRule> rules = service.getZenRules();
             Map<String, AutomaticZenRule> ruleMap = new HashMap<>();
             for (ZenModeConfig.ZenRule rule : rules) {
-                AutomaticZenRule azr = new AutomaticZenRule(rule.name, rule.component,
+                ruleMap.put(rule.id, new AutomaticZenRule(rule.name, rule.component,
                         rule.configurationActivity, rule.conditionId, rule.zenPolicy,
                         zenModeToInterruptionFilter(rule.zenMode), rule.enabled,
-                        rule.creationTime);
-                azr.setPackageName(rule.pkg);
-                ruleMap.put(rule.id, azr);
+                        rule.creationTime));
             }
             return ruleMap;
         } catch (RemoteException e) {
@@ -1228,7 +1226,7 @@ public class NotificationManager {
     public String addAutomaticZenRule(AutomaticZenRule automaticZenRule) {
         INotificationManager service = getService();
         try {
-            return service.addAutomaticZenRule(automaticZenRule, mContext.getPackageName());
+            return service.addAutomaticZenRule(automaticZenRule);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

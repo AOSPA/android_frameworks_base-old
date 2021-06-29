@@ -24,7 +24,6 @@ import android.graphics.PorterDuff;
 import android.graphics.PorterDuffColorFilter;
 import android.graphics.Typeface;
 import android.graphics.drawable.Drawable;
-import android.graphics.drawable.Icon;
 import android.text.TextUtils;
 import android.view.LayoutInflater;
 import android.view.View;
@@ -42,7 +41,6 @@ import androidx.recyclerview.widget.RecyclerView;
 
 import com.android.settingslib.bluetooth.BluetoothUtils;
 import com.android.settingslib.media.MediaDevice;
-import com.android.settingslib.utils.ThreadUtils;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 
@@ -118,7 +116,6 @@ public abstract class MediaOutputBaseAdapter extends
         final View mDivider;
         final View mBottomDivider;
         final CheckBox mCheckBox;
-        private String mDeviceId;
 
         MediaDeviceBaseViewHolder(View view) {
             super(view);
@@ -137,17 +134,8 @@ public abstract class MediaOutputBaseAdapter extends
         }
 
         void onBind(MediaDevice device, boolean topMargin, boolean bottomMargin) {
-            mDeviceId = device.getId();
-            ThreadUtils.postOnBackgroundThread(() -> {
-                Icon icon = mController.getDeviceIconCompat(device).toIcon(mContext);
-                ThreadUtils.postOnMainThread(() -> {
-                    if (!TextUtils.equals(mDeviceId, device.getId())) {
-                        return;
-                    }
-                    mTitleIcon.setImageIcon(icon);
-                    setMargin(topMargin, bottomMargin);
-                });
-            });
+            mTitleIcon.setImageIcon(mController.getDeviceIconCompat(device).toIcon(mContext));
+            setMargin(topMargin, bottomMargin);
         }
 
         void onBind(int customizedItem, boolean topMargin, boolean bottomMargin) {

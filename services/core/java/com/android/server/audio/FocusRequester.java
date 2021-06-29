@@ -182,7 +182,7 @@ public class FocusRequester {
         return mGrantFlags;
     }
 
-    @NonNull AudioAttributes getAudioAttributes() {
+    AudioAttributes getAudioAttributes() {
         return mAttributes;
     }
 

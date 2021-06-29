@@ -235,20 +235,15 @@ public class PipResizeGestureHandler {
 
     @VisibleForTesting
     void onInputEvent(InputEvent ev) {
-        if (!mEnableDragCornerResize && !mEnablePinchResize) {
-            // No need to handle anything if neither form of resizing is enabled.
-            return;
-        }
-
         // Don't allow resize when PiP is stashed.
         if (mPipBoundsState.isStashed()) {
             return;
         }
 
         if (ev instanceof MotionEvent) {
-            if (mEnablePinchResize && mOngoingPinchToResize) {
+            if (mOngoingPinchToResize) {
                 onPinchResize((MotionEvent) ev);
-            } else if (mEnableDragCornerResize) {
+            } else {
                 onDragCornerResize((MotionEvent) ev);
             }
         }
@@ -323,8 +318,8 @@ public class PipResizeGestureHandler {
                 case MotionEvent.ACTION_POINTER_DOWN:
                     if (mEnablePinchResize && ev.getPointerCount() == 2) {
                         onPinchResize(ev);
-                        mOngoingPinchToResize = mAllowGesture;
-                        return mAllowGesture;
+                        mOngoingPinchToResize = true;
+                        return true;
                     }
                     break;
 
@@ -388,17 +383,14 @@ public class PipResizeGestureHandler {
             return;
         }
 
-        final Rect pipBounds = mPipBoundsState.getBounds();
         if (action == MotionEvent.ACTION_POINTER_DOWN) {
-            if (mFirstIndex == -1 && mSecondIndex == -1
-                    && pipBounds.contains((int) ev.getRawX(0), (int) ev.getRawY(0))
-                    && pipBounds.contains((int) ev.getRawX(1), (int) ev.getRawY(1))) {
+            if (mFirstIndex == -1 && mSecondIndex == -1) {
                 mAllowGesture = true;
                 mFirstIndex = 0;
                 mSecondIndex = 1;
                 mDownPoint.set(ev.getRawX(mFirstIndex), ev.getRawY(mFirstIndex));
                 mDownSecondPoint.set(ev.getRawX(mSecondIndex), ev.getRawY(mSecondIndex));
-                mDownBounds.set(pipBounds);
+                mDownBounds.set(mPipBoundsState.getBounds());
 
                 mLastPoint.set(mDownPoint);
                 mLastSecondPoint.set(mLastSecondPoint);
@@ -522,18 +514,7 @@ public class PipResizeGestureHandler {
                         || mLastResizeBounds.height() >= PINCH_RESIZE_AUTO_MAX_RATIO * mMaxSize.y) {
                     resizeRectAboutCenter(mLastResizeBounds, mMaxSize.x, mMaxSize.y);
                 }
-                final int leftEdge = mLastResizeBounds.left;
-                final Rect movementBounds =
-                        mPipBoundsAlgorithm.getMovementBounds(mLastResizeBounds);
-                final int fromLeft = Math.abs(leftEdge - movementBounds.left);
-                final int fromRight = Math.abs(movementBounds.right - leftEdge);
-                // The PIP will be snapped to either the right or left edge, so calculate which one
-                // is closest to the current position.
-                final int newLeft = fromLeft < fromRight
-                        ? movementBounds.left : movementBounds.right;
-                mLastResizeBounds.offsetTo(newLeft, mLastResizeBounds.top);
-                final float snapFraction = mPipBoundsAlgorithm.getSnapFraction(
-                        mLastResizeBounds, movementBounds);
+                final float snapFraction = mPipBoundsAlgorithm.getSnapFraction(mLastResizeBounds);
                 mPipBoundsAlgorithm.applySnapFraction(mLastResizeBounds, snapFraction);
                 mPipTaskOrganizer.scheduleAnimateResizePip(startBounds, mLastResizeBounds,
                         PINCH_RESIZE_SNAP_DURATION, mAngle, callback);
@@ -541,9 +522,8 @@ public class PipResizeGestureHandler {
                 mPipTaskOrganizer.scheduleFinishResizePip(mLastResizeBounds,
                         PipAnimationController.TRANSITION_DIRECTION_USER_RESIZE, callback);
             }
-            final float magnetRadiusPercent = (float) mLastResizeBounds.width() / mMinSize.x / 2.f;
             mPipDismissTargetHandler
-                    .setMagneticFieldRadiusPercent(magnetRadiusPercent);
+                    .setMagneticFieldRadiusPercent((float) mLastResizeBounds.width() / mMinSize.x);
             mPipUiEventLogger.log(
                     PipUiEventLogger.PipUiEventEnum.PICTURE_IN_PICTURE_RESIZE);
         } else {

@@ -46,7 +46,6 @@ import android.os.RemoteCallback;
 import android.os.SharedMemory;
 import android.view.autofill.AutofillId;
 import android.view.translation.TranslationSpec;
-import android.view.translation.UiTranslationSpec;
 
 import com.android.internal.app.IVoiceInteractor;
 import com.android.internal.content.ReferrerIntent;
@@ -161,6 +160,5 @@ oneway interface IApplicationThread {
             IUiAutomationConnection instrumentationUiConnection,
             in ApplicationInfo targetInfo);
     void updateUiTranslationState(IBinder activityToken, int state, in TranslationSpec sourceSpec,
-            in TranslationSpec targetSpec, in List<AutofillId> viewIds,
-            in UiTranslationSpec uiTranslationSpec);
+            in TranslationSpec targetSpec, in List<AutofillId> viewIds);
 }

@@ -118,15 +118,15 @@ public class TaskView extends SurfaceView implements SurfaceHolder.Callback,
      *
      * @param shortcut the shortcut used to launch the activity.
      * @param options options for the activity.
-     * @param launchBounds the bounds (window size and position) that the activity should be
-     *                     launched in, in pixels and in screen coordinates.
+     * @param sourceBounds the rect containing the source bounds of the clicked icon to open
+     *                     this shortcut.
      */
     public void startShortcutActivity(@NonNull ShortcutInfo shortcut,
-            @NonNull ActivityOptions options, @Nullable Rect launchBounds) {
-        prepareActivityOptions(options, launchBounds);
+            @NonNull ActivityOptions options, @Nullable Rect sourceBounds) {
+        prepareActivityOptions(options);
         LauncherApps service = mContext.getSystemService(LauncherApps.class);
         try {
-            service.startShortcut(shortcut, null /* sourceBounds */, options.toBundle());
+            service.startShortcut(shortcut, sourceBounds, options.toBundle());
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -138,12 +138,10 @@ public class TaskView extends SurfaceView implements SurfaceHolder.Callback,
      * @param pendingIntent Intent used to launch an activity.
      * @param fillInIntent Additional Intent data, see {@link Intent#fillIn Intent.fillIn()}
      * @param options options for the activity.
-     * @param launchBounds the bounds (window size and position) that the activity should be
-     *                     launched in, in pixels and in screen coordinates.
      */
     public void startActivity(@NonNull PendingIntent pendingIntent, @Nullable Intent fillInIntent,
-            @NonNull ActivityOptions options, @Nullable Rect launchBounds) {
-        prepareActivityOptions(options, launchBounds);
+            @NonNull ActivityOptions options) {
+        prepareActivityOptions(options);
         try {
             pendingIntent.send(mContext, 0 /* code */, fillInIntent,
                     null /* onFinished */, null /* handler */, null /* requiredPermission */,
@@ -153,12 +151,11 @@ public class TaskView extends SurfaceView implements SurfaceHolder.Callback,
         }
     }
 
-    private void prepareActivityOptions(ActivityOptions options, Rect launchBounds) {
+    private void prepareActivityOptions(ActivityOptions options) {
         final Binder launchCookie = new Binder();
         mShellExecutor.execute(() -> {
             mTaskOrganizer.setPendingLaunchCookieListener(launchCookie, this);
         });
-        options.setLaunchBounds(launchBounds);
         options.setLaunchCookie(launchCookie);
         options.setLaunchWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
         options.setRemoveWithTaskOrganizer(true);

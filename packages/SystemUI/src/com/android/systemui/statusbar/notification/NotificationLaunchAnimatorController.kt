@@ -3,11 +3,11 @@ package com.android.systemui.statusbar.notification
 import android.view.ViewGroup
 import com.android.internal.jank.InteractionJankMonitor
 import com.android.systemui.animation.ActivityLaunchAnimator
+import com.android.systemui.statusbar.NotificationShadeDepthController
 import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.stack.NotificationListContainer
 import com.android.systemui.statusbar.phone.HeadsUpManagerPhone
 import com.android.systemui.statusbar.phone.NotificationShadeWindowViewController
-import com.android.systemui.statusbar.policy.HeadsUpUtil
 import kotlin.math.ceil
 import kotlin.math.max
 
@@ -15,6 +15,7 @@ import kotlin.math.max
 class NotificationLaunchAnimatorControllerProvider(
     private val notificationShadeWindowViewController: NotificationShadeWindowViewController,
     private val notificationListContainer: NotificationListContainer,
+    private val depthController: NotificationShadeDepthController,
     private val headsUpManager: HeadsUpManagerPhone
 ) {
     fun getAnimatorController(
@@ -23,8 +24,9 @@ class NotificationLaunchAnimatorControllerProvider(
         return NotificationLaunchAnimatorController(
             notificationShadeWindowViewController,
             notificationListContainer,
-            headsUpManager,
-            notification
+            depthController,
+            notification,
+            headsUpManager
         )
     }
 }
@@ -37,11 +39,11 @@ class NotificationLaunchAnimatorControllerProvider(
 class NotificationLaunchAnimatorController(
     private val notificationShadeWindowViewController: NotificationShadeWindowViewController,
     private val notificationListContainer: NotificationListContainer,
-    private val headsUpManager: HeadsUpManagerPhone,
-    private val notification: ExpandableNotificationRow
+    private val depthController: NotificationShadeDepthController,
+    private val notification: ExpandableNotificationRow,
+    private val headsUpManager: HeadsUpManagerPhone
 ) : ActivityLaunchAnimator.Controller {
-    private val notificationEntry = notification.entry
-    private val notificationKey = notificationEntry.sbn.key
+    private val notificationKey = notification.entry.sbn.key
 
     override var launchContainer: ViewGroup
         get() = notification.rootView as ViewGroup
@@ -84,7 +86,6 @@ class NotificationLaunchAnimatorController(
 
     override fun onIntentStarted(willAnimate: Boolean) {
         notificationShadeWindowViewController.setExpandAnimationRunning(willAnimate)
-        notificationEntry.isExpandAnimationRunning = willAnimate
 
         if (!willAnimate) {
             removeHun(animate = true)
@@ -96,7 +97,6 @@ class NotificationLaunchAnimatorController(
             return
         }
 
-        HeadsUpUtil.setNeedsHeadsUpDisappearAnimationAfterClick(notification, animate)
         headsUpManager.removeNotification(notificationKey, true /* releaseImmediately */, animate)
     }
 
@@ -104,7 +104,6 @@ class NotificationLaunchAnimatorController(
         // TODO(b/184121838): Should we call InteractionJankMonitor.cancel if the animation started
         // here?
         notificationShadeWindowViewController.setExpandAnimationRunning(false)
-        notificationEntry.isExpandAnimationRunning = false
         removeHun(animate = true)
     }
 
@@ -121,7 +120,6 @@ class NotificationLaunchAnimatorController(
 
         notification.isExpandAnimationRunning = false
         notificationShadeWindowViewController.setExpandAnimationRunning(false)
-        notificationEntry.isExpandAnimationRunning = false
         notificationListContainer.setExpandingNotification(null)
         applyParams(null)
         removeHun(animate = false)
@@ -130,6 +128,7 @@ class NotificationLaunchAnimatorController(
     private fun applyParams(params: ExpandAnimationParameters?) {
         notification.applyExpandAnimationParams(params)
         notificationListContainer.applyExpandAnimationParams(params)
+        depthController.notificationLaunchAnimationParams = params
     }
 
     override fun onLaunchAnimationProgress(

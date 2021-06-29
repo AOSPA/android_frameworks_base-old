@@ -703,7 +703,7 @@ final class AccessibilityController {
                 Slog.i(LOG_TAG, "Rotation: " + Surface.rotationToString(rotation)
                         + " displayId: " + displayContent.getDisplayId());
             }
-            mMagnifedViewport.onRotationChanged();
+            mMagnifedViewport.onRotationChanged(displayContent.getPendingTransaction());
             mHandler.sendEmptyMessage(MyHandler.MESSAGE_NOTIFY_ROTATION_CHANGED);
         }
 
@@ -858,7 +858,7 @@ final class AccessibilityController {
 
             private final RectF mTempRectF = new RectF();
 
-            private final Point mScreenSize = new Point();
+            private final Point mTempPoint = new Point();
 
             private final Matrix mTempMatrix = new Matrix();
 
@@ -887,8 +887,8 @@ final class AccessibilityController {
 
                 if (mDisplayContext.getResources().getConfiguration().isScreenRound()) {
                     mCircularPath = new Path();
-                    mDisplay.getRealSize(mScreenSize);
-                    final int centerXY = mScreenSize.x / 2;
+                    mDisplay.getRealSize(mTempPoint);
+                    final int centerXY = mTempPoint.x / 2;
                     mCircularPath.addCircle(centerXY, centerXY, centerXY, Path.Direction.CW);
                 } else {
                     mCircularPath = null;
@@ -917,9 +917,9 @@ final class AccessibilityController {
             }
 
             void recomputeBounds() {
-                mDisplay.getRealSize(mScreenSize);
-                final int screenWidth = mScreenSize.x;
-                final int screenHeight = mScreenSize.y;
+                mDisplay.getRealSize(mTempPoint);
+                final int screenWidth = mTempPoint.x;
+                final int screenHeight = mTempPoint.y;
 
                 mMagnificationRegion.set(0, 0, 0, 0);
                 final Region availableBounds = mTempRegion1;
@@ -985,7 +985,7 @@ final class AccessibilityController {
                     }
 
                     // Count letterbox into nonMagnifiedBounds
-                    if (windowState.areAppWindowBoundsLetterboxed()) {
+                    if (windowState.isLetterboxedAppWindow()) {
                         Region letterboxBounds = getLetterboxBounds(windowState);
                         nonMagnifiedBounds.op(letterboxBounds, Region.Op.UNION);
                         availableBounds.op(letterboxBounds, Region.Op.DIFFERENCE);
@@ -1052,7 +1052,7 @@ final class AccessibilityController {
                         || windowType == TYPE_ACCESSIBILITY_MAGNIFICATION_OVERLAY;
             }
 
-            void onRotationChanged() {
+            void onRotationChanged(SurfaceControl.Transaction t) {
                 // If we are showing the magnification border, hide it immediately so
                 // the user does not see strange artifacts during rotation. The screenshot
                 // used for rotation already has the border. After the rotation is complete
@@ -1066,7 +1066,7 @@ final class AccessibilityController {
                     mHandler.sendMessageDelayed(message, delay);
                 }
                 recomputeBounds();
-                mWindow.updateSize();
+                mWindow.updateSize(t);
             }
 
             void setMagnifiedRegionBorderShown(boolean shown, boolean animate) {
@@ -1148,9 +1148,9 @@ final class AccessibilityController {
                         /* ignore */
                     }
                     mSurfaceControl = surfaceControl;
-                    mDisplay.getRealSize(mScreenSize);
+                    mDisplay.getRealSize(mTempPoint);
                     mBlastBufferQueue = new BLASTBufferQueue(SURFACE_TITLE, mSurfaceControl,
-                            mScreenSize.x, mScreenSize.y, PixelFormat.RGBA_8888);
+                            mTempPoint.x, mTempPoint.y, PixelFormat.RGBA_8888);
 
                     final SurfaceControl.Transaction t = mService.mTransactionFactory.get();
                     final int layer =
@@ -1224,11 +1224,10 @@ final class AccessibilityController {
                     }
                 }
 
-                void updateSize() {
+                void updateSize(SurfaceControl.Transaction t) {
                     synchronized (mService.mGlobalLock) {
-                        mDisplay.getRealSize(mScreenSize);
-                        mBlastBufferQueue.update(mSurfaceControl, mScreenSize.x, mScreenSize.y,
-                                PixelFormat.RGBA_8888);
+                        mDisplay.getRealSize(mTempPoint);
+                        t.setBufferSize(mSurfaceControl, mTempPoint.x, mTempPoint.y);
                         invalidate(mDirtyRect);
                     }
                 }
@@ -1297,8 +1296,8 @@ final class AccessibilityController {
                     pw.println(prefix
                             + " mBounds= " + mBounds
                             + " mDirtyRect= " + mDirtyRect
-                            + " mWidth= " + mScreenSize.x
-                            + " mHeight= " + mScreenSize.y);
+                            + " mWidth= " + mSurfaceControl.getWidth()
+                            + " mHeight= " + mSurfaceControl.getHeight());
                 }
 
                 private final class AnimationController extends Handler {
@@ -1759,7 +1758,7 @@ final class AccessibilityController {
                 }
 
                 // Account for the space of letterbox.
-                if (windowState.areAppWindowBoundsLetterboxed()) {
+                if (windowState.isLetterboxedAppWindow()) {
                     unaccountedSpace.op(getLetterboxBounds(windowState), unaccountedSpace,
                             Region.Op.REVERSE_DIFFERENCE);
                 }

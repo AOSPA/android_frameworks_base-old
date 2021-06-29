@@ -51,6 +51,7 @@ class ControlsComponent @Inject constructor(
     private val userTracker: UserTracker,
     private val secureSettings: SecureSettings
 ) {
+
     private val contentResolver: ContentResolver
         get() = context.contentResolver
 
@@ -65,7 +66,7 @@ class ControlsComponent @Inject constructor(
     init {
         if (featureEnabled) {
             secureSettings.registerContentObserver(
-                Settings.Secure.getUriFor(Settings.Secure.LOCKSCREEN_SHOW_CONTROLS),
+                Settings.Secure.getUriFor(Settings.Secure.POWER_MENU_LOCKED_SHOW_CONTENT),
                 false, /* notifyForDescendants */
                 showWhileLockedObserver
             )
@@ -115,7 +116,7 @@ class ControlsComponent @Inject constructor(
 
     private fun updateShowWhileLocked() {
         canShowWhileLockedSetting = secureSettings.getInt(
-            Settings.Secure.LOCKSCREEN_SHOW_CONTROLS, 0) != 0
+            Settings.Secure.POWER_MENU_LOCKED_SHOW_CONTENT, 0) != 0
     }
 
     enum class Visibility {

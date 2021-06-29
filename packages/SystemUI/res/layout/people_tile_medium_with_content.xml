@@ -16,7 +16,6 @@
  -->
 <LinearLayout
     xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:androidprv="http://schemas.android.com/apk/prv/res/android"
     android:theme="@android:style/Theme.DeviceDefault.DayNight"
     android:id="@+id/item"
     android:background="@drawable/people_space_tile_view_card"
@@ -48,6 +47,8 @@
                 <ImageView
                     android:gravity="start"
                     android:id="@+id/person_icon"
+                    android:layout_marginStart="-2dp"
+                    android:layout_marginTop="-2dp"
                     android:layout_width="52dp"
                     android:layout_height="52dp" />
 
@@ -56,24 +57,22 @@
                     android:layout_marginStart="-2dp"
                     android:layout_width="10dp"
                     android:layout_height="10dp"
-                    android:background="@drawable/availability_dot_10dp" />
+                    android:background="@drawable/circle_green_10dp" />
 
                 <LinearLayout
-                    android:id="@+id/medium_content"
                     android:orientation="vertical"
                     android:gravity="top|start"
                     android:paddingStart="12dp"
-                    android:paddingBottom="@dimen/medium_content_padding_above_name"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content">
 
                     <TextView
                         android:id="@+id/subtext"
                         android:text="@string/empty_user_name"
-                        android:textAppearance="@*android:style/TextAppearance.DeviceDefault.Notification.Title"
+                        android:textAppearance="@*android:style/TextAppearance.DeviceDefault.ListItem"
                         android:textColor="?android:attr/textColorSecondary"
                         android:textSize="12sp"
-                        android:paddingBottom="8dp"
+                        android:paddingBottom="4dp"
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:singleLine="true"
@@ -90,7 +89,7 @@
                     <TextView
                         android:id="@+id/text_content"
                         android:text="@string/empty_status"
-                        android:textAppearance="@*android:style/TextAppearance.DeviceDefault.Notification.Title"
+                        android:textAppearance="@*android:style/TextAppearance.DeviceDefault.ListItem"
                         android:textColor="?android:attr/textColorPrimary"
                         android:textSize="@dimen/content_text_size_for_medium"
                         android:layout_width="match_parent"
@@ -105,25 +104,20 @@
                 android:gravity="bottom"
                 android:layout_gravity="center_vertical"
                 android:orientation="horizontal"
+                android:paddingTop="2dp"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
-                android:minHeight="18dp"
                 android:clipToOutline="true">
                 <TextView
                     android:id="@+id/name"
-                    android:layout_gravity="start|center_vertical"
-                    android:gravity="start|center_vertical"
+                    android:gravity="center_vertical"
+                    android:layout_weight="1"
                     android:text="@string/empty_user_name"
-                    android:textAppearance="@*android:style/TextAppearance.DeviceDefault.Notification.Title"
+                    android:textAppearance="@*android:style/TextAppearance.DeviceDefault.ListItem"
                     android:textColor="?android:attr/textColorPrimary"
-                    android:textSize="@dimen/name_text_size_for_medium_content"
+                    android:textSize="14sp"
                     android:singleLine="true"
                     android:ellipsize="end"
-                    android:paddingEnd="8dp"
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content" />
-                <TextView
-                    android:layout_weight="1"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content" />
                 <TextView
@@ -131,8 +125,8 @@
                     android:gravity="end"
                     android:paddingStart="8dp"
                     android:paddingEnd="8dp"
-                    android:textAppearance="@*android:style/TextAppearance.DeviceDefault.Notification.Title"
-                    android:textColor="?androidprv:attr/textColorOnAccent"
+                    android:textAppearance="@*android:style/TextAppearance.DeviceDefault.ListItem"
+                    android:textColor="?android:attr/textColorPrimary"
                     android:background="@drawable/people_space_messages_count_background"
                     android:textSize="14sp"
                     android:maxLines="1"
@@ -143,10 +137,11 @@
                     />
                 <ImageView
                     android:id="@+id/predefined_icon"
-                    android:tint="?android:attr/textColorSecondary"
+                    android:tint="?android:attr/colorAccent"
                     android:gravity="end|center_vertical"
-                    android:layout_width="@dimen/regular_predefined_icon"
-                    android:layout_height="@dimen/regular_predefined_icon" />
+                    android:paddingStart="6dp"
+                    android:layout_width="24dp"
+                    android:layout_height="18dp" />
             </LinearLayout>
         </LinearLayout>
     </RelativeLayout>

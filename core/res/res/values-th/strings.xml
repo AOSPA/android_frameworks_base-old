@@ -321,7 +321,7 @@
     <string name="permgroupdesc_camera" msgid="7585150538459320326">"ถ่ายภาพและบันทึกวิดีโอ"</string>
     <string name="permgrouplab_nearby_devices" msgid="5529147543651181991">"อุปกรณ์ที่อยู่ใกล้เคียง"</string>
     <string name="permgroupdesc_nearby_devices" msgid="3213561597116913508">"ค้นหาและเชื่อมต่อกับอุปกรณ์ที่อยู่ใกล้เคียง"</string>
-    <string name="permgrouplab_calllog" msgid="7926834372073550288">"บันทึกการโทร"</string>
+    <string name="permgrouplab_calllog" msgid="7926834372073550288">"ประวัติการโทร"</string>
     <string name="permgroupdesc_calllog" msgid="2026996642917801803">"อ่านและเขียนบันทึกการโทรของโทรศัพท์"</string>
     <string name="permgrouplab_phone" msgid="570318944091926620">"โทรศัพท์"</string>
     <string name="permgroupdesc_phone" msgid="270048070781478204">"โทรและจัดการการโทร"</string>
@@ -580,7 +580,7 @@
     <string name="fingerprint_acquired_partial" msgid="694598777291084823">"ตรวจพบลายนิ้วมือบางส่วน"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"ประมวลผลลายนิ้วมือไม่ได้ โปรดลองอีกครั้ง"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"ทำความสะอาดเซ็นเซอร์"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="6038375140739678098">"วางนิ้วให้นานขึ้นอีกนิด"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="1254724478300787385">"ขยับนิ้วเร็วเกินไป"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"นิ้วเคลื่อนที่ช้าเกินไป โปรดลองอีกครั้ง"</string>
     <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"ลองลายนิ้วมืออื่น"</string>
     <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"สว่างเกินไป"</string>
@@ -609,10 +609,14 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"ไอคอนลายนิ้วมือ"</string>
-    <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"การปลดล็อกด้วยใบหน้า"</string>
+    <string name="permlab_manageFace" msgid="4569549381889283282">"จัดการฮาร์ดแวร์การปลดล็อกด้วยใบหน้า"</string>
+    <string name="permdesc_manageFace" msgid="6204569688492710471">"อนุญาตให้แอปเรียกใช้วิธีเพิ่มและลบเทมเพลตใบหน้าสำหรับการใช้งาน"</string>
+    <string name="permlab_useFaceAuthentication" msgid="1011430526454859030">"ใช้ฮาร์ดแวร์การปลดล็อกด้วยใบหน้า"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="3115697017684668012">"อนุญาตให้แอปใช้ฮาร์ดแวร์การปลดล็อกด้วยใบหน้าเพื่อตรวจสอบสิทธิ์"</string>
+    <string name="face_recalibrate_notification_name" msgid="6006095897989257026">"ปลดล็อกด้วยใบหน้า"</string>
     <string name="face_recalibrate_notification_title" msgid="5944930528030496897">"ลงทะเบียนใบหน้าอีกครั้ง"</string>
     <string name="face_recalibrate_notification_content" msgid="892757485125249962">"โปรดลงทะเบียนใบหน้าอีกครั้งเพื่อปรับปรุงการจดจำ"</string>
-    <string name="face_setup_notification_title" msgid="8843461561970741790">"ตั้งค่าการปลดล็อกด้วยใบหน้า"</string>
+    <string name="face_setup_notification_title" msgid="550617822603450009">"ตั้งค่าการปลดล็อกด้วยใบหน้า"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"ปลดล็อกโทรศัพท์โดยมองไปที่โทรศัพท์"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"ตั้งค่าการปลดล็อกด้วยวิธีอื่น"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"แตะเพื่อเพิ่มลายนิ้วมือ"</string>
@@ -639,19 +643,18 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"ยืนยันใบหน้าไม่ได้ ฮาร์ดแวร์ไม่พร้อมใช้งาน"</string>
-    <string name="face_error_timeout" msgid="2598544068593889762">"ลองใช้การปลดล็อกด้วยใบหน้าอีกครั้ง"</string>
+    <string name="face_error_timeout" msgid="522924647742024699">"ลองใช้การปลดล็อกด้วยใบหน้าอีกครั้ง"</string>
     <string name="face_error_no_space" msgid="5649264057026021723">"จัดเก็บข้อมูลใบหน้าใหม่ไม่ได้ ลบข้อมูลเก่าออกไปก่อน"</string>
     <string name="face_error_canceled" msgid="2164434737103802131">"ยกเลิกการดำเนินการกับใบหน้าแล้ว"</string>
-    <string name="face_error_user_canceled" msgid="5766472033202928373">"ผู้ใช้ยกเลิกการใช้การปลดล็อกด้วยใบหน้า"</string>
+    <string name="face_error_user_canceled" msgid="8553045452825849843">"ผู้ใช้ยกเลิกการใช้การปลดล็อกด้วยใบหน้า"</string>
     <string name="face_error_lockout" msgid="7864408714994529437">"ดำเนินการหลายครั้งเกินไป ลองอีกครั้งในภายหลัง"</string>
-    <string name="face_error_lockout_permanent" msgid="3277134834042995260">"ลองหลายครั้งเกินไป ปิดใช้การปลดล็อกด้วยใบหน้าแล้ว"</string>
-    <string name="face_error_lockout_screen_lock" msgid="5062609811636860928">"ลองหลายครั้งเกินไป ใช้การล็อกหน้าจอแทน"</string>
+    <string name="face_error_lockout_permanent" msgid="8277853602168960343">"ลองหลายครั้งเกินไป ปิดใช้การปลดล็อกด้วยใบหน้าแล้ว"</string>
     <string name="face_error_unable_to_process" msgid="5723292697366130070">"ยืนยันใบหน้าไม่ได้ ลองอีกครั้ง"</string>
-    <string name="face_error_not_enrolled" msgid="1134739108536328412">"คุณยังไม่ได้ตั้งค่าการปลดล็อกด้วยใบหน้า"</string>
-    <string name="face_error_hw_not_present" msgid="7940978724978763011">"อุปกรณ์นี้ยังไม่รองรับการปลดล็อกด้วยใบหน้า"</string>
+    <string name="face_error_not_enrolled" msgid="7369928733504691611">"คุณยังไม่ได้ตั้งค่าการปลดล็อกด้วยใบหน้า"</string>
+    <string name="face_error_hw_not_present" msgid="1070600921591729944">"อุปกรณ์นี้ไม่รองรับการปลดล็อกด้วยใบหน้า"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"ปิดใช้เซ็นเซอร์ชั่วคราวแล้ว"</string>
     <string name="face_name_template" msgid="3877037340223318119">"ใบหน้า <xliff:g id="FACEID">%d</xliff:g>"</string>
-    <string name="face_app_setting_name" msgid="5854024256907828015">"ใช้การปลดล็อกด้วยใบหน้า"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"ใช้การปลดล็อกด้วยใบหน้า"</string>
     <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"ใช้การล็อกด้วยใบหน้าหรือการล็อกหน้าจอ"</string>
     <string name="face_dialog_default_subtitle" msgid="6620492813371195429">"ใช้ใบหน้าของคุณเพื่อดำเนินการต่อ"</string>
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"ใช้ใบหน้าหรือการล็อกหน้าจอเพื่อดำเนินการต่อ"</string>
@@ -954,7 +957,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="4215280881346033434">"ขยายพื้นที่ปลดล็อก"</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2968195219692413046">"การปลดล็อกด้วยการเลื่อน"</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="8669128146589233293">"การปลดล็อกด้วยรูปแบบ"</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4533832120787386728">"การปลดล็อกด้วยใบหน้า"</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="632407612842329815">"การปลดล็อกด้วยใบหน้า"</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="4020864007967340068">"การปลดล็อกด้วย PIN"</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="4895939120871890557">"การปลดล็อก PIN ของซิม"</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="3459003464041899101">"การปลดล็อก PUK ของซิม"</string>
@@ -1019,7 +1022,8 @@
     <string name="text_copied" msgid="2531420577879738860">"คัดลอกข้อความไปยังคลิปบอร์ด"</string>
     <string name="copied" msgid="4675902854553014676">"คัดลอกแล้ว"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"วาง <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> จาก <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g> แล้ว"</string>
-    <string name="pasted_from_clipboard" msgid="7355790625710831847">"วาง <xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> จากคลิปบอร์ดแล้ว"</string>
+    <!-- no translation found for pasted_from_clipboard (7355790625710831847) -->
+    <skip />
     <string name="pasted_text" msgid="4298871641549173733">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> วางข้อความที่คุณคัดลอก"</string>
     <string name="pasted_image" msgid="4729097394781491022">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> วางรูปภาพที่คุณคัดลอก"</string>
     <string name="pasted_content" msgid="646276353060777131">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> วางเนื้อหาที่คุณคัดลอก"</string>
@@ -1256,10 +1260,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"กำลังเตรียม <xliff:g id="APPNAME">%1$s</xliff:g>"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"กำลังเริ่มต้นแอปพลิเคชัน"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"เสร็จสิ้นการบูต"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"ปิดหน้าจอใช่ไหม"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"ขณะตั้งค่าลายนิ้วมือคุณจะต้องกดปุ่มเปิด/ปิด\n\nซึ่งโดยปกติจะเป็นการปิดหน้าจอด้วย"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"ปิด"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"ยกเลิก"</string>
+    <!-- no translation found for fp_enrollment_powerbutton_intent_title (3385634173366119903) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_message (6582149052513682522) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_positive_button (5963520983910436791) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_negative_button (6465764183480190748) -->
+    <skip />
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> กำลังทำงาน"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"แตะเพื่อกลับไปที่เกม"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"เลือกเกม"</string>
@@ -1458,10 +1466,6 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"อนุญาตให้แอปพลิเคชันขอการลบแพ็กเกจ"</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"ขอเพิกเฉยต่อการเพิ่มประสิทธิภาพแบตเตอรี่"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"อนุญาตให้แอปขอสิทธิ์เพิกเฉยต่อการเพิ่มประสิทธิภาพแบตเตอรี่สำหรับแอปนั้น"</string>
-    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
-    <skip />
-    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
-    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"แตะสองครั้งเพื่อควบคุมการซูม"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"ไม่สามารถเพิ่มวิดเจ็ต"</string>
     <string name="ime_action_go" msgid="5536744546326495436">"ไป"</string>
@@ -1863,15 +1867,17 @@
     <string name="managed_profile_label_badge" msgid="6762559569999499495">"<xliff:g id="LABEL">%1$s</xliff:g>ที่ทำงาน"</string>
     <string name="managed_profile_label_badge_2" msgid="5673187309555352550">"<xliff:g id="LABEL">%1$s</xliff:g> งานที่ 2"</string>
     <string name="managed_profile_label_badge_3" msgid="6882151970556391957">"<xliff:g id="LABEL">%1$s</xliff:g> งานที่ 3"</string>
-    <string name="lock_to_app_unlock_pin" msgid="3890940811866290782">"ขอ PIN ก่อนเลิกปักหมุด"</string>
+    <string name="lock_to_app_unlock_pin" msgid="3890940811866290782">"ขอ PIN ก่อนเลิกตรึง"</string>
     <string name="lock_to_app_unlock_pattern" msgid="2694204070499712503">"ขอรูปแบบการปลดล็อกก่อนเลิกปักหมุด"</string>
-    <string name="lock_to_app_unlock_password" msgid="9126722403506560473">"ขอรหัสผ่านก่อนเลิกปักหมุด"</string>
+    <string name="lock_to_app_unlock_password" msgid="9126722403506560473">"ขอรหัสผ่านก่อนเลิกตรึง"</string>
     <string name="package_installed_device_owner" msgid="7035926868974878525">"ติดตั้งโดยผู้ดูแลระบบ"</string>
     <string name="package_updated_device_owner" msgid="7560272363805506941">"อัปเดตโดยผู้ดูแลระบบ"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"ลบโดยผู้ดูแลระบบ"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ตกลง"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"โหมดประหยัดแบตเตอรี่จะเปิดธีมมืดและจำกัดหรือปิดกิจกรรมในเบื้องหลัง เอฟเฟกต์ภาพบางอย่าง ฟีเจอร์บางส่วน และการเชื่อมต่อบางเครือข่าย"</string>
-    <string name="battery_saver_description" msgid="8518809702138617167">"โหมดประหยัดแบตเตอรี่จะเปิดธีมมืดและจำกัดหรือปิดกิจกรรมในเบื้องหลัง เอฟเฟกต์ภาพบางอย่าง ฟีเจอร์บางส่วน และการเชื่อมต่อบางเครือข่าย"</string>
+    <!-- no translation found for battery_saver_description_with_learn_more (4877297130366222145) -->
+    <skip />
+    <!-- no translation found for battery_saver_description (8518809702138617167) -->
+    <skip />
     <string name="data_saver_description" msgid="4995164271550590517">"เพื่อช่วยลดปริมาณการใช้อินเทอร์เน็ต โปรแกรมประหยัดอินเทอร์เน็ตจะช่วยป้องกันไม่ให้บางแอปส่งหรือรับข้อมูลโดยการใช้อินเทอร์เน็ตอยู่เบื้องหลัง แอปที่คุณกำลังใช้งานสามารถเข้าถึงอินเทอร์เน็ตได้ แต่อาจไม่บ่อยเท่าเดิม ตัวอย่างเช่น ภาพต่างๆ จะไม่แสดงจนกว่าคุณจะแตะที่ภาพเหล่านั้น"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"เปิดการประหยัดอินเทอร์เน็ตไหม"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"เปิด"</string>
@@ -1974,8 +1980,10 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"เปิด <xliff:g id="APP_NAME_0">%1$s</xliff:g> ไม่ได้ในขณะนี้ แอปนี้จัดการโดย <xliff:g id="APP_NAME_1">%2$s</xliff:g>"</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"ดูข้อมูลเพิ่มเติม"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"ยกเลิกการหยุดแอปชั่วคราว"</string>
-    <string name="work_mode_off_title" msgid="961171256005852058">"เปิดแอปงานใช่ไหม"</string>
-    <string name="work_mode_off_message" msgid="7319580997683623309">"รับสิทธิ์เข้าถึงแอปงานและการแจ้งเตือนต่างๆ"</string>
+    <!-- no translation found for work_mode_off_title (961171256005852058) -->
+    <skip />
+    <!-- no translation found for work_mode_off_message (7319580997683623309) -->
+    <skip />
     <string name="work_mode_turn_on" msgid="3662561662475962285">"เปิด"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"แอปไม่พร้อมใช้งาน"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> ไม่พร้อมใช้งานในขณะนี้"</string>
@@ -2096,7 +2104,7 @@
     <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"ตกลง"</string>
     <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"ปิด"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"ดูข้อมูลเพิ่มเติม"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"การแจ้งเตือนที่เพิ่มประสิทธิภาพมาแทนที่การแจ้งเตือนแบบปรับอัตโนมัติของ Android ใน Android 12 ฟีเจอร์นี้จะแสดงการดำเนินการและการตอบกลับที่แนะนำ ตลอดจนจัดระเบียบการแจ้งเตือน\n\nการแจ้งเตือนที่เพิ่มประสิทธิภาพจะเข้าถึงเนื้อหาของการแจ้งเตือนได้ ซึ่งรวมถึงข้อมูลส่วนบุคคล เช่น ชื่อผู้ติดต่อและข้อความ ฟีเจอร์นี้ยังปิดหรือตอบสนองต่อการแจ้งเตือนได้ด้วย เช่น การรับสายโทรศัพท์และการควบคุมโหมดห้ามรบกวน"</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"การแจ้งเตือนที่เพิ่มประสิทธิภาพมาแทนที่การแจ้งเตือนแบบปรับอัตโนมัติของ Android ใน Android 12 ฟีเจอร์นี้จะแสดงการดำเนินการและการตอบกลับที่แนะนำ ตลอดจนจัดระเบียบการแจ้งเตือน\n\nการแจ้งเตือนที่เพิ่มประสิทธิภาพจะเข้าถึงเนื้อหาของการแจ้งเตือนได้ ซึ่งรวมถึงข้อมูลส่วนบุคคล เช่น ชื่อผู้ติดต่อและข้อความ ฟีเจอร์นี้ยังปิดหรือตอบสนองต่อการแจ้งเตือนได้ด้วย เช่น การรับสายโทรศัพท์และการควบคุมโหมดห้ามรบกวน"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"การแจ้งเตือนข้อมูลโหมดกิจวัตร"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"แบตเตอรี่อาจหมดก่อนการชาร์จปกติ"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"เปิดใช้งานโหมดประหยัดแบตเตอรี่แล้วเพื่อยืดอายุการใช้งานแบตเตอรี่"</string>

@@ -91,17 +91,15 @@ public class PlatformCompat extends IPlatformCompat.Stub {
 
     @Override
     public void reportChange(long changeId, ApplicationInfo appInfo) {
-        checkCompatChangeLogPermission();
-        reportChangeInternal(changeId, appInfo.uid, ChangeReporter.STATE_LOGGED);
+        reportChangeByUid(changeId, appInfo.uid);
     }
 
     @Override
     public void reportChangeByPackageName(long changeId, String packageName,
             @UserIdInt int userId) {
-        checkCompatChangeLogPermission();
         ApplicationInfo appInfo = getApplicationInfo(packageName, userId);
         if (appInfo != null) {
-            reportChangeInternal(changeId, appInfo.uid, ChangeReporter.STATE_LOGGED);
+            reportChangeByUid(changeId, appInfo.uid);
         }
     }
 
@@ -209,6 +207,15 @@ public class PlatformCompat extends IPlatformCompat.Stub {
     }
 
     @Override
+    public void setOverridesOnReleaseBuilds(CompatibilityOverrideConfig overrides,
+            String packageName) {
+        // TODO(b/183630314): Unify the permission enforcement with the other setOverrides* methods.
+        checkCompatChangeOverrideOverridablePermission();
+        checkAllCompatOverridesAreOverridable(overrides.overrides.keySet());
+        mCompatConfig.addOverrides(overrides, packageName);
+    }
+
+    @Override
     public void setOverridesForTest(CompatibilityChangeConfig overrides, String packageName) {
         checkCompatChangeOverridePermission();
         Map<Long, PackageOverride> overridesMap = new HashMap<>();
@@ -220,15 +227,6 @@ public class PlatformCompat extends IPlatformCompat.Stub {
                     .build());
         }
         mCompatConfig.addOverrides(new CompatibilityOverrideConfig(overridesMap), packageName);
-    }
-
-    @Override
-    public void putOverridesOnReleaseBuilds(CompatibilityOverrideConfig overrides,
-            String packageName) {
-        // TODO(b/183630314): Unify the permission enforcement with the other setOverrides* methods.
-        checkCompatChangeOverrideOverridablePermission();
-        checkAllCompatOverridesAreOverridable(overrides.overrides.keySet());
-        mCompatConfig.addOverrides(overrides, packageName);
     }
 
     @Override

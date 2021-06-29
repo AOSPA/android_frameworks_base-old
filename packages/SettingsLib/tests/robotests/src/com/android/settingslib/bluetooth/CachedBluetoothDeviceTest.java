@@ -30,11 +30,8 @@ import static org.mockito.Mockito.when;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
 import android.bluetooth.BluetoothProfile;
-import android.bluetooth.BluetoothStatusCodes;
 import android.content.Context;
-import android.graphics.drawable.BitmapDrawable;
 import android.media.AudioManager;
-import android.util.LruCache;
 
 import com.android.settingslib.R;
 import com.android.settingslib.testutils.shadow.ShadowBluetoothAdapter;
@@ -739,7 +736,7 @@ public class CachedBluetoothDeviceTest {
         doAnswer(invocation -> alias[0]).when(mDevice).getAlias();
         doAnswer(invocation -> {
             alias[0] = (String) invocation.getArguments()[0];
-            return BluetoothStatusCodes.SUCCESS;
+            return true;
         }).when(mDevice).setAlias(anyString());
         when(mDevice.getName()).thenReturn(DEVICE_NAME);
         CachedBluetoothDevice cachedBluetoothDevice =
@@ -964,10 +961,6 @@ public class CachedBluetoothDeviceTest {
 
     @Test
     public void getDrawableWithDescription_isAdvancedDevice_returnAdvancedIcon() {
-        LruCache lruCache = mock(LruCache.class);
-        mCachedDevice.mDrawableCache = lruCache;
-        BitmapDrawable drawable = mock(BitmapDrawable.class);
-        when(lruCache.get("fake_uri")).thenReturn(drawable);
         when(mDevice.getMetadata(BluetoothDevice.METADATA_MAIN_ICON))
                 .thenReturn("fake_uri".getBytes());
         when(mDevice.getMetadata(BluetoothDevice.METADATA_IS_UNTETHERED_HEADSET))

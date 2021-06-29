@@ -26,7 +26,6 @@ import static android.service.notification.ZenPolicy.CONVERSATION_SENDERS_ANYONE
 
 import static com.android.systemui.people.NotificationHelper.getContactUri;
 import static com.android.systemui.people.NotificationHelper.getHighestPriorityNotification;
-import static com.android.systemui.people.NotificationHelper.shouldFilterOut;
 import static com.android.systemui.people.NotificationHelper.shouldMatchNotificationByUri;
 import static com.android.systemui.people.PeopleSpaceUtils.EMPTY_STRING;
 import static com.android.systemui.people.PeopleSpaceUtils.INVALID_USER_ID;
@@ -88,7 +87,6 @@ import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationListener.NotificationHandler;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
-import com.android.wm.shell.bubbles.Bubbles;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -121,7 +119,6 @@ public class PeopleSpaceWidgetManager {
     private NotificationEntryManager mNotificationEntryManager;
     private PackageManager mPackageManager;
     private INotificationManager mINotificationManager;
-    private Optional<Bubbles> mBubblesOptional;
     private UserManager mUserManager;
     private PeopleSpaceWidgetManager mManager;
     public UiEventLogger mUiEventLogger = new UiEventLoggerImpl();
@@ -145,9 +142,9 @@ public class PeopleSpaceWidgetManager {
     @Inject
     public PeopleSpaceWidgetManager(Context context, LauncherApps launcherApps,
             NotificationEntryManager notificationEntryManager,
-            PackageManager packageManager, Optional<Bubbles> bubblesOptional,
-            UserManager userManager, NotificationManager notificationManager,
-            BroadcastDispatcher broadcastDispatcher, @Background Executor bgExecutor) {
+            PackageManager packageManager, UserManager userManager,
+            NotificationManager notificationManager, BroadcastDispatcher broadcastDispatcher,
+            @Background Executor bgExecutor) {
         if (DEBUG) Log.d(TAG, "constructor");
         mContext = context;
         mAppWidgetManager = AppWidgetManager.getInstance(context);
@@ -160,7 +157,6 @@ public class PeopleSpaceWidgetManager {
         mPackageManager = packageManager;
         mINotificationManager = INotificationManager.Stub.asInterface(
                 ServiceManager.getService(Context.NOTIFICATION_SERVICE));
-        mBubblesOptional = bubblesOptional;
         mUserManager = userManager;
         mNotificationManager = notificationManager;
         mManager = this;
@@ -183,7 +179,6 @@ public class PeopleSpaceWidgetManager {
                 filter.addAction(Intent.ACTION_MANAGED_PROFILE_UNAVAILABLE);
                 filter.addAction(Intent.ACTION_USER_UNLOCKED);
                 mBroadcastDispatcher.registerReceiver(mBaseBroadcastReceiver, filter,
-
                         null /* executor */, UserHandle.ALL);
                 mRegisteredReceivers = true;
             }
@@ -200,8 +195,7 @@ public class PeopleSpaceWidgetManager {
                         "Received updated conversation: "
                                 + conversation.getShortcutInfo().getLabel());
             }
-            mBgExecutor.execute(() ->
-                    updateWidgetsWithConversationChanged(conversation));
+            updateWidgetsWithConversationChanged(conversation);
         }
     }
 
@@ -213,9 +207,8 @@ public class PeopleSpaceWidgetManager {
             AppWidgetManager appWidgetManager, IPeopleManager iPeopleManager,
             PeopleManager peopleManager, LauncherApps launcherApps,
             NotificationEntryManager notificationEntryManager, PackageManager packageManager,
-            Optional<Bubbles> bubblesOptional, UserManager userManager,
-            INotificationManager iNotificationManager, NotificationManager notificationManager,
-            @Background Executor executor) {
+            UserManager userManager, INotificationManager iNotificationManager,
+            NotificationManager notificationManager, @Background Executor executor) {
         mContext = context;
         mAppWidgetManager = appWidgetManager;
         mIPeopleManager = iPeopleManager;
@@ -223,7 +216,6 @@ public class PeopleSpaceWidgetManager {
         mLauncherApps = launcherApps;
         mNotificationEntryManager = notificationEntryManager;
         mPackageManager = packageManager;
-        mBubblesOptional = bubblesOptional;
         mUserManager = userManager;
         mINotificationManager = iNotificationManager;
         mNotificationManager = notificationManager;
@@ -236,10 +228,6 @@ public class PeopleSpaceWidgetManager {
      * Updates People Space widgets.
      */
     public void updateWidgets(int[] widgetIds) {
-        mBgExecutor.execute(() -> updateWidgetsInBackground(widgetIds));
-    }
-
-    private void updateWidgetsInBackground(int[] widgetIds) {
         try {
             if (DEBUG) Log.d(TAG, "updateWidgets called");
             if (widgetIds.length == 0) {
@@ -495,8 +483,7 @@ public class PeopleSpaceWidgetManager {
                 notifications
                         .stream()
                         .filter(entry -> NotificationHelper.isValid(entry)
-                                && NotificationHelper.isMissedCallOrHasContent(entry)
-                                && !shouldFilterOut(mBubblesOptional, entry))
+                                && NotificationHelper.isMissedCallOrHasContent(entry))
                         .collect(Collectors.groupingBy(
                                 PeopleTileKey::new,
                                 Collectors.mapping(Function.identity(), Collectors.toSet())));
@@ -680,16 +667,12 @@ public class PeopleSpaceWidgetManager {
         if (icon != null) {
             updatedTile.setUserIcon(icon);
         }
-        if (DEBUG) Log.d(TAG, "Statuses: " + conversation.getStatuses());
-        NotificationChannel channel = conversation.getNotificationChannel();
-        if (channel != null) {
-            if (DEBUG) Log.d(TAG, "Important:" + channel.isImportantConversation());
-            updatedTile.setIsImportantConversation(channel.isImportantConversation());
-        }
         updatedTile
                 .setContactUri(uri)
                 .setStatuses(conversation.getStatuses())
-                .setLastInteractionTimestamp(conversation.getLastEventTimestamp());
+                .setLastInteractionTimestamp(conversation.getLastEventTimestamp())
+                .setIsImportantConversation(conversation.getParentNotificationChannel() != null
+                        && conversation.getParentNotificationChannel().isImportantConversation());
         updateAppWidgetOptionsAndView(appWidgetId, updatedTile.build());
     }
 
@@ -1100,18 +1083,17 @@ public class PeopleSpaceWidgetManager {
                 NotificationManager.Policy.areAllVisualEffectsSuppressed(
                         policy.suppressedVisualEffects);
         int notificationPolicyState = 0;
-        // If the user sees notifications in DND, we do not need to evaluate the current DND
-        // state, just always show notifications.
-        if (!suppressVisualEffects) {
-            if (DEBUG) Log.d(TAG, "Visual effects not suppressed.");
-            return PeopleSpaceTile.SHOW_CONVERSATIONS;
-        }
         switch (mNotificationManager.getCurrentInterruptionFilter()) {
             case INTERRUPTION_FILTER_ALL:
                 if (DEBUG) Log.d(TAG, "All interruptions allowed");
                 return PeopleSpaceTile.SHOW_CONVERSATIONS;
             case INTERRUPTION_FILTER_PRIORITY:
                 if (policy.allowConversations()) {
+                    // If the user sees notifications in DND, show notifications in tiles in DND.
+                    if (!suppressVisualEffects) {
+                        if (DEBUG) Log.d(TAG, "Visual effects not suppressed.");
+                        return PeopleSpaceTile.SHOW_CONVERSATIONS;
+                    }
                     if (policy.priorityConversationSenders == CONVERSATION_SENDERS_ANYONE) {
                         if (DEBUG) Log.d(TAG, "All conversations allowed");
                         // We only show conversations, so we can show everything.
@@ -1146,6 +1128,11 @@ public class PeopleSpaceWidgetManager {
             case INTERRUPTION_FILTER_NONE:
             case INTERRUPTION_FILTER_ALARMS:
             default:
+                // If the user sees notifications in DND, show notifications in tiles in DND.
+                if (!suppressVisualEffects) {
+                    if (DEBUG) Log.d(TAG, "Visual effects not suppressed.");
+                    return PeopleSpaceTile.SHOW_CONVERSATIONS;
+                }
                 if (DEBUG) Log.d(TAG, "Block conversations");
                 return PeopleSpaceTile.BLOCK_CONVERSATIONS;
         }

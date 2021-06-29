@@ -268,9 +268,7 @@ class PinnedTaskController {
                 matrix.postRotate(90);
             }
             matrix.postTranslate(dx, dy);
-            final SurfaceControl leash = pinnedTask.getSurfaceControl();
-            t.setMatrix(leash, matrix, new float[9])
-                    .setCornerRadius(leash, pipTx.mCornerRadius);
+            t.setMatrix(pinnedTask.getSurfaceControl(), matrix, new float[9]);
             Slog.i(TAG, "Seamless rotation PiP tx=" + pipTx + " pos=" + dx + "," + dy);
             return;
         }

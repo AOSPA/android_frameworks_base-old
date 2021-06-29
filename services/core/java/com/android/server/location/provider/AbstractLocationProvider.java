@@ -263,10 +263,10 @@ public abstract class AbstractLocationProvider {
     }
 
     /**
-     * The current state of the provider.
+     * The current allowed state of this provider.
      */
-    public final State getState() {
-        return mInternalState.get().state;
+    public final boolean isAllowed() {
+        return mInternalState.get().state.allowed;
     }
 
     /**
@@ -277,10 +277,24 @@ public abstract class AbstractLocationProvider {
     }
 
     /**
+     * The current provider properties of this provider.
+     */
+    public final @Nullable ProviderProperties getProperties() {
+        return mInternalState.get().state.properties;
+    }
+
+    /**
      * Call this method to report a change in provider properties.
      */
     protected void setProperties(@Nullable ProviderProperties properties) {
         setState(state -> state.withProperties(properties));
+    }
+
+    /**
+     * The current identity of this provider.
+     */
+    public final @Nullable CallerIdentity getIdentity() {
+        return mInternalState.get().state.identity;
     }
 
     /**
@@ -289,10 +303,6 @@ public abstract class AbstractLocationProvider {
     protected void setIdentity(@Nullable CallerIdentity identity) {
         Preconditions.checkArgument(identity == null || identity.getListenerId() == null);
         setState(state -> state.withIdentity(identity));
-    }
-
-    public final Set<String> getExtraAttributionTags() {
-        return mInternalState.get().state.extraAttributionTags;
     }
 
     /**

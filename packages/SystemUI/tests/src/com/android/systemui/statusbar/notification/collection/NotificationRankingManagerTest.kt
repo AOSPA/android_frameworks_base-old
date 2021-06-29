@@ -30,11 +30,9 @@ import androidx.test.filters.SmallTest
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.statusbar.NotificationEntryHelper.modifyRanking
 import com.android.systemui.statusbar.NotificationMediaManager
-import com.android.systemui.statusbar.notification.NotificationEntryManager.KeyguardEnvironment
 import com.android.systemui.statusbar.notification.NotificationEntryManagerLogger
 import com.android.systemui.statusbar.notification.NotificationFilter
 import com.android.systemui.statusbar.notification.NotificationSectionsFeatureManager
-import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
 import com.android.systemui.statusbar.notification.collection.provider.HighPriorityProvider
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier
 import com.android.systemui.statusbar.notification.people.PeopleNotificationIdentifier.Companion.TYPE_FULL_PERSON
@@ -44,6 +42,7 @@ import com.android.systemui.statusbar.notification.row.ExpandableNotificationRow
 import com.android.systemui.statusbar.notification.stack.BUCKET_ALERTING
 import com.android.systemui.statusbar.notification.stack.BUCKET_FOREGROUND_SERVICE
 import com.android.systemui.statusbar.notification.stack.BUCKET_SILENT
+import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy
 import com.android.systemui.statusbar.policy.HeadsUpManager
 import com.google.common.truth.Truth.assertThat
 import dagger.Lazy
@@ -80,11 +79,9 @@ class NotificationRankingManagerTest : SysuiTestCase() {
                 mock(NotificationEntryManagerLogger::class.java),
                 sectionsManager,
                 personNotificationIdentifier,
-                HighPriorityProvider(
-                        personNotificationIdentifier,
-                        mock(NotificationGroupManagerLegacy::class.java)),
-                mock(KeyguardEnvironment::class.java)
-                )
+                HighPriorityProvider(personNotificationIdentifier,
+                    mock(NotificationGroupManagerLegacy::class.java))
+        )
     }
 
     @Test
@@ -489,8 +486,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
         logger: NotificationEntryManagerLogger,
         sectionsFeatureManager: NotificationSectionsFeatureManager,
         peopleNotificationIdentifier: PeopleNotificationIdentifier,
-        highPriorityProvider: HighPriorityProvider,
-        keyguardEnvironment: KeyguardEnvironment
+        highPriorityProvider: HighPriorityProvider
     ) : NotificationRankingManager(
         mediaManager,
         groupManager,
@@ -499,8 +495,7 @@ class NotificationRankingManagerTest : SysuiTestCase() {
         logger,
         sectionsFeatureManager,
         peopleNotificationIdentifier,
-        highPriorityProvider,
-        keyguardEnvironment
+        highPriorityProvider
     ) {
         fun applyTestRankingMap(r: RankingMap) {
             rankingMap = r

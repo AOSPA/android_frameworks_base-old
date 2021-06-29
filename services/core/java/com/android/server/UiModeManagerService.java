@@ -754,7 +754,8 @@ final class UiModeManagerService extends SystemService {
         }
 
         @Override
-        public void setApplicationNightMode(@UiModeManager.NightMode int mode) {
+        public void setApplicationNightMode(@UiModeManager.NightMode int mode)
+                throws RemoteException {
             switch (mode) {
                 case UiModeManager.MODE_NIGHT_NO:
                 case UiModeManager.MODE_NIGHT_YES:
@@ -775,10 +776,14 @@ final class UiModeManagerService extends SystemService {
                 default:
                     configNightMode = Configuration.UI_MODE_NIGHT_UNDEFINED;
             }
-            final ActivityTaskManagerInternal.PackageConfigurationUpdater updater =
-                    mActivityTaskManager.createPackageConfigurationUpdater();
-            updater.setNightMode(configNightMode);
-            updater.commit();
+            try {
+                final ActivityTaskManagerInternal.PackageConfigurationUpdater updater =
+                        mActivityTaskManager.createPackageConfigurationUpdater();
+                updater.setNightMode(configNightMode);
+                updater.commit();
+            } catch (RemoteException e) {
+                throw e;
+            }
         }
 
         @Override

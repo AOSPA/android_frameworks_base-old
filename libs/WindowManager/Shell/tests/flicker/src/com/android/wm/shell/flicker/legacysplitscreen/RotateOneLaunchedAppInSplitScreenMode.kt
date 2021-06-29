@@ -23,7 +23,6 @@ import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.appWindowBecomesVisible
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.endRotation
@@ -51,7 +50,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group2
 class RotateOneLaunchedAppInSplitScreenMode(
     testSpec: FlickerTestParameter
 ) : LegacySplitScreenRotateTransition(testSpec) {
@@ -64,11 +62,11 @@ class RotateOneLaunchedAppInSplitScreenMode(
             }
         }
 
-    @Presubmit
+    @FlakyTest(bugId = 175687842)
     @Test
     fun dockedStackDividerIsVisible() = testSpec.dockedStackDividerIsVisible()
 
-    @Presubmit
+    @FlakyTest(bugId = 175687842)
     @Test
     fun dockedStackPrimaryBoundsIsVisible() = testSpec.dockedStackPrimaryBoundsIsVisible(
         testSpec.config.startRotation, splitScreenApp.defaultWindowName)

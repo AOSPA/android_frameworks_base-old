@@ -18,12 +18,10 @@ package com.android.systemui.biometrics;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.atLeast;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.content.Context;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 
@@ -56,8 +54,6 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
     // Dependencies
     @Mock
     private UdfpsKeyguardView mView;
-    @Mock
-    private Context mResourceContext;
     @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
@@ -94,9 +90,8 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        when(mView.getContext()).thenReturn(mResourceContext);
-        when(mResourceContext.getString(anyInt())).thenReturn("test string");
         when(mKeyguardViewMediator.isAnimatingScreenOff()).thenReturn(false);
+        when(mKeyguardUpdateMonitor.isKeyguardVisible()).thenReturn(true);
         mController = new UdfpsKeyguardViewController(
                 mView,
                 mStatusBarStateController,
@@ -183,6 +178,17 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void testShouldPauseAuthKeyguardNotVisible() {
+        mController.onViewAttached();
+        captureKeyguardUpdateMonitorCallback();
+
+        // WHEN keyguard isn't visible
+        mKeyguardUpdateMonitorCallback.onKeyguardVisibilityChangedRaw(false);
+
+        assertTrue(mController.shouldPauseAuth());
+    }
+
+    @Test
     public void testShouldPauseAuthOnShadeLocked() {
         mController.onViewAttached();
         captureStatusBarStateListeners();
@@ -254,15 +260,15 @@ public class UdfpsKeyguardViewControllerTest extends SysuiTestCase {
 
     @Test
     public void testOnDetachedStateReset() {
-        // GIVEN view is attached
+        // GIVEN view is attached, alt auth is force being shown
         mController.onViewAttached();
-        captureAltAuthInterceptor();
+        captureStatusBarStateListeners();
 
         // WHEN view is detached
         mController.onViewDetached();
 
-        // THEN remove alternate auth interceptor
-        verify(mStatusBarKeyguardViewManager).removeAlternateAuthInterceptor(mAltAuthInterceptor);
+        // THEN set alternate auth interceptor to null
+        verify(mStatusBarKeyguardViewManager).setAlternateAuthInterceptor(null);
     }
 
     private void sendStatusBarStateChanged(int statusBarState) {

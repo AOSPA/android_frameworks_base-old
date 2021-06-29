@@ -95,7 +95,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
     @Mock
     private WindowManager mWindowManager;
     @Mock
-    private UdfpsHbmProvider mHbmProvider;
+    private UdfpsHbmCallback mHbmCallback;
     @Mock
     private StatusBarStateController mStatusBarStateController;
     @Mock
@@ -178,7 +178,7 @@ public class UdfpsControllerTest extends SysuiTestCase {
                 mAccessibilityManager,
                 mScreenLifecycle,
                 mVibrator,
-                Optional.of(mHbmProvider));
+                Optional.of(mHbmCallback));
         verify(mFingerprintManager).setUdfpsOverlayController(mOverlayCaptor.capture());
         mOverlayController = mOverlayCaptor.getValue();
         verify(mScreenLifecycle).addObserver(mScreenObserverCaptor.capture());
@@ -275,7 +275,6 @@ public class UdfpsControllerTest extends SysuiTestCase {
         mScreenObserver.onScreenTurnedOn();
         mFgExecutor.runAllReady();
         mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
-        when(mUdfpsView.isIlluminationRequested()).thenReturn(true);
         // WHEN it is cancelled
         mUdfpsController.onCancelUdfps();
         // THEN the illumination is hidden
@@ -290,7 +289,6 @@ public class UdfpsControllerTest extends SysuiTestCase {
         mScreenObserver.onScreenTurnedOn();
         mFgExecutor.runAllReady();
         mUdfpsController.onAodInterrupt(0, 0, 0f, 0f);
-        when(mUdfpsView.isIlluminationRequested()).thenReturn(true);
         // WHEN it times out
         mFgExecutor.advanceClockToNext();
         mFgExecutor.runAllReady();

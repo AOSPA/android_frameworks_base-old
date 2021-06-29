@@ -96,14 +96,11 @@ public enum ScrimState {
     AUTH_SCRIMMED {
         @Override
         public void prepare(ScrimState previousState) {
-            mNotifTint = previousState.mNotifTint;
-            mNotifAlpha = previousState.mNotifAlpha;
-
-            mBehindTint = previousState.mBehindTint;
-            mBehindAlpha = previousState.mBehindAlpha;
-
             mFrontTint = Color.BLACK;
+
+            mBehindAlpha = 0f;
             mFrontAlpha = .66f;
+            mBubbleAlpha = 0f;
         }
     },
 
@@ -189,11 +186,9 @@ public enum ScrimState {
             mBubbleAlpha = ScrimController.TRANSPARENT;
 
             mAnimationDuration = ScrimController.ANIMATION_DURATION_LONG;
-            // DisplayPowerManager may blank the screen for us, or we might blank it for ourselves
-            // by animating the screen off via the LightRevelScrim. In either case we just need to
-            // set our state.
-            mAnimateChange = mDozeParameters.shouldControlScreenOff()
-                    && !mDozeParameters.shouldControlUnlockedScreenOff();
+            // DisplayPowerManager may blank the screen for us,
+            // in this case we just need to set our state.
+            mAnimateChange = mDozeParameters.shouldControlScreenOff();
         }
 
         @Override

@@ -17,7 +17,6 @@
 package com.android.server.appsearch.external.localstorage.stats;
 
 import android.annotation.NonNull;
-import android.app.appsearch.AppSearchResult;
 
 import java.util.Objects;
 
@@ -28,15 +27,8 @@ import java.util.Objects;
  * @hide
  */
 public final class PutDocumentStats {
-    @NonNull private final String mPackageName;
-    @NonNull private final String mDatabase;
-    /**
-     * The status code returned by {@link AppSearchResult#getResultCode()} for the call or internal
-     * state.
-     */
-    @AppSearchResult.ResultCode private final int mStatusCode;
-
-    private final int mTotalLatencyMillis;
+    /** {@link GeneralStats} holds the general stats. */
+    @NonNull private final GeneralStats mGeneralStats;
 
     /** Time used to generate a document proto from a Bundle. */
     private final int mGenerateDocumentProtoLatencyMillis;
@@ -69,10 +61,7 @@ public final class PutDocumentStats {
 
     PutDocumentStats(@NonNull Builder builder) {
         Objects.requireNonNull(builder);
-        mPackageName = builder.mPackageName;
-        mDatabase = builder.mDatabase;
-        mStatusCode = builder.mStatusCode;
-        mTotalLatencyMillis = builder.mTotalLatencyMillis;
+        mGeneralStats = Objects.requireNonNull(builder.mGeneralStatsBuilder).build();
         mGenerateDocumentProtoLatencyMillis = builder.mGenerateDocumentProtoLatencyMillis;
         mRewriteDocumentTypesLatencyMillis = builder.mRewriteDocumentTypesLatencyMillis;
         mNativeLatencyMillis = builder.mNativeLatencyMillis;
@@ -84,27 +73,10 @@ public final class PutDocumentStats {
         mNativeExceededMaxNumTokens = builder.mNativeExceededMaxNumTokens;
     }
 
-    /** Returns calling package name. */
+    /** Returns the {@link GeneralStats} object attached to this instance. */
     @NonNull
-    public String getPackageName() {
-        return mPackageName;
-    }
-
-    /** Returns calling database name. */
-    @NonNull
-    public String getDatabase() {
-        return mDatabase;
-    }
-
-    /** Returns status code for this putDocument. */
-    @AppSearchResult.ResultCode
-    public int getStatusCode() {
-        return mStatusCode;
-    }
-
-    /** Returns total latency of this putDocument in millis. */
-    public int getTotalLatencyMillis() {
-        return mTotalLatencyMillis;
+    public GeneralStats getGeneralStats() {
+        return mGeneralStats;
     }
 
     /** Returns time spent on generating document proto, in milliseconds. */
@@ -157,10 +129,7 @@ public final class PutDocumentStats {
 
     /** Builder for {@link PutDocumentStats}. */
     public static class Builder {
-        @NonNull final String mPackageName;
-        @NonNull final String mDatabase;
-        @AppSearchResult.ResultCode int mStatusCode;
-        int mTotalLatencyMillis;
+        @NonNull final GeneralStats.Builder mGeneralStatsBuilder;
         int mGenerateDocumentProtoLatencyMillis;
         int mRewriteDocumentTypesLatencyMillis;
         int mNativeLatencyMillis;
@@ -171,24 +140,17 @@ public final class PutDocumentStats {
         int mNativeNumTokensIndexed;
         boolean mNativeExceededMaxNumTokens;
 
-        /** Builder for {@link PutDocumentStats} */
+        /** Builder takes {@link GeneralStats.Builder}. */
         public Builder(@NonNull String packageName, @NonNull String database) {
-            mPackageName = Objects.requireNonNull(packageName);
-            mDatabase = Objects.requireNonNull(database);
+            Objects.requireNonNull(packageName);
+            Objects.requireNonNull(database);
+            mGeneralStatsBuilder = new GeneralStats.Builder(packageName, database);
         }
 
-        /** Sets the status code. */
+        /** Returns {@link GeneralStats.Builder}. */
         @NonNull
-        public Builder setStatusCode(@AppSearchResult.ResultCode int statusCode) {
-            mStatusCode = statusCode;
-            return this;
-        }
-
-        /** Sets total latency in millis. */
-        @NonNull
-        public Builder setTotalLatencyMillis(int totalLatencyMillis) {
-            mTotalLatencyMillis = totalLatencyMillis;
-            return this;
+        public GeneralStats.Builder getGeneralStatsBuilder() {
+            return mGeneralStatsBuilder;
         }
 
         /** Sets how much time we spend for generating document proto, in milliseconds. */

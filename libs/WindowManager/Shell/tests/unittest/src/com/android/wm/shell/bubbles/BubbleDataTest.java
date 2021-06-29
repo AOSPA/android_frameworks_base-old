@@ -19,12 +19,9 @@ package com.android.wm.shell.bubbles;
 import static com.google.common.truth.Truth.assertThat;
 import static com.google.common.truth.Truth.assertWithMessage;
 
-import static junit.framework.Assert.assertNotNull;
 import static junit.framework.TestCase.assertEquals;
 
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyZeroInteractions;
@@ -93,7 +90,6 @@ public class BubbleDataTest extends ShellTestCase {
     private Bubble mBubbleDismissed;
 
     private BubbleData mBubbleData;
-    private TestableBubblePositioner mPositioner;
 
     @Mock
     private TimeSource mTimeSource;
@@ -154,9 +150,9 @@ public class BubbleDataTest extends ShellTestCase {
                 mMainExecutor);
         mBubbleC1 = new Bubble(mEntryC1, mSuppressionListener, mPendingIntentCanceledListener,
                 mMainExecutor);
-        mPositioner = new TestableBubblePositioner(mContext,
+        TestableBubblePositioner positioner = new TestableBubblePositioner(mContext,
                 mock(WindowManager.class));
-        mBubbleData = new BubbleData(getContext(), mBubbleLogger, mPositioner,
+        mBubbleData = new BubbleData(getContext(), mBubbleLogger, positioner,
                 mMainExecutor);
 
         // Used by BubbleData to set lastAccessedTime
@@ -812,61 +808,6 @@ public class BubbleDataTest extends ShellTestCase {
         mBubbleData.overflowBubble(Bubbles.DISMISS_AGED, mBubbleA1);
         mBubbleData.overflowBubble(Bubbles.DISMISS_AGED, mBubbleA1);
         assertEquals(1, mBubbleData.getOverflowBubbles().size());
-    }
-
-    @Test
-    public void test_onMaxBubblesChanged_notExpanded() {
-        mBubbleData.setListener(mListener);
-        mPositioner.setMaxBubbles(5);
-        sendUpdatedEntryAtTime(mEntryA1, 1000);
-        sendUpdatedEntryAtTime(mEntryA2, 2000);
-        sendUpdatedEntryAtTime(mEntryA3, 3000);
-        sendUpdatedEntryAtTime(mEntryB1, 4000);
-        sendUpdatedEntryAtTime(mEntryB2, 5000);
-        mBubbleData.setExpanded(false);
-        reset(mListener);
-
-        mPositioner.setMaxBubbles(3);
-        mBubbleData.onMaxBubblesChanged();
-        verifyUpdateReceived();
-
-        BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.removedBubbles.get(0)).isEqualTo(
-                Pair.create(mBubbleA1, Bubbles.DISMISS_AGED));
-        assertThat(update.removedBubbles.get(1)).isEqualTo(
-                Pair.create(mBubbleA2, Bubbles.DISMISS_AGED));
-
-        assertNotNull(mBubbleData.getOverflowBubbleWithKey(mBubbleA1.getKey()));
-        assertNotNull(mBubbleData.getOverflowBubbleWithKey(mBubbleA2.getKey()));
-    }
-
-    @Test
-    public void test_onMaxBubblesChanged_expanded() {
-        mBubbleData.setListener(mListener);
-        mPositioner.setMaxBubbles(5);
-        sendUpdatedEntryAtTime(mEntryA1, 1000);
-        sendUpdatedEntryAtTime(mEntryA2, 2000);
-        sendUpdatedEntryAtTime(mEntryA3, 3000);
-        sendUpdatedEntryAtTime(mEntryB1, 4000);
-        sendUpdatedEntryAtTime(mEntryB2, 5000);
-        mBubbleData.setExpanded(true);
-        reset(mListener);
-
-        mPositioner.setMaxBubbles(3);
-        mBubbleData.onMaxBubblesChanged();
-        verify(mListener, never()).applyUpdate(any());
-
-        mBubbleData.setExpanded(false);
-        verifyUpdateReceived();
-
-        BubbleData.Update update = mUpdateCaptor.getValue();
-        assertThat(update.removedBubbles.get(0)).isEqualTo(
-                Pair.create(mBubbleA1, Bubbles.DISMISS_AGED));
-        assertThat(update.removedBubbles.get(1)).isEqualTo(
-                Pair.create(mBubbleA2, Bubbles.DISMISS_AGED));
-
-        assertNotNull(mBubbleData.getOverflowBubbleWithKey(mBubbleA1.getKey()));
-        assertNotNull(mBubbleData.getOverflowBubbleWithKey(mBubbleA2.getKey()));
     }
 
     private void verifyUpdateReceived() {

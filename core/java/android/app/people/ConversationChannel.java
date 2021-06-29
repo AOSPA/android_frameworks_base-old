@@ -36,8 +36,8 @@ public final class ConversationChannel implements Parcelable {
 
     private ShortcutInfo mShortcutInfo;
     private int mUid;
-    private NotificationChannel mNotificationChannel;
-    private NotificationChannelGroup mNotificationChannelGroup;
+    private NotificationChannel mParentNotificationChannel;
+    private NotificationChannelGroup mParentNotificationChannelGroup;
     private long mLastEventTimestamp;
     private boolean mHasActiveNotifications;
     private boolean mHasBirthdayToday;
@@ -61,8 +61,8 @@ public final class ConversationChannel implements Parcelable {
             boolean hasActiveNotifications) {
         mShortcutInfo = shortcutInfo;
         mUid = uid;
-        mNotificationChannel = parentNotificationChannel;
-        mNotificationChannelGroup = parentNotificationChannelGroup;
+        mParentNotificationChannel = parentNotificationChannel;
+        mParentNotificationChannelGroup = parentNotificationChannelGroup;
         mLastEventTimestamp = lastEventTimestamp;
         mHasActiveNotifications = hasActiveNotifications;
     }
@@ -74,8 +74,8 @@ public final class ConversationChannel implements Parcelable {
             List<ConversationStatus> statuses) {
         mShortcutInfo = shortcutInfo;
         mUid = uid;
-        mNotificationChannel = parentNotificationChannel;
-        mNotificationChannelGroup = parentNotificationChannelGroup;
+        mParentNotificationChannel = parentNotificationChannel;
+        mParentNotificationChannelGroup = parentNotificationChannelGroup;
         mLastEventTimestamp = lastEventTimestamp;
         mHasActiveNotifications = hasActiveNotifications;
         mHasBirthdayToday = hasBirthdayToday;
@@ -85,8 +85,8 @@ public final class ConversationChannel implements Parcelable {
     public ConversationChannel(Parcel in) {
         mShortcutInfo = in.readParcelable(ShortcutInfo.class.getClassLoader());
         mUid = in.readInt();
-        mNotificationChannel = in.readParcelable(NotificationChannel.class.getClassLoader());
-        mNotificationChannelGroup =
+        mParentNotificationChannel = in.readParcelable(NotificationChannel.class.getClassLoader());
+        mParentNotificationChannelGroup =
                 in.readParcelable(NotificationChannelGroup.class.getClassLoader());
         mLastEventTimestamp = in.readLong();
         mHasActiveNotifications = in.readBoolean();
@@ -104,8 +104,8 @@ public final class ConversationChannel implements Parcelable {
     public void writeToParcel(Parcel dest, int flags) {
         dest.writeParcelable(mShortcutInfo, flags);
         dest.writeInt(mUid);
-        dest.writeParcelable(mNotificationChannel, flags);
-        dest.writeParcelable(mNotificationChannelGroup, flags);
+        dest.writeParcelable(mParentNotificationChannel, flags);
+        dest.writeParcelable(mParentNotificationChannelGroup, flags);
         dest.writeLong(mLastEventTimestamp);
         dest.writeBoolean(mHasActiveNotifications);
         dest.writeBoolean(mHasBirthdayToday);
@@ -120,12 +120,12 @@ public final class ConversationChannel implements Parcelable {
         return mUid;
     }
 
-    public NotificationChannel getNotificationChannel() {
-        return mNotificationChannel;
+    public NotificationChannel getParentNotificationChannel() {
+        return mParentNotificationChannel;
     }
 
-    public NotificationChannelGroup getNotificationChannelGroup() {
-        return mNotificationChannelGroup;
+    public NotificationChannelGroup getParentNotificationChannelGroup() {
+        return mParentNotificationChannelGroup;
     }
 
     public long getLastEventTimestamp() {
@@ -148,19 +148,5 @@ public final class ConversationChannel implements Parcelable {
     /** Returns statuses associated with the conversation. */
     public @Nullable List<ConversationStatus> getStatuses() {
         return mStatuses;
-    }
-
-    @Override
-    public String toString() {
-        return "ConversationChannel{" +
-                "mShortcutInfo=" + mShortcutInfo +
-                ", mUid=" + mUid +
-                ", mNotificationChannel=" + mNotificationChannel +
-                ", mNotificationChannelGroup=" + mNotificationChannelGroup +
-                ", mLastEventTimestamp=" + mLastEventTimestamp +
-                ", mHasActiveNotifications=" + mHasActiveNotifications +
-                ", mHasBirthdayToday=" + mHasBirthdayToday +
-                ", mStatuses=" + mStatuses +
-                '}';
     }
 }

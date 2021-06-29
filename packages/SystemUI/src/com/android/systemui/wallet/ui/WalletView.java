@@ -63,8 +63,6 @@ public class WalletView extends FrameLayout implements WalletCardCarousel.OnCard
     private final ViewGroup mEmptyStateView;
     private CharSequence mCenterCardText;
     private boolean mIsDeviceLocked = false;
-    private boolean mIsUdfpsEnabled = false;
-    private OnClickListener mDeviceLockedActionOnClickListener;
 
     public WalletView(Context context) {
         this(context, null);
@@ -109,7 +107,7 @@ public class WalletView extends FrameLayout implements WalletCardCarousel.OnCard
             mCardLabel.setText(centerCardText);
             mIcon.setImageDrawable(centerCardIcon);
         }
-        renderActionButton(centerCard, mIsDeviceLocked, mIsUdfpsEnabled);
+        renderActionButton(centerCard, mIsDeviceLocked);
         if (TextUtils.equals(centerCardText, getLabelText(nextCard))) {
             mCardLabel.setAlpha(1f);
         } else {
@@ -129,19 +127,15 @@ public class WalletView extends FrameLayout implements WalletCardCarousel.OnCard
      * @param isDeviceLocked indicates whether the device is locked.
      */
     void showCardCarousel(
-            List<WalletCardViewInfo> data,
-            int selectedIndex,
-            boolean isDeviceLocked,
-            boolean isUdfpsEnabled) {
+            List<WalletCardViewInfo> data, int selectedIndex, boolean isDeviceLocked) {
         boolean shouldAnimate =
                 mCardCarousel.setData(data, selectedIndex, mIsDeviceLocked != isDeviceLocked);
         mIsDeviceLocked = isDeviceLocked;
-        mIsUdfpsEnabled = isUdfpsEnabled;
         mCardCarouselContainer.setVisibility(VISIBLE);
         mErrorView.setVisibility(GONE);
         mEmptyStateView.setVisibility(GONE);
         mIcon.setImageDrawable(getHeaderIcon(mContext, data.get(selectedIndex)));
-        renderActionButton(data.get(selectedIndex), isDeviceLocked, mIsUdfpsEnabled);
+        renderActionButton(data.get(selectedIndex), isDeviceLocked);
         if (shouldAnimate) {
             animateViewsShown(mIcon, mCardLabel, mActionButton);
         }
@@ -166,12 +160,10 @@ public class WalletView extends FrameLayout implements WalletCardCarousel.OnCard
             OnClickListener clickListener) {
         mEmptyStateView.setVisibility(VISIBLE);
         mErrorView.setVisibility(GONE);
-        mCardCarousel.setVisibility(GONE);
-        mIcon.setImageDrawable(logo);
-        mIcon.setContentDescription(logoContentDescription);
-        mCardLabel.setText(R.string.wallet_empty_state_label);
+        mCardCarouselContainer.setVisibility(GONE);
         ImageView logoView = mEmptyStateView.requireViewById(R.id.empty_state_icon);
-        logoView.setImageDrawable(mContext.getDrawable(R.drawable.ic_qs_plus));
+        logoView.setImageDrawable(logo);
+        logoView.setContentDescription(logoContentDescription);
         mEmptyStateView.<TextView>requireViewById(R.id.empty_state_title).setText(label);
         mEmptyStateView.setOnClickListener(clickListener);
     }
@@ -184,10 +176,6 @@ public class WalletView extends FrameLayout implements WalletCardCarousel.OnCard
         mErrorView.setVisibility(VISIBLE);
         mCardCarouselContainer.setVisibility(GONE);
         mEmptyStateView.setVisibility(GONE);
-    }
-
-    void setDeviceLockedActionOnClickListener(OnClickListener onClickListener) {
-        mDeviceLockedActionOnClickListener = onClickListener;
     }
 
     void hide() {
@@ -245,14 +233,12 @@ public class WalletView extends FrameLayout implements WalletCardCarousel.OnCard
         return icon;
     }
 
-    private void renderActionButton(
-            WalletCardViewInfo walletCard, boolean isDeviceLocked, boolean isUdfpsEnabled) {
+    private void renderActionButton(WalletCardViewInfo walletCard, boolean isDeviceLocked) {
         CharSequence actionButtonText = getActionButtonText(walletCard);
-        if (!isUdfpsEnabled && isDeviceLocked) {
+        if (isDeviceLocked) {
             mActionButton.setVisibility(VISIBLE);
             mActionButton.setText(R.string.wallet_action_button_label_unlock);
-            mActionButton.setOnClickListener(mDeviceLockedActionOnClickListener);
-        } else if (!isDeviceLocked && actionButtonText != null) {
+        } else if (actionButtonText != null) {
             mActionButton.setText(actionButtonText);
             mActionButton.setVisibility(VISIBLE);
             mActionButton.setOnClickListener(v -> {

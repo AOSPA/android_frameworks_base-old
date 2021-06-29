@@ -25,7 +25,6 @@ import static android.content.pm.LauncherApps.FLAG_CACHE_BUBBLE_SHORTCUTS;
 import static android.content.pm.LauncherApps.FLAG_CACHE_NOTIFICATION_SHORTCUTS;
 import static android.content.pm.LauncherApps.FLAG_CACHE_PEOPLE_TILE_SHORTCUTS;
 
-import android.annotation.AppIdInt;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.UserIdInt;
@@ -698,13 +697,14 @@ public class LauncherAppsService extends SystemService {
             }
             final long ident = Binder.clearCallingIdentity();
             try {
-                return injectCreatePendingIntent(0 /* requestCode */, intents,
-                        FLAG_MUTABLE, opts, packageName, mPackageManagerInternal.getPackageUid(
-                                packageName, PackageManager.MATCH_DIRECT_BOOT_AUTO,
-                                user.getIdentifier()));
+                return injectCreatePendingIntent(mContext.createPackageContextAsUser(packageName,
+                        0, user), 0 /* requestCode */, intents, FLAG_MUTABLE, opts, user);
+            } catch (PackageManager.NameNotFoundException e) {
+                Slog.e(TAG, "Cannot create pending intent from shortcut " + shortcutId, e);
             } finally {
                 Binder.restoreCallingIdentity(ident);
             }
+            return null;
         }
 
         @Override
@@ -811,10 +811,10 @@ public class LauncherAppsService extends SystemService {
         }
 
         @VisibleForTesting
-        PendingIntent injectCreatePendingIntent(int requestCode, @NonNull Intent[] intents,
-                int flags, Bundle options, String ownerPackage, int ownerUserId) {
-            return mActivityManagerInternal.getPendingIntentActivityAsApp(requestCode, intents,
-                    flags, options, ownerPackage, ownerUserId);
+        PendingIntent injectCreatePendingIntent(Context context, int requestCode,
+                @NonNull Intent[] intents, int flags, Bundle options, UserHandle user) {
+            return PendingIntent.getActivitiesAsUser(context, requestCode, intents, flags, options,
+                    user);
         }
 
         @Override
@@ -1000,15 +1000,16 @@ public class LauncherAppsService extends SystemService {
             intents[0].setSourceBounds(sourceBounds);
 
             // Replace theme for splash screen
-            final String splashScreenThemeResName =
-                    mShortcutServiceInternal.getShortcutStartingThemeResName(getCallingUserId(),
+            final int splashScreenThemeResId =
+                    mShortcutServiceInternal.getShortcutStartingThemeResId(getCallingUserId(),
                             callingPackage, packageName, shortcutId, targetUserId);
-            if (splashScreenThemeResName != null && !splashScreenThemeResName.isEmpty()) {
+            if (splashScreenThemeResId != 0) {
                 if (startActivityOptions == null) {
                     startActivityOptions = new Bundle();
                 }
-                startActivityOptions.putString(KEY_SPLASH_SCREEN_THEME, splashScreenThemeResName);
+                startActivityOptions.putInt(KEY_SPLASH_SCREEN_THEME, splashScreenThemeResId);
             }
+
             return startShortcutIntentsAsPublisher(
                     intents, packageName, featureId, startActivityOptions, targetUserId);
         }
@@ -1205,16 +1206,8 @@ public class LauncherAppsService extends SystemService {
             final long ident = Binder.clearCallingIdentity();
             try {
                 String packageName = component.getPackageName();
-                int uId = -1;
-                try {
-                    uId = mContext.getPackageManager().getApplicationInfo(
-                            packageName, PackageManager.MATCH_ANY_USER).uid;
-                } catch (PackageManager.NameNotFoundException e) {
-                    Log.d(TAG, "package not found: " + e);
-                }
                 intent = new Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
                         Uri.fromParts("package", packageName, null));
-                intent.putExtra("uId", uId);
                 intent.setFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK);
                 intent.setSourceBounds(sourceBounds);
             } finally {
@@ -1239,12 +1232,12 @@ public class LauncherAppsService extends SystemService {
                     cookie.user.getIdentifier());
         }
 
-        /** Returns whether or not the given appId is in allow list */
-        private static boolean isCallingAppIdAllowed(int[] appIdAllowList, @AppIdInt int appId) {
-            if (appIdAllowList == null) {
+        /** Returns whether or not the given UID is in allow list */
+        private static boolean isCallingUidAllowed(int[] allowList, int callingUid) {
+            if (allowList == null) {
                 return true;
             }
-            return Arrays.binarySearch(appIdAllowList, appId) > -1;
+            return Arrays.binarySearch(allowList, callingUid) > -1;
         }
 
         private String[] getFilteredPackageNames(String[] packageNames, BroadcastCookie cookie) {
@@ -1439,7 +1432,7 @@ public class LauncherAppsService extends SystemService {
                 // Handle onPackageRemoved.
                 if (Intent.ACTION_PACKAGE_REMOVED_INTERNAL.equals(action)) {
                     final String packageName = getPackageName(intent);
-                    final int[] appIdAllowList =
+                    final int[] allowList =
                             intent.getIntArrayExtra(Intent.EXTRA_VISIBILITY_ALLOW_LIST);
                     // If {@link #EXTRA_REPLACING} is true, that will be onPackageChanged case.
                     if (packageName != null && !intent.getBooleanExtra(
@@ -1455,8 +1448,7 @@ public class LauncherAppsService extends SystemService {
                                 if (!isEnabledProfileOf(cookie.user, user, "onPackageRemoved")) {
                                     continue;
                                 }
-                                if (!isCallingAppIdAllowed(appIdAllowList, UserHandle.getAppId(
-                                        cookie.callingUid))) {
+                                if (!isCallingUidAllowed(allowList, cookie.callingUid)) {
                                     continue;
                                 }
                                 try {

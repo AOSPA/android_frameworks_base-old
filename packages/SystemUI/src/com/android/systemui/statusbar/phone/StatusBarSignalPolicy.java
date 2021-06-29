@@ -23,6 +23,7 @@ import android.util.ArraySet;
 import android.util.Log;
 
 import com.android.settingslib.mobile.TelephonyIcons;
+import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.policy.NetworkController;
@@ -62,7 +63,6 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
     private final SecurityController mSecurityController;
     private final Handler mHandler = Handler.getMain();
     private final CarrierConfigTracker mCarrierConfigTracker;
-    private final TunerService mTunerService;
 
     private boolean mHideAirplane;
     private boolean mHideMobile;
@@ -83,15 +83,8 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
 
     @Inject
     public StatusBarSignalPolicy(Context context, StatusBarIconController iconController,
-            CarrierConfigTracker carrierConfigTracker, NetworkController networkController,
-            SecurityController securityController, TunerService tunerService) {
+            CarrierConfigTracker carrierConfigTracker) {
         mContext = context;
-
-        mIconController = iconController;
-        mCarrierConfigTracker = carrierConfigTracker;
-        mNetworkController = networkController;
-        mSecurityController = securityController;
-        mTunerService = tunerService;
 
         mSlotAirplane = mContext.getString(com.android.internal.R.string.status_bar_airplane);
         mSlotMobile   = mContext.getString(com.android.internal.R.string.status_bar_mobile);
@@ -103,14 +96,18 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
                 mContext.getString(com.android.internal.R.string.status_bar_call_strength);
         mActivityEnabled = mContext.getResources().getBoolean(R.bool.config_showActivity);
 
+        mIconController = iconController;
+        mCarrierConfigTracker = carrierConfigTracker;
+        mNetworkController = Dependency.get(NetworkController.class);
+        mSecurityController = Dependency.get(SecurityController.class);
 
-        tunerService.addTunable(this, StatusBarIconController.ICON_HIDE_LIST);
+        Dependency.get(TunerService.class).addTunable(this, StatusBarIconController.ICON_HIDE_LIST);
         mNetworkController.addCallback(this);
         mSecurityController.addCallback(this);
     }
 
     public void destroy() {
-        mTunerService.removeTunable(this);
+        Dependency.get(TunerService.class).removeTunable(this);
         mNetworkController.removeCallback(this);
         mSecurityController.removeCallback(this);
     }
@@ -175,7 +172,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
                 && !mIsAirplaneMode) {
             newState.visible = true;
             newState.resId = R.drawable.ic_qs_no_internet_unavailable;
-        } else if (mWifiIconState.noDefaultNetwork && !mWifiIconState.noNetworksAvailable
+        } else if (mWifiIconState.noValidatedNetwork && !mWifiIconState.noNetworksAvailable
                 && (!mIsAirplaneMode || (mIsAirplaneMode && mIsWifiEnabled))) {
             newState.visible = true;
             newState.resId = R.drawable.ic_qs_no_internet_available;
@@ -381,7 +378,7 @@ public class StatusBarSignalPolicy implements NetworkControllerImpl.SignalCallba
         if (noDefaultNetwork && noNetworksAvailable && !mIsAirplaneMode) {
             newState.visible = true;
             newState.resId = R.drawable.ic_qs_no_internet_unavailable;
-        } else if (noDefaultNetwork && !noNetworksAvailable
+        } else if (noValidatedNetwork && !noNetworksAvailable
                 && (!mIsAirplaneMode || (mIsAirplaneMode && mIsWifiEnabled))) {
             newState.visible = true;
             newState.resId = R.drawable.ic_qs_no_internet_available;

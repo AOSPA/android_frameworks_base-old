@@ -16,10 +16,7 @@
 
 package com.android.systemui.doze;
 
-import static com.android.systemui.doze.DozeMachine.State.DOZE_AOD;
-
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyFloat;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.clearInvocations;
@@ -164,7 +161,7 @@ public class DozeTriggersTest extends SysuiTestCase {
 
         clearInvocations(mSensors);
         mTriggers.transitionTo(DozeMachine.State.DOZE_PULSING, DozeMachine.State.DOZE_PULSE_DONE);
-        mTriggers.transitionTo(DozeMachine.State.DOZE_PULSE_DONE, DOZE_AOD);
+        mTriggers.transitionTo(DozeMachine.State.DOZE_PULSE_DONE, DozeMachine.State.DOZE_AOD);
         waitForSensorManager();
         verify(mSensors).requestTriggerSensor(any(), eq(mTapSensor));
     }
@@ -210,7 +207,7 @@ public class DozeTriggersTest extends SysuiTestCase {
         mTriggers.onSensor(DozeLog.REASON_SENSOR_QUICK_PICKUP, 100, 100, null);
 
         // THEN device goes into aod (shows clock with black background)
-        verify(mMachine).requestState(DOZE_AOD);
+        verify(mMachine).requestState(DozeMachine.State.DOZE_AOD);
 
         // THEN a log is taken that quick pick up was triggered
         verify(mUiEventLogger).log(DozingUpdateUiEvent.DOZING_UPDATE_QUICK_PICKUP);
@@ -221,7 +218,7 @@ public class DozeTriggersTest extends SysuiTestCase {
         // GIVEN quick pickup is triggered when device is in DOZE
         when(mMachine.getState()).thenReturn(DozeMachine.State.DOZE);
         mTriggers.onSensor(DozeLog.REASON_SENSOR_QUICK_PICKUP, 100, 100, null);
-        verify(mMachine).requestState(DOZE_AOD);
+        verify(mMachine).requestState(DozeMachine.State.DOZE_AOD);
         verify(mMachine, never()).requestState(DozeMachine.State.DOZE);
 
         // WHEN next executable is run
@@ -237,30 +234,15 @@ public class DozeTriggersTest extends SysuiTestCase {
 
     @Test
     public void testOnSensor_Fingerprint() {
-        // GIVEN dozing state
-        when(mMachine.getState()).thenReturn(DOZE_AOD);
         final int screenX = 100;
         final int screenY = 100;
-        final float misc = -1;
         final float minor = 2f;
         final float major = 3f;
         final int reason = DozeLog.REASON_SENSOR_UDFPS_LONG_PRESS;
-        float[] rawValues = new float[]{screenX, screenY, misc, major, minor};
-
-        // WHEN longpress gesture is triggered
+        float[] rawValues = new float[]{screenX, screenY, minor, major};
         mTriggers.onSensor(reason, screenX, screenY, rawValues);
-
-        // THEN
-        // * don't immediately send interrupt
-        // * immediately extend pulse
-        verify(mAuthController, never()).onAodInterrupt(anyInt(), anyInt(), anyFloat(), anyFloat());
         verify(mHost).extendPulse(reason);
-
-        // WHEN display state changes to ON
-        mTriggers.onScreenState(Display.STATE_ON);
-
-        // THEN send interrupt
-        verify(mAuthController).onAodInterrupt(eq(screenX), eq(screenY), eq(major), eq(minor));
+        verify(mAuthController).onAodInterrupt(eq(screenX), eq(screenY), eq(minor), eq(major));
     }
 
     private void waitForSensorManager() {

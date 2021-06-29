@@ -66,12 +66,12 @@ public class BaseIWindow extends IWindow.Stub {
     }
 
     @Override
-    public void insetsChanged(InsetsState insetsState, boolean willMove, boolean willResize) {
+    public void insetsChanged(InsetsState insetsState) {
     }
 
     @Override
     public void insetsControlChanged(InsetsState insetsState,
-            InsetsSourceControl[] activeControls, boolean willMove, boolean willResize) {
+            InsetsSourceControl[] activeControls) {
     }
 
     @Override

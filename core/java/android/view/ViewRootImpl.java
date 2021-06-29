@@ -586,10 +586,6 @@ public final class ViewRootImpl implements ViewParent,
     final Rect mWinFrame; // frame given by window manager.
 
     final Rect mPendingBackDropFrame = new Rect();
-
-    private boolean mWillMove;
-    private boolean mWillResize;
-
     boolean mPendingAlwaysConsumeSystemBars;
     private final InsetsState mTempInsets = new InsetsState();
     private final InsetsSourceControl[] mTempControls = new InsetsSourceControl[SIZE];
@@ -1207,7 +1203,8 @@ public final class ViewRootImpl implements ViewParent,
                             Looper.myLooper());
 
                     if (mAttachInfo.mThreadedRenderer != null) {
-                        InputMetricsListener listener = new InputMetricsListener();
+                        InputMetricsListener listener =
+                                new InputMetricsListener(mInputEventReceiver);
                         mHardwareRendererObserver = new HardwareRendererObserver(
                                 listener, listener.data, mHandler, true /*waitForPresentTime*/);
                         mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
@@ -1361,11 +1358,6 @@ public final class ViewRootImpl implements ViewParent,
         }
     }
 
-    /**
-     * Register a callback to be executed when Webview overlay needs to merge a transaction.
-     * This callback will be executed on RenderThread worker thread, and released inside native code
-     * when CanvasContext is destroyed.
-     */
     private void addASurfaceTransactionCallback() {
         HardwareRenderer.ASurfaceTransactionCallback callback = (nativeTransactionObj,
                                                                  nativeSurfaceControlObj,
@@ -1412,16 +1404,13 @@ public final class ViewRootImpl implements ViewParent,
                 final boolean translucent = attrs.format != PixelFormat.OPAQUE || hasSurfaceInsets;
                 mAttachInfo.mThreadedRenderer = ThreadedRenderer.create(mContext, translucent,
                         attrs.getTitle().toString());
+                addASurfaceTransactionCallback();
+                mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
                 updateColorModeIfNeeded(attrs.getColorMode());
                 updateForceDarkMode();
                 if (mAttachInfo.mThreadedRenderer != null) {
                     mAttachInfo.mHardwareAccelerated =
                             mAttachInfo.mHardwareAccelerationRequested = true;
-                    if (mHardwareRendererObserver != null) {
-                        mAttachInfo.mThreadedRenderer.addObserver(mHardwareRendererObserver);
-                    }
-                    addASurfaceTransactionCallback();
-                    mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
                 }
             }
         }
@@ -1714,10 +1703,6 @@ public final class ViewRootImpl implements ViewParent,
 
     void notifyInsetsChanged() {
         mApplyInsetsRequested = true;
-        if (mWillMove || mWillResize) {
-            // The window frame will be changed soon. The following logic will be executed then.
-            return;
-        }
         requestLayout();
 
         // See comment for View.sForceLayoutWhenInsetsChanged
@@ -2676,7 +2661,7 @@ public final class ViewRootImpl implements ViewParent,
             }
         }
 
-        if (mApplyInsetsRequested && !(mWillMove || mWillResize)) {
+        if (mApplyInsetsRequested) {
             dispatchApplyInsets(host);
             if (mLayoutRequested) {
                 // Short-circuit catching a new layout request here, so
@@ -2794,7 +2779,7 @@ public final class ViewRootImpl implements ViewParent,
                         & WindowManagerGlobal.RELAYOUT_RES_DRAG_RESIZING_DOCKED) != 0;
                 final boolean dragResizing = freeformResizing || dockedResizing;
                 if (mSurfaceControl.isValid()) {
-                    updateOpacity(mWindowAttributes, dragResizing);
+                    updateOpacity(params, dragResizing);
                 }
 
                 if (DEBUG_LAYOUT) Log.v(mTag, "relayout: frame=" + frame.toShortString()
@@ -3383,9 +3368,9 @@ public final class ViewRootImpl implements ViewParent,
         }
         // TODO (b/131181940): Make sure this doesn't leak Activity with mActivityConfigCallback
         // config changes.
+        final View focusedView = mView != null ? mView.findFocus() : null;
         if (hasWindowFocus) {
-            mInsetsController.onWindowFocusGained(
-                    getFocusedViewOrNull() != null /* hasViewFocused */);
+            mInsetsController.onWindowFocusGained(focusedView != null /* hasViewFocused */);
         } else {
             mInsetsController.onWindowFocusLost();
         }
@@ -3434,8 +3419,7 @@ public final class ViewRootImpl implements ViewParent,
 
             // Note: must be done after the focus change callbacks,
             // so all of the view state is set up correctly.
-            mImeFocusController.onPostWindowFocus(
-                    getFocusedViewOrNull(), hasWindowFocus, mWindowAttributes);
+            mImeFocusController.onPostWindowFocus(focusedView, hasWindowFocus, mWindowAttributes);
 
             if (hasWindowFocus) {
                 // Clear the forward bit.  We can just do this directly, since
@@ -5246,25 +5230,16 @@ public final class ViewRootImpl implements ViewParent,
                     break;
                 case MSG_RESIZED:
                 case MSG_RESIZED_REPORT: {
-                    mWillMove = false;
-                    mWillResize = false;
                     final SomeArgs args = (SomeArgs) msg.obj;
                     handleResized(msg.what, args);
                     args.recycle();
                     break;
                 }
-                case MSG_INSETS_CHANGED: {
-                    SomeArgs args = (SomeArgs) msg.obj;
-                    mWillMove = args.argi1 == 1;
-                    mWillResize = args.argi2 == 1;
-                    mInsetsController.onStateChanged((InsetsState) args.arg1);
-                    args.recycle();
+                case MSG_INSETS_CHANGED:
+                    mInsetsController.onStateChanged((InsetsState) msg.obj);
                     break;
-                }
                 case MSG_INSETS_CONTROL_CHANGED: {
                     SomeArgs args = (SomeArgs) msg.obj;
-                    mWillMove = args.argi1 == 1;
-                    mWillResize = args.argi2 == 1;
 
                     // Deliver state change before control change, such that:
                     // a) When gaining control, controller can compare with server state to evaluate
@@ -5273,7 +5248,6 @@ public final class ViewRootImpl implements ViewParent,
                     // dispatched state as truth.
                     mInsetsController.onStateChanged((InsetsState) args.arg1);
                     mInsetsController.onControlsChanged((InsetsSourceControl[]) args.arg2);
-                    args.recycle();
                     break;
                 }
                 case MSG_SHOW_INSETS: {
@@ -5291,7 +5265,6 @@ public final class ViewRootImpl implements ViewParent,
                     break;
                 }
                 case MSG_WINDOW_MOVED:
-                    mWillMove = false;
                     if (mAdded) {
                         final int w = mWinFrame.width();
                         final int h = mWinFrame.height();
@@ -6421,11 +6394,6 @@ public final class ViewRootImpl implements ViewParent,
         mView.dispatchTooltipHoverEvent(event);
     }
 
-    @Nullable
-    private View getFocusedViewOrNull() {
-        return mView != null ? mView.findFocus() : null;
-    }
-
     /**
      * Performs synthesis of new input events from unhandled input events.
      */
@@ -7541,8 +7509,7 @@ public final class ViewRootImpl implements ViewParent,
                 final View prevDragView = mCurrentDragView;
 
                 if (what == DragEvent.ACTION_DROP && event.mClipData != null) {
-                    event.mClipData.prepareToEnterProcess(
-                            mView.getContext().getAttributionSource());
+                    event.mClipData.prepareToEnterProcess();
                 }
 
                 // Now dispatch the drag/drop event
@@ -7752,7 +7719,6 @@ public final class ViewRootImpl implements ViewParent,
                 }
             }
             if (mAttachInfo.mThreadedRenderer != null) {
-                addASurfaceTransactionCallback();
                 mAttachInfo.mThreadedRenderer.setSurfaceControl(mSurfaceControl);
             }
         } else {
@@ -7772,17 +7738,14 @@ public final class ViewRootImpl implements ViewParent,
             mTranslator.translateSourceControlsInScreenToAppWindow(mTempControls);
         }
         setFrame(mTmpFrames.frame);
-        mWillMove = false;
-        mWillResize = false;
         mInsetsController.onStateChanged(mTempInsets);
         mInsetsController.onControlsChanged(mTempControls);
         return relayoutResult;
     }
 
-    private void updateOpacity(WindowManager.LayoutParams params, boolean dragResizing) {
+    private void updateOpacity(@Nullable WindowManager.LayoutParams params, boolean dragResizing) {
         boolean opaque = false;
-
-        if (!PixelFormat.formatHasAlpha(params.format)
+        if (params != null && !PixelFormat.formatHasAlpha(params.format)
                 // Don't make surface with surfaceInsets opaque as they display a
                 // translucent shadow.
                 && params.surfaceInsets.left == 0
@@ -8157,9 +8120,6 @@ public final class ViewRootImpl implements ViewParent,
         ThreadedRenderer hardwareRenderer = mAttachInfo.mThreadedRenderer;
 
         if (hardwareRenderer != null) {
-            if (mHardwareRendererObserver != null) {
-                hardwareRenderer.removeObserver(mHardwareRendererObserver);
-            }
             if (mView != null) {
                 hardwareRenderer.destroyHardwareResources(mView);
             }
@@ -8209,8 +8169,7 @@ public final class ViewRootImpl implements ViewParent,
         mHandler.sendMessage(msg);
     }
 
-    private void dispatchInsetsChanged(InsetsState insetsState, boolean willMove,
-            boolean willResize) {
+    private void dispatchInsetsChanged(InsetsState insetsState) {
         if (Binder.getCallingPid() == android.os.Process.myPid()) {
             insetsState = new InsetsState(insetsState, true /* copySource */);
         }
@@ -8221,15 +8180,11 @@ public final class ViewRootImpl implements ViewParent,
             ImeTracing.getInstance().triggerClientDump("ViewRootImpl#dispatchInsetsChanged",
                     getInsetsController().getHost().getInputMethodManager(), null /* icProto */);
         }
-        SomeArgs args = SomeArgs.obtain();
-        args.arg1 = insetsState;
-        args.argi1 = willMove ? 1 : 0;
-        args.argi2 = willResize ? 1 : 0;
-        mHandler.obtainMessage(MSG_INSETS_CHANGED, args).sendToTarget();
+        mHandler.obtainMessage(MSG_INSETS_CHANGED, insetsState).sendToTarget();
     }
 
     private void dispatchInsetsControlChanged(InsetsState insetsState,
-            InsetsSourceControl[] activeControls, boolean willMove, boolean willResize) {
+            InsetsSourceControl[] activeControls) {
         if (Binder.getCallingPid() == android.os.Process.myPid()) {
             insetsState = new InsetsState(insetsState, true /* copySource */);
             if (activeControls != null) {
@@ -8249,8 +8204,6 @@ public final class ViewRootImpl implements ViewParent,
         SomeArgs args = SomeArgs.obtain();
         args.arg1 = insetsState;
         args.arg2 = activeControls;
-        args.argi1 = willMove ? 1 : 0;
-        args.argi2 = willResize ? 1 : 0;
         mHandler.obtainMessage(MSG_INSETS_CONTROL_CHANGED, args).sendToTarget();
     }
 
@@ -8669,11 +8622,17 @@ public final class ViewRootImpl implements ViewParent,
             super.dispose();
         }
     }
-    private WindowInputEventReceiver mInputEventReceiver;
+    WindowInputEventReceiver mInputEventReceiver;
 
     final class InputMetricsListener
             implements HardwareRendererObserver.OnFrameMetricsAvailableListener {
         public long[] data = new long[FrameMetrics.Index.FRAME_STATS_COUNT];
+
+        private InputEventReceiver mReceiver;
+
+        InputMetricsListener(InputEventReceiver receiver) {
+            mReceiver = receiver;
+        }
 
         @Override
         public void onFrameMetricsAvailable(int dropCountSinceLastInvocation) {
@@ -8687,20 +8646,6 @@ public final class ViewRootImpl implements ViewParent,
                 // available, we cannot compute end-to-end input latency metrics.
                 return;
             }
-            final long gpuCompletedTime = data[FrameMetrics.Index.GPU_COMPLETED];
-            if (mInputEventReceiver == null) {
-                return;
-            }
-            if (gpuCompletedTime >= presentTime) {
-                final double discrepancyMs = (gpuCompletedTime - presentTime) * 1E-6;
-                final long vsyncId = data[FrameMetrics.Index.FRAME_TIMELINE_VSYNC_ID];
-                Log.w(TAG, "Not reporting timeline because gpuCompletedTime is " + discrepancyMs
-                        + "ms ahead of presentTime. FRAME_TIMELINE_VSYNC_ID=" + vsyncId
-                        + ", INPUT_EVENT_ID=" + inputEventId);
-                // TODO(b/186664409): figure out why this sometimes happens
-                return;
-            }
-            mInputEventReceiver.reportTimeline(inputEventId, gpuCompletedTime, presentTime);
         }
     }
     HardwareRendererObserver mHardwareRendererObserver;
@@ -9598,20 +9543,19 @@ public final class ViewRootImpl implements ViewParent,
         }
 
         @Override
-        public void insetsChanged(InsetsState insetsState, boolean willMove, boolean willResize) {
+        public void insetsChanged(InsetsState insetsState) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
-                viewAncestor.dispatchInsetsChanged(insetsState, willMove, willResize);
+                viewAncestor.dispatchInsetsChanged(insetsState);
             }
         }
 
         @Override
         public void insetsControlChanged(InsetsState insetsState,
-                InsetsSourceControl[] activeControls, boolean willMove, boolean willResize) {
+                InsetsSourceControl[] activeControls) {
             final ViewRootImpl viewAncestor = mViewAncestor.get();
             if (viewAncestor != null) {
-                viewAncestor.dispatchInsetsControlChanged(
-                        insetsState, activeControls, willMove, willResize);
+                viewAncestor.dispatchInsetsControlChanged(insetsState, activeControls);
             }
         }
 

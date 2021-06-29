@@ -184,9 +184,6 @@ interface ControlsController : UserAwareController {
      */
     fun countFavoritesForComponent(componentName: ComponentName): Int
 
-    /** See [ControlsUiController.getPreferredStructure]. */
-    fun getPreferredStructure(): StructureInfo
-
     /**
      * Interface for structure to pass data to [ControlsFavoritingActivity].
      */

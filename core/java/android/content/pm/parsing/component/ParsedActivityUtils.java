@@ -102,8 +102,7 @@ public class ParsedActivityUtils {
                     R.styleable.AndroidManifestActivity_name,
                     R.styleable.AndroidManifestActivity_process,
                     R.styleable.AndroidManifestActivity_roundIcon,
-                    R.styleable.AndroidManifestActivity_splitName,
-                    R.styleable.AndroidManifestActivity_attributionTags);
+                    R.styleable.AndroidManifestActivity_splitName);
             if (result.isError()) {
                 return result;
             }
@@ -213,6 +212,11 @@ public class ParsedActivityUtils {
                 pkg.setVisibleToInstantApps(true);
             }
 
+            String attributionTags = sa.getString(R.styleable.AndroidManifestActivity_attributionTags);
+            if (attributionTags != null) {
+                activity.attributionTags = attributionTags.split("\\|");
+            }
+
             return parseActivityOrAlias(activity, pkg, tag, parser, res, sa, receiver,
                     false /*isAlias*/, visibleToEphemeral, input,
                     R.styleable.AndroidManifestActivity_parentActivityName,
@@ -277,8 +281,7 @@ public class ParsedActivityUtils {
                     R.styleable.AndroidManifestActivityAlias_name,
                     null /*processAttr*/,
                     R.styleable.AndroidManifestActivityAlias_roundIcon,
-                    null /*splitNameAttr*/,
-                    R.styleable.AndroidManifestActivityAlias_attributionTags);
+                    null /*splitNameAttr*/);
             if (result.isError()) {
                 return result;
             }

@@ -136,7 +136,7 @@ public interface DelegateConnectionStateCallback {
      * not compleed yet.
      *
      * @param registeredSipConfig The configuration of the IMS stack registered on the IMS network.
-     * @removed Will not be in final API, use
+     * @deprecated Will not be in final API, use
      * {@link #onConfigurationChanged(SipDelegateConfiguration)} instead}.
      */
     @Deprecated
@@ -161,7 +161,7 @@ public interface DelegateConnectionStateCallback {
      *
      * @param registeredSipConfig The configuration of the IMS stack registered on the IMS network.
      */
-    void onConfigurationChanged(@NonNull SipDelegateConfiguration registeredSipConfig);
+    default void onConfigurationChanged(@NonNull SipDelegateConfiguration registeredSipConfig) {}
 
     /**
      * The previously created {@link SipDelegateConnection} instance delivered via

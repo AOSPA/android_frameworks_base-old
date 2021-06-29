@@ -250,7 +250,7 @@
     <string name="global_action_emergency" msgid="1387617624177105088">"緊急電話"</string>
     <string name="global_action_bug_report" msgid="5127867163044170003">"錯誤報告"</string>
     <string name="global_action_logout" msgid="6093581310002476511">"結束"</string>
-    <string name="global_action_screenshot" msgid="2610053466156478564">"螢幕截圖"</string>
+    <string name="global_action_screenshot" msgid="2610053466156478564">"擷取螢幕畫面"</string>
     <string name="bugreport_title" msgid="8549990811777373050">"錯誤報告"</string>
     <string name="bugreport_message" msgid="5212529146119624326">"這會收集你目前裝置狀態的相關資訊，以便透過電子郵件傳送。從錯誤報告開始建立到準備傳送的這段過程可能需要一點時間，敬請耐心等候。"</string>
     <string name="bugreport_option_interactive_title" msgid="7968287837902871289">"互動式報告"</string>
@@ -580,7 +580,7 @@
     <string name="fingerprint_acquired_partial" msgid="694598777291084823">"僅偵測到局部指紋"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"無法處理指紋，請再試一次。"</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"清潔感應器"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="6038375140739678098">"按久一點"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="1254724478300787385">"太快將手指移開"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"手指移動速度過慢，請再試一次。"</string>
     <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"改用其他指紋"</string>
     <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"太亮"</string>
@@ -609,10 +609,14 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"指紋圖示"</string>
-    <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"人臉解鎖"</string>
+    <string name="permlab_manageFace" msgid="4569549381889283282">"管理人臉解鎖硬體"</string>
+    <string name="permdesc_manageFace" msgid="6204569688492710471">"允許應用程式呼叫方法來新增及移除可用的臉孔範本。"</string>
+    <string name="permlab_useFaceAuthentication" msgid="1011430526454859030">"使用人臉解鎖硬體"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="3115697017684668012">"允許應用程式使用人臉解鎖硬體進行驗證"</string>
+    <string name="face_recalibrate_notification_name" msgid="6006095897989257026">"人臉解鎖"</string>
     <string name="face_recalibrate_notification_title" msgid="5944930528030496897">"請重新註冊你的臉孔"</string>
     <string name="face_recalibrate_notification_content" msgid="892757485125249962">"為提升辨識精準度，請重新註冊你的臉孔"</string>
-    <string name="face_setup_notification_title" msgid="8843461561970741790">"設定人臉解鎖功能"</string>
+    <string name="face_setup_notification_title" msgid="550617822603450009">"設定人臉解鎖功能"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"看著手機就能解鎖"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"設定更多解鎖方式"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"輕觸即可新增指紋"</string>
@@ -639,19 +643,18 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"相關硬體無法使用，因此無法驗證臉孔。"</string>
-    <string name="face_error_timeout" msgid="2598544068593889762">"請重新進行人臉解鎖"</string>
+    <string name="face_error_timeout" msgid="522924647742024699">"請重新進行人臉解鎖。"</string>
     <string name="face_error_no_space" msgid="5649264057026021723">"無法儲存新的臉孔資料，請先刪除舊的資料。"</string>
     <string name="face_error_canceled" msgid="2164434737103802131">"臉孔處理作業已取消。"</string>
-    <string name="face_error_user_canceled" msgid="5766472033202928373">"使用者已取消人臉解鎖作業"</string>
+    <string name="face_error_user_canceled" msgid="8553045452825849843">"使用者已取消人臉解鎖作業。"</string>
     <string name="face_error_lockout" msgid="7864408714994529437">"嘗試次數過多，請稍後再試。"</string>
-    <string name="face_error_lockout_permanent" msgid="3277134834042995260">"嘗試次數過多，因此系統已停用人臉解鎖功能。"</string>
-    <string name="face_error_lockout_screen_lock" msgid="5062609811636860928">"嘗試次數過多，請改用螢幕鎖定功能驗證身分。"</string>
+    <string name="face_error_lockout_permanent" msgid="8277853602168960343">"嘗試次數過多，因此系統已停用人臉解鎖功能。"</string>
     <string name="face_error_unable_to_process" msgid="5723292697366130070">"無法驗證臉孔，請再試一次。"</string>
-    <string name="face_error_not_enrolled" msgid="1134739108536328412">"你尚未設定人臉解鎖功能"</string>
-    <string name="face_error_hw_not_present" msgid="7940978724978763011">"這部裝置不支援人臉解鎖功能"</string>
+    <string name="face_error_not_enrolled" msgid="7369928733504691611">"你尚未設定人臉解鎖功能。"</string>
+    <string name="face_error_hw_not_present" msgid="1070600921591729944">"這個裝置不支援人臉解鎖功能。"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"感應器已暫時停用。"</string>
     <string name="face_name_template" msgid="3877037340223318119">"臉孔 <xliff:g id="FACEID">%d</xliff:g>"</string>
-    <string name="face_app_setting_name" msgid="5854024256907828015">"使用人臉解鎖功能"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"使用人臉解鎖功能"</string>
     <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"使用人臉解鎖或螢幕鎖定功能"</string>
     <string name="face_dialog_default_subtitle" msgid="6620492813371195429">"如要繼續操作，請透過你的臉孔驗證身分"</string>
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"請使用人臉解鎖或螢幕鎖定功能驗證身分，才能繼續操作"</string>
@@ -954,7 +957,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="4215280881346033434">"展開解鎖區域。"</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2968195219692413046">"滑動解鎖。"</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="8669128146589233293">"圖案解鎖。"</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4533832120787386728">"人臉解鎖。"</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="632407612842329815">"人臉解鎖。"</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="4020864007967340068">"PIN 解鎖。"</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="4895939120871890557">"SIM 卡 PIN 碼解鎖。"</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="3459003464041899101">"SIM 卡 PUK 解鎖。"</string>
@@ -1019,7 +1022,8 @@
     <string name="text_copied" msgid="2531420577879738860">"文字已複製到剪貼簿。"</string>
     <string name="copied" msgid="4675902854553014676">"已複製"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"「<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g>」已貼上從「<xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g>」複製的資料"</string>
-    <string name="pasted_from_clipboard" msgid="7355790625710831847">"已將剪貼簿內容貼到「<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g>」"</string>
+    <!-- no translation found for pasted_from_clipboard (7355790625710831847) -->
+    <skip />
     <string name="pasted_text" msgid="4298871641549173733">"你複製的文字已貼到「<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g>」"</string>
     <string name="pasted_image" msgid="4729097394781491022">"你複製的圖片已貼到「<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g>」"</string>
     <string name="pasted_content" msgid="646276353060777131">"你複製的內容已貼到「<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g>」"</string>
@@ -1256,10 +1260,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"正在準備升級「<xliff:g id="APPNAME">%1$s</xliff:g>」。"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"正在啟動應用程式。"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"啟動完成。"</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"要關閉螢幕嗎？"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"設定指紋時必須按下電源鍵。\n\n這項操作通常會將螢幕關閉。"</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"關閉"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"取消"</string>
+    <!-- no translation found for fp_enrollment_powerbutton_intent_title (3385634173366119903) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_message (6582149052513682522) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_positive_button (5963520983910436791) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_negative_button (6465764183480190748) -->
+    <skip />
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> 執行中"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"輕觸即可返回遊戲"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"選擇遊戲"</string>
@@ -1458,10 +1466,6 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"允許應用程式要求刪除套件。"</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"要求忽略電池效能最佳化設定"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"允許應用程式要求權限，以便忽略針對該應用程式的電池效能最佳化設定。"</string>
-    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
-    <skip />
-    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
-    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"點兩下以進行縮放控制"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"無法新增小工具。"</string>
     <string name="ime_action_go" msgid="5536744546326495436">"開始"</string>
@@ -1870,8 +1874,10 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"已由你的管理員更新"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"已由你的管理員刪除"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"確定"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"省電模式會開啟深色主題，並限制或關閉背景活動、某些視覺效果、特定功能和部分網路連線。"</string>
-    <string name="battery_saver_description" msgid="8518809702138617167">"省電模式會開啟深色主題，並限制或關閉背景活動、某些視覺效果、特定功能和部分網路連線。"</string>
+    <!-- no translation found for battery_saver_description_with_learn_more (4877297130366222145) -->
+    <skip />
+    <!-- no translation found for battery_saver_description (8518809702138617167) -->
+    <skip />
     <string name="data_saver_description" msgid="4995164271550590517">"「數據節省模式」可防止部分應用程式在背景收發資料，以節省數據用量。你目前使用的應用程式可以存取資料，但存取頻率可能不如平時高。舉例來說，圖片可能不會自動顯示，在你輕觸後才會顯示。"</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"要開啟數據節省模式嗎？"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"開啟"</string>
@@ -1974,8 +1980,10 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"目前無法使用「<xliff:g id="APP_NAME_0">%1$s</xliff:g>」。這項設定是由「<xliff:g id="APP_NAME_1">%2$s</xliff:g>」管理。"</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"瞭解詳情"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"取消暫停應用程式"</string>
-    <string name="work_mode_off_title" msgid="961171256005852058">"要開啟工作應用程式存取權嗎？"</string>
-    <string name="work_mode_off_message" msgid="7319580997683623309">"開啟工作應用程式和通知的存取權"</string>
+    <!-- no translation found for work_mode_off_title (961171256005852058) -->
+    <skip />
+    <!-- no translation found for work_mode_off_message (7319580997683623309) -->
+    <skip />
     <string name="work_mode_turn_on" msgid="3662561662475962285">"開啟"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"應用程式無法使用"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"「<xliff:g id="APP_NAME">%1$s</xliff:g>」目前無法使用。"</string>
@@ -2096,7 +2104,7 @@
     <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"確定"</string>
     <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"關閉"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"瞭解詳情"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"在 Android 12 中，加強型通知功能已取代 Android 自動調整通知。這項功能可以顯示建議的操作和回覆內容，也可以幫你整理通知訊息。\n\n加強型通知功能可存取通知內容，包括聯絡人名稱和訊息內文等個人資訊。此外，這項功能還能關閉或回覆通知，例如接聽來電及控管「零打擾」功能。"</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"在 Android 12 中，加強型通知功能已取代 Android 自動調整通知。這項功能可以顯示建議的操作和回覆內容，也可以整理通知。\n\n加強型通知功能可存取通知內容，包括聯絡人名稱和訊息內文等個人資訊。此外，這項功能還能關閉或回覆通知，例如接聽來電及控管「零打擾」功能。"</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"日常安排模式資訊通知"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"電池電力可能會在你平常的充電時間前耗盡"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"已啟用省電模式以延長電池續航力"</string>
@@ -2139,7 +2147,7 @@
     <string name="accessibility_system_action_quick_settings_label" msgid="4583900123506773783">"快速設定"</string>
     <string name="accessibility_system_action_power_dialog_label" msgid="8095341821683910781">"開啟電源對話方塊"</string>
     <string name="accessibility_system_action_lock_screen_label" msgid="5484190691945563838">"螢幕鎖定"</string>
-    <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"螢幕截圖"</string>
+    <string name="accessibility_system_action_screenshot_label" msgid="3581566515062741676">"擷取螢幕畫面"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_label" msgid="8488701469459210309">"螢幕上的無障礙捷徑"</string>
     <string name="accessibility_system_action_on_screen_a11y_shortcut_chooser_label" msgid="1057878690209817886">"螢幕上的無障礙捷徑選擇器"</string>
     <string name="accessibility_system_action_hardware_a11y_shortcut_label" msgid="5764644187715255107">"無障礙捷徑"</string>

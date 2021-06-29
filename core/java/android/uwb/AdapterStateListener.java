@@ -108,13 +108,16 @@ public class AdapterStateListener extends IUwbAdapterStateCallbacks.Stub {
      */
     public void setEnabled(boolean isEnabled) {
         synchronized (this) {
-            try {
-                mAdapter.setEnabled(isEnabled);
-            } catch (RemoteException e) {
-                Log.w(TAG, "Failed to set adapter state");
-                throw e.rethrowFromSystemServer();
+            if (!mIsRegistered) {
+                return;
+            } else {
+                try {
+                    mAdapter.setEnabled(isEnabled);
+                } catch (RemoteException e) {
+                    Log.w(TAG, "Failed to set adapter state");
+                    throw e.rethrowFromSystemServer();
+                }
             }
-
         }
     }
 

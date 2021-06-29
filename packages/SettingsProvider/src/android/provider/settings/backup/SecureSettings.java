@@ -169,7 +169,7 @@ public class SecureSettings {
         Settings.Secure.AWARE_TAP_PAUSE_TOUCH_COUNT,
         Settings.Secure.PEOPLE_STRIP,
         Settings.Secure.MEDIA_CONTROLS_RESUME,
-        Settings.Secure.MEDIA_CONTROLS_RECOMMENDATION,
+        Settings.Secure.MEDIA_CONTROLS_RESUME_BLOCKED,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_MODE,
         Settings.Secure.ACCESSIBILITY_BUTTON_TARGETS,
         Settings.Secure.ACCESSIBILITY_MAGNIFICATION_CAPABILITY,
@@ -190,7 +190,5 @@ public class SecureSettings {
         Settings.Secure.ACCESSIBILITY_FLOATING_MENU_FADE_ENABLED,
         Settings.Secure.NOTIFICATION_BUBBLES,
         Settings.Secure.LOCATION_TIME_ZONE_DETECTION_ENABLED,
-        Settings.Secure.LOCKSCREEN_SHOW_CONTROLS,
-        Settings.Secure.LOCKSCREEN_SHOW_WALLET,
     };
 }

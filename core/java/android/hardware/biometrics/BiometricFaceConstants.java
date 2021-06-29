@@ -53,6 +53,9 @@ public interface BiometricFaceConstants {
     // authentication or removal. Must agree with the list in HAL h file
     //
 
+    /**
+     * @hide
+     */
     @IntDef({FACE_ERROR_HW_UNAVAILABLE,
             FACE_ERROR_UNABLE_TO_PROCESS,
             FACE_ERROR_TIMEOUT,
@@ -107,6 +110,8 @@ public interface BiometricFaceConstants {
     /**
      * The {@link FaceManager#remove} call failed. Typically this will happen when the
      * provided face id was incorrect.
+     *
+     * @hide
      */
     int FACE_ERROR_UNABLE_TO_REMOVE = 6;
 
@@ -155,6 +160,8 @@ public interface BiometricFaceConstants {
     /**
      * The user pressed the negative button. This is a placeholder that is currently only used
      * by the support library.
+     *
+     * @hide
      */
     int FACE_ERROR_NEGATIVE_BUTTON = 13;
 
@@ -170,23 +177,24 @@ public interface BiometricFaceConstants {
      * security update has addressed this issue. This error can be received if for example,
      * authentication was requested with {@link Authenticators#BIOMETRIC_STRONG}, but the
      * sensor's strength can currently only meet {@link Authenticators#BIOMETRIC_WEAK}.
+     * @hide
      */
     int BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED = 15;
 
     /**
      * Authentication cannot proceed because re-enrollment is required.
+     * @hide
      */
     int BIOMETRIC_ERROR_RE_ENROLL = 16;
 
     /**
      * Unknown error received from the HAL.
+     * @hide
      */
     int FACE_ERROR_UNKNOWN = 17;
 
     /**
-     * Vendor codes received from the HAL start at 0. Codes that the framework exposes to keyguard
-     * append this value for some reason. We should probably remove this and just send the actual
-     * vendor code.
+     * @hide
      */
     int FACE_ERROR_VENDOR_BASE = 1000;
 
@@ -195,6 +203,9 @@ public interface BiometricFaceConstants {
     // existing constants. These must agree with face@1.0/types.hal.
     //
 
+    /**
+     * @hide
+     */
     @IntDef({FACE_ACQUIRED_GOOD,
             FACE_ACQUIRED_INSUFFICIENT,
             FACE_ACQUIRED_TOO_BRIGHT,
@@ -218,10 +229,7 @@ public interface BiometricFaceConstants {
             FACE_ACQUIRED_START,
             FACE_ACQUIRED_SENSOR_DIRTY,
             FACE_ACQUIRED_VENDOR,
-            FACE_ACQUIRED_UNKNOWN,
-            FACE_ACQUIRED_FIRST_FRAME_RECEIVED,
-            FACE_ACQUIRED_DARK_GLASSES_DETECTED,
-            FACE_ACQUIRED_MOUTH_COVERING_DETECTED})
+            FACE_ACQUIRED_UNKNOWN})
     @Retention(RetentionPolicy.SOURCE)
     @interface FaceAcquired {}
 
@@ -394,35 +402,19 @@ public interface BiometricFaceConstants {
     /**
      * Hardware vendors may extend this list if there are conditions that do not fall under one of
      * the above categories. Vendors are responsible for providing error strings for these errors.
+     *
+     * @hide
      */
     int FACE_ACQUIRED_VENDOR = 22;
 
     /**
      * Unknown acquired code received from the HAL.
+     * @hide
      */
     int FACE_ACQUIRED_UNKNOWN = 23;
 
     /**
-     * The first frame from the camera has been received.
-     */
-    int FACE_ACQUIRED_FIRST_FRAME_RECEIVED = 24;
-
-    /**
-     * Dark glasses detected. This can be useful for providing relevant feedback to the user and
-     * enabling an alternative authentication logic if the implementation supports it.
-     */
-    int FACE_ACQUIRED_DARK_GLASSES_DETECTED = 25;
-
-    /**
-     * A face mask or face covering detected. This can be useful for providing relevant feedback to
-     * the user and enabling an alternative authentication logic if the implementation supports it.
-     */
-    int FACE_ACQUIRED_MOUTH_COVERING_DETECTED = 26;
-
-    /**
-     * Vendor codes received from the HAL start at 0. Codes that the framework exposes to keyguard
-     * append this value for some reason. We should probably remove this and just send the actual
-     * vendor code.
+     * @hide
      */
     int FACE_ACQUIRED_VENDOR_BASE = 1000;
 }

@@ -160,7 +160,7 @@ public final class IncrementalFileStorages {
     /**
      * Starts or re-starts loading of data.
      */
-    public void startLoading(
+    void startLoading(
             @NonNull DataLoaderParams dataLoaderParams,
             @Nullable IDataLoaderStatusListener statusListener,
             @Nullable StorageHealthCheckParams healthCheckParams,

@@ -25,6 +25,7 @@ import static java.nio.charset.StandardCharsets.US_ASCII;
 
 import android.content.ContentResolver;
 import android.content.ContentValues;
+import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.Bitmap.CompressFormat;
 import android.graphics.BitmapFactory;
@@ -38,6 +39,7 @@ import android.testing.AndroidTestingRunner;
 
 import androidx.exifinterface.media.ExifInterface;
 import androidx.test.filters.MediumTest;
+import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.systemui.SysuiTestCase;
 
@@ -90,7 +92,8 @@ public class ImageExporterTest extends SysuiTestCase {
 
     @Test
     public void testImageExport() throws ExecutionException, InterruptedException, IOException {
-        ContentResolver contentResolver = mContext.getContentResolver();
+        Context context = InstrumentationRegistry.getInstrumentation().getContext();
+        ContentResolver contentResolver = context.getContentResolver();
         ImageExporter exporter = new ImageExporter(contentResolver);
 
         UUID requestId = UUID.fromString("3c11da99-9284-4863-b1d5-6f3684976814");

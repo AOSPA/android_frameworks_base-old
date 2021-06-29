@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Certifikimi i ekranit pa tel"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Aktivizo hyrjen Wi-Fi Verbose"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Përshpejtimi i skanimit të Wi‑Fi"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Renditje e rastësishme jo e përhershme e MAC për Wi‑Fi"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Renditja e rastësishme e adresave MAC të përmirësuara me Wi-Fi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Të dhënat celulare gjithmonë aktive"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Përshpejtimi i harduerit për ndarjen e lidhjes (internet)"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Shfaq pajisjet me Bluetooth pa emra"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Shfaq konturet e klipit, hapësirat etj."</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Detyro drejtimin e shkrimit nga e djathta në të majtë"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Ndrysho me detyrim drejtimin e planit të ekranit nga e djathta në të majtë për të gjitha vendet"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"Lejo turbullimet në nivel dritareje"</string>
     <string name="force_msaa" msgid="4081288296137775550">"Detyro 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"Aktivizo 4x MSAA në aplikacionet OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"Korrigjo veprimet mbi klipet jodrejtkëndore"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> derisa të mbushet"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> derisa të mbushet"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - Karikimi përkohësisht i kufizuar"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - Po optimizohet për integritetin e baterisë"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"I panjohur"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Po karikohet"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Po ngarkon me shpejtësi"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Po karikohet ngadalë"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Po karikohet pa tel"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Nuk po karikohet"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Lidhur, jo në karikim"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Në prizë, por nuk mund të karikohet për momentin"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Karikuar"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Kontrolluar nga administratori"</string>
     <string name="disabled" msgid="8017887509554714950">"Çaktivizuar"</string>
@@ -507,8 +506,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Alarmet dhe alarmet rikujtuese"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Lejo caktimin e alarmeve dhe alarmeve rikujtuese"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Alarmet dhe alarmet rikujtuese"</string>
-    <!-- no translation found for alarms_and_reminders_footer_title (6302587438389079695) -->
-    <skip />
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Lejo që ky aplikacion të caktojë alarme dhe të planifikojë veprime të tjera. Ky aplikacion mund të përdoret kur ti nuk e përdor telefonin, gjë që mund të përdorë më shumë bateri. Nëse leja është joaktive, ky aplikacion mund të mos funksionojë në mënyrë normale dhe alarmet e tij nuk do të punojnë siç janë planifikuar."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Lejo që ky aplikacion të caktojë alarme dhe të planifikojë veprime të tjera. Ky aplikacion mund të përdoret kur ti nuk e përdor tabletin, gjë që mund të përdorë më shumë bateri. Nëse leja është joaktive, ky aplikacion mund të mos funksionojë në mënyrë normale dhe alarmet e tij nuk do të punojnë siç janë planifikuar."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Lejo që ky aplikacion të caktojë alarme dhe të planifikojë veprime të tjera. Ky aplikacion mund të përdoret kur ti nuk e përdor pajisjen, gjë që mund të përdorë më shumë bateri. Nëse leja është joaktive, ky aplikacion mund të mos funksionojë në mënyrë normale dhe alarmet e tij nuk do të punojnë siç janë planifikuar."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"planifiko, alarm, alarm rikujtues, ora"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Aktivizo"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"Aktivizo \"Mos shqetëso\""</string>

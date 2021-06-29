@@ -16,6 +16,8 @@
 
 package android.media.audiofx;
 
+import static android.media.permission.PermissionUtil.myIdentity;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
@@ -24,11 +26,10 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.AttributionSource;
-import android.content.AttributionSource.ScopedParcelState;
 import android.media.AudioDeviceAttributes;
 import android.media.AudioDeviceInfo;
 import android.media.AudioSystem;
+import android.media.permission.Identity;
 import android.os.Build;
 import android.os.Handler;
 import android.os.Looper;
@@ -517,13 +518,10 @@ public class AudioEffect {
 
         // native initialization
         // TODO b/182469354: Make consistent with AudioRecord
-        int initResult;
-        try (ScopedParcelState attributionSourceState =  AttributionSource.myAttributionSource()
-                .asScopedParcelState()) {
-            initResult = native_setup(new WeakReference<>(this), type.toString(), uuid.toString(),
-                    priority, audioSession, deviceType, deviceAddress, id, desc,
-                    attributionSourceState.getParcel(), probe);
-        }
+        int initResult = native_setup(new WeakReference<AudioEffect>(this),
+                type.toString(), uuid.toString(), priority, audioSession,
+                deviceType, deviceAddress,
+                id, desc, myIdentity(null), probe);
         if (initResult != SUCCESS && initResult != ALREADY_EXISTS) {
             Log.e(TAG, "Error code " + initResult
                     + " when initializing AudioEffect.");
@@ -1390,7 +1388,7 @@ public class AudioEffect {
     private native final int native_setup(Object audioeffect_this, String type,
             String uuid, int priority, int audioSession,
             int deviceType, String deviceAddress, int[] id, Object[] desc,
-            @NonNull Parcel attributionSource, boolean probe);
+            Identity identity, boolean probe);
 
     private native final void native_finalize();
 

@@ -67,7 +67,6 @@ import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
 import android.companion.AssociationRequest;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Build;
@@ -83,6 +82,7 @@ import java.io.IOException;
 import java.io.UnsupportedEncodingException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.util.List;
 import java.util.UUID;
 
 /**
@@ -119,7 +119,7 @@ import java.util.UUID;
  * {@see BluetoothAdapter}
  * {@see BluetoothSocket}
  */
-public final class BluetoothDevice implements Parcelable, Attributable {
+public final class BluetoothDevice implements Parcelable {
     private static final String TAG = "BluetoothDevice";
     private static final boolean DBG = false;
 
@@ -1319,14 +1319,24 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         mAttributionSource = BluetoothManager.resolveAttributionSource(null);
     }
 
-    /** {@hide} */
-    public void setAttributionSource(@NonNull AttributionSource attributionSource) {
+    void setAttributionSource(AttributionSource attributionSource) {
         mAttributionSource = attributionSource;
     }
 
-    /** {@hide} */
-    public void prepareToEnterProcess(@NonNull AttributionSource attributionSource) {
-        setAttributionSource(attributionSource);
+    static BluetoothDevice setAttributionSource(BluetoothDevice device,
+            AttributionSource attributionSource) {
+        device.setAttributionSource(attributionSource);
+        return device;
+    }
+
+    static List<BluetoothDevice> setAttributionSource(List<BluetoothDevice> devices,
+            AttributionSource attributionSource) {
+        if (devices != null) {
+            for (BluetoothDevice device : devices) {
+                device.setAttributionSource(attributionSource);
+            }
+        }
+        return devices;
     }
 
     @Override
@@ -1485,17 +1495,6 @@ public final class BluetoothDevice implements Parcelable, Attributable {
         return null;
     }
 
-    /** @hide */
-    @Retention(RetentionPolicy.SOURCE)
-    @IntDef(value = {
-            BluetoothStatusCodes.SUCCESS,
-            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
-            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ALLOWED,
-            BluetoothStatusCodes.ERROR_MISSING_BLUETOOTH_CONNECT_PERMISSION,
-            BluetoothStatusCodes.ERROR_DEVICE_NOT_BONDED
-    })
-    public @interface SetAliasReturnValues{}
-
     /**
      * Sets the locally modifiable name (alias) of the remote Bluetooth device. This method
      * overwrites the previously stored alias. The new alias is saved in local
@@ -1503,35 +1502,34 @@ public final class BluetoothDevice implements Parcelable, Attributable {
      *
      * <p>This method requires the calling app to be associated with Companion Device Manager (see
      * {@link android.companion.CompanionDeviceManager#associate(AssociationRequest,
-     * android.companion.CompanionDeviceManager.Callback, Handler)}) and have the
-     * {@link android.Manifest.permission#BLUETOOTH_CONNECT} permission. Alternatively, if the
-     * caller has the {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission, they can
-     * bypass the Companion Device Manager association requirement as well as other permission
-     * requirements.
+     * android.companion.CompanionDeviceManager.Callback, Handler)}) and have the {@link
+     * android.Manifest.permission#BLUETOOTH} permission. Alternatively, if the caller has the
+     * {@link android.Manifest.permission#BLUETOOTH_PRIVILEGED} permission, they can bypass the
+     * Companion Device Manager association requirement.
      *
-     * @param alias is the new locally modifiable name for the remote Bluetooth device which must
-     *              be the empty string. If null, we clear the alias.
-     * @return whether the alias was successfully changed
-     * @throws IllegalArgumentException if the alias is the empty string
+     * @param alias is the new locally modifiable name for the remote Bluetooth device which must be
+     *              non-null and not the empty string.
+     * @return {@code true} if the alias is successfully set, {@code false} on error
+     * @throws IllegalArgumentException if the alias is {@code null} or the empty string
      */
     @RequiresLegacyBluetoothPermission
     @RequiresBluetoothConnectPermission
     @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
-    public @SetAliasReturnValues int setAlias(@Nullable String alias) {
-        if (alias != null && alias.isEmpty()) {
-            throw new IllegalArgumentException("alias cannot be the empty string");
+    public boolean setAlias(@NonNull String alias) {
+        if (alias == null || alias.isEmpty()) {
+            throw new IllegalArgumentException("Cannot set the alias to null or the empty string");
         }
         final IBluetooth service = sService;
         if (service == null) {
             Log.e(TAG, "BT not enabled. Cannot set Remote Device name");
-            return BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED;
+            return false;
         }
         try {
             return service.setRemoteAlias(this, alias, mAttributionSource);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
-            throw e.rethrowFromSystemServer();
         }
+        return false;
     }
 
     /**

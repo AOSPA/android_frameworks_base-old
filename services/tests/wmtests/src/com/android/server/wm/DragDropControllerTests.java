@@ -239,41 +239,6 @@ public class DragDropControllerTests extends WindowTestsBase {
     }
 
     @Test
-    public void testPrivateInterceptGlobalDragDropIgnoresNonLocalWindows() {
-        WindowState nonLocalWindow = createDropTargetWindow("App drag test window", 0);
-        WindowState globalInterceptWindow = createDropTargetWindow("Global drag test window", 0);
-        globalInterceptWindow.mAttrs.privateFlags |= PRIVATE_FLAG_INTERCEPT_GLOBAL_DRAG_AND_DROP;
-
-        // Necessary for now since DragState.sendDragStartedLocked() will recycle drag events
-        // immediately after dispatching, which is a problem when using mockito arguments captor
-        // because it returns and modifies the same drag event
-        TestIWindow localIWindow = (TestIWindow) mWindow.mClient;
-        final ArrayList<DragEvent> localWindowDragEvents = new ArrayList<>();
-        localIWindow.setDragEventJournal(localWindowDragEvents);
-        TestIWindow nonLocalIWindow = (TestIWindow) nonLocalWindow.mClient;
-        final ArrayList<DragEvent> nonLocalWindowDragEvents = new ArrayList<>();
-        nonLocalIWindow.setDragEventJournal(nonLocalWindowDragEvents);
-        TestIWindow globalInterceptIWindow = (TestIWindow) globalInterceptWindow.mClient;
-        final ArrayList<DragEvent> globalInterceptWindowDragEvents = new ArrayList<>();
-        globalInterceptIWindow.setDragEventJournal(globalInterceptWindowDragEvents);
-
-        startDrag(View.DRAG_FLAG_GLOBAL | View.DRAG_FLAG_GLOBAL_URI_READ,
-                createClipDataForActivity(null, mock(UserHandle.class)), () -> {
-                    // Verify the start-drag event is sent for the local and global intercept window
-                    // but not the other window
-                    assertTrue(nonLocalWindowDragEvents.isEmpty());
-                    assertTrue(localWindowDragEvents.get(0).getAction()
-                            == ACTION_DRAG_STARTED);
-                    assertTrue(globalInterceptWindowDragEvents.get(0).getAction()
-                            == ACTION_DRAG_STARTED);
-
-                    mTarget.reportDropWindow(globalInterceptWindow.mInputChannelToken, 0, 0);
-                    mTarget.handleMotionEvent(false, 0, 0);
-                    mToken = globalInterceptWindow.mClient.asBinder();
-                });
-    }
-
-    @Test
     public void testValidateAppActivityArguments() {
         final Session session = new Session(mWm, new IWindowSessionCallback.Stub() {
             @Override

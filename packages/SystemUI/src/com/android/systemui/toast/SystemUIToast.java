@@ -22,19 +22,16 @@ import android.annotation.Nullable;
 import android.app.Application;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
-import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
 import android.graphics.drawable.Drawable;
-import android.os.Build;
 import android.os.UserHandle;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
+import android.widget.ToastPresenter;
 
 import com.android.internal.R;
 import com.android.launcher3.icons.IconFactory;
@@ -55,6 +52,7 @@ public class SystemUIToast implements ToastPlugin.Toast {
     private final String mPackageName;
     private final int mUserId;
     private final LayoutInflater mLayoutInflater;
+    private final boolean mToastStyleEnabled;
 
     final int mDefaultX = 0;
     final int mDefaultHorizontalMargin = 0;
@@ -68,14 +66,15 @@ public class SystemUIToast implements ToastPlugin.Toast {
     @Nullable private final Animator mOutAnimator;
 
     SystemUIToast(LayoutInflater layoutInflater, Context context, CharSequence text,
-            String packageName, int userId, int orientation) {
+            String packageName, int userId, boolean toastStyleEnabled, int orientation) {
         this(layoutInflater, context, text, null, packageName, userId,
-                orientation);
+                toastStyleEnabled, orientation);
     }
 
     SystemUIToast(LayoutInflater layoutInflater, Context context, CharSequence text,
             ToastPlugin.Toast pluginToast, String packageName, int userId,
-            int orientation) {
+            boolean toastStyleEnabled, int orientation) {
+        mToastStyleEnabled = toastStyleEnabled;
         mLayoutInflater = layoutInflater;
         mContext = context;
         mText = text;
@@ -168,45 +167,23 @@ public class SystemUIToast implements ToastPlugin.Toast {
             return mPluginToast.getView();
         }
 
-        final View toastView = mLayoutInflater.inflate(
+        View toastView;
+        if (mToastStyleEnabled) {
+            toastView = mLayoutInflater.inflate(
                     com.android.systemui.R.layout.text_toast, null);
-        final TextView textView = toastView.findViewById(com.android.systemui.R.id.text);
-        final ImageView iconView = toastView.findViewById(com.android.systemui.R.id.icon);
-        textView.setText(mText);
+            ((TextView) toastView.findViewById(com.android.systemui.R.id.text)).setText(mText);
 
-        ApplicationInfo appInfo = null;
-        try {
-            appInfo = mContext.getPackageManager()
-                    .getApplicationInfoAsUser(mPackageName, 0, mUserId);
-        } catch (PackageManager.NameNotFoundException e) {
-            Log.e(TAG, "Package name not found package=" + mPackageName
-                    + " user=" + mUserId);
-        }
-
-        if (appInfo != null && appInfo.targetSdkVersion < Build.VERSION_CODES.S) {
-            // no two-line limit
-            textView.setMaxLines(Integer.MAX_VALUE);
-
-            // no app icon
-            toastView.findViewById(com.android.systemui.R.id.icon).setVisibility(View.GONE);
-        } else {
             Drawable icon = getBadgedIcon(mContext, mPackageName, mUserId);
             if (icon == null) {
-                iconView.setVisibility(View.GONE);
+                toastView.findViewById(com.android.systemui.R.id.icon).setVisibility(View.GONE);
             } else {
-                iconView.setImageDrawable(icon);
-                if (appInfo.labelRes != 0) {
-                    try {
-                        Resources res = mContext.getPackageManager().getResourcesForApplication(
-                                appInfo,
-                                new Configuration(mContext.getResources().getConfiguration()));
-                        iconView.setContentDescription(res.getString(appInfo.labelRes));
-                    } catch (PackageManager.NameNotFoundException e) {
-                        Log.d(TAG, "Cannot find application resources for icon label.");
-                    }
-                }
+                ((ImageView) toastView.findViewById(com.android.systemui.R.id.icon))
+                        .setImageDrawable(icon);
             }
+        } else {
+            toastView = ToastPresenter.getTextToastView(mContext, mText);
         }
+
         return toastView;
     }
 
@@ -228,14 +205,18 @@ public class SystemUIToast implements ToastPlugin.Toast {
             return mPluginToast.getInAnimation();
         }
 
-        return ToastDefaultAnimation.Companion.toastIn(getView());
+        return mToastStyleEnabled
+                ? ToastDefaultAnimation.Companion.toastIn(getView())
+                : null;
     }
 
     private Animator createOutAnimator() {
         if (isPluginToast() && mPluginToast.getOutAnimation() != null) {
             return mPluginToast.getOutAnimation();
         }
-        return ToastDefaultAnimation.Companion.toastOut(getView());
+        return mToastStyleEnabled
+                ? ToastDefaultAnimation.Companion.toastOut(getView())
+                : null;
     }
 
     /**
@@ -244,10 +225,6 @@ public class SystemUIToast implements ToastPlugin.Toast {
      */
     public static Drawable getBadgedIcon(@NonNull Context context, String packageName,
             int userId) {
-        if (!(context.getApplicationContext() instanceof Application)) {
-            return null;
-        }
-
         final ApplicationsState appState =
                 ApplicationsState.getInstance((Application) context.getApplicationContext());
         if (!appState.isUserAdded(userId)) {

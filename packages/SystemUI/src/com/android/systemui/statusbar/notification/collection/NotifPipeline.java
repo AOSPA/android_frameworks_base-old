@@ -16,8 +16,6 @@
 
 package com.android.systemui.statusbar.notification.collection;
 
-import androidx.annotation.Nullable;
-
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.notification.collection.listbuilder.OnBeforeFinalizeFilterListener;
 import com.android.systemui.statusbar.notification.collection.listbuilder.OnBeforeRenderListListener;
@@ -91,7 +89,6 @@ public class NotifPipeline implements CommonNotifCollection {
      *
      * The returned collection is read-only, unsorted, unfiltered, and ungrouped.
      */
-    @Override
     public Collection<NotificationEntry> getAllNotifs() {
         return mNotifCollection.getAllNotifs();
     }
@@ -99,14 +96,6 @@ public class NotifPipeline implements CommonNotifCollection {
     @Override
     public void addCollectionListener(NotifCollectionListener listener) {
         mNotifCollection.addCollectionListener(listener);
-    }
-
-    /**
-     * Returns the NotificationEntry associated with [key].
-     */
-    @Nullable
-    public NotificationEntry getEntry(String key) {
-        return mNotifCollection.getEntry(key);
     }
 
     /**

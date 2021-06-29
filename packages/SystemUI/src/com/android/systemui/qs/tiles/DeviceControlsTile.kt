@@ -22,7 +22,6 @@ import android.os.Handler
 import android.os.Looper
 import android.service.quicksettings.Tile
 import android.view.View
-import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.MetricsLogger
 import com.android.systemui.R
 import com.android.systemui.animation.ActivityLaunchAnimator
@@ -41,7 +40,6 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.qs.QSHost
 import com.android.systemui.qs.logging.QSLogger
 import com.android.systemui.qs.tileimpl.QSTileImpl
-import com.android.systemui.statusbar.policy.KeyguardStateController
 import java.util.concurrent.atomic.AtomicBoolean
 import javax.inject.Inject
 
@@ -54,8 +52,7 @@ class DeviceControlsTile @Inject constructor(
     statusBarStateController: StatusBarStateController,
     activityStarter: ActivityStarter,
     qsLogger: QSLogger,
-    private val controlsComponent: ControlsComponent,
-    private val keyguardStateController: KeyguardStateController
+    private val controlsComponent: ControlsComponent
 ) : QSTileImpl<QSTile.State>(
         host,
         backgroundLooper,
@@ -97,34 +94,18 @@ class DeviceControlsTile @Inject constructor(
     }
 
     override fun handleClick(view: View?) {
-        if (state.state == Tile.STATE_UNAVAILABLE) {
-            return
-        }
-
-        val intent = Intent().apply {
-            component = ComponentName(mContext, ControlsActivity::class.java)
-            addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
-            putExtra(ControlsUiController.EXTRA_ANIMATE, true)
-        }
-        val animationController = view?.let {
-            ActivityLaunchAnimator.Controller.fromView(
-                    it, InteractionJankMonitor.CUJ_SHADE_APP_LAUNCH_FROM_QS_TILE)
-        }
-
-        mUiHandler.post {
-            if (keyguardStateController.isUnlocked) {
-                mActivityStarter.startActivity(
-                        intent, true /* dismissShade */, animationController)
-            } else {
-                if (state.state == Tile.STATE_ACTIVE) {
-                    mHost.collapsePanels()
-                    // With an active tile, don't use ActivityStarter so that the activity is
-                    // started without prompting keyguard unlock.
-                    mContext.startActivity(intent)
-                } else {
-                    mActivityStarter.postStartActivityDismissingKeyguard(
-                            intent, 0 /* delay */, animationController)
+        if (state.state == Tile.STATE_ACTIVE) {
+            mUiHandler.post {
+                val i = Intent().apply {
+                    component = ComponentName(mContext, ControlsActivity::class.java)
+                    addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_NEW_TASK)
+                    putExtra(ControlsUiController.EXTRA_ANIMATE, true)
                 }
+
+                val animationController = view?.let {
+                    ActivityLaunchAnimator.Controller.fromView(it)
+                }
+                mActivityStarter.startActivity(i, true /* dismissShade */, animationController)
             }
         }
     }
@@ -137,8 +118,7 @@ class DeviceControlsTile @Inject constructor(
         if (controlsComponent.isEnabled() && hasControlsApps.get()) {
             if (controlsComponent.getVisibility() == AVAILABLE) {
                 state.state = Tile.STATE_ACTIVE
-                state.secondaryLabel = controlsComponent
-                        .getControlsController().get().getPreferredStructure().structure
+                state.secondaryLabel = ""
             } else {
                 state.state = Tile.STATE_INACTIVE
                 state.secondaryLabel = mContext.getText(R.string.controls_tile_locked)

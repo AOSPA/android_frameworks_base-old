@@ -35,7 +35,6 @@ import androidx.test.platform.app.InstrumentationRegistry;
 
 import com.android.systemui.SysuiTestCase;
 
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 
@@ -47,7 +46,6 @@ import java.util.concurrent.TimeUnit;
  */
 @RunWith(AndroidTestingRunner.class)
 @SmallTest
-@Ignore
 public class ScrollCaptureFrameworkSmokeTest extends SysuiTestCase {
     private static final String TAG = "ScrollCaptureFrameworkSmokeTest";
     private volatile ScrollCaptureResponse mResponse;

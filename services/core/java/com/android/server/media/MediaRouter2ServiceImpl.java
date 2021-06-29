@@ -2156,8 +2156,6 @@ class MediaRouter2ServiceImpl {
             List<RouterRecord> routerRecords = getRouterRecords();
             List<ManagerRecord> managerRecords = getManagerRecords();
 
-            boolean shouldBindProviders = false;
-
             if (service.mPowerManager.isInteractive()) {
                 boolean isManagerScanning = managerRecords.stream().anyMatch(manager ->
                         manager.mIsScanning && service.mActivityManager
@@ -2168,20 +2166,12 @@ class MediaRouter2ServiceImpl {
                     discoveryPreferences = routerRecords.stream()
                             .map(record -> record.mDiscoveryPreference)
                             .collect(Collectors.toList());
-                    shouldBindProviders = true;
                 } else {
                     discoveryPreferences = routerRecords.stream().filter(record ->
                             service.mActivityManager.getPackageImportance(record.mPackageName)
                                     <= PACKAGE_IMPORTANCE_FOR_DISCOVERY)
                             .map(record -> record.mDiscoveryPreference)
                             .collect(Collectors.toList());
-                }
-            }
-
-            for (MediaRoute2Provider provider : mRouteProviders) {
-                if (provider instanceof MediaRoute2ProviderServiceProxy) {
-                    ((MediaRoute2ProviderServiceProxy) provider)
-                            .setManagerScanning(shouldBindProviders);
                 }
             }
 

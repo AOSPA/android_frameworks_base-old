@@ -59,8 +59,6 @@ import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.external.CustomTile;
-import com.android.systemui.qs.external.CustomTileStatePersister;
-import com.android.systemui.qs.external.TileServiceKey;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.settings.UserTracker;
@@ -127,8 +125,6 @@ public class QSTileHostTest extends SysuiTestCase {
     private UserTracker mUserTracker;
     @Mock
     private SecureSettings mSecureSettings;
-    @Mock
-    private CustomTileStatePersister mCustomTileStatePersister;
 
     private Handler mHandler;
     private TestableLooper mLooper;
@@ -149,7 +145,7 @@ public class QSTileHostTest extends SysuiTestCase {
         mQSTileHost = new TestQSTileHost(mContext, mIconController, mDefaultFactory, mHandler,
                 mLooper.getLooper(), mPluginManager, mTunerService, mAutoTiles, mDumpManager,
                 mBroadcastDispatcher, mStatusBar, mQSLogger, mUiEventLogger, mUserTracker,
-                mSecureSettings, mCustomTileStatePersister);
+                mSecureSettings);
         setUpTileFactory();
 
         when(mSecureSettings.getStringForUser(eq(QSTileHost.TILES_SETTING), anyInt()))
@@ -375,14 +371,6 @@ public class QSTileHostTest extends SysuiTestCase {
         verify(mQSLogger, never()).logTileDestroyed(isNull(), anyString());
     }
 
-    @Test
-    public void testCustomTileRemoved_stateDeleted() {
-        mQSTileHost.changeTiles(List.of(CUSTOM_TILE_SPEC), List.of());
-
-        verify(mCustomTileStatePersister)
-                .removeState(new TileServiceKey(CUSTOM_TILE, mQSTileHost.getUserId()));
-    }
-
     private class TestQSTileHost extends QSTileHost {
         TestQSTileHost(Context context, StatusBarIconController iconController,
                 QSFactory defaultFactory, Handler mainHandler, Looper bgLooper,
@@ -390,11 +378,10 @@ public class QSTileHostTest extends SysuiTestCase {
                 Provider<AutoTileManager> autoTiles, DumpManager dumpManager,
                 BroadcastDispatcher broadcastDispatcher, StatusBar statusBar, QSLogger qsLogger,
                 UiEventLogger uiEventLogger, UserTracker userTracker,
-                SecureSettings secureSettings, CustomTileStatePersister customTileStatePersister) {
+                SecureSettings secureSettings) {
             super(context, iconController, defaultFactory, mainHandler, bgLooper, pluginManager,
                     tunerService, autoTiles, dumpManager, broadcastDispatcher,
-                    Optional.of(statusBar), qsLogger, uiEventLogger, userTracker, secureSettings,
-                    customTileStatePersister);
+                    Optional.of(statusBar), qsLogger, uiEventLogger, userTracker, secureSettings);
         }
 
         @Override

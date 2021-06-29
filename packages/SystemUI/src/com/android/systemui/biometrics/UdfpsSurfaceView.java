@@ -28,7 +28,6 @@ import android.os.UserHandle;
 import android.provider.Settings;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.Surface;
 import android.view.SurfaceHolder;
 import android.view.SurfaceView;
 
@@ -58,7 +57,7 @@ public class UdfpsSurfaceView extends SurfaceView implements UdfpsIlluminator {
     private final @HbmType int mHbmType;
 
     @NonNull private RectF mSensorRect;
-    @Nullable private UdfpsHbmProvider mHbmProvider;
+    @Nullable private UdfpsHbmCallback mHbmCallback;
 
     public UdfpsSurfaceView(Context context, AttributeSet attrs) {
         super(context, attrs);
@@ -91,45 +90,39 @@ public class UdfpsSurfaceView extends SurfaceView implements UdfpsIlluminator {
     }
 
     @Override
-    public void setHbmProvider(@Nullable UdfpsHbmProvider hbmProvider) {
-        mHbmProvider = hbmProvider;
+    public void setHbmCallback(@Nullable UdfpsHbmCallback callback) {
+        mHbmCallback = callback;
     }
 
     @Override
     public void startIllumination(@Nullable Runnable onIlluminatedRunnable) {
-        if (mHbmProvider != null) {
-            final Surface surface =
-                    (mHbmType == UdfpsHbmTypes.GLOBAL_HBM) ? mHolder.getSurface() : null;
-
-            final Runnable onHbmEnabled = () -> {
-                if (mHbmType == UdfpsHbmTypes.GLOBAL_HBM) {
-                    drawImmediately(mIlluminationDotDrawable);
-                }
-                if (onIlluminatedRunnable != null) {
-                    // No framework API can reliably tell when a frame reaches the panel. A timeout
-                    // is the safest solution. The frame should be displayed within 3 refresh
-                    // cycles, which on a 60 Hz panel equates to 50 milliseconds.
-                    postDelayed(onIlluminatedRunnable, 50 /* delayMillis */);
-                } else {
-                    Log.w(TAG, "startIllumination | onIlluminatedRunnable is null");
-                }
-            };
-
-            mHbmProvider.enableHbm(mHbmType, surface, onHbmEnabled);
+        if (mHbmCallback != null) {
+            mHbmCallback.enableHbm(mHbmType, mHolder.getSurface());
         } else {
-            Log.e(TAG, "startIllumination | mHbmProvider is null");
+            Log.e(TAG, "startIllumination | mHbmCallback is null");
+        }
+
+        if (mHbmType == UdfpsHbmTypes.GLOBAL_HBM) {
+            drawImmediately(mIlluminationDotDrawable);
+        }
+
+        if (onIlluminatedRunnable != null) {
+            // No framework API can reliably tell when a frame reaches the panel. A timeout is the
+            // safest solution. The frame should be displayed within 3 refresh cycles, which on a
+            // 60 Hz panel equates to 50 milliseconds.
+            postDelayed(onIlluminatedRunnable, 50 /* delayMillis */);
         }
     }
 
     @Override
     public void stopIllumination() {
-        if (mHbmProvider != null) {
-            final Runnable onHbmDisabled =
-                    (mHbmType == UdfpsHbmTypes.GLOBAL_HBM) ? this::invalidate : null;
-            mHbmProvider.disableHbm(onHbmDisabled);
+        if (mHbmCallback != null) {
+            mHbmCallback.disableHbm(mHbmType, mHolder.getSurface());
         } else {
-            Log.e(TAG, "stopIllumination | mHbmProvider is null");
+            Log.e(TAG, "stopIllumination | mHbmCallback is null");
         }
+
+        invalidate();
     }
 
     void onSensorRectUpdated(@NonNull RectF sensorRect) {

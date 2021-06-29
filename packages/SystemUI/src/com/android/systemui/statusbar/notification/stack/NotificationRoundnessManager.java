@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.notification.stack;
 
 import android.content.res.Resources;
 import android.util.MathUtils;
+import android.view.View;
 
 import com.android.systemui.R;
 import com.android.systemui.dagger.SysUISingleton;
@@ -198,7 +199,7 @@ public class NotificationRoundnessManager {
         mExpanded = expandedHeight != 0.0f;
         mAppearFraction = appearFraction;
         if (mTrackedHeadsUp != null) {
-            updateView(mTrackedHeadsUp, false /* animate */);
+            updateView(mTrackedHeadsUp, true);
         }
     }
 

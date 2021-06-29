@@ -21,8 +21,8 @@ import android.util.Log;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.util.Assert;
 import com.android.systemui.util.concurrency.DelayableExecutor;
-import com.android.systemui.util.concurrency.Execution;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +62,6 @@ public class ProximitySensor implements ThresholdSensor {
     private final ThresholdSensor mPrimaryThresholdSensor;
     private final ThresholdSensor mSecondaryThresholdSensor;
     private final DelayableExecutor mDelayableExecutor;
-    private final Execution mExecution;
     private final List<ThresholdSensor.Listener> mListeners = new ArrayList<>();
     private String mTag = null;
     @VisibleForTesting protected boolean mPaused;
@@ -75,10 +74,14 @@ public class ProximitySensor implements ThresholdSensor {
     private boolean mInitializedListeners = false;
     private boolean mSecondarySafe = false;
 
-    private final ThresholdSensor.Listener mPrimaryEventListener = this::onPrimarySensorEvent;
+    private ThresholdSensor.Listener mPrimaryEventListener = new ThresholdSensor.Listener() {
+        @Override
+        public void onThresholdCrossed(ThresholdSensorEvent event) {
+            onPrimarySensorEvent(event);
+        }
+    };
 
-    private final ThresholdSensor.Listener mSecondaryEventListener =
-            new ThresholdSensor.Listener() {
+    private ThresholdSensor.Listener mSecondaryEventListener = new ThresholdSensor.Listener() {
         @Override
         public void onThresholdCrossed(ThresholdSensorEvent event) {
             // If we no longer have a "below" signal and the secondary sensor is not
@@ -107,15 +110,12 @@ public class ProximitySensor implements ThresholdSensor {
     };
 
     @Inject
-    public ProximitySensor(
-            @PrimaryProxSensor ThresholdSensor primary,
+    public ProximitySensor(@PrimaryProxSensor ThresholdSensor primary,
             @SecondaryProxSensor ThresholdSensor  secondary,
-            @Main DelayableExecutor delayableExecutor,
-            Execution execution) {
+            @Main DelayableExecutor delayableExecutor) {
         mPrimaryThresholdSensor = primary;
         mSecondaryThresholdSensor = secondary;
         mDelayableExecutor = delayableExecutor;
-        mExecution = execution;
     }
 
     @Override
@@ -127,7 +127,7 @@ public class ProximitySensor implements ThresholdSensor {
 
     @Override
     public void setDelay(int delay) {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         mPrimaryThresholdSensor.setDelay(delay);
         mSecondaryThresholdSensor.setDelay(delay);
     }
@@ -137,7 +137,7 @@ public class ProximitySensor implements ThresholdSensor {
      */
     @Override
     public void pause() {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         mPaused = true;
         unregisterInternal();
     }
@@ -147,23 +147,18 @@ public class ProximitySensor implements ThresholdSensor {
      */
     @Override
     public void resume() {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         mPaused = false;
         registerInternal();
     }
 
     /**
      * Sets that it is safe to leave the secondary sensor on indefinitely.
-     *
-     * The secondary sensor will be turned on if there are any registered listeners, regardless
-     * of what is reported by the primary sensor.
      */
     public void setSecondarySafe(boolean safe) {
         mSecondarySafe = safe;
         if (!mSecondarySafe) {
             mSecondaryThresholdSensor.pause();
-        } else {
-            mSecondaryThresholdSensor.resume();
         }
     }
 
@@ -190,7 +185,7 @@ public class ProximitySensor implements ThresholdSensor {
      */
     @Override
     public void register(ThresholdSensor.Listener listener) {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         if (!isLoaded()) {
             return;
         }
@@ -204,15 +199,13 @@ public class ProximitySensor implements ThresholdSensor {
     }
 
     protected void registerInternal() {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         if (mRegistered || mPaused || mListeners.isEmpty()) {
             return;
         }
         if (!mInitializedListeners) {
             mPrimaryThresholdSensor.register(mPrimaryEventListener);
-            if (!mSecondarySafe) {
-                mSecondaryThresholdSensor.pause();
-            }
+            mSecondaryThresholdSensor.pause();
             mSecondaryThresholdSensor.register(mSecondaryEventListener);
             mInitializedListeners = true;
         }
@@ -229,7 +222,7 @@ public class ProximitySensor implements ThresholdSensor {
      */
     @Override
     public void unregister(ThresholdSensor.Listener listener) {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         mListeners.remove(listener);
         if (mListeners.size() == 0) {
             unregisterInternal();
@@ -237,7 +230,7 @@ public class ProximitySensor implements ThresholdSensor {
     }
 
     protected void unregisterInternal() {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         if (!mRegistered) {
             return;
         }
@@ -259,7 +252,7 @@ public class ProximitySensor implements ThresholdSensor {
 
     /** Update all listeners with the last value this class received from the sensor. */
     public void alertListeners() {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         if (mAlerting.getAndSet(true)) {
             return;
         }
@@ -274,7 +267,7 @@ public class ProximitySensor implements ThresholdSensor {
     }
 
     private void onPrimarySensorEvent(ThresholdSensorEvent event) {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         if (mLastPrimaryEvent != null && event.getBelow() == mLastPrimaryEvent.getBelow()) {
             return;
         }
@@ -297,7 +290,7 @@ public class ProximitySensor implements ThresholdSensor {
     }
 
     private void onSensorEvent(ThresholdSensorEvent event) {
-        mExecution.assertIsMainThread();
+        Assert.isMainThread();
         if (mLastEvent != null && event.getBelow() == mLastEvent.getBelow()) {
             return;
         }
@@ -313,9 +306,9 @@ public class ProximitySensor implements ThresholdSensor {
     @Override
     public String toString() {
         return String.format("{registered=%s, paused=%s, near=%s, primarySensor=%s, "
-                + "secondarySensor=%s secondarySafe=%s}",
+                + "secondarySensor=%s}",
                 isRegistered(), mPaused, isNear(), mPrimaryThresholdSensor,
-                mSecondaryThresholdSensor, mSecondarySafe);
+                mSecondaryThresholdSensor);
     }
 
     /**

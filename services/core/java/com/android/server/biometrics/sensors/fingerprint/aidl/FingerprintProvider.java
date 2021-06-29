@@ -36,7 +36,6 @@ import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.hardware.fingerprint.IFingerprintServiceReceiver;
-import android.hardware.fingerprint.ISidefpsController;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.os.Binder;
 import android.os.Handler;
@@ -91,7 +90,6 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
 
     @Nullable private IFingerprint mDaemon;
     @Nullable private IUdfpsOverlayController mUdfpsOverlayController;
-    @Nullable private ISidefpsController mSidefpsController;
 
     private final class BiometricTaskStackListener extends TaskStackListener {
         @Override
@@ -161,7 +159,7 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
                             prop.sensorLocations[0].sensorLocationY,
                             prop.sensorLocations[0].sensorRadius);
             final Sensor sensor = new Sensor(getTag() + "/" + sensorId, this, mContext, mHandler,
-                    internalProp, lockoutResetDispatcher, gestureAvailabilityDispatcher);
+                    internalProp, gestureAvailabilityDispatcher);
 
             mSensors.put(sensorId, sensor);
             Slog.d(getTag(), "Added: " + internalProp);
@@ -170,14 +168,6 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
 
     private String getTag() {
         return "FingerprintProvider/" + mHalInstanceName;
-    }
-
-    boolean hasHalInstance() {
-        if (mTestHalEnabled) {
-            return true;
-        }
-        return (ServiceManager.checkService(IFingerprint.DESCRIPTOR + "/" + mHalInstanceName)
-                != null);
     }
 
     @Nullable
@@ -340,8 +330,7 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
                     mSensors.get(sensorId).getLazySession(), token,
                     new ClientMonitorCallbackConverter(receiver), userId, hardwareAuthToken,
                     opPackageName, FingerprintUtils.getInstance(sensorId), sensorId,
-                    mSensors.get(sensorId).getSensorProperties(),
-                    mUdfpsOverlayController, mSidefpsController, maxTemplatesPerUser, enrollReason);
+                    mUdfpsOverlayController, maxTemplatesPerUser, enrollReason);
             scheduleForSensor(sensorId, client, new BaseClientMonitor.Callback() {
 
                 @Override
@@ -463,7 +452,7 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
 
     @Override
     public boolean isHardwareDetected(int sensorId) {
-        return hasHalInstance();
+        return getHalInstance() != null;
     }
 
     @Override
@@ -539,11 +528,6 @@ public class FingerprintProvider implements IBinder.DeathRecipient, ServiceProvi
     @Override
     public void setUdfpsOverlayController(@NonNull IUdfpsOverlayController controller) {
         mUdfpsOverlayController = controller;
-    }
-
-    @Override
-    public void setSidefpsController(@NonNull ISidefpsController controller) {
-        mSidefpsController = controller;
     }
 
     @Override

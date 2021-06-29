@@ -98,6 +98,7 @@ extern int register_android_media_AudioVolumeGroupChangeHandler(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
 extern int register_android_media_midi(JNIEnv *env);
+extern int register_android_media_permission_Identity(JNIEnv* env);
 
 namespace android {
 extern int register_android_util_SeempLog(JNIEnv* env);
@@ -127,7 +128,6 @@ extern int register_android_view_SurfaceControlHdrLayerInfoListener(JNIEnv* env)
 extern int register_android_view_SurfaceSession(JNIEnv* env);
 extern int register_android_view_CompositionSamplingListener(JNIEnv* env);
 extern int register_android_view_TextureView(JNIEnv* env);
-extern int register_android_view_TunnelModeEnabledListener(JNIEnv* env);
 extern int register_android_database_CursorWindow(JNIEnv* env);
 extern int register_android_database_SQLiteConnection(JNIEnv* env);
 extern int register_android_database_SQLiteGlobal(JNIEnv* env);
@@ -641,8 +641,6 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
     char saveResolvedClassesDelayMsOptsBuf[
             sizeof("-Xps-save-resolved-classes-delay-ms:")-1 + PROPERTY_VALUE_MAX];
     char profileMinSavePeriodOptsBuf[sizeof("-Xps-min-save-period-ms:")-1 + PROPERTY_VALUE_MAX];
-    char profileMinFirstSaveOptsBuf[
-            sizeof("-Xps-min-first-save-ms:")-1 + PROPERTY_VALUE_MAX];
     char madviseRandomOptsBuf[sizeof("-XX:MadviseRandomAccess:")-1 + PROPERTY_VALUE_MAX];
     char madviseWillNeedFileSizeVdex[
             sizeof("-XMadviseWillNeedVdexFileSize:")-1 + PROPERTY_VALUE_MAX];
@@ -880,9 +878,6 @@ int AndroidRuntime::startVm(JavaVM** pJavaVM, JNIEnv** pEnv, bool zygote, bool p
 
     parseRuntimeOption("dalvik.vm.ps-min-save-period-ms", profileMinSavePeriodOptsBuf,
             "-Xps-min-save-period-ms:");
-
-    parseRuntimeOption("dalvik.vm.ps-min-first-save-ms", profileMinFirstSaveOptsBuf,
-            "-Xps-min-first-save-ms:");
 
     property_get("ro.config.low_ram", propBuf, "");
     if (strcmp(propBuf, "true") == 0) {
@@ -1529,7 +1524,6 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_view_SurfaceSession),
         REG_JNI(register_android_view_CompositionSamplingListener),
         REG_JNI(register_android_view_TextureView),
-        REG_JNI(register_android_view_TunnelModeEnabledListener),
         REG_JNI(register_com_google_android_gles_jni_EGLImpl),
         REG_JNI(register_com_google_android_gles_jni_GLImpl),
         REG_JNI(register_android_opengl_jni_EGL14),
@@ -1598,6 +1592,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_media_RemoteDisplay),
         REG_JNI(register_android_media_ToneGenerator),
         REG_JNI(register_android_media_midi),
+        REG_JNI(register_android_media_permission_Identity),
 
         REG_JNI(register_android_opengl_classes),
         REG_JNI(register_android_server_NetworkManagementSocketTagger),

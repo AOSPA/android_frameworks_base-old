@@ -145,11 +145,11 @@ public class StatusBarStateControllerImpl implements SysuiStatusBarStateControll
     }
 
     @Override
-    public boolean setState(int state, boolean force) {
+    public boolean setState(int state) {
         if (state > MAX_STATE || state < MIN_STATE) {
             throw new IllegalArgumentException("Invalid state " + state);
         }
-        if (!force && state == mState) {
+        if (state == mState) {
             return false;
         }
 

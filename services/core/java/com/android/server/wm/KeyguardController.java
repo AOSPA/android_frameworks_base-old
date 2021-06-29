@@ -48,7 +48,6 @@ import android.os.Trace;
 import android.util.Slog;
 import android.util.SparseArray;
 import android.util.proto.ProtoOutputStream;
-import android.view.Display;
 
 import com.android.internal.policy.IKeyguardDismissCallback;
 import com.android.server.inputmethod.InputMethodManagerInternal;
@@ -164,27 +163,16 @@ class KeyguardController {
                 aodShowing ? 1 : 0,
                 mKeyguardGoingAway ? 1 : 0,
                 "setKeyguardShown");
-
-        // Update the task snapshot if the screen will not be turned off. To make sure that the
-        // unlocking animation can animate consistent content. The conditions are:
-        // - Either AOD or keyguard changes to be showing. So if the states change individually,
-        //   the later one can be skipped to avoid taking snapshot again. While it still accepts
-        //   if both of them change to show at the same time.
-        // - Keyguard was not going away. Because if it was, the closing transition is able to
-        //   handle the snapshot.
-        // - The display state is ON. Because if AOD is not on or pulsing, the display state will
-        //   be OFF or DOZE (the path of screen off may have handled it).
-        if (((aodShowing ^ keyguardShowing) || (aodShowing && aodChanged && keyguardChanged))
-                && !mKeyguardGoingAway && Display.isOnState(
-                        mRootWindowContainer.getDefaultDisplay().getDisplayInfo().state)) {
-            mWindowManager.mTaskSnapshotController.snapshotForSleeping(DEFAULT_DISPLAY);
-        }
-
         mKeyguardShowing = keyguardShowing;
         mAodShowing = aodShowing;
         if (aodChanged) {
             // Ensure the new state takes effect.
             mWindowManager.mWindowPlacerLocked.performSurfacePlacement();
+            // If the device can enter AOD and keyguard at the same time, the screen will not be
+            // turned off, so the snapshot needs to be refreshed when these states are changed.
+            if (aodShowing && keyguardShowing && keyguardChanged) {
+                mWindowManager.mTaskSnapshotController.snapshotForSleeping(DEFAULT_DISPLAY);
+            }
         }
 
         if (keyguardChanged) {
@@ -204,7 +192,7 @@ class KeyguardController {
         // state when evaluating visibilities.
         updateKeyguardSleepToken();
         mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
-        InputMethodManagerInternal.get().updateImeWindowStatus(false /* disableImeIcon */);
+        InputMethodManagerInternal.get().updateImeWindowStatus();
     }
 
     /**

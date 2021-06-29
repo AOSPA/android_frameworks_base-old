@@ -111,7 +111,7 @@ public class UdfpsController implements DozeReceiver {
     @NonNull private final FalsingManager mFalsingManager;
     @NonNull private final PowerManager mPowerManager;
     @NonNull private final AccessibilityManager mAccessibilityManager;
-    @Nullable private final UdfpsHbmProvider mHbmProvider;
+    @Nullable private final UdfpsHbmCallback mHbmCallback;
     // Currently the UdfpsController supports a single UDFPS sensor. If devices have multiple
     // sensors, this, in addition to a lot of the code here, will be updated.
     @VisibleForTesting final FingerprintSensorPropertiesInternal mSensorProps;
@@ -123,11 +123,6 @@ public class UdfpsController implements DozeReceiver {
     private int mActivePointerId = -1;
     // The timestamp of the most recent touch log.
     private long mTouchLogTime;
-    // Sensor has a good capture for this touch. Do not need to illuminate for this particular
-    // touch event anymore. In other words, do not illuminate until user lifts and touches the
-    // sensor area again.
-    // TODO: We should probably try to make touch/illumination things more of a FSM
-    private boolean mGoodCaptureReceived;
 
     @Nullable private UdfpsView mView;
     // The current request from FingerprintService. Null if no current request.
@@ -211,12 +206,6 @@ public class UdfpsController implements DozeReceiver {
             }
         }
 
-        void onAcquiredGood() {
-            if (mEnrollHelper != null) {
-                mEnrollHelper.animateIfLastStep();
-            }
-        }
-
         void onEnrollmentHelp() {
             if (mEnrollHelper != null) {
                 mEnrollHelper.onEnrollmentHelp();
@@ -236,74 +225,48 @@ public class UdfpsController implements DozeReceiver {
         @Override
         public void showUdfpsOverlay(int sensorId, int reason,
                 @NonNull IUdfpsOverlayControllerCallback callback) {
-            mFgExecutor.execute(() -> {
-                final UdfpsEnrollHelper enrollHelper;
-                if (reason == IUdfpsOverlayController.REASON_ENROLL_FIND_SENSOR
-                        || reason == IUdfpsOverlayController.REASON_ENROLL_ENROLLING) {
-                    enrollHelper = new UdfpsEnrollHelper(mContext, reason);
-                } else {
-                    enrollHelper = null;
-                }
-                mServerRequest = new ServerRequest(reason, callback, enrollHelper);
-                updateOverlay();
-            });
+            final UdfpsEnrollHelper enrollHelper;
+            if (reason == IUdfpsOverlayController.REASON_ENROLL_FIND_SENSOR
+                    || reason == IUdfpsOverlayController.REASON_ENROLL_ENROLLING) {
+                enrollHelper = new UdfpsEnrollHelper(mContext, reason);
+            } else {
+                enrollHelper = null;
+            }
+
+            mServerRequest = new ServerRequest(reason, callback, enrollHelper);
+            updateOverlay();
         }
 
         @Override
         public void hideUdfpsOverlay(int sensorId) {
-            mFgExecutor.execute(() -> {
-                mServerRequest = null;
-                updateOverlay();
-            });
-        }
-
-        @Override
-        public void onAcquiredGood(int sensorId) {
-            mFgExecutor.execute(() -> {
-                if (mView == null) {
-                    Log.e(TAG, "Null view when onAcquiredGood for sensorId: " + sensorId);
-                    return;
-                }
-                mGoodCaptureReceived = true;
-                mView.stopIllumination();
-                if (mServerRequest != null) {
-                    mServerRequest.onAcquiredGood();
-                } else {
-                    Log.e(TAG, "Null serverRequest when onAcquiredGood");
-                }
-            });
+            mServerRequest = null;
+            updateOverlay();
         }
 
         @Override
         public void onEnrollmentProgress(int sensorId, int remaining) {
-            mFgExecutor.execute(() -> {
-                if (mServerRequest == null) {
-                    Log.e(TAG, "onEnrollProgress received but serverRequest is null");
-                    return;
-                }
-                mServerRequest.onEnrollmentProgress(remaining);
-            });
+            if (mServerRequest == null) {
+                Log.e(TAG, "onEnrollProgress received but serverRequest is null");
+                return;
+            }
+            mServerRequest.onEnrollmentProgress(remaining);
         }
 
         @Override
         public void onEnrollmentHelp(int sensorId) {
-            mFgExecutor.execute(() -> {
-                if (mServerRequest == null) {
-                    Log.e(TAG, "onEnrollmentHelp received but serverRequest is null");
-                    return;
-                }
-                mServerRequest.onEnrollmentHelp();
-            });
+            if (mServerRequest == null) {
+                Log.e(TAG, "onEnrollmentHelp received but serverRequest is null");
+                return;
+            }
+            mServerRequest.onEnrollmentHelp();
         }
 
         @Override
         public void setDebugMessage(int sensorId, String message) {
-            mFgExecutor.execute(() -> {
-                if (mView == null) {
-                    return;
-                }
-                mView.setDebugMessage(message);
-            });
+            if (mView == null) {
+                return;
+            }
+            mView.setDebugMessage(message);
         }
     }
 
@@ -370,15 +333,14 @@ public class UdfpsController implements DozeReceiver {
 
     private boolean onTouch(View view, MotionEvent event, boolean fromUdfpsView) {
         UdfpsView udfpsView = (UdfpsView) view;
-        final boolean isIlluminationRequested = udfpsView.isIlluminationRequested();
+        final boolean isFingerDown = udfpsView.isIlluminationRequested();
         boolean handled = false;
         switch (event.getActionMasked()) {
             case MotionEvent.ACTION_OUTSIDE:
                 udfpsView.onTouchOutsideView();
-                return true;
+                break;
             case MotionEvent.ACTION_DOWN:
             case MotionEvent.ACTION_HOVER_ENTER:
-                Trace.beginSection("UdfpsController.onTouch.ACTION_DOWN");
                 // To simplify the lifecycle of the velocity tracker, make sure it's never null
                 // after ACTION_DOWN, and always null after ACTION_CANCEL or ACTION_UP.
                 if (mVelocityTracker == null) {
@@ -389,7 +351,8 @@ public class UdfpsController implements DozeReceiver {
                     mVelocityTracker.clear();
                 }
                 if (isWithinSensorArea(udfpsView, event.getX(), event.getY(), fromUdfpsView)) {
-                    Trace.beginAsyncSection("UdfpsController.e2e.onPointerDown", 0);
+                    Trace.beginAsyncSection(
+                            "UdfpsController#ACTION_DOWN", 1);
                     // The pointer that causes ACTION_DOWN is always at index 0.
                     // We need to persist its ID to track it during ACTION_MOVE that could include
                     // data for many other pointers because of multi-touch support.
@@ -397,18 +360,17 @@ public class UdfpsController implements DozeReceiver {
                     mVelocityTracker.addMovement(event);
                     handled = true;
                 }
-                Trace.endSection();
                 break;
 
             case MotionEvent.ACTION_MOVE:
             case MotionEvent.ACTION_HOVER_MOVE:
-                Trace.beginSection("UdfpsController.onTouch.ACTION_MOVE");
                 final int idx = mActivePointerId == -1
                         ? event.getPointerId(0)
                         : event.findPointerIndex(mActivePointerId);
                 if (idx == event.getActionIndex()) {
-                    if (isWithinSensorArea(udfpsView, event.getX(idx), event.getY(idx),
-                            fromUdfpsView)) {
+                    final float x = event.getX(idx);
+                    final float y = event.getY(idx);
+                    if (isWithinSensorArea(udfpsView, x, y, fromUdfpsView)) {
                         if (mVelocityTracker == null) {
                             // touches could be injected, so the velocity tracker may not have
                             // been initialized (via ACTION_DOWN).
@@ -426,10 +388,8 @@ public class UdfpsController implements DozeReceiver {
                                 "minor: %.1f, major: %.1f, v: %.1f, exceedsVelocityThreshold: %b",
                                 minor, major, v, exceedsVelocityThreshold);
                         final long sinceLastLog = SystemClock.elapsedRealtime() - mTouchLogTime;
-                        if (!isIlluminationRequested && !mGoodCaptureReceived &&
-                                !exceedsVelocityThreshold) {
-                            onFingerDown((int) event.getRawX(), (int) event.getRawY(), minor,
-                                    major);
+                        if (!isFingerDown && !exceedsVelocityThreshold) {
+                            onFingerDown((int) x, (int) y, minor, major);
                             Log.v(TAG, "onTouch | finger down: " + touchInfo);
                             mTouchLogTime = SystemClock.elapsedRealtime();
                             mPowerManager.userActivity(SystemClock.uptimeMillis(),
@@ -463,27 +423,27 @@ public class UdfpsController implements DozeReceiver {
                             Log.v(TAG, "onTouch | finger move: " + touchInfo);
                             mTouchLogTime = SystemClock.elapsedRealtime();
                         }
-                    } else {
+                    } else if (isFingerDown) {
                         Log.v(TAG, "onTouch | finger outside");
                         onFingerUp();
                     }
                 }
-                Trace.endSection();
                 break;
 
             case MotionEvent.ACTION_UP:
             case MotionEvent.ACTION_CANCEL:
             case MotionEvent.ACTION_HOVER_EXIT:
-                Trace.beginSection("UdfpsController.onTouch.ACTION_UP");
                 mActivePointerId = -1;
                 if (mVelocityTracker != null) {
                     mVelocityTracker.recycle();
                     mVelocityTracker = null;
                 }
-                Log.v(TAG, "onTouch | finger up");
-                onFingerUp();
+                if (isFingerDown) {
+                    Log.v(TAG, "onTouch | finger up");
+                    onFingerUp();
+                }
                 mFalsingManager.isFalseTouch(UDFPS_AUTHENTICATION);
-                Trace.endSection();
+
                 break;
 
             default:
@@ -509,7 +469,7 @@ public class UdfpsController implements DozeReceiver {
             @NonNull AccessibilityManager accessibilityManager,
             @NonNull ScreenLifecycle screenLifecycle,
             @Nullable Vibrator vibrator,
-            @NonNull Optional<UdfpsHbmProvider> hbmProvider) {
+            @NonNull Optional<UdfpsHbmCallback> hbmCallback) {
         mContext = context;
         // TODO (b/185124905): inject main handler and vibrator once done prototyping
         mMainHandler = new Handler(Looper.getMainLooper());
@@ -529,13 +489,14 @@ public class UdfpsController implements DozeReceiver {
         mFalsingManager = falsingManager;
         mPowerManager = powerManager;
         mAccessibilityManager = accessibilityManager;
-        mHbmProvider = hbmProvider.orElse(null);
+        mHbmCallback = hbmCallback.orElse(null);
         screenLifecycle.addObserver(mScreenObserver);
         mScreenOn = screenLifecycle.getScreenState() == ScreenLifecycle.SCREEN_ON;
 
         mSensorProps = findFirstUdfps();
         // At least one UDFPS sensor exists
         checkArgument(mSensorProps != null);
+        mStatusBar.setSensorRect(getSensorLocation());
 
         mCoreLayoutParams = new WindowManager.LayoutParams(
                 WindowManager.LayoutParams.TYPE_KEYGUARD_DIALOG,
@@ -641,8 +602,6 @@ public class UdfpsController implements DozeReceiver {
             default:
                 // Do nothing to stay in portrait mode.
         }
-        // avoid announcing window title
-        mCoreLayoutParams.accessibilityTitle = " ";
         return mCoreLayoutParams;
     }
 
@@ -664,17 +623,10 @@ public class UdfpsController implements DozeReceiver {
                     Log.v(TAG, "showUdfpsOverlay | adding window reason=" + reason);
                     mView = (UdfpsView) mInflater.inflate(R.layout.udfps_view, null, false);
                     mView.setSensorProperties(mSensorProps);
-                    mView.setHbmProvider(mHbmProvider);
+                    mView.setHbmCallback(mHbmCallback);
                     UdfpsAnimationViewController animation = inflateUdfpsAnimation(reason);
                     animation.init();
                     mView.setAnimationViewController(animation);
-
-                    // This view overlaps the sensor area, so prevent it from being selectable
-                    // during a11y.
-                    if (reason == IUdfpsOverlayController.REASON_ENROLL_FIND_SENSOR
-                            || reason == IUdfpsOverlayController.REASON_ENROLL_ENROLLING) {
-                        mView.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
-                    }
 
                     mWindowManager.addView(mView, computeLayoutParams(animation));
                     mAccessibilityManager.addTouchExplorationStateChangeListener(
@@ -822,27 +774,25 @@ public class UdfpsController implements DozeReceiver {
             return;
         }
         mFingerprintManager.onPointerDown(mSensorProps.sensorId, x, y, minor, major);
-        Trace.endAsyncSection("UdfpsController.e2e.onPointerDown", 0);
-        Trace.beginAsyncSection("UdfpsController.e2e.startIllumination", 0);
+        Trace.endAsyncSection(
+                "UdfpsController#ACTION_DOWN", 1);
+        Trace.beginAsyncSection("UdfpsController#startIllumination", 1);
         mView.startIllumination(() -> {
             mFingerprintManager.onUiReady(mSensorProps.sensorId);
-            Trace.endAsyncSection("UdfpsController.e2e.startIllumination", 0);
+            Trace.endAsyncSection("UdfpsController#startIllumination", 1);
         });
     }
 
     // This method can be called from the UI thread.
     private void onFingerUp() {
         mActivePointerId = -1;
-        mGoodCaptureReceived = false;
         mMainHandler.removeCallbacks(mAcquiredVibration);
         if (mView == null) {
             Log.w(TAG, "Null view in onFingerUp");
             return;
         }
         mFingerprintManager.onPointerUp(mSensorProps.sensorId);
-        if (mView.isIlluminationRequested()) {
-            mView.stopIllumination();
-        }
+        mView.stopIllumination();
     }
 
 

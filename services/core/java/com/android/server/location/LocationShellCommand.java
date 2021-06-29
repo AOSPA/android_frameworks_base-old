@@ -20,7 +20,6 @@ import android.content.Context;
 import android.location.Criteria;
 import android.location.Location;
 import android.location.provider.ProviderProperties;
-import android.os.SystemClock;
 import android.os.UserHandle;
 
 import com.android.modules.utils.BasicShellCommandHandler;
@@ -237,7 +236,7 @@ class LocationShellCommand extends BasicShellCommandHandler {
         Location location = new Location(provider);
         location.setAccuracy(DEFAULT_TEST_LOCATION_ACCURACY);
         location.setTime(System.currentTimeMillis());
-        location.setElapsedRealtimeNanos(SystemClock.elapsedRealtimeNanos());
+        location.setElapsedRealtimeNanos(System.nanoTime());
 
         do {
             String option = getNextOption();

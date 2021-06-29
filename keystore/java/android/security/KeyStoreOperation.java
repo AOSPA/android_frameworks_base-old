@@ -18,7 +18,6 @@ package android.security;
 
 import android.annotation.NonNull;
 import android.hardware.security.keymint.KeyParameter;
-import android.os.Binder;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.security.keymaster.KeymasterDefs;
@@ -40,7 +39,6 @@ public class KeyStoreOperation {
             Long challenge,
             KeyParameter[] parameters
     ) {
-        Binder.allowBlocking(operation.asBinder());
         this.mOperation = operation;
         this.mChallenge = challenge;
         this.mParameters = parameters;

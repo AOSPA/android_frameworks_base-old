@@ -182,7 +182,7 @@ public final class AppSearchSchema {
         @IntDef(
                 value = {
                     DATA_TYPE_STRING,
-                    DATA_TYPE_LONG,
+                    DATA_TYPE_INT64,
                     DATA_TYPE_DOUBLE,
                     DATA_TYPE_BOOLEAN,
                     DATA_TYPE_BYTES,
@@ -195,7 +195,7 @@ public final class AppSearchSchema {
         public static final int DATA_TYPE_STRING = 1;
 
         /** @hide */
-        public static final int DATA_TYPE_LONG = 2;
+        public static final int DATA_TYPE_INT64 = 2;
 
         /** @hide */
         public static final int DATA_TYPE_DOUBLE = 3;
@@ -315,8 +315,8 @@ public final class AppSearchSchema {
             switch (propertyBundle.getInt(PropertyConfig.DATA_TYPE_FIELD)) {
                 case PropertyConfig.DATA_TYPE_STRING:
                     return new StringPropertyConfig(propertyBundle);
-                case PropertyConfig.DATA_TYPE_LONG:
-                    return new LongPropertyConfig(propertyBundle);
+                case PropertyConfig.DATA_TYPE_INT64:
+                    return new Int64PropertyConfig(propertyBundle);
                 case PropertyConfig.DATA_TYPE_DOUBLE:
                     return new DoublePropertyConfig(propertyBundle);
                 case PropertyConfig.DATA_TYPE_BOOLEAN:
@@ -389,24 +389,12 @@ public final class AppSearchSchema {
         public @interface TokenizerType {}
 
         /**
-         * This value indicates that no tokens should be extracted from this property.
-         *
-         * <p>It is only valid for tokenizer_type to be 'NONE' if {@link #getIndexingType} is {@link
+         * It is only valid for tokenizer_type to be 'NONE' if {@link #getIndexingType} is {@link
          * #INDEXING_TYPE_NONE}.
          */
         public static final int TOKENIZER_TYPE_NONE = 0;
 
-        /**
-         * Tokenization for plain text. This value indicates that tokens should be extracted from
-         * this property based on word breaks. Segments of whitespace and punctuation are not
-         * considered tokens.
-         *
-         * <p>Ex. A property with "foo bar. baz." will produce tokens for "foo", "bar" and "baz".
-         * The segments " " and "." will not be considered tokens.
-         *
-         * <p>It is only valid for tokenizer_type to be 'PLAIN' if {@link #getIndexingType} is
-         * {@link #INDEXING_TYPE_EXACT_TERMS} or {@link #INDEXING_TYPE_PREFIXES}.
-         */
+        /** Tokenization for plain text. */
         public static final int TOKENIZER_TYPE_PLAIN = 1;
 
         StringPropertyConfig(@NonNull Bundle bundle) {
@@ -486,17 +474,6 @@ public final class AppSearchSchema {
             /** Constructs a new {@link StringPropertyConfig} from the contents of this builder. */
             @NonNull
             public StringPropertyConfig build() {
-                if (mTokenizerType == TOKENIZER_TYPE_NONE) {
-                    Preconditions.checkState(
-                            mIndexingType == INDEXING_TYPE_NONE,
-                            "Cannot set "
-                                    + "TOKENIZER_TYPE_NONE with an indexing type other than "
-                                    + "INDEXING_TYPE_NONE.");
-                } else {
-                    Preconditions.checkState(
-                            mIndexingType != INDEXING_TYPE_NONE,
-                            "Cannot set " + "TOKENIZER_TYPE_PLAIN  with INDEXING_TYPE_NONE.");
-                }
                 Bundle bundle = new Bundle();
                 bundle.putString(NAME_FIELD, mPropertyName);
                 bundle.putInt(DATA_TYPE_FIELD, DATA_TYPE_STRING);
@@ -508,13 +485,8 @@ public final class AppSearchSchema {
         }
     }
 
-    /**
-     * @deprecated TODO(b/181887768): Exists for dogfood transition; must be removed.
-     * @hide
-     */
-    @Deprecated
-    public static class Int64PropertyConfig extends PropertyConfig {
-        @UnsupportedAppUsage
+    /** Configuration for a property containing a 64-bit integer. */
+    public static final class Int64PropertyConfig extends PropertyConfig {
         Int64PropertyConfig(@NonNull Bundle bundle) {
             super(bundle);
         }
@@ -525,7 +497,6 @@ public final class AppSearchSchema {
             private @Cardinality int mCardinality = CARDINALITY_OPTIONAL;
 
             /** Creates a new {@link Int64PropertyConfig.Builder}. */
-            @UnsupportedAppUsage
             public Builder(@NonNull String propertyName) {
                 mPropertyName = Objects.requireNonNull(propertyName);
             }
@@ -538,7 +509,6 @@ public final class AppSearchSchema {
              */
             @SuppressWarnings("MissingGetterMatchingBuilder") // getter defined in superclass
             @NonNull
-            @UnsupportedAppUsage
             public Int64PropertyConfig.Builder setCardinality(@Cardinality int cardinality) {
                 Preconditions.checkArgumentInRange(
                         cardinality, CARDINALITY_REPEATED, CARDINALITY_REQUIRED, "cardinality");
@@ -548,57 +518,12 @@ public final class AppSearchSchema {
 
             /** Constructs a new {@link Int64PropertyConfig} from the contents of this builder. */
             @NonNull
-            @UnsupportedAppUsage
             public Int64PropertyConfig build() {
                 Bundle bundle = new Bundle();
                 bundle.putString(NAME_FIELD, mPropertyName);
-                bundle.putInt(DATA_TYPE_FIELD, DATA_TYPE_LONG);
+                bundle.putInt(DATA_TYPE_FIELD, DATA_TYPE_INT64);
                 bundle.putInt(CARDINALITY_FIELD, mCardinality);
                 return new Int64PropertyConfig(bundle);
-            }
-        }
-    }
-
-    /** Configuration for a property containing a 64-bit integer. */
-    // TODO(b/181887768): This should extend directly from PropertyConfig
-    public static final class LongPropertyConfig extends Int64PropertyConfig {
-        LongPropertyConfig(@NonNull Bundle bundle) {
-            super(bundle);
-        }
-
-        /** Builder for {@link LongPropertyConfig}. */
-        public static final class Builder {
-            private final String mPropertyName;
-            private @Cardinality int mCardinality = CARDINALITY_OPTIONAL;
-
-            /** Creates a new {@link LongPropertyConfig.Builder}. */
-            public Builder(@NonNull String propertyName) {
-                mPropertyName = Objects.requireNonNull(propertyName);
-            }
-
-            /**
-             * The cardinality of the property (whether it is optional, required or repeated).
-             *
-             * <p>If this method is not called, the default cardinality is {@link
-             * PropertyConfig#CARDINALITY_OPTIONAL}.
-             */
-            @SuppressWarnings("MissingGetterMatchingBuilder") // getter defined in superclass
-            @NonNull
-            public LongPropertyConfig.Builder setCardinality(@Cardinality int cardinality) {
-                Preconditions.checkArgumentInRange(
-                        cardinality, CARDINALITY_REPEATED, CARDINALITY_REQUIRED, "cardinality");
-                mCardinality = cardinality;
-                return this;
-            }
-
-            /** Constructs a new {@link LongPropertyConfig} from the contents of this builder. */
-            @NonNull
-            public LongPropertyConfig build() {
-                Bundle bundle = new Bundle();
-                bundle.putString(NAME_FIELD, mPropertyName);
-                bundle.putInt(DATA_TYPE_FIELD, DATA_TYPE_LONG);
-                bundle.putInt(CARDINALITY_FIELD, mCardinality);
-                return new LongPropertyConfig(bundle);
             }
         }
     }

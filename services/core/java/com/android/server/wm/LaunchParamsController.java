@@ -160,7 +160,8 @@ class LaunchParamsController {
                 return false;
             }
 
-            if (task.getRootTask().inMultiWindowMode()) {
+            if (task.getRootTask().inFreeformWindowingMode()) {
+                // Only set bounds if it's in freeform mode.
                 task.setBounds(mTmpParams.mBounds);
                 return true;
             }

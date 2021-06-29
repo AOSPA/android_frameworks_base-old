@@ -22,7 +22,6 @@ import static com.android.internal.util.function.pooled.PooledLambda.obtainMessa
 
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
-import android.hardware.soundtrigger.SoundTrigger;
 import android.media.AudioFormat;
 import android.os.Handler;
 import android.os.Looper;
@@ -32,7 +31,6 @@ import android.os.RemoteException;
 import android.os.SharedMemory;
 import android.util.Slog;
 
-import com.android.internal.app.IHotwordRecognitionStatusCallback;
 import com.android.internal.app.IVoiceInteractionManagerService;
 
 import java.io.PrintWriter;
@@ -66,8 +64,7 @@ class SoftwareHotwordDetector extends AbstractHotwordDetector {
         mAudioFormat = audioFormat;
         mCallback = callback;
         mHandler = new Handler(Looper.getMainLooper());
-        updateStateLocked(options, sharedMemory,
-                new InitializationStateListener(mHandler, mCallback));
+        updateStateLocked(options, sharedMemory, null /* callback */);
     }
 
     @RequiresPermission(RECORD_AUDIO)
@@ -133,59 +130,6 @@ class SoftwareHotwordDetector extends AbstractHotwordDetector {
                     mCallback,
                     new AlwaysOnHotwordDetector.EventPayload(
                             audioFormat, hotwordDetectedResult, audioStream)));
-        }
-    }
-
-    private static class InitializationStateListener
-            extends IHotwordRecognitionStatusCallback.Stub {
-        private final Handler mHandler;
-        private final HotwordDetector.Callback mCallback;
-
-        InitializationStateListener(Handler handler, HotwordDetector.Callback callback) {
-            this.mHandler = handler;
-            this.mCallback = callback;
-        }
-
-        @Override
-        public void onKeyphraseDetected(
-                SoundTrigger.KeyphraseRecognitionEvent recognitionEvent,
-                HotwordDetectedResult result) {
-
-        }
-
-        @Override
-        public void onGenericSoundTriggerDetected(
-                SoundTrigger.GenericRecognitionEvent recognitionEvent) throws RemoteException {
-
-        }
-
-        @Override
-        public void onRejected(HotwordRejectedResult result) throws RemoteException {
-
-        }
-
-        @Override
-        public void onError(int status) throws RemoteException {
-
-        }
-
-        @Override
-        public void onRecognitionPaused() throws RemoteException {
-
-        }
-
-        @Override
-        public void onRecognitionResumed() throws RemoteException {
-
-        }
-
-        @Override
-        public void onStatusReported(int status) {
-            Slog.v(TAG, "onStatusReported" + (DEBUG ? "(" + status + ")" : ""));
-            mHandler.sendMessage(obtainMessage(
-                    HotwordDetector.Callback::onHotwordDetectionServiceInitialized,
-                    mCallback,
-                    status));
         }
     }
 

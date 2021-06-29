@@ -34,14 +34,15 @@ import android.view.View;
 import android.view.ViewGroup;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.systemui.ExpandHelper;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingCollector;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.doze.DozeLog;
+import com.android.systemui.plugins.FalsingManager;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.DragDownHelper;
-import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
@@ -72,6 +73,7 @@ public class NotificationShadeWindowViewController {
     private final DynamicPrivacyController mDynamicPrivacyController;
     private final KeyguardBypassController mBypassController;
     private final PluginManager mPluginManager;
+    private final FalsingManager mFalsingManager;
     private final FalsingCollector mFalsingCollector;
     private final TunerService mTunerService;
     private final NotificationLockscreenUserManager mNotificationLockscreenUserManager;
@@ -85,7 +87,6 @@ public class NotificationShadeWindowViewController {
     private final ShadeController mShadeController;
     private final NotificationShadeDepthController mDepthController;
     private final NotificationStackScrollLayoutController mNotificationStackScrollLayoutController;
-    private final LockscreenShadeTransitionController mLockscreenShadeTransitionController;
     private final StatusBarKeyguardViewManager mStatusBarKeyguardViewManager;
 
     private GestureDetector mGestureDetector;
@@ -118,7 +119,7 @@ public class NotificationShadeWindowViewController {
             PulseExpansionHandler pulseExpansionHandler,
             DynamicPrivacyController dynamicPrivacyController,
             KeyguardBypassController bypassController,
-            LockscreenShadeTransitionController transitionController,
+            FalsingManager falsingManager,
             FalsingCollector falsingCollector,
             PluginManager pluginManager,
             TunerService tunerService,
@@ -142,7 +143,7 @@ public class NotificationShadeWindowViewController {
         mPulseExpansionHandler = pulseExpansionHandler;
         mDynamicPrivacyController = dynamicPrivacyController;
         mBypassController = bypassController;
-        mLockscreenShadeTransitionController = transitionController;
+        mFalsingManager = falsingManager;
         mFalsingCollector = falsingCollector;
         mPluginManager = pluginManager;
         mTunerService = tunerService;
@@ -405,7 +406,12 @@ public class NotificationShadeWindowViewController {
             }
         });
 
-        setDragDownHelper(mLockscreenShadeTransitionController.getTouchHelper());
+        ExpandHelper.Callback expandHelperCallback = mStackScrollLayout.getExpandHelperCallback();
+        DragDownHelper.DragDownCallback dragDownCallback = mStackScrollLayout.getDragDownCallback();
+        setDragDownHelper(
+                new DragDownHelper(
+                        mView.getContext(), mView, expandHelperCallback,
+                        dragDownCallback, mFalsingManager, mFalsingCollector));
 
         mDepthController.setRoot(mView);
         mNotificationPanelViewController.addExpansionListener(mDepthController);

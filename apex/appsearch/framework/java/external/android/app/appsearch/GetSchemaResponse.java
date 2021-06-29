@@ -26,7 +26,7 @@ import java.util.Objects;
 import java.util.Set;
 
 /** The response class of {@link AppSearchSession#getSchema} */
-public final class GetSchemaResponse {
+public class GetSchemaResponse {
     private static final String VERSION_FIELD = "version";
     private static final String SCHEMAS_FIELD = "schemas";
 

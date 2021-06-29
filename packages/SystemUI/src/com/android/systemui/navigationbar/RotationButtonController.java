@@ -71,8 +71,6 @@ public class RotationButtonController {
     private final ViewRippler mViewRippler = new ViewRippler();
     private RotationButton mRotationButton;
 
-    private boolean mIsRecentsAnimationRunning;
-    private boolean mHomeRotationEnabled;
     private int mLastRotationSuggestion;
     private boolean mPendingRotationSuggestion;
     private boolean mHoveringRotationSuggestion;
@@ -94,6 +92,7 @@ public class RotationButtonController {
             () -> mPendingRotationSuggestion = false;
     private Animator mRotateHideAnimator;
 
+
     private final Stub mRotationWatcher = new Stub() {
         @Override
         public void onRotationChanged(final int rotation) throws RemoteException {
@@ -106,7 +105,7 @@ public class RotationButtonController {
                     if (shouldOverrideUserLockPrefs(rotation)) {
                         setRotationLockedAtAngle(rotation);
                     }
-                    setRotateSuggestionButtonState(false /* visible */, true /* hideImmediately */);
+                    setRotateSuggestionButtonState(false /* visible */, true /* forced */);
                 }
 
                 if (mRotWatcherListener != null) {
@@ -193,14 +192,10 @@ public class RotationButtonController {
     }
 
     void setRotateSuggestionButtonState(boolean visible) {
-        setRotateSuggestionButtonState(visible, false /* hideImmediately */);
+        setRotateSuggestionButtonState(visible, false /* force */);
     }
 
-    /**
-     * Change the visibility of rotate suggestion button. If {@code hideImmediately} is true,
-     * it doesn't wait until the completion of the running animation.
-     */
-    void setRotateSuggestionButtonState(final boolean visible, final boolean hideImmediately) {
+    void setRotateSuggestionButtonState(final boolean visible, final boolean force) {
         // At any point the the button can become invisible because an a11y service became active.
         // Similarly, a call to make the button visible may be rejected because an a11y service is
         // active. Must account for this.
@@ -241,7 +236,7 @@ public class RotationButtonController {
         } else { // Hide
             mViewRippler.stop(); // Prevent any pending ripples, force hide or not
 
-            if (hideImmediately) {
+            if (force) {
                 // If a hide animator is running stop it and make invisible
                 if (mRotateHideAnimator != null && mRotateHideAnimator.isRunning()) {
                     mRotateHideAnimator.pause();
@@ -268,29 +263,12 @@ public class RotationButtonController {
         }
     }
 
-    void setRecentsAnimationRunning(boolean running) {
-        mIsRecentsAnimationRunning = running;
-        updateRotationButtonStateInOverview();
-    }
-
-    void setHomeRotationEnabled(boolean enabled) {
-        mHomeRotationEnabled = enabled;
-        updateRotationButtonStateInOverview();
-    }
-
-    private void updateRotationButtonStateInOverview() {
-        if (mIsRecentsAnimationRunning && !mHomeRotationEnabled) {
-            setRotateSuggestionButtonState(false, true /* hideImmediately */ );
-        }
-    }
-
     void setDarkIntensity(float darkIntensity) {
         mRotationButton.setDarkIntensity(darkIntensity);
     }
 
     void onRotationProposal(int rotation, int windowRotation, boolean isValid) {
-        if (!mRotationButton.acceptRotationProposal() || (!mHomeRotationEnabled
-                && mIsRecentsAnimationRunning)) {
+        if (!mRotationButton.acceptRotationProposal()) {
             return;
         }
 

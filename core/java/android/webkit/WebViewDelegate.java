@@ -19,6 +19,7 @@ package android.webkit;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
+import android.annotation.UptimeMillisLong;
 import android.app.ActivityThread;
 import android.app.Application;
 import android.app.ResourcesManager;
@@ -220,12 +221,14 @@ public final class WebViewDelegate {
     }
 
     /**
-     * Get the timestamps at which various WebView startup events occurred in this process.
+     * Returns an array of startup timestamps. For the specification of array
+     * see {@link WebViewFactory.Timestamp}.
      * This method must be called on the same thread where the
      * WebViewChromiumFactoryProvider#create method was invoked.
      */
     @NonNull
-    public WebViewFactory.StartupTimestamps getStartupTimestamps() {
-        return WebViewFactory.getStartupTimestamps();
+    @UptimeMillisLong
+    public long[] getTimestamps() {
+        return WebViewFactory.getTimestamps();
     }
 }

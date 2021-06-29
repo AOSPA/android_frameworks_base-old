@@ -89,9 +89,6 @@ public class ReduceBrightColorsTileTest extends SysuiTestCase {
                 mActivityStarter,
                 mQSLogger
         );
-
-        mTile.initialize();
-        mTestableLooper.processAllMessages();
     }
 
     @Test

@@ -34,6 +34,7 @@ import android.icu.text.DateTimePatternGenerator;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Handler;
+import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.format.DateFormat;
@@ -44,10 +45,6 @@ import android.view.inspector.InspectableProperty;
 
 import com.android.internal.R;
 
-import java.time.Duration;
-import java.time.Instant;
-import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Calendar;
 import java.util.TimeZone;
 
@@ -188,29 +185,18 @@ public class TextClock extends TextView {
 
     private final Runnable mTicker = new Runnable() {
         public void run() {
-            removeCallbacks(this);
-            if (mStopTicking || !mShouldRunTicker) {
+            if (mStopTicking) {
                 return; // Test disabled the clock ticks
             }
             onTimeChanged();
 
-            Instant now = mTime.toInstant();
-            ZoneId zone = mTime.getTimeZone().toZoneId();
+            long now = SystemClock.uptimeMillis();
+            long next = now + (1000 - now % 1000);
 
-            ZonedDateTime nextTick;
-            if (mHasSeconds) {
-                nextTick = now.atZone(zone).plusSeconds(1).withNano(0);
-            } else {
-                nextTick = now.atZone(zone).plusMinutes(1).withSecond(0).withNano(0);
+            Handler handler = getHandler();
+            if (handler != null) {
+                handler.postAtTime(mTicker, next);
             }
-
-            long millisUntilNextTick = Duration.between(now, nextTick.toInstant()).toMillis();
-            if (millisUntilNextTick <= 0) {
-                // This should never happen, but if it does, then tick again in a second.
-                millisUntilNextTick = 1000;
-            }
-
-            postDelayed(this, millisUntilNextTick);
         }
     };
 
@@ -533,7 +519,8 @@ public class TextClock extends TextView {
         mHasSeconds = DateFormat.hasSeconds(mFormat);
 
         if (mShouldRunTicker && hadSeconds != mHasSeconds) {
-            mTicker.run();
+            if (hadSeconds) getHandler().removeCallbacks(mTicker);
+            else mTicker.run();
         }
     }
 
@@ -570,10 +557,14 @@ public class TextClock extends TextView {
 
         if (!mShouldRunTicker && isVisible) {
             mShouldRunTicker = true;
-            mTicker.run();
+            if (mHasSeconds) {
+                mTicker.run();
+            } else {
+                onTimeChanged();
+            }
         } else if (mShouldRunTicker && !isVisible) {
             mShouldRunTicker = false;
-            removeCallbacks(mTicker);
+            getHandler().removeCallbacks(mTicker);
         }
     }
 
@@ -601,6 +592,7 @@ public class TextClock extends TextView {
     private void registerReceiver() {
         final IntentFilter filter = new IntentFilter();
 
+        filter.addAction(Intent.ACTION_TIME_TICK);
         filter.addAction(Intent.ACTION_TIME_CHANGED);
         filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
 

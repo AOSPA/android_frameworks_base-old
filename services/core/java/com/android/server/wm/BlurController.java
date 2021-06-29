@@ -29,7 +29,6 @@ import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.provider.Settings;
 import android.view.ICrossWindowBlurEnabledListener;
-import android.view.TunnelModeEnabledListener;
 
 /**
  * Keeps track of the different factors that determine whether cross-window blur is enabled
@@ -46,16 +45,6 @@ final class BlurController {
     private volatile boolean mBlurEnabled;
     private boolean mInPowerSaveMode;
     private boolean mBlurDisabledSetting;
-    private boolean mTunnelModeEnabled = false;
-
-    private TunnelModeEnabledListener mTunnelModeListener =
-            new TunnelModeEnabledListener(Runnable::run) {
-        @Override
-        public void onTunnelModeEnabledChanged(boolean tunnelModeEnabled) {
-            mTunnelModeEnabled = tunnelModeEnabled;
-            updateBlurEnabled();
-        }
-    };
 
     BlurController(Context context, PowerManager powerManager) {
         mContext = context;
@@ -89,8 +78,6 @@ final class BlurController {
                 });
         mBlurDisabledSetting = getBlurDisabledSetting();
 
-        TunnelModeEnabledListener.register(mTunnelModeListener);
-
         updateBlurEnabled();
     }
 
@@ -112,7 +99,7 @@ final class BlurController {
     private void updateBlurEnabled() {
         synchronized (mLock) {
             final boolean newEnabled = CROSS_WINDOW_BLUR_SUPPORTED && !mBlurDisabledSetting
-                    && !mInPowerSaveMode && !mTunnelModeEnabled;
+                    && !mInPowerSaveMode;
             if (mBlurEnabled == newEnabled) {
                 return;
             }

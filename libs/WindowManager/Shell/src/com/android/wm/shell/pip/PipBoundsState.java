@@ -55,7 +55,7 @@ public final class PipBoundsState {
             STASH_TYPE_RIGHT
     })
     @Retention(RetentionPolicy.SOURCE)
-    public @interface StashType {}
+    @interface StashType {}
 
     private static final String TAG = PipBoundsState.class.getSimpleName();
 

@@ -17,18 +17,16 @@
 package com.android.wm.shell.flicker.legacysplitscreen
 
 import android.platform.test.annotations.Presubmit
+import android.provider.Settings
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.launchSplitScreen
 import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
 import com.android.wm.shell.flicker.dockedStackDividerIsVisible
-import com.android.wm.shell.flicker.helpers.MultiWindowHelper.Companion.resetMultiWindowConfig
-import com.android.wm.shell.flicker.helpers.MultiWindowHelper.Companion.setSupportsNonResizableMultiWindow
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import org.junit.After
 import org.junit.Before
@@ -49,10 +47,10 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
-@Group2
 class EnterSplitScreenSupportNonResizable(
     testSpec: FlickerTestParameter
 ) : LegacySplitScreenTransition(testSpec) {
+    var prevSupportNonResizableInMultiWindow = 0
 
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
         get() = { configuration ->
@@ -75,15 +73,21 @@ class EnterSplitScreenSupportNonResizable(
                 splitScreenApp.defaultWindowName)
 
     @Before
-    override fun setup() {
-        super.setup()
-        setSupportsNonResizableMultiWindow(instrumentation, 1)
+    fun setup() {
+        prevSupportNonResizableInMultiWindow = Settings.Global.getInt(context.contentResolver,
+                Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW)
+        if (prevSupportNonResizableInMultiWindow != 1) {
+            // Support non-resizable in multi window
+            Settings.Global.putInt(context.contentResolver,
+                    Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1)
+        }
     }
 
     @After
-    override fun teardown() {
-        super.teardown()
-        resetMultiWindowConfig(instrumentation)
+    fun teardown() {
+        Settings.Global.putInt(context.contentResolver,
+                Settings.Global.DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW,
+                prevSupportNonResizableInMultiWindow)
     }
 
     @Presubmit

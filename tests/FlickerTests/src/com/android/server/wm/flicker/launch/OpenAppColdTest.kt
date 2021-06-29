@@ -21,7 +21,6 @@ import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.dsl.FlickerBuilder
@@ -40,7 +39,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
+@FlakyTest(bugId = 185400889)
 class OpenAppColdTest(testSpec: FlickerTestParameter) : OpenAppTransition(testSpec) {
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
         get() = {
@@ -70,32 +69,14 @@ class OpenAppColdTest(testSpec: FlickerTestParameter) : OpenAppTransition(testSp
 
     @FlakyTest
     @Test
-    override fun navBarLayerIsAlwaysVisible() {
-        super.navBarLayerIsAlwaysVisible()
-    }
-
-    @FlakyTest
-    @Test
     override fun navBarLayerRotatesAndScales() {
         super.navBarLayerRotatesAndScales()
     }
 
     @FlakyTest
     @Test
-    override fun statusBarLayerIsAlwaysVisible() {
-        super.statusBarLayerIsAlwaysVisible()
-    }
-
-    @FlakyTest
-    @Test
-    override fun appLayerReplacesLauncher() {
-        super.appLayerReplacesLauncher()
-    }
-
-    @FlakyTest
-    @Test
-    override fun appWindowReplacesLauncherAsTopWindow() {
-        super.appWindowReplacesLauncherAsTopWindow()
+    override fun focusChanges() {
+        super.focusChanges()
     }
 
     companion object {

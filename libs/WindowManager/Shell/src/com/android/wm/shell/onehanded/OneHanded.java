@@ -19,6 +19,7 @@ package com.android.wm.shell.onehanded;
 import android.content.res.Configuration;
 
 import com.android.wm.shell.common.annotations.ExternalThread;
+import com.android.wm.shell.onehanded.OneHandedGestureHandler.OneHandedGestureEventCallback;
 
 /**
  * Interface to engage one handed feature.
@@ -59,6 +60,11 @@ public interface OneHanded {
     void stopOneHanded(int uiEvent);
 
     /**
+     * Sets navigation 3 button mode enabled or disabled by users.
+     */
+    void setThreeButtonModeEnabled(boolean enabled);
+
+    /**
      * Sets one handed feature temporary locked in enabled or disabled state, this won't change
      * settings configuration.
      *
@@ -68,15 +74,16 @@ public interface OneHanded {
     void setLockedDisabled(boolean locked, boolean enabled);
 
     /**
-     * Registers callback to notify WMShell when user tap shortcut to expand notification.
-     */
-    void registerEventCallback(OneHandedEventCallback callback);
-
-    /**
      * Registers callback to be notified after {@link OneHandedDisplayAreaOrganizer}
      * transition start or finish
      */
     void registerTransitionCallback(OneHandedTransitionCallback callback);
+
+    /**
+     * Registers callback for one handed gesture, this gesture callback will be activated on
+     * 3 button navigation mode only
+     */
+    void registerGestureCallback(OneHandedGestureEventCallback callback);
 
     /**
      * Receive onConfigurationChanged() events

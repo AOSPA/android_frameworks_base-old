@@ -147,7 +147,6 @@ public final class SharedLibraryInfo implements Parcelable {
      *
      * @hide
      */
-    @TestApi
     public boolean isNative() {
         return mIsNative;
     }

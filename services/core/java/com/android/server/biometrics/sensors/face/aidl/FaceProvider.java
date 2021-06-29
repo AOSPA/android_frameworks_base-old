@@ -149,7 +149,7 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
                     prop.supportsDetectInteraction, prop.halControlsPreview,
                     false /* resetLockoutRequiresChallenge */);
             final Sensor sensor = new Sensor(getTag() + "/" + sensorId, this, mContext, mHandler,
-                    internalProp, lockoutResetDispatcher);
+                    internalProp);
 
             mSensors.put(sensorId, sensor);
             Slog.d(getTag(), "Added: " + internalProp);
@@ -158,13 +158,6 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
 
     private String getTag() {
         return "FaceProvider/" + mHalInstanceName;
-    }
-
-    boolean hasHalInstance() {
-        if (mTestHalEnabled) {
-            return true;
-        }
-        return ServiceManager.checkService(IFace.DESCRIPTOR + "/" + mHalInstanceName) != null;
     }
 
     @Nullable
@@ -298,7 +291,7 @@ public class FaceProvider implements IBinder.DeathRecipient, ServiceProvider {
 
     @Override
     public boolean isHardwareDetected(int sensorId) {
-        return hasHalInstance();
+        return getHalInstance() != null;
     }
 
     @Override

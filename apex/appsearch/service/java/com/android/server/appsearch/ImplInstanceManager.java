@@ -16,38 +16,41 @@
 
 package com.android.server.appsearch;
 
+import static android.content.pm.PackageManager.MATCH_FACTORY_ONLY;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.appsearch.exceptions.AppSearchException;
 import android.content.Context;
+import android.content.pm.PackageManager;
 import android.os.Environment;
 import android.os.UserHandle;
-import android.util.ArrayMap;
-import android.util.Log;
+import android.util.SparseArray;
 
+import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.server.appsearch.external.localstorage.AppSearchImpl;
-import com.android.server.appsearch.external.localstorage.AppSearchLogger;
-import com.android.server.appsearch.external.localstorage.FrameworkOptimizeStrategy;
 
 import java.io.File;
-import java.util.Map;
-import java.util.Objects;
 
 /**
  * Manages the lifecycle of instances of {@link AppSearchImpl}.
  *
  * <p>These instances are managed per unique device-user.
- * @hide
  */
 public final class ImplInstanceManager {
-    private static final String TAG = "AppSearchImplInstanceMa";
+    private static final String APP_SEARCH_DIR = "appSearch";
 
     private static ImplInstanceManager sImplInstanceManager;
 
     @GuardedBy("mInstancesLocked")
-    private final Map<UserHandle, AppSearchImpl> mInstancesLocked = new ArrayMap<>();
+    private final SparseArray<AppSearchImpl> mInstancesLocked = new SparseArray<>();
+
+    private final String mGlobalQuerierPackage;
+
+    private ImplInstanceManager(@NonNull String globalQuerierPackage) {
+        mGlobalQuerierPackage = globalQuerierPackage;
+    }
 
     /**
      * Gets an instance of ImplInstanceManager to be used.
@@ -60,7 +63,9 @@ public final class ImplInstanceManager {
         if (sImplInstanceManager == null) {
             synchronized (ImplInstanceManager.class) {
                 if (sImplInstanceManager == null) {
-                    sImplInstanceManager = new ImplInstanceManager();
+                    sImplInstanceManager =
+                            new ImplInstanceManager(
+                                    getGlobalAppSearchDataQuerierPackageName(context));
                 }
             }
         }
@@ -72,12 +77,8 @@ public final class ImplInstanceManager {
      *
      * <p>This folder should only be accessed after unlock.
      */
-    public static File getAppSearchDir(@NonNull UserHandle userHandle) {
-        // Duplicates the implementation of Environment#getDataSystemCeDirectory
-        // TODO(b/191059409): Unhide Environment#getDataSystemCeDirectory and switch to it.
-        File systemCeDir = new File(Environment.getDataDirectory(), "system_ce");
-        File systemCeUserDir = new File(systemCeDir, String.valueOf(userHandle.getIdentifier()));
-        return new File(systemCeUserDir, "appSearch");
+    public static File getAppSearchDir(@UserIdInt int userId) {
+        return new File(Environment.getDataSystemCeDirectory(userId), APP_SEARCH_DIR);
     }
 
     /**
@@ -86,26 +87,38 @@ public final class ImplInstanceManager {
      * <p>If no AppSearchImpl instance exists for the unlocked user, Icing will be initialized and
      * one will be created.
      *
-     * @param context The system context
-     * @param userHandle The multi-user handle of the device user calling AppSearch
+     * @param context The context
+     * @param userId The multi-user userId of the device user calling AppSearch
      * @return An initialized {@link AppSearchImpl} for this user
      */
     @NonNull
     public AppSearchImpl getOrCreateAppSearchImpl(
-            @NonNull Context context,
-            @NonNull UserHandle userHandle,
-            @Nullable AppSearchLogger logger) throws AppSearchException {
-        Objects.requireNonNull(context);
-        Objects.requireNonNull(userHandle);
-
+            @NonNull Context context, @UserIdInt int userId) throws AppSearchException {
         synchronized (mInstancesLocked) {
-            AppSearchImpl instance = mInstancesLocked.get(userHandle);
+            AppSearchImpl instance = mInstancesLocked.get(userId);
             if (instance == null) {
-                Context userContext = context.createContextAsUser(userHandle, /*flags=*/ 0);
-                instance = createImpl(userContext, userHandle, logger);
-                mInstancesLocked.put(userHandle, instance);
+                instance = createImpl(context, userId);
+                mInstancesLocked.put(userId, instance);
             }
             return instance;
+        }
+    }
+
+    /**
+     * Remove an instance of {@link AppSearchImpl} for the given user.
+     *
+     * <p>This method should only be called if {@link AppSearchManagerService} receives an
+     * ACTION_USER_REMOVED, which the instance of given user should be removed.
+     *
+     * <p>If the user is removed, the "credential encrypted" system directory where icing lives will
+     * be auto-deleted. So we shouldn't worry about persist data or close the AppSearchImpl.
+     *
+     * @param userId The multi-user userId of the user that need to be removed.
+     */
+    public void removeAppSearchImplForUser(@UserIdInt int userId) {
+        synchronized (mInstancesLocked) {
+            // no need to close and persist data to disk since we are removing them now.
+            mInstancesLocked.remove(userId);
         }
     }
 
@@ -114,15 +127,14 @@ public final class ImplInstanceManager {
      *
      * <p>All mutation apply to this {@link AppSearchImpl} will be persisted to disk.
      *
-     * @param userHandle The multi-user user handle of the user that need to be removed.
+     * @param userId The multi-user userId of the user that need to be removed.
      */
-    public void closeAndRemoveAppSearchImplForUser(@NonNull UserHandle userHandle) {
-        Objects.requireNonNull(userHandle);
+    public void closeAndRemoveAppSearchImplForUser(@UserIdInt int userId) {
         synchronized (mInstancesLocked) {
-            AppSearchImpl appSearchImpl = mInstancesLocked.get(userHandle);
+            AppSearchImpl appSearchImpl = mInstancesLocked.get(userId);
             if (appSearchImpl != null) {
                 appSearchImpl.close();
-                mInstancesLocked.remove(userHandle);
+                mInstancesLocked.remove(userId);
             }
         }
     }
@@ -133,38 +145,53 @@ public final class ImplInstanceManager {
      * <p>This method should only be called by an initialized SearchSession, which has been already
      * created the AppSearchImpl instance for the given user.
      *
-     * @param userHandle The multi-user handle of the device user calling AppSearch
+     * @param userId The multi-user userId of the device user calling AppSearch
      * @return An initialized {@link AppSearchImpl} for this user
      * @throws IllegalStateException if {@link AppSearchImpl} haven't created for the given user.
      */
     @NonNull
-    public AppSearchImpl getAppSearchImpl(@NonNull UserHandle userHandle) {
-        Objects.requireNonNull(userHandle);
+    public AppSearchImpl getAppSearchImpl(@UserIdInt int userId) {
         synchronized (mInstancesLocked) {
-            AppSearchImpl instance = mInstancesLocked.get(userHandle);
+            AppSearchImpl instance = mInstancesLocked.get(userId);
             if (instance == null) {
                 // Impossible scenario, user cannot call an uninitialized SearchSession,
                 // getInstance should always find the instance for the given user and never try to
                 // create an instance for this user again.
                 throw new IllegalStateException(
-                        "AppSearchImpl has never been created for: " + userHandle);
+                        "AppSearchImpl has never been created for this user: " + userId);
             }
             return instance;
         }
     }
 
-    private AppSearchImpl createImpl(
-            @NonNull Context userContext,
-            @NonNull UserHandle userHandle,
-            @Nullable AppSearchLogger logger)
+    private AppSearchImpl createImpl(@NonNull Context context, @UserIdInt int userId)
             throws AppSearchException {
-        File appSearchDir = getAppSearchDir(userHandle);
-        File icingDir = new File(appSearchDir, "icing");
-        Log.i(TAG, "Creating new AppSearch instance at: " + icingDir);
+        File appSearchDir = getAppSearchDir(userId);
         return AppSearchImpl.create(
-                icingDir,
-                userContext,
-                /*logger=*/ null,
-                new FrameworkOptimizeStrategy());
+                appSearchDir, context, userId, mGlobalQuerierPackage, /*logger=*/ null);
+    }
+
+    /**
+     * Returns the global querier package if it's a system package. Otherwise, empty string.
+     *
+     * @param context Context of the system service.
+     */
+    @NonNull
+    private static String getGlobalAppSearchDataQuerierPackageName(@NonNull Context context) {
+        String globalAppSearchDataQuerierPackage =
+                context.getString(R.string.config_globalAppSearchDataQuerierPackage);
+        try {
+            if (context.getPackageManager()
+                            .getPackageInfoAsUser(
+                                    globalAppSearchDataQuerierPackage,
+                                    MATCH_FACTORY_ONLY,
+                                    UserHandle.USER_SYSTEM)
+                    == null) {
+                return "";
+            }
+        } catch (PackageManager.NameNotFoundException e) {
+            return "";
+        }
+        return globalAppSearchDataQuerierPackage;
     }
 }

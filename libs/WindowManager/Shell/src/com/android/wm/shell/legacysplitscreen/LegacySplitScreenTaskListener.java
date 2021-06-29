@@ -38,7 +38,6 @@ import androidx.annotation.NonNull;
 
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.wm.shell.ShellTaskOrganizer;
-import com.android.wm.shell.common.SurfaceUtils;
 import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.transition.Transitions;
 
@@ -71,9 +70,9 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
     private final LegacySplitScreenTransitions mSplitTransitions;
 
     LegacySplitScreenTaskListener(LegacySplitScreenController splitScreenController,
-            ShellTaskOrganizer shellTaskOrganizer,
-            Transitions transitions,
-            SyncTransactionQueue syncQueue) {
+                    ShellTaskOrganizer shellTaskOrganizer,
+                    Transitions transitions,
+                    SyncTransactionQueue syncQueue) {
         mSplitScreenController = splitScreenController;
         mTaskOrganizer = shellTaskOrganizer;
         mSplitTransitions = new LegacySplitScreenTransitions(splitScreenController.mTransactionPool,
@@ -147,11 +146,21 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
                 ProtoLog.v(WM_SHELL_TASK_ORG, "%s onTaskAppeared Supported", TAG);
 
                 // Initialize dim surfaces:
+                mPrimaryDim = new SurfaceControl.Builder(mSurfaceSession)
+                        .setParent(mPrimarySurface).setColorLayer()
+                        .setName("Primary Divider Dim")
+                        .setCallsite("SplitScreenTaskOrganizer.onTaskAppeared")
+                        .build();
+                mSecondaryDim = new SurfaceControl.Builder(mSurfaceSession)
+                        .setParent(mSecondarySurface).setColorLayer()
+                        .setName("Secondary Divider Dim")
+                        .setCallsite("SplitScreenTaskOrganizer.onTaskAppeared")
+                        .build();
                 SurfaceControl.Transaction t = getTransaction();
-                mPrimaryDim = SurfaceUtils.makeDimLayer(
-                        t, mPrimarySurface, "Primary Divider Dim", mSurfaceSession);
-                mSecondaryDim = SurfaceUtils.makeDimLayer(
-                        t, mSecondarySurface, "Secondary Divider Dim", mSurfaceSession);
+                t.setLayer(mPrimaryDim, Integer.MAX_VALUE);
+                t.setColor(mPrimaryDim, new float[]{0f, 0f, 0f});
+                t.setLayer(mSecondaryDim, Integer.MAX_VALUE);
+                t.setColor(mSecondaryDim, new float[]{0f, 0f, 0f});
                 t.apply();
                 releaseTransaction(t);
             }
@@ -194,22 +203,6 @@ class LegacySplitScreenTaskListener implements ShellTaskOrganizer.TaskListener {
             return;
         }
         synchronized (this) {
-            if (!taskInfo.supportsMultiWindow) {
-                if (mSplitScreenController.isDividerVisible()) {
-                    // Dismiss the split screen if the task no longer supports multi window.
-                    if (taskInfo.taskId == mPrimary.taskId
-                            || taskInfo.parentTaskId == mPrimary.taskId) {
-                        // If the primary is focused, dismiss to primary.
-                        mSplitScreenController
-                                .startDismissSplit(taskInfo.isFocused /* toPrimaryTask */);
-                    } else {
-                        // If the secondary is not focused, dismiss to primary.
-                        mSplitScreenController
-                                .startDismissSplit(!taskInfo.isFocused /* toPrimaryTask */);
-                    }
-                }
-                return;
-            }
             if (taskInfo.hasParentTask()) {
                 // changed messages are noisy since it reports on every ensureVisibility. This
                 // conflicts with legacy app-transitions which "swaps" the position to a

@@ -39,11 +39,9 @@ import android.media.session.MediaSession
 import android.net.Uri
 import android.os.Parcelable
 import android.os.UserHandle
-import android.provider.Settings
 import android.service.notification.StatusBarNotification
 import android.text.TextUtils
 import android.util.Log
-import com.android.internal.annotations.VisibleForTesting
 import com.android.systemui.Dumpable
 import com.android.systemui.R
 import com.android.systemui.broadcast.BroadcastDispatcher
@@ -55,7 +53,6 @@ import com.android.systemui.plugins.ActivityStarter
 import com.android.systemui.plugins.BcSmartspaceDataPlugin
 import com.android.systemui.statusbar.NotificationMediaManager.isPlayingState
 import com.android.systemui.statusbar.notification.row.HybridGroupManager
-import com.android.systemui.tuner.TunerService
 import com.android.systemui.util.Assert
 import com.android.systemui.util.Utils
 import com.android.systemui.util.concurrency.DelayableExecutor
@@ -79,9 +76,6 @@ private const val DEBUG = true
 
 private val LOADING = MediaData(-1, false, 0, null, null, null, null, null,
         emptyList(), emptyList(), "INVALID", null, null, null, true, null)
-@VisibleForTesting
-internal val EMPTY_SMARTSPACE_MEDIA_DATA = SmartspaceMediaData("INVALID", false, false,
-    "INVALID", null, emptyList(), 0)
 
 fun isMediaNotification(sbn: StatusBarNotification): Boolean {
     if (!sbn.notification.hasMediaSession()) {
@@ -116,18 +110,13 @@ class MediaDataManager(
     private val smartspaceMediaDataProvider: SmartspaceMediaDataProvider,
     private var useMediaResumption: Boolean,
     private val useQsMediaPlayer: Boolean,
-    private val systemClock: SystemClock,
-    private val tunerService: TunerService
+    private val systemClock: SystemClock
 ) : Dumpable, BcSmartspaceDataPlugin.SmartspaceTargetListener {
 
     companion object {
         // UI surface label for subscribing Smartspace updates.
         @JvmField
         val SMARTSPACE_UI_SURFACE_LABEL = "media_data_manager"
-
-        // Smartspace package name's extra key.
-        @JvmField
-        val EXTRAS_MEDIA_SOURCE_PACKAGE_NAME = "package_name"
 
         // Maximum number of actions allowed in compact view
         @JvmField
@@ -148,9 +137,19 @@ class MediaDataManager(
     private val internalListeners: MutableSet<Listener> = mutableSetOf()
     private val mediaEntries: LinkedHashMap<String, MediaData> = LinkedHashMap()
     // There should ONLY be at most one Smartspace media recommendation.
-    private var smartspaceMediaData: SmartspaceMediaData = EMPTY_SMARTSPACE_MEDIA_DATA
+    private var smartspaceMediaTarget: SmartspaceTarget? = null
+    internal var appsBlockedFromResume: MutableSet<String> = Utils.getBlockedMediaApps(context)
+        set(value) {
+            // Update list
+            appsBlockedFromResume.clear()
+            appsBlockedFromResume.addAll(value)
+
+            // Remove any existing resume players that are now blocked
+            appsBlockedFromResume.forEach {
+                removeAllForPackage(it)
+            }
+        }
     private var smartspaceSession: SmartspaceSession? = null
-    private var allowMediaRecommendations = Utils.allowMediaRecommendations(context)
 
     @Inject
     constructor(
@@ -168,13 +167,12 @@ class MediaDataManager(
         mediaDataFilter: MediaDataFilter,
         activityStarter: ActivityStarter,
         smartspaceMediaDataProvider: SmartspaceMediaDataProvider,
-        clock: SystemClock,
-        tunerService: TunerService
+        clock: SystemClock
     ) : this(context, backgroundExecutor, foregroundExecutor, mediaControllerFactory,
             broadcastDispatcher, dumpManager, mediaTimeoutListener, mediaResumeListener,
             mediaSessionBasedFilter, mediaDeviceManager, mediaDataCombineLatest, mediaDataFilter,
             activityStarter, smartspaceMediaDataProvider, Utils.useMediaResumption(context),
-            Utils.useQsMediaPlayer(context), clock, tunerService)
+            Utils.useQsMediaPlayer(context), clock)
 
     private val appChangeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -248,14 +246,6 @@ class MediaDataManager(
                 })
         }
         smartspaceSession?.let { it.requestSmartspaceUpdate() }
-        tunerService.addTunable(object : TunerService.Tunable {
-            override fun onTuningChanged(key: String?, newValue: String?) {
-                allowMediaRecommendations = Utils.allowMediaRecommendations(context)
-                if (!allowMediaRecommendations) {
-                    dismissSmartspaceRecommendation(key = smartspaceMediaData.targetId, delay = 0L)
-                }
-            }
-        }, Settings.Secure.MEDIA_CONTROLS_RECOMMENDATION)
     }
 
     fun destroy() {
@@ -381,7 +371,7 @@ class MediaDataManager(
      * External listeners registered with [addListener] will be notified after the event propagates
      * through the internal listener pipeline.
      */
-    private fun notifySmartspaceMediaDataLoaded(key: String, info: SmartspaceMediaData) {
+    private fun notifySmartspaceMediaDataLoaded(key: String, info: SmartspaceTarget) {
         internalListeners.forEach { it.onSmartspaceMediaDataLoaded(key, info) }
     }
 
@@ -400,13 +390,9 @@ class MediaDataManager(
      *
      * External listeners registered with [addListener] will be notified after the event propagates
      * through the internal listener pipeline.
-     *
-     * @param immediately indicates should apply the UI changes immediately, otherwise wait until
-     * the next refresh-round before UI becomes visible. Should only be true if the update is
-     * initiated by user's interaction.
      */
-    private fun notifySmartspaceMediaDataRemoved(key: String, immediately: Boolean) {
-        internalListeners.forEach { it.onSmartspaceMediaDataRemoved(key, immediately) }
+    private fun notifySmartspaceMediaDataRemoved(key: String) {
+        internalListeners.forEach { it.onSmartspaceMediaDataRemoved(key) }
     }
 
     /**
@@ -449,18 +435,14 @@ class MediaDataManager(
      * This will make the recommendation view to not be shown anymore during this headphone
      * connection session.
      */
-    fun dismissSmartspaceRecommendation(key: String, delay: Long) {
-        if (smartspaceMediaData.targetId != key) {
-            return
-        }
+    fun dismissSmartspaceRecommendation(delay: Long) {
         Log.d(TAG, "Dismissing Smartspace media target")
-        if (smartspaceMediaData.isActive) {
-            smartspaceMediaData = EMPTY_SMARTSPACE_MEDIA_DATA.copy(
-                targetId = smartspaceMediaData.targetId)
+        // Do not set smartspaceMediaTarget to null. So the instance is preserved during the entire
+        // headphone connection, and will ONLY be set to null when headphones are disconnected.
+        smartspaceMediaTarget?.let {
+            foregroundExecutor.executeDelayed(
+                { notifySmartspaceMediaDataRemoved(it.smartspaceTargetId) }, delay)
         }
-        foregroundExecutor.executeDelayed(
-            { notifySmartspaceMediaDataRemoved(
-                smartspaceMediaData.targetId, immediately = true) }, delay)
     }
 
     private fun loadMediaDataInBgForResumption(
@@ -708,41 +690,45 @@ class MediaDataManager(
     }
 
     override fun onSmartspaceTargetsUpdated(targets: List<Parcelable>) {
-        if (!allowMediaRecommendations) {
-            return
-        }
-
+        Log.d(TAG, "My Smartspace media updates are here")
         val mediaTargets = targets.filterIsInstance<SmartspaceTarget>()
         when (mediaTargets.size) {
             0 -> {
                 Log.d(TAG, "Empty Smartspace media target")
-                if (!smartspaceMediaData.isActive) {
-                    return
+                smartspaceMediaTarget?.let {
+                    Log.d(TAG, "Setting Smartspace media target to null")
+                    notifySmartspaceMediaDataRemoved(it.smartspaceTargetId)
                 }
-                Log.d(TAG, "Set Smartspace media to be inactive for the data update")
-                smartspaceMediaData = EMPTY_SMARTSPACE_MEDIA_DATA.copy(
-                    targetId = smartspaceMediaData.targetId)
-                notifySmartspaceMediaDataRemoved(smartspaceMediaData.targetId, immediately = false)
+                smartspaceMediaTarget = null
             }
             1 -> {
+                // TODO(b/182811956): Reactivate the resumable media sessions whose last active
+                //  time is within 3 hours.
+                // TODO(b/182813365): Wire this up with MediaTimeoutListener so the session can be
+                //  expired after 30 seconds.
                 val newMediaTarget = mediaTargets.get(0)
-                if (smartspaceMediaData.targetId == newMediaTarget.smartspaceTargetId) {
-                    // The same Smartspace updates can be received. Skip the duplicate updates.
+                if (smartspaceMediaTarget != null &&
+                    smartspaceMediaTarget!!.smartspaceTargetId ==
+                    newMediaTarget.smartspaceTargetId) {
+                    // The same Smartspace updates can be received. Only send the first one.
                     Log.d(TAG, "Same Smartspace media update exists. Skip loading data.")
                 } else {
-                    Log.d(TAG, "Forwarding Smartspace media update.")
-                    smartspaceMediaData = toSmartspaceMediaData(newMediaTarget, isActive = true)
+                    smartspaceMediaTarget?.let {
+                        notifySmartspaceMediaDataRemoved(it.smartspaceTargetId)
+                    }
                     notifySmartspaceMediaDataLoaded(
-                        smartspaceMediaData.targetId, smartspaceMediaData)
+                        newMediaTarget.smartspaceTargetId, newMediaTarget)
+                    smartspaceMediaTarget = newMediaTarget
                 }
             }
             else -> {
                 // There should NOT be more than 1 Smartspace media update. When it happens, it
                 // indicates a bad state or an error. Reset the status accordingly.
                 Log.wtf(TAG, "More than 1 Smartspace Media Update. Resetting the status...")
-                notifySmartspaceMediaDataRemoved(
-                    smartspaceMediaData.targetId, false /* immediately */)
-                smartspaceMediaData = EMPTY_SMARTSPACE_MEDIA_DATA
+                smartspaceMediaTarget?.let {
+                    notifySmartspaceMediaDataRemoved(it.smartspaceTargetId)
+                }
+                smartspaceMediaTarget = null
             }
         }
     }
@@ -750,7 +736,8 @@ class MediaDataManager(
     fun onNotificationRemoved(key: String) {
         Assert.isMainThread()
         val removed = mediaEntries.remove(key)
-        if (useMediaResumption && removed?.resumeAction != null && removed?.isLocalSession) {
+        if (useMediaResumption && removed?.resumeAction != null &&
+                !isBlockedFromResume(removed.packageName) && removed?.isLocalSession == true) {
             Log.d(TAG, "Not removing $key because resumable")
             // Move to resume key (aka package name) if that key doesn't already exist.
             val resumeAction = getResumeMediaAction(removed.resumeAction!!)
@@ -776,6 +763,13 @@ class MediaDataManager(
         if (removed != null) {
             notifyMediaDataRemoved(key)
         }
+    }
+
+    private fun isBlockedFromResume(packageName: String?): Boolean {
+        if (packageName == null) {
+            return true
+        }
+        return appsBlockedFromResume.contains(packageName)
     }
 
     fun setMediaResumptionEnabled(isEnabled: Boolean) {
@@ -820,77 +814,19 @@ class MediaDataManager(
          * oldKey is provided to check whether the view has changed keys, which can happen when a
          * player has gone from resume state (key is package name) to active state (key is
          * notification key) or vice versa.
-         *
-         * @param immediately indicates should apply the UI changes immediately, otherwise wait
-         * until the next refresh-round before UI becomes visible. True by default to take in place
-         * immediately.
          */
-        fun onMediaDataLoaded(
-            key: String,
-            oldKey: String?,
-            data: MediaData,
-            immediately: Boolean = true
-        ) {}
+        fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {}
+
+        /** Called whenever there's new Smartspace media data loaded. */
+        fun onSmartspaceMediaDataLoaded(key: String, data: SmartspaceTarget) {}
 
         /**
-         * Called whenever there's new Smartspace media data loaded.
-         *
-         * @param shouldPrioritize indicates the sorting priority of the Smartspace card. If true,
-         * it will be prioritized as the first card. Otherwise, it will show up as the last card as
-         * default.
+         * Called whenever a previously existing Media notification was removed
          */
-        fun onSmartspaceMediaDataLoaded(
-            key: String,
-            data: SmartspaceMediaData,
-            shouldPrioritize: Boolean = false
-        ) {}
-
-        /** Called whenever a previously existing Media notification was removed. */
         fun onMediaDataRemoved(key: String) {}
 
-        /**
-         * Called whenever a previously existing Smartspace media data was removed.
-         *
-         * @param immediately indicates should apply the UI changes immediately, otherwise wait
-         * until the next refresh-round before UI becomes visible. True by default to take in place
-         * immediately.
-         */
-        fun onSmartspaceMediaDataRemoved(key: String, immediately: Boolean = true) {}
-    }
-
-    /**
-     * Converts the pass-in SmartspaceTarget to SmartspaceMediaData with the pass-in active status.
-     *
-     * @return An empty SmartspaceMediaData with the valid target Id is returned if the
-     * SmartspaceTarget's data is invalid.
-     */
-    private fun toSmartspaceMediaData(
-        target: SmartspaceTarget,
-        isActive: Boolean
-    ): SmartspaceMediaData {
-        packageName(target)?.let {
-            return SmartspaceMediaData(target.smartspaceTargetId, isActive, true, it,
-                target.baseAction, target.iconGrid, 0)
-        }
-        return EMPTY_SMARTSPACE_MEDIA_DATA
-            .copy(targetId = target.smartspaceTargetId, isActive = isActive)
-    }
-
-    private fun packageName(target: SmartspaceTarget): String? {
-        val recommendationList = target.iconGrid
-        if (recommendationList == null || recommendationList.isEmpty()) {
-            Log.d(TAG, "Empty or media recommendation list.")
-            return null
-        }
-        for (recommendation in recommendationList) {
-            val extras = recommendation.extras
-            extras?.let {
-                it.getString(EXTRAS_MEDIA_SOURCE_PACKAGE_NAME)?.let {
-                    packageName -> return packageName }
-            }
-        }
-        Log.d(TAG, "No valid package name is provided.")
-        return null
+        /** Called whenever a previously existing Smartspace media data was removed.  */
+        fun onSmartspaceMediaDataRemoved(key: String) {}
     }
 
     override fun dump(fd: FileDescriptor, pw: PrintWriter, args: Array<out String>) {
@@ -899,6 +835,7 @@ class MediaDataManager(
             println("externalListeners: ${mediaDataFilter.listeners}")
             println("mediaEntries: $mediaEntries")
             println("useMediaResumption: $useMediaResumption")
+            println("appsBlockedFromResume: $appsBlockedFromResume")
         }
     }
 }

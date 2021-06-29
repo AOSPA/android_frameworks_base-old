@@ -740,6 +740,7 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     private MovementMethod mMovement;
 
     private TransformationMethod mTransformation;
+    private TextViewTranslationCallback mDefaultTranslationCallback;
     @UnsupportedAppUsage
     private boolean mAllowTransformationLengthChange;
     @UnsupportedAppUsage
@@ -2375,16 +2376,11 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     @ViewDebug.CapturedViewProperty
     @InspectableProperty
     public CharSequence getText() {
-        if (mUseTextPaddingForUiTranslation) {
-            ViewTranslationCallback callback = getViewTranslationCallback();
-            if (callback != null && callback instanceof TextViewTranslationCallback) {
-                TextViewTranslationCallback defaultCallback =
-                        (TextViewTranslationCallback) callback;
-                if (defaultCallback.isTextPaddingEnabled()
-                        && defaultCallback.isShowingTranslation()) {
-                    return defaultCallback.getPaddedText(mText, mTransformed);
-                }
-            }
+        if (mUseTextPaddingForUiTranslation
+                && mDefaultTranslationCallback != null
+                && mDefaultTranslationCallback.isTextPaddingEnabled()
+                && mDefaultTranslationCallback.isShowingTranslation()) {
+            return mDefaultTranslationCallback.getPaddedText(mText, mTransformed);
         }
         return mText;
     }
@@ -10750,15 +10746,12 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
         Editable text = (Editable) mText;
 
         T[] spans = text.getSpans(start, end, type);
-        ArrayList<T> spansToRemove = new ArrayList<>();
-        for (T span : spans) {
-            final int spanStart = text.getSpanStart(span);
-            final int spanEnd = text.getSpanEnd(span);
-            if (spanEnd == start || spanStart == end) continue;
-            spansToRemove.add(span);
-        }
-        for (T span : spansToRemove) {
-            text.removeSpan(span);
+        final int length = spans.length;
+        for (int i = 0; i < length; i++) {
+            final int spanStart = text.getSpanStart(spans[i]);
+            final int spanEnd = text.getSpanEnd(spans[i]);
+            if (spanEnd == start || spanStart == end) break;
+            text.removeSpan(spans[i]);
         }
     }
 
@@ -13931,12 +13924,32 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
             // TODO(b/176488462): apply the view's important for translation
             requestBuilder.setValue(ViewTranslationRequest.ID_TEXT,
                     TranslationRequestValue.forText(mText));
-            if (!TextUtils.isEmpty(getContentDescription())) {
-                requestBuilder.setValue(ViewTranslationRequest.ID_CONTENT_DESCRIPTION,
-                        TranslationRequestValue.forText(getContentDescription()));
-            }
         }
         requestsCollector.accept(requestBuilder.build());
+    }
+
+    /**
+     * Returns a {@link ViewTranslationCallback} that is used to display the translated information.
+     * The default implementation will use a {@link TransformationMethod} that allow to replace the
+     * current {@link TransformationMethod} to transform the original text to the translated text
+     * display.
+     *
+     * @return a {@link ViewTranslationCallback} that is used to control how to display the
+     * translated information or {@code null} if this View doesn't support translation.
+     *
+     * @hide
+     */
+    @Nullable
+    @Override
+    public ViewTranslationCallback getViewTranslationCallback() {
+        return getDefaultViewTranslationCallback();
+    }
+
+    private ViewTranslationCallback getDefaultViewTranslationCallback() {
+        if (mDefaultTranslationCallback == null) {
+            mDefaultTranslationCallback = new TextViewTranslationCallback();
+        }
+        return mDefaultTranslationCallback;
     }
 
     /**
@@ -13952,19 +13965,17 @@ public class TextView extends View implements ViewTreeObserver.OnPreDrawListener
     public void onViewTranslationResponse(@NonNull ViewTranslationResponse response) {
         // set ViewTranslationResponse
         super.onViewTranslationResponse(response);
-        // TODO(b/178353965): move to ViewTranslationCallback.onShow()
-        ViewTranslationCallback callback = getViewTranslationCallback();
-        if (callback instanceof TextViewTranslationCallback) {
-            TextViewTranslationCallback textViewDefaultCallback =
-                    (TextViewTranslationCallback) callback;
-            TranslationTransformationMethod oldTranslationMethod =
-                    textViewDefaultCallback.getTranslationTransformation();
-            TransformationMethod originalTranslationMethod = oldTranslationMethod != null
-                    ? oldTranslationMethod.getOriginalTransformationMethod() : mTransformation;
-            TranslationTransformationMethod newTranslationMethod =
-                    new TranslationTransformationMethod(response, originalTranslationMethod);
-            // TODO(b/178353965): well-handle setTransformationMethod.
-            textViewDefaultCallback.setTranslationTransformation(newTranslationMethod);
-        }
+        // TODO(b/183467275): Use the overridden ViewTranslationCallback instead of our default
+        //  implementation if the view has overridden getViewTranslationCallback.
+        TextViewTranslationCallback callback =
+                (TextViewTranslationCallback) getDefaultViewTranslationCallback();
+        TranslationTransformationMethod oldTranslationMethod =
+                callback.getTranslationTransformation();
+        TransformationMethod originalTranslationMethod = oldTranslationMethod != null
+                ? oldTranslationMethod.getOriginalTransformationMethod() : mTransformation;
+        TranslationTransformationMethod newTranslationMethod =
+                new TranslationTransformationMethod(response, originalTranslationMethod);
+        // TODO(b/178353965): well-handle setTransformationMethod.
+        callback.setTranslationTransformation(newTranslationMethod);
     }
 }

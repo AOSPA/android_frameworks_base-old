@@ -59,7 +59,8 @@ void StretchMask::draw(GrRecordingContext* context,
     }
 
     sk_sp<SkImage> maskImage = mMaskSurface->makeImageSnapshot();
-    sk_sp<SkShader> maskStretchShader = stretch.getShader(width, height, maskImage, nullptr);
+    sk_sp<SkShader> maskStretchShader = stretch.getShader(
+        width, height, maskImage);
 
     SkPaint maskPaint;
     maskPaint.setShader(maskStretchShader);

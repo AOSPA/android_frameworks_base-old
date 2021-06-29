@@ -32,6 +32,7 @@ import android.widget.TextView;
 import com.android.internal.R;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.settingslib.Utils;
+import com.android.systemui.Dependency;
 import com.android.systemui.plugins.GlobalActions;
 import com.android.systemui.scrim.ScrimDrawable;
 import com.android.systemui.statusbar.BlurUtils;
@@ -51,24 +52,19 @@ public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks 
     private final KeyguardStateController mKeyguardStateController;
     private final DeviceProvisionedController mDeviceProvisionedController;
     private final BlurUtils mBlurUtils;
-    private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final CommandQueue mCommandQueue;
     private GlobalActionsDialogLite mGlobalActionsDialog;
     private boolean mDisabled;
 
     @Inject
     public GlobalActionsImpl(Context context, CommandQueue commandQueue,
-            Lazy<GlobalActionsDialogLite> globalActionsDialogLazy, BlurUtils blurUtils,
-            KeyguardStateController keyguardStateController,
-            DeviceProvisionedController deviceProvisionedController,
-            KeyguardUpdateMonitor keyguardUpdateMonitor) {
+            Lazy<GlobalActionsDialogLite> globalActionsDialogLazy, BlurUtils blurUtils) {
         mContext = context;
         mGlobalActionsDialogLazy = globalActionsDialogLazy;
-        mKeyguardStateController = keyguardStateController;
-        mDeviceProvisionedController = deviceProvisionedController;
+        mKeyguardStateController = Dependency.get(KeyguardStateController.class);
+        mDeviceProvisionedController = Dependency.get(DeviceProvisionedController.class);
         mCommandQueue = commandQueue;
         mBlurUtils = blurUtils;
-        mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mCommandQueue.addCallback(this);
     }
 
@@ -87,7 +83,7 @@ public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks 
         mGlobalActionsDialog = mGlobalActionsDialogLazy.get();
         mGlobalActionsDialog.showOrHideDialog(mKeyguardStateController.isShowing(),
                 mDeviceProvisionedController.isDeviceProvisioned());
-        mKeyguardUpdateMonitor.requestFaceAuth();
+        Dependency.get(KeyguardUpdateMonitor.class).requestFaceAuth();
     }
 
     @Override
@@ -99,10 +95,9 @@ public class GlobalActionsImpl implements GlobalActions, CommandQueue.Callbacks 
 
         d.setOnShowListener(dialog -> {
             if (mBlurUtils.supportsBlursOnWindows()) {
-                int backgroundAlpha = (int) (ScrimController.BUSY_SCRIM_ALPHA * 255);
-                background.setAlpha(backgroundAlpha);
+                background.setAlpha((int) (ScrimController.BUSY_SCRIM_ALPHA * 255));
                 mBlurUtils.applyBlur(d.getWindow().getDecorView().getViewRootImpl(),
-                        mBlurUtils.blurRadiusOfRatio(1), backgroundAlpha == 255);
+                        mBlurUtils.blurRadiusOfRatio(1));
             } else {
                 float backgroundAlpha = mContext.getResources().getFloat(
                         com.android.systemui.R.dimen.shutdown_scrim_behind_alpha);

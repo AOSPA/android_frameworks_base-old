@@ -148,7 +148,7 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
     /**
      * Animates in the bg protection circle behind the fp icon to highlight the icon.
      */
-    void animateUdfpsBouncer(Runnable onEndAnimation) {
+    void animateUdfpsBouncer() {
         if (mBgProtection.getVisibility() == View.VISIBLE && mBgProtection.getAlpha() == 1f) {
             // already fully highlighted, don't re-animate
             return;
@@ -186,14 +186,6 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
                 ObjectAnimator.ofFloat(mBgProtection, View.SCALE_X, 0f, 1f),
                 ObjectAnimator.ofFloat(mBgProtection, View.SCALE_Y, 0f, 1f),
                 fpIconAnim);
-        mAnimatorSet.addListener(new AnimatorListenerAdapter() {
-            @Override
-            public void onAnimationEnd(Animator animation) {
-                if (onEndAnimation != null) {
-                    onEndAnimation.run();
-                }
-            }
-        });
         mAnimatorSet.start();
     }
 

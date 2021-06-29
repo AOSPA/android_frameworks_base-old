@@ -98,7 +98,6 @@ public:
 
     void destroyHardwareResources();
     static void trimMemory(int level);
-    static void purgeCaches();
     static void overrideProperty(const char* name, const char* value);
 
     void fence();
@@ -111,7 +110,6 @@ public:
     void resetProfileInfo();
     uint32_t frameTimePercentile(int p);
     static void dumpGraphicsMemory(int fd, bool includeProfileData = true);
-    static void getMemoryUsage(size_t* cpuUsage, size_t* gpuUsage);
 
     static void rotateProcessStatsBuffer();
     static void setProcessStatsBuffer(int fd);
@@ -136,7 +134,6 @@ public:
     static void prepareToDraw(Bitmap& bitmap);
 
     static int copyHWBitmapInto(Bitmap* hwBitmap, SkBitmap* bitmap);
-    static int copyImageInto(const sk_sp<SkImage>& image, SkBitmap* bitmap);
 
     static void disableVsync();
 

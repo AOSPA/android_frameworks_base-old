@@ -37,7 +37,7 @@ import java.io.PrintWriter;
  */
 public class FadeAnimationController {
     protected final Context mContext;
-    protected final ArrayMap<WindowToken, Runnable> mDeferredFinishCallbacks = new ArrayMap<>();
+    private final ArrayMap<WindowToken, Runnable> mDeferredFinishCallbacks = new ArrayMap<>();
 
     public FadeAnimationController(DisplayContent displayContent) {
         mContext = displayContent.mWmService.mContext;
@@ -69,10 +69,16 @@ public class FadeAnimationController {
             return;
         }
 
-        final FadeAnimationAdapter animationAdapter = createAdapter(show, windowToken);
-        if (animationAdapter == null) {
+        final Animation animation = show ? getFadeInAnimation() : getFadeOutAnimation();
+        if (animation == null) {
             return;
         }
+
+        final LocalAnimationAdapter.AnimationSpec windowAnimationSpec =
+                createAnimationSpec(animation);
+
+        final FadeAnimationAdapter animationAdapter = new FadeAnimationAdapter(
+                windowAnimationSpec, windowToken.getSurfaceAnimationRunner(), show, windowToken);
 
         // We deferred the end of the animation when hiding the token, so we need to end it now that
         // it's shown again.
@@ -86,21 +92,7 @@ public class FadeAnimationController {
                 show /* hidden */, animationType, finishedCallback);
     }
 
-    protected FadeAnimationAdapter createAdapter(boolean show, WindowToken windowToken) {
-        final Animation animation = show ? getFadeInAnimation() : getFadeOutAnimation();
-        if (animation == null) {
-            return null;
-        }
-
-        final LocalAnimationAdapter.AnimationSpec windowAnimationSpec =
-                createAnimationSpec(animation);
-
-        return new FadeAnimationAdapter(
-                windowAnimationSpec, windowToken.getSurfaceAnimationRunner(), show, windowToken);
-    }
-
-    protected LocalAnimationAdapter.AnimationSpec createAnimationSpec(
-            @NonNull Animation animation) {
+    private LocalAnimationAdapter.AnimationSpec createAnimationSpec(@NonNull Animation animation) {
         return new LocalAnimationAdapter.AnimationSpec() {
 
             final Transformation mTransformation = new Transformation();
@@ -138,8 +130,8 @@ public class FadeAnimationController {
         };
     }
 
-    protected class FadeAnimationAdapter extends LocalAnimationAdapter {
-        protected final boolean mShow;
+    private class FadeAnimationAdapter extends LocalAnimationAdapter {
+        private final boolean mShow;
         private final WindowToken mToken;
 
         FadeAnimationAdapter(AnimationSpec windowAnimationSpec,

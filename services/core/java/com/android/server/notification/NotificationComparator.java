@@ -188,7 +188,8 @@ public class NotificationComparator
     }
 
     private boolean isCallStyle(NotificationRecord record) {
-        return record.getNotification().isStyle(Notification.CallStyle.class);
+        return "android.app.Notification$CallStyle".equals(
+                record.getNotification().extras.getString(Notification.EXTRA_TEMPLATE));
     }
 
     private boolean isDefaultPhoneApp(String pkg) {

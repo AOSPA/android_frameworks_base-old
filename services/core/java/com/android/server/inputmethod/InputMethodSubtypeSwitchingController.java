@@ -196,7 +196,7 @@ final class InputMethodSubtypeSwitchingController {
             final int numImes = imis.size();
             for (int i = 0; i < numImes; ++i) {
                 final InputMethodInfo imi = imis.get(i);
-                if (forImeMenu && !imi.shouldShowInInputMethodPicker()) {
+                if (forImeMenu && !imi.showInInputMethodPicker()) {
                     continue;
                 }
                 final List<InputMethodSubtype> explicitlyOrImplicitlyEnabledSubtypeList =

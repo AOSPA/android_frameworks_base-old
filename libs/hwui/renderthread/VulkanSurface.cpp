@@ -20,9 +20,9 @@
 #include <SkSurface.h>
 #include <algorithm>
 
-#include <gui/TraceUtils.h>
 #include "VulkanManager.h"
 #include "utils/Color.h"
+#include "utils/TraceUtils.h"
 
 namespace android {
 namespace uirenderer {
@@ -329,16 +329,20 @@ void VulkanSurface::releaseBuffers() {
 
         if (bufferInfo.buffer.get() != nullptr && bufferInfo.dequeued) {
             int err = mNativeWindow->cancelBuffer(mNativeWindow.get(), bufferInfo.buffer.get(),
-                                                  bufferInfo.dequeue_fence.release());
+                                                  bufferInfo.dequeue_fence);
             if (err != 0) {
                 ALOGE("cancelBuffer[%u] failed during destroy: %s (%d)", i, strerror(-err), err);
             }
             bufferInfo.dequeued = false;
-            bufferInfo.dequeue_fence.reset();
+
+            if (bufferInfo.dequeue_fence >= 0) {
+                close(bufferInfo.dequeue_fence);
+                bufferInfo.dequeue_fence = -1;
+            }
         }
 
         LOG_ALWAYS_FATAL_IF(bufferInfo.dequeued);
-        LOG_ALWAYS_FATAL_IF(bufferInfo.dequeue_fence.ok());
+        LOG_ALWAYS_FATAL_IF(bufferInfo.dequeue_fence != -1);
 
         bufferInfo.skSurface.reset();
         bufferInfo.buffer.clear();
@@ -361,12 +365,8 @@ VulkanSurface::NativeBufferInfo* VulkanSurface::dequeueNativeBuffer() {
     // Since auto pre-rotation is enabled, dequeueBuffer to get the consumer driven buffer size
     // from ANativeWindowBuffer.
     ANativeWindowBuffer* buffer;
-    base::unique_fd fence_fd;
-    {
-        int rawFd = -1;
-        err = mNativeWindow->dequeueBuffer(mNativeWindow.get(), &buffer, &rawFd);
-        fence_fd.reset(rawFd);
-    }
+    int fence_fd;
+    err = mNativeWindow->dequeueBuffer(mNativeWindow.get(), &buffer, &fence_fd);
     if (err != 0) {
         ALOGE("dequeueBuffer failed: %s (%d)", strerror(-err), err);
         return nullptr;
@@ -387,7 +387,7 @@ VulkanSurface::NativeBufferInfo* VulkanSurface::dequeueNativeBuffer() {
             if (err != 0) {
                 ALOGE("native_window_set_buffers_transform(%d) failed: %s (%d)", transformHint,
                       strerror(-err), err);
-                mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer, fence_fd.release());
+                mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer, fence_fd);
                 return nullptr;
             }
             mWindowInfo.transform = transformHint;
@@ -405,19 +405,19 @@ VulkanSurface::NativeBufferInfo* VulkanSurface::dequeueNativeBuffer() {
     for (idx = 0; idx < mWindowInfo.bufferCount; idx++) {
         if (mNativeBuffers[idx].buffer.get() == buffer) {
             mNativeBuffers[idx].dequeued = true;
-            mNativeBuffers[idx].dequeue_fence = std::move(fence_fd);
+            mNativeBuffers[idx].dequeue_fence = fence_fd;
             break;
         } else if (mNativeBuffers[idx].buffer.get() == nullptr) {
             // increasing the number of buffers we have allocated
             mNativeBuffers[idx].buffer = buffer;
             mNativeBuffers[idx].dequeued = true;
-            mNativeBuffers[idx].dequeue_fence = std::move(fence_fd);
+            mNativeBuffers[idx].dequeue_fence = fence_fd;
             break;
         }
     }
     if (idx == mWindowInfo.bufferCount) {
         ALOGE("dequeueBuffer returned unrecognized buffer");
-        mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer, fence_fd.release());
+        mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer, fence_fd);
         return nullptr;
     }
 
@@ -429,9 +429,7 @@ VulkanSurface::NativeBufferInfo* VulkanSurface::dequeueNativeBuffer() {
                 kTopLeft_GrSurfaceOrigin, mWindowInfo.colorspace, nullptr);
         if (bufferInfo->skSurface.get() == nullptr) {
             ALOGE("SkSurface::MakeFromAHardwareBuffer failed");
-            mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer,
-                                        mNativeBuffers[idx].dequeue_fence.release());
-            mNativeBuffers[idx].dequeued = false;
+            mNativeWindow->cancelBuffer(mNativeWindow.get(), buffer, fence_fd);
             return nullptr;
         }
     }
@@ -462,23 +460,25 @@ bool VulkanSurface::presentCurrentBuffer(const SkRect& dirtyRect, int semaphoreF
 
     LOG_ALWAYS_FATAL_IF(!mCurrentBufferInfo);
     VulkanSurface::NativeBufferInfo& currentBuffer = *mCurrentBufferInfo;
-    // queueBuffer always closes fence, even on error
-    int queuedFd = (semaphoreFd != -1) ? semaphoreFd : currentBuffer.dequeue_fence.release();
+    int queuedFd = (semaphoreFd != -1) ? semaphoreFd : currentBuffer.dequeue_fence;
     int err = mNativeWindow->queueBuffer(mNativeWindow.get(), currentBuffer.buffer.get(), queuedFd);
 
     currentBuffer.dequeued = false;
+    // queueBuffer always closes fence, even on error
     if (err != 0) {
         ALOGE("queueBuffer failed: %s (%d)", strerror(-err), err);
-        // cancelBuffer takes ownership of the fence
         mNativeWindow->cancelBuffer(mNativeWindow.get(), currentBuffer.buffer.get(),
-                                    currentBuffer.dequeue_fence.release());
+                                    currentBuffer.dequeue_fence);
     } else {
         currentBuffer.hasValidContents = true;
         currentBuffer.lastPresentedCount = mPresentCount;
         mPresentCount++;
     }
 
-    currentBuffer.dequeue_fence.reset();
+    if (currentBuffer.dequeue_fence >= 0) {
+        close(currentBuffer.dequeue_fence);
+        currentBuffer.dequeue_fence = -1;
+    }
 
     return err == 0;
 }

@@ -33,5 +33,4 @@ java_sdk_library {
         "com.android.location.provider",
         "com.android.location.timezone.provider",
     ],
-    dist_group: "android",
 }

@@ -40,8 +40,7 @@ public class ActivityConfigurationChangeItem extends ActivityTransactionItem {
 
     @Override
     public void preExecute(android.app.ClientTransactionHandler client, IBinder token) {
-        final ActivityClientRecord r = getActivityClientRecord(client, token,
-                true /* includeLaunching */);
+        final ActivityClientRecord r = getActivityClientRecord(client, token);
         // Notify the client of an upcoming change in the token configuration. This ensures that
         // batches of config change items only process the newest configuration.
         client.updatePendingActivityConfiguration(r, mConfiguration);

@@ -36,12 +36,10 @@ import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
 import static org.mockito.Matchers.anyBoolean;
 import static org.mockito.Matchers.anyInt;
-import static org.mockito.Matchers.anyLong;
 import static org.mockito.Mockito.doNothing;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.spy;
 
-import android.annotation.CurrentTimeMillisLong;
 import android.app.ApplicationExitInfo;
 import android.content.ComponentName;
 import android.content.Context;
@@ -165,15 +163,14 @@ public class ApplicationExitInfoTest {
         }
     }
 
-    private void updateExitInfo(ProcessRecord app, @CurrentTimeMillisLong long timestamp) {
-        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecord(app, timestamp);
+    private void updateExitInfo(ProcessRecord app) {
+        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecord(app);
         mAppExitInfoTracker.handleNoteProcessDiedLocked(raw);
         mAppExitInfoTracker.recycleRawRecord(raw);
     }
 
-    private void noteAppKill(ProcessRecord app, int reason, int subReason, String msg,
-            @CurrentTimeMillisLong long timestamp) {
-        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecord(app, timestamp);
+    private void noteAppKill(ProcessRecord app, int reason, int subReason, String msg) {
+        ApplicationExitInfo raw = mAppExitInfoTracker.obtainRawRecord(app);
         raw.setReason(reason);
         raw.setSubReason(subReason);
         raw.setDescription(msg);
@@ -193,7 +190,6 @@ public class ApplicationExitInfoTest {
 
         // Test application calls System.exit()
         doNothing().when(mAppExitInfoTracker).schedulePersistProcessExitInfo(anyBoolean());
-        doReturn(true).when(mAppExitInfoTracker).isFresh(anyLong());
 
         final int app1Uid = 10123;
         final int app1Pid1 = 12345;
@@ -220,7 +216,7 @@ public class ApplicationExitInfoTest {
         final byte[] app1Cookie2 = {(byte) 0x08, (byte) 0x07, (byte) 0x06, (byte) 0x05,
                 (byte) 0x04, (byte) 0x03, (byte) 0x02, (byte) 0x01};
 
-        final long now1 = 1;
+        final long now1 = System.currentTimeMillis();
         ProcessRecord app = makeProcessRecord(
                 app1Pid1,                    // pid
                 app1Uid,                     // uid
@@ -244,7 +240,7 @@ public class ApplicationExitInfoTest {
         doReturn(null)
                 .when(mAppExitInfoTracker.mAppExitInfoSourceLmkd)
                 .remove(anyInt(), anyInt());
-        updateExitInfo(app, now1);
+        updateExitInfo(app);
 
         ArrayList<ApplicationExitInfo> list = new ArrayList<ApplicationExitInfo>();
         mAppExitInfoTracker.getExitInfo(app1PackageName, app1Uid, app1Pid1, 0, list);
@@ -294,11 +290,11 @@ public class ApplicationExitInfoTest {
                 .when(mAppExitInfoTracker.mAppExitInfoSourceLmkd)
                 .remove(anyInt(), anyInt());
         noteAppKill(app, ApplicationExitInfo.REASON_USER_REQUESTED,
-                ApplicationExitInfo.SUBREASON_UNKNOWN, null, now1s);
+                ApplicationExitInfo.SUBREASON_UNKNOWN, null);
 
         // Case 2: create another app1 process record with a different pid
         sleep(1);
-        final long now2 = 2;
+        final long now2 = System.currentTimeMillis();
         app = makeProcessRecord(
                 app1Pid2,               // pid
                 app1Uid,                // uid
@@ -320,15 +316,16 @@ public class ApplicationExitInfoTest {
         doReturn(new Pair<Long, Object>(now2, Integer.valueOf(makeExitStatus(exitCode))))
                 .when(mAppExitInfoTracker.mAppExitInfoSourceZygote)
                 .remove(anyInt(), anyInt());
-        updateExitInfo(app, now2);
+        updateExitInfo(app);
         list.clear();
 
         // Get all the records for app1Uid
         mAppExitInfoTracker.getExitInfo(null, app1Uid, 0, 0, list);
         assertEquals(3, list.size());
 
-        info = list.get(1);
+        info = list.get(0);
 
+        // Verify the most recent one
         verifyApplicationExitInfo(
                 info,                                 // info
                 now2,                                 // timestamp
@@ -349,7 +346,7 @@ public class ApplicationExitInfoTest {
         assertTrue(ArrayUtils.equals(info.getProcessStateSummary(), app1Cookie2,
                 app1Cookie2.length));
 
-        info = list.get(0);
+        info = list.get(1);
         verifyApplicationExitInfo(
                 info,                                      // info
                 now1s,                                     // timestamp
@@ -389,7 +386,7 @@ public class ApplicationExitInfoTest {
         doReturn(new Pair<Long, Object>(now3, Integer.valueOf(makeSignalStatus(sigNum))))
                 .when(mAppExitInfoTracker.mAppExitInfoSourceZygote)
                 .remove(anyInt(), anyInt());
-        updateExitInfo(app, now3);
+        updateExitInfo(app);
         list.clear();
         mAppExitInfoTracker.getExitInfo(app1PackageName, app1UidUser2, app1PidUser2, 0, list);
 
@@ -466,7 +463,7 @@ public class ApplicationExitInfoTest {
                 app2Rss1,                    // rss
                 app2ProcessName,             // processName
                 app2PackageName);            // packageName
-        updateExitInfo(app, now4);
+        updateExitInfo(app);
         list.clear();
         mAppExitInfoTracker.getExitInfo(app2PackageName, app2UidUser2, app2PidUser2, 0, list);
         assertEquals(1, list.size());
@@ -526,9 +523,9 @@ public class ApplicationExitInfoTest {
                 app3ProcessName,         // processName
                 app3PackageName);        // packageName
         noteAppKill(app, ApplicationExitInfo.REASON_CRASH_NATIVE,
-                ApplicationExitInfo.SUBREASON_UNKNOWN, app3Description, now5);
+                ApplicationExitInfo.SUBREASON_UNKNOWN, app3Description);
 
-        updateExitInfo(app, now5);
+        updateExitInfo(app);
         list.clear();
         mAppExitInfoTracker.getExitInfo(app3PackageName, app3UidUser2, app3PidUser2, 0, list);
         assertEquals(1, list.size());
@@ -651,11 +648,11 @@ public class ApplicationExitInfoTest {
                 app3PackageName);            // packageName
         mAppExitInfoTracker.mIsolatedUidRecords.addIsolatedUid(app3IsolatedUid, app3Uid);
         noteAppKill(app, ApplicationExitInfo.REASON_CRASH,
-                ApplicationExitInfo.SUBREASON_UNKNOWN, app3Description2, now6);
+                ApplicationExitInfo.SUBREASON_UNKNOWN, app3Description2);
 
         assertEquals(app3Uid, mAppExitInfoTracker.mIsolatedUidRecords
                 .getUidByIsolatedUid(app3IsolatedUid).longValue());
-        updateExitInfo(app, now6);
+        updateExitInfo(app);
         assertNull(mAppExitInfoTracker.mIsolatedUidRecords.getUidByIsolatedUid(app3IsolatedUid));
 
         list.clear();
@@ -739,9 +736,9 @@ public class ApplicationExitInfoTest {
 
         mAppExitInfoTracker.mIsolatedUidRecords.addIsolatedUid(app1IsolatedUidUser2, app1UidUser2);
         noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
-                ApplicationExitInfo.SUBREASON_UNKNOWN, app1Description, now8);
+                ApplicationExitInfo.SUBREASON_UNKNOWN, app1Description);
 
-        updateExitInfo(app, now8);
+        updateExitInfo(app);
         list.clear();
         mAppExitInfoTracker.getExitInfo(app1PackageName, app1UidUser2, app1PidUser2, 1, list);
         assertEquals(1, list.size());
@@ -805,8 +802,8 @@ public class ApplicationExitInfoTest {
                 traceFile, traceStart, traceEnd);
 
         noteAppKill(app, ApplicationExitInfo.REASON_OTHER,
-                ApplicationExitInfo.SUBREASON_TOO_MANY_EMPTY, app1Description2, now9);
-        updateExitInfo(app, now9);
+                ApplicationExitInfo.SUBREASON_TOO_MANY_EMPTY, app1Description2);
+        updateExitInfo(app);
         list.clear();
         mAppExitInfoTracker.getExitInfo(app1PackageName, app1UidUser2, app1Pid2User2, 1, list);
         assertEquals(1, list.size());
@@ -862,7 +859,7 @@ public class ApplicationExitInfoTest {
         mAppExitInfoTracker.getExitInfo(null, app1Uid, 0, 0, list);
         assertEquals(3, list.size());
 
-        info = list.get(1);
+        info = list.get(0);
 
         exitCode = 6;
         verifyApplicationExitInfo(
@@ -882,7 +879,7 @@ public class ApplicationExitInfoTest {
                 IMPORTANCE_SERVICE,                   // importance
                 null);                                // description
 
-        info = list.get(0);
+        info = list.get(1);
         verifyApplicationExitInfo(
                 info,                                      // info
                 now1s,                                     // timestamp

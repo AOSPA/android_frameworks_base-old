@@ -40,10 +40,8 @@ import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
-import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
 import com.android.systemui.plugins.ClockPlugin;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.shared.system.smartspace.SmartspaceTransitionController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.lockscreen.LockscreenSmartspaceController;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
@@ -88,9 +86,6 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
 
     @Mock
     Resources mResources;
-    KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
-    @Mock
-    SmartspaceTransitionController mSmartSpaceTransitionController;
     @Mock
     private ClockPlugin mClockPlugin;
     @Mock
@@ -140,10 +135,7 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
                 mBatteryController,
                 mKeyguardUpdateMonitor,
                 mBypassController,
-                mSmartspaceController,
-                mKeyguardUnlockAnimationController,
-                mSmartSpaceTransitionController
-        );
+                mSmartspaceController);
 
         when(mStatusBarStateController.getState()).thenReturn(StatusBarState.SHADE);
         when(mColorExtractor.getColors(anyInt())).thenReturn(mGradientColors);
@@ -238,13 +230,6 @@ public class KeyguardClockSwitchControllerTest extends SysuiTestCase {
 
         listenerArgumentCaptor.getValue().onViewDetachedFromWindow(mView);
         verify(mView).removeView(mFakeSmartspaceView);
-    }
-
-    @Test
-    public void testRefresh() {
-        mController.refresh();
-
-        verify(mSmartspaceController).requestSmartspaceUpdate();
     }
 
     private void verifyAttachment(VerificationMode times) {

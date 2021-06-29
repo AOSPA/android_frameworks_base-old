@@ -178,7 +178,6 @@ public final class LocationRequest implements Parcelable {
     public static final int POWER_HIGH = 203;
 
     private static final long IMPLICIT_MIN_UPDATE_INTERVAL = -1;
-    private static final double IMPLICIT_MIN_UPDATE_INTERVAL_FACTOR = 1D / 6D;
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, publicAlternatives = "Use {@link "
             + "LocationManager} methods to provide the provider explicitly.")
@@ -553,7 +552,7 @@ public final class LocationRequest implements Parcelable {
      */
     public @IntRange(from = 0) long getMinUpdateIntervalMillis() {
         if (mMinUpdateIntervalMillis == IMPLICIT_MIN_UPDATE_INTERVAL) {
-            return (long) (mInterval * IMPLICIT_MIN_UPDATE_INTERVAL_FACTOR);
+            return mInterval;
         } else {
             // the min is only necessary in case someone use a deprecated function to mess with the
             // interval or min update interval
@@ -1019,9 +1018,7 @@ public final class LocationRequest implements Parcelable {
          * Sets an explicit minimum update interval. If location updates are available faster than
          * the request interval then an update will only occur if the minimum update interval has
          * expired since the last location update. Defaults to no explicit minimum update interval
-         * set, which means some sensible default between 0 and the interval will be chosen. The
-         * exact value is not specified at the moment. If an exact known value is required, clients
-         * should set an explicit value themselves.
+         * set, which means the minimum update interval is the same as the interval.
          *
          * <p class=note><strong>Note:</strong> Some allowance for jitter is already built into the
          * minimum update interval, so you need not worry about updates blocked simply because they
@@ -1040,8 +1037,7 @@ public final class LocationRequest implements Parcelable {
 
         /**
          * Clears an explicitly set minimum update interval and reverts to an implicit minimum
-         * update interval (ie, the minimum update interval is some sensible default between 0 and
-         * the interval).
+         * update interval (ie, the minimum update interval is the same value as the interval).
          */
         public @NonNull Builder clearMinUpdateIntervalMillis() {
             mMinUpdateIntervalMillis = IMPLICIT_MIN_UPDATE_INTERVAL;

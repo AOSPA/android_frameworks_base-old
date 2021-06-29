@@ -16,7 +16,6 @@
 
 package android.widget;
 
-import android.animation.ValueAnimator;
 import android.annotation.ColorInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -77,11 +76,6 @@ public class EdgeEffect {
     public static final BlendMode DEFAULT_BLEND_MODE = BlendMode.SRC_ATOP;
 
     /**
-     * Completely disable edge effect
-     */
-    private static final int TYPE_NONE = -1;
-
-    /**
      * Use a color edge glow for the edge effect.
      */
     private static final int TYPE_GLOW = 0;
@@ -120,7 +114,7 @@ public class EdgeEffect {
     private static final float ON_ABSORB_VELOCITY_ADJUSTMENT = 13f;
 
     /** @hide */
-    @IntDef({TYPE_NONE, TYPE_GLOW, TYPE_STRETCH})
+    @IntDef({TYPE_GLOW, TYPE_STRETCH})
     @Retention(RetentionPolicy.SOURCE)
     public @interface EdgeEffectType {
     }
@@ -201,12 +195,6 @@ public class EdgeEffect {
     private float mBaseGlowScale;
     private float mDisplacement = 0.5f;
     private float mTargetDisplacement = 0.5f;
-
-    /**
-     * Current edge effect type, consumers should always query
-     * {@link #getCurrentEdgeEffectBehavior()} instead of this parameter
-     * directly in case animations have been disabled (ex. for accessibility reasons)
-     */
     private @EdgeEffectType int mEdgeEffectType = TYPE_GLOW;
     private Matrix mTmpMatrix = null;
     private float[] mTmpPoints = null;
@@ -237,15 +225,6 @@ public class EdgeEffect {
         mPaint.setColor((themeColor & 0xffffff) | 0x33000000);
         mPaint.setStyle(Paint.Style.FILL);
         mPaint.setBlendMode(DEFAULT_BLEND_MODE);
-    }
-
-    @EdgeEffectType
-    private int getCurrentEdgeEffectBehavior() {
-        if (!ValueAnimator.areAnimatorsEnabled()) {
-            return TYPE_NONE;
-        } else {
-            return mEdgeEffectType;
-        }
     }
 
     /**
@@ -323,19 +302,14 @@ public class EdgeEffect {
      *                     Values may be from 0-1.
      */
     public void onPull(float deltaDistance, float displacement) {
-        int edgeEffectBehavior = getCurrentEdgeEffectBehavior();
-        if (edgeEffectBehavior == TYPE_NONE) {
-            finish();
-            return;
-        }
         final long now = AnimationUtils.currentAnimationTimeMillis();
         mTargetDisplacement = displacement;
         if (mState == STATE_PULL_DECAY && now - mStartTime < mDuration
-                && edgeEffectBehavior == TYPE_GLOW) {
+                && mEdgeEffectType == TYPE_GLOW) {
             return;
         }
         if (mState != STATE_PULL) {
-            if (edgeEffectBehavior == TYPE_STRETCH) {
+            if (mEdgeEffectType == TYPE_STRETCH) {
                 // Restore the mPullDistance to the fraction it is currently showing -- we want
                 // to "catch" the current stretch value.
                 mPullDistance = mDistance;
@@ -368,9 +342,6 @@ public class EdgeEffect {
 
         mGlowAlphaFinish = mGlowAlpha;
         mGlowScaleYFinish = mGlowScaleY;
-        if (edgeEffectBehavior == TYPE_STRETCH && mDistance == 0) {
-            mState = STATE_IDLE;
-        }
     }
 
     /**
@@ -403,17 +374,13 @@ public class EdgeEffect {
      * 0 and <code>deltaDistance</code>.
      */
     public float onPullDistance(float deltaDistance, float displacement) {
-        int edgeEffectBehavior = getCurrentEdgeEffectBehavior();
-        if (edgeEffectBehavior == TYPE_NONE) {
-            return 0f;
-        }
         float finalDistance = Math.max(0f, deltaDistance + mDistance);
         float delta = finalDistance - mDistance;
         if (delta == 0f && mDistance == 0f) {
             return 0f; // No pull, don't do anything.
         }
 
-        if (mState != STATE_PULL && mState != STATE_PULL_DECAY && edgeEffectBehavior == TYPE_GLOW) {
+        if (mState != STATE_PULL && mState != STATE_PULL_DECAY && mEdgeEffectType == TYPE_GLOW) {
             // Catch the edge glow in the middle of an animation.
             mPullDistance = mDistance;
             mState = STATE_PULL;
@@ -472,12 +439,11 @@ public class EdgeEffect {
      * @param velocity Velocity at impact in pixels per second.
      */
     public void onAbsorb(int velocity) {
-        int edgeEffectBehavior = getCurrentEdgeEffectBehavior();
-        if (edgeEffectBehavior == TYPE_STRETCH) {
+        if (mEdgeEffectType == TYPE_STRETCH) {
             mState = STATE_RECEDE;
             mVelocity = velocity * ON_ABSORB_VELOCITY_ADJUSTMENT;
             mStartTime = AnimationUtils.currentAnimationTimeMillis();
-        } else if (edgeEffectBehavior == TYPE_GLOW) {
+        } else {
             mState = STATE_ABSORB;
             mVelocity = 0;
             velocity = Math.min(Math.max(MIN_VELOCITY, Math.abs(velocity)), MAX_VELOCITY);
@@ -501,8 +467,6 @@ public class EdgeEffect {
                     mGlowAlphaStart,
                     Math.min(velocity * VELOCITY_GLOW_FACTOR * .00001f, MAX_ALPHA));
             mTargetDisplacement = 0.5f;
-        } else {
-            finish();
         }
     }
 
@@ -565,8 +529,7 @@ public class EdgeEffect {
      *         animation
      */
     public boolean draw(Canvas canvas) {
-        int edgeEffectBehavior = getCurrentEdgeEffectBehavior();
-        if (edgeEffectBehavior == TYPE_GLOW) {
+        if (mEdgeEffectType == TYPE_GLOW) {
             update();
             final int count = canvas.save();
 
@@ -583,7 +546,7 @@ public class EdgeEffect {
             mPaint.setAlpha((int) (0xff * mGlowAlpha));
             canvas.drawCircle(centerX, centerY, mRadius, mPaint);
             canvas.restoreToCount(count);
-        } else if (edgeEffectBehavior == TYPE_STRETCH && canvas instanceof RecordingCanvas) {
+        } else if (canvas instanceof RecordingCanvas) {
             if (mState == STATE_RECEDE) {
                 updateSpring();
             }
@@ -638,8 +601,8 @@ public class EdgeEffect {
                 );
             }
         } else {
-            // Animations have been disabled or this is TYPE_STRETCH and drawing into a Canvas
-            // that isn't a Recording Canvas, so no effect can be shown. Just end the effect.
+            // This is TYPE_STRETCH and drawing into a Canvas that isn't a Recording Canvas,
+            // so no effect can be shown. Just end the effect.
             mState = STATE_IDLE;
             mDistance = 0;
             mVelocity = 0;
@@ -776,12 +739,8 @@ public class EdgeEffect {
     private boolean isAtEquilibrium() {
         double displacement = mDistance * mHeight; // in pixels
         double velocity = mVelocity;
-
-        // Don't allow displacement to drop below 0. We don't want it stretching the opposite
-        // direction if it is flung that way. We also want to stop the animation as soon as
-        // it gets very close to its destination.
-        return displacement < 0 || (Math.abs(velocity) < VELOCITY_THRESHOLD
-                && displacement < VALUE_THRESHOLD);
+        return Math.abs(velocity) < VELOCITY_THRESHOLD
+                && Math.abs(displacement) < VALUE_THRESHOLD;
     }
 
     private float dampStretchVector(float normalizedVec) {

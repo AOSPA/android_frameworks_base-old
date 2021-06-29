@@ -47,7 +47,6 @@ public class ScreenPowerCalculatorTest {
 
     @Test
     public void testMeasuredEnergyBasedModel() {
-        mStatsRule.initMeasuredEnergyStatsLocked();
         BatteryStatsImpl batteryStats = mStatsRule.getBatteryStats();
 
         batteryStats.noteScreenStateLocked(Display.STATE_ON, 0, 0, 0);

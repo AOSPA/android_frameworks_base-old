@@ -16,8 +16,6 @@
 
 package com.android.systemui.biometrics;
 
-import static android.hardware.biometrics.BiometricAuthenticator.TYPE_NONE;
-
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
 import android.animation.AnimatorSet;
@@ -26,7 +24,6 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.hardware.biometrics.BiometricAuthenticator.Modality;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.PromptInfo;
 import android.os.Bundle;
@@ -102,13 +99,6 @@ public abstract class AuthBiometricView extends LinearLayout {
         int ACTION_BUTTON_TRY_AGAIN = 4;
         int ACTION_ERROR = 5;
         int ACTION_USE_DEVICE_CREDENTIAL = 6;
-        /**
-         * Notify the receiver to start the fingerprint sensor.
-         *
-         * This is only applicable to multi-sensor devices that need to delay fingerprint auth
-         * (i.e face -> fingerprint).
-         */
-        int ACTION_START_DELAYED_FINGERPRINT_SENSOR = 7;
 
         /**
          * When an action has occurred. The caller will only invoke this when the callback should
@@ -176,7 +166,7 @@ public abstract class AuthBiometricView extends LinearLayout {
     }
 
     private final Injector mInjector;
-    protected final Handler mHandler;
+    private final Handler mHandler;
     private final AccessibilityManager mAccessibilityManager;
     protected final int mTextColorError;
     protected final int mTextColorHint;
@@ -209,7 +199,7 @@ public abstract class AuthBiometricView extends LinearLayout {
     // Measurements when biometric view is showing text, buttons, etc.
     @Nullable @VisibleForTesting AuthDialog.LayoutParams mLayoutParams;
 
-    protected Callback mCallback;
+    private Callback mCallback;
     protected @BiometricState int mState;
 
     private float mIconOriginalY;
@@ -545,25 +535,12 @@ public abstract class AuthBiometricView extends LinearLayout {
         }
     }
 
-    /**
-     * Notify the view that auth has failed.
-     *
-     * @param modality sensor modality that failed
-     * @param failureReason message
-     */
-    public void onAuthenticationFailed(
-            @Modality int modality, @Nullable String failureReason) {
+    public void onAuthenticationFailed(String failureReason) {
         showTemporaryMessage(failureReason, mResetErrorRunnable);
         updateState(STATE_ERROR);
     }
 
-    /**
-     * Notify the view that an error occurred.
-     *
-     * @param modality sensor modality that failed
-     * @param error message
-     */
-    public void onError(@Modality int modality, String error) {
+    public void onError(String error) {
         showTemporaryMessage(error, mResetErrorRunnable);
         updateState(STATE_ERROR);
 
@@ -572,22 +549,11 @@ public abstract class AuthBiometricView extends LinearLayout {
         }, mInjector.getDelayAfterError());
     }
 
-    /**
-     * Show a help message to the user.
-     *
-     * @param modality sensor modality
-     * @param help message
-     */
-    public void onHelp(@Modality int modality, String help) {
+    public void onHelp(String help) {
         if (mSize != AuthDialog.SIZE_MEDIUM) {
             Log.w(TAG, "Help received in size: " + mSize);
             return;
         }
-        if (TextUtils.isEmpty(help)) {
-            Log.w(TAG, "Ignoring blank help message");
-            return;
-        }
-
         showTemporaryMessage(help, mResetHelpRunnable);
         updateState(STATE_HELP);
     }
@@ -623,6 +589,10 @@ public abstract class AuthBiometricView extends LinearLayout {
         Utils.notifyAccessibilityContentChanged(mAccessibilityManager, this);
     }
 
+    private void setText(TextView view, CharSequence charSequence) {
+        view.setText(charSequence);
+    }
+
     // Remove all pending icon and text animations
     private void removePendingAnimations() {
         mHandler.removeCallbacks(mResetHelpRunnable);
@@ -635,7 +605,7 @@ public abstract class AuthBiometricView extends LinearLayout {
         mIndicatorView.setTextColor(mTextColorError);
         mIndicatorView.setVisibility(View.VISIBLE);
         mIndicatorView.setSelected(true);
-        mHandler.postDelayed(resetMessageRunnable, mInjector.getDelayAfterError());
+        mHandler.postDelayed(resetMessageRunnable, BiometricPrompt.HIDE_DIALOG_DELAY);
 
         Utils.notifyAccessibilityContentChanged(mAccessibilityManager, this);
     }
@@ -711,7 +681,7 @@ public abstract class AuthBiometricView extends LinearLayout {
      */
     @VisibleForTesting
     void onAttachedToWindowInternal() {
-        mTitleView.setText(mPromptInfo.getTitle());
+        setText(mTitleView, mPromptInfo.getTitle());
 
         if (isDeviceCredentialAllowed()) {
             final CharSequence credentialButtonText;
@@ -741,7 +711,7 @@ public abstract class AuthBiometricView extends LinearLayout {
             mUseCredentialButton.setText(credentialButtonText);
             mUseCredentialButton.setVisibility(View.VISIBLE);
         } else {
-            mNegativeButton.setText(mPromptInfo.getNegativeButtonText());
+            setText(mNegativeButton, mPromptInfo.getNegativeButtonText());
         }
 
         setTextOrHide(mSubtitleView, mPromptInfo.getSubtitle());
@@ -855,10 +825,10 @@ public abstract class AuthBiometricView extends LinearLayout {
                 final String indicatorText =
                         mSavedState.getString(AuthDialog.KEY_BIOMETRIC_INDICATOR_STRING);
                 if (mSavedState.getBoolean(AuthDialog.KEY_BIOMETRIC_INDICATOR_HELP_SHOWING)) {
-                    onHelp(TYPE_NONE, indicatorText);
+                    onHelp(indicatorText);
                 } else if (mSavedState.getBoolean(
                         AuthDialog.KEY_BIOMETRIC_INDICATOR_ERROR_SHOWING)) {
-                    onAuthenticationFailed(TYPE_NONE, indicatorText);
+                    onAuthenticationFailed(indicatorText);
                 }
             }
         }

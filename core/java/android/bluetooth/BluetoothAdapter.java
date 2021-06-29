@@ -17,8 +17,6 @@
 
 package android.bluetooth;
 
-import static java.util.Objects.requireNonNull;
-
 import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
@@ -48,7 +46,6 @@ import android.bluetooth.le.ScanRecord;
 import android.bluetooth.le.ScanResult;
 import android.bluetooth.le.ScanSettings;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.BatteryStats;
@@ -63,6 +60,8 @@ import android.os.SynchronousResultReceiver;
 import android.os.SystemProperties;
 import android.util.Log;
 import android.util.Pair;
+
+import com.android.internal.util.Preconditions;
 
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -722,8 +721,8 @@ public final class BluetoothAdapter {
 
     private final Object mLock = new Object();
     private final Map<LeScanCallback, ScanCallback> mLeScanClients;
-    private final Map<BluetoothDevice, List<Pair<OnMetadataChangedListener, Executor>>>
-                mMetadataListeners = new HashMap<>();
+    private static final Map<BluetoothDevice, List<Pair<OnMetadataChangedListener, Executor>>>
+                sMetadataListeners = new HashMap<>();
     private final Map<BluetoothConnectionCallback, Executor>
             mBluetoothConnectionCallbackExecutorMap = new HashMap<>();
 
@@ -732,15 +731,14 @@ public final class BluetoothAdapter {
      * implementation.
      */
     @SuppressLint("AndroidFrameworkBluetoothPermission")
-    private final IBluetoothMetadataListener mBluetoothMetadataListener =
+    private static final IBluetoothMetadataListener sBluetoothMetadataListener =
             new IBluetoothMetadataListener.Stub() {
         @Override
         public void onMetadataChanged(BluetoothDevice device, int key, byte[] value) {
-            Attributable.setAttributionSource(device, mAttributionSource);
-            synchronized (mMetadataListeners) {
-                if (mMetadataListeners.containsKey(device)) {
+            synchronized (sMetadataListeners) {
+                if (sMetadataListeners.containsKey(device)) {
                     List<Pair<OnMetadataChangedListener, Executor>> list =
-                            mMetadataListeners.get(device);
+                            sMetadataListeners.get(device);
                     for (Pair<OnMetadataChangedListener, Executor> pair : list) {
                         OnMetadataChangedListener listener = pair.first;
                         Executor executor = pair.second;
@@ -2471,9 +2469,7 @@ public final class BluetoothAdapter {
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return Attributable.setAttributionSource(
-                        mService.getMostRecentlyConnectedDevices(mAttributionSource),
-                        mAttributionSource);
+                return mService.getMostRecentlyConnectedDevices(mAttributionSource);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
@@ -2499,16 +2495,14 @@ public final class BluetoothAdapter {
     public Set<BluetoothDevice> getBondedDevices() {
         android.util.SeempLog.record(61);
         if (getState() != STATE_ON) {
-            return toDeviceSet(Arrays.asList());
+            return toDeviceSet(new BluetoothDevice[0]);
         }
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return toDeviceSet(Attributable.setAttributionSource(
-                        Arrays.asList(mService.getBondedDevices(mAttributionSource)),
-                        mAttributionSource));
+                return toDeviceSet(mService.getBondedDevices(mAttributionSource));
             }
-            return toDeviceSet(Arrays.asList());
+            return toDeviceSet(new BluetoothDevice[0]);
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
         } finally {
@@ -3372,10 +3366,10 @@ public final class BluetoothAdapter {
                             }
                         }
                     }
-                    synchronized (mMetadataListeners) {
-                        mMetadataListeners.forEach((device, pair) -> {
+                    synchronized (sMetadataListeners) {
+                        sMetadataListeners.forEach((device, pair) -> {
                             try {
-                                mService.registerMetadataListener(mBluetoothMetadataListener,
+                                mService.registerMetadataListener(sBluetoothMetadataListener,
                                         device, mAttributionSource);
                             } catch (RemoteException e) {
                                 Log.e(TAG, "Failed to register metadata listener", e);
@@ -3468,12 +3462,37 @@ public final class BluetoothAdapter {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(value = {
-            BluetoothStatusCodes.ERROR_UNKNOWN,
-            BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED,
-            BluetoothStatusCodes.ERROR_ANOTHER_ACTIVE_OOB_REQUEST,
+    @IntDef(prefix = { "OOB_ERROR_" }, value = {
+        OOB_ERROR_UNKNOWN,
+        OOB_ERROR_ANOTHER_ACTIVE_REQUEST,
+        OOB_ERROR_ADAPTER_DISABLED
     })
     public @interface OobError {}
+
+    /**
+     * An unknown error has occurred in the controller, stack, or callback pipeline.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int OOB_ERROR_UNKNOWN = 0;
+
+    /**
+     * If another application has already requested {@link OobData} then another fetch will be
+     * disallowed until the callback is removed.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int OOB_ERROR_ANOTHER_ACTIVE_REQUEST = 1;
+
+    /**
+     * The adapter is currently disabled, please enable it.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int OOB_ERROR_ADAPTER_DISABLED = 2;
 
     /**
      * Provides callback methods for receiving {@link OobData} from the host stack, as well as an
@@ -3495,7 +3514,7 @@ public final class BluetoothAdapter {
         /**
          * Provides feedback when things don't go as expected.
          *
-         * @param errorCode - the code describing the type of error that occurred.
+         * @param errorCode - the code descibing the type of error that occurred.
          */
         void onError(@OobError int errorCode);
     }
@@ -3518,8 +3537,8 @@ public final class BluetoothAdapter {
          */
         WrappedOobDataCallback(@NonNull OobDataCallback callback,
                 @NonNull @CallbackExecutor Executor executor) {
-            requireNonNull(callback);
-            requireNonNull(executor);
+            Preconditions.checkNotNull(callback);
+            Preconditions.checkNotNull(executor);
             mCallback = callback;
             mExecutor = executor;
         }
@@ -3589,10 +3608,10 @@ public final class BluetoothAdapter {
                 != BluetoothDevice.TRANSPORT_LE) {
             throw new IllegalArgumentException("Invalid transport '" + transport + "'!");
         }
-        requireNonNull(callback);
+        Preconditions.checkNotNull(callback);
         if (!isEnabled()) {
             Log.w(TAG, "generateLocalOobData(): Adapter isn't enabled!");
-            callback.onError(BluetoothStatusCodes.ERROR_BLUETOOTH_NOT_ENABLED);
+            callback.onError(OOB_ERROR_ADAPTER_DISABLED);
         } else {
             try {
                 mService.generateLocalOobData(transport, new WrappedOobDataCallback(callback,
@@ -3681,8 +3700,8 @@ public final class BluetoothAdapter {
         }
     }
 
-    private Set<BluetoothDevice> toDeviceSet(List<BluetoothDevice> devices) {
-        Set<BluetoothDevice> deviceSet = new HashSet<BluetoothDevice>(devices);
+    private Set<BluetoothDevice> toDeviceSet(BluetoothDevice[] devices) {
+        Set<BluetoothDevice> deviceSet = new HashSet<BluetoothDevice>(Arrays.asList(devices));
         return Collections.unmodifiableSet(deviceSet);
     }
 
@@ -3742,7 +3761,7 @@ public final class BluetoothAdapter {
      * @hide
      */
     public static boolean isAddressRandomStatic(@NonNull String address) {
-        requireNonNull(address);
+        Preconditions.checkNotNull(address);
         return checkBluetoothAddress(address)
                 && (Integer.parseInt(address.split(":")[5], 16) & 0b11) == 0b11;
     }
@@ -4152,13 +4171,13 @@ public final class BluetoothAdapter {
             throw new NullPointerException("executor is null");
         }
 
-        synchronized (mMetadataListeners) {
+        synchronized (sMetadataListeners) {
             List<Pair<OnMetadataChangedListener, Executor>> listenerList =
-                    mMetadataListeners.get(device);
+                    sMetadataListeners.get(device);
             if (listenerList == null) {
                 // Create new listener/executor list for registeration
                 listenerList = new ArrayList<>();
-                mMetadataListeners.put(device, listenerList);
+                sMetadataListeners.put(device, listenerList);
             } else {
                 // Check whether this device was already registed by the lisenter
                 if (listenerList.stream().anyMatch((pair) -> (pair.first.equals(listener)))) {
@@ -4172,7 +4191,7 @@ public final class BluetoothAdapter {
 
             boolean ret = false;
             try {
-                ret = service.registerMetadataListener(mBluetoothMetadataListener, device,
+                ret = service.registerMetadataListener(sBluetoothMetadataListener, device,
                         mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, "registerMetadataListener fail", e);
@@ -4182,7 +4201,7 @@ public final class BluetoothAdapter {
                     listenerList.remove(listenerPair);
                     if (listenerList.isEmpty()) {
                         // Remove the device if its listener list is empty
-                        mMetadataListeners.remove(device);
+                        sMetadataListeners.remove(device);
                     }
                 }
             }
@@ -4221,17 +4240,17 @@ public final class BluetoothAdapter {
             throw new NullPointerException("listener is null");
         }
 
-        synchronized (mMetadataListeners) {
-            if (!mMetadataListeners.containsKey(device)) {
+        synchronized (sMetadataListeners) {
+            if (!sMetadataListeners.containsKey(device)) {
                 throw new IllegalArgumentException("device was not registered");
             }
             // Remove issued listener from the registered device
-            mMetadataListeners.get(device).removeIf((pair) -> (pair.first.equals(listener)));
+            sMetadataListeners.get(device).removeIf((pair) -> (pair.first.equals(listener)));
 
-            if (mMetadataListeners.get(device).isEmpty()) {
+            if (sMetadataListeners.get(device).isEmpty()) {
                 // Unregister to Bluetooth service if all listeners are removed from
                 // the registered device
-                mMetadataListeners.remove(device);
+                sMetadataListeners.remove(device);
                 final IBluetooth service = mService;
                 if (service == null) {
                     // Bluetooth is OFF, do nothing to Bluetooth service.
@@ -4271,7 +4290,6 @@ public final class BluetoothAdapter {
             new IBluetoothConnectionCallback.Stub() {
         @Override
         public void onDeviceConnected(BluetoothDevice device) {
-            Attributable.setAttributionSource(device, mAttributionSource);
             for (Map.Entry<BluetoothConnectionCallback, Executor> callbackExecutorEntry:
                     mBluetoothConnectionCallbackExecutorMap.entrySet()) {
                 BluetoothConnectionCallback callback = callbackExecutorEntry.getKey();
@@ -4282,7 +4300,6 @@ public final class BluetoothAdapter {
 
         @Override
         public void onDeviceDisconnected(BluetoothDevice device, int hciReason) {
-            Attributable.setAttributionSource(device, mAttributionSource);
             for (Map.Entry<BluetoothConnectionCallback, Executor> callbackExecutorEntry:
                     mBluetoothConnectionCallbackExecutorMap.entrySet()) {
                 BluetoothConnectionCallback callback = callbackExecutorEntry.getKey();
@@ -4413,45 +4430,141 @@ public final class BluetoothAdapter {
          */
         @Retention(RetentionPolicy.SOURCE)
         @IntDef(prefix = { "REASON_" }, value = {
-                BluetoothStatusCodes.ERROR_UNKNOWN,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_LOCAL_REQUEST,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE_REQUEST,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_LOCAL,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_TIMEOUT,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_SECURITY,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_SYSTEM_POLICY,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_RESOURCE_LIMIT_REACHED,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_CONNECTION_ALREADY_EXISTS,
-                BluetoothStatusCodes.ERROR_DISCONNECT_REASON_BAD_PARAMETERS})
+                REASON_UNKNOWN,
+                REASON_LOCAL_REQUEST,
+                REASON_REMOTE_REQUEST,
+                REASON_LOCAL_ERROR,
+                REASON_REMOTE_ERROR,
+                REASON_TIMEOUT,
+                REASON_SECURITY,
+                REASON_SYSTEM_POLICY,
+                REASON_RESOURCE_LIMIT_REACHED,
+                REASON_CONNECTION_EXISTS,
+                REASON_BAD_PARAMETERS})
         public @interface DisconnectReason {}
+
+        /**
+         * Indicates that the ACL disconnected due to an unknown reason.
+         */
+        public static final int REASON_UNKNOWN = 0;
+
+        /**
+         * Indicates that the ACL disconnected due to an explicit request from the local device.
+         * <p>
+         * Example cause: This is a normal disconnect reason, e.g., user/app initiates
+         * disconnection.
+         */
+        public static final int REASON_LOCAL_REQUEST = 1;
+
+        /**
+         * Indicates that the ACL disconnected due to an explicit request from the remote device.
+         * <p>
+         * Example cause: This is a normal disconnect reason, e.g., user/app initiates
+         * disconnection.
+         * <p>
+         * Example solution: The app can also prompt the user to check their remote device.
+         */
+        public static final int REASON_REMOTE_REQUEST = 2;
+
+        /**
+         * Generic disconnect reason indicating the ACL disconnected due to an error on the local
+         * device.
+         * <p>
+         * Example solution: Prompt the user to check their local device (e.g., phone, car
+         * headunit).
+         */
+        public static final int REASON_LOCAL_ERROR = 3;
+
+        /**
+         * Generic disconnect reason indicating the ACL disconnected due to an error on the remote
+         * device.
+         * <p>
+         * Example solution: Prompt the user to check their remote device (e.g., headset, car
+         * headunit, watch).
+         */
+        public static final int REASON_REMOTE_ERROR = 4;
+
+        /**
+         * Indicates that the ACL disconnected due to a timeout.
+         * <p>
+         * Example cause: remote device might be out of range.
+         * <p>
+         * Example solution: Prompt user to verify their remote device is on or in
+         * connection/pairing mode.
+         */
+        public static final int REASON_TIMEOUT = 5;
+
+        /**
+         * Indicates that the ACL disconnected due to link key issues.
+         * <p>
+         * Example cause: Devices are either unpaired or remote device is refusing our pairing
+         * request.
+         * <p>
+         * Example solution: Prompt user to unpair and pair again.
+         */
+        public static final int REASON_SECURITY = 6;
+
+        /**
+         * Indicates that the ACL disconnected due to the local device's system policy.
+         * <p>
+         * Example cause: privacy policy, power management policy, permissions, etc.
+         * <p>
+         * Example solution: Prompt the user to check settings, or check with their system
+         * administrator (e.g. some corp-managed devices do not allow OPP connection).
+         */
+        public static final int REASON_SYSTEM_POLICY = 7;
+
+        /**
+         * Indicates that the ACL disconnected due to resource constraints, either on the local
+         * device or the remote device.
+         * <p>
+         * Example cause: controller is busy, memory limit reached, maximum number of connections
+         * reached.
+         * <p>
+         * Example solution: The app should wait and try again. If still failing, prompt the user
+         * to disconnect some devices, or toggle Bluetooth on the local and/or the remote device.
+         */
+        public static final int REASON_RESOURCE_LIMIT_REACHED = 8;
+
+        /**
+         * Indicates that the ACL disconnected because another ACL connection already exists.
+         */
+        public static final int REASON_CONNECTION_EXISTS = 9;
+
+        /**
+         * Indicates that the ACL disconnected due to incorrect parameters passed in from the app.
+         * <p>
+         * Example solution: Change parameters and try again. If error persists, the app can report
+         * telemetry and/or log the error in a bugreport.
+         */
+        public static final int REASON_BAD_PARAMETERS = 10;
 
         /**
          * Returns human-readable strings corresponding to {@link DisconnectReason}.
          */
         public static String disconnectReasonText(@DisconnectReason int reason) {
             switch (reason) {
-                case BluetoothStatusCodes.ERROR_UNKNOWN:
+                case REASON_UNKNOWN:
                     return "Reason unknown";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_LOCAL_REQUEST:
+                case REASON_LOCAL_REQUEST:
                     return "Local request";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE_REQUEST:
+                case REASON_REMOTE_REQUEST:
                     return "Remote request";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_LOCAL:
+                case REASON_LOCAL_ERROR:
                     return "Local error";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_REMOTE:
+                case REASON_REMOTE_ERROR:
                     return "Remote error";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_TIMEOUT:
+                case REASON_TIMEOUT:
                     return "Timeout";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_SECURITY:
+                case REASON_SECURITY:
                     return "Security";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_SYSTEM_POLICY:
+                case REASON_SYSTEM_POLICY:
                     return "System policy";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_RESOURCE_LIMIT_REACHED:
+                case REASON_RESOURCE_LIMIT_REACHED:
                     return "Resource constrained";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_CONNECTION_ALREADY_EXISTS:
+                case REASON_CONNECTION_EXISTS:
                     return "Connection already exists";
-                case BluetoothStatusCodes.ERROR_DISCONNECT_REASON_BAD_PARAMETERS:
+                case REASON_BAD_PARAMETERS:
                     return "Bad parameters";
                 default:
                     return "Unrecognized disconnect reason: " + reason;

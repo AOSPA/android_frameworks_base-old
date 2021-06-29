@@ -18,12 +18,11 @@ package android.app.appsearch;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.app.appsearch.aidl.AppSearchResultParcel;
 import android.app.appsearch.aidl.IAppSearchManager;
 import android.app.appsearch.aidl.IAppSearchResultCallback;
 import android.os.RemoteException;
-import android.os.SystemClock;
-import android.os.UserHandle;
 import android.util.Log;
 
 import com.android.internal.util.Preconditions;
@@ -45,23 +44,24 @@ public class GlobalSearchSession implements Closeable {
     private static final String TAG = "AppSearchGlobalSearchSe";
 
     private final String mPackageName;
-    private final UserHandle mUserHandle;
+    @UserIdInt
+    private final int mUserId;
     private final IAppSearchManager mService;
 
     private boolean mIsMutated = false;
     private boolean mIsClosed = false;
 
     /**
-     * Creates a search session for the client, defined by the {@code userHandle} and
+     * Creates a search session for the client, defined by the {@code userId} and
      * {@code packageName}.
      */
     static void createGlobalSearchSession(
             @NonNull IAppSearchManager service,
-            @NonNull UserHandle userHandle,
+            @UserIdInt int userId,
             @NonNull String packageName,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<GlobalSearchSession>> callback) {
-        GlobalSearchSession globalSearchSession = new GlobalSearchSession(service, userHandle,
+        GlobalSearchSession globalSearchSession = new GlobalSearchSession(service, userId,
                 packageName);
         globalSearchSession.initialize(executor, callback);
     }
@@ -72,21 +72,17 @@ public class GlobalSearchSession implements Closeable {
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<GlobalSearchSession>> callback) {
         try {
-            mService.initialize(
-                    mUserHandle,
-                    /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
-                    new IAppSearchResultCallback.Stub() {
-                        @Override
-                        public void onResult(AppSearchResultParcel resultParcel) {
-                            executor.execute(() -> {
-                                AppSearchResult<Void> result = resultParcel.getResult();
-                                if (result.isSuccess()) {
-                                    callback.accept(
-                                            AppSearchResult.newSuccessfulResult(
-                                                    GlobalSearchSession.this));
-                                } else {
-                                    callback.accept(AppSearchResult.newFailedResult(result));
-                                }
+            mService.initialize(mUserId, new IAppSearchResultCallback.Stub() {
+                @Override
+                public void onResult(AppSearchResultParcel resultParcel) {
+                    executor.execute(() -> {
+                        AppSearchResult<Void> result = resultParcel.getResult();
+                        if (result.isSuccess()) {
+                            callback.accept(
+                                    AppSearchResult.newSuccessfulResult(GlobalSearchSession.this));
+                        } else {
+                            callback.accept(AppSearchResult.newFailedResult(result));
+                        }
                     });
                 }
             });
@@ -95,10 +91,10 @@ public class GlobalSearchSession implements Closeable {
         }
     }
 
-    private GlobalSearchSession(@NonNull IAppSearchManager service, @NonNull UserHandle userHandle,
+    private GlobalSearchSession(@NonNull IAppSearchManager service, @UserIdInt int userId,
             @NonNull String packageName) {
         mService = service;
-        mUserHandle = userHandle;
+        mUserId = userId;
         mPackageName = packageName;
     }
 
@@ -127,7 +123,7 @@ public class GlobalSearchSession implements Closeable {
         Objects.requireNonNull(searchSpec);
         Preconditions.checkState(!mIsClosed, "GlobalSearchSession has already been closed");
         return new SearchResults(mService, mPackageName, /*databaseName=*/null, queryExpression,
-                searchSpec, mUserHandle);
+                searchSpec, mUserId);
     }
 
     /**
@@ -165,7 +161,7 @@ public class GlobalSearchSession implements Closeable {
                     request.getDocumentId(),
                     request.getUsageTimestampMillis(),
                     /*systemUsage=*/ true,
-                    mUserHandle,
+                    mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -186,8 +182,7 @@ public class GlobalSearchSession implements Closeable {
     public void close() {
         if (mIsMutated && !mIsClosed) {
             try {
-                mService.persistToDisk(
-                        mUserHandle, /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime());
+                mService.persistToDisk(mUserId);
                 mIsClosed = true;
             } catch (RemoteException e) {
                 Log.e(TAG, "Unable to close the GlobalSearchSession", e);

@@ -31,7 +31,6 @@ import android.content.Context;
 import android.content.Intent;
 import android.hardware.soundtrigger.SoundTrigger;
 import android.media.AudioFormat;
-import android.media.AudioSystem;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.IRemoteCallback;
@@ -79,17 +78,30 @@ public abstract class HotwordDetectionService extends Service {
     /** @hide */
     public static final String KEY_INITIALIZATION_STATUS = "initialization_status";
 
-    /**
-     * The maximum number of initialization status for some application specific failed reasons.
-     *
-     * @hide
-     */
-    public static final int MAXIMUM_NUMBER_OF_INITIALIZATION_STATUS_CUSTOM_ERROR = 2;
+    /** @hide */
+    @Retention(RetentionPolicy.SOURCE)
+    @IntDef(flag = true, prefix = { "INITIALIZATION_STATUS_" }, value = {
+            INITIALIZATION_STATUS_SUCCESS,
+            INITIALIZATION_STATUS_CUSTOM_ERROR_1,
+            INITIALIZATION_STATUS_CUSTOM_ERROR_2,
+            INITIALIZATION_STATUS_UNKNOWN,
+    })
+    public @interface InitializationStatus {}
 
     /**
      * Indicates that the updated status is successful.
      */
     public static final int INITIALIZATION_STATUS_SUCCESS = 0;
+
+    /**
+     * Indicates that the updated status is failure for some application specific reasons.
+     */
+    public static final int INITIALIZATION_STATUS_CUSTOM_ERROR_1 = 1;
+
+    /**
+     * Indicates that the updated status is failure for some application specific reasons.
+     */
+    public static final int INITIALIZATION_STATUS_CUSTOM_ERROR_2 = 2;
 
     /**
      * Indicates that the callback wasn’t invoked within the timeout.
@@ -188,20 +200,10 @@ public abstract class HotwordDetectionService extends Service {
         }
 
         @Override
-        public void updateAudioFlinger(IBinder audioFlinger) {
-            AudioSystem.setAudioFlingerBinder(audioFlinger);
-        }
-
-        @Override
         public void updateContentCaptureManager(IContentCaptureManager manager,
                 ContentCaptureOptions options) {
             mContentCaptureManager = new ContentCaptureManager(
                     HotwordDetectionService.this, manager, options);
-        }
-
-        @Override
-        public void stopDetection() {
-            HotwordDetectionService.this.onStopDetection();
         }
     };
 
@@ -227,16 +229,33 @@ public abstract class HotwordDetectionService extends Service {
     }
 
     /**
-     * Returns the maximum number of initialization status for some application specific failed
-     * reasons.
+     * Called when the device hardware (such as a DSP) detected the hotword, to request second stage
+     * validation before handing over the audio to the {@link AlwaysOnHotwordDetector}.
+     * <p>
+     * After {@code callback} is invoked or {@code timeoutMillis} has passed, the system closes
+     * {@code audioStream} and invokes the appropriate {@link AlwaysOnHotwordDetector.Callback
+     * callback}.
      *
-     * Note: The value 0 is reserved for success.
+     * @param audioStream Stream containing audio bytes returned from DSP
+     * @param audioFormat Format of the supplied audio
+     * @param timeoutMillis Timeout in milliseconds for the operation to invoke the callback. If
+     *                      the application fails to abide by the timeout, system will close the
+     *                      microphone and cancel the operation.
+     * @param callback The callback to use for responding to the detection request.
+     * @deprecated Implement
+     * {@link #onDetect(AlwaysOnHotwordDetector.EventPayload, long, Callback)} instead.
      *
      * @hide
      */
+    @Deprecated
     @SystemApi
-    public static int getMaxCustomInitializationStatus() {
-        return MAXIMUM_NUMBER_OF_INITIALIZATION_STATUS_CUSTOM_ERROR;
+    public void onDetect(
+            @NonNull ParcelFileDescriptor audioStream,
+            @NonNull AudioFormat audioFormat,
+            @DurationMillisLong long timeoutMillis,
+            @NonNull Callback callback) {
+        // TODO: Add a helpful error message.
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -279,10 +298,9 @@ public abstract class HotwordDetectionService extends Service {
      * such data to the trusted process.
      * @param callbackTimeoutMillis Timeout in milliseconds for the operation to invoke the
      * statusCallback.
-     * @param statusCallback Use this to return the updated result; the allowed values are
-     * {@link #INITIALIZATION_STATUS_SUCCESS}, 1<->{@link #getMaxCustomInitializationStatus()}.
-     * This is non-null only when the {@link HotwordDetectionService} is being initialized; and it
-     * is null if the state is updated after that.
+     * @param statusCallback Use this to return the updated result. This is non-null only when the
+     * {@link HotwordDetectionService} is being initialized; and it is null if the state is updated
+     * after that.
      *
      * @hide
      */
@@ -291,8 +309,36 @@ public abstract class HotwordDetectionService extends Service {
             @Nullable PersistableBundle options,
             @Nullable SharedMemory sharedMemory,
             @DurationMillisLong long callbackTimeoutMillis,
-            @Nullable IntConsumer statusCallback) {
+            @Nullable @InitializationStatus IntConsumer statusCallback) {
         // TODO: Handle the unimplemented case by throwing?
+    }
+
+    /**
+     * Called when the {@link VoiceInteractionService} requests that this service
+     * {@link HotwordDetector#startRecognition() start} hotword recognition on audio coming directly
+     * from the device microphone.
+     * <p>
+     * On such a request, the system streams mic audio to this service through {@code audioStream}.
+     * Audio is streamed until {@link HotwordDetector#stopRecognition()} is called, at which point
+     * the system closes {code audioStream}.
+     * <p>
+     * On successful detection of a hotword within {@code audioStream}, call
+     * {@link Callback#onDetected(HotwordDetectedResult)}. The system continues to stream audio
+     * through {@code audioStream}; {@code callback} is reusable.
+     *
+     * @param audioStream Stream containing audio bytes returned from a microphone
+     * @param audioFormat Format of the supplied audio
+     * @param callback The callback to use for responding to the detection request.
+     * {@link Callback#onRejected(HotwordRejectedResult) callback.onRejected} cannot be used here.
+     * @deprecated Implement {@link #onDetect(Callback)} instead.
+     */
+    @Deprecated
+    public void onDetect(
+            @NonNull ParcelFileDescriptor audioStream,
+            @NonNull AudioFormat audioFormat,
+            @NonNull Callback callback) {
+        // TODO: Add a helpful error message.
+        throw new UnsupportedOperationException();
     }
 
     /**
@@ -343,10 +389,6 @@ public abstract class HotwordDetectionService extends Service {
         if (callback != null) {
             intConsumer =
                     value -> {
-                        if (value > getMaxCustomInitializationStatus()) {
-                            throw new IllegalArgumentException(
-                                    "The initialization status is invalid for " + value);
-                        }
                         try {
                             Bundle status = new Bundle();
                             status.putInt(KEY_INITIALIZATION_STATUS, value);
@@ -357,15 +399,6 @@ public abstract class HotwordDetectionService extends Service {
                     };
         }
         onUpdateState(options, sharedMemory, UPDATE_TIMEOUT_MILLIS, intConsumer);
-    }
-
-    /**
-     * Called when the {@link VoiceInteractionService}
-     * {@link HotwordDetector#stopRecognition() requests} that hotword recognition be stopped.
-     * <p>
-     * Any open {@link android.media.AudioRecord} should be closed here.
-     */
-    public void onStopDetection() {
     }
 
     /**

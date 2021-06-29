@@ -20,9 +20,11 @@ import android.app.Instrumentation
 import android.content.Context
 import android.platform.test.annotations.Presubmit
 import android.system.helpers.ActivityHelper
+import android.util.Log
 import android.view.Surface
 import androidx.test.filters.FlakyTest
 import androidx.test.platform.app.InstrumentationRegistry
+import com.android.compatibility.common.util.SystemUtil
 import com.android.server.wm.flicker.FlickerBuilderProvider
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.dsl.FlickerBuilder
@@ -39,14 +41,10 @@ import com.android.server.wm.flicker.statusBarLayerIsAlwaysVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsAlwaysVisible
 import com.android.wm.shell.flicker.helpers.AppPairsHelper
-import com.android.wm.shell.flicker.helpers.BaseAppHelper
-import com.android.wm.shell.flicker.helpers.MultiWindowHelper.Companion.getDevEnableNonResizableMultiWindow
-import com.android.wm.shell.flicker.helpers.MultiWindowHelper.Companion.setDevEnableNonResizableMultiWindow
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import com.android.wm.shell.flicker.testapp.Components
-import org.junit.After
-import org.junit.Before
 import org.junit.Test
+import java.io.IOException
 
 abstract class AppPairsTransition(protected val testSpec: FlickerTestParameter) {
     protected val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
@@ -64,21 +62,6 @@ abstract class AppPairsTransition(protected val testSpec: FlickerTestParameter) 
     protected var primaryTaskId = ""
     protected var secondaryTaskId = ""
     protected var nonResizeableTaskId = ""
-    private var prevDevEnableNonResizableMultiWindow = 0
-
-    @Before
-    open fun setup() {
-        prevDevEnableNonResizableMultiWindow = getDevEnableNonResizableMultiWindow(context)
-        if (prevDevEnableNonResizableMultiWindow != 0) {
-            // Turn off the development option
-            setDevEnableNonResizableMultiWindow(context, 0)
-        }
-    }
-
-    @After
-    open fun teardown() {
-        setDevEnableNonResizableMultiWindow(context, prevDevEnableNonResizableMultiWindow)
-    }
 
     @FlickerBuilderProvider
     fun buildFlicker(): FlickerBuilder {
@@ -134,7 +117,11 @@ abstract class AppPairsTransition(protected val testSpec: FlickerTestParameter) 
     }
 
     internal fun executeShellCommand(cmd: String) {
-        BaseAppHelper.executeShellCommand(instrumentation, cmd)
+        try {
+            SystemUtil.runShellCommand(instrumentation, cmd)
+        } catch (e: IOException) {
+            Log.d("AppPairsTest", "executeShellCommand error! $e")
+        }
     }
 
     internal fun composePairsCommand(

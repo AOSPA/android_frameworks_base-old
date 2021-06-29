@@ -59,12 +59,11 @@ class PlayerViewHolder private constructor(itemView: View) {
     val action4 = itemView.requireViewById<ImageButton>(R.id.action4)
 
     // Settings screen
-    val longPressText = itemView.requireViewById<TextView>(R.id.remove_text)
+    val settingsText = itemView.requireViewById<TextView>(R.id.remove_text)
     val cancel = itemView.requireViewById<View>(R.id.cancel)
     val dismiss = itemView.requireViewById<ViewGroup>(R.id.dismiss)
     val dismissLabel = dismiss.getChildAt(0)
     val settings = itemView.requireViewById<View>(R.id.settings)
-    val settingsText = itemView.requireViewById<TextView>(R.id.settings_text)
 
     init {
         (player.background as IlluminationDrawable).let {
@@ -91,10 +90,6 @@ class PlayerViewHolder private constructor(itemView: View) {
                 throw IllegalArgumentException()
             }
         }
-    }
-
-    fun marquee(start: Boolean, delay: Long) {
-        longPressText.getHandler().postDelayed({ longPressText.setSelected(start) }, delay)
     }
 
     companion object {

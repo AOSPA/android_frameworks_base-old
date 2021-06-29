@@ -37,7 +37,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.CancellationSignal;
 import android.os.Parcelable;
-import android.os.UserHandle;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.util.Pair;
@@ -79,10 +78,6 @@ public class AppWidgetHostView extends FrameLayout {
     static final int VIEW_MODE_ERROR = 2;
     static final int VIEW_MODE_DEFAULT = 3;
 
-    // Set of valid colors resources.
-    private static final int FIRST_RESOURCE_COLOR_ID = android.R.color.system_neutral1_0;
-    private static final int LAST_RESOURCE_COLOR_ID = android.R.color.system_accent3_1000;
-
     // When we're inflating the initialLayout for a AppWidget, we only allow
     // views that are allowed in RemoteViews.
     private static final LayoutInflater.Filter INFLATER_FILTER =
@@ -102,7 +97,6 @@ public class AppWidgetHostView extends FrameLayout {
     private boolean mOnLightBackground;
     private SizeF mCurrentSize = null;
     private RemoteViews.ColorResources mColorResources = null;
-    private SparseIntArray mColorMapping = null;
     // Stores the last remote views last inflated.
     private RemoteViews mLastInflatedRemoteViews = null;
     private long mLastInflatedRemoteViewsId = -1;
@@ -719,10 +713,9 @@ public class AppWidgetHostView extends FrameLayout {
     protected Context getRemoteContext() {
         try {
             // Return if cloned successfully, otherwise default
-            final ApplicationInfo info = mInfo.providerInfo.applicationInfo;
-            Context newContext = mContext.createPackageContextAsUser(info.packageName,
-                    Context.CONTEXT_RESTRICTED,
-                    UserHandle.getUserHandleForUid(info.uid));
+            Context newContext = mContext.createApplicationContext(
+                    mInfo.providerInfo.applicationInfo,
+                    Context.CONTEXT_RESTRICTED);
             if (mColorResources != null) {
                 mColorResources.apply(newContext);
             }
@@ -895,28 +888,10 @@ public class AppWidgetHostView extends FrameLayout {
      * {@link android.R.color#system_neutral1_500}.
      */
     public void setColorResources(@NonNull SparseIntArray colorMapping) {
-        if (mColorMapping != null && isSameColorMapping(mColorMapping, colorMapping)) {
-            return;
-        }
-        mColorMapping = colorMapping.clone();
-        mColorResources = RemoteViews.ColorResources.create(mContext, mColorMapping);
+        mColorResources = RemoteViews.ColorResources.create(mContext, colorMapping);
         mLayoutId = -1;
         mViewMode = VIEW_MODE_NOINIT;
         reapplyLastRemoteViews();
-    }
-
-    /** Check if, in the current context, the two color mappings are equivalent. */
-    private boolean isSameColorMapping(SparseIntArray oldColors, SparseIntArray newColors) {
-        if (oldColors.size() != newColors.size()) {
-            return false;
-        }
-        for (int i = 0; i < oldColors.size(); i++) {
-            if (oldColors.keyAt(i) != newColors.keyAt(i)
-                    || oldColors.valueAt(i) != newColors.valueAt(i)) {
-                return false;
-            }
-        }
-        return true;
     }
 
     /**
@@ -929,7 +904,6 @@ public class AppWidgetHostView extends FrameLayout {
     public void resetColorResources() {
         if (mColorResources != null) {
             mColorResources = null;
-            mColorMapping = null;
             mLayoutId = -1;
             mViewMode = VIEW_MODE_NOINIT;
             reapplyLastRemoteViews();

@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.notification.init
 
+import android.content.Context
 import android.service.notification.StatusBarNotification
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.people.widget.PeopleSpaceWidgetManager
@@ -29,7 +30,6 @@ import com.android.systemui.statusbar.notification.NotificationClicker
 import com.android.systemui.statusbar.notification.NotificationEntryManager
 import com.android.systemui.statusbar.notification.NotificationListController
 import com.android.systemui.statusbar.notification.collection.NotifPipeline
-import com.android.systemui.statusbar.notification.collection.NotificationRankingManager
 import com.android.systemui.statusbar.notification.collection.TargetSdkResolver
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinderImpl
 import com.android.systemui.statusbar.notification.collection.init.NotifPipelineInitializer
@@ -59,10 +59,10 @@ import javax.inject.Inject
  */
 @SysUISingleton
 class NotificationsControllerImpl @Inject constructor(
+    private val context: Context,
     private val featureFlags: FeatureFlags,
     private val notificationListener: NotificationListener,
     private val entryManager: NotificationEntryManager,
-    private val legacyRanker: NotificationRankingManager,
     private val notifPipeline: Lazy<NotifPipeline>,
     private val targetSdkResolver: TargetSdkResolver,
     private val newNotifPipeline: Lazy<NotifPipelineInitializer>,
@@ -128,7 +128,6 @@ class NotificationsControllerImpl @Inject constructor(
             groupManagerLegacy.get().setHeadsUpManager(headsUpManager)
             groupAlertTransferHelper.setHeadsUpManager(headsUpManager)
 
-            entryManager.setRanker(legacyRanker)
             entryManager.attach(notificationListener)
         }
 
@@ -170,5 +169,11 @@ class NotificationsControllerImpl @Inject constructor(
 
     override fun getActiveNotificationsCount(): Int {
         return entryManager.activeNotificationsCount
+    }
+
+    override fun setNotificationSnoozed(sbn: StatusBarNotification, hoursToSnooze: Int) {
+        notificationListener.snoozeNotification(
+                sbn.key,
+                hoursToSnooze * 60 * 60 * 1000.toLong())
     }
 }

@@ -68,9 +68,7 @@ public class UsbDebuggingActivity extends AlertActivity
 
         super.onCreate(icicle);
 
-        // Emulator does not support reseating the usb cable to reshow the dialog.
-        boolean isEmulator = SystemProperties.get("ro.boot.qemu").equals("1");
-        if (SystemProperties.getInt("service.adb.tcp.port", 0) == 0 && !isEmulator) {
+        if (SystemProperties.getInt("service.adb.tcp.port", 0) == 0) {
             mDisconnectedReceiver = new UsbDisconnectedReceiver(this);
             IntentFilter filter = new IntentFilter(UsbManager.ACTION_USB_STATE);
             mBroadcastDispatcher.registerReceiver(mDisconnectedReceiver, filter);

@@ -27,7 +27,6 @@ import android.testing.TestableLooper;
 import androidx.test.filters.SmallTest;
 
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.util.concurrency.FakeExecution;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
 
@@ -55,8 +54,7 @@ public class ProximitySensorDualTest extends SysuiTestCase {
         mThresholdSensorSecondary.setLoaded(true);
 
         mProximitySensor = new ProximitySensor(
-                mThresholdSensorPrimary, mThresholdSensorSecondary, mFakeExecutor,
-                new FakeExecution());
+                mThresholdSensorPrimary, mThresholdSensorSecondary, mFakeExecutor);
     }
 
     @Test
@@ -326,10 +324,9 @@ public class ProximitySensorDualTest extends SysuiTestCase {
 
         TestableListener listener = new TestableListener();
 
-        // WE immediately register the secondary sensor.
         mProximitySensor.register(listener);
         assertFalse(mThresholdSensorPrimary.isPaused());
-        assertFalse(mThresholdSensorSecondary.isPaused());
+        assertTrue(mThresholdSensorSecondary.isPaused());
         assertNull(listener.mLastEvent);
         assertEquals(0, listener.mCallCount);
 

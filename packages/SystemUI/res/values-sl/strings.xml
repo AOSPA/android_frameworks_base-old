@@ -136,7 +136,6 @@
     <string name="accessibility_camera_button" msgid="2938898391716647247">"Fotoaparat"</string>
     <string name="accessibility_phone_button" msgid="4256353121703100427">"Telefon"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"Glasovni pomočnik"</string>
-    <string name="accessibility_wallet_button" msgid="1458258783460555507">"Google Denarnica"</string>
     <string name="accessibility_unlock_button" msgid="122785427241471085">"Odkleni"</string>
     <string name="accessibility_lock_icon" msgid="661492842417875775">"Naprava je zaklenjena."</string>
     <string name="accessibility_waiting_for_fingerprint" msgid="5209142744692162598">"Čakanje na prstni odtis"</string>
@@ -290,7 +289,11 @@
     <string name="accessibility_quick_settings_hotspot_changed_off" msgid="7002061268910095176">"Mobilna dostopna točka je izklopljena."</string>
     <string name="accessibility_quick_settings_hotspot_changed_on" msgid="2576895346762408840">"Mobilna dostopna točka je vklopljena."</string>
     <string name="accessibility_casting_turned_off" msgid="1387906158563374962">"Predvajanje zaslona je ustavljeno."</string>
-    <string name="accessibility_quick_settings_work_mode_changed_off" msgid="6422896967647049692">"Način za delo je začasno zaustavljen."</string>
+    <!-- no translation found for accessibility_quick_settings_work_mode_off (9106217884005620744) -->
+    <skip />
+    <string name="accessibility_quick_settings_work_mode_on" msgid="2779253456042059110">"Način za delo vklopljen."</string>
+    <!-- no translation found for accessibility_quick_settings_work_mode_changed_off (2653550342355027441) -->
+    <skip />
     <string name="accessibility_quick_settings_work_mode_changed_on" msgid="1105258550138313384">"Način za delo je vklopljen."</string>
     <string name="accessibility_quick_settings_data_saver_changed_off" msgid="4910847127871603832">"Varčevanje s podatki je izklopljeno."</string>
     <string name="accessibility_quick_settings_data_saver_changed_on" msgid="6370606590802623078">"Varčevanje s podatki je vklopljeno."</string>
@@ -412,7 +415,9 @@
     <string name="quick_settings_cellular_detail_data_used" msgid="6798849610647988987">"Preneseno: <xliff:g id="DATA_USED">%s</xliff:g>"</string>
     <string name="quick_settings_cellular_detail_data_limit" msgid="1791389609409211628">"Omejitev: <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
     <string name="quick_settings_cellular_detail_data_warning" msgid="7957253810481086455">"Opozorilo – <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
-    <string name="quick_settings_work_mode_label" msgid="6440531507319809121">"Delovne aplikacije"</string>
+    <string name="quick_settings_work_mode_label" msgid="2754212289804324685">"Delovni profil"</string>
+    <!-- no translation found for quick_settings_work_mode_paused (4841109346916998613) -->
+    <skip />
     <string name="quick_settings_night_display_label" msgid="8180030659141778180">"Nočna svetloba"</string>
     <string name="quick_settings_night_secondary_label_on_at_sunset" msgid="3358706312129866626">"Ob sončnem zahodu"</string>
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4063448287758262485">"Do sončnega vzhoda"</string>
@@ -427,7 +432,7 @@
     <string name="quick_settings_nfc_label" msgid="1054317416221168085">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="3465000058515424663">"Tehnologija NFC je onemogočena"</string>
     <string name="quick_settings_nfc_on" msgid="1004976611203202230">"Tehnologija NFC je omogočena"</string>
-    <string name="quick_settings_screen_record_label" msgid="8650355346742003694">"Snemanje zaslona"</string>
+    <string name="quick_settings_screen_record_label" msgid="1594046461509776676">"Snemanje zaslona"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"Začni"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"Ustavi"</string>
     <string name="sensor_privacy_start_use_mic_dialog_title" msgid="563796653825944944">"Želite odblokirati mikrofon v napravi?"</string>
@@ -456,7 +461,6 @@
     <string name="keyguard_more_overflow_text" msgid="5819512373606638727">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="7248696377626341060">"Manj nujna obvestila spodaj"</string>
     <string name="notification_tap_again" msgid="4477318164947497249">"Znova se dotaknite, da odprete"</string>
-    <string name="tap_again" msgid="1315420114387908655">"Znova se dotaknite možnosti"</string>
     <string name="keyguard_unlock" msgid="8031975796351361601">"Povlecite navzgor, da odprete"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Povlecite navzgor za vnovičen poskus"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Odklenite napravo, če želite uporabljati NFC."</string>
@@ -473,10 +477,14 @@
     <string name="interruption_level_none_twoline" msgid="8579382742855486372">"Popolna\ntišina"</string>
     <string name="interruption_level_priority_twoline" msgid="8523482736582498083">"Samo\nprednostno"</string>
     <string name="interruption_level_alarms_twoline" msgid="2045067991335708767">"Samo\nalarmi"</string>
-    <string name="keyguard_indication_charging_time_wireless" msgid="577856646141738675">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Brezžično polnjenje • Napolnjeno čez <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
-    <string name="keyguard_indication_charging_time" msgid="6492711711891071502">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Polnjenje • Napolnjeno čez <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
-    <string name="keyguard_indication_charging_time_fast" msgid="8390311020603859480">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Hitro polnjenje • Napolnjeno čez <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
-    <string name="keyguard_indication_charging_time_slowly" msgid="301936949731705417">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Počasno polnjenje • Napolnjeno čez <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
+    <!-- no translation found for keyguard_indication_charging_time_wireless (577856646141738675) -->
+    <skip />
+    <!-- no translation found for keyguard_indication_charging_time (6492711711891071502) -->
+    <skip />
+    <!-- no translation found for keyguard_indication_charging_time_fast (8390311020603859480) -->
+    <skip />
+    <!-- no translation found for keyguard_indication_charging_time_slowly (301936949731705417) -->
+    <skip />
     <string name="accessibility_multi_user_switch_switcher" msgid="5330448341251092660">"Preklop med uporabniki"</string>
     <string name="accessibility_multi_user_switch_switcher_with_current" msgid="5759855008166759399">"Preklop med uporabniki, trenutni uporabnik <xliff:g id="CURRENT_USER_NAME">%s</xliff:g>"</string>
     <string name="accessibility_multi_user_switch_inactive" msgid="383168614528618402">"Trenutni uporabnik: <xliff:g id="CURRENT_USER_NAME">%s</xliff:g>"</string>
@@ -622,8 +630,8 @@
     <string name="screen_pinning_toast_gesture_nav" msgid="170699893395336705">"Če želite odpeti to aplikacijo, povlecite navzgor in pridržite."</string>
     <string name="screen_pinning_positive" msgid="3285785989665266984">"Razumem"</string>
     <string name="screen_pinning_negative" msgid="6882816864569211666">"Ne, hvala"</string>
-    <string name="screen_pinning_start" msgid="7483998671383371313">"Aplikacija je pripeta."</string>
-    <string name="screen_pinning_exit" msgid="4553787518387346893">"Aplikacija je odpeta."</string>
+    <string name="screen_pinning_start" msgid="7483998671383371313">"Aplikacija je pripeta"</string>
+    <string name="screen_pinning_exit" msgid="4553787518387346893">"Aplikacija je odpeta"</string>
     <string name="quick_settings_reset_confirmation_title" msgid="463533331480997595">"Želite skriti <xliff:g id="TILE_LABEL">%1$s</xliff:g>?"</string>
     <string name="quick_settings_reset_confirmation_message" msgid="2320586180785674186">"Znova se bo pojavila, ko jo naslednjič vklopite v nastavitvah."</string>
     <string name="quick_settings_reset_confirmation_button" msgid="3341477479055016776">"Skrij"</string>
@@ -672,13 +680,14 @@
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Opozorilo"</string>
     <string name="wallet_title" msgid="5369767670735827105">"Denarnica"</string>
-    <string name="wallet_empty_state_label" msgid="7776761245237530394">"Nastavite možnost hitrejšega in varnejšega plačevanja s telefonom."</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Prikaži vse"</string>
     <string name="wallet_action_button_label_unlock" msgid="8663239748726774487">"Odklenite za plačevanje"</string>
-    <string name="wallet_secondary_label_no_card" msgid="1282609666895946317">"Ni nastavljeno"</string>
+    <!-- no translation found for wallet_secondary_label_no_card (1282609666895946317) -->
+    <skip />
     <string name="wallet_secondary_label_device_locked" msgid="5175862019125370506">"Odklenite za uporabo"</string>
     <string name="wallet_error_generic" msgid="257704570182963611">"Pri pridobivanju kartic je prišlo do težave. Poskusite znova pozneje."</string>
-    <string name="wallet_lockscreen_settings_label" msgid="3539105300870383570">"Nastavitve zaklepanja zaslona"</string>
+    <!-- no translation found for wallet_lockscreen_settings_label (3539105300870383570) -->
+    <skip />
     <string name="status_bar_work" msgid="5238641949837091056">"Profil za Android Work"</string>
     <string name="status_bar_airplane" msgid="4848702508684541009">"Način za letalo"</string>
     <string name="add_tile" msgid="6239678623873086686">"Dodajanje ploščice"</string>
@@ -737,7 +746,7 @@
     <string name="notification_silence_title" msgid="8608090968400832335">"Tiho"</string>
     <string name="notification_alert_title" msgid="3656229781017543655">"Privzeto"</string>
     <string name="notification_automatic_title" msgid="3745465364578762652">"Samodejno"</string>
-    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Brez zvočnega opozarjanja ali vibriranja."</string>
+    <string name="notification_channel_summary_low" msgid="4860617986908931158">"Brez zvočnega opozarjanja ali vibriranja"</string>
     <string name="notification_conversation_summary_low" msgid="1734433426085468009">"Brez zvočnega opozarjanja ali vibriranja, prikaz nižje v razdelku Pogovor."</string>
     <string name="notification_channel_summary_default" msgid="3282930979307248890">"Zvonjenje ali vibriranje je omogočeno na podlagi nastavitev telefona."</string>
     <string name="notification_channel_summary_default_with_bubbles" msgid="1782419896613644568">"Zvonjenje ali vibriranje je omogočeno na podlagi nastavitev telefona. Pogovori v aplikaciji <xliff:g id="APP_NAME">%1$s</xliff:g> so privzeto prikazani v oblačkih."</string>
@@ -748,7 +757,7 @@
     <string name="notification_channel_summary_automatic_promoted" msgid="1301710305149590426">"&lt;b&gt;Stanje:&lt;/b&gt; Uvrščeno višje"</string>
     <string name="notification_channel_summary_automatic_demoted" msgid="1831303964660807700">"&lt;b&gt;Stanje:&lt;/b&gt; Uvrščeno nižje"</string>
     <string name="notification_channel_summary_priority_baseline" msgid="46674690072551234">"Prikaz na vrhu razdelka z obvestili za pogovor in kot profilna slika na zaklenjenem zaslonu"</string>
-    <string name="notification_channel_summary_priority_bubble" msgid="1275413109619074576">"Prikaz v obliki oblačka na vrhu razdelka z obvestili za pogovor in kot profilna slika na zaklenjenem zaslonu."</string>
+    <string name="notification_channel_summary_priority_bubble" msgid="1275413109619074576">"Prikaz v obliki oblačka na vrhu razdelka z obvestili za pogovor in kot profilna slika na zaklenjenem zaslonu"</string>
     <string name="notification_channel_summary_priority_dnd" msgid="6665395023264154361">"Prikaz na vrhu razdelka z obvestili za pogovor in kot profilna slika na zaklenjenem zaslonu, preglasitev načina Ne moti"</string>
     <string name="notification_channel_summary_priority_all" msgid="7151752959650048285">"Prikaz v obliki oblačka na vrhu razdelka z obvestili za pogovor in kot profilna slika na zaklenjenem zaslonu, preglasitev načina Ne moti"</string>
     <string name="notification_conversation_channel_settings" msgid="2409977688430606835">"Nastavitve"</string>
@@ -872,7 +881,8 @@
     <string name="switch_bar_on" msgid="1770868129120096114">"Vklopljeno"</string>
     <string name="switch_bar_off" msgid="5669805115416379556">"Izklopljeno"</string>
     <string name="tile_unavailable" msgid="3095879009136616920">"Ni na voljo"</string>
-    <string name="tile_disabled" msgid="373212051546573069">"Onemogočeno"</string>
+    <!-- no translation found for tile_disabled (373212051546573069) -->
+    <skip />
     <string name="nav_bar" msgid="4642708685386136807">"Vrstica za krmarjenje"</string>
     <string name="nav_bar_layout" msgid="4716392484772899544">"Postavitev"</string>
     <string name="left_nav_bar_button_type" msgid="2634852842345192790">"Vrsta dodatnega levega gumba"</string>
@@ -900,8 +910,8 @@
     <string name="right_keycode" msgid="2480715509844798438">"Desna koda tipke"</string>
     <string name="left_icon" msgid="5036278531966897006">"Leva ikona"</string>
     <string name="right_icon" msgid="1103955040645237425">"Desna ikona"</string>
-    <string name="drag_to_add_tiles" msgid="8933270127508303672">"Držite in povlecite, da dodate ploščice."</string>
-    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Držite in povlecite, da prerazporedite ploščice."</string>
+    <string name="drag_to_add_tiles" msgid="8933270127508303672">"Držite in povlecite, da dodate ploščice"</string>
+    <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Držite in povlecite, da prerazporedite ploščice"</string>
     <string name="drag_to_remove_tiles" msgid="4682194717573850385">"Če želite odstraniti, povlecite sem"</string>
     <string name="drag_to_remove_disabled" msgid="933046987838658850">"Imeti morate vsaj toliko ploščic: <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g>"</string>
     <string name="qs_edit" msgid="5583565172803472437">"Uredi"</string>
@@ -1052,7 +1062,10 @@
     <string name="accessibility_floating_button_action_move_to_edge_and_hide_to_half" msgid="662401168245782658">"Premakni na rob in skrij"</string>
     <string name="accessibility_floating_button_action_move_out_edge_and_show" msgid="8354760891651663326">"Premakni z roba in pokaži"</string>
     <string name="accessibility_floating_button_action_double_tap_to_toggle" msgid="7976492639670692037">"preklop"</string>
-    <string name="quick_controls_title" msgid="7095074621086860062">"Kontrolniki za dom"</string>
+    <string name="quick_controls_title" msgid="6839108006171302273">"Kontrolniki naprave"</string>
+    <string name="quick_controls_subtitle" msgid="1667408093326318053">"Dodajte kontrolnike za povezane naprave."</string>
+    <string name="quick_controls_setup_title" msgid="8901436655997849822">"Nastavitev kontrolnikov naprave"</string>
+    <string name="quick_controls_setup_subtitle" msgid="1681506617879773824">"Za dostop do kontrolnikov pridržite gumb za vklop"</string>
     <string name="controls_providers_title" msgid="6879775889857085056">"Izberite aplikacijo za dodajanje kontrolnikov"</string>
     <plurals name="controls_number_of_favorites" formatted="false" msgid="1057347832073807380">
       <item quantity="one"><xliff:g id="NUMBER_1">%s</xliff:g> kontrolnik dodan.</item>
@@ -1068,7 +1081,7 @@
     <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"odstranitev iz priljubljenih"</string>
     <string name="accessibility_control_move" msgid="8980344493796647792">"Premakni na položaj <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kontrolniki"</string>
-    <string name="controls_favorite_subtitle" msgid="6481675111056961083">"Izberite kontrolnike, do katerih želite imeti dostop v hitrih nastavitvah."</string>
+    <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Izberite kontrolnike, do katerih želite imeti dostop prek menija za vklop/izklop."</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Držite in povlecite, da prerazporedite kontrolnike."</string>
     <string name="controls_favorite_removed" msgid="5276978408529217272">"Vsi kontrolniki so bili odstranjeni."</string>
     <string name="controls_favorite_toast_no_changes" msgid="7094494210840877931">"Spremembe niso shranjene"</string>
@@ -1097,11 +1110,7 @@
     <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Opusti"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Nadaljuj"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Nastavitve"</string>
-    <string name="controls_media_playing_item_description" msgid="4531853311504359098">"Skladba <xliff:g id="SONG_NAME">%1$s</xliff:g> izvajalca <xliff:g id="ARTIST_NAME">%2$s</xliff:g> se predvaja iz aplikacije <xliff:g id="APP_LABEL">%3$s</xliff:g>."</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"Predvajaj"</string>
-    <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"Odpri aplikacijo <xliff:g id="APP_LABEL">%1$s</xliff:g>."</string>
-    <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"Predvajaj skladbo <xliff:g id="SONG_NAME">%1$s</xliff:g> izvajalca <xliff:g id="ARTIST_NAME">%2$s</xliff:g> iz aplikacije <xliff:g id="APP_LABEL">%3$s</xliff:g>."</string>
-    <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"Predvajaj skladbo <xliff:g id="SONG_NAME">%1$s</xliff:g> iz aplikacije <xliff:g id="APP_LABEL">%2$s</xliff:g>."</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Neaktivno, poglejte aplikacijo"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Napaka, vnovični poskus …"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"Ni mogoče najti"</string>
@@ -1111,9 +1120,9 @@
     <string name="controls_error_generic" msgid="352500456918362905">"Stanja ni mogoče naložiti"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Napaka, poskusite znova"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"V teku"</string>
-    <string name="controls_added_tooltip" msgid="5866098408470111984">"Za ogled novih kontrolnikov odprite hitre nastavitve."</string>
-    <string name="controls_menu_add" msgid="4447246119229920050">"Dodajte kontrolnike"</string>
-    <string name="controls_menu_edit" msgid="890623986951347062">"Uredite kontrolnike"</string>
+    <string name="controls_added_tooltip" msgid="4842812921719153085">"Za ogled novih kontrolnikov pridržite gumb za vklop"</string>
+    <string name="controls_menu_add" msgid="4447246119229920050">"Dodaj kontrolnike"</string>
+    <string name="controls_menu_edit" msgid="890623986951347062">"Uredi kontrolnike"</string>
     <string name="media_output_dialog_add_output" msgid="5642703238877329518">"Dodajanje izhodov"</string>
     <string name="media_output_dialog_group" msgid="5571251347877452212">"Skupina"</string>
     <string name="media_output_dialog_single_device" msgid="3102758980643351058">"Izbrana je ena naprava"</string>
@@ -1130,11 +1139,9 @@
     <string name="priority_conversations" msgid="3967482288896653039">"Prednostni pogovori"</string>
     <string name="recent_conversations" msgid="8531874684782574622">"Nedavni pogovori"</string>
     <string name="okay" msgid="6490552955618608554">"V redu"</string>
-    <string name="days_timestamp" msgid="5821854736213214331">"Pred več dnevi (<xliff:g id="DURATION">%1$s</xliff:g>)"</string>
-    <string name="one_week_timestamp" msgid="4925600765473875590">"Pred 1 tednom"</string>
-    <string name="two_weeks_timestamp" msgid="9111801081871962155">"Pred 2 tednoma"</string>
-    <string name="over_one_week_timestamp" msgid="3770560704420807142">"Pred več kot 1 tednom"</string>
-    <string name="over_two_weeks_timestamp" msgid="6300507859007874050">"Pred več kot 2 tednoma"</string>
+    <string name="timestamp" msgid="6577851592534538533">"pred <xliff:g id="DURATION">%1$s</xliff:g>"</string>
+    <string name="less_than_timestamp" msgid="6598972791137724517">"Pred manj kot <xliff:g id="DURATION">%1$s</xliff:g>"</string>
+    <string name="over_timestamp" msgid="4765793502859358634">"Pred več kot <xliff:g id="DURATION">%1$s</xliff:g>"</string>
     <string name="birthday_status" msgid="2596961629465396761">"Rojstni dan"</string>
     <string name="birthday_status_content_description" msgid="682836371128282925">"<xliff:g id="NAME">%1$s</xliff:g> ima rojstni dan."</string>
     <string name="upcoming_birthday_status" msgid="2005452239256870351">"Rojstni dan se bliža"</string>
@@ -1165,6 +1172,4 @@
     <string name="accessibility_authenticate_hint" msgid="798914151813205721">"preverjanje pristnosti"</string>
     <string name="accessibility_enter_hint" msgid="2617864063504824834">"vstop v napravo"</string>
     <string name="keyguard_try_fingerprint" msgid="2825130772993061165">"Odprite s prstnim odtisom"</string>
-    <string name="accessibility_fingerprint_bouncer" msgid="7189102492498735519">"Zahtevano je preverjanje pristnosti. Za preverjanje pristnosti se dotaknite tipala prstnih odtisov."</string>
-    <string name="ongoing_phone_call_content_description" msgid="5332334388483099947">"Poteka klic"</string>
 </resources>

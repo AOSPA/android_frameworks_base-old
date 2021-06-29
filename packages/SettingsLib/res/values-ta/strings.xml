@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"வயர்லெஸ் காட்சிக்கான சான்றிதழ்"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"வைஃபை அதிவிவர நுழைவை இயக்கு"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"வைஃபை ஸ்கேனிங்கை வரம்பிடுதல்"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"வைஃபையில், மாறுபடும் MAC முகவரியைக் காண்பித்தல்"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"வைஃபை மேம்பாட்டுடன் MAC ரேண்டம் ஆக்குதல்"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"மொபைல் டேட்டாவை எப்போதும் இயக்கத்திலேயே வை"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"வன்பொருள் விரைவுப்படுத்துதல் இணைப்பு முறை"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"பெயர்கள் இல்லாத புளூடூத் சாதனங்களைக் காட்டு"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"கிளிப் எல்லைகள், ஓரங்கள், மேலும் பலவற்றைக் காட்டு"</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"RTL தளவமைப்பின் திசையை வலியுறுத்து"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"எல்லா மொழிகளுக்கும் திரையின் தளவமைப்பு திசையை RTL க்கு மாற்று"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"திரை-நிலை மங்கலை அனுமதி"</string>
     <string name="force_msaa" msgid="4081288296137775550">"4x MSAA ஐ வலியுறுத்து"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"OpenGL ES 2.0 பயன்பாடுகளில் 4x MSAA ஐ இயக்கு"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"செவ்வகம் அல்லாத கிளிப் செயல்பாடுகளைப் பிழைத்திருத்து"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"முழுவதும் சார்ஜாக <xliff:g id="TIME">%1$s</xliff:g> ஆகும்"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - முழுவதும் சார்ஜாக <xliff:g id="TIME">%2$s</xliff:g> ஆகும்"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - சார்ஜாவது தற்காலிகமாக வரம்பிடப்பட்டுள்ளது"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - பேட்டரியின் ஆயுளை மேம்படுத்துகிறது"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"அறியப்படாத"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"சார்ஜ் ஆகிறது"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"வேகமாக சார்ஜாகிறது"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"மெதுவாக சார்ஜாகிறது"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"வயரின்றி சார்ஜாகிறது"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"சார்ஜ் செய்யப்படவில்லை"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"இணைக்கப்பட்டுள்ளது, சார்ஜாகவில்லை"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"செருகப்பட்டது, ஆனால் இப்போது சார்ஜ் செய்ய முடியவில்லை"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"சார்ஜாகிவிட்டது"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"நிர்வாகி கட்டுப்படுத்துகிறார்"</string>
     <string name="disabled" msgid="8017887509554714950">"முடக்கப்பட்டது"</string>
@@ -508,7 +507,9 @@
     <!-- unknown quoting pattern: original -1, translation 1 -->
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"அலாரங்கள் &amp;amp; நினைவூட்டல்களை அமைக்க அனுமதித்தல்"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"அலாரங்கள் &amp; நினைவூட்டல்கள்"</string>
-    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"அலாரங்களை அமைக்கவும் குறிப்பிட்ட கால இடைவெளியில் செயல்களைத் திட்டமிடவும் இந்த ஆப்ஸை அனுமதிக்கும். இது ஆப்ஸ் பின்னணியில் இயங்குவதை அனுமதிக்கும், இதற்காக அதிக பேட்டரியைப் பயன்படுத்தக்கூடும்.\n\nஇந்த அனுமதி முடக்கப்பட்டிருந்தால் இந்த ஆப்ஸ் மூலம் திட்டமிடப்பட்ட ஏற்கெனவே அமைத்த அலாரங்களும் நேர அடிப்படையிலான நிகழ்வுகளும் வேலை செய்யாது."</string>
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"அலாரங்களை அமைக்கவும் பிற செயல்களைத் திட்டமிடவும் இந்த ஆப்ஸை அனுமதிக்கும். உங்கள் மொபைலை உபயோகிக்காதபோதும் இந்த ஆப்ஸ் பயன்படுத்தப்படக்கூடும், இதனால் பேட்டரி அதிகமாகப் பயன்படுத்தப்படலாம். ஆப்ஸுக்கான அனுமதி முடக்கப்பட்டிருந்தால், அது இயல்பாகச் செயல்படாமல் போகலாம். மேலும் இதன் அலாரங்களும் திட்டமிட்டபடி இயங்காது."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"அலாரங்களை அமைக்கவும் பிற செயல்களைத் திட்டமிடவும் இந்த ஆப்ஸை அனுமதிக்கும். உங்கள் டேப்லெட்டை உபயோகிக்காதபோதும் இந்த ஆப்ஸ் பயன்படுத்தப்படக்கூடும், இதனால் பேட்டரி அதிகமாகப் பயன்படுத்தப்படலாம். ஆப்ஸுக்கான அனுமதி முடக்கப்பட்டிருந்தால், அது இயல்பாகச் செயல்படாமல் போகலாம். மேலும் இதன் அலாரங்களும் திட்டமிட்டபடி இயங்காது."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"அலாரங்களை அமைக்கவும் பிற செயல்களைத் திட்டமிடவும் இந்த ஆப்ஸை அனுமதிக்கும். உங்கள் சாதனத்தை உபயோகிக்காதபோதும் இந்த ஆப்ஸ் பயன்படுத்தப்படக்கூடும், இதனால் பேட்டரி அதிகமாகப் பயன்படுத்தப்படலாம். ஆப்ஸுக்கான அனுமதி முடக்கப்பட்டிருந்தால், அது இயல்பாகச் செயல்படாமல் போகலாம். மேலும் இதன் அலாரங்களும் திட்டமிட்டபடி இயங்காது."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"திட்டமிடல், அலாரம், நினைவூட்டல், கடிகாரம்"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"ஆன் செய்"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"தொந்தரவு செய்ய வேண்டாம் என்பதை ஆன் செய்யும்"</string>

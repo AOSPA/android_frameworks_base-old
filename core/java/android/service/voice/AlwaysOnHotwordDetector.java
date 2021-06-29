@@ -49,6 +49,7 @@ import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.os.SharedMemory;
+import android.service.voice.HotwordDetectionService.InitializationStatus;
 import android.util.Log;
 import android.util.Slog;
 
@@ -354,13 +355,6 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
                     null);
         }
 
-        EventPayload(boolean triggerAvailable, boolean captureAvailable,
-                AudioFormat audioFormat, int captureSession, byte[] data,
-                HotwordDetectedResult hotwordDetectedResult) {
-            this(triggerAvailable, captureAvailable, audioFormat, captureSession, data,
-                    hotwordDetectedResult, null);
-        }
-
         EventPayload(AudioFormat audioFormat, HotwordDetectedResult hotwordDetectedResult) {
             this(false, false, audioFormat, -1, null, hotwordDetectedResult, null);
         }
@@ -537,12 +531,9 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
          * Called when the {@link HotwordDetectionService} is created by the system and given a
          * short amount of time to report it's initialization state.
          *
-         * @param status Info about initialization state of {@link HotwordDetectionService}; the
-         * allowed values are {@link HotwordDetectionService#INITIALIZATION_STATUS_SUCCESS},
-         * 1<->{@link HotwordDetectionService#getMaxCustomInitializationStatus()},
-         * {@link HotwordDetectionService#INITIALIZATION_STATUS_UNKNOWN}.
+         * @param status Info about initialization state of {@link HotwordDetectionService}.
          */
-        public void onHotwordDetectionServiceInitialized(int status) {
+        public void onHotwordDetectionServiceInitialized(@InitializationStatus int status) {
         }
 
         /**
@@ -1156,8 +1147,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
         }
 
         @Override
-        public void onKeyphraseDetected(
-                KeyphraseRecognitionEvent event, HotwordDetectedResult result) {
+        public void onKeyphraseDetected(KeyphraseRecognitionEvent event) {
             if (DBG) {
                 Slog.d(TAG, "onDetected(" + event + ")");
             } else {
@@ -1165,7 +1155,7 @@ public class AlwaysOnHotwordDetector extends AbstractHotwordDetector {
             }
             Message.obtain(mHandler, MSG_HOTWORD_DETECTED,
                     new EventPayload(event.triggerInData, event.captureAvailable,
-                            event.captureFormat, event.captureSession, event.data, result))
+                            event.captureFormat, event.captureSession, event.data))
                     .sendToTarget();
         }
         @Override

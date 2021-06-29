@@ -144,7 +144,7 @@ public class SQLiteCursor extends AbstractWindowedCursor {
             if (mCount == NO_COUNT) {
                 mCount = mQuery.fillWindow(mWindow, requiredPos, requiredPos, true);
                 mCursorWindowCapacity = mWindow.getNumRows();
-                if (SQLiteDebug.NoPreloadHolder.DEBUG_SQL_LOG) {
+                if (Log.isLoggable(TAG, Log.DEBUG)) {
                     Log.d(TAG, "received count(*) from native_fill_window: " + mCount);
                 }
             } else {

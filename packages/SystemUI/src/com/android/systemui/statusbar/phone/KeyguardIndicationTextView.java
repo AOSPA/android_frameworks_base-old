@@ -38,7 +38,7 @@ import java.util.LinkedList;
  * A view to show hints on Keyguard ("Swipe up to unlock", "Tap again to open").
  */
 public class KeyguardIndicationTextView extends TextView {
-    private static final long MSG_DURATION_MILLIS = 1500;
+    private static final long MSG_DURATION_MILLIS = 600;
     private long mNextAnimationTime = 0;
     private boolean mAnimationsEnabled = true;
     private LinkedList<CharSequence> mMessages = new LinkedList<>();
@@ -142,6 +142,7 @@ public class KeyguardIndicationTextView extends TextView {
         Animator yTranslate =
                 ObjectAnimator.ofFloat(this, View.TRANSLATION_Y, 0, -getYTranslationPixels());
         yTranslate.setDuration(getFadeOutDuration());
+        fadeOut.setInterpolator(Interpolators.FAST_OUT_LINEAR_IN);
         animatorSet.playTogether(fadeOut, yTranslate);
 
         return animatorSet;

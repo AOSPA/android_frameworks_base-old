@@ -55,9 +55,8 @@ class ControlsProviderSelectorActivity @Inject constructor(
 
     companion object {
         private const val TAG = "ControlsProviderSelectorActivity"
-        const val BACK_SHOULD_EXIT = "back_should_exit"
     }
-    private var backShouldExit = false
+
     private lateinit var recyclerView: RecyclerView
     private val currentUserTracker = object : CurrentUserTracker(broadcastDispatcher) {
         private val startingUser = listingController.currentUserId
@@ -103,17 +102,13 @@ class ControlsProviderSelectorActivity @Inject constructor(
             }
         }
         requireViewById<View>(R.id.done).visibility = View.GONE
-
-        backShouldExit = intent.getBooleanExtra(BACK_SHOULD_EXIT, false)
     }
 
     override fun onBackPressed() {
-        if (!backShouldExit) {
-            val i = Intent().apply {
-                component = ComponentName(applicationContext, ControlsActivity::class.java)
-            }
-            startActivity(i, ActivityOptions.makeSceneTransitionAnimation(this).toBundle())
+        val i = Intent().apply {
+            component = ComponentName(applicationContext, ControlsActivity::class.java)
         }
+        startActivity(i, ActivityOptions.makeSceneTransitionAnimation(this).toBundle())
         animateExitAndFinish()
     }
 

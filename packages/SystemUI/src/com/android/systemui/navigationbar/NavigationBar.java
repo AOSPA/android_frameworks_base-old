@@ -31,7 +31,6 @@ import static android.view.WindowInsetsController.APPEARANCE_LOW_PROFILE_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_OPAQUE_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.APPEARANCE_SEMI_TRANSPARENT_NAVIGATION_BARS;
 import static android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
-import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_GESTURAL;
@@ -201,7 +200,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     private final UiEventLogger mUiEventLogger;
 
     private Bundle mSavedState;
-    private NavigationBarView mNavigationBarView;
+    private NavigationBarView mNavigationBarView = null;
 
     private @WindowVisibleState int mNavigationBarWindowState = WINDOW_STATE_SHOWING;
 
@@ -247,7 +246,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
      * gesture to indicate to them that they can continue in that orientation without having to
      * rotate the phone
      * The secondary handle will show when we get
-     * {@link OverviewProxyListener#notifyPrioritizedRotation(int)} callback with the
+     * {@link OverviewProxyListener#onQuickSwitchToNewTask(int)} callback with the
      * original handle hidden and we'll flip the visibilities once the
      * {@link #mTasksFrozenListener} fires
      */
@@ -320,7 +319,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         }
 
         @Override
-        public void onPrioritizedRotation(@Surface.Rotation int rotation) {
+        public void onQuickSwitchToNewTask(@Surface.Rotation int rotation) {
             mStartingQuickSwitchRotation = rotation;
             if (rotation == -1) {
                 mShowOrientedHandleForImmersiveMode = false;
@@ -365,11 +364,6 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         }
 
         @Override
-        public void onHomeRotationEnabled(boolean enabled) {
-            mNavigationBarView.getRotationButtonController().setHomeRotationEnabled(enabled);
-        }
-
-        @Override
         public void onOverviewShown(boolean fromHome) {
             // If the overview has fixed orientation that may change display to natural rotation,
             // we don't want the user rotation to be reset. So after user returns to application,
@@ -393,8 +387,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
             };
 
     private final Runnable mAutoDim = () -> getBarTransitions().setAutoDim(true);
-    private final Runnable mEnableLayoutTransitions = () ->
-            mNavigationBarView.setLayoutTransitionsEnabled(true);
+
     private final Runnable mOnVariableDurationHomeLongClick = () -> {
         if (onHomeLongClick(mNavigationBarView.getHomeButton().getCurrentView())) {
             mNavigationBarView.getHomeButton().getCurrentView().performHapticFeedback(
@@ -490,7 +483,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         mA11yBtnMode = mAccessibilityButtonModeObserver.getCurrentAccessibilityButtonMode();
     }
 
-    public NavigationBarView getView() {
+    public View getView() {
         return mNavigationBarView;
     }
 
@@ -506,20 +499,16 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                         | WindowManager.LayoutParams.FLAG_SLIPPERY,
                 PixelFormat.TRANSLUCENT);
         lp.token = new Binder();
-        lp.accessibilityTitle = mContext.getString(R.string.nav_bar);
-        lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC;
-        lp.layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
-        lp.windowAnimations = 0;
         lp.setTitle("NavigationBar" + mContext.getDisplayId());
-        lp.setFitInsetsTypes(0 /* types */);
-        lp.setTrustedOverlay();
+        lp.accessibilityTitle = mContext.getString(R.string.nav_bar);
+        lp.windowAnimations = 0;
+        lp.privateFlags |= WindowManager.LayoutParams.PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC;
 
         NavigationBarFrame frame = (NavigationBarFrame) LayoutInflater.from(mContext).inflate(
                 R.layout.navigation_bar_window, null);
         View barView = LayoutInflater.from(frame.getContext()).inflate(
                 R.layout.navigation_bar, frame);
         barView.addOnAttachStateChangeListener(this);
-        mNavigationBarView = barView.findViewById(R.id.navigation_bar_view);
 
         if (DEBUG) Log.v(TAG, "addNavigationBar: about to add " + barView);
         mContext.getSystemService(WindowManager.class).addView(frame, lp);
@@ -539,19 +528,6 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         mContentResolver.registerContentObserver(
                 Settings.Secure.getUriFor(Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED),
                 false, mAssistContentObserver, UserHandle.USER_ALL);
-        mAllowForceNavBarHandleOpaque = mContext.getResources().getBoolean(
-                R.bool.allow_force_nav_bar_handle_opaque);
-        mForceNavBarHandleOpaque = DeviceConfig.getBoolean(
-                DeviceConfig.NAMESPACE_SYSTEMUI,
-                NAV_BAR_HANDLE_FORCE_OPAQUE,
-                /* defaultValue = */ true);
-        mHomeButtonLongPressDurationMs = Optional.of(DeviceConfig.getLong(
-                DeviceConfig.NAMESPACE_SYSTEMUI,
-                HOME_BUTTON_LONG_PRESS_DURATION_MS,
-                /* defaultValue = */ 0
-        )).filter(duration -> duration != 0);
-        DeviceConfig.addOnPropertiesChangedListener(
-                DeviceConfig.NAMESPACE_SYSTEMUI, mHandler::post, mOnPropertiesChangedListener);
         updateAssistantEntrypoints();
 
         if (savedState != null) {
@@ -562,9 +538,24 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
             mTransientShown = savedState.getBoolean(EXTRA_TRANSIENT_STATE, false);
         }
         mSavedState = savedState;
+        mAccessibilityManagerWrapper.addCallback(mAccessibilityListener);
 
         // Respect the latest disabled-flags.
         mCommandQueue.recomputeDisableFlags(mDisplayId, false);
+
+        mAllowForceNavBarHandleOpaque = mContext.getResources().getBoolean(
+                R.bool.allow_force_nav_bar_handle_opaque);
+        mForceNavBarHandleOpaque = DeviceConfig.getBoolean(
+                DeviceConfig.NAMESPACE_SYSTEMUI,
+                NAV_BAR_HANDLE_FORCE_OPAQUE,
+                /* defaultValue = */ true);
+        mHomeButtonLongPressDurationMs = Optional.of(DeviceConfig.getLong(
+            DeviceConfig.NAMESPACE_SYSTEMUI,
+            HOME_BUTTON_LONG_PRESS_DURATION_MS,
+            /* defaultValue = */ 0
+        )).filter(duration -> duration != 0);
+        DeviceConfig.addOnPropertiesChangedListener(
+                DeviceConfig.NAMESPACE_SYSTEMUI, mHandler::post, mOnPropertiesChangedListener);
 
         mIsCurrentUserSetup = mDeviceProvisionedController.isCurrentUserSetup();
         mDeviceProvisionedController.addCallback(mUserSetupListener);
@@ -591,6 +582,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     @Override
     public void onViewAttachedToWindow(View v) {
         final Display display = v.getDisplay();
+        mNavigationBarView = v.findViewById(R.id.navigation_bar_view);
         mNavigationBarView.setComponents(mStatusBarLazy.get().getPanelController());
         mNavigationBarView.setDisabledFlags(mDisabledFlags1);
         mNavigationBarView.setOnVerticalChangedListener(this::onVerticalChanged);
@@ -601,9 +593,6 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         mNavigationBarView.setNavigationIconHints(mNavigationIconHints);
         mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
         mNavigationBarView.setBehavior(mBehavior);
-
-        mAccessibilityManagerWrapper.addCallback(mAccessibilityListener);
-
         mSplitScreenOptional.ifPresent(mNavigationBarView::registerDockedListener);
         mPipOptional.ifPresent(mNavigationBarView::registerPipExclusionBoundsChangeListener);
 
@@ -663,8 +652,10 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
 
     @Override
     public void onViewDetachedFromWindow(View v) {
-        mNavigationBarView.getBarTransitions().destroy();
-        mNavigationBarView.getLightTransitionsController().destroy(mContext);
+        if (mNavigationBarView != null) {
+            mNavigationBarView.getBarTransitions().destroy();
+            mNavigationBarView.getLightTransitionsController().destroy(mContext);
+        }
         mOverviewProxyService.removeCallback(mOverviewProxyListener);
         mBroadcastDispatcher.unregisterReceiver(mBroadcastReceiver);
         if (mOrientationHandle != null) {
@@ -675,8 +666,6 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                     mOrientationHandleGlobalLayoutListener);
         }
         mHandler.removeCallbacks(mAutoDim);
-        mHandler.removeCallbacks(mOnVariableDurationHomeLongClick);
-        mHandler.removeCallbacks(mEnableLayoutTransitions);
         mNavigationBarView = null;
         mOrientationHandle = null;
     }
@@ -688,7 +677,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         outState.putInt(EXTRA_APPEARANCE, mAppearance);
         outState.putInt(EXTRA_BEHAVIOR, mBehavior);
         outState.putBoolean(EXTRA_TRANSIENT_STATE, mTransientShown);
-        mNavigationBarView.getLightTransitionsController().saveState(outState);
+        if (mNavigationBarView != null) {
+            mNavigationBarView.getLightTransitionsController().saveState(outState);
+        }
     }
 
     /**
@@ -813,12 +804,15 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
             // mOrientedHandle is initialized lazily
             mOrientationHandle.setVisibility(View.GONE);
         }
-        mNavigationBarView.setVisibility(View.VISIBLE);
-        mNavigationBarView.setOrientedHandleSamplingRegion(null);
+        if (mNavigationBarView != null) {
+            mNavigationBarView.setVisibility(View.VISIBLE);
+            mNavigationBarView.setOrientedHandleSamplingRegion(null);
+        }
     }
 
     private void reconfigureHomeLongClick() {
-        if (mNavigationBarView.getHomeButton().getCurrentView() == null) {
+        if (mNavigationBarView == null
+                || mNavigationBarView.getHomeButton().getCurrentView() == null) {
             return;
         }
         if (mHomeButtonLongPressDurationMs.isPresent() || !mLongPressHomeEnabled) {
@@ -845,12 +839,17 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         pw.println("  mHomeButtonLongPressDurationMs=" + mHomeButtonLongPressDurationMs);
         pw.println("  mLongPressHomeEnabled=" + mLongPressHomeEnabled);
         pw.println("  mAssistantTouchGestureEnabled=" + mAssistantTouchGestureEnabled);
-        pw.println("  mNavigationBarWindowState="
-                + windowStateToString(mNavigationBarWindowState));
-        pw.println("  mNavigationBarMode="
-                + BarTransitions.modeToString(mNavigationBarMode));
-        dumpBarTransitions(pw, "mNavigationBarView", mNavigationBarView.getBarTransitions());
-        mNavigationBarView.dump(pw);
+
+        if (mNavigationBarView != null) {
+            pw.println("  mNavigationBarWindowState="
+                    + windowStateToString(mNavigationBarWindowState));
+            pw.println("  mNavigationBarMode="
+                    + BarTransitions.modeToString(mNavigationBarMode));
+            dumpBarTransitions(pw, "mNavigationBarView", mNavigationBarView.getBarTransitions());
+            mNavigationBarView.dump(pw);
+        } else {
+            pw.print("  mNavigationBarView=null");
+        }
     }
 
     // ----- CommandQueue Callbacks -----
@@ -885,7 +884,10 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         if (hints == mNavigationIconHints) return;
 
         mNavigationIconHints = hints;
-        mNavigationBarView.setNavigationIconHints(hints);
+
+        if (mNavigationBarView != null) {
+            mNavigationBarView.setNavigationIconHints(hints);
+        }
         checkBarModes();
         updateSystemUiStateFlags(-1);
     }
@@ -904,12 +906,23 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                 orientSecondaryHomeHandle();
             }
             if (DEBUG_WINDOW_STATE) Log.d(TAG, "Navigation bar " + windowStateToString(state));
-            mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
+
+            if (mNavigationBarView != null) {
+                mNavigationBarView.setWindowVisible(isNavBarWindowVisible());
+            }
         }
     }
 
     @Override
     public void onRotationProposal(final int rotation, boolean isValid) {
+        if (mNavigationBarView == null) {
+            if (RotationContextButton.DEBUG_ROTATION) {
+                Log.v(TAG, "onRotationProposal proposedRotation=" +
+                        Surface.rotationToString(rotation) + ", mNavigationBarView is null");
+            }
+            return;
+        }
+
         final int winRotation = mNavigationBarView.getDisplay().getRotation();
         final boolean rotateSuggestionsDisabled = RotationButtonController
                 .hasDisable2RotateSuggestionFlag(mDisabledFlags2);
@@ -923,7 +936,8 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                     + ", isValid=" + isValid + ", mNavBarWindowState="
                     + StatusBarManager.windowStateToString(mNavigationBarWindowState)
                     + ", rotateSuggestionsDisabled=" + rotateSuggestionsDisabled
-                    + ", isRotateButtonVisible=" + rotationButton.isVisible());
+                    + ", isRotateButtonVisible=" + (mNavigationBarView == null ? "null"
+                    : rotationButton.isVisible()));
         }
 
         // Respect the disabled flag, no need for action as flag change callback will handle hiding
@@ -937,7 +951,6 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         if (running) {
             mNavbarOverlayController.setButtonState(/* visible */false, /* force */true);
         }
-        mNavigationBarView.getRotationButtonController().setRecentsAnimationRunning(running);
     }
 
     /** Restores the appearance and the transient saved state to {@link NavigationBar}. */
@@ -964,6 +977,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         boolean nbModeChanged = false;
         if (mAppearance != appearance) {
             mAppearance = appearance;
+            if (getView() == null) {
+                return;
+            }
             nbModeChanged = updateBarMode(barMode(mTransientShown, appearance));
         }
         if (mLightBarController != null) {
@@ -972,7 +988,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         }
         if (mBehavior != behavior) {
             mBehavior = behavior;
-            mNavigationBarView.setBehavior(behavior);
+            if (mNavigationBarView != null) {
+                mNavigationBarView.setBehavior(behavior);
+            }
             updateSystemUiStateFlags(-1);
         }
     }
@@ -1010,7 +1028,12 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     private void handleTransientChanged() {
-        mNavigationBarView.onTransientStateChanged(mTransientShown);
+        if (getView() == null) {
+            return;
+        }
+        if (mNavigationBarView != null) {
+            mNavigationBarView.onTransientStateChanged(mTransientShown);
+        }
         final int barMode = barMode(mTransientShown, mAppearance);
         if (updateBarMode(barMode) && mLightBarController != null) {
             mLightBarController.onNavigationBarModeChanged(barMode);
@@ -1063,7 +1086,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                 | StatusBarManager.DISABLE_SEARCH);
         if (masked != mDisabledFlags1) {
             mDisabledFlags1 = masked;
-            mNavigationBarView.setDisabledFlags(state1);
+            if (mNavigationBarView != null) {
+                mNavigationBarView.setDisabledFlags(state1);
+            }
             updateScreenPinningGestures();
         }
 
@@ -1079,13 +1104,17 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
 
     private void setDisabled2Flags(int state2) {
         // Method only called on change of disable2 flags
-        mNavigationBarView.getRotationButtonController().onDisable2FlagChanged(state2);
+        if (mNavigationBarView != null) {
+            mNavigationBarView.getRotationButtonController().onDisable2FlagChanged(state2);
+        }
     }
 
     // ----- Internal stuff -----
 
     private void refreshLayout(int layoutDirection) {
-        mNavigationBarView.setLayoutDirection(layoutDirection);
+        if (mNavigationBarView != null) {
+            mNavigationBarView.setLayoutDirection(layoutDirection);
+        }
     }
 
     private boolean shouldDisableNavbarGestures() {
@@ -1094,7 +1123,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     private void repositionNavigationBar() {
-        if (!mNavigationBarView.isAttachedToWindow()) return;
+        if (mNavigationBarView == null || !mNavigationBarView.isAttachedToWindow()) return;
 
         prepareNavigationBarView();
 
@@ -1103,6 +1132,10 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     private void updateScreenPinningGestures() {
+        if (mNavigationBarView == null) {
+            return;
+        }
+
         // Change the cancel pin gesture to home and back if recents button is invisible
         boolean pinningActive = ActivityManagerWrapper.getInstance().isScreenPinningActive();
         ButtonDispatcher backButton = mNavigationBarView.getBackButton();
@@ -1213,7 +1246,10 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                 AssistManager.INVOCATION_TYPE_HOME_BUTTON_LONG_PRESS);
         mAssistManagerLazy.get().startAssist(args);
         mStatusBarLazy.get().awakenDreams();
-        mNavigationBarView.abortCurrentGesture();
+
+        if (mNavigationBarView != null) {
+            mNavigationBarView.abortCurrentGesture();
+        }
         return true;
     }
 
@@ -1363,6 +1399,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     void updateAccessibilityServicesState(AccessibilityManager accessibilityManager) {
+        if (mNavigationBarView == null) {
+            return;
+        }
         boolean[] feedbackEnabled = new boolean[1];
         int a11yFlags = getA11yButtonState(feedbackEnabled);
 
@@ -1448,14 +1487,10 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     private void updateAssistantEntrypoints() {
         mAssistantAvailable = mAssistManagerLazy.get()
                 .getAssistInfoForUser(UserHandle.USER_CURRENT) != null;
-        boolean longPressDefault = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_assistLongPressHomeEnabledDefault);
         mLongPressHomeEnabled = Settings.Secure.getInt(mContentResolver,
-                Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED, longPressDefault ? 1 : 0) != 0;
-        boolean gestureDefault = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_assistTouchGestureEnabledDefault);
+                Settings.Secure.ASSIST_LONG_PRESS_HOME_ENABLED, 1) != 0;
         mAssistantTouchGestureEnabled = Settings.Secure.getInt(mContentResolver,
-                Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED, gestureDefault ? 1 : 0) != 0;
+                Settings.Secure.ASSIST_TOUCH_GESTURE_ENABLED, 1) != 0;
         if (mOverviewProxyService.getProxy() != null) {
             try {
                 mOverviewProxyService.getProxy().onAssistantAvailable(mAssistantAvailable
@@ -1552,7 +1587,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
 
     public void disableAnimationsDuringHide(long delay) {
         mNavigationBarView.setLayoutTransitionsEnabled(false);
-        mHandler.postDelayed(mEnableLayoutTransitions,
+        mNavigationBarView.postDelayed(() -> mNavigationBarView.setLayoutTransitionsEnabled(true),
                 delay + StackStateAnimator.ANIMATION_DURATION_GO_TO_FULL_SHADE);
     }
 
@@ -1567,7 +1602,10 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     public NavigationBarTransitions getBarTransitions() {
-        return mNavigationBarView.getBarTransitions();
+        if (mNavigationBarView != null) {
+            return mNavigationBarView.getBarTransitions();
+        }
+        return null;
     }
 
     public void finishBarAnimations() {
@@ -1582,7 +1620,8 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     }
 
     private final Consumer<Integer> mRotationWatcher = rotation -> {
-        if (mNavigationBarView.needsReorient(rotation)) {
+        if (mNavigationBarView != null
+                && mNavigationBarView.needsReorient(rotation)) {
             repositionNavigationBar();
         }
     };
@@ -1590,6 +1629,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
+            if (mNavigationBarView == null) {
+                return;
+            }
             String action = intent.getAction();
             if (Intent.ACTION_SCREEN_OFF.equals(action)
                     || Intent.ACTION_SCREEN_ON.equals(action)) {

@@ -1093,7 +1093,6 @@ public class ChooserActivity extends ResolverActivity implements
                     "",
                     -1);
 
-            setResult(RESULT_OK);
             finish();
         }
     }
@@ -2591,8 +2590,7 @@ public class ChooserActivity extends ResolverActivity implements
             boolean filterLastUsed, ResolverListController resolverListController) {
         return new ChooserListAdapter(context, payloadIntents, initialIntents, rList,
                 filterLastUsed, resolverListController, this,
-                this, context.getPackageManager(),
-                getChooserActivityLogger());
+                this, context.getPackageManager());
     }
 
     @VisibleForTesting
@@ -2601,11 +2599,11 @@ public class ChooserActivity extends ResolverActivity implements
         AbstractResolverComparator resolverComparator;
         if (appPredictor != null) {
             resolverComparator = new AppPredictionServiceResolverComparator(this, getTargetIntent(),
-                    getReferrerPackageName(), appPredictor, userHandle, getChooserActivityLogger());
+                    getReferrerPackageName(), appPredictor, userHandle);
         } else {
             resolverComparator =
                     new ResolverRankerServiceResolverComparator(this, getTargetIntent(),
-                        getReferrerPackageName(), null, getChooserActivityLogger());
+                        getReferrerPackageName(), null);
         }
 
         return new ChooserListController(

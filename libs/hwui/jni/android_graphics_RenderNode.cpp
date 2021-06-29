@@ -26,8 +26,8 @@
 #endif
 #include <TreeInfo.h>
 #include <effects/StretchEffect.h>
-#include <gui/TraceUtils.h>
 #include <hwui/Paint.h>
+#include <utils/TraceUtils.h>
 
 namespace android {
 
@@ -574,7 +574,7 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
 
             uirenderer::Rect bounds(props.getWidth(), props.getHeight());
             bool useStretchShader =
-                    Properties::getStretchEffectBehavior() != StretchEffectBehavior::UniformScale;
+                    Properties::stretchEffectBehavior != StretchEffectBehavior::UniformScale;
             if (useStretchShader && info.stretchEffectCount) {
                 handleStretchEffect(info, bounds);
             }
@@ -680,8 +680,7 @@ static void android_view_RenderNode_requestPositionUpdates(JNIEnv* env, jobject,
             stretchTargetBounds(*effect, result.width, result.height,
                                 childRelativeBounds,targetBounds);
 
-            if (Properties::getStretchEffectBehavior() ==
-                StretchEffectBehavior::Shader) {
+            if (Properties::stretchEffectBehavior == StretchEffectBehavior::Shader) {
                 JNIEnv* env = jnienv();
 
                 jobject localref = env->NewLocalRef(mWeakRef);

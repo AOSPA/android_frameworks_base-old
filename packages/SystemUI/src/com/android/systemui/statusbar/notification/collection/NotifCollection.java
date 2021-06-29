@@ -185,11 +185,6 @@ public class NotifCollection implements Dumpable {
         mBuildListener = buildListener;
     }
 
-    /** @see NotifPipeline#getEntry(String) () */
-    NotificationEntry getEntry(String key) {
-        return mNotificationSet.get(key);
-    }
-
     /** @see NotifPipeline#getAllNotifs() */
     Collection<NotificationEntry> getAllNotifs() {
         Assert.isMainThread();

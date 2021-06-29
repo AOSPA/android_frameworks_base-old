@@ -16,7 +16,6 @@
 
 #include "SkiaOpenGLPipeline.h"
 
-#include <gui/TraceUtils.h>
 #include "DeferredLayerUpdater.h"
 #include "LayerDrawable.h"
 #include "LightingInfo.h"
@@ -28,6 +27,7 @@
 #include "renderthread/EglManager.h"
 #include "renderthread/Frame.h"
 #include "utils/GLUtils.h"
+#include "utils/TraceUtils.h"
 
 #include <GLES3/gl3.h>
 
@@ -75,9 +75,7 @@ bool SkiaOpenGLPipeline::draw(const Frame& frame, const SkRect& screenDirty, con
                               bool opaque, const LightInfo& lightInfo,
                               const std::vector<sp<RenderNode>>& renderNodes,
                               FrameInfoVisualizer* profiler) {
-    if (!isCapturingSkp()) {
-        mEglManager.damageFrame(frame, dirty);
-    }
+    mEglManager.damageFrame(frame, dirty);
 
     SkColorType colorType = getSurfaceColorType();
     // setup surface for fbo0

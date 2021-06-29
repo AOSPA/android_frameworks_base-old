@@ -77,7 +77,6 @@ public:
         setUniform(effectBuilder, "in_radius", params.radius);
         setUniform(effectBuilder, "in_progress", params.progress);
         setUniform(effectBuilder, "in_turbulencePhase", params.turbulencePhase);
-        setUniform(effectBuilder, "in_noisePhase", params.turbulencePhase->value * 0.001);
 
         SkRuntimeShaderBuilder::BuilderUniform uniform = effectBuilder.uniform("in_color");
         if (uniform.fVar != nullptr) {
@@ -121,24 +120,17 @@ private:
     static constexpr float PI_ROTATE_LEFT = PI * -0.0078125;
     static constexpr float SCALE = 1.5;
 
-    static void setUniform(SkRuntimeShaderBuilder& effectBuilder, const char* name,
+    static void setUniform(SkRuntimeShaderBuilder& effectBuilder, std::string name,
                            sp<uirenderer::CanvasPropertyPrimitive> property) {
-        SkRuntimeShaderBuilder::BuilderUniform uniform = effectBuilder.uniform(name);
+        SkRuntimeShaderBuilder::BuilderUniform uniform = effectBuilder.uniform(name.c_str());
         if (uniform.fVar != nullptr) {
             uniform = property->value;
         }
     }
 
-    static void setUniform(SkRuntimeShaderBuilder& effectBuilder, const char* name, float value) {
-        SkRuntimeShaderBuilder::BuilderUniform uniform = effectBuilder.uniform(name);
-        if (uniform.fVar != nullptr) {
-            uniform = value;
-        }
-    }
-
-    static void setUniform2f(SkRuntimeShaderBuilder& effectBuilder, const char* name, float a,
+    static void setUniform2f(SkRuntimeShaderBuilder& effectBuilder, std::string name, float a,
                              float b) {
-        SkRuntimeShaderBuilder::BuilderUniform uniform = effectBuilder.uniform(name);
+        SkRuntimeShaderBuilder::BuilderUniform uniform = effectBuilder.uniform(name.c_str());
         if (uniform.fVar != nullptr) {
             uniform = SkV2{a, b};
         }

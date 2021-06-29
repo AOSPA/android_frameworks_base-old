@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Kablosuz ekran sertifikası"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Kablosuz Ayrıntılı Günlük Kaydını etkinleştir"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Kablosuz ağ taramasını kısma"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Kablosuz kalıcı olmayan MAC rastgele hale getirme süreci"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Kablosuz için geliştirilmiş MAC rastgele seçimi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Mobil veri her zaman etkin"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Tethering donanım hızlandırıcısı"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Adsız Bluetooth cihazlarını göster"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Klip sınırlarını, kenar boşluklarını vb. göster"</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Sağdan sola düzenini zorla"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Tüm yerel ayarlar için sağdan sola ekran düzenini zorlar"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"Pencere bulanıklaştırmaya izin ver"</string>
     <string name="force_msaa" msgid="4081288296137775550">"4x MSAA\'yı zorla"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"OpenGL ES 2.0 uygulamalarda 4x MSAA\'yı etkinleştir"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"Dikdörtgen olmayan kırpma işlemlerinde hata ayıkla"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"Tamamen şarj olmasına <xliff:g id="TIME">%1$s</xliff:g> kaldı"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - Tamamen şarj olmasına <xliff:g id="TIME">%2$s</xliff:g> kaldı"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - Şarj etme geçici olarak sınırlı"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - Pil sağlığı için optimize ediliyor"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Bilinmiyor"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Şarj oluyor"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Hızlı şarj oluyor"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Yavaş şarj oluyor"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Kablosuz şarj oluyor"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Şarj olmuyor"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Bağlandı, şarj olmuyor"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Prize takıldı, şu anda şarj olamıyor"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Şarj oldu"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Yönetici tarafından denetleniyor"</string>
     <string name="disabled" msgid="8017887509554714950">"Devre dışı"</string>
@@ -507,7 +506,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Alarmlar ve hatırlatıcılar"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Alarm ve hatırlatıcı ayarlanmasına izin ver"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Alarmlar ve hatırlatıcılar"</string>
-    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"Bu uygulamanın alarmlar kurmasına ve zamana bağlı işlemler programlamasına izin verin. Bu izin, uygulamanın arka planda çalışmasına olanak sağlayarak daha fazla pil harcanmasına neden olabilir.\n\nBu izin verilmezse bu uygulama tarafından programlanmış mevcut alarmlar ve zamana bağlı etkinlikler çalışmaz."</string>
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Bu uygulamanın, alarmlar kurup başka işlemler programlamasına izin verir. Telefonunuzu kullanmadığınız sırada bu uygulama kullanılabilir. Bu da daha fazla pil kullanımına neden olabilir. Bu izin kapatılırsa hem bu uygulama işlevini normal şekilde yerine getirmeyebilir hem de alarmları programladığı gibi çalışmayabilir."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Bu uygulamanın, alarmlar kurup başka işlemler programlamasına izin verir. Tabletinizi kullanmadığınız sırada bu uygulama kullanılabilir. Bu da daha fazla pil kullanımına neden olabilir. Bu izin kapatılırsa hem bu uygulama işlevini normal şekilde yerine getirmeyebilir hem de alarmları programladığı gibi çalışmayabilir."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Bu uygulamanın, alarmlar kurup başka işlemler programlamasına izin verir. Cihazınızı kullanmadığınız sırada bu uygulama kullanılabilir. Bu da daha fazla pil kullanımına neden olabilir. Bu izin kapatılırsa hem bu uygulama işlevini normal şekilde yerine getirmeyebilir hem de alarmları programladığı gibi çalışmayabilir."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"program, alarm, hatırlatıcı, saat"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Aç"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"Rahatsız Etmeyin\'i açın"</string>

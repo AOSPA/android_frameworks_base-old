@@ -45,9 +45,7 @@ import com.android.systemui.plugins.qs.QSFactory;
 import com.android.systemui.plugins.qs.QSTile;
 import com.android.systemui.plugins.qs.QSTileView;
 import com.android.systemui.qs.external.CustomTile;
-import com.android.systemui.qs.external.CustomTileStatePersister;
 import com.android.systemui.qs.external.TileLifecycleManager;
-import com.android.systemui.qs.external.TileServiceKey;
 import com.android.systemui.qs.external.TileServices;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.settings.UserTracker;
@@ -95,7 +93,6 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
     private final QSLogger mQSLogger;
     private final UiEventLogger mUiEventLogger;
     private final InstanceIdSequence mInstanceIdSequence;
-    private final CustomTileStatePersister mCustomTileStatePersister;
 
     private final List<Callback> mCallbacks = new ArrayList<>();
     private AutoTileManager mAutoTiles;
@@ -122,8 +119,7 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
             QSLogger qsLogger,
             UiEventLogger uiEventLogger,
             UserTracker userTracker,
-            SecureSettings secureSettings,
-            CustomTileStatePersister customTileStatePersister) {
+            SecureSettings secureSettings) {
         mIconController = iconController;
         mContext = context;
         mUserContext = context;
@@ -143,7 +139,6 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
         mDumpManager.registerDumpable(TAG, this);
         mUserTracker = userTracker;
         mSecureSettings = secureSettings;
-        mCustomTileStatePersister = customTileStatePersister;
 
         mainHandler.post(() -> {
             // This is technically a hack to avoid circular dependency of
@@ -423,11 +418,6 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
         changeTiles(mTileSpecs, newSpecs);
     }
 
-    /**
-     * Change the tiles triggered by the user editing.
-     * <p>
-     * This is not called on device start, or on user change.
-     */
     public void changeTiles(List<String> previousTiles, List<String> newTiles) {
         final List<String> copy = new ArrayList<>(previousTiles);
         final int NP = copy.size();
@@ -443,7 +433,6 @@ public class QSTileHost implements QSHost, Tunable, PluginListener<QSFactory>, D
                         mBroadcastDispatcher);
                 lifecycleManager.onStopListening();
                 lifecycleManager.onTileRemoved();
-                mCustomTileStatePersister.removeState(new TileServiceKey(component, mCurrentUser));
                 TileLifecycleManager.setTileAdded(mContext, component, false);
                 lifecycleManager.flushMessagesAndUnbind();
             }

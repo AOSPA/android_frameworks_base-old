@@ -47,7 +47,7 @@ class BlurUtilsTest : SysuiTestCase() {
 
     @Test
     fun testApplyBlur_noViewRoot_doesntCrash() {
-        blurUtils.applyBlur(null /* viewRootImple */, 10 /* radius */, false /* opaque */)
+        blurUtils.applyBlur(null /* viewRootImple */, 10 /* radius */)
     }
 
     @Test
@@ -55,7 +55,7 @@ class BlurUtilsTest : SysuiTestCase() {
         val surfaceControl = mock(SurfaceControl::class.java)
         val viewRootImpl = mock(ViewRootImpl::class.java)
         `when`(viewRootImpl.surfaceControl).thenReturn(surfaceControl)
-        blurUtils.applyBlur(viewRootImpl, 10 /* radius */, false /* opaque */)
+        blurUtils.applyBlur(viewRootImpl, 10 /* radius */)
     }
 
     @Test
@@ -65,9 +65,8 @@ class BlurUtilsTest : SysuiTestCase() {
         val viewRootImpl = mock(ViewRootImpl::class.java)
         `when`(viewRootImpl.surfaceControl).thenReturn(surfaceControl)
         `when`(surfaceControl.isValid).thenReturn(true)
-        blurUtils.applyBlur(viewRootImpl, radius, true /* opaque */)
+        blurUtils.applyBlur(viewRootImpl, radius)
         verify(transaction).setBackgroundBlurRadius(eq(surfaceControl), eq(radius))
-        verify(transaction).setOpaque(eq(surfaceControl), eq(true))
         verify(transaction).apply()
     }
 

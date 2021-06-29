@@ -18,7 +18,6 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
-import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
@@ -196,11 +195,6 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
             } else {
                 if (DEBUG) appendLog("empty-window-layout");
             }
-        } else if (launchMode == WINDOWING_MODE_MULTI_WINDOW
-                && options != null && options.getLaunchBounds() != null) {
-            outParams.mBounds.set(options.getLaunchBounds());
-            hasInitialBounds = true;
-            if (DEBUG) appendLog("multiwindow-activity-options-bounds=" + outParams.mBounds);
         }
 
         // STEP 2.2: Check if previous modifier or the controller (referred as "callers" below) has
@@ -618,7 +612,7 @@ class TaskLaunchParamsModifier implements LaunchParamsModifier {
 
     private boolean shouldLaunchUnresizableAppInFreeform(ActivityRecord activity,
             TaskDisplayArea displayArea) {
-        if (!activity.supportsFreeformInDisplayArea(displayArea) || activity.isResizeable()) {
+        if (!activity.supportsFreeform() || activity.isResizeable()) {
             return false;
         }
 

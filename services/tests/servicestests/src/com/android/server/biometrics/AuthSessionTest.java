@@ -18,7 +18,6 @@ package com.android.server.biometrics;
 
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FACE;
 import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRINT;
-import static android.hardware.biometrics.BiometricPrompt.DISMISSED_REASON_NEGATIVE;
 
 import static com.android.server.biometrics.BiometricServiceStateProto.*;
 
@@ -67,7 +66,6 @@ import org.mockito.MockitoAnnotations;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Random;
-import java.util.function.Consumer;
 
 @Presubmit
 @SmallTest
@@ -172,42 +170,21 @@ public class AuthSessionTest {
         session.onCookieReceived(cookie2);
         assertTrue(session.allCookiesReceived());
 
-
-        // for multi-sensor face then fingerprint is the default policy
         for (BiometricSensor sensor : session.mPreAuthInfo.eligibleSensors) {
-            if (sensor.modality == TYPE_FACE) {
-                verify(sensor.impl).startPreparedClient(eq(sensor.getCookie()));
-                assertEquals(BiometricSensor.STATE_AUTHENTICATING, sensor.getSensorState());
-            } else if (sensor.modality == TYPE_FINGERPRINT) {
-                assertEquals(BiometricSensor.STATE_COOKIE_RETURNED, sensor.getSensorState());
-            }
+            verify(sensor.impl).startPreparedClient(eq(sensor.getCookie()));
+            assertEquals(BiometricSensor.STATE_AUTHENTICATING, sensor.getSensorState());
         }
     }
 
     @Test
-    public void testMultiAuth_singleSensor_fingerprintSensorStartsAfterDialogAnimationCompletes()
-            throws Exception {
+    public void testUdfpsAuth_sensorStartsAfterDialogAnimationCompletes() throws RemoteException {
+        // For UDFPS-only setups, ensure that the sensor does not start auth until after the
+        // BiometricPrompt UI is finished animating. Otherwise, the UDFPS affordance will be
+        // shown before the BiometricPrompt is shown.
         setupFingerprint(0 /* id */, FingerprintSensorProperties.TYPE_UDFPS_OPTICAL);
-        testMultiAuth_fingerprintSensorStartsAfter(false /* fingerprintStartsAfterDelay */);
-    }
 
-    @Test
-    public void testMultiAuth_fingerprintSensorStartsAfterDialogAnimationCompletes()
-            throws Exception {
-        setupFingerprint(0 /* id */, FingerprintSensorProperties.TYPE_UDFPS_OPTICAL);
-        setupFace(1 /* id */, false, mock(IBiometricAuthenticator.class));
-        testMultiAuth_fingerprintSensorStartsAfter(true /* fingerprintStartsAfterDelay */);
-    }
-
-    public void testMultiAuth_fingerprintSensorStartsAfter(boolean fingerprintStartsAfterDelay)
-            throws Exception {
         final long operationId = 123;
         final int userId = 10;
-        final int fingerprintSensorId = mSensors.stream()
-                .filter(s -> s.modality == TYPE_FINGERPRINT)
-                .map(s -> s.id)
-                .findFirst()
-                .orElse(-1);
 
         final AuthSession session = createAuthSession(mSensors,
                 false /* checkDevicePolicyManager */,
@@ -223,54 +200,32 @@ public class AuthSessionTest {
 
         session.goToInitialState();
 
+        final int cookie1 = session.mPreAuthInfo.eligibleSensors.get(0).getCookie();
+        session.onCookieReceived(cookie1);
         for (BiometricSensor sensor : session.mPreAuthInfo.eligibleSensors) {
-            assertEquals(BiometricSensor.STATE_WAITING_FOR_COOKIE, sensor.getSensorState());
-            session.onCookieReceived(
-                    session.mPreAuthInfo.eligibleSensors.get(sensor.id).getCookie());
-            if (fingerprintSensorId == sensor.id) {
+            if (cookie1 == sensor.getCookie()) {
                 assertEquals(BiometricSensor.STATE_COOKIE_RETURNED, sensor.getSensorState());
             } else {
-                assertEquals(BiometricSensor.STATE_AUTHENTICATING, sensor.getSensorState());
+                assertEquals(BiometricSensor.STATE_WAITING_FOR_COOKIE, sensor.getSensorState());
             }
         }
         assertTrue(session.allCookiesReceived());
 
-        // fingerprint sensor does not start even if all cookies are received
+        // UDFPS does not start even if all cookies are received
         assertEquals(STATE_AUTH_STARTED, session.getState());
         verify(mStatusBarService).showAuthenticationDialog(any(), any(), any(),
-                anyBoolean(), anyBoolean(), anyInt(), any(), anyLong(), anyInt());
+                anyBoolean(), anyBoolean(), anyInt(), any(), anyLong());
 
-        // Notify AuthSession that the UI is shown. Then, fingerprint sensor should be started.
+        // Notify AuthSession that the UI is shown. Then, UDFPS sensor should be started.
         session.onDialogAnimatedIn();
-        if (fingerprintStartsAfterDelay) {
-            assertEquals(STATE_AUTH_STARTED_UI_SHOWING, session.getState());
-            assertEquals(BiometricSensor.STATE_COOKIE_RETURNED,
-                    session.mPreAuthInfo.eligibleSensors.get(fingerprintSensorId).getSensorState());
-            session.onStartFingerprint();
-        }
         assertEquals(STATE_AUTH_STARTED_UI_SHOWING, session.getState());
         assertEquals(BiometricSensor.STATE_AUTHENTICATING,
-                session.mPreAuthInfo.eligibleSensors.get(fingerprintSensorId).getSensorState());
+                session.mPreAuthInfo.eligibleSensors.get(0).getSensorState());
     }
 
     @Test
     public void testCancelAuthentication_whenStateAuthCalled_invokesCancel()
             throws RemoteException {
-        testInvokesCancel(session -> session.onCancelAuthSession(false /* force */));
-    }
-
-    @Test
-    public void testCancelAuthentication_whenStateAuthForcedCalled_invokesCancel()
-            throws RemoteException {
-        testInvokesCancel(session -> session.onCancelAuthSession(true /* force */));
-    }
-
-    @Test
-    public void testCancelAuthentication_whenDialogDismissed() throws RemoteException {
-        testInvokesCancel(session -> session.onDialogDismissed(DISMISSED_REASON_NEGATIVE, null));
-    }
-
-    private void testInvokesCancel(Consumer<AuthSession> sessionConsumer) throws RemoteException {
         final IBiometricAuthenticator faceAuthenticator = mock(IBiometricAuthenticator.class);
 
         setupFace(0 /* id */, false /* confirmationAlwaysRequired */, faceAuthenticator);
@@ -282,8 +237,7 @@ public class AuthSessionTest {
 
         session.goToInitialState();
         assertEquals(STATE_AUTH_CALLED, session.getState());
-
-        sessionConsumer.accept(session);
+        session.onCancelAuthSession(false /* force */);
 
         verify(faceAuthenticator).cancelAuthenticationFromService(eq(mToken), eq(TEST_PACKAGE));
     }

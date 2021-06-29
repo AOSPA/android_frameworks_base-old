@@ -134,11 +134,7 @@ public class FontCustomizationParser {
             throw new IllegalArgumentException("customizationType must be specified");
         }
         if (customizationType.equals("new-named-family")) {
-            FontFamily fontFamily = FontListParser.readFamily(
-                    parser, fontDir, updatableFontMap, false);
-            if (fontFamily != null) {
-                out.add(fontFamily);
-            }
+            out.add(FontListParser.readFamily(parser, fontDir, updatableFontMap, false));
         } else {
             throw new IllegalArgumentException("Unknown customizationType=" + customizationType);
         }

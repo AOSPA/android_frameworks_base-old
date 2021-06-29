@@ -22,7 +22,6 @@ import android.annotation.SuppressLint;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
@@ -136,7 +135,7 @@ public final class BluetoothAvrcpController implements BluetoothProfile {
                 getService();
         if (service != null && isEnabled()) {
             try {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getConnectedDevices(mAttributionSource), mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, "Stack:" + Log.getStackTraceString(new Throwable()));
@@ -159,7 +158,7 @@ public final class BluetoothAvrcpController implements BluetoothProfile {
                 getService();
         if (service != null && isEnabled()) {
             try {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getDevicesMatchingConnectionStates(states, mAttributionSource),
                         mAttributionSource);
             } catch (RemoteException e) {

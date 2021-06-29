@@ -19,7 +19,6 @@
 #include <string>
 #include <vector>
 
-#include "idmap2/CommandUtils.h"
 #include "idmap2/Idmap.h"
 #include "idmap2/Result.h"
 #include "idmap2/SysTrace.h"

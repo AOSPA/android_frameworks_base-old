@@ -181,7 +181,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     private static final int MSG_PERFORM_POLL = 1;
     // Perform polling, persist network, and register the global alert again.
     private static final int MSG_PERFORM_POLL_REGISTER_ALERT = 2;
-    private static final int MSG_NOTIFY_NETWORK_STATUS = 3;
+    private static final int MSG_UPDATE_IFACES = 3;
     // A message for broadcasting ACTION_NETWORK_STATS_UPDATED in handler thread to prevent
     // deadlock.
     private static final int MSG_BROADCAST_NETWORK_STATS_UPDATED = 4;
@@ -379,12 +379,11 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                     performPoll(FLAG_PERSIST_ALL);
                     break;
                 }
-                case MSG_NOTIFY_NETWORK_STATUS: {
+                case MSG_UPDATE_IFACES: {
                     // If no cached states, ignore.
                     if (mLastNetworkStateSnapshots == null) break;
                     // TODO (b/181642673): Protect mDefaultNetworks from concurrent accessing.
-                    handleNotifyNetworkStatus(
-                            mDefaultNetworks, mLastNetworkStateSnapshots, mActiveIface);
+                    updateIfaces(mDefaultNetworks, mLastNetworkStateSnapshots, mActiveIface);
                     break;
                 }
                 case MSG_PERFORM_POLL_REGISTER_ALERT: {
@@ -475,7 +474,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
                 @NonNull Looper looper, @NonNull Executor executor,
                 @NonNull NetworkStatsService service) {
             // TODO: Update RatType passively in NSS, instead of querying into the monitor
-            //  when notifyNetworkStatus.
+            //  when forceUpdateIface.
             return new NetworkStatsSubscriptionsMonitor(context, looper, executor,
                     (subscriberId, type) -> service.handleOnCollapsedRatTypeChanged());
         }
@@ -972,19 +971,16 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
         }
     }
 
-    /**
-     * Notify {@code NetworkStatsService} about network status changed.
-     */
-    public void notifyNetworkStatus(
-            @NonNull Network[] defaultNetworks,
-            @NonNull NetworkStateSnapshot[] networkStates,
-            @Nullable String activeIface,
-            @NonNull UnderlyingNetworkInfo[] underlyingNetworkInfos) {
+    public void forceUpdateIfaces(
+            Network[] defaultNetworks,
+            NetworkStateSnapshot[] networkStates,
+            String activeIface,
+            UnderlyingNetworkInfo[] underlyingNetworkInfos) {
         checkNetworkStackPermission(mContext);
 
         final long token = Binder.clearCallingIdentity();
         try {
-            handleNotifyNetworkStatus(defaultNetworks, networkStates, activeIface);
+            updateIfaces(defaultNetworks, networkStates, activeIface);
         } finally {
             Binder.restoreCallingIdentity(token);
         }
@@ -1252,12 +1248,12 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
     @VisibleForTesting
     public void handleOnCollapsedRatTypeChanged() {
         // Protect service from frequently updating. Remove pending messages if any.
-        mHandler.removeMessages(MSG_NOTIFY_NETWORK_STATUS);
+        mHandler.removeMessages(MSG_UPDATE_IFACES);
         mHandler.sendMessageDelayed(
-                mHandler.obtainMessage(MSG_NOTIFY_NETWORK_STATUS), mSettings.getPollDelay());
+                mHandler.obtainMessage(MSG_UPDATE_IFACES), mSettings.getPollDelay());
     }
 
-    private void handleNotifyNetworkStatus(
+    private void updateIfaces(
             Network[] defaultNetworks,
             NetworkStateSnapshot[] snapshots,
             String activeIface) {
@@ -1265,7 +1261,7 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
             mWakeLock.acquire();
             try {
                 mActiveIface = activeIface;
-                handleNotifyNetworkStatusLocked(defaultNetworks, snapshots);
+                updateIfacesLocked(defaultNetworks, snapshots);
             } finally {
                 mWakeLock.release();
             }
@@ -1278,10 +1274,10 @@ public class NetworkStatsService extends INetworkStatsService.Stub {
      * they are combined under a single {@link NetworkIdentitySet}.
      */
     @GuardedBy("mStatsLock")
-    private void handleNotifyNetworkStatusLocked(@NonNull Network[] defaultNetworks,
+    private void updateIfacesLocked(@NonNull Network[] defaultNetworks,
             @NonNull NetworkStateSnapshot[] snapshots) {
         if (!mSystemReady) return;
-        if (LOGV) Slog.v(TAG, "handleNotifyNetworkStatusLocked()");
+        if (LOGV) Slog.v(TAG, "updateIfacesLocked()");
 
         // take one last stats snapshot before updating iface mapping. this
         // isn't perfect, since the kernel may already be counting traffic from

@@ -43,7 +43,6 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.phone.DozeParameters;
-import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.wakelock.WakeLockFake;
 
@@ -78,8 +77,6 @@ public class DozeUiTest extends SysuiTestCase {
     private DozeUi mDozeUi;
     @Mock
     private StatusBarStateController mStatusBarStateController;
-    @Mock
-    private ConfigurationController mConfigurationController;
 
     @Before
     public void setUp() throws Exception {
@@ -92,7 +89,7 @@ public class DozeUiTest extends SysuiTestCase {
 
         mDozeUi = new DozeUi(mContext, mAlarmManager, mWakeLock, mHost, mHandler,
                 mDozeParameters, mKeyguardUpdateMonitor, mDozeLog, mTunerService,
-                () -> mStatusBarStateController, mConfigurationController);
+                () -> mStatusBarStateController);
         mDozeUi.setDozeMachine(mMachine);
     }
 
@@ -149,7 +146,7 @@ public class DozeUiTest extends SysuiTestCase {
         when(mDozeParameters.getDisplayNeedsBlanking()).thenReturn(true);
         mDozeUi = new DozeUi(mContext, mAlarmManager, mWakeLock, mHost, mHandler,
                 mDozeParameters, mKeyguardUpdateMonitor, mDozeLog, mTunerService,
-                () -> mStatusBarStateController, mConfigurationController);
+                () -> mStatusBarStateController);
         mDozeUi.setDozeMachine(mMachine);
 
         // Never animate if display doesn't support it.

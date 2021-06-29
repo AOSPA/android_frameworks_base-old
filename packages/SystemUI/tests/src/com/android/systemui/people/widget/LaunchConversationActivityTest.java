@@ -16,14 +16,11 @@
 
 package com.android.systemui.people.widget;
 
-import static android.view.Display.DEFAULT_DISPLAY;
-
 import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
-import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -42,14 +39,11 @@ import androidx.test.filters.SmallTest;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.systemui.SysuiTestCase;
-import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
 import com.android.systemui.wmshell.BubblesManager;
-import com.android.wm.shell.bubbles.Bubble;
 
 import org.junit.Before;
-import org.junit.Ignore;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
@@ -93,8 +87,6 @@ public class LaunchConversationActivityTest extends SysuiTestCase {
     @Mock
     private UserManager mUserManager;
 
-    private CommandQueue mCommandQueue;
-
     @Captor
     private ArgumentCaptor<NotificationVisibility> mNotificationVisibilityCaptor;
 
@@ -103,9 +95,8 @@ public class LaunchConversationActivityTest extends SysuiTestCase {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
-        mCommandQueue = new CommandQueue(mContext);
         mActivity = new LaunchConversationActivity(mNotificationEntryManager,
-                Optional.of(mBubblesManager), mUserManager, mCommandQueue);
+                Optional.of(mBubblesManager), mUserManager);
         mActivity.setIsForTesting(true, mIStatusBarService);
         mIntent = new Intent();
         mIntent.putExtra(PeopleSpaceWidgetProvider.EXTRA_TILE_ID, "tile ID");
@@ -168,13 +159,9 @@ public class LaunchConversationActivityTest extends SysuiTestCase {
         mActivity.setIntent(mIntent);
         mActivity.onCreate(new Bundle());
 
-        assertThat(mActivity.isFinishing()).isTrue();
-        mCommandQueue.appTransitionFinished(DEFAULT_DISPLAY);
-
         verify(mIStatusBarService, times(1)).onNotificationClear(any(),
                 anyInt(), any(), anyInt(), anyInt(), mNotificationVisibilityCaptor.capture());
-        verify(mBubblesManager, never()).expandStackAndSelectBubble(any(Bubble.class));
-        verify(mBubblesManager, never()).expandStackAndSelectBubble(any(NotificationEntry.class));
+        verify(mBubblesManager, never()).expandStackAndSelectBubble(any());
 
         NotificationVisibility nv = mNotificationVisibilityCaptor.getValue();
         assertThat(nv.count).isEqualTo(NOTIF_COUNT);
@@ -187,9 +174,6 @@ public class LaunchConversationActivityTest extends SysuiTestCase {
                 NOTIF_KEY_CAN_BUBBLE);
         mActivity.setIntent(mIntent);
         mActivity.onCreate(new Bundle());
-
-        assertThat(mActivity.isFinishing()).isTrue();
-        mCommandQueue.appTransitionFinished(DEFAULT_DISPLAY);
 
         // Don't clear the notification for bubbles.
         verify(mIStatusBarService, never()).onNotificationClear(any(),
@@ -206,28 +190,8 @@ public class LaunchConversationActivityTest extends SysuiTestCase {
         mActivity.onCreate(new Bundle());
 
         assertThat(mActivity.isFinishing()).isTrue();
-        mCommandQueue.appTransitionFinished(DEFAULT_DISPLAY);
-
         verify(mIStatusBarService, never()).onNotificationClear(any(),
                 anyInt(), any(), anyInt(), anyInt(), any());
-        verify(mBubblesManager, never()).expandStackAndSelectBubble(any(Bubble.class));
-        verify(mBubblesManager, never()).expandStackAndSelectBubble(any(NotificationEntry.class));
-    }
-
-    @Ignore
-    @Test
-    public void testBubbleWithNoNotifOpensBubble() throws Exception {
-        Bubble bubble = mock(Bubble.class);
-        when(mBubblesManager.getBubbleWithShortcutId(any())).thenReturn(bubble);
-
-        mIntent.putExtra(PeopleSpaceWidgetProvider.EXTRA_NOTIFICATION_KEY,
-                EMPTY_STRING);
-        mActivity.setIntent(mIntent);
-        mActivity.onCreate(new Bundle());
-
-        assertThat(mActivity.isFinishing()).isTrue();
-        mCommandQueue.appTransitionFinished(DEFAULT_DISPLAY);
-
-        verify(mBubblesManager, times(1)).expandStackAndSelectBubble(eq(bubble));
+        verify(mBubblesManager, never()).expandStackAndSelectBubble(any());
     }
 }

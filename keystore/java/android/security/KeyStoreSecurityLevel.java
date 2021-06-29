@@ -19,7 +19,6 @@ package android.security;
 import android.annotation.NonNull;
 import android.app.compat.CompatChanges;
 import android.hardware.security.keymint.KeyParameter;
-import android.os.Binder;
 import android.os.RemoteException;
 import android.os.ServiceSpecificException;
 import android.security.keystore.BackendBusyException;
@@ -46,7 +45,6 @@ public class KeyStoreSecurityLevel {
     private final IKeystoreSecurityLevel mSecurityLevel;
 
     public KeyStoreSecurityLevel(IKeystoreSecurityLevel securityLevel) {
-        Binder.allowBlocking(securityLevel.asBinder());
         this.mSecurityLevel = securityLevel;
     }
 

@@ -419,26 +419,6 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.STREAM_MUSIC,       // STREAM_ACCESSIBILITY
         AudioSystem.STREAM_MUSIC        // STREAM_ASSISTANT
     };
-    /**
-     * Using Volume groups configuration allows to control volume per attributes
-     * and group definition may differ from stream aliases.
-     * So, do not alias any stream on one another when using volume groups.
-     * TODO(b/181140246): volume group definition hosting alias definition.
-     */
-    private final int[] STREAM_VOLUME_ALIAS_NONE = new int[] {
-        AudioSystem.STREAM_VOICE_CALL,      // STREAM_VOICE_CALL
-        AudioSystem.STREAM_SYSTEM,          // STREAM_SYSTEM
-        AudioSystem.STREAM_RING,            // STREAM_RING
-        AudioSystem.STREAM_MUSIC,           // STREAM_MUSIC
-        AudioSystem.STREAM_ALARM,           // STREAM_ALARM
-        AudioSystem.STREAM_NOTIFICATION,    // STREAM_NOTIFICATION
-        AudioSystem.STREAM_BLUETOOTH_SCO,   // STREAM_BLUETOOTH_SCO
-        AudioSystem.STREAM_SYSTEM_ENFORCED, // STREAM_SYSTEM_ENFORCED
-        AudioSystem.STREAM_DTMF,            // STREAM_DTMF
-        AudioSystem.STREAM_TTS,             // STREAM_TTS
-        AudioSystem.STREAM_ACCESSIBILITY,   // STREAM_ACCESSIBILITY
-        AudioSystem.STREAM_ASSISTANT        // STREAM_ASSISTANT
-    };
     private final int[] STREAM_VOLUME_ALIAS_DEFAULT = new int[] {
         AudioSystem.STREAM_VOICE_CALL,      // STREAM_VOICE_CALL
         AudioSystem.STREAM_RING,            // STREAM_SYSTEM
@@ -454,7 +434,6 @@ public class AudioService extends IAudioService.Stub
         AudioSystem.STREAM_MUSIC            // STREAM_ASSISTANT
     };
     protected static int[] mStreamVolumeAlias;
-    private static final int UNSET_INDEX = -1;
 
     /**
      * Map AudioSystem.STREAM_* constants to app ops.  This should be used
@@ -476,7 +455,6 @@ public class AudioService extends IAudioService.Stub
     };
 
     private final boolean mUseFixedVolume;
-    private final boolean mUseVolumeGroupAliases;
 
     // If absolute volume is supported in AVRCP device
     private volatile boolean mAvrcpAbsVolSupported = false;
@@ -877,9 +855,6 @@ public class AudioService extends IAudioService.Stub
         mSupportsMicPrivacyToggle = context.getSystemService(SensorPrivacyManager.class)
                 .supportsSensorToggle(SensorPrivacyManager.Sensors.MICROPHONE);
 
-        mUseVolumeGroupAliases = mContext.getResources().getBoolean(
-                com.android.internal.R.bool.config_handleVolumeAliasesUsingVolumeGroups);
-
         // Initialize volume
         // Priority 1 - Android Property
         // Priority 2 - Audio Policy Service
@@ -898,12 +873,6 @@ public class AudioService extends IAudioService.Stub
                 int minVolume = AudioSystem.getMinVolumeIndexForAttributes(attr);
                 if (minVolume != -1) {
                     MIN_STREAM_VOLUME[streamType] = minVolume;
-                }
-            }
-            if (mUseVolumeGroupAliases) {
-                // Set all default to uninitialized.
-                for (int stream = 0; stream < AudioSystem.DEFAULT_STREAM_VOLUME.length; stream++) {
-                    AudioSystem.DEFAULT_STREAM_VOLUME[stream] = UNSET_INDEX;
                 }
             }
         }
@@ -1771,40 +1740,16 @@ public class AudioService extends IAudioService.Stub
         updateDefaultVolumes();
     }
 
-    /**
-     * Update default indexes from aliased streams. Must be called after mStreamStates is created
-     * TODO(b/181140246): when using VolumeGroup alias, we are lacking configurability for default
-     * index. Need to make default index configurable and independent of streams.
-     * Fallback on music stream for default initialization to take benefit of property based default
-     * initialization.
-     * For other volume groups not linked to any streams, default music stream index is considered.
-     */
+    // Update default indexes from aliased streams. Must be called after mStreamStates is created
     private void updateDefaultVolumes() {
         for (int stream = 0; stream < mStreamStates.length; stream++) {
-            int streamVolumeAlias = mStreamVolumeAlias[stream];
-            if (mUseVolumeGroupAliases) {
-                if (AudioSystem.DEFAULT_STREAM_VOLUME[stream] != UNSET_INDEX) {
-                    // Already initialized through default property based mecanism.
-                    continue;
-                }
-                streamVolumeAlias = AudioSystem.STREAM_MUSIC;
-                int defaultAliasVolume = getUiDefaultRescaledIndex(streamVolumeAlias, stream);
-                if ((defaultAliasVolume >= MIN_STREAM_VOLUME[stream])
-                        && (defaultAliasVolume <= MAX_STREAM_VOLUME[stream])) {
-                    AudioSystem.DEFAULT_STREAM_VOLUME[stream] = defaultAliasVolume;
-                    continue;
-                }
-            }
-            if (stream != streamVolumeAlias) {
-                AudioSystem.DEFAULT_STREAM_VOLUME[stream] =
-                        getUiDefaultRescaledIndex(streamVolumeAlias, stream);
+            if (stream != mStreamVolumeAlias[stream]) {
+                AudioSystem.DEFAULT_STREAM_VOLUME[stream] = (rescaleIndex(
+                        AudioSystem.DEFAULT_STREAM_VOLUME[mStreamVolumeAlias[stream]] * 10,
+                        mStreamVolumeAlias[stream],
+                        stream) + 5) / 10;
             }
         }
-    }
-
-    private int getUiDefaultRescaledIndex(int srcStream, int dstStream) {
-        return (rescaleIndex(AudioSystem.DEFAULT_STREAM_VOLUME[srcStream] * 10,
-                srcStream, dstStream) + 5) / 10;
     }
 
     private void dumpStreamStates(PrintWriter pw) {
@@ -1830,9 +1775,6 @@ public class AudioService extends IAudioService.Stub
         if (mIsSingleVolume) {
             mStreamVolumeAlias = STREAM_VOLUME_ALIAS_TELEVISION;
             dtmfStreamAlias = AudioSystem.STREAM_MUSIC;
-        } else if (mUseVolumeGroupAliases) {
-            mStreamVolumeAlias = STREAM_VOLUME_ALIAS_NONE;
-            dtmfStreamAlias = AudioSystem.STREAM_DTMF;
         } else {
             switch (mPlatformType) {
                 case AudioSystem.PLATFORM_VOICE:
@@ -2866,7 +2808,7 @@ public class AudioService extends IAudioService.Stub
         // If either the client forces allowing ringer modes for this adjustment,
         // or the stream type is one that is affected by ringer modes
         if (((flags & AudioManager.FLAG_ALLOW_RINGER_MODES) != 0) ||
-                (isUiSoundsStreamType(streamTypeAlias))) {
+                (streamTypeAlias == getUiSoundsStreamType())) {
             int ringerMode = getRingerModeInternal();
             // do not vibrate if already in vibrate mode
             if (ringerMode == AudioManager.RINGER_MODE_VIBRATE) {
@@ -3669,7 +3611,7 @@ public class AudioService extends IAudioService.Stub
             case Settings.Global.ZEN_MODE_ALARMS:
             case Settings.Global.ZEN_MODE_IMPORTANT_INTERRUPTIONS:
                 return !isStreamMutedByRingerOrZenMode(streamTypeAlias)
-                        || isUiSoundsStreamType(streamTypeAlias)
+                        || streamTypeAlias == getUiSoundsStreamType()
                         || (flags & AudioManager.FLAG_ALLOW_RINGER_MODES) != 0;
         }
 
@@ -4086,26 +4028,9 @@ public class AudioService extends IAudioService.Stub
         return (mStreamStates[streamType].getIndex(device) + 5) / 10;
     }
 
-    /** @see AudioManager#getUiSoundsStreamType()
-     * TODO(b/181140246): when using VolumeGroup alias, we are lacking configurability for
-     * UI Sounds identification.
-     * Fallback on Voice configuration to ensure correct behavior of DnD feature.
-     */
+    /** @see AudioManager#getUiSoundsStreamType()  */
     public int getUiSoundsStreamType() {
-        return mUseVolumeGroupAliases ? STREAM_VOLUME_ALIAS_VOICE[AudioSystem.STREAM_SYSTEM]
-                : mStreamVolumeAlias[AudioSystem.STREAM_SYSTEM];
-    }
-
-    /**
-     * TODO(b/181140246): when using VolumeGroup alias, we are lacking configurability for
-     * UI Sounds identification.
-     * Fallback on Voice configuration to ensure correct behavior of DnD feature.
-     */
-    private boolean isUiSoundsStreamType(int aliasStreamType) {
-        return mUseVolumeGroupAliases
-                ? STREAM_VOLUME_ALIAS_VOICE[aliasStreamType]
-                        == STREAM_VOLUME_ALIAS_VOICE[AudioSystem.STREAM_SYSTEM]
-                : aliasStreamType == mStreamVolumeAlias[AudioSystem.STREAM_SYSTEM];
+        return mStreamVolumeAlias[AudioSystem.STREAM_SYSTEM];
     }
 
     /** @see AudioManager#setMicrophoneMute(boolean) */

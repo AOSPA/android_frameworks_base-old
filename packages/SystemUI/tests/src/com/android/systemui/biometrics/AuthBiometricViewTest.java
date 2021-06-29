@@ -16,20 +16,16 @@
 
 package com.android.systemui.biometrics;
 
-import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FACE;
-import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRINT;
 import static android.hardware.biometrics.BiometricManager.Authenticators;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 import android.content.Context;
-import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.PromptInfo;
 import android.os.Bundle;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -202,11 +198,11 @@ public class AuthBiometricViewTest extends SysuiTestCase {
     public void testError_sendsActionError() {
         initDialog(mContext, false /* allowDeviceCredential */, mCallback, new MockInjector());
         final String testError = "testError";
-        mBiometricView.onError(TYPE_FACE, testError);
+        mBiometricView.onError(testError);
         waitForIdleSync();
 
-        verify(mCallback).onAction(eq(AuthBiometricView.Callback.ACTION_ERROR));
-        assertEquals(AuthBiometricView.STATE_IDLE, mBiometricView.mState);
+        verify(mCallback).onAction(AuthBiometricView.Callback.ACTION_ERROR);
+        assertEquals(AuthBiometricView.STATE_ERROR, mBiometricView.mState);
     }
 
     @Test
@@ -243,23 +239,6 @@ public class AuthBiometricViewTest extends SysuiTestCase {
     }
 
     @Test
-    public void testIgnoresUselessHelp() {
-        initDialog(mContext, false /* allowDeviceCredential */, mCallback, new MockInjector());
-
-        mBiometricView.onDialogAnimatedIn();
-        waitForIdleSync();
-
-        assertEquals(AuthBiometricView.STATE_AUTHENTICATING, mBiometricView.mState);
-
-        mBiometricView.onHelp(TYPE_FINGERPRINT, "");
-        waitForIdleSync();
-
-        verify(mIndicatorView, never()).setText(any());
-        verify(mCallback, never()).onAction(eq(AuthBiometricView.Callback.ACTION_ERROR));
-        assertEquals(AuthBiometricView.STATE_AUTHENTICATING, mBiometricView.mState);
-    }
-
-    @Test
     public void testRestoresState() {
         final boolean requireConfirmation = true; // set/init from AuthController
 
@@ -274,17 +253,11 @@ public class AuthBiometricViewTest extends SysuiTestCase {
             public TextView getIndicatorView() {
                 return indicatorView;
             }
-
-            @Override
-            public int getDelayAfterError() {
-                // keep a real delay to test saving in the error state
-                return BiometricPrompt.HIDE_DIALOG_DELAY;
-            }
         });
 
         final String failureMessage = "testFailureMessage";
         mBiometricView.setRequireConfirmation(requireConfirmation);
-        mBiometricView.onAuthenticationFailed(TYPE_FACE, failureMessage);
+        mBiometricView.onAuthenticationFailed(failureMessage);
         waitForIdleSync();
 
         Bundle state = new Bundle();

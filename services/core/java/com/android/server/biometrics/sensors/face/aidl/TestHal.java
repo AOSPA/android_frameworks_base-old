@@ -35,16 +35,6 @@ public class TestHal extends IFace.Stub {
     private static final String TAG = "face.aidl.TestHal";
 
     @Override
-    public int getInterfaceVersion() {
-        return this.VERSION;
-    }
-
-    @Override
-    public String getInterfaceHash() {
-        return this.HASH;
-    }
-
-    @Override
     public SensorProps[] getSensorProps() {
         Slog.w(TAG, "getSensorProps");
         return new SensorProps[0];
@@ -55,16 +45,6 @@ public class TestHal extends IFace.Stub {
         Slog.w(TAG, "createSession, sensorId: " + sensorId + " userId: " + userId);
 
         return new ISession.Stub() {
-            @Override
-            public int getInterfaceVersion() {
-                return this.VERSION;
-            }
-
-            @Override
-            public String getInterfaceHash() {
-                return this.HASH;
-            }
-
             @Override
             public void generateChallenge() throws RemoteException {
                 Slog.w(TAG, "generateChallenge");
@@ -91,14 +71,6 @@ public class TestHal extends IFace.Stub {
                     public void cancel() throws RemoteException {
                         cb.onError(Error.CANCELED, 0 /* vendorCode */);
                     }
-                    @Override
-                    public int getInterfaceVersion() {
-                        return this.VERSION;
-                    }
-                    @Override
-                    public String getInterfaceHash() {
-                        return this.HASH;
-                    }
                 };
             }
 
@@ -110,14 +82,6 @@ public class TestHal extends IFace.Stub {
                     public void cancel() throws RemoteException {
                         cb.onError(Error.CANCELED, 0 /* vendorCode */);
                     }
-                    @Override
-                    public int getInterfaceVersion() {
-                        return this.VERSION;
-                    }
-                    @Override
-                    public String getInterfaceHash() {
-                        return this.HASH;
-                    }
                 };
             }
 
@@ -128,14 +92,6 @@ public class TestHal extends IFace.Stub {
                     @Override
                     public void cancel() throws RemoteException {
                         cb.onError(Error.CANCELED, 0 /* vendorCode */);
-                    }
-                    @Override
-                    public int getInterfaceVersion() {
-                        return this.VERSION;
-                    }
-                    @Override
-                    public String getInterfaceHash() {
-                        return this.HASH;
                     }
                 };
             }

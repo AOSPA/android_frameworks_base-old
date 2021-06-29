@@ -36,7 +36,6 @@ import android.app.ActivityManager;
 import android.app.ActivityOptions;
 import android.app.PendingIntent;
 import android.content.Context;
-import android.graphics.Rect;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
 import android.view.SurfaceControl;
@@ -126,7 +125,7 @@ public class TaskViewTest extends ShellTestCase {
     @Test
     public void testStartActivity() {
         ActivityOptions options = ActivityOptions.makeBasic();
-        mTaskView.startActivity(mock(PendingIntent.class), null, options, new Rect(0, 0, 100, 100));
+        mTaskView.startActivity(mock(PendingIntent.class), null, options);
 
         verify(mOrganizer).setPendingLaunchCookieListener(any(), eq(mTaskView));
         assertThat(options.getLaunchWindowingMode()).isEqualTo(WINDOWING_MODE_MULTI_WINDOW);

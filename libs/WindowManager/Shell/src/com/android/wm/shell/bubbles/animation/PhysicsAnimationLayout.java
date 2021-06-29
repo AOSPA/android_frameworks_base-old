@@ -117,8 +117,7 @@ public class PhysicsAnimationLayout extends FrameLayout {
          * This is used for things like maintaining the 'stack' effect in Bubbles, where bubbles
          * stack off to the left or right side slightly.
          */
-        abstract float getOffsetForChainedPropertyAnimation(
-                DynamicAnimation.ViewProperty property, int index);
+        abstract float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property);
 
         /**
          * Returns the SpringForce to be used for the given child view's property animation. Despite
@@ -497,7 +496,7 @@ public class PhysicsAnimationLayout extends FrameLayout {
         // setting up animations for all children when setActiveController is called.
         if (mController != null && !isReorder) {
             for (DynamicAnimation.ViewProperty property : mController.getAnimatedProperties()) {
-                setUpAnimationForChild(property, child);
+                setUpAnimationForChild(property, child, index);
             }
 
             mController.onChildAdded(child, index);
@@ -537,22 +536,23 @@ public class PhysicsAnimationLayout extends FrameLayout {
     /** Sets up SpringAnimations of the given property for each child view in the layout. */
     private void setUpAnimationsForProperty(DynamicAnimation.ViewProperty property) {
         for (int i = 0; i < getChildCount(); i++) {
-            setUpAnimationForChild(property, getChildAt(i));
+            setUpAnimationForChild(property, getChildAt(i), i);
         }
     }
 
     /** Constructs a SpringAnimation of the given property for a child view. */
-    private void setUpAnimationForChild(DynamicAnimation.ViewProperty property, View child) {
+    private void setUpAnimationForChild(
+            DynamicAnimation.ViewProperty property, View child, int index) {
         SpringAnimation newAnim = new SpringAnimation(child, property);
         newAnim.addUpdateListener((animation, value, velocity) -> {
             final int indexOfChild = indexOfChild(child);
             final int nextAnimInChain = mController.getNextAnimationInChain(property, indexOfChild);
+
             if (nextAnimInChain == PhysicsAnimationController.NONE || indexOfChild < 0) {
                 return;
             }
 
-            final float offset = mController.getOffsetForChainedPropertyAnimation(property,
-                    nextAnimInChain);
+            final float offset = mController.getOffsetForChainedPropertyAnimation(property);
             if (nextAnimInChain < getChildCount()) {
                 final SpringAnimation nextAnim = getSpringAnimationAtIndex(
                         property, nextAnimInChain);

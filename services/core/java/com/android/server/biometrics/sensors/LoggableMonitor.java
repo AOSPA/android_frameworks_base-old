@@ -16,13 +16,7 @@
 
 package com.android.server.biometrics.sensors;
 
-import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.content.Context;
-import android.hardware.Sensor;
-import android.hardware.SensorEvent;
-import android.hardware.SensorEventListener;
-import android.hardware.SensorManager;
 import android.hardware.biometrics.BiometricConstants;
 import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.face.FaceManager;
@@ -43,40 +37,8 @@ public abstract class LoggableMonitor {
     final int mStatsModality;
     private final int mStatsAction;
     private final int mStatsClient;
-    @NonNull private final SensorManager mSensorManager;
     private long mFirstAcquireTimeMs;
-    private boolean mLightSensorEnabled = false;
     private boolean mShouldLogMetrics = true;
-
-    // report only the most recent value
-    // consider com.android.server.display.utils.AmbientFilter or similar if need arises
-    private volatile float mLastAmbientLux = 0;
-
-    private final SensorEventListener mLightSensorListener = new SensorEventListener() {
-        @Override
-        public void onSensorChanged(SensorEvent event) {
-            mLastAmbientLux = event.values[0];
-        }
-
-        @Override
-        public void onAccuracyChanged(Sensor sensor, int accuracy) {
-            // Not used.
-        }
-    };
-
-    /**
-     * @param context system_server context
-     * @param statsModality One of {@link BiometricsProtoEnums} MODALITY_* constants.
-     * @param statsAction One of {@link BiometricsProtoEnums} ACTION_* constants.
-     * @param statsClient One of {@link BiometricsProtoEnums} CLIENT_* constants.
-     */
-    public LoggableMonitor(@NonNull Context context, int statsModality, int statsAction,
-            int statsClient) {
-        mStatsModality = statsModality;
-        mStatsAction = statsAction;
-        mStatsClient = statsClient;
-        mSensorManager = context.getSystemService(SensorManager.class);
-    }
 
     /**
      * Only valid for AuthenticationClient.
@@ -84,6 +46,17 @@ public abstract class LoggableMonitor {
      */
     protected boolean isCryptoOperation() {
         return false;
+    }
+
+    /**
+     * @param statsModality One of {@link BiometricsProtoEnums} MODALITY_* constants.
+     * @param statsAction One of {@link BiometricsProtoEnums} ACTION_* constants.
+     * @param statsClient One of {@link BiometricsProtoEnums} CLIENT_* constants.
+     */
+    public LoggableMonitor(int statsModality, int statsAction, int statsClient) {
+        mStatsModality = statsModality;
+        mStatsAction = statsAction;
+        mStatsClient = statsClient;
     }
 
     protected void setShouldLog(boolean shouldLog) {
@@ -158,6 +131,7 @@ public abstract class LoggableMonitor {
     }
 
     protected final void logOnError(Context context, int error, int vendorCode, int targetUserId) {
+
         if (!mShouldLogMetrics) {
             return;
         }
@@ -225,8 +199,7 @@ public abstract class LoggableMonitor {
                     + ", Client: " + mStatsClient
                     + ", RequireConfirmation: " + requireConfirmation
                     + ", State: " + authState
-                    + ", Latency: " + latency
-                    + ", Lux: " + mLastAmbientLux);
+                    + ", Latency: " + latency);
         } else {
             Slog.v(TAG, "Authentication latency: " + latency);
         }
@@ -244,8 +217,7 @@ public abstract class LoggableMonitor {
                 authState,
                 sanitizeLatency(latency),
                 Utils.isDebugEnabled(context, targetUserId),
-                -1 /* sensorId */,
-                mLastAmbientLux /* ambientLightLux */);
+                -1 /* sensorId */);
     }
 
     protected final void logOnEnrolled(int targetUserId, long latency, boolean enrollSuccessful) {
@@ -258,7 +230,6 @@ public abstract class LoggableMonitor {
                     + ", User: " + targetUserId
                     + ", Client: " + mStatsClient
                     + ", Latency: " + latency
-                    + ", Lux: " + mLastAmbientLux
                     + ", Success: " + enrollSuccessful);
         } else {
             Slog.v(TAG, "Enroll latency: " + latency);
@@ -273,8 +244,7 @@ public abstract class LoggableMonitor {
                 targetUserId,
                 sanitizeLatency(latency),
                 enrollSuccessful,
-                -1, /* sensorId */
-                mLastAmbientLux /* ambientLightLux */);
+                -1 /* sensorId */);
     }
 
     private long sanitizeLatency(long latency) {
@@ -285,46 +255,4 @@ public abstract class LoggableMonitor {
         return latency;
     }
 
-    /** Get a callback to start/stop ALS capture when client runs. */
-    @NonNull
-    protected BaseClientMonitor.Callback createALSCallback() {
-        return new BaseClientMonitor.Callback() {
-            @Override
-            public void onClientStarted(@NonNull BaseClientMonitor clientMonitor) {
-                setLightSensorLoggingEnabled(getAmbientLightSensor(mSensorManager));
-            }
-
-            @Override
-            public void onClientFinished(@NonNull BaseClientMonitor clientMonitor,
-                    boolean success) {
-                setLightSensorLoggingEnabled(null);
-            }
-        };
-    }
-
-    /** The sensor to use for ALS logging. */
-    @Nullable
-    protected Sensor getAmbientLightSensor(@NonNull SensorManager sensorManager) {
-        return mShouldLogMetrics ? sensorManager.getDefaultSensor(Sensor.TYPE_LIGHT) : null;
-    }
-
-    private void setLightSensorLoggingEnabled(@Nullable Sensor lightSensor) {
-        if (DEBUG) {
-            Slog.v(TAG, "capturing ambient light using: "
-                    + (lightSensor != null ? lightSensor : "[disabled]"));
-        }
-
-        if (lightSensor != null) {
-            if (!mLightSensorEnabled) {
-                mLightSensorEnabled = true;
-                mLastAmbientLux = 0;
-                mSensorManager.registerListener(mLightSensorListener, lightSensor,
-                        SensorManager.SENSOR_DELAY_NORMAL);
-            }
-        } else {
-            mLightSensorEnabled = false;
-            mLastAmbientLux = 0;
-            mSensorManager.unregisterListener(mLightSensorListener);
-        }
-    }
 }

@@ -18,8 +18,6 @@
 
 #include <algorithm>
 #include <cstdarg>
-#include <string>
-#include <utility>
 
 #include "android-base/macros.h"
 #include "android-base/stringprintf.h"

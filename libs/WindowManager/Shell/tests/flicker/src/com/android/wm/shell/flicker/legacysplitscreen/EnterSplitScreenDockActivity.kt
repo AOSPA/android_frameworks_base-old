@@ -18,12 +18,12 @@ package com.android.wm.shell.flicker.legacysplitscreen
 
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
+import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.HOME_WINDOW_TITLE
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.launchSplitScreen
 import com.android.server.wm.flicker.navBarWindowIsAlwaysVisible
@@ -48,7 +48,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 class EnterSplitScreenDockActivity(
     testSpec: FlickerTestParameter
 ) : LegacySplitScreenTransition(testSpec) {
@@ -65,7 +64,7 @@ class EnterSplitScreenDockActivity(
             splitScreenApp.defaultWindowName, WindowManagerStateHelper.SPLASH_SCREEN_NAME,
             WindowManagerStateHelper.SNAPSHOT_WINDOW_NAME, *HOME_WINDOW_TITLE)
 
-    @Presubmit
+    @FlakyTest(bugId = 169271943)
     @Test
     fun dockedStackPrimaryBoundsIsVisible() =
         testSpec.dockedStackPrimaryBoundsIsVisible(testSpec.config.startRotation,

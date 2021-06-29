@@ -16,7 +16,6 @@
 
 package com.android.server.location.injector;
 
-import android.os.PackageTagsList;
 import android.os.UserHandle;
 import android.util.IndentingPrintWriter;
 import android.util.SparseArray;
@@ -41,7 +40,7 @@ public class FakeSettingsHelper extends SettingsHelper {
 
         private final CopyOnWriteArrayList<UserSettingChangedListener> mListeners;
 
-        Setting(Object defaultValue) {
+        private Setting(Object defaultValue) {
             mValues = new SparseArray<>();
             mDefaultValue = defaultValue;
             mListeners = new CopyOnWriteArrayList<>();
@@ -84,8 +83,7 @@ public class FakeSettingsHelper extends SettingsHelper {
     private final Setting mBackgroundThrottlePackageWhitelistSetting = new Setting(
             Collections.emptySet());
     private final Setting mGnssMeasurementsFullTrackingSetting = new Setting(Boolean.FALSE);
-    private final Setting mIgnoreSettingsAllowlist = new Setting(
-            new PackageTagsList.Builder().build());
+    private final Setting mIgnoreSettingsPackageWhitelist = new Setting(Collections.emptySet());
     private final Setting mBackgroundThrottleProximityAlertIntervalSetting = new Setting(
             30 * 60 * 1000L);
     private final Setting mCoarseLocationAccuracySetting = new Setting(2000.0f);
@@ -194,24 +192,24 @@ public class FakeSettingsHelper extends SettingsHelper {
     }
 
     @Override
-    public PackageTagsList getIgnoreSettingsAllowlist() {
-        return mIgnoreSettingsAllowlist.getValue(PackageTagsList.class);
+    public Set<String> getIgnoreSettingsPackageWhitelist() {
+        return mIgnoreSettingsPackageWhitelist.getValue(Set.class);
     }
 
-    public void setIgnoreSettingsAllowlist(PackageTagsList newValue) {
-        mIgnoreSettingsAllowlist.setValue(newValue);
-    }
-
-    @Override
-    public void addIgnoreSettingsAllowlistChangedListener(
-            GlobalSettingChangedListener listener) {
-        mIgnoreSettingsAllowlist.addListener(listener);
+    public void setIgnoreSettingsPackageWhitelist(Set<String> newValue) {
+        mIgnoreSettingsPackageWhitelist.setValue(newValue);
     }
 
     @Override
-    public void removeIgnoreSettingsAllowlistChangedListener(
+    public void addOnIgnoreSettingsPackageWhitelistChangedListener(
             GlobalSettingChangedListener listener) {
-        mIgnoreSettingsAllowlist.removeListener(listener);
+        mIgnoreSettingsPackageWhitelist.addListener(listener);
+    }
+
+    @Override
+    public void removeOnIgnoreSettingsPackageWhitelistChangedListener(
+            GlobalSettingChangedListener listener) {
+        mIgnoreSettingsPackageWhitelist.removeListener(listener);
     }
 
     @Override

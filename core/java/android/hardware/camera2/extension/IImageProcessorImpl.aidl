@@ -21,6 +21,5 @@ import android.hardware.camera2.extension.ParcelImage;
 /** @hide */
 interface IImageProcessorImpl
 {
-    void onNextImageAvailable(in OutputConfigId outputConfigId, in ParcelImage image,
-            in String physicalCameraId);
+    void onNextImageAvailable(in OutputConfigId outputConfigId, in ParcelImage image);
 }

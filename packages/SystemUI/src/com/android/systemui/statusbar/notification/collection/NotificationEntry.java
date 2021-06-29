@@ -179,7 +179,6 @@ public final class NotificationEntry extends ListEntry {
     private boolean mIsAlerting;
 
     public boolean mRemoteEditImeVisible;
-    private boolean mExpandAnimationRunning;
 
     /**
      * @param sbn the StatusBarNotification from system server
@@ -951,16 +950,6 @@ public final class NotificationEntry extends ListEntry {
 
     public boolean isAlerting() {
         return mIsAlerting;
-    }
-
-    /** Set whether this notification is currently used to animate a launch. */
-    public void setExpandAnimationRunning(boolean expandAnimationRunning) {
-        mExpandAnimationRunning = expandAnimationRunning;
-    }
-
-    /** Whether this notification is currently used to animate a launch. */
-    public boolean isExpandAnimationRunning() {
-        return mExpandAnimationRunning;
     }
 
     /** Information about a suggestion that is being edited. */

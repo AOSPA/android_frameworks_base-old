@@ -23,7 +23,6 @@ import android.graphics.drawable.RippleDrawable
 import android.media.MediaMetadata
 import android.media.session.MediaSession
 import android.media.session.PlaybackState
-import android.os.Handler
 import android.provider.Settings.ACTION_MEDIA_CONTROLS_SETTINGS
 import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
@@ -55,6 +54,7 @@ import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.anyLong
 import org.mockito.Mock
+import org.mockito.Mockito.anyBoolean
 import org.mockito.Mockito.mock
 import org.mockito.Mockito.never
 import org.mockito.Mockito.verify
@@ -110,10 +110,8 @@ public class MediaControlPanelTest : SysuiTestCase() {
     private lateinit var action2: ImageButton
     private lateinit var action3: ImageButton
     private lateinit var action4: ImageButton
-    @Mock private lateinit var longPressText: TextView
-    @Mock private lateinit var handler: Handler
-    private lateinit var settings: View
     private lateinit var settingsText: TextView
+    private lateinit var settings: View
     private lateinit var cancel: View
     private lateinit var dismiss: FrameLayout
     private lateinit var dismissLabel: View
@@ -172,12 +170,10 @@ public class MediaControlPanelTest : SysuiTestCase() {
         whenever(holder.action3).thenReturn(action3)
         action4 = ImageButton(context)
         whenever(holder.action4).thenReturn(action4)
-        whenever(holder.longPressText).thenReturn(longPressText)
-        whenever(longPressText.handler).thenReturn(handler)
-        settings = View(context)
-        whenever(holder.settings).thenReturn(settings)
         settingsText = TextView(context)
         whenever(holder.settingsText).thenReturn(settingsText)
+        settings = View(context)
+        whenever(holder.settings).thenReturn(settings)
         cancel = View(context)
         whenever(holder.cancel).thenReturn(cancel)
         dismiss = FrameLayout(context)
@@ -328,6 +324,10 @@ public class MediaControlPanelTest : SysuiTestCase() {
 
         assertThat(dismiss.isEnabled).isEqualTo(true)
         dismiss.callOnClick()
+        val captor = ArgumentCaptor.forClass(ActivityStarter.OnDismissAction::class.java)
+        verify(keyguardDismissUtil).executeWhenUnlocked(captor.capture(), anyBoolean())
+
+        captor.value.onDismiss()
         verify(mediaDataManager).dismissMediaData(eq(mediaKey), anyLong())
     }
 

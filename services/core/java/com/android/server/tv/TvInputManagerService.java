@@ -143,9 +143,9 @@ public final class TvInputManagerService extends SystemService {
     // ID of the current user.
     @GuardedBy("mLock")
     private int mCurrentUserId = UserHandle.USER_SYSTEM;
-    // IDs of the running profiles. Their parent user ID should be mCurrentUserId.
+    // IDs of the running managed profiles. Their parent user ID should be mCurrentUserId.
     @GuardedBy("mLock")
-    private final Set<Integer> mRunningProfiles = new HashSet<>();
+    private final Set<Integer> mRunningManagedProfile  = new HashSet<>();
 
     // A map from user id to UserState.
     @GuardedBy("mLock")
@@ -440,13 +440,13 @@ public final class TvInputManagerService extends SystemService {
 
     private void startUser(int userId) {
         synchronized (mLock) {
-            if (userId == mCurrentUserId || mRunningProfiles.contains(userId)) {
+            if (userId == mCurrentUserId || mRunningManagedProfile.contains(userId)) {
                 // user already started
                 return;
             }
             UserInfo userInfo = mUserManager.getUserInfo(userId);
             UserInfo parentInfo = mUserManager.getProfileParent(userId);
-            if (userInfo.isProfile()
+            if (userInfo.isManagedProfile()
                     && parentInfo != null
                     && parentInfo.id == mCurrentUserId) {
                 // only the children of the current user can be started in background
@@ -463,13 +463,13 @@ public final class TvInputManagerService extends SystemService {
 
         releaseSessionOfUserLocked(userId);
         unbindServiceOfUserLocked(userId);
-        mRunningProfiles.remove(userId);
+        mRunningManagedProfile.remove(userId);
     }
 
     private void startProfileLocked(int userId) {
         buildTvInputListLocked(userId, null);
         buildTvContentRatingSystemListLocked(userId);
-        mRunningProfiles.add(userId);
+        mRunningManagedProfile.add(userId);
     }
 
     private void switchUser(int userId) {
@@ -478,16 +478,16 @@ public final class TvInputManagerService extends SystemService {
                 return;
             }
             UserInfo userInfo = mUserManager.getUserInfo(userId);
-            if (userInfo.isProfile()) {
-                Slog.w(TAG, "cannot switch to a profile!");
+            if (userInfo.isManagedProfile()) {
+                Slog.w(TAG, "cannot switch to a managed profile!");
                 return;
             }
 
-            for (int runningId : mRunningProfiles) {
+            for (int runningId : mRunningManagedProfile) {
                 releaseSessionOfUserLocked(runningId);
                 unbindServiceOfUserLocked(runningId);
             }
-            mRunningProfiles.clear();
+            mRunningManagedProfile.clear();
             releaseSessionOfUserLocked(mCurrentUserId);
             unbindServiceOfUserLocked(mCurrentUserId);
 
@@ -630,7 +630,7 @@ public final class TvInputManagerService extends SystemService {
             userState.mCallbacks.kill();
             userState.mainSessionToken = null;
 
-            mRunningProfiles.remove(userId);
+            mRunningManagedProfile.remove(userId);
             mUserStates.remove(userId);
 
             if (userId == mCurrentUserId) {
@@ -729,7 +729,7 @@ public final class TvInputManagerService extends SystemService {
         }
 
         boolean shouldBind;
-        if (userId == mCurrentUserId || mRunningProfiles.contains(userId)) {
+        if (userId == mCurrentUserId || mRunningManagedProfile.contains(userId)) {
             shouldBind = !serviceState.sessionTokens.isEmpty() || serviceState.isHardware;
         } else {
             // For a non-current user,
@@ -1400,9 +1400,9 @@ public final class TvInputManagerService extends SystemService {
             String uniqueSessionId = UUID.randomUUID().toString();
             try {
                 synchronized (mLock) {
-                    if (userId != mCurrentUserId && !mRunningProfiles.contains(userId)
+                    if (userId != mCurrentUserId && !mRunningManagedProfile.contains(userId)
                             && !isRecordingSession) {
-                        // Only current user and its running profiles can create
+                        // Only current user and its running managed profiles can create
                         // non-recording sessions.
                         // Let the client get onConnectionFailed callback for this case.
                         sendSessionTokenToClientLocked(client, inputId, null, null, seq);

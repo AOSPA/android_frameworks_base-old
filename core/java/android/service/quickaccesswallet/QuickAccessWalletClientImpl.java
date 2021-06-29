@@ -61,7 +61,6 @@ import java.util.concurrent.Executor;
 public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, ServiceConnection {
 
     private static final String TAG = "QAWalletSClient";
-    public static final String SETTING_KEY = "lockscreen_show_wallet";
     private final Handler mHandler;
     private final Context mContext;
     private final Queue<ApiCaller> mRequestQueue;
@@ -97,12 +96,13 @@ public class QuickAccessWalletClientImpl implements QuickAccessWalletClient, Ser
         int currentUser = ActivityManager.getCurrentUser();
         return currentUser == UserHandle.USER_SYSTEM
                 && checkUserSetupComplete()
+                && checkSecureSetting(Settings.Secure.GLOBAL_ACTIONS_PANEL_ENABLED)
                 && !new LockPatternUtils(mContext).isUserInLockdown(currentUser);
     }
 
     @Override
     public boolean isWalletFeatureAvailableWhenDeviceLocked() {
-        return checkSecureSetting(SETTING_KEY);
+        return checkSecureSetting(Settings.Secure.POWER_MENU_LOCKED_SHOW_CONTENT);
     }
 
     @Override

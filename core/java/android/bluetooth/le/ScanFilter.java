@@ -16,8 +16,6 @@
 
 package android.bluetooth.le;
 
-import static java.util.Objects.requireNonNull;
-
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.SystemApi;
@@ -29,6 +27,7 @@ import android.os.ParcelUuid;
 import android.os.Parcelable;
 
 import com.android.internal.util.BitUtils;
+import com.android.internal.util.Preconditions;
 
 import java.util.Arrays;
 import java.util.List;
@@ -775,7 +774,7 @@ public final class ScanFilter implements Parcelable {
         public Builder setDeviceAddress(@NonNull String deviceAddress,
                                         @AddressType int addressType,
                                         @NonNull byte[] irk) {
-            requireNonNull(irk);
+            Preconditions.checkNotNull(irk);
             if (irk.length != LEN_IRK_OCTETS) {
                 throw new IllegalArgumentException("'irk' is invalid length!");
             }
@@ -807,7 +806,7 @@ public final class ScanFilter implements Parcelable {
                                                  @Nullable byte[] irk) {
 
             // Make sure our deviceAddress is valid!
-            requireNonNull(deviceAddress);
+            Preconditions.checkNotNull(deviceAddress);
             if (!BluetoothAdapter.checkBluetoothAddress(deviceAddress)) {
                 throw new IllegalArgumentException("invalid device address " + deviceAddress);
             }

@@ -16,11 +16,11 @@
 
 package com.android.server.location.injector;
 
-import static android.location.LocationDeviceConfig.IGNORE_SETTINGS_ALLOWLIST;
 import static android.provider.Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING;
 import static android.provider.Settings.Global.LOCATION_BACKGROUND_THROTTLE_INTERVAL_MS;
 import static android.provider.Settings.Global.LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST;
 import static android.provider.Settings.Global.LOCATION_BACKGROUND_THROTTLE_PROXIMITY_ALERT_INTERVAL_MS;
+import static android.provider.Settings.Global.LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST;
 import static android.provider.Settings.Secure.LOCATION_COARSE_ACCURACY_M;
 import static android.provider.Settings.Secure.LOCATION_MODE;
 import static android.provider.Settings.Secure.LOCATION_MODE_OFF;
@@ -35,13 +35,10 @@ import android.database.ContentObserver;
 import android.net.Uri;
 import android.os.Binder;
 import android.os.Handler;
-import android.os.PackageTagsList;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.provider.DeviceConfig;
 import android.provider.Settings;
 import android.text.TextUtils;
-import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.IndentingPrintWriter;
 import android.util.Log;
@@ -80,7 +77,7 @@ public class SystemSettingsHelper extends SettingsHelper {
     private final StringListCachedSecureSetting mLocationPackageBlacklist;
     private final StringListCachedSecureSetting mLocationPackageWhitelist;
     private final StringSetCachedGlobalSetting mBackgroundThrottlePackageWhitelist;
-    private final PackageTagsListSetting mIgnoreSettingsPackageAllowlist;
+    private final StringSetCachedGlobalSetting mIgnoreSettingsPackageWhitelist;
 
     public SystemSettingsHelper(Context context) {
         mContext = context;
@@ -98,9 +95,10 @@ public class SystemSettingsHelper extends SettingsHelper {
                 LOCATION_BACKGROUND_THROTTLE_PACKAGE_WHITELIST,
                 () -> SystemConfig.getInstance().getAllowUnthrottledLocation(),
                 FgThread.getHandler());
-        mIgnoreSettingsPackageAllowlist = new PackageTagsListSetting(
-                IGNORE_SETTINGS_ALLOWLIST,
-                () -> SystemConfig.getInstance().getAllowIgnoreLocationSettings());
+        mIgnoreSettingsPackageWhitelist = new StringSetCachedGlobalSetting(context,
+                LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST,
+                () -> SystemConfig.getInstance().getAllowIgnoreLocationSettings(),
+                FgThread.getHandler());
     }
 
     /** Called when system is ready. */
@@ -110,14 +108,20 @@ public class SystemSettingsHelper extends SettingsHelper {
         mLocationPackageBlacklist.register();
         mLocationPackageWhitelist.register();
         mBackgroundThrottlePackageWhitelist.register();
-        mIgnoreSettingsPackageAllowlist.register();
+        mIgnoreSettingsPackageWhitelist.register();
     }
 
+    /**
+     * Retrieve if location is enabled or not.
+     */
     @Override
     public boolean isLocationEnabled(int userId) {
         return mLocationMode.getValueForUser(LOCATION_MODE_OFF, userId) != LOCATION_MODE_OFF;
     }
 
+    /**
+     * Set location enabled for a user.
+     */
     @Override
     public void setLocationEnabled(boolean enabled, int userId) {
         final long identity = Binder.clearCallingIdentity();
@@ -134,33 +138,53 @@ public class SystemSettingsHelper extends SettingsHelper {
         }
     }
 
+    /**
+     * Add a listener for changes to the location enabled setting. Callbacks occur on an unspecified
+     * thread.
+     */
     @Override
     public void addOnLocationEnabledChangedListener(UserSettingChangedListener listener) {
         mLocationMode.addListener(listener);
     }
 
+    /**
+     * Remove a listener for changes to the location enabled setting.
+     */
     @Override
     public void removeOnLocationEnabledChangedListener(UserSettingChangedListener listener) {
         mLocationMode.removeListener(listener);
     }
 
+    /**
+     * Retrieve the background throttle interval.
+     */
     @Override
     public long getBackgroundThrottleIntervalMs() {
         return mBackgroundThrottleIntervalMs.getValue(DEFAULT_BACKGROUND_THROTTLE_INTERVAL_MS);
     }
 
+    /**
+     * Add a listener for changes to the background throttle interval. Callbacks occur on an
+     * unspecified thread.
+     */
     @Override
     public void addOnBackgroundThrottleIntervalChangedListener(
             GlobalSettingChangedListener listener) {
         mBackgroundThrottleIntervalMs.addListener(listener);
     }
 
+    /**
+     * Remove a listener for changes to the background throttle interval.
+     */
     @Override
     public void removeOnBackgroundThrottleIntervalChangedListener(
             GlobalSettingChangedListener listener) {
         mBackgroundThrottleIntervalMs.removeListener(listener);
     }
 
+    /**
+     * Check if the given package is blacklisted for location access.
+     */
     @Override
     public boolean isLocationPackageBlacklisted(int userId, String packageName) {
         List<String> locationPackageBlacklist = mLocationPackageBlacklist.getValueForUser(userId);
@@ -184,6 +208,10 @@ public class SystemSettingsHelper extends SettingsHelper {
         return false;
     }
 
+    /**
+     * Add a listener for changes to the location package blacklist. Callbacks occur on an
+     * unspecified thread.
+     */
     @Override
     public void addOnLocationPackageBlacklistChangedListener(
             UserSettingChangedListener listener) {
@@ -191,6 +219,9 @@ public class SystemSettingsHelper extends SettingsHelper {
         mLocationPackageWhitelist.addListener(listener);
     }
 
+    /**
+     * Remove a listener for changes to the location package blacklist.
+     */
     @Override
     public void removeOnLocationPackageBlacklistChangedListener(
             UserSettingChangedListener listener) {
@@ -198,57 +229,90 @@ public class SystemSettingsHelper extends SettingsHelper {
         mLocationPackageWhitelist.removeListener(listener);
     }
 
+    /**
+     * Retrieve the background throttle package whitelist.
+     */
     @Override
     public Set<String> getBackgroundThrottlePackageWhitelist() {
         return mBackgroundThrottlePackageWhitelist.getValue();
     }
 
+    /**
+     * Add a listener for changes to the background throttle package whitelist. Callbacks occur on
+     * an unspecified thread.
+     */
     @Override
     public void addOnBackgroundThrottlePackageWhitelistChangedListener(
             GlobalSettingChangedListener listener) {
         mBackgroundThrottlePackageWhitelist.addListener(listener);
     }
 
+    /**
+     * Remove a listener for changes to the background throttle package whitelist.
+     */
     @Override
     public void removeOnBackgroundThrottlePackageWhitelistChangedListener(
             GlobalSettingChangedListener listener) {
         mBackgroundThrottlePackageWhitelist.removeListener(listener);
     }
 
+    /**
+     * Retrieve the gnss measurements full tracking enabled setting.
+     */
     @Override
     public boolean isGnssMeasurementsFullTrackingEnabled() {
         return mGnssMeasurementFullTracking.getValue(false);
     }
 
+    /**
+     * Add a listener for changes to the background throttle package whitelist. Callbacks occur on
+     * an unspecified thread.
+     */
     @Override
     public void addOnGnssMeasurementsFullTrackingEnabledChangedListener(
             GlobalSettingChangedListener listener) {
         mGnssMeasurementFullTracking.addListener(listener);
     }
 
+    /**
+     * Remove a listener for changes to the background throttle package whitelist.
+     */
     @Override
     public void removeOnGnssMeasurementsFullTrackingEnabledChangedListener(
             GlobalSettingChangedListener listener) {
         mGnssMeasurementFullTracking.removeListener(listener);
     }
 
+    /**
+     * Retrieve the ignore settings package whitelist.
+     */
     @Override
-    public PackageTagsList getIgnoreSettingsAllowlist() {
-        return mIgnoreSettingsPackageAllowlist.getValue();
+    public Set<String> getIgnoreSettingsPackageWhitelist() {
+        return mIgnoreSettingsPackageWhitelist.getValue();
     }
 
+    /**
+     * Add a listener for changes to the ignore settings package whitelist. Callbacks occur on an
+     * unspecified thread.
+     */
     @Override
-    public void addIgnoreSettingsAllowlistChangedListener(
+    public void addOnIgnoreSettingsPackageWhitelistChangedListener(
             GlobalSettingChangedListener listener) {
-        mIgnoreSettingsPackageAllowlist.addListener(listener);
+        mIgnoreSettingsPackageWhitelist.addListener(listener);
     }
 
+    /**
+     * Remove a listener for changes to the ignore settings package whitelist.
+     */
     @Override
-    public void removeIgnoreSettingsAllowlistChangedListener(
+    public void removeOnIgnoreSettingsPackageWhitelistChangedListener(
             GlobalSettingChangedListener listener) {
-        mIgnoreSettingsPackageAllowlist.removeListener(listener);
+        mIgnoreSettingsPackageWhitelist.removeListener(listener);
     }
 
+    /**
+     * Retrieve the background throttling proximity alert interval.
+     */
     @Override
     public long getBackgroundThrottleProximityAlertIntervalMs() {
         final long identity = Binder.clearCallingIdentity();
@@ -261,6 +325,10 @@ public class SystemSettingsHelper extends SettingsHelper {
         }
     }
 
+    /**
+     * Retrieve the accuracy for coarsening location, ie, the grid size used for snap-to-grid
+     * coarsening.
+     */
     @Override
     public float getCoarseLocationAccuracyM() {
         final long identity = Binder.clearCallingIdentity();
@@ -276,6 +344,9 @@ public class SystemSettingsHelper extends SettingsHelper {
         }
     }
 
+    /**
+     * Dump info for debugging.
+     */
     @Override
     public void dump(FileDescriptor fd, IndentingPrintWriter ipw, String[] args) {
         int[] userIds;
@@ -357,11 +428,13 @@ public class SystemSettingsHelper extends SettingsHelper {
             ipw.decreaseIndent();
         }
 
-        PackageTagsList ignoreSettingsAllowlist = mIgnoreSettingsPackageAllowlist.getValue();
-        if (!ignoreSettingsAllowlist.isEmpty()) {
+        Set<String> ignoreSettingsPackageWhitelist = mIgnoreSettingsPackageWhitelist.getValue();
+        if (!ignoreSettingsPackageWhitelist.isEmpty()) {
             ipw.println("Bypass Allow Packages:");
             ipw.increaseIndent();
-            ignoreSettingsAllowlist.dump(ipw);
+            for (String packageName : ignoreSettingsPackageWhitelist) {
+                ipw.println(packageName);
+            }
             ipw.decreaseIndent();
         }
     }
@@ -612,141 +685,6 @@ public class SystemSettingsHelper extends SettingsHelper {
         public void onChange(boolean selfChange, Uri uri, int userId) {
             invalidate();
             super.onChange(selfChange, uri, userId);
-        }
-    }
-
-    private static class DeviceConfigSetting implements DeviceConfig.OnPropertiesChangedListener {
-
-        protected final String mName;
-        private final CopyOnWriteArrayList<GlobalSettingChangedListener> mListeners;
-
-        @GuardedBy("this")
-        private boolean mRegistered;
-
-        DeviceConfigSetting(String name) {
-            mName = name;
-            mListeners = new CopyOnWriteArrayList<>();
-        }
-
-        protected synchronized boolean isRegistered() {
-            return mRegistered;
-        }
-
-        protected synchronized void register() {
-            if (mRegistered) {
-                return;
-            }
-
-            DeviceConfig.addOnPropertiesChangedListener(DeviceConfig.NAMESPACE_LOCATION,
-                    FgThread.getExecutor(), this);
-            mRegistered = true;
-        }
-
-        public void addListener(GlobalSettingChangedListener listener) {
-            mListeners.add(listener);
-        }
-
-        public void removeListener(GlobalSettingChangedListener listener) {
-            mListeners.remove(listener);
-        }
-
-        @Override
-        public final void onPropertiesChanged(DeviceConfig.Properties properties) {
-            if (!properties.getKeyset().contains(mName)) {
-                return;
-            }
-
-            onPropertiesChanged();
-        }
-
-        public void onPropertiesChanged() {
-            if (D) {
-                Log.d(TAG, "location device config setting changed: " + mName);
-            }
-
-            for (UserSettingChangedListener listener : mListeners) {
-                listener.onSettingChanged(UserHandle.USER_ALL);
-            }
-        }
-    }
-
-
-
-    private static class PackageTagsListSetting extends DeviceConfigSetting {
-
-        private final Supplier<ArrayMap<String, ArraySet<String>>> mBaseValuesSupplier;
-
-        @GuardedBy("this")
-        private boolean mValid;
-        @GuardedBy("this")
-        private PackageTagsList mCachedValue;
-
-        PackageTagsListSetting(String name,
-                Supplier<ArrayMap<String, ArraySet<String>>> baseValuesSupplier) {
-            super(name);
-            mBaseValuesSupplier = baseValuesSupplier;
-        }
-
-        public synchronized PackageTagsList getValue() {
-            PackageTagsList value = mCachedValue;
-            if (!mValid) {
-                final long identity = Binder.clearCallingIdentity();
-                try {
-                    PackageTagsList.Builder builder = new PackageTagsList.Builder().add(
-                            mBaseValuesSupplier.get());
-
-                    String setting = DeviceConfig.getProperty(DeviceConfig.NAMESPACE_LOCATION,
-                            mName);
-                    if (!TextUtils.isEmpty(setting)) {
-                        for (String packageAndTags : setting.split(",")) {
-                            if (TextUtils.isEmpty(packageAndTags)) {
-                                continue;
-                            }
-
-                            String[] packageThenTags = packageAndTags.split(";");
-                            String packageName = packageThenTags[0];
-                            if (packageThenTags.length == 1) {
-                                builder.add(packageName);
-                            } else {
-                                for (int i = 1; i < packageThenTags.length; i++) {
-                                    String attributionTag = packageThenTags[i];
-                                    if ("null".equals(attributionTag)) {
-                                        attributionTag = null;
-                                    }
-
-                                    if ("*".equals(attributionTag)) {
-                                        builder.add(packageName);
-                                    } else {
-                                        builder.add(packageName, attributionTag);
-                                    }
-                                }
-                            }
-                        }
-                    }
-
-                    value = builder.build();
-                } finally {
-                    Binder.restoreCallingIdentity(identity);
-                }
-
-                if (isRegistered()) {
-                    mValid = true;
-                    mCachedValue = value;
-                }
-            }
-
-            return value;
-        }
-
-        public synchronized void invalidate() {
-            mValid = false;
-            mCachedValue = null;
-        }
-
-        @Override
-        public void onPropertiesChanged() {
-            invalidate();
-            super.onPropertiesChanged();
         }
     }
 }

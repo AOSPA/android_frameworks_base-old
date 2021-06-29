@@ -19,7 +19,6 @@ package com.android.settingslib.widget;
 import android.content.Context;
 import android.content.res.TypedArray;
 import android.util.AttributeSet;
-import android.widget.Switch;
 
 import androidx.preference.PreferenceViewHolder;
 import androidx.preference.TwoStatePreference;
@@ -32,7 +31,7 @@ import java.util.List;
  * This component is used as the main switch of the page
  * to enable or disable the prefereces on the page.
  */
-public class MainSwitchPreference extends TwoStatePreference implements OnMainSwitchChangeListener {
+public class MainSwitchPreference extends TwoStatePreference {
 
     private final List<OnMainSwitchChangeListener> mSwitchChangeListeners = new ArrayList<>();
 
@@ -74,7 +73,7 @@ public class MainSwitchPreference extends TwoStatePreference implements OnMainSw
 
     private void init(Context context, AttributeSet attrs) {
         setLayoutResource(R.layout.settingslib_main_switch_layout);
-        mSwitchChangeListeners.add(this);
+
         if (attrs != null) {
             final TypedArray a = context.obtainStyledAttributes(attrs,
                     androidx.preference.R.styleable.Preference, 0 /*defStyleAttr*/,
@@ -89,7 +88,7 @@ public class MainSwitchPreference extends TwoStatePreference implements OnMainSw
     @Override
     public void setChecked(boolean checked) {
         super.setChecked(checked);
-        if (mMainSwitchBar != null && mMainSwitchBar.isChecked() != checked) {
+        if (mMainSwitchBar != null) {
             mMainSwitchBar.setChecked(checked);
         }
     }
@@ -102,17 +101,13 @@ public class MainSwitchPreference extends TwoStatePreference implements OnMainSw
         }
     }
 
-    @Override
-    public void onSwitchChanged(Switch switchView, boolean isChecked) {
-        super.setChecked(isChecked);
-    }
-
     /**
      * Update the switch status of preference
      */
     public void updateStatus(boolean checked) {
         setChecked(checked);
         if (mMainSwitchBar != null) {
+            mMainSwitchBar.setChecked(checked);
             mMainSwitchBar.setTitle(mTitle);
             mMainSwitchBar.show();
         }

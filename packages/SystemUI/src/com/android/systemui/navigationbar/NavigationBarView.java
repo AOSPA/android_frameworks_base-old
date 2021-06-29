@@ -323,6 +323,10 @@ public class NavigationBarView extends FrameLayout implements
 
         mOverviewProxyService = Dependency.get(OverviewProxyService.class);
         mRecentsOnboarding = new RecentsOnboarding(context, mOverviewProxyService);
+        mNavBarOverlayController = Dependency.get(NavigationBarOverlayController.class);
+        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
+            mNavBarOverlayController.init(mNavbarOverlayVisibilityChangeCallback);
+        }
 
         mConfiguration = new Configuration();
         mTmpLastConfiguration = new Configuration();
@@ -367,12 +371,6 @@ public class NavigationBarView extends FrameLayout implements
                         return isGesturalModeOnDefaultDisplay(getContext(), mNavBarMode);
                     }
                 });
-
-        mNavBarOverlayController = Dependency.get(NavigationBarOverlayController.class);
-        if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
-            mNavBarOverlayController.init(mNavbarOverlayVisibilityChangeCallback,
-                    mEdgeBackGestureHandler::updateNavigationBarOverlayExcludeRegion);
-        }
     }
 
     public void setAutoHideController(AutoHideController autoHideController) {

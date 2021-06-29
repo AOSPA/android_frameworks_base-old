@@ -28,8 +28,7 @@ import android.graphics.Rect;
 import android.graphics.drawable.Drawable;
 import android.util.IconDrawableFactory;
 import android.util.Log;
-
-import androidx.core.graphics.drawable.RoundedBitmapDrawable;
+import android.util.TypedValue;
 
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
@@ -38,7 +37,7 @@ class PeopleStoryIconFactory implements AutoCloseable {
 
     private static final int PADDING = 2;
     private static final int RING_WIDTH = 2;
-    private static final int MAX_BADGE_SIZE = 40;
+    private static final int MAX_BADGE_SIZE = 36;
 
     final PackageManager mPackageManager;
     final IconDrawableFactory mIconDrawableFactory;
@@ -52,15 +51,15 @@ class PeopleStoryIconFactory implements AutoCloseable {
 
     PeopleStoryIconFactory(Context context, PackageManager pm,
             IconDrawableFactory iconDrawableFactory, int iconSizeDp) {
-        context.setTheme(android.R.style.Theme_DeviceDefault_DayNight);
         mIconBitmapSize = (int) (iconSizeDp * context.getResources().getDisplayMetrics().density);
         mDensity = context.getResources().getDisplayMetrics().density;
         mIconSize = mDensity * iconSizeDp;
         mPackageManager = pm;
         mIconDrawableFactory = iconDrawableFactory;
         mImportantConversationColor = context.getColor(R.color.important_conversation);
-        mAccentColor = Utils.getColorAttr(context,
-                com.android.internal.R.attr.colorAccentPrimaryVariant).getDefaultColor();
+        TypedValue typedValue = new TypedValue();
+        context.getTheme().resolveAttribute(android.R.attr.colorAccent, typedValue, true);
+        mAccentColor = context.getColor(typedValue.resourceId);
         mContext = context;
     }
 
@@ -85,8 +84,7 @@ class PeopleStoryIconFactory implements AutoCloseable {
      * Returns a {@link Drawable} for the entire conversation. The shortcut icon will be badged
      * with the launcher icon of the app specified by packageName.
      */
-    public Drawable getPeopleTileDrawable(RoundedBitmapDrawable headDrawable, String packageName,
-            int userId,
+    public Drawable getPeopleTileDrawable(Drawable headDrawable, String packageName, int userId,
             boolean important, boolean newStory) {
         return new PeopleStoryIconDrawable(headDrawable, getAppBadge(packageName, userId),
                 mIconBitmapSize, mImportantConversationColor, important, mIconSize, mDensity,
@@ -99,7 +97,7 @@ class PeopleStoryIconFactory implements AutoCloseable {
      */
     public static class PeopleStoryIconDrawable extends Drawable {
         private float mFullIconSize;
-        private RoundedBitmapDrawable mAvatar;
+        private Drawable mAvatar;
         private Drawable mBadgeIcon;
         private int mIconSize;
         private Paint mPriorityRingPaint;
@@ -108,13 +106,12 @@ class PeopleStoryIconFactory implements AutoCloseable {
         private Paint mStoryPaint;
         private float mDensity;
 
-        PeopleStoryIconDrawable(RoundedBitmapDrawable avatar,
+        PeopleStoryIconDrawable(Drawable avatar,
                 Drawable badgeIcon,
                 int iconSize,
                 @ColorInt int ringColor,
                 boolean showImportantRing, float fullIconSize, float density,
                 @ColorInt int accentColor, boolean showStoryRing) {
-            avatar.setCircular(true);
             mAvatar = avatar;
             mBadgeIcon = badgeIcon;
             mIconSize = iconSize;

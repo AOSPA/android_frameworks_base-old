@@ -24,7 +24,6 @@ import android.app.PendingIntent
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
-import android.graphics.Rect
 import android.view.View
 import android.view.ViewGroup
 import android.view.WindowInsets
@@ -84,9 +83,8 @@ class DetailDialog(
             taskView.startActivity(
                 PendingIntent.getActivity(context, 0, launchIntent,
                         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE),
-                null /* fillInIntent */,
-                options,
-                getTaskViewBounds()
+                null,
+                options
             )
         }
 
@@ -101,10 +99,6 @@ class DetailDialog(
 
         override fun onReleased() {
             removeDetailTask()
-        }
-
-        override fun onBackPressedOnTaskRoot(taskId: Int) {
-            dismiss()
         }
     }
 
@@ -163,23 +157,6 @@ class DetailDialog(
         }
 
         taskView.setListener(cvh.uiExecutor, stateCallback)
-    }
-
-    fun getTaskViewBounds(): Rect {
-        val wm = context.getSystemService(WindowManager::class.java)
-        val windowMetrics = wm.getCurrentWindowMetrics()
-        val rect = windowMetrics.bounds
-        val metricInsets = windowMetrics.windowInsets
-        val insets = metricInsets.getInsetsIgnoringVisibility(Type.systemBars()
-                or Type.displayCutout())
-        val headerHeight = context.resources.getDimensionPixelSize(
-                R.dimen.controls_detail_dialog_header_height)
-
-        val finalRect = Rect(rect.left - insets.left /* left */,
-                rect.top + insets.top + headerHeight /* top */,
-                rect.right - insets.right /* right */,
-                rect.bottom - insets.bottom /* bottom */)
-        return finalRect
     }
 
     override fun dismiss() {

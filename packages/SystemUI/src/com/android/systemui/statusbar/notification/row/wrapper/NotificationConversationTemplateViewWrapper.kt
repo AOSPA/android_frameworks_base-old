@@ -85,11 +85,10 @@ class NotificationConversationTemplateViewWrapper constructor(
         // This also clears the existing types
         super.updateTransformedTypes()
 
-        mTransformationHelper.addTransformedView(TRANSFORMING_VIEW_TITLE, conversationTitleView)
         addTransformedViews(
                 messagingLinearLayout,
-                appName
-        )
+                appName,
+                conversationTitleView)
 
         setCustomImageMessageTransform(mTransformationHelper, imageMessageContainer)
 

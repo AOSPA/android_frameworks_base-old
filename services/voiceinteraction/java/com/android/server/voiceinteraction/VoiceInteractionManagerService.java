@@ -234,43 +234,6 @@ public class VoiceInteractionManagerService extends SystemService {
             VoiceInteractionManagerService.this.mServiceStub.stopLocalVoiceInteraction(
                     callingActivity);
         }
-
-        @Override
-        public boolean hasActiveSession(String packageName) {
-            VoiceInteractionManagerServiceImpl impl =
-                    VoiceInteractionManagerService.this.mServiceStub.mImpl;
-            if (impl == null) {
-                return false;
-            }
-
-            VoiceInteractionSessionConnection session =
-                    impl.mActiveSession;
-            if (session == null) {
-                return false;
-            }
-
-            return TextUtils.equals(packageName, session.mSessionComponentName.getPackageName());
-        }
-
-        @Override
-        public HotwordDetectionServiceIdentity getHotwordDetectionServiceIdentity() {
-            // IMPORTANT: This is called when performing permission checks; do not lock!
-
-            // TODO: Have AppOpsPolicy register a listener instead of calling in here everytime.
-            // Then also remove the `volatile`s that were added with this method.
-
-            VoiceInteractionManagerServiceImpl impl =
-                    VoiceInteractionManagerService.this.mServiceStub.mImpl;
-            if (impl == null) {
-                return null;
-            }
-            HotwordDetectionConnection hotwordDetectionConnection =
-                    impl.mHotwordDetectionConnection;
-            if (hotwordDetectionConnection == null) {
-                return null;
-            }
-            return hotwordDetectionConnection.mIdentity;
-        }
     }
 
     // implementation entry point and binder service
@@ -278,7 +241,7 @@ public class VoiceInteractionManagerService extends SystemService {
 
     class VoiceInteractionManagerServiceStub extends IVoiceInteractionManagerService.Stub {
 
-        volatile VoiceInteractionManagerServiceImpl mImpl;
+        VoiceInteractionManagerServiceImpl mImpl;
 
         private boolean mSafeMode;
         private int mCurUser;
@@ -562,10 +525,11 @@ public class VoiceInteractionManagerService extends SystemService {
         }
 
         void switchImplementationIfNeededLocked(boolean force) {
-            if (!mCurUserSupported) {
+            if (!mCurUserSupported || mTemporarilyDisabled) {
                 if (DEBUG_USER) {
                     Slog.d(TAG, "switchImplementationIfNeeded(): skipping: force= " + force
-                            + "mCurUserSupported=" + mCurUserSupported);
+                            + "mCurUserSupported=" + mCurUserSupported
+                            + "mTemporarilyDisabled=" + mTemporarilyDisabled);
                 }
                 if (mImpl != null) {
                     mImpl.shutdownLocked();
@@ -1047,16 +1011,13 @@ public class VoiceInteractionManagerService extends SystemService {
                     if (DEBUG) Slog.d(TAG, "setDisabled(): already " + disabled);
                     return;
                 }
-                mTemporarilyDisabled = disabled;
-                if (mTemporarilyDisabled) {
-                    Slog.i(TAG, "setDisabled(): temporarily disabling and hiding current session");
-                    try {
-                        hideCurrentSession();
-                    } catch (RemoteException e) {
-                        Log.w(TAG, "Failed to call hideCurrentSession", e);
-                    }
-                } else {
-                    Slog.i(TAG, "setDisabled(): re-enabling");
+                Slog.i(TAG, "setDisabled(): changing to " + disabled);
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    mTemporarilyDisabled = disabled;
+                    switchImplementationIfNeeded(/* force= */ false);
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
                 }
             }
         }
@@ -1510,20 +1471,12 @@ public class VoiceInteractionManagerService extends SystemService {
         public boolean showSessionForActiveService(Bundle args, int sourceFlags,
                 IVoiceInteractionSessionShowCallback showCallback, IBinder activityToken) {
             enforceCallingPermission(Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE);
-            if (DEBUG_USER) Slog.d(TAG, "showSessionForActiveService()");
-
             synchronized (this) {
                 if (mImpl == null) {
                     Slog.w(TAG, "showSessionForActiveService without running voice interaction"
                             + "service");
                     return false;
                 }
-                if (mTemporarilyDisabled) {
-                    Slog.i(TAG, "showSessionForActiveService(): ignored while temporarily "
-                            + "disabled");
-                    return false;
-                }
-
                 final long caller = Binder.clearCallingIdentity();
                 try {
                     return mImpl.showSessionLocked(args,
@@ -1540,21 +1493,22 @@ public class VoiceInteractionManagerService extends SystemService {
         @Override
         public void hideCurrentSession() throws RemoteException {
             enforceCallingPermission(Manifest.permission.ACCESS_VOICE_INTERACTION_SERVICE);
-
-            if (mImpl == null) {
-                return;
-            }
-            final long caller = Binder.clearCallingIdentity();
-            try {
-                if (mImpl.mActiveSession != null && mImpl.mActiveSession.mSession != null) {
-                    try {
-                        mImpl.mActiveSession.mSession.closeSystemDialogs();
-                    } catch (RemoteException e) {
-                        Log.w(TAG, "Failed to call closeSystemDialogs", e);
-                    }
+            synchronized (this) {
+                if (mImpl == null) {
+                    return;
                 }
-            } finally {
-                Binder.restoreCallingIdentity(caller);
+                final long caller = Binder.clearCallingIdentity();
+                try {
+                    if (mImpl.mActiveSession != null && mImpl.mActiveSession.mSession != null) {
+                        try {
+                            mImpl.mActiveSession.mSession.closeSystemDialogs();
+                        } catch (RemoteException e) {
+                            Log.w(TAG, "Failed to call closeSystemDialogs", e);
+                        }
+                    }
+                } finally {
+                    Binder.restoreCallingIdentity(caller);
+                }
             }
         }
 

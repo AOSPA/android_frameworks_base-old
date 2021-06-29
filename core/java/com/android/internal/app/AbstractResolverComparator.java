@@ -64,7 +64,6 @@ public abstract class AbstractResolverComparator implements Comparator<ResolvedC
     private static final int WATCHDOG_TIMEOUT_MILLIS = 500;
 
     private final Comparator<ResolveInfo> mAzComparator;
-    private ChooserActivityLogger mChooserActivityLogger;
 
     protected final Handler mHandler = new Handler(Looper.getMainLooper()) {
         public void handleMessage(Message msg) {
@@ -86,9 +85,6 @@ public abstract class AbstractResolverComparator implements Comparator<ResolvedC
                     }
                     mHandler.removeMessages(RANKER_SERVICE_RESULT);
                     afterCompute();
-                    if (mChooserActivityLogger != null) {
-                        mChooserActivityLogger.logSharesheetAppShareRankingTimeout();
-                    }
                     break;
 
                 default:
@@ -133,14 +129,6 @@ public abstract class AbstractResolverComparator implements Comparator<ResolvedC
 
     void setCallBack(AfterCompute afterCompute) {
         mAfterCompute = afterCompute;
-    }
-
-    void setChooserActivityLogger(ChooserActivityLogger chooserActivityLogger) {
-        mChooserActivityLogger = chooserActivityLogger;
-    }
-
-    ChooserActivityLogger getChooserActivityLogger() {
-        return mChooserActivityLogger;
     }
 
     protected final void afterCompute() {

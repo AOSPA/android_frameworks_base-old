@@ -33,7 +33,7 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.policy.CallbackController;
 
-import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.ArrayList;
 
 import javax.inject.Inject;
 
@@ -58,8 +58,7 @@ public class RecordingController
             "com.android.systemui.screenrecord.UPDATE_STATE";
     protected static final String EXTRA_STATE = "extra_state";
 
-    private CopyOnWriteArrayList<RecordingStateChangeCallback> mListeners =
-            new CopyOnWriteArrayList<>();
+    private ArrayList<RecordingStateChangeCallback> mListeners = new ArrayList<>();
 
     @VisibleForTesting
     protected final BroadcastReceiver mUserChangeReceiver = new BroadcastReceiver() {

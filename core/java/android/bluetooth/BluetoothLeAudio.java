@@ -26,7 +26,6 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressLint;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
@@ -228,7 +227,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         try {
             final IBluetoothLeAudio service = getService();
             if (service != null && mAdapter.isEnabled()) {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getConnectedDevices(mAttributionSource), mAttributionSource);
             }
             if (service == null) Log.w(TAG, "Proxy not attached to service");
@@ -251,7 +250,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         try {
             final IBluetoothLeAudio service = getService();
             if (service != null && mAdapter.isEnabled()) {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getDevicesMatchingConnectionStates(states, mAttributionSource),
                         mAttributionSource);
             }
@@ -340,8 +339,7 @@ public final class BluetoothLeAudio implements BluetoothProfile, AutoCloseable {
         try {
             final IBluetoothLeAudio service = getService();
             if (service != null && mAdapter.isEnabled()) {
-                return Attributable.setAttributionSource(
-                        service.getActiveDevices(mAttributionSource), mAttributionSource);
+                return service.getActiveDevices(mAttributionSource);
             }
             if (service == null) Log.w(TAG, "Proxy not attached to service");
             return new ArrayList<>();

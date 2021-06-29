@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"නොරැහැන් සංදර්ශක සහතිකය"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"විස්තරාත්මක Wi‑Fi ලොග් කිරීම සබල කරන්න"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Wi‑Fi ස්කෑන් අවකරණය"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Wi‑Fi අඛණ්ඩ නොවන MAC සසම්භාවීකරණය"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi-Fi‑වැඩිදියුණු කළ MAC සසම්භාවීකරණය"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"ජංගම දත්ත සැමවිට ක්‍රියාකාරීය"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"ටෙදරින් දෘඪාංග ත්වරණය"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"නම් නොමැති බ්ලූටූත් උපාංග පෙන්වන්න"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"ක්ලිප් සීමා, මායිම්, ආදිය පෙන්වන්න."</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"බල RTL පිරිසැලසුම් දිශාව"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"සියලු පෙදෙසි සඳහා RTL වෙත බල තිර පිරිසැලසුම"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"කවුළු මට්. බොඳ කි. ඉඩ දෙ."</string>
     <string name="force_msaa" msgid="4081288296137775550">"4x MSAA බල කරන්න"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"OpenGL ES 2.0 යෙදුම්හි 4x MSAA සබල කරන්න"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"සෘජුකෝණාස්‍ර-නොවන ක්ලිප් මෙහෙයුම් නිදොස් කරන්න"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"සම්පූර්ණ වීමට <xliff:g id="TIME">%1$s</xliff:g>ක් ඉතිරියි"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - සම්පූර්ණ වීමට <xliff:g id="TIME">%2$s</xliff:g>ක් ඉතිරියි"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - ආරෝපණය කිරීම තාවකාලිකව සීමා කර ඇත"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - බැටරි ආයු කාලය වැඩි දියුණු කරමින්"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"නොදනී"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"ආරෝපණය වෙමින්"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"ශීඝ්‍ර ආරෝපණය"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"සෙමින් ආරෝපණය"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"නොරැහැන්ව ආරෝපණය වේ"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"ආරෝපණය නොවේ"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"සම්බන්ධයි, ආරෝපණය නොවේ"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"පේනුගත කර ඇත, මේ අවස්ථාවේදී ආරෝපණය කළ නොහැකිය"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"අරෝපිතයි"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"පරිපාලක විසින් පාලනය කරන ලදී"</string>
     <string name="disabled" msgid="8017887509554714950">"අබල කර ඇත"</string>
@@ -507,7 +506,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"එලාම සහ සිහිකැඳවීම්"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"එලාම සහ සිහිකැඳවීම් සැකසීමට ඉඩ දෙන්න"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"එලාම සහ සිහිකැඳවීම්"</string>
-    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"එලාම සැකසීමට සහ කාල සංවේදී ක්‍රියා කාලසටහන්ගත කිරීමට මෙම යෙදුමට ඉඩ දෙන්න. මෙය පසුබිමේ ධාවනය වීමට යෙදුමට ඉඩ දෙයි, එය වැඩි බැටරිය වැඩියෙන් භාවිත කළ හැකිය.\n\nමෙම අවසරය ක්‍රියාවිරහිත නම්, මෙම යෙදුම මඟින් සැලසුම් කර ඇති තිබෙන එලාම සහ වේලාව පදනම් කර ගත් සිදුවීම් ක්‍රියා නොකරනු ඇත."</string>
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"එලාම සැකසීමට සහ වෙනත් ක්‍රියා කාල සටහන්ගත කිරීමට මෙම යෙදුමට ඉඩ දෙන්න. ඔබ ඔබගේ දුරකථනය භාවිත නොකරන විට මෙම යෙදුම භාවිත කළ හැකිය, එය බැටරිය වැඩියෙන් භාවිත කළ හැකිය. මෙම අවසරය ක්‍රියාවිරහිත නම්, මෙම යෙදුම සාමාන්‍ය ආකාරයට ක්‍රියා නොකළ හැකි අතර, එහි එලාම කාල සටහන්ගත කර ඇති පරිදි ක්‍රියා නොකරනු ඇත."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"එලාම සැකසීමට සහ වෙනත් ක්‍රියා කාල සටහන්ගත කිරීමට මෙම යෙදුමට ඉඩ දෙන්න. ඔබ ඔබගේ ටැබ්ලටය භාවිත නොකරන විට මෙම යෙදුම භාවිත කළ හැකිය, එය බැටරිය වැඩියෙන් භාවිත කළ හැකිය. මෙම අවසරය ක්‍රියාවිරහිත නම්, මෙම යෙදුම සාමාන්‍ය ආකාරයට ක්‍රියා නොකළ හැකි අතර, එහි එලාම කාල සටහන්ගත කර ඇති පරිදි ක්‍රියා නොකරනු ඇත."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"එලාම සැකසීමට සහ වෙනත් ක්‍රියා කාල සටහන්ගත කිරීමට මෙම යෙදුමට ඉඩ දෙන්න. ඔබ ඔබගේ උපාංගය භාවිත නොකරන විට මෙම යෙදුම භාවිත කළ හැකිය, එය බැටරිය වැඩියෙන් භාවිත කළ හැකිය. මෙම අවසරය ක්‍රියාවිරහිත නම්, මෙම යෙදුම සාමාන්‍ය ආකාරයට ක්‍රියා නොකළ හැකි අතර, එහි එලාම කාල සටහන්ගත කර ඇති පරිදි ක්‍රියා නොකරනු ඇත."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"කාල සටහන, එලාමය, සිහිකැඳවීම, ඔරලෝසුව"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"ක්‍රියාත්මක කරන්න"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"බාධා නොකරන්න ක්‍රියාත්මක කරන්න"</string>

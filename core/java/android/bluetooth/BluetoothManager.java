@@ -16,8 +16,6 @@
 
 package android.bluetooth;
 
-import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.annotation.RequiresFeature;
 import android.annotation.RequiresNoPermission;
 import android.annotation.RequiresPermission;
@@ -26,7 +24,6 @@ import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.content.pm.PackageManager;
@@ -74,7 +71,7 @@ public final class BluetoothManager {
     }
 
     /** {@hide} */
-    public static @NonNull AttributionSource resolveAttributionSource(@Nullable Context context) {
+    public static AttributionSource resolveAttributionSource(Context context) {
         AttributionSource res = null;
         if (context != null) {
             res = context.getAttributionSource();
@@ -196,7 +193,7 @@ public final class BluetoothManager {
             IBluetoothManager managerService = mAdapter.getBluetoothManager();
             IBluetoothGatt iGatt = managerService.getBluetoothGatt();
             if (iGatt == null) return devices;
-            devices = Attributable.setAttributionSource(
+            devices = BluetoothDevice.setAttributionSource(
                     iGatt.getDevicesMatchingConnectionStates(states, mAttributionSource),
                     mAttributionSource);
         } catch (RemoteException e) {

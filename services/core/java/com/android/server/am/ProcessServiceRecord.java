@@ -89,7 +89,7 @@ final class ProcessServiceRecord {
     /**
      * All ServiceRecord running in this process.
      */
-    final ArraySet<ServiceRecord> mServices = new ArraySet<>();
+    private final ArraySet<ServiceRecord> mServices = new ArraySet<>();
 
     /**
      * Services that are currently executing code (need to remain foreground).

@@ -43,7 +43,6 @@ import android.os.IBinder;
 import android.os.Process;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.util.EventLog;
 import android.util.Log;
 
 import com.android.internal.content.PackageMonitor;
@@ -737,19 +736,13 @@ public class MidiService extends IMidiManager.Stub {
 
     @Override
     public MidiDeviceInfo getServiceDeviceInfo(String packageName, String className) {
-        int uid = Binder.getCallingUid();
         synchronized (mDevicesByInfo) {
             for (Device device : mDevicesByInfo.values()) {
                  ServiceInfo serviceInfo = device.getServiceInfo();
                  if (serviceInfo != null &&
                         packageName.equals(serviceInfo.packageName) &&
                         className.equals(serviceInfo.name)) {
-                    if (device.isUidAllowed(uid)) {
-                        return device.getDeviceInfo();
-                    } else {
-                        EventLog.writeEvent(0x534e4554, "185796676", -1, "");
-                        return null;
-                    }
+                    return device.getDeviceInfo();
                 }
             }
             return null;

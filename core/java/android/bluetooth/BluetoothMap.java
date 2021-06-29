@@ -26,7 +26,6 @@ import android.annotation.SystemApi;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
@@ -171,8 +170,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         final IBluetoothMap service = getService();
         if (service != null) {
             try {
-                return Attributable.setAttributionSource(
-                        service.getClient(mAttributionSource), mAttributionSource);
+                return service.getClient(mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, e.toString());
             }
@@ -287,7 +285,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         final IBluetoothMap service = getService();
         if (service != null && isEnabled()) {
             try {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getConnectedDevices(mAttributionSource), mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
@@ -312,7 +310,7 @@ public final class BluetoothMap implements BluetoothProfile, AutoCloseable {
         final IBluetoothMap service = getService();
         if (service != null && isEnabled()) {
             try {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getDevicesMatchingConnectionStates(states, mAttributionSource),
                         mAttributionSource);
             } catch (RemoteException e) {

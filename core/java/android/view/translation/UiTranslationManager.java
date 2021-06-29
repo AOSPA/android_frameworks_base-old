@@ -119,7 +119,7 @@ public final class UiTranslationManager {
     }
 
     /**
-     * @removed Use {@link #startTranslation(TranslationSpec, TranslationSpec, List, ActivityId,
+     * @deprecated Use {@link #startTranslation(TranslationSpec, TranslationSpec, List, ActivityId,
      * UiTranslationSpec)} instead.
      *
      * @hide

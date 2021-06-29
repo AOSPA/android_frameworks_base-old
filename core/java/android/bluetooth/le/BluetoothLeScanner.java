@@ -30,7 +30,6 @@ import android.bluetooth.IBluetoothManager;
 import android.bluetooth.annotations.RequiresBluetoothLocationPermission;
 import android.bluetooth.annotations.RequiresBluetoothScanPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.os.Handler;
 import android.os.Looper;
@@ -529,7 +528,6 @@ public final class BluetoothLeScanner {
          */
         @Override
         public void onScanResult(final ScanResult scanResult) {
-            Attributable.setAttributionSource(scanResult, mAttributionSource);
             if (VDBG) Log.d(TAG, "onScanResult() - " + scanResult.toString());
 
             // Check null in case the scan has been stopped
@@ -547,7 +545,6 @@ public final class BluetoothLeScanner {
 
         @Override
         public void onBatchScanResults(final List<ScanResult> results) {
-            Attributable.setAttributionSource(results, mAttributionSource);
             Handler handler = new Handler(Looper.getMainLooper());
             handler.post(new Runnable() {
                 @Override
@@ -559,7 +556,6 @@ public final class BluetoothLeScanner {
 
         @Override
         public void onFoundOrLost(final boolean onFound, final ScanResult scanResult) {
-            Attributable.setAttributionSource(scanResult, mAttributionSource);
             if (VDBG) {
                 Log.d(TAG, "onFoundOrLost() - onFound = " + onFound + " " + scanResult.toString());
             }

@@ -30,8 +30,6 @@ import android.widget.LinearLayout;
 import android.widget.RemoteViews;
 import android.widget.TextView;
 
-import com.android.internal.R;
-
 import java.util.ArrayList;
 import java.util.Comparator;
 
@@ -52,7 +50,7 @@ public class NotificationActionListLayout extends LinearLayout {
     private int mDefaultPaddingTop;
     private int mEmphasizedHeight;
     private int mRegularHeight;
-    @DimenRes private int mCollapsibleIndentDimen = R.dimen.notification_actions_padding_start;
+    @DimenRes private int mCollapsibleIndentDimen;
 
     public NotificationActionListLayout(Context context, AttributeSet attrs) {
         this(context, attrs, 0);
@@ -315,10 +313,7 @@ public class NotificationActionListLayout extends LinearLayout {
      */
     @RemotableViewMethod
     public void setCollapsibleIndentDimen(@DimenRes int collapsibleIndentDimen) {
-        if (mCollapsibleIndentDimen != collapsibleIndentDimen) {
-            mCollapsibleIndentDimen = collapsibleIndentDimen;
-            requestLayout();
-        }
+        mCollapsibleIndentDimen = collapsibleIndentDimen;
     }
 
     /**

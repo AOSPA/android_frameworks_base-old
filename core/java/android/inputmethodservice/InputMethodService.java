@@ -481,7 +481,6 @@ public class InputMethodService extends AbstractInputMethodService {
 
     boolean mFullscreenApplied;
     boolean mIsFullscreen;
-    private boolean mLastWasInFullscreenMode;
     @UnsupportedAppUsage
     View mExtractView;
     boolean mExtractViewHidden;
@@ -921,17 +920,8 @@ public class InputMethodService extends AbstractInputMethodService {
         if (mHandler == null) {
             mHandler = new Handler(getMainLooper());
         }
-
-        if (mLastWasInFullscreenMode) {
-            // Caching surface / delaying surface removal can cause mServedView to detach in certain
-            // cases in RecyclerView (b/187772544).
-            // TODO(b/188818557): Re-enable IME surface caching for fullscreen mode once detaching
-            //  view issues is resolved in RecyclerView.
-            removeImeSurface();
-        } else {
-            mImeSurfaceScheduledForRemoval = true;
-            mHandler.postDelayed(() -> removeImeSurface(), TIMEOUT_SURFACE_REMOVAL_MILLIS);
-        }
+        mImeSurfaceScheduledForRemoval = true;
+        mHandler.postDelayed(() -> removeImeSurface(), TIMEOUT_SURFACE_REMOVAL_MILLIS);
     }
 
     private void removeImeSurface() {
@@ -2360,7 +2350,6 @@ public class InputMethodService extends AbstractInputMethodService {
             onWindowHidden();
             mDecorViewWasVisible = false;
         }
-        mLastWasInFullscreenMode = mIsFullscreen;
         updateFullscreenMode();
     }
 

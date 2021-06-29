@@ -63,15 +63,10 @@ public class BatteryChargeCalculator extends PowerCalculator {
             builder.setChargeTimeRemainingMs(chargeTimeRemainingMs / 1000);
         }
 
-        long dischargeMah = batteryStats.getUahDischarge(BatteryStats.STATS_SINCE_CHARGED) / 1000;
-        if (dischargeMah == 0) {
-            dischargeMah = (long) ((dischargedPowerLowerBoundMah + dischargedPowerUpperBoundMah) / 2
-                    + 0.5);
-        }
-
         builder.getAggregateBatteryConsumerBuilder(
                 BatteryUsageStats.AGGREGATE_BATTERY_CONSUMER_SCOPE_DEVICE)
-                .setConsumedPower(dischargeMah);
+                .setConsumedPower(
+                        (dischargedPowerLowerBoundMah + dischargedPowerUpperBoundMah) / 2);
     }
 
     @Override

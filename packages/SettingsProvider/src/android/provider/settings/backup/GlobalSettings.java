@@ -73,8 +73,6 @@ public class GlobalSettings {
         Settings.Global.CUSTOM_BUGREPORT_HANDLER_USER,
         Settings.Global.DEVELOPMENT_SETTINGS_ENABLED,
         Settings.Global.USER_DISABLED_HDR_FORMATS,
-        Settings.Global.ARE_USER_DISABLED_HDR_FORMATS_ALLOWED,
-        Settings.Global.DEVICE_CONFIG_SYNC_DISABLED,
-        Settings.Global.POWER_BUTTON_LONG_PRESS,
+        Settings.Global.ARE_USER_DISABLED_HDR_FORMATS_ALLOWED
     };
 }

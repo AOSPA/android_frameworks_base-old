@@ -19,8 +19,6 @@ package com.android.systemui.statusbar.notification;
 import android.annotation.Nullable;
 import android.util.ArraySet;
 
-import androidx.annotation.VisibleForTesting;
-
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
@@ -78,9 +76,8 @@ public class DynamicPrivacyController implements KeyguardStateController.Callbac
         }
     }
 
-    @VisibleForTesting
-    boolean isDynamicPrivacyEnabled() {
-        return !mLockscreenUserManager.userAllowsPrivateNotificationsInPublic(
+    private boolean isDynamicPrivacyEnabled() {
+        return !mLockscreenUserManager.shouldHideNotifications(
                 mLockscreenUserManager.getCurrentUserId());
     }
 

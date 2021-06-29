@@ -509,13 +509,7 @@ open class AndroidPackageParsingTestBase {
             .ignored("Checked separately in test")}
             reqFeatures=${this.reqFeatures?.joinToString { it.dumpToString() }}
             requestedPermissions=${this.requestedPermissions?.contentToString()}
-            requestedPermissionsFlags=${
-                this.requestedPermissionsFlags?.map {
-                    // Newer flags are stripped
-                    it and (PackageInfo.REQUESTED_PERMISSION_REQUIRED
-                            or PackageInfo.REQUESTED_PERMISSION_GRANTED)
-                }?.joinToString()
-            }
+            requestedPermissionsFlags=${this.requestedPermissionsFlags?.contentToString()}
             requiredAccountType=${this.requiredAccountType}
             requiredForAllUsers=${this.requiredForAllUsers}
             restrictedAccountType=${this.restrictedAccountType}

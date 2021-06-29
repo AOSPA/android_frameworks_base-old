@@ -23,6 +23,7 @@ import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
 import android.provider.Settings;
+import android.text.TextUtils;
 import android.view.ContextThemeWrapper;
 import android.view.View;
 
@@ -31,7 +32,9 @@ import com.android.systemui.shared.system.QuickStepContract;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FeatureFlags;
 
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.function.Consumer;
 
 public class Utils {
@@ -141,7 +144,7 @@ public class Utils {
 
     /**
      * Allow media resumption controls. Requires {@link #useQsMediaPlayer(Context)} to be enabled.
-     * On by default, but can be disabled by setting to 0
+     * Off by default, but can be enabled by setting to 1
      */
     public static boolean useMediaResumption(Context context) {
         int flag = Settings.Secure.getInt(context.getContentResolver(),
@@ -150,14 +153,20 @@ public class Utils {
     }
 
     /**
-     * Allow recommendations from smartspace to show in media controls.
-     * Requires {@link #useQsMediaPlayer(Context)} to be enabled.
-     * On by default, but can be disabled by setting to 0
+     * Get the set of apps for which the user has manually disabled resumption.
      */
-    public static boolean allowMediaRecommendations(Context context) {
-        int flag = Settings.Secure.getInt(context.getContentResolver(),
-                Settings.Secure.MEDIA_CONTROLS_RECOMMENDATION, 1);
-        return useQsMediaPlayer(context) && flag > 0;
+    public static Set<String> getBlockedMediaApps(Context context) {
+        String list = Settings.Secure.getString(context.getContentResolver(),
+                Settings.Secure.MEDIA_CONTROLS_RESUME_BLOCKED);
+        if (TextUtils.isEmpty(list)) {
+            return new HashSet<>();
+        }
+        String[] names = list.split(":");
+        Set<String> apps = new HashSet<>(names.length);
+        for (String s : names) {
+            apps.add(s);
+        }
+        return apps;
     }
 
     /**

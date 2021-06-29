@@ -448,7 +448,7 @@ public class FontManagerShellCommand extends ShellCommand {
         }
     }
 
-    private int clear(ShellCommand shell) {
+    private int clear(ShellCommand shell) throws SystemFontException {
         mService.clearUpdates();
         shell.getOutPrintWriter().println("Success");
         return 0;

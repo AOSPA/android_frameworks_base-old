@@ -42,7 +42,6 @@ import android.os.IBinder;
 import android.os.IInterface;
 import android.os.Looper;
 import android.os.Message;
-import android.os.PackageTagsList;
 import android.os.RemoteCallbackList;
 import android.os.RemoteException;
 import android.os.ServiceManager;
@@ -67,6 +66,7 @@ import com.android.server.FgThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemConfig;
 import com.android.server.SystemService;
+import com.android.server.SystemService.TargetUser;
 import com.android.server.utils.ManagedApplicationService;
 import com.android.server.utils.ManagedApplicationService.BinderChecker;
 import com.android.server.utils.ManagedApplicationService.LogEvent;
@@ -860,10 +860,8 @@ public class VrManagerService extends SystemService
         }
 
         // Apply the restrictions for the current user based on vr state
-        PackageTagsList exemptions = null;
-        if (exemptedPackage != null) {
-            exemptions = new PackageTagsList.Builder(1).add(exemptedPackage).build();
-        }
+        String[] exemptions = (exemptedPackage == null) ? new String[0] :
+                new String[] { exemptedPackage };
 
         appOpsManager.setUserRestrictionForUser(AppOpsManager.OP_SYSTEM_ALERT_WINDOW,
                 mVrModeEnabled, mOverlayToken, exemptions, newUserId);

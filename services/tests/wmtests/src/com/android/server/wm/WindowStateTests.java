@@ -20,8 +20,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
-import static android.view.InsetsState.ITYPE_IME;
-import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
 import static android.view.Surface.ROTATION_0;
 import static android.view.Surface.ROTATION_270;
@@ -35,7 +33,6 @@ import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_ATTACHED_
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_MEDIA_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY;
-import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_STARTING;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION_SUB_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_BASE_APPLICATION;
@@ -52,7 +49,6 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.spy;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.DisplayContent.IME_TARGET_CONTROL;
-import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
 import static com.android.server.wm.WindowContainer.SYNC_STATE_WAITING_FOR_DRAW;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -61,7 +57,6 @@ import static org.hamcrest.Matchers.is;
 import static org.hamcrest.Matchers.not;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertThat;
 import static org.junit.Assert.assertTrue;
@@ -83,7 +78,6 @@ import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.view.Gravity;
 import android.view.InputWindowHandle;
-import android.view.InsetsSource;
 import android.view.InsetsState;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
@@ -578,43 +572,21 @@ public class WindowStateTests extends WindowTestsBase {
         spyOn(cmp);
         doReturn(overrideScale).when(cmp).getCompatScale(anyString(), anyInt());
         final WindowState w = createWindow(null, TYPE_APPLICATION_OVERLAY, "win");
-        final WindowState child = createWindow(w, TYPE_APPLICATION_PANEL, "child");
-
-        assertTrue(w.hasCompatScale());
-        assertFalse(child.hasCompatScale());
-
-        makeWindowVisible(w, child);
+        makeWindowVisible(w);
         w.setRequestedSize(100, 200);
-        child.setRequestedSize(50, 100);
-        child.mAttrs.width = child.mAttrs.height = 0;
-        w.mAttrs.x = w.mAttrs.y = 100;
         w.mAttrs.width = w.mAttrs.height = WindowManager.LayoutParams.WRAP_CONTENT;
         w.mAttrs.gravity = Gravity.TOP | Gravity.LEFT;
-        child.mAttrs.gravity = Gravity.CENTER;
         DisplayContentTests.performLayout(mDisplayContent);
 
-        // Frame on screen = 200x400 (200, 200 - 400, 600). Compat frame on client = 100x200.
+        // Frame on screen = 100x200. Compat frame on client = 50x100.
         final Rect unscaledCompatFrame = new Rect(w.getWindowFrames().mCompatFrame);
         unscaledCompatFrame.scale(overrideScale);
-        final Rect parentFrame = w.getFrame();
         assertEquals(w.getWindowFrames().mFrame, unscaledCompatFrame);
-
-        final Rect childFrame = child.getFrame();
-        assertEquals(childFrame, child.getWindowFrames().mCompatFrame);
-        // Child frame = 50x100 (225, 250 - 275, 350) according to Gravity.CENTER.
-        final int childX = parentFrame.left + child.mRequestedWidth / 2;
-        final int childY = parentFrame.top + child.mRequestedHeight / 2;
-        final Rect expectedChildFrame = new Rect(childX, childY, childX + child.mRequestedWidth,
-                childY + child.mRequestedHeight);
-        assertEquals(expectedChildFrame, childFrame);
 
         // Surface should apply the scale.
         w.prepareSurfaces();
         verify(w.getPendingTransaction()).setMatrix(w.getSurfaceControl(),
                 overrideScale, 0, 0, overrideScale);
-        // Child surface inherits parent's scale, so it doesn't need to scale.
-        verify(child.getPendingTransaction(), never()).setMatrix(any(), anyInt(), anyInt(),
-                anyInt(), anyInt());
 
         // According to "dp * density / 160 = px", density is scaled and the size in dp is the same.
         final CompatibilityInfo compatInfo = cmp.compatibilityInfoForPackageLocked(
@@ -711,6 +683,39 @@ public class WindowStateTests extends WindowTestsBase {
         mWm.mResizingWindows.remove(win);
         win.updateResizingWindowIfNeeded();
         assertThat(mWm.mResizingWindows).doesNotContain(win);
+    }
+
+    @Test
+    public void testGetTransformationMatrix() {
+        final int PARENT_WINDOW_OFFSET = 1;
+        final int DISPLAY_IN_PARENT_WINDOW_OFFSET = 2;
+        final int WINDOW_OFFSET = 3;
+        final float OFFSET_SUM =
+                PARENT_WINDOW_OFFSET + DISPLAY_IN_PARENT_WINDOW_OFFSET + WINDOW_OFFSET;
+
+        final WindowState win0 = createWindow(null, TYPE_APPLICATION, "win0");
+
+        final DisplayContent dc = createNewDisplay();
+        win0.getFrame().offsetTo(PARENT_WINDOW_OFFSET, 0);
+        dc.reparentDisplayContent(win0, win0.getSurfaceControl());
+        dc.updateLocation(win0, DISPLAY_IN_PARENT_WINDOW_OFFSET, 0);
+
+        final float[] values = new float[9];
+        final Matrix matrix = new Matrix();
+        final SurfaceControl.Transaction t = spy(StubTransaction.class);
+        final WindowState win1 = createWindow(null, TYPE_APPLICATION, dc, "win1");
+        win1.mHasSurface = true;
+        win1.mSurfaceControl = mock(SurfaceControl.class);
+        win1.mAttrs.surfaceInsets.set(1, 2, 3, 4);
+        win1.getFrame().offsetTo(WINDOW_OFFSET, 0);
+        // Simulate layout
+        win1.mRelayoutCalled = true;
+        win1.updateSurfacePosition(t);
+        win1.getTransformationMatrix(values, matrix);
+
+        matrix.getValues(values);
+        assertEquals(OFFSET_SUM, values[Matrix.MTRANS_X], 0f);
+        assertEquals(0f, values[Matrix.MTRANS_Y], 0f);
     }
 
     @Test
@@ -875,22 +880,6 @@ public class WindowStateTests extends WindowTestsBase {
         verify(app).notifyInsetsChanged();
     }
 
-    @UseTestDisplay(addWindows = { W_INPUT_METHOD, W_ACTIVITY })
-    @Test
-    public void testImeAlwaysReceivesVisibleNavigationBarInsets() {
-        final InsetsSource navSource = new InsetsSource(ITYPE_NAVIGATION_BAR);
-        mImeWindow.mAboveInsetsState.addSource(navSource);
-        mAppWindow.mAboveInsetsState.addSource(navSource);
-
-        navSource.setVisible(false);
-        assertTrue(mImeWindow.getInsetsState().getSourceOrDefaultVisibility(ITYPE_NAVIGATION_BAR));
-        assertFalse(mAppWindow.getInsetsState().getSourceOrDefaultVisibility(ITYPE_NAVIGATION_BAR));
-
-        navSource.setVisible(true);
-        assertTrue(mImeWindow.getInsetsState().getSourceOrDefaultVisibility(ITYPE_NAVIGATION_BAR));
-        assertTrue(mAppWindow.getInsetsState().getSourceOrDefaultVisibility(ITYPE_NAVIGATION_BAR));
-    }
-
     @UseTestDisplay(addWindows = { W_ACTIVITY })
     @Test
     public void testUpdateImeControlTargetWhenLeavingMultiWindow() {
@@ -915,35 +904,5 @@ public class WindowStateTests extends WindowTestsBase {
 
         verify(app.getDisplayContent()).updateImeControlTarget();
         assertEquals(mAppWindow, mDisplayContent.getImeTarget(IME_TARGET_CONTROL).getWindow());
-    }
-
-    @UseTestDisplay(addWindows = { W_ACTIVITY, W_INPUT_METHOD, W_NOTIFICATION_SHADE })
-    @Test
-    public void testNotificationShadeHasImeInsetsWhenSplitscreenActivated() {
-        WindowState app = createWindow(null, TYPE_BASE_APPLICATION,
-                mAppWindow.mToken, "app");
-
-        // Simulate entering multi-window mode and verify if the split-screen is activated.
-        app.mActivityRecord.getRootTask().setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        assertEquals(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY, app.getWindowingMode());
-        assertTrue(mDisplayContent.getDefaultTaskDisplayArea().isSplitScreenModeActivated());
-
-        // Simulate notificationShade is shown and being IME layering target.
-        mNotificationShadeWindow.setHasSurface(true);
-        mNotificationShadeWindow.mAttrs.flags &= ~FLAG_NOT_FOCUSABLE;
-        assertTrue(mNotificationShadeWindow.canBeImeTarget());
-        mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_IME).setWindow(
-                mImeWindow, null, null);
-
-        mDisplayContent.computeImeTarget(true);
-        assertEquals(mNotificationShadeWindow, mDisplayContent.getImeTarget(IME_TARGET_LAYERING));
-        mDisplayContent.getInsetsStateController().getRawInsetsState()
-                .setSourceVisible(ITYPE_IME, true);
-
-        // Verify notificationShade can still get IME insets even the split-screen is activated.
-        InsetsState state = mDisplayContent.getInsetsStateController().getInsetsForWindow(
-                mNotificationShadeWindow);
-        assertNotNull(state.peekSource(ITYPE_IME));
-        assertTrue(state.getSource(ITYPE_IME).isVisible());
     }
 }

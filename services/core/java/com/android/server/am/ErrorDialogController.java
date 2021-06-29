@@ -115,7 +115,7 @@ final class ErrorDialogController {
             return;
         }
         if (needDismiss) {
-            scheduleForAllDialogs(mCrashDialogs, Dialog::dismiss);
+            forAllDialogs(mCrashDialogs, Dialog::dismiss);
         }
         mCrashDialogs = null;
     }
@@ -125,7 +125,7 @@ final class ErrorDialogController {
         if (mAnrDialogs == null) {
             return;
         }
-        scheduleForAllDialogs(mAnrDialogs, Dialog::dismiss);
+        forAllDialogs(mAnrDialogs, Dialog::dismiss);
         mAnrDialogs = null;
         mAnrController = null;
     }
@@ -135,7 +135,7 @@ final class ErrorDialogController {
         if (mViolationDialogs == null) {
             return;
         }
-        scheduleForAllDialogs(mViolationDialogs, Dialog::dismiss);
+        forAllDialogs(mViolationDialogs, Dialog::dismiss);
         mViolationDialogs = null;
     }
 
@@ -146,16 +146,6 @@ final class ErrorDialogController {
         }
         mWaitDialog.dismiss();
         mWaitDialog = null;
-    }
-
-    @GuardedBy("mProcLock")
-    void scheduleForAllDialogs(List<? extends BaseErrorDialog> dialogs,
-            Consumer<BaseErrorDialog> c) {
-        mService.mUiHandler.post(() -> {
-            if (dialogs != null) {
-                forAllDialogs(dialogs, c);
-            }
-        });
     }
 
     void forAllDialogs(List<? extends BaseErrorDialog> dialogs, Consumer<BaseErrorDialog> c) {
@@ -192,7 +182,15 @@ final class ErrorDialogController {
             final Context c = contexts.get(i);
             mAnrDialogs.add(new AppNotRespondingDialog(mService, c, data));
         }
-        scheduleForAllDialogs(mAnrDialogs, Dialog::show);
+        mService.mUiHandler.post(() -> {
+            List<AppNotRespondingDialog> dialogs;
+            synchronized (mProcLock) {
+                dialogs = mAnrDialogs;
+            }
+            if (dialogs != null) {
+                forAllDialogs(dialogs, Dialog::show);
+            }
+        });
     }
 
     @GuardedBy("mProcLock")
@@ -204,7 +202,15 @@ final class ErrorDialogController {
             mViolationDialogs.add(
                     new StrictModeViolationDialog(c, mService, res, mApp));
         }
-        scheduleForAllDialogs(mViolationDialogs, Dialog::show);
+        mService.mUiHandler.post(() -> {
+            List<StrictModeViolationDialog> dialogs;
+            synchronized (mProcLock) {
+                dialogs = mViolationDialogs;
+            }
+            if (dialogs != null) {
+                forAllDialogs(dialogs, Dialog::show);
+            }
+        });
     }
 
     @GuardedBy("mProcLock")

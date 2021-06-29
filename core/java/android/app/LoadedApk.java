@@ -930,23 +930,8 @@ public final class LoadedApk {
         if (DEBUG) Slog.v(ActivityThread.TAG, "Class path: " + zip +
                     ", JNI path: " + librarySearchPath);
 
-        boolean registerAppInfoToArt = false;
+        boolean needToSetupJitProfiles = false;
         if (mDefaultClassLoader == null) {
-            // Setup the dex reporter to notify package manager
-            // of any relevant dex loads. The idle maintenance job will use the information
-            // reported to optimize the loaded dex files.
-            // Note that we only need one global reporter per app.
-            // Make sure we do this before creating the main app classloader for the first time
-            // so that we can capture the complete application startup.
-            //
-            // We should not do this in a zygote context (where mActivityThread will be null),
-            // thus we'll guard against it.
-            // Also, the system server reporter (SystemServerDexLoadReporter) is already registered
-            // when system server starts, so we don't need to do it here again.
-            if (mActivityThread != null && !ActivityThread.isSystem()) {
-                BaseDexClassLoader.setReporter(DexLoadReporter.getInstance());
-            }
-
             // Temporarily disable logging of disk reads on the Looper thread
             // as this is early and necessary.
             StrictMode.ThreadPolicy oldPolicy = allowThreadDiskReads();
@@ -972,7 +957,7 @@ public final class LoadedApk {
 
             setThreadPolicy(oldPolicy);
             // Setup the class loader paths for profiling.
-            registerAppInfoToArt = true;
+            needToSetupJitProfiles = true;
         }
 
         if (!libPaths.isEmpty()) {
@@ -989,7 +974,7 @@ public final class LoadedApk {
             final String add = TextUtils.join(File.pathSeparator, addedPaths);
             ApplicationLoaders.getDefault().addPath(mDefaultClassLoader, add);
             // Setup the new code paths for profiling.
-            registerAppInfoToArt = true;
+            needToSetupJitProfiles = true;
         }
 
         // Setup jit profile support.
@@ -1003,8 +988,8 @@ public final class LoadedApk {
         // loads code from) so we explicitly disallow it there.
         //
         // It is not ok to call this in a zygote context where mActivityThread is null.
-        if (registerAppInfoToArt && !ActivityThread.isSystem() && mActivityThread != null) {
-            registerAppInfoToArt();
+        if (needToSetupJitProfiles && !ActivityThread.isSystem() && mActivityThread != null) {
+            setupJitProfileSupport();
         }
 
         // Call AppComponentFactory to select/create the main class loader of this app.
@@ -1061,7 +1046,19 @@ public final class LoadedApk {
         }
     }
 
-    private void registerAppInfoToArt() {
+    private void setupJitProfileSupport() {
+        if (!SystemProperties.getBoolean("dalvik.vm.usejitprofiles", false)) {
+            return;
+        }
+
+        // If we use profiles, setup the dex reporter to notify package manager
+        // of any relevant dex loads. The idle maintenance job will use the information
+        // reported to optimize the loaded dex files.
+        // Note that we only need one global reporter per app.
+        // Make sure we do this before invoking app code for the first time so that we
+        // can capture the complete application startup.
+        BaseDexClassLoader.setReporter(DexLoadReporter.getInstance());
+
         // Only set up profile support if the loaded apk has the same uid as the
         // current process.
         // Currently, we do not support profiling across different apps.
@@ -1087,19 +1084,9 @@ public final class LoadedApk {
 
         for (int i = codePaths.size() - 1; i >= 0; i--) {
             String splitName = i == 0 ? null : mApplicationInfo.splitNames[i - 1];
-            String curProfileFile = ArtManager.getCurrentProfilePath(
+            String profileFile = ArtManager.getCurrentProfilePath(
                     mPackageName, UserHandle.myUserId(), splitName);
-            String refProfileFile = ArtManager.getReferenceProfilePath(
-                    mPackageName, UserHandle.myUserId(), splitName);
-            int codePathType = codePaths.get(i).equals(mApplicationInfo.sourceDir)
-                    ? VMRuntime.CODE_PATH_TYPE_PRIMARY_APK
-                    : VMRuntime.CODE_PATH_TYPE_SPLIT_APK;
-            VMRuntime.registerAppInfo(
-                    mPackageName,
-                    curProfileFile,
-                    refProfileFile,
-                    new String[] {codePaths.get(i)},
-                    codePathType);
+            VMRuntime.registerAppInfo(profileFile, new String[] {codePaths.get(i)});
         }
 
         // Register the app data directory with the reporter. It will
@@ -1294,10 +1281,6 @@ public final class LoadedApk {
             } catch (NameNotFoundException e) {
                 // This should never fail.
                 throw new AssertionError("null split not found");
-            }
-
-            if (Process.myUid() == mApplicationInfo.uid) {
-                ResourcesManager.getInstance().initializeApplicationPaths(mResDir, splitPaths);
             }
 
             mResources = ResourcesManager.getInstance().getResources(null, mResDir,
@@ -1668,8 +1651,7 @@ public final class LoadedApk {
                         intent.setExtrasClassLoader(cl);
                         // TODO: determine at registration time if caller is
                         // protecting themselves with signature permission
-                        intent.prepareToEnterProcess(ActivityThread.isProtectedBroadcast(intent),
-                                mContext.getAttributionSource());
+                        intent.prepareToEnterProcess(ActivityThread.isProtectedBroadcast(intent));
                         setExtrasClassLoader(cl);
                         receiver.setPendingResult(this);
                         receiver.onReceive(mContext, intent);
@@ -2067,14 +2049,13 @@ public final class LoadedApk {
             }
             if (dead) {
                 mConnection.onBindingDied(name);
+            }
+            // If there is a new viable service, it is now connected.
+            if (service != null) {
+                mConnection.onServiceConnected(name, service);
             } else {
-                // If there is a new viable service, it is now connected.
-                if (service != null) {
-                    mConnection.onServiceConnected(name, service);
-                } else {
-                    // The binding machinery worked, but the remote returned null from onBind().
-                    mConnection.onNullBinding(name);
-                }
+                // The binding machinery worked, but the remote returned null from onBind().
+                mConnection.onNullBinding(name);
             }
         }
 

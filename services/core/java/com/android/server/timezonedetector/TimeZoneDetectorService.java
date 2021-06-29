@@ -304,13 +304,6 @@ public final class TimeZoneDetectorService extends ITimeZoneDetectorService.Stub
         mHandler.post(() -> mTimeZoneDetectorStrategy.suggestTelephonyTimeZone(timeZoneSuggestion));
     }
 
-    boolean isTelephonyTimeZoneDetectionSupported() {
-        enforceManageTimeZoneDetectorPermission();
-
-        return ServiceConfigAccessor.getInstance(mContext)
-                .isTelephonyTimeZoneDetectionFeatureSupported();
-    }
-
     boolean isGeoTimeZoneDetectionSupported() {
         enforceManageTimeZoneDetectorPermission();
 

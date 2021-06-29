@@ -114,6 +114,7 @@ public class NotificationConversationInfo extends LinearLayout implements
     private @Action int mSelectedAction = -1;
     private boolean mPressedApply;
 
+    private OnSnoozeClickListener mOnSnoozeClickListener;
     private OnSettingsClickListener mOnSettingsClickListener;
     private NotificationGuts mGutsContainer;
     private OnConversationSettingsClickListener mOnConversationSettingsClickListener;
@@ -132,6 +133,22 @@ public class NotificationConversationInfo extends LinearLayout implements
     static final int ACTION_SNOOZE = 3;
     static final int ACTION_MUTE = 4;
     static final int ACTION_SETTINGS = 5;
+
+    // TODO: b/152050825
+    /*
+    private OnClickListener mOnHomeClick = v -> {
+        mSelectedAction = ACTION_HOME;
+        mShortcutManager.requestPinShortcut(mShortcutInfo, null);
+        mShadeController.animateCollapsePanels();
+        mGutsContainer.closeControls(v, true);
+    };
+
+    private OnClickListener mOnSnoozeClick = v -> {
+        mSelectedAction = ACTION_SNOOZE;
+        mOnSnoozeClickListener.onClick(v, 1);
+        mGutsContainer.closeControls(v, true);
+    };
+    */
 
     private OnClickListener mOnFavoriteClick = v -> {
         setSelectedAction(ACTION_FAVORITE);
@@ -176,6 +193,10 @@ public class NotificationConversationInfo extends LinearLayout implements
         void onClick(View v, Intent intent);
     }
 
+    public interface OnSnoozeClickListener {
+        void onClick(View v, int hoursToSnooze);
+    }
+
     @VisibleForTesting
     void setSelectedAction(int selectedAction) {
         if (mSelectedAction == selectedAction) {
@@ -197,6 +218,7 @@ public class NotificationConversationInfo extends LinearLayout implements
             NotificationEntry entry,
             Notification.BubbleMetadata bubbleMetadata,
             OnSettingsClickListener onSettingsClick,
+            OnSnoozeClickListener onSnoozeClickListener,
             ConversationIconFactory conversationIconFactory,
             Context userContext,
             boolean isDeviceProvisioned,
@@ -220,6 +242,7 @@ public class NotificationConversationInfo extends LinearLayout implements
         mAppUid = mSbn.getUid();
         mDelegatePkg = mSbn.getOpPkg();
         mIsDeviceProvisioned = isDeviceProvisioned;
+        mOnSnoozeClickListener = onSnoozeClickListener;
         mOnConversationSettingsClickListener = onConversationSettingsClickListener;
         mIconFactory = conversationIconFactory;
         mUserContext = userContext;

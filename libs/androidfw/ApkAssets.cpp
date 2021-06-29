@@ -40,7 +40,7 @@ ApkAssets::ApkAssets(std::unique_ptr<Asset> resources_asset,
       loaded_idmap_(std::move(loaded_idmap)) {}
 
 std::unique_ptr<ApkAssets> ApkAssets::Load(const std::string& path, package_property_t flags) {
-  return Load(ZipAssetsProvider::Create(path, flags), flags);
+  return Load(ZipAssetsProvider::Create(path), flags);
 }
 
 std::unique_ptr<ApkAssets> ApkAssets::LoadFromFd(base::unique_fd fd,
@@ -88,10 +88,10 @@ std::unique_ptr<ApkAssets> ApkAssets::LoadOverlay(const std::string& idmap_path,
   if (IsFabricatedOverlay(overlay_path)) {
     // Fabricated overlays do not contain resource definitions. All of the overlay resource values
     // are defined inline in the idmap.
-    overlay_assets = EmptyAssetsProvider::Create(overlay_path);
+    overlay_assets = EmptyAssetsProvider::Create();
   } else {
     // The overlay should be an APK.
-    overlay_assets = ZipAssetsProvider::Create(overlay_path, flags);
+    overlay_assets = ZipAssetsProvider::Create(overlay_path);
   }
   if (overlay_assets == nullptr) {
     return {};

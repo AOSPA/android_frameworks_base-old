@@ -26,7 +26,6 @@ import android.content.om.OverlayInfo;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.ArraySet;
-import android.util.Pair;
 import android.util.Slog;
 import android.util.TypedXmlPullParser;
 import android.util.TypedXmlSerializer;
@@ -204,12 +203,6 @@ final class OverlayManagerSettings {
         final Set<String> paths = new ArraySet<>();
         mItems.forEach(item -> paths.add(item.mBaseCodePath));
         return paths;
-    }
-
-    Set<Pair<OverlayIdentifier, String>> getAllIdentifiersAndBaseCodePaths() {
-        final Set<Pair<OverlayIdentifier, String>> set = new ArraySet<>();
-        mItems.forEach(item -> set.add(new Pair(item.mOverlay, item.mBaseCodePath)));
-        return set;
     }
 
     @NonNull

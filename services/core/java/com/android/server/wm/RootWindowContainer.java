@@ -2147,8 +2147,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
                 // Move the last recents animation transaction from original task to the new one.
                 if (task.mLastRecentsAnimationTransaction != null) {
                     rootTask.setLastRecentsAnimationTransaction(
-                            task.mLastRecentsAnimationTransaction,
-                            task.mLastRecentsAnimationOverlay);
+                            task.mLastRecentsAnimationTransaction);
                     task.clearLastRecentsAnimationTransaction();
                 }
 
@@ -2374,13 +2373,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
 
     boolean resumeFocusedTasksTopActivities(
             Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions) {
-        return resumeFocusedTasksTopActivities(targetRootTask, target, targetOptions,
-                false /* deferPause */);
-    }
 
-    boolean resumeFocusedTasksTopActivities(
-            Task targetRootTask, ActivityRecord target, ActivityOptions targetOptions,
-            boolean deferPause) {
         if (!mTaskSupervisor.readyToResume()) {
             return false;
         }
@@ -2388,8 +2381,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         boolean result = false;
         if (targetRootTask != null && (targetRootTask.isTopRootTaskInDisplayArea()
                 || getTopDisplayFocusedRootTask() == targetRootTask)) {
-            result = targetRootTask.resumeTopActivityUncheckedLocked(target, targetOptions,
-                    deferPause);
+            result = targetRootTask.resumeTopActivityUncheckedLocked(target, targetOptions);
         }
 
         for (int displayNdx = getChildCount() - 1; displayNdx >= 0; --displayNdx) {
@@ -3135,7 +3127,7 @@ public class RootWindowContainer extends WindowContainer<DisplayContent>
         // There is a 1-to-1 relationship between root task and task when not in
         // primary split-windowing mode.
         if (task.getWindowingMode() == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
-                && r.supportsSplitScreenWindowingModeInDisplayArea(task.getDisplayArea())
+                && r.supportsSplitScreenWindowingMode()
                 && (windowingMode == WINDOWING_MODE_SPLIT_SCREEN_PRIMARY
                 || windowingMode == WINDOWING_MODE_UNDEFINED)) {
             return true;

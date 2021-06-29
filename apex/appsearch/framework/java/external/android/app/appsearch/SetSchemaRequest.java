@@ -322,8 +322,6 @@ public final class SetSchemaRequest {
         /**
          * Sets a Map of {@link Migrator}s.
          *
-         * <p>The key of the map is the schema type that the {@link Migrator} value applies to.
-         *
          * <p>The {@link Migrator} migrates all {@link GenericDocument}s under given schema type
          * from the current version number stored in AppSearch to the final version set via {@link
          * #setVersion}.
@@ -337,8 +335,7 @@ public final class SetSchemaRequest {
          * SetSchemaRequest}.
          *
          * @param migrators A {@link Map} of migrators that translate a document from it's current
-         *     version to the final version set via {@link #setVersion}. The key of the map is the
-         *     schema type that the {@link Migrator} value applies to.
+         *     version to the final version set via {@link #setVersion}.
          * @see SetSchemaRequest.Builder#setVersion
          * @see SetSchemaRequest.Builder#addSchemas
          * @see AppSearchSession#setSchema

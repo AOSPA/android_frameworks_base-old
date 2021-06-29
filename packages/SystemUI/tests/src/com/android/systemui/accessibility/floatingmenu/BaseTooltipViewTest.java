@@ -55,7 +55,6 @@ public class BaseTooltipViewTest extends SysuiTestCase {
     private AccessibilityFloatingMenuView mMenuView;
     private BaseTooltipView mToolTipView;
 
-    private final Position mPlaceholderPosition = new Position(0.0f, 0.0f);
     private final MotionEventHelper mMotionEventHelper = new MotionEventHelper();
 
     @Before
@@ -67,7 +66,7 @@ public class BaseTooltipViewTest extends SysuiTestCase {
                 mWindowManager).getMaximumWindowMetrics();
         mContext.addMockSystemService(Context.WINDOW_SERVICE, mWindowManager);
 
-        mMenuView = new AccessibilityFloatingMenuView(mContext, mPlaceholderPosition);
+        mMenuView = new AccessibilityFloatingMenuView(mContext);
         mToolTipView = new BaseTooltipView(mContext, mMenuView);
     }
 

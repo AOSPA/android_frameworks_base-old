@@ -16,6 +16,7 @@
 
 package com.android.systemui.media
 
+import android.app.smartspace.SmartspaceTarget
 import android.content.ComponentName
 import android.content.Context
 import android.media.session.MediaController
@@ -91,44 +92,39 @@ class MediaSessionBasedFilter @Inject constructor(
      * playback type PLAYBACK_TYPE_LOCAL. These updates should be filtered to improve the usability
      * of the media controls.
      */
-    override fun onMediaDataLoaded(
-        key: String,
-        oldKey: String?,
-        data: MediaData,
-        immediately: Boolean
-    ) {
+    override fun onMediaDataLoaded(key: String, oldKey: String?, info: MediaData) {
         backgroundExecutor.execute {
-            data.token?.let {
+            info.token?.let {
                 tokensWithNotifications.add(it)
             }
             val isMigration = oldKey != null && key != oldKey
             if (isMigration) {
                 keyedTokens.remove(oldKey)?.let { removed -> keyedTokens.put(key, removed) }
             }
-            if (data.token != null) {
+            if (info.token != null) {
                 keyedTokens.get(key)?.let {
                     tokens ->
-                    tokens.add(data.token)
+                    tokens.add(info.token)
                 } ?: run {
-                    val tokens = mutableSetOf(data.token)
+                    val tokens = mutableSetOf(info.token)
                     keyedTokens.put(key, tokens)
                 }
             }
             // Determine if an app is casting by checking if it has a session with playback type
             // PLAYBACK_TYPE_REMOTE.
-            val remoteControllers = packageControllers.get(data.packageName)?.filter {
+            val remoteControllers = packageControllers.get(info.packageName)?.filter {
                 it.playbackInfo?.playbackType == PlaybackInfo.PLAYBACK_TYPE_REMOTE
             }
             // Limiting search to only apps with a single remote session.
             val remote = if (remoteControllers?.size == 1) remoteControllers.firstOrNull() else null
-            if (isMigration || remote == null || remote.sessionToken == data.token ||
+            if (isMigration || remote == null || remote.sessionToken == info.token ||
                     !tokensWithNotifications.contains(remote.sessionToken)) {
                 // Not filtering in this case. Passing the event along to listeners.
-                dispatchMediaDataLoaded(key, oldKey, data, immediately)
+                dispatchMediaDataLoaded(key, oldKey, info)
             } else {
                 // Filtering this event because the app is casting and the loaded events is for a
                 // local session.
-                Log.d(TAG, "filtering key=$key local=${data.token} remote=${remote?.sessionToken}")
+                Log.d(TAG, "filtering key=$key local=${info.token} remote=${remote?.sessionToken}")
                 // If the local session uses a different notification key, then lets go a step
                 // farther and dismiss the media data so that media controls for the local session
                 // don't hang around while casting.
@@ -139,11 +135,7 @@ class MediaSessionBasedFilter @Inject constructor(
         }
     }
 
-    override fun onSmartspaceMediaDataLoaded(
-        key: String,
-        data: SmartspaceMediaData,
-        shouldPrioritize: Boolean
-    ) {
+    override fun onSmartspaceMediaDataLoaded(key: String, data: SmartspaceTarget) {
         backgroundExecutor.execute {
             dispatchSmartspaceMediaDataLoaded(key, data)
         }
@@ -157,20 +149,15 @@ class MediaSessionBasedFilter @Inject constructor(
         }
     }
 
-    override fun onSmartspaceMediaDataRemoved(key: String, immediately: Boolean) {
+    override fun onSmartspaceMediaDataRemoved(key: String) {
         backgroundExecutor.execute {
-            dispatchSmartspaceMediaDataRemoved(key, immediately)
+            dispatchSmartspaceMediaDataRemoved(key)
         }
     }
 
-    private fun dispatchMediaDataLoaded(
-        key: String,
-        oldKey: String?,
-        info: MediaData,
-        immediately: Boolean
-    ) {
+    private fun dispatchMediaDataLoaded(key: String, oldKey: String?, info: MediaData) {
         foregroundExecutor.execute {
-            listeners.toSet().forEach { it.onMediaDataLoaded(key, oldKey, info, immediately) }
+            listeners.toSet().forEach { it.onMediaDataLoaded(key, oldKey, info) }
         }
     }
 
@@ -180,15 +167,15 @@ class MediaSessionBasedFilter @Inject constructor(
         }
     }
 
-    private fun dispatchSmartspaceMediaDataLoaded(key: String, info: SmartspaceMediaData) {
+    private fun dispatchSmartspaceMediaDataLoaded(key: String, info: SmartspaceTarget) {
         foregroundExecutor.execute {
             listeners.toSet().forEach { it.onSmartspaceMediaDataLoaded(key, info) }
         }
     }
 
-    private fun dispatchSmartspaceMediaDataRemoved(key: String, immediately: Boolean) {
+    private fun dispatchSmartspaceMediaDataRemoved(key: String) {
         foregroundExecutor.execute {
-            listeners.toSet().forEach { it.onSmartspaceMediaDataRemoved(key, immediately) }
+            listeners.toSet().forEach { it.onSmartspaceMediaDataRemoved(key) }
         }
     }
 

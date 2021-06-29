@@ -280,8 +280,8 @@
     <string name="notification_channel_security" msgid="8516754650348238057">"Sécurité"</string>
     <string name="notification_channel_car_mode" msgid="2123919247040988436">"Mode Voiture"</string>
     <string name="notification_channel_account" msgid="6436294521740148173">"État du compte"</string>
-    <string name="notification_channel_developer" msgid="1691059964407549150">"Messages des développeurs"</string>
-    <string name="notification_channel_developer_important" msgid="7197281908918789589">"Messages importants à l\'intention des développeurs"</string>
+    <string name="notification_channel_developer" msgid="1691059964407549150">"Messages des concepteurs"</string>
+    <string name="notification_channel_developer_important" msgid="7197281908918789589">"Messages importants à l\'intention des concepteurs"</string>
     <string name="notification_channel_updates" msgid="7907863984825495278">"Mises à jour"</string>
     <string name="notification_channel_network_status" msgid="2127687368725272809">"État du réseau"</string>
     <string name="notification_channel_network_alerts" msgid="6312366315654526528">"Alertes réseau"</string>
@@ -580,7 +580,7 @@
     <string name="fingerprint_acquired_partial" msgid="694598777291084823">"Empreinte digitale partielle détectée"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Impossible de reconnaître l\'empreinte digitale. Veuillez réessayer."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"Nettoyez le capteur"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="6038375140739678098">"Maintenez le doigt en place un peu plus longtemps"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="1254724478300787385">"Doigt retiré trop vite"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"Vous avez déplacé votre doigt trop lentement. Veuillez réessayer."</string>
     <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"Essayez une autre empreinte digitale"</string>
     <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"Trop lumineux"</string>
@@ -609,10 +609,14 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Icône d\'empreinte digitale"</string>
-    <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Déverrouillage par reconnaissance faciale"</string>
+    <string name="permlab_manageFace" msgid="4569549381889283282">"gérer le matériel de déverrouillage par reconnaissance faciale"</string>
+    <string name="permdesc_manageFace" msgid="6204569688492710471">"Permet à l\'appli d\'employer des méthodes d\'aj. et de suppr. de modèles de reconn. visage."</string>
+    <string name="permlab_useFaceAuthentication" msgid="1011430526454859030">"utiliser le matériel de déverrouillage par reconnaissance faciale"</string>
+    <string name="permdesc_useFaceAuthentication" msgid="3115697017684668012">"Permet à l\'appli d\'utiliser du matériel de déverr. par reconn faciale pour l\'authentific."</string>
+    <string name="face_recalibrate_notification_name" msgid="6006095897989257026">"Déverrouillage par reconnaissance faciale"</string>
     <string name="face_recalibrate_notification_title" msgid="5944930528030496897">"Inscrivez votre visage à nouveau"</string>
     <string name="face_recalibrate_notification_content" msgid="892757485125249962">"Pour améliorer la reconnaissance, veuillez enregistrer à nouveau votre visage"</string>
-    <string name="face_setup_notification_title" msgid="8843461561970741790">"Configurer le déverrouillage par reconnaissance faciale"</string>
+    <string name="face_setup_notification_title" msgid="550617822603450009">"Configurer le déverrouillage par reconnaissance faciale"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Déverrouillez votre téléphone en le regardant"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Configurer d\'autres méthodes de déverrouillage"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Touchez pour ajouter une empreinte digitale"</string>
@@ -639,19 +643,18 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"Imposs. de vérif. visage. Matériel non accessible."</string>
-    <string name="face_error_timeout" msgid="2598544068593889762">"Réessayez déverrouillage reconnaissance faciale"</string>
+    <string name="face_error_timeout" msgid="522924647742024699">"Réessayez le déverr. par reconnaissance faciale."</string>
     <string name="face_error_no_space" msgid="5649264057026021723">"Impossible de stocker de nouveaux visages. Supprimez-en un."</string>
     <string name="face_error_canceled" msgid="2164434737103802131">"Opération de reconnaissance du visage annulée."</string>
-    <string name="face_error_user_canceled" msgid="5766472033202928373">"Le déverrouillage par reconnaissance faciale a été annulé"</string>
+    <string name="face_error_user_canceled" msgid="8553045452825849843">"Déverr. par reconn. faciale annulé par l\'utilisateur."</string>
     <string name="face_error_lockout" msgid="7864408714994529437">"Trop de tentatives. Veuillez réessayer plus tard."</string>
-    <string name="face_error_lockout_permanent" msgid="3277134834042995260">"Trop de tentatives. Le déverrouillage par reconnaissance faciale est désactivé."</string>
-    <string name="face_error_lockout_screen_lock" msgid="5062609811636860928">"Trop de tentatives. Entrez plutôt le verrouillage de l\'écran."</string>
+    <string name="face_error_lockout_permanent" msgid="8277853602168960343">"Trop de tentatives. Le déverr. par reconnaissance faciale est désactivé."</string>
     <string name="face_error_unable_to_process" msgid="5723292697366130070">"Impossible de vérifier le visage. Réessayez."</string>
-    <string name="face_error_not_enrolled" msgid="1134739108536328412">"Déverrouillage par reconnaissance faciale non configuré"</string>
-    <string name="face_error_hw_not_present" msgid="7940978724978763011">"Déverrouillage par reconnaissance faciale non pris en charge"</string>
+    <string name="face_error_not_enrolled" msgid="7369928733504691611">"Vous n\'avez pas config. le déverr. par reconn. faciale."</string>
+    <string name="face_error_hw_not_present" msgid="1070600921591729944">"Cet appar. ne prend pas en charge le déverr. par reconn. faciale."</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"Le capteur a été désactivé temporairement."</string>
     <string name="face_name_template" msgid="3877037340223318119">"Visage <xliff:g id="FACEID">%d</xliff:g>"</string>
-    <string name="face_app_setting_name" msgid="5854024256907828015">"Déverr. reconnaissance faciale"</string>
+    <string name="face_app_setting_name" msgid="8130135875458467243">"Utiliser le déverrouillage par reconnaissance faciale"</string>
     <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Utiliser la reconnaissance faciale ou le verrouillage de l\'écran"</string>
     <string name="face_dialog_default_subtitle" msgid="6620492813371195429">"Utilisez votre visage pour continuer"</string>
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Utilisez votre visage ou le verrouillage de l\'écran pour continuer"</string>
@@ -884,7 +887,7 @@
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Réessayer"</string>
     <string name="lockscreen_password_wrong" msgid="8605355913868947490">"Réessayer"</string>
     <string name="lockscreen_storage_locked" msgid="634993789186443380">"Déverr. pour acc. aux autres fonction. et données"</string>
-    <string name="faceunlock_multiple_failures" msgid="681991538434031708">"Nombre maximal atteint de tentatives de déverrouillage par reconnaissance faciale"</string>
+    <string name="faceunlock_multiple_failures" msgid="681991538434031708">"Nombre maximal autorisé de tentatives Face Unlock atteint."</string>
     <string name="lockscreen_missing_sim_message_short" msgid="1248431165144893792">"Aucune carte SIM"</string>
     <string name="lockscreen_missing_sim_message" product="tablet" msgid="8596805728510570760">"Aucune carte SIM n\'est insérée dans la tablette."</string>
     <string name="lockscreen_missing_sim_message" product="tv" msgid="2582768023352171073">"Aucune carte SIM ne se trouve dans votre appareil Android TV."</string>
@@ -954,7 +957,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="4215280881346033434">"Développer la zone de déverrouillage"</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2968195219692413046">"Déverrouillage en faisant glisser votre doigt sur l\'écran"</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="8669128146589233293">"Déverrouillage par schéma"</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="4533832120787386728">"Déverrouillage par reconnaissance faciale."</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="632407612842329815">"Déverrouillage par reconnaissance faciale"</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="4020864007967340068">"Déverrouillage par NIP"</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="4895939120871890557">"Déverrouillage du NIP de la carte SIM."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="3459003464041899101">"Déverrouillage du code PUK de la carte SIM."</string>
@@ -1019,7 +1022,8 @@
     <string name="text_copied" msgid="2531420577879738860">"Le texte a été copié dans le presse-papiers."</string>
     <string name="copied" msgid="4675902854553014676">"Copié"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> collé à partir de <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g>"</string>
-    <string name="pasted_from_clipboard" msgid="7355790625710831847">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> a collé du contenu de votre presse-papiers"</string>
+    <!-- no translation found for pasted_from_clipboard (7355790625710831847) -->
+    <skip />
     <string name="pasted_text" msgid="4298871641549173733">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> a collé du texte que vous avez copié"</string>
     <string name="pasted_image" msgid="4729097394781491022">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> a collé une image que vous avez copiée"</string>
     <string name="pasted_content" msgid="646276353060777131">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> a collé le contenu que vous avez copié"</string>
@@ -1256,10 +1260,14 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Préparation de <xliff:g id="APPNAME">%1$s</xliff:g> en cours…"</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Lancement des applications…"</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Finalisation de la mise à jour."</string>
-    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Éteindre l\'écran?"</string>
-    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Pendant que vous configuriez votre empreinte digitale, vous avez appuyé sur l\'interrupteur.\n\nAppuyer sur ce bouton ferme habituellement l\'écran."</string>
-    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Éteindre"</string>
-    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Annuler"</string>
+    <!-- no translation found for fp_enrollment_powerbutton_intent_title (3385634173366119903) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_message (6582149052513682522) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_positive_button (5963520983910436791) -->
+    <skip />
+    <!-- no translation found for fp_enrollment_powerbutton_intent_negative_button (6465764183480190748) -->
+    <skip />
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> en cours d\'exécution"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Touchez pour revenir au jeu"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Choisissez un jeu"</string>
@@ -1271,7 +1279,7 @@
     <string name="dump_heap_ready_notification" msgid="2302452262927390268">"L\'empreinte de mémoire <xliff:g id="PROC">%1$s</xliff:g> est prête"</string>
     <string name="dump_heap_notification_detail" msgid="8431586843001054050">"L\'empreinte de mémoire a été recueillie. Touchez ici pour la partager."</string>
     <string name="dump_heap_title" msgid="4367128917229233901">"Partager l\'empreinte de mémoire?"</string>
-    <string name="dump_heap_text" msgid="1692649033835719336">"Le processus <xliff:g id="PROC">%1$s</xliff:g> a dépassé sa limite de mémoire de <xliff:g id="SIZE">%2$s</xliff:g>. Vous pouvez partager son empreinte de mémoire avec son développeur. Attention : Cette empreinte peut contenir certains de vos renseignements personnels auxquels l\'application a accès."</string>
+    <string name="dump_heap_text" msgid="1692649033835719336">"Le processus <xliff:g id="PROC">%1$s</xliff:g> a dépassé sa limite de mémoire de <xliff:g id="SIZE">%2$s</xliff:g>. Vous pouvez partager son empreinte de mémoire avec son concepteur. Attention : Cette empreinte peut contenir certains de vos renseignements personnels auxquels l\'application a accès."</string>
     <string name="dump_heap_system_text" msgid="6805155514925350849">"Le processus <xliff:g id="PROC">%1$s</xliff:g> a dépassé sa limite de mémoire de <xliff:g id="SIZE">%2$s</xliff:g>. Vous pouvez partager son empreinte de mémoire. Attention : Cette empreinte peut contenir des renseignements personnels auxquels le processus a accès, y compris du texte que vous avez entré."</string>
     <string name="dump_heap_ready_text" msgid="5849618132123045516">"Une empreinte de mémoire du processus lié à l\'application <xliff:g id="PROC">%1$s</xliff:g> peut être partagée. Attention : Cette empreinte peut contenir des renseignements personnels auxquels le processus a accès, y compris du texte que vous avez entré."</string>
     <string name="sendText" msgid="493003724401350724">"Sélectionner une action pour le texte"</string>
@@ -1458,10 +1466,6 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"Permet à une application de demander la suppression de paquets."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"demander d\'ignorer les optimisations de la pile"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"Permet à une application de demander la permission d\'ignorer les optimisations de la pile."</string>
-    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
-    <skip />
-    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
-    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"Appuyer deux fois pour régler le zoom"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"Impossible d\'ajouter le widget."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"Aller"</string>
@@ -1714,7 +1718,8 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Utiliser le raccourci"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Inversion des couleurs"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Correction des couleurs"</string>
-    <string name="one_handed_mode_feature_name" msgid="2334330034828094891">"Mode Une main"</string>
+    <!-- no translation found for one_handed_mode_feature_name (2334330034828094891) -->
+    <skip />
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Réduction supplémentaire de la luminosité"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Touches de volume maintenues enfoncées. <xliff:g id="SERVICE_NAME">%1$s</xliff:g> activé."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Touches de volume maintenues enfoncées. Service <xliff:g id="SERVICE_NAME">%1$s</xliff:g> désactivé."</string>
@@ -1870,8 +1875,10 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Mise à jour par votre administrateur"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Supprimé par votre administrateur"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"OK"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"Le mode Économiseur de pile active le thème sombre et limite ou désactive l\'activité en arrière-plan, certains effets visuels, certaines fonctionnalités et certaines connexions réseau."</string>
-    <string name="battery_saver_description" msgid="8518809702138617167">"Le mode Économiseur de pile active le thème sombre et limite ou désactive l\'activité en arrière-plan, certains effets visuels, certaines fonctionnalités et certaines connexions réseau."</string>
+    <!-- no translation found for battery_saver_description_with_learn_more (4877297130366222145) -->
+    <skip />
+    <!-- no translation found for battery_saver_description (8518809702138617167) -->
+    <skip />
     <string name="data_saver_description" msgid="4995164271550590517">"Pour aider à diminuer l\'utilisation des données, la fonctionnalité Économiseur de données empêche certaines applications d\'envoyer ou de recevoir des données en arrière-plan. Une application que vous utilisez actuellement peut accéder à des données, mais peut le faire moins souvent. Cela peut signifier, par exemple, que les images ne s\'affichent pas jusqu\'à ce que vous les touchiez."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Activer l\'économiseur de données?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Activer"</string>
@@ -1974,12 +1981,14 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"L\'application <xliff:g id="APP_NAME_0">%1$s</xliff:g> n\'est pas accessible pour le moment. Ceci est géré par <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"En savoir plus"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"Réactiver l\'application"</string>
-    <string name="work_mode_off_title" msgid="961171256005852058">"Activer applis professionnelles?"</string>
-    <string name="work_mode_off_message" msgid="7319580997683623309">"Accédez à vos applications professionnelles et à vos notifications"</string>
+    <!-- no translation found for work_mode_off_title (961171256005852058) -->
+    <skip />
+    <!-- no translation found for work_mode_off_message (7319580997683623309) -->
+    <skip />
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Activer"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"L\'application n\'est pas accessible"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"<xliff:g id="APP_NAME">%1$s</xliff:g> n\'est pas accessible pour le moment."</string>
-    <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"Cette application a été conçue pour une ancienne version d\'Android et pourrait ne pas fonctionner correctement. Essayez de vérifier les mises à jour ou communiquez avec son développeur."</string>
+    <string name="deprecated_target_sdk_message" msgid="5203207875657579953">"Cette application a été conçue pour une ancienne version d\'Android et pourrait ne pas fonctionner correctement. Essayez de vérifier les mises à jour ou communiquez avec son concepteur."</string>
     <string name="deprecated_target_sdk_app_store" msgid="8456784048558808909">"Vérifier la présence de mises à jour"</string>
     <string name="new_sms_notification_title" msgid="6528758221319927107">"Vous avez de nouveaux messages"</string>
     <string name="new_sms_notification_content" msgid="3197949934153460639">"Ouvrez l\'application de messagerie texte pour l\'afficher"</string>
@@ -2096,7 +2105,7 @@
     <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"OK"</string>
     <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"Désactiver"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"En savoir plus"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Les notifications améliorées ont remplacé les notifications adaptatives Android sous Android 12. Cette fonctionnalité vous présente des suggestions d\'actions et de réponse, et organise vos notifications.\n\nLes notifications améliorées peuvent accéder au contenu de toutes les notifications, y compris les renseignements personnels comme le nom des contacts et les messages. Cette fonctionnalité peut aussi fermer des notifications ou interagir avec elles, comme répondre aux appels téléphoniques et gérer le mode Ne pas déranger."</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"Les notifications améliorées ont remplacé les notifications adaptatives Android sous Android 12. Cette fonctionnalité vous présente des suggestions d\'actions et de réponse, et organise vos notifications.\n\nLes notifications améliorées peuvent accéder au contenu de toutes les notifications, y compris les renseignements personnels comme le nom des contacts et les messages. Cette fonctionnalité peut aussi fermer des notifications ou interagir avec elles, comme répondre aux appels téléphoniques et gérer le mode Ne pas déranger."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Notification d\'information du mode Routine"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"La pile pourrait s\'épuiser avant la charge habituelle"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Le mode Économiseur de pile est activé afin de prolonger l\'autonomie"</string>

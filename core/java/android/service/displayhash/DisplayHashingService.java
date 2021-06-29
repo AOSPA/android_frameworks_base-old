@@ -51,9 +51,15 @@ public abstract class DisplayHashingService extends Service {
     public static final String EXTRA_VERIFIED_DISPLAY_HASH =
             "android.service.displayhash.extra.VERIFIED_DISPLAY_HASH";
 
-    /** @hide **/
-    public static final String EXTRA_INTERVAL_BETWEEN_REQUESTS =
-            "android.service.displayhash.extra.INTERVAL_BETWEEN_REQUESTS";
+    /**
+     * Name under which a DisplayHashingService component publishes information
+     * about itself.  This meta-data must reference an XML resource containing a
+     * {@link com.android.internal.R.styleable#DisplayHashingService} tag.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String SERVICE_META_DATA = "android.displayhash.display_hashing_service";
 
     /**
      * The {@link Intent} action that must be declared as handled by a service in its manifest
@@ -143,21 +149,6 @@ public abstract class DisplayHashingService extends Service {
         callback.sendResult(data);
     }
 
-    /**
-     * Call to get the interval required between display hash requests. Requests made faster than
-     * this will be throttled.
-     *
-     * @return the interval value required between requests.
-     */
-    public abstract int onGetIntervalBetweenRequestsMillis();
-
-    private void getDurationBetweenRequestsMillis(RemoteCallback callback) {
-        int durationBetweenRequestMillis = onGetIntervalBetweenRequestsMillis();
-        Bundle data = new Bundle();
-        data.putInt(EXTRA_INTERVAL_BETWEEN_REQUESTS, durationBetweenRequestMillis);
-        callback.sendResult(data);
-    }
-
     private final class DisplayHashingServiceWrapper extends IDisplayHashingService.Stub {
         @Override
         public void generateDisplayHash(byte[] salt, HardwareBuffer buffer, Rect bounds,
@@ -195,13 +186,6 @@ public abstract class DisplayHashingService extends Service {
         public void getDisplayHashAlgorithms(RemoteCallback callback) {
             mHandler.sendMessage(obtainMessage(DisplayHashingService::getDisplayHashAlgorithms,
                     DisplayHashingService.this, callback));
-        }
-
-        @Override
-        public void getIntervalBetweenRequestsMillis(RemoteCallback callback) {
-            mHandler.sendMessage(
-                    obtainMessage(DisplayHashingService::getDurationBetweenRequestsMillis,
-                            DisplayHashingService.this, callback));
         }
     }
 }

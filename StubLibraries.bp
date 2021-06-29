@@ -54,7 +54,7 @@ droidstubs {
         },
         api_lint: {
             enabled: true,
-            new_since: ":android.api.public.latest",
+            new_since: ":android-non-updatable.api.public.latest",
         },
     },
     dists: [
@@ -109,7 +109,7 @@ droidstubs {
         },
         api_lint: {
             enabled: true,
-            new_since: ":android.api.system.latest",
+            new_since: ":android-non-updatable.api.system.latest",
             baseline_file: "core/api/system-lint-baseline.txt",
         },
     },
@@ -204,8 +204,7 @@ droidstubs {
         },
         api_lint: {
             enabled: true,
-            new_since: ":android.api.module-lib.latest",
-            baseline_file: "core/api/module-lib-lint-baseline.txt",
+            new_since: ":android-non-updatable.api.module-lib.latest",
         },
     },
     dists: [
@@ -256,7 +255,7 @@ modules_public_stubs = [
 
 modules_system_stubs = [
     "android.net.ipsec.ike.stubs.system",
-    "art.module.public.api.stubs.system",
+    "art.module.public.api.stubs", // Only has public stubs
     "conscrypt.module.public.api.stubs", // Only has public stubs
     "framework-appsearch.stubs.system",
     "framework-connectivity.stubs.system",

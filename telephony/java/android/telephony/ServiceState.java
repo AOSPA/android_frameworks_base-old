@@ -353,11 +353,9 @@ public class ServiceState implements Parcelable {
     private int mChannelNumber;
     private int[] mCellBandwidths = new int[0];
 
-    /**
-     *  ARFCN stands for Absolute Radio Frequency Channel Number. This field is current used for
-     *  LTE where it represents the boost for EARFCN (Reference: 3GPP TS 36.104 5.4.3) and for NR
-     *  where it's for NR ARFCN (Reference: 3GPP TS 36.108) */
-    private int mArfcnRsrpBoost = 0;
+    /* EARFCN stands for E-UTRA Absolute Radio Frequency Channel Number,
+     * Reference: 3GPP TS 36.104 5.4.3 */
+    private int mLteEarfcnRsrpBoost = 0;
 
     private final List<NetworkRegistrationInfo> mNetworkRegistrationInfos = new ArrayList<>();
 
@@ -441,7 +439,7 @@ public class ServiceState implements Parcelable {
         mChannelNumber = s.mChannelNumber;
         mCellBandwidths = s.mCellBandwidths == null ? null :
                 Arrays.copyOf(s.mCellBandwidths, s.mCellBandwidths.length);
-        mArfcnRsrpBoost = s.mArfcnRsrpBoost;
+        mLteEarfcnRsrpBoost = s.mLteEarfcnRsrpBoost;
         synchronized (mNetworkRegistrationInfos) {
             mNetworkRegistrationInfos.clear();
             mNetworkRegistrationInfos.addAll(s.getNetworkRegistrationInfoList());
@@ -475,7 +473,7 @@ public class ServiceState implements Parcelable {
         mCdmaEriIconIndex = in.readInt();
         mCdmaEriIconMode = in.readInt();
         mIsEmergencyOnly = in.readInt() != 0;
-        mArfcnRsrpBoost = in.readInt();
+        mLteEarfcnRsrpBoost = in.readInt();
         synchronized (mNetworkRegistrationInfos) {
             in.readList(mNetworkRegistrationInfos, NetworkRegistrationInfo.class.getClassLoader());
         }
@@ -503,7 +501,7 @@ public class ServiceState implements Parcelable {
         out.writeInt(mCdmaEriIconIndex);
         out.writeInt(mCdmaEriIconMode);
         out.writeInt(mIsEmergencyOnly ? 1 : 0);
-        out.writeInt(mArfcnRsrpBoost);
+        out.writeInt(mLteEarfcnRsrpBoost);
         synchronized (mNetworkRegistrationInfos) {
             out.writeList(mNetworkRegistrationInfos);
         }
@@ -892,7 +890,7 @@ public class ServiceState implements Parcelable {
                     mCdmaEriIconIndex,
                     mCdmaEriIconMode,
                     mIsEmergencyOnly,
-                    mArfcnRsrpBoost,
+                    mLteEarfcnRsrpBoost,
                     mNetworkRegistrationInfos,
                     mNrFrequencyRange,
                     mOperatorAlphaLongRaw,
@@ -1103,7 +1101,7 @@ public class ServiceState implements Parcelable {
                     .append(", mCdmaDefaultRoamingIndicator=").append(mCdmaDefaultRoamingIndicator)
                     .append(", mIsEmergencyOnly=").append(mIsEmergencyOnly)
                     .append(", isUsingCarrierAggregation=").append(isUsingCarrierAggregation())
-                    .append(", mArfcnRsrpBoost=").append(mArfcnRsrpBoost)
+                    .append(", mLteEarfcnRsrpBoost=").append(mLteEarfcnRsrpBoost)
                     .append(", mNetworkRegistrationInfos=").append(mNetworkRegistrationInfos)
                     .append(", mNrFrequencyRange=").append(Build.IS_DEBUGGABLE
                             ? mNrFrequencyRange : FREQUENCY_RANGE_UNKNOWN)
@@ -1134,7 +1132,7 @@ public class ServiceState implements Parcelable {
         mCdmaEriIconIndex = -1;
         mCdmaEriIconMode = -1;
         mIsEmergencyOnly = false;
-        mArfcnRsrpBoost = 0;
+        mLteEarfcnRsrpBoost = 0;
         mNrFrequencyRange = FREQUENCY_RANGE_UNKNOWN;
         synchronized (mNetworkRegistrationInfos) {
             mNetworkRegistrationInfos.clear();
@@ -1366,7 +1364,7 @@ public class ServiceState implements Parcelable {
         m.putBoolean("emergencyOnly", mIsEmergencyOnly);
         m.putBoolean("isDataRoamingFromRegistration", getDataRoamingFromRegistration());
         m.putBoolean("isUsingCarrierAggregation", isUsingCarrierAggregation());
-        m.putInt("ArfcnRsrpBoost", mArfcnRsrpBoost);
+        m.putInt("LteEarfcnRsrpBoost", mLteEarfcnRsrpBoost);
         m.putInt("ChannelNumber", mChannelNumber);
         m.putIntArray("CellBandwidths", mCellBandwidths);
         m.putInt("mNrFrequencyRange", mNrFrequencyRange);
@@ -1457,13 +1455,13 @@ public class ServiceState implements Parcelable {
     }
 
     /** @hide */
-    public int getArfcnRsrpBoost() {
-        return mArfcnRsrpBoost;
+    public int getLteEarfcnRsrpBoost() {
+        return mLteEarfcnRsrpBoost;
     }
 
     /** @hide */
-    public void setArfcnRsrpBoost(int arfcnRsrpBoost) {
-        mArfcnRsrpBoost = arfcnRsrpBoost;
+    public void setLteEarfcnRsrpBoost(int LteEarfcnRsrpBoost) {
+        mLteEarfcnRsrpBoost = LteEarfcnRsrpBoost;
     }
 
     /** @hide */

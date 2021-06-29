@@ -18,7 +18,7 @@ package com.android.server.am;
 
 import static android.app.PendingIntent.FLAG_IMMUTABLE;
 import static android.app.PendingIntent.FLAG_UPDATE_CURRENT;
-import static android.os.PowerExemptionManager.REASON_DENIED;
+import static android.os.PowerWhitelistManager.REASON_DENIED;
 
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NAME;
@@ -37,7 +37,7 @@ import android.net.Uri;
 import android.os.Binder;
 import android.os.Build;
 import android.os.IBinder;
-import android.os.PowerExemptionManager;
+import android.os.PowerWhitelistManager;
 import android.os.SystemClock;
 import android.os.UserHandle;
 import android.provider.Settings;
@@ -149,11 +149,13 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     @GuardedBy("ams")
     private List<IBinder> mBgActivityStartsByStartOriginatingTokens = new ArrayList<>();
 
+    // any current binding to this service has BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND
+    // flag? if true, the process can start FGS from background.
+    boolean mIsAllowedBgFgsStartsByBinding;
+
     // allow while-in-use permissions in foreground service or not.
     // while-in-use permissions in FGS started from background might be restricted.
     boolean mAllowWhileInUsePermissionInFgs;
-    // A copy of mAllowWhileInUsePermissionInFgs's value when the service is entering FGS state.
-    boolean mAllowWhileInUsePermissionInFgsAtEntering;
 
     // the most recent package that start/bind this service.
     String mRecentCallingPackage;
@@ -166,18 +168,14 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
     long mFgsEnterTime = 0;
     // The uptime when the service exits FGS state.
     long mFgsExitTime = 0;
-    // FGS notification is deferred.
-    boolean mFgsNotificationDeferred;
     // FGS notification was deferred.
-    boolean mFgsNotificationWasDeferred;
+    boolean mFgsNotificationDeferred;
     // FGS notification was shown before the FGS finishes, or it wasn't deferred in the first place.
     boolean mFgsNotificationShown;
 
     // allow the service becomes foreground service? Service started from background may not be
     // allowed to become a foreground service.
-    @PowerExemptionManager.ReasonCode int mAllowStartForeground = REASON_DENIED;
-    // A copy of mAllowStartForeground's value when the service is entering FGS state.
-    @PowerExemptionManager.ReasonCode int mAllowStartForegroundAtEntering = REASON_DENIED;
+    @PowerWhitelistManager.ReasonCode int mAllowStartForeground = REASON_DENIED;
     // Debug info why mAllowStartForeground is allowed or denied.
     String mInfoAllowStartForeground;
     // Debug info if mAllowStartForeground is allowed because of a temp-allowlist.
@@ -447,6 +445,10 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             pw.print(prefix); pw.print("mIsAllowedBgActivityStartsByStart=");
             pw.println(mIsAllowedBgActivityStartsByStart);
         }
+        if (mIsAllowedBgFgsStartsByBinding) {
+            pw.print(prefix); pw.print("mIsAllowedBgFgsStartsByBinding=");
+            pw.println(mIsAllowedBgFgsStartsByBinding);
+        }
         pw.print(prefix); pw.print("allowWhileInUsePermissionInFgs=");
                 pw.println(mAllowWhileInUsePermissionInFgs);
         pw.print(prefix); pw.print("recentCallingPackage=");
@@ -632,6 +634,11 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             } else {
                 proc.removeAllowBackgroundActivityStartsToken(this);
             }
+            if (mIsAllowedBgFgsStartsByBinding) {
+                proc.mState.addAllowBackgroundFgsStartsToken(this);
+            } else {
+                proc.mState.removeAllowBackgroundFgsStartsToken(this);
+            }
         }
         if (app != null && app != proc) {
             // If the old app is allowed to start bg activities because of a service start, leave it
@@ -719,9 +726,32 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
         setAllowedBgActivityStartsByBinding(isAllowedByBinding);
     }
 
+    void updateIsAllowedBgFgsStartsByBinding() {
+        boolean isAllowedByBinding = false;
+        for (int conni = connections.size() - 1; conni >= 0; conni--) {
+            ArrayList<ConnectionRecord> cr = connections.valueAt(conni);
+            for (int i = 0; i < cr.size(); i++) {
+                if ((cr.get(i).flags
+                        & Context.BIND_ALLOW_FOREGROUND_SERVICE_STARTS_FROM_BACKGROUND) != 0) {
+                    isAllowedByBinding = true;
+                    break;
+                }
+            }
+            if (isAllowedByBinding) {
+                break;
+            }
+        }
+        setAllowedBgFgsStartsByBinding(isAllowedByBinding);
+    }
+
     void setAllowedBgActivityStartsByBinding(boolean newValue) {
         mIsAllowedBgActivityStartsByBinding = newValue;
         updateParentProcessBgActivityStartsToken();
+    }
+
+    void setAllowedBgFgsStartsByBinding(boolean newValue) {
+        mIsAllowedBgFgsStartsByBinding = newValue;
+        updateParentProcessBgFgsStartsToken();
     }
 
     /**
@@ -813,6 +843,17 @@ final class ServiceRecord extends Binder implements ComponentName.WithComponentN
             app.addOrUpdateAllowBackgroundActivityStartsToken(this, getExclusiveOriginatingToken());
         } else {
             app.removeAllowBackgroundActivityStartsToken(this);
+        }
+    }
+
+    private void updateParentProcessBgFgsStartsToken() {
+        if (app == null) {
+            return;
+        }
+        if (mIsAllowedBgFgsStartsByBinding) {
+            app.mState.addAllowBackgroundFgsStartsToken(this);
+        } else {
+            app.mState.removeAllowBackgroundFgsStartsToken(this);
         }
     }
 

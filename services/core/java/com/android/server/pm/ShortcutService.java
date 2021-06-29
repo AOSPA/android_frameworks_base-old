@@ -1208,6 +1208,14 @@ public class ShortcutService extends IShortcutService.Stub {
         }
     }
 
+    void postValue(@NonNull final ShortcutInfo shortcutInfo,
+            @NonNull final Consumer<ShortcutInfo> cb) {
+        final String pkg = shortcutInfo.getPackage();
+        final int userId = shortcutInfo.getUserId();
+        final String id = shortcutInfo.getId();
+        getPackageShortcutsLocked(pkg, userId).mutateShortcut(id, shortcutInfo, cb);
+    }
+
     /** Return the last reset time. */
     @GuardedBy("mLock")
     long getLastResetTimeLocked() {
@@ -3536,8 +3544,7 @@ public class ShortcutService extends IShortcutService.Stub {
         }
 
         @Override
-        @Nullable
-        public String getShortcutStartingThemeResName(int launcherUserId,
+        public int getShortcutStartingThemeResId(int launcherUserId,
                 @NonNull String callingPackage, @NonNull String packageName,
                 @NonNull String shortcutId, int userId) {
             Objects.requireNonNull(callingPackage, "callingPackage");
@@ -3554,11 +3561,11 @@ public class ShortcutService extends IShortcutService.Stub {
                 final ShortcutPackage p = getUserShortcutsLocked(userId)
                         .getPackageShortcutsIfExists(packageName);
                 if (p == null) {
-                    return null;
+                    return 0;
                 }
 
                 final ShortcutInfo shortcutInfo = p.findShortcutById(shortcutId);
-                return shortcutInfo != null ? shortcutInfo.getStartingThemeResName() : null;
+                return shortcutInfo != null ? shortcutInfo.getStartingThemeResId() : 0;
             }
         }
 

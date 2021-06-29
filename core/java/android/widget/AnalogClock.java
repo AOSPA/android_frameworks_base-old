@@ -18,7 +18,6 @@ package android.widget;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.app.AppGlobals;
 import android.compat.annotation.UnsupportedAppUsage;
 import android.content.BroadcastReceiver;
 import android.content.Context;
@@ -44,7 +43,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalTime;
 import java.time.ZoneId;
-import java.time.ZonedDateTime;
 import java.util.Formatter;
 import java.util.Locale;
 
@@ -63,9 +61,8 @@ import java.util.Locale;
 @Deprecated
 public class AnalogClock extends View {
     private static final String LOG_TAG = "AnalogClock";
-
     /** How many times per second that the seconds hand advances. */
-    private final int mSecondsHandFps;
+    private static final long SECONDS_HAND_FPS = 30;
 
     private Clock mClock;
     @Nullable
@@ -108,10 +105,6 @@ public class AnalogClock extends View {
 
     public AnalogClock(Context context, AttributeSet attrs, int defStyleAttr, int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-
-        mSecondsHandFps = AppGlobals.getIntCoreSetting(
-                WidgetFlags.KEY_ANALOG_CLOCK_SECONDS_HAND_FPS,
-                WidgetFlags.ANALOG_CLOCK_SECONDS_HAND_FPS_DEFAULT);
 
         final TypedArray a = context.obtainStyledAttributes(
                 attrs, com.android.internal.R.styleable.AnalogClock, defStyleAttr, defStyleRes);
@@ -452,9 +445,7 @@ public class AnalogClock extends View {
         if (mSecondHandTintInfo.mHasTintList || mSecondHandTintInfo.mHasTintBlendMode) {
             mSecondHand = mSecondHandTintInfo.apply(mSecondHand);
         }
-        // Re-run the tick runnable immediately as the presence or absence of a seconds hand affects
-        // the next time we need to tick the clock.
-        mTick.run();
+        mSecondsTick.run();
 
         mChanged = true;
         invalidate();
@@ -576,25 +567,26 @@ public class AnalogClock extends View {
         }
     }
 
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        IntentFilter filter = new IntentFilter();
+    private void onVisible() {
+        if (!mVisible) {
+            mVisible = true;
+            IntentFilter filter = new IntentFilter();
 
-        if (!mReceiverAttached) {
+            filter.addAction(Intent.ACTION_TIME_TICK);
             filter.addAction(Intent.ACTION_TIME_CHANGED);
             filter.addAction(Intent.ACTION_TIMEZONE_CHANGED);
 
             // OK, this is gross but needed. This class is supported by the
-            // remote views mechanism and as a part of that the remote views
+            // remote views machanism and as a part of that the remote views
             // can be inflated by a context for another user without the app
             // having interact users permission - just for loading resources.
-            // For example, when adding widgets from a user profile to the
+            // For exmaple, when adding widgets from a user profile to the
             // home screen. Therefore, we register the receiver as the current
             // user not the one the context is for.
             getContext().registerReceiverAsUser(mIntentReceiver,
                     android.os.Process.myUserHandle(), filter, null, getHandler());
-            mReceiverAttached = true;
+
+            mSecondsTick.run();
         }
 
         // NOTE: It's safe to do these after registering the receiver since the receiver always runs
@@ -607,26 +599,10 @@ public class AnalogClock extends View {
         onTimeChanged();
     }
 
-    @Override
-    protected void onDetachedFromWindow() {
-        if (mReceiverAttached) {
-            getContext().unregisterReceiver(mIntentReceiver);
-            mReceiverAttached = false;
-        }
-        super.onDetachedFromWindow();
-    }
-
-    private void onVisible() {
-        if (!mVisible) {
-            mVisible = true;
-            mTick.run();
-        }
-
-    }
-
     private void onInvisible() {
         if (mVisible) {
-            removeCallbacks(mTick);
+            getContext().unregisterReceiver(mIntentReceiver);
+            removeCallbacks(mSecondsTick);
             mVisible = false;
         }
     }
@@ -752,7 +728,7 @@ public class AnalogClock extends View {
         // n positions between two given numbers, where n is the number of ticks per second. This
         // ensures the second hand advances by a consistent distance despite our handler callbacks
         // occurring at inconsistent frequencies.
-        mSeconds = Math.round(rawSeconds * mSecondsHandFps) / (float) mSecondsHandFps;
+        mSeconds = Math.round(rawSeconds * SECONDS_HAND_FPS) / (float) SECONDS_HAND_FPS;
         mMinutes = localTime.getMinute() + mSeconds / 60.0f;
         mHour = localTime.getHour() + mMinutes / 60.0f;
         mChanged = true;
@@ -763,7 +739,6 @@ public class AnalogClock extends View {
         }
     }
 
-    /** Intent receiver for the time or time zone changing. */
     private final BroadcastReceiver mIntentReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
@@ -771,56 +746,35 @@ public class AnalogClock extends View {
                 createClock();
             }
 
-            mTick.run();
+            onTimeChanged();
+
+            invalidate();
         }
     };
-    private boolean mReceiverAttached;
 
-    private final Runnable mTick = new Runnable() {
+    private final Runnable mSecondsTick = new Runnable() {
         @Override
         public void run() {
             removeCallbacks(this);
-            if (!mVisible) {
+            if (!mVisible || mSecondHand == null) {
                 return;
             }
 
             Instant now = mClock.instant();
-            ZonedDateTime zonedDateTime = now.atZone(mClock.getZone());
-            LocalTime localTime = zonedDateTime.toLocalTime();
-
-            long millisUntilNextTick;
-            if (mSecondHand == null) {
-                // If there's no second hand, then tick at the start of the next minute.
-                //
-                // This must be done with ZonedDateTime as opposed to LocalDateTime to ensure proper
-                // handling of DST. Also note that because of leap seconds, it should not be assumed
-                // that one minute == 60 seconds.
-                Instant startOfNextMinute = zonedDateTime.plusMinutes(1).withSecond(0).toInstant();
-                millisUntilNextTick = Duration.between(now, startOfNextMinute).toMillis();
-                if (millisUntilNextTick <= 0) {
-                    // This should never occur, but if it does, then just check the tick again in
-                    // one minute to ensure we're always moving forward.
-                    millisUntilNextTick = Duration.ofMinutes(1).toMillis();
-                }
-            } else {
-                // If there is a seconds hand, then determine the next tick point based on the fps.
-                //
-                // How many milliseconds through the second we currently are.
-                long millisOfSecond = Duration.ofNanos(localTime.getNano()).toMillis();
-                // How many milliseconds there are between tick positions for the seconds hand.
-                double millisPerTick = 1000 / (double) mSecondsHandFps;
-                // How many milliseconds we are past the last tick position.
-                long millisPastLastTick = Math.round(millisOfSecond % millisPerTick);
-                // How many milliseconds there are until the next tick position.
-                millisUntilNextTick = Math.round(millisPerTick - millisPastLastTick);
-                // If we are exactly at the tick position, this could be 0 milliseconds due to
-                // rounding. In this case, advance by the full amount of millis to the next
-                // position.
-                if (millisUntilNextTick <= 0) {
-                    millisUntilNextTick = Math.round(millisPerTick);
-                }
+            LocalTime localTime = now.atZone(mClock.getZone()).toLocalTime();
+            // How many milliseconds through the second we currently are.
+            long millisOfSecond = Duration.ofNanos(localTime.getNano()).toMillis();
+            // How many milliseconds there are between tick positions for the seconds hand.
+            double millisPerTick = 1000 / (double) SECONDS_HAND_FPS;
+            // How many milliseconds we are past the last tick position.
+            long millisPastLastTick = Math.round(millisOfSecond % millisPerTick);
+            // How many milliseconds there are until the next tick position.
+            long millisUntilNextTick = Math.round(millisPerTick - millisPastLastTick);
+            // If we are exactly at the tick position, this could be 0 milliseconds due to rounding.
+            // In this case, advance by the full amount of millis to the next position.
+            if (millisUntilNextTick <= 0) {
+                millisUntilNextTick = Math.round(millisPerTick);
             }
-
             // Schedule a callback for when the next tick should occur.
             postDelayed(this, millisUntilNextTick);
 

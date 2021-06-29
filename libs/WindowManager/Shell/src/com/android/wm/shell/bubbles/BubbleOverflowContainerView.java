@@ -27,8 +27,6 @@ import android.content.res.TypedArray;
 import android.graphics.Color;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.util.TypedValue;
-import android.view.KeyEvent;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -63,15 +61,6 @@ public class BubbleOverflowContainerView extends LinearLayout {
     private RecyclerView mRecyclerView;
     private List<Bubble> mOverflowBubbles = new ArrayList<>();
 
-    private View.OnKeyListener mKeyListener = (view, i, keyEvent) -> {
-        if (keyEvent.getAction() == KeyEvent.ACTION_UP
-                && keyEvent.getKeyCode() == KeyEvent.KEYCODE_BACK) {
-            mController.collapseStack();
-            return true;
-        }
-        return false;
-    };
-
     private class OverflowGridLayoutManager extends GridLayoutManager {
         OverflowGridLayoutManager(Context context, int columns) {
             super(context, columns);
@@ -99,22 +88,20 @@ public class BubbleOverflowContainerView extends LinearLayout {
     }
 
     public BubbleOverflowContainerView(Context context) {
-        this(context, null);
+        super(context);
     }
 
     public BubbleOverflowContainerView(Context context, @Nullable AttributeSet attrs) {
-        this(context, attrs, 0);
+        super(context, attrs);
     }
 
-    public BubbleOverflowContainerView(Context context, @Nullable AttributeSet attrs,
-            int defStyleAttr) {
-        this(context, attrs, defStyleAttr, 0);
+    public BubbleOverflowContainerView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
+        super(context, attrs, defStyleAttr);
     }
 
     public BubbleOverflowContainerView(Context context, AttributeSet attrs, int defStyleAttr,
             int defStyleRes) {
         super(context, attrs, defStyleAttr, defStyleRes);
-        setFocusableInTouchMode(true);
     }
 
     public void setBubbleController(BubbleController controller) {
@@ -122,8 +109,12 @@ public class BubbleOverflowContainerView extends LinearLayout {
     }
 
     public void show() {
-        requestFocus();
+        setVisibility(View.VISIBLE);
         updateOverflow();
+    }
+
+    public void hide() {
+        setVisibility(View.INVISIBLE);
     }
 
     @Override
@@ -135,25 +126,6 @@ public class BubbleOverflowContainerView extends LinearLayout {
         mEmptyStateTitle = findViewById(R.id.bubble_overflow_empty_title);
         mEmptyStateSubtitle = findViewById(R.id.bubble_overflow_empty_subtitle);
         mEmptyStateImage = findViewById(R.id.bubble_overflow_empty_state_image);
-    }
-
-    @Override
-    protected void onAttachedToWindow() {
-        super.onAttachedToWindow();
-        if (mController != null) {
-            // For the overflow to get key events (e.g. back press) we need to adjust the flags
-            mController.updateWindowFlagsForOverflow(true);
-        }
-        setOnKeyListener(mKeyListener);
-    }
-
-    @Override
-    protected void onDetachedFromWindow() {
-        super.onDetachedFromWindow();
-        if (mController != null) {
-            mController.updateWindowFlagsForOverflow(false);
-        }
-        setOnKeyListener(null);
     }
 
     void updateOverflow() {
@@ -197,23 +169,16 @@ public class BubbleOverflowContainerView extends LinearLayout {
                         ? res.getColor(R.color.bubbles_dark)
                         : res.getColor(R.color.bubbles_light));
 
-        final TypedArray typedArray = getContext().obtainStyledAttributes(new int[] {
-                android.R.attr.colorBackgroundFloating,
-                android.R.attr.textColorSecondary});
+        final TypedArray typedArray = getContext().obtainStyledAttributes(
+                new int[]{android.R.attr.colorBackgroundFloating,
+                        android.R.attr.textColorSecondary});
         int bgColor = typedArray.getColor(0, isNightMode ? Color.BLACK : Color.WHITE);
         int textColor = typedArray.getColor(1, isNightMode ? Color.WHITE : Color.BLACK);
         textColor = ContrastColorUtil.ensureTextContrast(textColor, bgColor, isNightMode);
         typedArray.recycle();
-        setBackgroundColor(bgColor);
+
         mEmptyStateTitle.setTextColor(textColor);
         mEmptyStateSubtitle.setTextColor(textColor);
-    }
-
-    public void updateFontSize() {
-        final float fontSize = mContext.getResources()
-                .getDimensionPixelSize(com.android.internal.R.dimen.text_size_body_2_material);
-        mEmptyStateTitle.setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSize);
-        mEmptyStateSubtitle.setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSize);
     }
 
     private final BubbleData.Listener mDataListener = new BubbleData.Listener() {

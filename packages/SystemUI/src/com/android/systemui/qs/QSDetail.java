@@ -37,7 +37,6 @@ import android.widget.LinearLayout;
 import android.widget.Switch;
 import android.widget.TextView;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.systemui.Dependency;
@@ -58,8 +57,7 @@ public class QSDetail extends LinearLayout {
     private ViewGroup mDetailContent;
     protected TextView mDetailSettingsButton;
     protected TextView mDetailDoneButton;
-    @VisibleForTesting
-    QSDetailClipper mClipper;
+    private QSDetailClipper mClipper;
     private DetailAdapter mDetailAdapter;
     private QSPanelController mQsPanelController;
 

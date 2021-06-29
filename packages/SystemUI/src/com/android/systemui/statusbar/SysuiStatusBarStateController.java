@@ -59,19 +59,7 @@ public interface SysuiStatusBarStateController extends StatusBarStateController 
      * @param state see {@link StatusBarState} for valid options
      * @return {@code true} if the state changed, else {@code false}
      */
-    default boolean setState(int state) {
-        return setState(state, false /* force */);
-    }
-
-    /**
-     * Update the status bar state
-     * @param state see {@link StatusBarState} for valid options
-     * @param force whether to set the state even if it's the same as the current state. This will
-     *              dispatch the state to all StatusBarStateListeners, ensuring that all listening
-     *              components are reset to this state.
-     * @return {@code true} if the state was changed or set forcefully
-     */
-    boolean setState(int state, boolean force);
+    boolean setState(int state);
 
     /**
      * Update the dozing state from {@link StatusBar}'s perspective

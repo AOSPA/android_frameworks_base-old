@@ -255,7 +255,6 @@ private:
         binder::Status onStatusChanged(MountId mount, int newStatus) final;
 
         void setCurrentStatus(int newStatus);
-        void compareAndSetCurrentStatus(int expectedStatus, int newStatus);
 
         sp<content::pm::IDataLoader> getDataLoader();
 

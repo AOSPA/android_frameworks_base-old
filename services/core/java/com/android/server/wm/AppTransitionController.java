@@ -623,11 +623,7 @@ public class AppTransitionController {
             siblings.add(current);
             boolean canPromote = true;
 
-            if (parent == null || !parent.canCreateRemoteAnimationTarget()
-                    // We cannot promote the animation on Task's parent when the task is in
-                    // clearing task in case the animating get stuck when performing the opening
-                    // task that behind it.
-                    || (current.asTask() != null && current.asTask().mInRemoveTask)) {
+            if (parent == null || !parent.canCreateRemoteAnimationTarget()) {
                 canPromote = false;
             } else {
                 // In case a descendant of the parent belongs to the other group, we cannot promote
@@ -804,8 +800,7 @@ public class AppTransitionController {
     }
 
     private void handleNonAppWindowsInTransition(@TransitionOldType int transit, int flags) {
-        if (transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY
-                && !WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
+        if (transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY) {
             if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0
                     && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION) == 0
                     && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION) == 0) {
@@ -817,9 +812,8 @@ public class AppTransitionController {
                 }
             }
         }
-        if ((transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY
-                || transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY_ON_WALLPAPER)
-                && !WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
+        if (transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY
+                || transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY_ON_WALLPAPER) {
             mDisplayContent.startKeyguardExitOnNonAppWindows(
                     transit == TRANSIT_OLD_KEYGUARD_GOING_AWAY_ON_WALLPAPER,
                     (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE) != 0,

@@ -22,15 +22,13 @@ import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FINGERPRIN
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.Context;
-import android.hardware.biometrics.BiometricAuthenticator.Modality;
+import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.util.AttributeSet;
 import android.util.Log;
-import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 
 /**
@@ -87,11 +85,9 @@ public class AuthBiometricFaceToFingerprintView extends AuthBiometricFaceView {
         }
     }
 
-    @Modality
-    private int mActiveSensorType = TYPE_FACE;
+    @BiometricAuthenticator.Modality private int mActiveSensorType = TYPE_FACE;
 
-    @Nullable
-    private UdfpsDialogMeasureAdapter mUdfpsMeasureAdapter;
+    @Nullable UdfpsDialogMeasureAdapter mUdfpsMeasureAdapter;
 
     public AuthBiometricFaceToFingerprintView(Context context) {
         super(context);
@@ -99,11 +95,6 @@ public class AuthBiometricFaceToFingerprintView extends AuthBiometricFaceView {
 
     public AuthBiometricFaceToFingerprintView(Context context, AttributeSet attrs) {
         super(context, attrs);
-    }
-
-    @VisibleForTesting
-    AuthBiometricFaceToFingerprintView(Context context, AttributeSet attrs, Injector injector) {
-        super(context, attrs, injector);
     }
 
     void setFingerprintSensorProps(@NonNull FingerprintSensorPropertiesInternal sensorProps) {
@@ -128,64 +119,23 @@ public class AuthBiometricFaceToFingerprintView extends AuthBiometricFaceView {
     }
 
     @Override
-    public void onAuthenticationFailed(
-            @Modality int modality, @Nullable String failureReason) {
-        super.onAuthenticationFailed(modality, checkErrorForFallback(failureReason));
-    }
-
-    @Override
-    public void onError(int modality, String error) {
-        super.onError(modality, checkErrorForFallback(error));
-    }
-
-    private String checkErrorForFallback(String message) {
-        if (mActiveSensorType == TYPE_FACE) {
-            Log.d(TAG, "Falling back to fingerprint: " + message);
-
-            // switching from face -> fingerprint mode, suppress root error messages
-            mCallback.onAction(Callback.ACTION_START_DELAYED_FINGERPRINT_SENSOR);
-            return mContext.getString(R.string.fingerprint_dialog_use_fingerprint_instead);
-        }
-        return message;
-    }
-
-    @Override
-    @BiometricState
-    protected int getStateForAfterError() {
-        if (mActiveSensorType == TYPE_FACE) {
-            return STATE_AUTHENTICATING;
-        }
-
-        return super.getStateForAfterError();
-    }
-
-    @Override
     @NonNull
     protected IconController getIconController() {
         if (mActiveSensorType == TYPE_FINGERPRINT) {
             if (!(mIconController instanceof UdfpsIconController)) {
-                mIconController = createUdfpsIconController();
+                mIconController = new UdfpsIconController(getContext(), mIconView, mIndicatorView);
             }
             return mIconController;
         }
         return super.getIconController();
     }
 
-    @NonNull
-    protected IconController createUdfpsIconController() {
-        return new UdfpsIconController(getContext(), mIconView, mIndicatorView);
-    }
-
     @Override
-    public void updateState(@BiometricState int newState) {
+    public void updateState(int newState) {
         if (mState == STATE_HELP || mState == STATE_ERROR) {
             mActiveSensorType = TYPE_FINGERPRINT;
-
             setRequireConfirmation(false);
-            mConfirmButton.setEnabled(false);
-            mConfirmButton.setVisibility(View.GONE);
         }
-
         super.updateState(newState);
     }
 

@@ -23,7 +23,6 @@ import android.annotation.SdkConstant;
 import android.annotation.SuppressLint;
 import android.annotation.SdkConstant.SdkConstantType;
 import android.bluetooth.annotations.RequiresBluetoothConnectPermission;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
@@ -188,7 +187,7 @@ public final class BluetoothPbapClient implements BluetoothProfile {
         final IBluetoothPbapClient service = getService();
         if (service != null && isEnabled()) {
             try {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getConnectedDevices(mAttributionSource), mAttributionSource);
             } catch (RemoteException e) {
                 Log.e(TAG, Log.getStackTraceString(new Throwable()));
@@ -216,7 +215,7 @@ public final class BluetoothPbapClient implements BluetoothProfile {
         final IBluetoothPbapClient service = getService();
         if (service != null && isEnabled()) {
             try {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getDevicesMatchingConnectionStates(states, mAttributionSource),
                         mAttributionSource);
             } catch (RemoteException e) {

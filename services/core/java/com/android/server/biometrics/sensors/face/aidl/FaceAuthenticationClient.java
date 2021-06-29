@@ -68,7 +68,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     private final int[] mKeyguardIgnoreList;
     private final int[] mKeyguardIgnoreListVendor;
 
-    @FaceManager.FaceAcquired private int mLastAcquire = FaceManager.FACE_ACQUIRED_UNKNOWN;
+    private int mLastAcquire;
 
     FaceAuthenticationClient(@NonNull Context context,
             @NonNull LazyDaemon<ISession> lazyDaemon, @NonNull IBinder token,
@@ -99,12 +99,6 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
                 "face_custom_success_error", 0) == 1;
     }
 
-    @NonNull
-    @Override
-    protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return new CompositeCallback(createALSCallback(), callback);
-    }
-
     @Override
     protected void startHalOperation() {
         try {
@@ -133,8 +127,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         // Do not provide haptic feedback if the user was not detected, and an error (usually
         // ERROR_TIMEOUT) is received.
         return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED
-                && mLastAcquire != FaceManager.FACE_ACQUIRED_SENSOR_DIRTY
-                && mLastAcquire != FaceManager.FACE_ACQUIRED_UNKNOWN;
+                && mLastAcquire != FaceManager.FACE_ACQUIRED_SENSOR_DIRTY;
     }
 
     @Override
@@ -235,8 +228,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         }
     }
 
-    @Override
-    public void onLockoutTimed(long durationMillis) {
+    @Override public void onLockoutTimed(long durationMillis) {
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_TIMED);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT;
@@ -249,8 +241,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         }
     }
 
-    @Override
-    public void onLockoutPermanent() {
+    @Override public void onLockoutPermanent() {
         mLockoutCache.setLockoutModeForUser(getTargetUserId(), LockoutTracker.LOCKOUT_PERMANENT);
         // Lockout metrics are logged as an error code.
         final int error = BiometricFaceConstants.FACE_ERROR_LOCKOUT_PERMANENT;

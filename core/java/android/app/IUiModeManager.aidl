@@ -67,6 +67,7 @@ interface IUiModeManager {
      *   1 - notnight mode
      *   2 - night mode
      *   3 - automatic mode switching
+     * @throws RemoteException
      */
     void setApplicationNightMode(in int mode);
 

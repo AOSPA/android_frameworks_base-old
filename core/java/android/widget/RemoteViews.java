@@ -114,7 +114,6 @@ import java.lang.invoke.MethodHandle;
 import java.lang.invoke.MethodHandles;
 import java.lang.invoke.MethodType;
 import java.lang.reflect.Method;
-import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
@@ -813,8 +812,27 @@ public class RemoteViews implements Parcelable, Filter {
                 AdapterView<?> av = (AdapterView<?>) target;
                 // The PendingIntent template is stored in the view's tag.
                 OnItemClickListener listener = (parent, view, position, id) -> {
-                    RemoteResponse response = findRemoteResponseTag(view);
-                    if (response != null) {
+                    // The view should be a frame layout
+                    if (view instanceof ViewGroup) {
+                        ViewGroup vg = (ViewGroup) view;
+
+                        // AdapterViews contain their children in a frame
+                        // so we need to go one layer deeper here.
+                        if (parent instanceof AdapterViewAnimator) {
+                            vg = (ViewGroup) vg.getChildAt(0);
+                        }
+                        if (vg == null) return;
+
+                        RemoteResponse response = null;
+                        int childCount = vg.getChildCount();
+                        for (int i = 0; i < childCount; i++) {
+                            Object tag = vg.getChildAt(i).getTag(R.id.fillInIntent);
+                            if (tag instanceof RemoteResponse) {
+                                response = (RemoteResponse) tag;
+                                break;
+                            }
+                        }
+                        if (response == null) return;
                         response.handleViewInteraction(view, handler);
                     }
                 };
@@ -825,28 +843,6 @@ public class RemoteViews implements Parcelable, Filter {
                         "an AdapterView (id: " + viewId + ")");
                 return;
             }
-        }
-
-        @Nullable
-        private RemoteResponse findRemoteResponseTag(@Nullable View rootView) {
-            if (rootView == null) return null;
-
-            ArrayDeque<View> viewsToCheck = new ArrayDeque<>();
-            viewsToCheck.addLast(rootView);
-
-            while (!viewsToCheck.isEmpty()) {
-                View view = viewsToCheck.removeFirst();
-                Object tag = view.getTag(R.id.fillInIntent);
-                if (tag instanceof RemoteResponse) return (RemoteResponse) tag;
-                if (!(view instanceof ViewGroup)) continue;
-
-                ViewGroup viewGroup = (ViewGroup) view;
-                for (int i = 0; i < viewGroup.getChildCount(); i++) {
-                    viewsToCheck.addLast(viewGroup.getChildAt(i));
-                }
-            }
-
-            return null;
         }
 
         @Override
@@ -5831,9 +5827,8 @@ public class RemoteViews implements Parcelable, Filter {
                 return context;
             }
             try {
-                return context.createPackageContextAsUser(mApplication.packageName,
-                        Context.CONTEXT_RESTRICTED,
-                        UserHandle.getUserHandleForUid(mApplication.uid));
+                return context.createApplicationContext(mApplication,
+                        Context.CONTEXT_RESTRICTED);
             } catch (NameNotFoundException e) {
                 Log.e(LOG_TAG, "Package name " + mApplication.packageName + " not found");
             }

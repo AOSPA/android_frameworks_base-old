@@ -19,7 +19,6 @@ package com.android.systemui.toast;
 import static android.content.res.Configuration.ORIENTATION_PORTRAIT;
 
 import android.animation.Animator;
-import android.animation.AnimatorListenerAdapter;
 import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -35,8 +34,7 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.IAccessibilityManager;
 import android.widget.ToastPresenter;
 
-import androidx.annotation.VisibleForTesting;
-
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.SystemUI;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.statusbar.CommandQueue;
@@ -62,11 +60,11 @@ public class ToastUI extends SystemUI implements CommandQueue.Callbacks {
     private final AccessibilityManager mAccessibilityManager;
     private final ToastFactory mToastFactory;
     private final ToastLogger mToastLogger;
+    private SystemUIToast mToast;
     @Nullable private ToastPresenter mPresenter;
     @Nullable private ITransientNotificationCallback mCallback;
     private ToastOutAnimatorListener mToastOutAnimatorListener;
 
-    @VisibleForTesting SystemUIToast mToast;
     private int mOrientation = ORIENTATION_PORTRAIT;
 
     @Inject
@@ -193,7 +191,7 @@ public class ToastUI extends SystemUI implements CommandQueue.Callbacks {
     /**
      * Once the out animation for a toast is finished, start showing the next toast.
      */
-    class ToastOutAnimatorListener extends AnimatorListenerAdapter {
+    class ToastOutAnimatorListener implements Animator.AnimatorListener {
         final ToastPresenter mPrevPresenter;
         final ITransientNotificationCallback mPrevCallback;
         @Nullable Runnable mShowNextToastRunnable;
@@ -212,12 +210,26 @@ public class ToastUI extends SystemUI implements CommandQueue.Callbacks {
         }
 
         @Override
+        public void onAnimationStart(Animator animation) {
+        }
+
+        @Override
         public void onAnimationEnd(Animator animation) {
             mPrevPresenter.hide(mPrevCallback);
             if (mShowNextToastRunnable != null) {
                 mShowNextToastRunnable.run();
             }
             mToastOutAnimatorListener = null;
+        }
+
+        @Override
+        public void onAnimationCancel(Animator animation) {
+            onAnimationEnd(animation);
+        }
+
+        @Override
+        public void onAnimationRepeat(Animator animation) {
+
         }
     }
 }

@@ -51,20 +51,19 @@ public class BatteryUsageStatsRule implements TestRule {
 
     private final PowerProfile mPowerProfile;
     private final MockClocks mMockClocks = new MockClocks();
-    private final MockBatteryStatsImpl mBatteryStats;
+    private final MockBatteryStatsImpl mBatteryStats = new MockBatteryStatsImpl(mMockClocks) {
+        @Override
+        public boolean hasBluetoothActivityReporting() {
+            return true;
+        }
+    };
 
     private BatteryUsageStats mBatteryUsageStats;
     private boolean mScreenOn;
 
     public BatteryUsageStatsRule() {
-        this(0);
-    }
-
-    public BatteryUsageStatsRule(long currentTime) {
         Context context = InstrumentationRegistry.getContext();
         mPowerProfile = spy(new PowerProfile(context, true /* forTest */));
-        mMockClocks.currentTime = currentTime;
-        mBatteryStats = new MockBatteryStatsImpl(mMockClocks);
         mBatteryStats.setPowerProfile(mPowerProfile);
     }
 
@@ -111,17 +110,10 @@ public class BatteryUsageStatsRule implements TestRule {
 
     /** Call only after setting the power profile information. */
     public BatteryUsageStatsRule initMeasuredEnergyStatsLocked() {
-        return initMeasuredEnergyStatsLocked(new String[0]);
-    }
-
-    /** Call only after setting the power profile information. */
-    public BatteryUsageStatsRule initMeasuredEnergyStatsLocked(
-            String[] customPowerComponentNames) {
         final boolean[] supportedStandardBuckets =
                 new boolean[MeasuredEnergyStats.NUMBER_STANDARD_POWER_BUCKETS];
         Arrays.fill(supportedStandardBuckets, true);
-        mBatteryStats.initMeasuredEnergyStatsLocked(supportedStandardBuckets,
-                customPowerComponentNames);
+        mBatteryStats.initMeasuredEnergyStatsLocked(supportedStandardBuckets, new String[0]);
         mBatteryStats.informThatAllExternalStatsAreFlushed();
         return this;
     }
@@ -167,10 +159,6 @@ public class BatteryUsageStatsRule implements TestRule {
     public void setTime(long realtimeMs, long uptimeMs) {
         mMockClocks.realtime = realtimeMs;
         mMockClocks.uptime = uptimeMs;
-    }
-
-    public void setCurrentTime(long currentTimeMs) {
-        mMockClocks.currentTime = currentTimeMs;
     }
 
     BatteryUsageStats apply(PowerCalculator... calculators) {

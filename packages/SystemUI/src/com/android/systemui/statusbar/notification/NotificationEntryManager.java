@@ -46,9 +46,8 @@ import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationRemoveInterceptor;
 import com.android.systemui.statusbar.NotificationUiAdjustment;
 import com.android.systemui.statusbar.notification.collection.NotificationEntry;
+import com.android.systemui.statusbar.notification.collection.NotificationRankingManager;
 import com.android.systemui.statusbar.notification.collection.inflation.NotificationRowBinder;
-import com.android.systemui.statusbar.notification.collection.legacy.LegacyNotificationRanker;
-import com.android.systemui.statusbar.notification.collection.legacy.LegacyNotificationRankerStub;
 import com.android.systemui.statusbar.notification.collection.legacy.NotificationGroupManagerLegacy;
 import com.android.systemui.statusbar.notification.collection.legacy.VisualStabilityManager;
 import com.android.systemui.statusbar.notification.collection.notifcollection.CommonNotifCollection;
@@ -139,11 +138,12 @@ public class NotificationEntryManager implements
     private final LeakDetector mLeakDetector;
     private final List<NotifCollectionListener> mNotifCollectionListeners = new ArrayList<>();
 
+    private final KeyguardEnvironment mKeyguardEnvironment;
     private final NotificationGroupManagerLegacy mGroupManager;
+    private final Lazy<NotificationRankingManager> mRankingManager;
     private final FeatureFlags mFeatureFlags;
     private final ForegroundServiceDismissalFeatureController mFgsFeatureController;
 
-    private LegacyNotificationRanker mRanker = new LegacyNotificationRankerStub();
     private NotificationPresenter mPresenter;
     private RankingMap mLatestRankingMap;
 
@@ -200,6 +200,8 @@ public class NotificationEntryManager implements
     public NotificationEntryManager(
             NotificationEntryManagerLogger logger,
             NotificationGroupManagerLegacy groupManager,
+            Lazy<NotificationRankingManager> rankingManager,
+            KeyguardEnvironment keyguardEnvironment,
             FeatureFlags featureFlags,
             Lazy<NotificationRowBinder> notificationRowBinderLazy,
             Lazy<NotificationRemoteInputManager> notificationRemoteInputManagerLazy,
@@ -209,6 +211,8 @@ public class NotificationEntryManager implements
     ) {
         mLogger = logger;
         mGroupManager = groupManager;
+        mRankingManager = rankingManager;
+        mKeyguardEnvironment = keyguardEnvironment;
         mFeatureFlags = featureFlags;
         mNotificationRowBinderLazy = notificationRowBinderLazy;
         mRemoteInputManagerLazy = notificationRemoteInputManagerLazy;
@@ -220,10 +224,6 @@ public class NotificationEntryManager implements
     /** Once called, the NEM will start processing notification events from system server. */
     public void attach(NotificationListener notificationListener) {
         notificationListener.addNotificationHandler(mNotifListener);
-    }
-
-    public void setRanker(LegacyNotificationRanker ranker) {
-        mRanker = ranker;
     }
 
     /** Adds a {@link NotificationEntryListener}. */
@@ -419,7 +419,7 @@ public class NotificationEntryManager implements
 
         mActiveNotifications.put(entry.getKey(), entry);
         mGroupManager.onEntryAdded(entry);
-        updateRankingAndSort(mRanker.getRankingMap(), "addEntryInternalInternal");
+        updateRankingAndSort(mRankingManager.get().getRankingMap(), "addEntryInternalInternal");
     }
 
     /**
@@ -698,6 +698,13 @@ public class NotificationEntryManager implements
 
         updateNotifications("updateNotificationInternal");
 
+        if (DEBUG) {
+            // Is this for you?
+            boolean isForCurrentUser = mKeyguardEnvironment
+                    .isNotificationForCurrentProfiles(notification);
+            Log.d(TAG, "notification is " + (isForCurrentUser ? "" : "not ") + "for you");
+        }
+
         for (NotificationEntryListener listener : mNotificationEntryListeners) {
             listener.onPostEntryUpdated(entry);
         }
@@ -855,7 +862,8 @@ public class NotificationEntryManager implements
         final int len = mActiveNotifications.size();
         for (int i = 0; i < len; i++) {
             NotificationEntry entry = mActiveNotifications.valueAt(i);
-            if (!mRanker.isNotificationForCurrentProfiles(entry)) {
+            final StatusBarNotification sbn = entry.getSbn();
+            if (!mKeyguardEnvironment.isNotificationForCurrentProfiles(sbn)) {
                 continue;
             }
             filtered.add(entry);
@@ -878,13 +886,13 @@ public class NotificationEntryManager implements
 
     /** Resorts / filters the current notification set with the current RankingMap */
     public void reapplyFilterAndSort(String reason) {
-        updateRankingAndSort(mRanker.getRankingMap(), reason);
+        updateRankingAndSort(mRankingManager.get().getRankingMap(), reason);
     }
 
     /** Calls to NotificationRankingManager and updates mSortedAndFiltered */
     private void updateRankingAndSort(@NonNull RankingMap rankingMap, String reason) {
         mSortedAndFiltered.clear();
-        mSortedAndFiltered.addAll(mRanker.updateRanking(
+        mSortedAndFiltered.addAll(mRankingManager.get().updateRanking(
                 rankingMap, mActiveNotifications.values(), reason));
     }
 

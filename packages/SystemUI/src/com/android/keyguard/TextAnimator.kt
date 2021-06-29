@@ -21,9 +21,7 @@ import android.animation.AnimatorListenerAdapter
 import android.animation.TimeInterpolator
 import android.animation.ValueAnimator
 import android.graphics.Canvas
-import android.graphics.Typeface
 import android.text.Layout
-import android.util.SparseArray
 
 private const val TAG_WGHT = "wght"
 private const val DEFAULT_ANIMATION_DURATION: Long = 300
@@ -74,8 +72,6 @@ class TextAnimator(
         })
     }
 
-    private val typefaceCache = SparseArray<Typeface?>()
-
     fun updateLayout(layout: Layout) {
         textInterpolator.layout = layout
     }
@@ -124,12 +120,7 @@ class TextAnimator(
             textInterpolator.targetPaint.textSize = textSize
         }
         if (weight >= 0) {
-            // Paint#setFontVariationSettings creates Typeface instance from scratch. To reduce the
-            // memory impact, cache the typeface result.
-            textInterpolator.targetPaint.typeface = typefaceCache.getOrElse(weight) {
-                textInterpolator.targetPaint.fontVariationSettings = "'$TAG_WGHT' $weight"
-                textInterpolator.targetPaint.typeface
-            }
+            textInterpolator.targetPaint.fontVariationSettings = "'$TAG_WGHT' $weight"
         }
         if (color != null) {
             textInterpolator.targetPaint.color = color
@@ -163,13 +154,4 @@ class TextAnimator(
             textInterpolator.rebase()
         }
     }
-}
-
-private fun <V> SparseArray<V>.getOrElse(key: Int, defaultValue: () -> V): V {
-    var v = get(key)
-    if (v == null) {
-        v = defaultValue()
-        put(key, v)
-    }
-    return v
 }

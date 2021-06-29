@@ -94,7 +94,6 @@ public class WifiTile extends QSTileImpl<SignalState> {
         mWifiController = accessPointController;
         mDetailAdapter = (WifiDetailAdapter) createDetailAdapter();
         mController.observe(getLifecycle(), mSignalCallback);
-        mStateBeforeClick.spec = "wifi";
     }
 
     @Override

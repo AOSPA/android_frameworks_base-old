@@ -66,7 +66,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
     public static final boolean DEFAULT_IGNORE_BATTERY_STATUS = false;
     public static final boolean DEFAULT_COLLECT_LATENCY_DATA = true;
     public static final int MAX_BINDER_CALL_STATS_COUNT_DEFAULT = 1500;
-    public static final int SHARDING_MODULO_DEFAULT = 1;
     private static final String DEBUG_ENTRY_PREFIX = "__DEBUG_";
 
     private static class OverflowBinder extends Binder {}
@@ -107,12 +106,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
     private boolean mTrackScreenInteractive = DEFAULT_TRACK_SCREEN_INTERACTIVE;
     private boolean mIgnoreBatteryStatus = DEFAULT_IGNORE_BATTERY_STATUS;
     private boolean mCollectLatencyData = DEFAULT_COLLECT_LATENCY_DATA;
-
-    // Controls how many APIs will be collected per device. 1 means all APIs, 10 means every 10th
-    // API will be collected.
-    private int mShardingModulo = SHARDING_MODULO_DEFAULT;
-    // Controls which shards will be collected on this device.
-    private int mShardingOffset;
 
     private CachedDeviceState.Readonly mDeviceState;
     private CachedDeviceState.TimeInStateStopwatch mBatteryStopwatch;
@@ -185,7 +178,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
         this.mRandom = injector.getRandomGenerator();
         this.mCallStatsObserverHandler = injector.getHandler();
         this.mLatencyObserver = injector.getLatencyObserver(processSource);
-        this.mShardingOffset = mRandom.nextInt(mShardingModulo);
     }
 
     public void setDeviceState(@NonNull CachedDeviceState.Readonly deviceState) {
@@ -351,19 +343,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
         }
     }
 
-    private boolean shouldExport(ExportedCallStat e, boolean applySharding) {
-        if (!applySharding) {
-            return true;
-        }
-
-        int hash = e.binderClass.hashCode();
-        hash = 31 * hash + e.transactionCode;
-        hash = 31 * hash + e.callingUid;
-        hash = 31 * hash + (e.screenInteractive ? 1231 : 1237);
-
-        return (hash + mShardingOffset) % mShardingModulo == 0;
-    }
-
     private UidEntry getUidEntry(int uid) {
         UidEntry uidEntry = mUidEntries.get(uid);
         if (uidEntry == null) {
@@ -445,15 +424,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
      * This method is expensive to call.
      */
     public ArrayList<ExportedCallStat> getExportedCallStats() {
-        return getExportedCallStats(false);
-    }
-
-    /**
-     * This method is expensive to call.
-     * Exports call stats and applies sharding if requested.
-     */
-    @VisibleForTesting
-    public ArrayList<ExportedCallStat> getExportedCallStats(boolean applySharding) {
         // We do not collect all the data if detailed tracking is off.
         if (!mDetailedTracking) {
             return new ArrayList<>();
@@ -465,10 +435,7 @@ public class BinderCallsStats implements BinderInternal.Observer {
             for (int entryIdx = 0; entryIdx < uidEntriesSize; entryIdx++) {
                 final UidEntry entry = mUidEntries.valueAt(entryIdx);
                 for (CallStat stat : entry.getCallStatsList()) {
-                    ExportedCallStat e = getExportedCallStat(entry.workSourceUid, stat);
-                    if (shouldExport(e, applySharding)) {
-                        resultCallStats.add(e);
-                    }
+                    resultCallStats.add(getExportedCallStat(entry.workSourceUid, stat));
                 }
             }
         }
@@ -483,7 +450,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
             resultCallStats.add(
                     createDebugEntry("battery_time_millis", mBatteryStopwatch.getMillis()));
             resultCallStats.add(createDebugEntry("sampling_interval", mPeriodicSamplingInterval));
-            resultCallStats.add(createDebugEntry("sharding_modulo", mShardingModulo));
         }
 
         return resultCallStats;
@@ -493,24 +459,11 @@ public class BinderCallsStats implements BinderInternal.Observer {
      * This method is expensive to call.
      */
     public ArrayList<ExportedCallStat> getExportedCallStats(int workSourceUid) {
-        return getExportedCallStats(workSourceUid, false);
-    }
-
-    /**
-     * This method is expensive to call.
-     * Exports call stats and applies sharding if requested.
-     */
-    @VisibleForTesting
-    public ArrayList<ExportedCallStat> getExportedCallStats(
-                int workSourceUid, boolean applySharding) {
         ArrayList<ExportedCallStat> resultCallStats = new ArrayList<>();
         synchronized (mLock) {
             final UidEntry entry = getUidEntry(workSourceUid);
             for (CallStat stat : entry.getCallStatsList()) {
-                ExportedCallStat e = getExportedCallStat(workSourceUid, stat);
-                if (shouldExport(e, applySharding)) {
-                    resultCallStats.add(e);
-                }
+                resultCallStats.add(getExportedCallStat(workSourceUid, stat));
             }
         }
 
@@ -602,7 +555,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
         pw.print("On battery time (ms): ");
         pw.println(mBatteryStopwatch != null ? mBatteryStopwatch.getMillis() : 0);
         pw.println("Sampling interval period: " + mPeriodicSamplingInterval);
-        pw.println("Sharding modulo: " + mShardingModulo);
 
         final String datasetSizeDesc = verbose ? "" : "(top 90% by cpu time) ";
         final StringBuilder sb = new StringBuilder();
@@ -614,9 +566,9 @@ public class BinderCallsStats implements BinderInternal.Observer {
                 + "call_count):");
         final List<ExportedCallStat> exportedCallStats;
         if (workSourceUid != Process.INVALID_UID) {
-            exportedCallStats = getExportedCallStats(workSourceUid, true);
+            exportedCallStats = getExportedCallStats(workSourceUid);
         } else {
-            exportedCallStats = getExportedCallStats(true);
+            exportedCallStats = getExportedCallStats();
         }
         exportedCallStats.sort(BinderCallsStats::compareByCpuDesc);
         for (ExportedCallStat e : exportedCallStats) {
@@ -827,23 +779,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
         synchronized (mLock) {
             if (samplingInterval != mPeriodicSamplingInterval) {
                 mPeriodicSamplingInterval = samplingInterval;
-                reset();
-            }
-        }
-    }
-
-    /** Updates the sharding modulo. */
-    public void setShardingModulo(int shardingModulo) {
-        if (shardingModulo <= 0) {
-            Slog.w(TAG, "Ignored invalid sharding modulo (value must be positive): "
-                    + shardingModulo);
-            return;
-        }
-
-        synchronized (mLock) {
-            if (shardingModulo != mShardingModulo) {
-                mShardingModulo = shardingModulo;
-                mShardingOffset = mRandom.nextInt(shardingModulo);
                 reset();
             }
         }
@@ -1169,7 +1104,6 @@ public class BinderCallsStats implements BinderInternal.Observer {
         public static final String SETTINGS_TRACK_DIRECT_CALLING_UID_KEY = "track_calling_uid";
         public static final String SETTINGS_MAX_CALL_STATS_KEY = "max_call_stats_count";
         public static final String SETTINGS_IGNORE_BATTERY_STATUS_KEY = "ignore_battery_status";
-        public static final String SETTINGS_SHARDING_MODULO_KEY = "sharding_modulo";
         // Settings for BinderLatencyObserver.
         public static final String SETTINGS_COLLECT_LATENCY_DATA_KEY = "collect_latency_data";
         public static final String SETTINGS_LATENCY_OBSERVER_SAMPLING_INTERVAL_KEY =
@@ -1193,10 +1127,11 @@ public class BinderCallsStats implements BinderInternal.Observer {
         private final int mProcessSource;
 
         public SettingsObserver(Context context, BinderCallsStats binderCallsStats,
-                    int processSource) {
+                    int processSource, int userHandle) {
             super(BackgroundThread.getHandler());
             mContext = context;
-            context.getContentResolver().registerContentObserver(mUri, false, this);
+            context.getContentResolver().registerContentObserver(mUri, false, this,
+                    userHandle);
             mBinderCallsStats = binderCallsStats;
             mProcessSource = processSource;
             // Always kick once to ensure that we match current state

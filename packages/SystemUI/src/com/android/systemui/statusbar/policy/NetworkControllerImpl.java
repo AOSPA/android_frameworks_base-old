@@ -806,9 +806,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         for (int i = 0; i < mMobileSignalControllers.size(); i++) {
             MobileSignalController controller = mMobileSignalControllers.valueAt(i);
             controller.setConfiguration(mConfig);
-            if (mProviderModel) {
-                controller.refreshCallIndicator(mCallbackHandler);
-            }
         }
         refreshLocale();
     }
@@ -1038,11 +1035,6 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mValidatedTransports.clear();
         if (mLastDefaultNetworkCapabilities != null) {
             for (int transportType : mLastDefaultNetworkCapabilities.getTransportTypes()) {
-                if (transportType != NetworkCapabilities.TRANSPORT_CELLULAR
-                        && transportType != NetworkCapabilities.TRANSPORT_WIFI
-                        && transportType != NetworkCapabilities.TRANSPORT_ETHERNET) {
-                    continue;
-                }
                 if (transportType == NetworkCapabilities.TRANSPORT_CELLULAR
                         && Utils.tryGetWifiInfoForVcn(mLastDefaultNetworkCapabilities) != null) {
                     mConnectedTransports.set(NetworkCapabilities.TRANSPORT_WIFI);
@@ -1065,15 +1057,11 @@ public class NetworkControllerImpl extends BroadcastReceiver
             Log.d(TAG, "updateConnectivity: mValidatedTransports=" + mValidatedTransports);
         }
 
-        mInetCondition = mValidatedTransports.get(NetworkCapabilities.TRANSPORT_CELLULAR)
-                || mValidatedTransports.get(NetworkCapabilities.TRANSPORT_WIFI)
-                || mValidatedTransports.get(NetworkCapabilities.TRANSPORT_ETHERNET);
+        mInetCondition = !mValidatedTransports.isEmpty();
 
         pushConnectivityToSignals();
         if (mProviderModel) {
-            mNoDefaultNetwork = !mConnectedTransports.get(NetworkCapabilities.TRANSPORT_CELLULAR)
-                && !mConnectedTransports.get(NetworkCapabilities.TRANSPORT_WIFI)
-                && !mConnectedTransports.get(NetworkCapabilities.TRANSPORT_ETHERNET);
+            mNoDefaultNetwork = mConnectedTransports.isEmpty();
             mCallbackHandler.setConnectivityStatus(mNoDefaultNetwork, !mInetCondition,
                     mNoNetworksAvailable);
             for (int i = 0; i < mMobileSignalControllers.size(); i++) {

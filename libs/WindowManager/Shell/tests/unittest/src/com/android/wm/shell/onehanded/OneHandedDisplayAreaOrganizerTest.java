@@ -418,18 +418,4 @@ public class OneHandedDisplayAreaOrganizerTest extends OneHandedTestCase {
 
         verify(mSpiedDisplayAreaOrganizer, never()).resetWindowsOffset();
     }
-
-    @Test
-    public void testDisplayArea_notReadyForTransition() {
-        OneHandedDisplayAreaOrganizer testSpiedDisplayAreaOrganizer = spy(
-                new OneHandedDisplayAreaOrganizer(mContext,
-                        mDisplayLayout,
-                        mMockSettingsUitl,
-                        mMockAnimationController,
-                        mTutorialHandler,
-                        mMockBackgroundOrganizer,
-                        mMockShellMainExecutor));
-
-        assertThat(testSpiedDisplayAreaOrganizer.isReady()).isFalse();
-    }
 }

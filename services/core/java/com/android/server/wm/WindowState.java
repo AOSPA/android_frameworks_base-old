@@ -25,7 +25,6 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.app.WindowConfiguration.isSplitScreenWindowingMode;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 import static android.graphics.GraphicsProtos.dumpPointProto;
-import static android.hardware.display.DisplayManager.SWITCHING_TYPE_NONE;
 import static android.hardware.input.InputManager.BLOCK_UNTRUSTED_TOUCHES;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.os.PowerManager.DRAW_WAKE_LOCK;
@@ -61,7 +60,6 @@ import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_M
 import static android.view.WindowManager.LayoutParams.MATCH_PARENT;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_COMPATIBLE_WINDOW;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_LAYOUT_CHILD_WINDOW_IN_PARENT_FRAME;
-import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NOT_MAGNIFIABLE;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_NO_MOVE_ANIMATION;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_TRUSTED_OVERLAY;
 import static android.view.WindowManager.LayoutParams.PRIVATE_FLAG_WILL_NOT_REPLACE_ON_RELAUNCH;
@@ -260,7 +258,6 @@ import com.android.internal.util.ToBooleanFunction;
 import com.android.server.policy.WindowManagerPolicy;
 import com.android.server.wm.LocalAnimationAdapter.AnimationSpec;
 import com.android.server.wm.SurfaceAnimator.AnimationType;
-import com.android.server.wm.utils.CoordinateTransforms;
 
 import java.io.PrintWriter;
 import java.lang.ref.WeakReference;
@@ -447,17 +444,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     float mOverrideScale = 1;
     float mHScale=1, mVScale=1;
     float mLastHScale=1, mLastVScale=1;
-
-    // An offset in pixel of the surface contents from the window position. Used for Wallpaper
-    // to provide the effect of scrolling within a large surface. We just use these values as
-    // a cache.
-    int mXOffset = 0;
-    int mYOffset = 0;
-
-    // A scale factor for the surface contents, that will be applied from the center of the visible
-    // region.
-    float mWallpaperScale = 1f;
-
     final Matrix mTmpMatrix = new Matrix();
     final float[] mTmpMatrixArray = new float[9];
 
@@ -652,7 +638,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     private PowerManager.WakeLock mDrawLock;
 
     private final Rect mTmpRect = new Rect();
-    private final Rect mTmpRect2 = new Rect();
     private final Point mTmpPoint = new Point();
 
     private final Transaction mTmpTransaction;
@@ -766,11 +751,11 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     int mFrameRateSelectionPriority = RefreshRatePolicy.LAYER_PRIORITY_UNSET;
 
     /**
-     * This is the frame rate which is passed to SurfaceFlinger if the window set a
-     * preferredDisplayModeId or is part of the high refresh rate deny list.
-     * The variable is cached, so we do not send too many updates to SF.
+     * This is the frame rate which is passed to SurfaceFlinger if the window is part of the
+     * high refresh rate deny list. The variable is cached, so we do not send too many updates to
+     * SF.
      */
-    float mAppPreferredFrameRate = 0f;
+    float mDenyListFrameRate = 0f;
 
     static final int BLAST_TIMEOUT_DURATION = 5000; /* milliseconds */
 
@@ -1175,14 +1160,13 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     /**
      * @return {@code true} if the application runs in size compatibility mode or has an app level
-     * scaling override set. This method always returns {@code false} on child window because it
-     * should follow parent's scale.
+     * scaling override set.
      * @see CompatModePackages#getCompatScale
      * @see android.content.res.CompatibilityInfo#supportsScreen
      * @see ActivityRecord#hasSizeCompatBounds()
      */
     boolean hasCompatScale() {
-        return (mOverrideScale != 1f || hasCompatScale(mAttrs, mActivityRecord)) && !mIsChildWindow;
+        return mOverrideScale != 1f || hasCompatScale(mAttrs, mActivityRecord);
     }
 
     /**
@@ -1354,8 +1338,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 }
             }
 
-            layoutDisplayFrame = mTmpRect2;
-            layoutDisplayFrame.set(windowFrames.mDisplayFrame);
+            layoutDisplayFrame = new Rect(windowFrames.mDisplayFrame);
             windowFrames.mDisplayFrame.set(windowFrames.mContainingFrame);
             layoutXDiff = mInsetFrame.left - windowFrames.mContainingFrame.left;
             layoutYDiff = mInsetFrame.top - windowFrames.mContainingFrame.top;
@@ -1517,9 +1500,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         }
 
         boolean didFrameInsetsChange = setReportResizeHints();
-        // The latest configuration will be returned by the out parameter of relayout, so it is
-        // unnecessary to report resize if this window is running relayout.
-        final boolean configChanged = !mInRelayout && !isLastConfigReportedToClient();
+        boolean configChanged = !isLastConfigReportedToClient();
         if (DEBUG_CONFIGURATION && configChanged) {
             Slog.v(TAG_WM, "Win " + this + " config changed: " + getConfiguration());
         }
@@ -2328,7 +2309,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // When the window configuration changed, we need to update the IME control target in
         // case the app may lose the IME inets control when exiting from split-screen mode, or the
         // IME parent may failed to attach to the app during rotating the screen.
-        // See DisplayContent#shouldImeAttachedToApp, DisplayContent#isImeControlledByApp
+        // See DisplayContent#isImeAttachedToApp, DisplayContent#isImeControlledByApp
         if (windowConfigChanged) {
             getDisplayContent().updateImeControlTarget();
         }
@@ -2428,28 +2409,25 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         final boolean startingWindow = mAttrs.type == TYPE_APPLICATION_STARTING;
         if (startingWindow) {
             ProtoLog.d(WM_DEBUG_STARTING_WINDOW, "Starting window removed %s", this);
-            // Cancel the remove starting window animation on shell. The main window might changed
-            // during animating, checking for all windows would be safer.
+        }
+
+        if (startingWindow && StartingSurfaceController.DEBUG_ENABLE_SHELL_DRAWER) {
+            // cancel the remove starting window animation on shell
             if (mActivityRecord != null) {
-                mActivityRecord.forAllWindowsUnchecked(w -> {
-                    if (w.isSelfAnimating(0, ANIMATION_TYPE_STARTING_REVEAL)) {
-                        w.cancelAnimation();
-                        return true;
-                    }
-                    return false;
-                }, true);
+                final WindowState mainWindow =
+                        mActivityRecord.findMainWindow(false/* includeStartingApp */);
+                if (mainWindow != null && mainWindow.isSelfAnimating(0 /* flags */,
+                        ANIMATION_TYPE_STARTING_REVEAL)) {
+                    mainWindow.cancelAnimation();
+                }
             }
-        } else if (mAttrs.type == TYPE_BASE_APPLICATION
-                && isSelfAnimating(0, ANIMATION_TYPE_STARTING_REVEAL)) {
-            // Cancel the remove starting window animation in case the binder dead before remove
-            // splash window.
-            cancelAnimation();
         }
 
         ProtoLog.v(WM_DEBUG_FOCUS, "Remove client=%x, surfaceController=%s Callers=%s",
                     System.identityHashCode(mClient.asBinder()),
                     mWinAnimator.mSurfaceController,
                     Debug.getCallers(5));
+
 
         final long origId = Binder.clearCallingIdentity();
 
@@ -3857,9 +3835,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
         fillClientWindowFramesAndConfiguration(mClientWindowFrames, mLastReportedConfiguration,
                 true /* useLatestConfig */, false /* relayoutVisible */);
-        final boolean syncRedraw = shouldSendRedrawForSync();
-        final boolean reportDraw = syncRedraw || drawPending;
-        final boolean forceRelayout = syncRedraw || reportOrientation || isDragResizeChanged();
+        final boolean reportDraw = drawPending || useBLASTSync() || !mRedrawForSyncReported;
+        final boolean forceRelayout = reportOrientation || isDragResizeChanged() || !mRedrawForSyncReported;
         final DisplayContent displayContent = getDisplayContent();
         final boolean alwaysConsumeSystemBars =
                 displayContent.getDisplayPolicy().areSystemBarsForcedShownLw(this);
@@ -3930,9 +3907,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
     void notifyInsetsChanged() {
         ProtoLog.d(WM_DEBUG_IME, "notifyInsetsChanged for %s ", this);
         try {
-            mClient.insetsChanged(getCompatInsetsState(),
-                    hasMoved(),
-                    mWindowFrames.isFrameSizeChangeReported());
+            mClient.insetsChanged(getCompatInsetsState());
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver inset state change w=" + this, e);
         }
@@ -3948,9 +3923,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 getDisplayContent().getInsetsStateController();
         try {
             mClient.insetsControlChanged(getCompatInsetsState(),
-                    stateController.getControlsForDispatch(this),
-                    hasMoved(),
-                    mWindowFrames.isFrameSizeChangeReported());
+                    stateController.getControlsForDispatch(this));
         } catch (RemoteException e) {
             Slog.w(TAG, "Failed to deliver inset state change to w=" + this, e);
         }
@@ -4018,15 +3991,24 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         return mActivityRecord == null || (mActivityRecord.matchParentBounds() && !inMultiWindowMode());
     }
 
-    /**
-     * @return true if activity bounds are letterboxed or letterboxed for diplay cutout.
-     *
-     * <p>Note that letterbox UI may not be shown even when this returns {@code true}. See {@link
-     * LetterboxUiController#shouldShowLetterboxUi} for more context.
-     */
-    boolean areAppWindowBoundsLetterboxed() {
-        return mActivityRecord != null
-                && (mActivityRecord.areBoundsLetterboxed() || isLetterboxedForDisplayCutout());
+    /** @return true when the window should be letterboxed. */
+    boolean isLetterboxedAppWindow() {
+        // Fullscreen mode but doesn't fill display area.
+        if (!inMultiWindowMode() && !matchesDisplayAreaBounds()) {
+            return true;
+        }
+        if (mActivityRecord != null) {
+            // Activity in size compat.
+            if (mActivityRecord.inSizeCompatMode()) {
+                return true;
+            }
+            // Letterbox for fixed orientation.
+            if (mActivityRecord.isLetterboxedForFixedOrientationAndAspectRatio()) {
+                return true;
+            }
+        }
+        // Letterboxed for display cutout.
+        return isLetterboxedForDisplayCutout();
     }
 
     /** Returns {@code true} if the window is letterboxed for the display cutout. */
@@ -4463,22 +4445,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
             h = Math.min(h, ph);
         }
 
-        if (mIsChildWindow) {
-            final WindowState parent = getTopParentWindow();
-            if (parent.hasCompatScale()) {
-                // Scale the containing and display frames because they are in screen coordinates.
-                // The position of frames are already relative to parent so only size is scaled.
-                mTmpRect.set(containingFrame);
-                containingFrame = mTmpRect;
-                CoordinateTransforms.scaleRectSize(containingFrame, parent.mInvGlobalScale);
-                if (fitToDisplay) {
-                    mTmpRect2.set(displayFrame);
-                    displayFrame = mTmpRect2;
-                    CoordinateTransforms.scaleRectSize(displayFrame, parent.mInvGlobalScale);
-                }
-            }
-        }
-
         // Set mFrame
         Gravity.apply(mAttrs.gravity, w, h, containingFrame,
                 (int) (x + mAttrs.horizontalMargin * pw),
@@ -4886,9 +4852,8 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // (i.e. Like {@link DisplayContent.ImeContainer#skipImeWindowsDuringTraversal}, the IME
         // window will be ignored to traverse when the IME target is still in split-screen mode).
         if (isImeLayeringTarget()
-                && (!mDisplayContent.getDefaultTaskDisplayArea().isSplitScreenModeActivated()
-                         || getTask() == null)) {
-            if (mDisplayContent.forAllImeWindows(callback, traverseTopToBottom)) {
+                && !getDisplayContent().getDefaultTaskDisplayArea().isSplitScreenModeActivated()) {
+            if (getDisplayContent().forAllImeWindows(callback, traverseTopToBottom)) {
                 return true;
             }
         }
@@ -5386,9 +5351,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                 || mAttrs.type == TYPE_NAVIGATION_BAR_PANEL) {
             return false;
         }
-        if ((mAttrs.privateFlags & PRIVATE_FLAG_NOT_MAGNIFIABLE) != 0) {
-            return false;
-        }
         return true;
     }
 
@@ -5453,28 +5415,19 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
                     mFrameRateSelectionPriority);
         }
 
-        // If refresh rate switching is disabled there is no point to set the frame rate on the
-        // surface as the refresh rate will be limited by display manager to a single value
-        // and SurfaceFlinger wouldn't be able to change it anyways.
-        if (mWmService.mDisplayManagerInternal.getRefreshRateSwitchingType()
-                != SWITCHING_TYPE_NONE) {
-            final float refreshRate = refreshRatePolicy.getPreferredRefreshRate(this);
-            if (mAppPreferredFrameRate != refreshRate) {
-                mAppPreferredFrameRate = refreshRate;
-                getPendingTransaction().setFrameRate(
-                        mSurfaceControl, mAppPreferredFrameRate,
-                        Surface.FRAME_RATE_COMPATIBILITY_EXACT, Surface.CHANGE_FRAME_RATE_ALWAYS);
-            }
+        final float refreshRate = refreshRatePolicy.getPreferredRefreshRate(this);
+        if (mDenyListFrameRate != refreshRate) {
+            mDenyListFrameRate = refreshRate;
+            getPendingTransaction().setFrameRate(
+                    mSurfaceControl, mDenyListFrameRate, Surface.FRAME_RATE_COMPATIBILITY_EXACT);
         }
     }
 
     private void updateScaleIfNeeded() {
-        float newHScale = mHScale * mGlobalScale * mWallpaperScale;
-        float newVScale = mVScale * mGlobalScale * mWallpaperScale;
-        if (mLastHScale != newHScale ||
-            mLastVScale != newVScale ) {
+        if (mLastGlobalScale != mGlobalScale || mLastHScale != mHScale ||
+            mLastVScale != mVScale ) {
             getPendingTransaction().setMatrix(getSurfaceControl(),
-                newHScale, 0, 0, newVScale);
+                mGlobalScale*mHScale, 0, 0, mGlobalScale*mVScale);
             mLastGlobalScale = mGlobalScale;
             mLastHScale = mHScale;
             mLastVScale = mVScale;
@@ -5512,7 +5465,6 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         mSurfacePlacementNeeded = false;
         transformFrameToSurfacePosition(mWindowFrames.mFrame.left, mWindowFrames.mFrame.top,
                 mSurfacePosition);
-        mSurfacePosition.offset(mXOffset, mYOffset);
 
         // Freeze position while we're unrotated, so the surface remains at the position it was
         // prior to the rotation.
@@ -5867,7 +5819,7 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
         // the status bar). In that case we need to use the final frame.
         if (inFreeformWindowingMode()) {
             outFrame.set(getFrame());
-        } else if (areAppWindowBoundsLetterboxed() || mToken.isFixedRotationTransforming()) {
+        } else if (isLetterboxedAppWindow() || mToken.isFixedRotationTransforming()) {
             // 1. The letterbox surfaces should be animated with the owner activity, so use task
             //    bounds to include them.
             // 2. If the activity has fixed rotation transform, its windows are rotated in activity
@@ -5989,14 +5941,10 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
      * for Windows involved in these Syncs
      */
     private boolean shouldSendRedrawForSync() {
-        if (mRedrawForSyncReported) {
-            return false;
-        }
         final Task task = getTask();
-        if (task != null && task.getMainWindowSizeChangeTransaction() != null) {
-            return true;
-        }
-        return useBLASTSync();
+        if (task != null && task.getMainWindowSizeChangeTransaction() != null)
+            return !mRedrawForSyncReported;
+        return useBLASTSync() && !mRedrawForSyncReported;
     }
 
     void requestRedrawForSync() {
@@ -6124,16 +6072,5 @@ class WindowState extends WindowContainer<WindowState> implements WindowManagerP
 
     void markRedrawForSyncReported() {
        mRedrawForSyncReported = true;
-    }
-
-    boolean setWallpaperOffset(int dx, int dy, float scale) {
-        if (mXOffset == dx && mYOffset == dy && Float.compare(mWallpaperScale, scale) == 0) {
-            return false;
-        }
-        mXOffset = dx;
-        mYOffset = dy;
-        mWallpaperScale = scale;
-        scheduleAnimation();
-        return true;
     }
 }

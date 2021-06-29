@@ -171,6 +171,8 @@ enum DebugLevel {
  */
 #define PROPERTY_TARGET_CPU_TIME_PERCENTAGE "debug.hwui.target_cpu_time_percent"
 
+#define PROPERTY_STRETCH_EFFECT_TYPE "debug.hwui.stretch_mode"
+
 /**
  * Property for whether this is running in the emulator.
  */
@@ -276,26 +278,9 @@ public:
     static bool useHintManager;
     static int targetCpuTimePercentage;
 
-    static StretchEffectBehavior getStretchEffectBehavior() {
-        return stretchEffectBehavior;
-    }
-
-    static void setIsHighEndGfx(bool isHighEndGfx) {
-        stretchEffectBehavior = isHighEndGfx ?
-            StretchEffectBehavior::ShaderHWUI :
-            StretchEffectBehavior::UniformScale;
-    }
-
-    /**
-     * Used for testing. Typical configuration of stretch behavior is done
-     * through setIsHighEndGfx
-     */
-    static void setStretchEffectBehavior(StretchEffectBehavior behavior) {
-        stretchEffectBehavior = behavior;
-    }
+    static StretchEffectBehavior stretchEffectBehavior;
 
 private:
-    static StretchEffectBehavior stretchEffectBehavior;
     static ProfileType sProfileType;
     static bool sDisableProfileBars;
     static RenderPipelineType sRenderPipelineType;

@@ -122,18 +122,14 @@ public abstract class SmartspaceService extends Service {
     @Override
     public void onCreate() {
         super.onCreate();
-        if (DEBUG) {
-            Log.d(TAG, "onCreate mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "onCreate mSessionCallbacks: " + mSessionCallbacks);
         mHandler = new Handler(Looper.getMainLooper(), null, true);
     }
 
     @Override
     @NonNull
     public final IBinder onBind(@NonNull Intent intent) {
-        if (DEBUG) {
-            Log.d(TAG, "onBind mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "onBind mSessionCallbacks: " + mSessionCallbacks);
         if (SERVICE_INTERFACE.equals(intent.getAction())) {
             return mInterface.asBinder();
         }
@@ -144,9 +140,7 @@ public abstract class SmartspaceService extends Service {
 
     private void doCreateSmartspaceSession(@NonNull SmartspaceConfig config,
             @NonNull SmartspaceSessionId sessionId) {
-        if (DEBUG) {
-            Log.d(TAG, "doCreateSmartspaceSession mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "doCreateSmartspaceSession mSessionCallbacks: " + mSessionCallbacks);
         mSessionCallbacks.put(sessionId, new ArrayList<>());
         onCreateSmartspaceSession(config, sessionId);
     }
@@ -172,9 +166,7 @@ public abstract class SmartspaceService extends Service {
 
     private void doRegisterSmartspaceUpdates(@NonNull SmartspaceSessionId sessionId,
             @NonNull ISmartspaceCallback callback) {
-        if (DEBUG) {
-            Log.d(TAG, "doRegisterSmartspaceUpdates mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "doRegisterSmartspaceUpdates mSessionCallbacks: " + mSessionCallbacks);
         final ArrayList<CallbackWrapper> callbacks = mSessionCallbacks.get(sessionId);
         if (callbacks == null) {
             Slog.e(TAG, "Failed to register for updates for unknown session: " + sessionId);
@@ -192,9 +184,7 @@ public abstract class SmartspaceService extends Service {
 
     private void doUnregisterSmartspaceUpdates(@NonNull SmartspaceSessionId sessionId,
             @NonNull ISmartspaceCallback callback) {
-        if (DEBUG) {
-            Log.d(TAG, "doUnregisterSmartspaceUpdates mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "doUnregisterSmartspaceUpdates mSessionCallbacks: " + mSessionCallbacks);
         final ArrayList<CallbackWrapper> callbacks = mSessionCallbacks.get(sessionId);
         if (callbacks == null) {
             Slog.e(TAG, "Failed to unregister for updates for unknown session: " + sessionId);
@@ -208,9 +198,7 @@ public abstract class SmartspaceService extends Service {
     }
 
     private void doRequestPredictionUpdate(@NonNull SmartspaceSessionId sessionId) {
-        if (DEBUG) {
-            Log.d(TAG, "doRequestPredictionUpdate mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "doRequestPredictionUpdate mSessionCallbacks: " + mSessionCallbacks);
         // Just an optimization, if there are no callbacks, then don't bother notifying the service
         final ArrayList<CallbackWrapper> callbacks = mSessionCallbacks.get(sessionId);
         if (callbacks != null && !callbacks.isEmpty()) {
@@ -258,9 +246,7 @@ public abstract class SmartspaceService extends Service {
      */
     public final void updateSmartspaceTargets(@NonNull SmartspaceSessionId sessionId,
             @NonNull List<SmartspaceTarget> targets) {
-        if (DEBUG) {
-            Log.d(TAG, "updateSmartspaceTargets mSessionCallbacks: " + mSessionCallbacks);
-        }
+        Log.d(TAG, "updateSmartspaceTargets mSessionCallbacks: " + mSessionCallbacks);
         List<CallbackWrapper> callbacks = mSessionCallbacks.get(sessionId);
         if (callbacks != null) {
             for (CallbackWrapper callback : callbacks) {

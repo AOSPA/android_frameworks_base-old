@@ -24,11 +24,10 @@
         </shape>
     </item>
 
-    <item
-        android:gravity="center">
+    <item>
         <vector
-            android:width="36dp"
-            android:height="36dp"
+            android:width="24dp"
+            android:height="24dp"
             android:viewportWidth="24"
             android:viewportHeight="24">
             <group>

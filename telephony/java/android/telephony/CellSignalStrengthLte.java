@@ -314,7 +314,7 @@ public final class CellSignalStrengthLte extends CellSignalStrength implements P
 
         int rsrpBoost = 0;
         if (ss != null) {
-            rsrpBoost = ss.getArfcnRsrpBoost();
+            rsrpBoost = ss.getLteEarfcnRsrpBoost();
         }
 
         int rsrp = inRangeOrUnavailable(mRsrp + rsrpBoost, MIN_LTE_RSRP, MAX_LTE_RSRP);

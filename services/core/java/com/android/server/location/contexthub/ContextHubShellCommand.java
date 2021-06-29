@@ -32,18 +32,16 @@ public class ContextHubShellCommand extends ShellCommand {
 
     // Internal service impl -- must perform security checks before touching.
     private final ContextHubService mInternal;
-    private final Context mContext;
 
     public ContextHubShellCommand(Context context, ContextHubService service) {
         mInternal = service;
-        mContext = context;
+
+        context.enforceCallingOrSelfPermission(
+                android.Manifest.permission.ACCESS_CONTEXT_HUB, "ContextHubShellCommand");
     }
 
     @Override
     public int onCommand(String cmd) {
-        mContext.enforceCallingOrSelfPermission(
-                android.Manifest.permission.ACCESS_CONTEXT_HUB, "ContextHubShellCommand");
-
         if ("deny".equals(cmd)) {
             return runDisableAuth();
         }

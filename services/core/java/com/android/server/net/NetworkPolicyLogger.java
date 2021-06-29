@@ -26,7 +26,6 @@ import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_NAME_POWERSAVE;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_NAME_RESTRICTED;
 import static android.net.NetworkPolicyManager.FIREWALL_CHAIN_NAME_STANDBY;
 import static android.net.NetworkPolicyManager.FIREWALL_RULE_DEFAULT;
-import static android.os.PowerExemptionManager.reasonCodeToString;
 import static android.os.Process.INVALID_UID;
 
 import android.app.ActivityManager;
@@ -193,12 +192,13 @@ public class NetworkPolicyLogger {
         }
     }
 
-    void tempPowerSaveWlChanged(int appId, boolean added, int reasonCode, String reason) {
+    void tempPowerSaveWlChanged(int appId, boolean added) {
         synchronized (mLock) {
             if (LOGV || appId == UserHandle.getAppId(mDebugUid)) {
-                Slog.v(TAG, getTempPowerSaveWlChangedLog(appId, added, reasonCode, reason));
+                Slog.v(TAG,
+                        getTempPowerSaveWlChangedLog(appId, added));
             }
-            mEventsBuffer.tempPowerSaveWlChanged(appId, added, reasonCode, reason);
+            mEventsBuffer.tempPowerSaveWlChanged(appId, added);
         }
     }
 
@@ -326,10 +326,8 @@ public class NetworkPolicyLogger {
         return "Parole state: " + paroleOn;
     }
 
-    private static String getTempPowerSaveWlChangedLog(int appId, boolean added,
-            int reasonCode, String reason) {
-        return "temp-power-save whitelist for " + appId + " changed to: " + added
-                + "; reason=" + reasonCodeToString(reasonCode) + " <" + reason + ">";
+    private static String getTempPowerSaveWlChangedLog(int appId, boolean added) {
+        return "temp-power-save whitelist for " + appId + " changed to: " + added;
     }
 
     private static String getUidFirewallRuleChangedLog(int chain, int uid, int rule) {
@@ -499,17 +497,14 @@ public class NetworkPolicyLogger {
             data.timeStamp = System.currentTimeMillis();
         }
 
-        public void tempPowerSaveWlChanged(int appId, boolean added,
-                int reasonCode, String reason) {
+        public void tempPowerSaveWlChanged(int appId, boolean added) {
             final Data data = getNextSlot();
             if (data == null) return;
 
             data.reset();
             data.type = EVENT_TEMP_POWER_SAVE_WL_CHANGED;
             data.ifield1 = appId;
-            data.ifield2 = reasonCode;
             data.bfield1 = added;
-            data.sfield1 = reason;
             data.timeStamp = System.currentTimeMillis();
         }
 
@@ -576,8 +571,7 @@ public class NetworkPolicyLogger {
                 case EVENT_PAROLE_STATE_CHANGED:
                     return getParoleStateChanged(data.bfield1);
                 case EVENT_TEMP_POWER_SAVE_WL_CHANGED:
-                    return getTempPowerSaveWlChangedLog(data.ifield1, data.bfield1,
-                            data.ifield2, data.sfield1);
+                    return getTempPowerSaveWlChangedLog(data.ifield1, data.bfield1);
                 case EVENT_UID_FIREWALL_RULE_CHANGED:
                     return getUidFirewallRuleChangedLog(data.ifield1, data.ifield2, data.ifield3);
                 case EVENT_FIREWALL_CHAIN_ENABLED:

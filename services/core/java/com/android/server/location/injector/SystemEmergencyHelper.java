@@ -35,17 +35,17 @@ public class SystemEmergencyHelper extends EmergencyHelper {
 
     private final Context mContext;
 
-    TelephonyManager mTelephonyManager;
+    private TelephonyManager mTelephonyManager;
 
-    boolean mIsInEmergencyCall;
-    long mEmergencyCallEndRealtimeMs = Long.MIN_VALUE;
+    private boolean mIsInEmergencyCall;
+    private long mEmergencyCallEndRealtimeMs = Long.MIN_VALUE;
 
     public SystemEmergencyHelper(Context context) {
         mContext = context;
     }
 
     /** Called when system is ready. */
-    public synchronized void onSystemReady() {
+    public void onSystemReady() {
         if (mTelephonyManager != null) {
             return;
         }
@@ -64,25 +64,16 @@ public class SystemEmergencyHelper extends EmergencyHelper {
                     return;
                 }
 
-                synchronized (SystemEmergencyHelper.this) {
-                    mIsInEmergencyCall = mTelephonyManager.isEmergencyNumber(
-                            intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER));
-                }
+                mIsInEmergencyCall = mTelephonyManager.isEmergencyNumber(
+                        intent.getStringExtra(Intent.EXTRA_PHONE_NUMBER));
             }
         }, new IntentFilter(Intent.ACTION_NEW_OUTGOING_CALL));
     }
 
     @Override
-    public synchronized boolean isInEmergency(long extensionTimeMs) {
-        if (mTelephonyManager == null) {
-            return false;
-        }
-
-        boolean isInExtensionTime = mEmergencyCallEndRealtimeMs != Long.MIN_VALUE
-                && (SystemClock.elapsedRealtime() - mEmergencyCallEndRealtimeMs) < extensionTimeMs;
-
+    public boolean isInEmergency(long extensionTimeMs) {
         return mIsInEmergencyCall
-                || isInExtensionTime
+                || ((SystemClock.elapsedRealtime() - mEmergencyCallEndRealtimeMs) < extensionTimeMs)
                 || mTelephonyManager.getEmergencyCallbackMode()
                 || mTelephonyManager.isInEmergencySmsMode();
     }
@@ -90,16 +81,12 @@ public class SystemEmergencyHelper extends EmergencyHelper {
     private class EmergencyCallTelephonyCallback extends TelephonyCallback implements
             TelephonyCallback.CallStateListener{
 
-        EmergencyCallTelephonyCallback() {}
-
         @Override
         public void onCallStateChanged(int state) {
             if (state == TelephonyManager.CALL_STATE_IDLE) {
-                synchronized (SystemEmergencyHelper.this) {
-                    if (mIsInEmergencyCall) {
-                        mEmergencyCallEndRealtimeMs = SystemClock.elapsedRealtime();
-                        mIsInEmergencyCall = false;
-                    }
+                if (mIsInEmergencyCall) {
+                    mEmergencyCallEndRealtimeMs = SystemClock.elapsedRealtime();
+                    mIsInEmergencyCall = false;
                 }
             }
         }

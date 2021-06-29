@@ -79,7 +79,6 @@ public class ChooserListAdapter extends ResolverListAdapter {
     private final ChooserListCommunicator mChooserListCommunicator;
     private final SelectableTargetInfo.SelectableTargetInfoCommunicator
             mSelectableTargetInfoCommunicator;
-    private final ChooserActivityLogger mChooserActivityLogger;
 
     private int mNumShortcutResults = 0;
     private Map<DisplayResolveInfo, LoadIconTask> mIconLoaders = new HashMap<>();
@@ -105,8 +104,7 @@ public class ChooserListAdapter extends ResolverListAdapter {
             boolean filterLastUsed, ResolverListController resolverListController,
             ChooserListCommunicator chooserListCommunicator,
             SelectableTargetInfo.SelectableTargetInfoCommunicator selectableTargetInfoCommunicator,
-            PackageManager packageManager,
-            ChooserActivityLogger chooserActivityLogger) {
+            PackageManager packageManager) {
         // Don't send the initial intents through the shared ResolverActivity path,
         // we want to separate them into a different section.
         super(context, payloadIntents, null, rList, filterLastUsed,
@@ -117,7 +115,6 @@ public class ChooserListAdapter extends ResolverListAdapter {
         mChooserListCommunicator = chooserListCommunicator;
         createPlaceHolders();
         mSelectableTargetInfoCommunicator = selectableTargetInfoCommunicator;
-        mChooserActivityLogger = chooserActivityLogger;
 
         if (initialIntents != null) {
             for (int i = 0; i < initialIntents.length; i++) {
@@ -593,7 +590,6 @@ public class ChooserListAdapter extends ResolverListAdapter {
         mServiceTargets.removeIf(o -> o instanceof ChooserActivity.PlaceHolderTargetInfo);
         if (mServiceTargets.isEmpty()) {
             mServiceTargets.add(new ChooserActivity.EmptyTargetInfo());
-            mChooserActivityLogger.logSharesheetEmptyDirectShareRow();
         }
         notifyDataSetChanged();
     }

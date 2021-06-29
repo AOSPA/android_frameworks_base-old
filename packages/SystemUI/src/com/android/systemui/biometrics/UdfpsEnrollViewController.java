@@ -18,6 +18,7 @@ package com.android.systemui.biometrics;
 
 import android.annotation.NonNull;
 import android.graphics.PointF;
+import android.view.View;
 
 import com.android.systemui.R;
 import com.android.systemui.dump.DumpManager;
@@ -28,21 +29,8 @@ import com.android.systemui.statusbar.phone.StatusBar;
  * Class that coordinates non-HBM animations during enrollment.
  */
 public class UdfpsEnrollViewController extends UdfpsAnimationViewController<UdfpsEnrollView> {
-
-    private final int mEnrollProgressBarRadius;
+    @NonNull private final UdfpsProgressBar mProgressBar;
     @NonNull private final UdfpsEnrollHelper mEnrollHelper;
-    @NonNull private final UdfpsEnrollHelper.Listener mEnrollHelperListener =
-            new UdfpsEnrollHelper.Listener() {
-        @Override
-        public void onEnrollmentProgress(int remaining, int totalSteps) {
-            mView.onEnrollmentProgress(remaining, totalSteps);
-        }
-
-        @Override
-        public void onLastStepAcquired() {
-            mView.onLastStepAcquired();
-        }
-    };
 
     protected UdfpsEnrollViewController(
             @NonNull UdfpsEnrollView view,
@@ -51,9 +39,8 @@ public class UdfpsEnrollViewController extends UdfpsAnimationViewController<Udfp
             @NonNull StatusBar statusBar,
             @NonNull DumpManager dumpManager) {
         super(view, statusBarStateController, statusBar, dumpManager);
-        mEnrollProgressBarRadius = getContext().getResources()
-                .getInteger(R.integer.config_udfpsEnrollProgressBar);
         mEnrollHelper = enrollHelper;
+        mProgressBar = mView.findViewById(R.id.progress_bar);
         mView.setEnrollHelper(mEnrollHelper);
     }
 
@@ -66,6 +53,8 @@ public class UdfpsEnrollViewController extends UdfpsAnimationViewController<Udfp
     protected void onViewAttached() {
         super.onViewAttached();
         if (mEnrollHelper.shouldShowProgressBar()) {
+            mProgressBar.setVisibility(View.VISIBLE);
+
             // Only need enrollment updates if the progress bar is showing :)
             mEnrollHelper.setListener(mEnrollHelperListener);
         }
@@ -89,11 +78,22 @@ public class UdfpsEnrollViewController extends UdfpsAnimationViewController<Udfp
 
     @Override
     public int getPaddingX() {
-        return mEnrollProgressBarRadius;
+        return (int) Math.ceil(UdfpsEnrollDrawable.PROGRESS_BAR_RADIUS);
     }
 
     @Override
     public int getPaddingY() {
-        return mEnrollProgressBarRadius;
+        return (int) Math.ceil(UdfpsEnrollDrawable.PROGRESS_BAR_RADIUS);
     }
+
+    private final UdfpsEnrollHelper.Listener mEnrollHelperListener =
+            new UdfpsEnrollHelper.Listener() {
+        @Override
+        public void onEnrollmentProgress(int remaining, int totalSteps) {
+            final int interpolatedProgress = mProgressBar.getMax()
+                    * Math.max(0, totalSteps + 1 - remaining) / (totalSteps + 1);
+
+            mProgressBar.setProgress(interpolatedProgress, true);
+        }
+    };
 }

@@ -160,8 +160,7 @@ public class QSFactoryImpl implements QSFactory {
     public QSTile createTile(String tileSpec) {
         QSTileImpl tile = createTileInternal(tileSpec);
         if (tile != null) {
-            tile.initialize();
-            tile.postStale(); // Tile was just created, must be stale.
+            tile.handleStale(); // Tile was just created, must be stale.
         }
         return tile;
     }

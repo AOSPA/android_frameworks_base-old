@@ -1137,9 +1137,6 @@
         <!-- Darker accent color used on Material NEXT buttons. @hide -->
         <attr name="colorAccentPrimaryVariant" format="color" />
 
-        <!-- Text color used on top of Material NEXT accent colors. @hide -->
-        <attr name="textColorOnAccent" format="color" />
-
         <!-- Secondary darker accent color used on Material NEXT buttons. @hide -->
         <attr name="colorAccentSecondaryVariant" format="color" />
 
@@ -9571,4 +9568,11 @@
     <attr name="iconfactoryBadgeSize" format="dimension"/>
     <!-- Perceptual luminance of a color, in accessibility friendly color space. From 0 to 100. -->
     <attr name="lStar" format="float"/>
+
+    <declare-styleable name="DisplayHashingService">
+        <!-- The interval required between display hash requests. Requests made faster than this
+             delay will be throttled."
+             @hide @SystemApi -->
+        <attr name="durationBetweenRequestsMillis" format="integer" />
+    </declare-styleable>
 </resources>

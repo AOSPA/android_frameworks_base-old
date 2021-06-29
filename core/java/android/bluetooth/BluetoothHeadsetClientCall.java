@@ -16,10 +16,7 @@
 
 package android.bluetooth;
 
-import android.annotation.NonNull;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
-import android.content.AttributionSource;
 import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
@@ -33,7 +30,7 @@ import java.util.UUID;
  *
  * @hide
  */
-public final class BluetoothHeadsetClientCall implements Parcelable, Attributable {
+public final class BluetoothHeadsetClientCall implements Parcelable {
 
     /* Call state */
     /**
@@ -99,11 +96,6 @@ public final class BluetoothHeadsetClientCall implements Parcelable, Attributabl
         mOutgoing = outgoing;
         mInBandRing = inBandRing;
         mCreationElapsedMilli = SystemClock.elapsedRealtime();
-    }
-
-    /** {@hide} */
-    public void setAttributionSource(@NonNull AttributionSource attributionSource) {
-        Attributable.setAttributionSource(mDevice, attributionSource);
     }
 
     /**

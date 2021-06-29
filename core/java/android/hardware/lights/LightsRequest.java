@@ -18,10 +18,12 @@ package android.hardware.lights;
 
 import android.annotation.NonNull;
 import android.annotation.SystemApi;
+import android.util.SparseArray;
 
 import com.android.internal.util.Preconditions;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -32,48 +34,58 @@ import java.util.Map;
 public final class LightsRequest {
 
     /** Visible to {@link LightsManager.Session}. */
-    final Map<Light, LightState> mRequests = new HashMap<>();
-    final List<Integer> mLightIds = new ArrayList<>();
-    final List<LightState> mLightStates = new ArrayList<>();
+    final int[] mLightIds;
+
+    /** Visible to {@link LightsManager.Session}. */
+    final LightState[] mLightStates;
 
     /**
      * Can only be constructed via {@link LightsRequest.Builder#build()}.
      */
-    private LightsRequest(Map<Light, LightState> requests) {
-        mRequests.putAll(requests);
-        List<Light> lights = new ArrayList<Light>(mRequests.keySet());
-        for (int i = 0; i < lights.size(); i++) {
-            final Light light = lights.get(i);
-            mLightIds.add(i, light.getId());
-            mLightStates.add(i, mRequests.get(light));
+    private LightsRequest(SparseArray<LightState> changes) {
+        final int n = changes.size();
+        mLightIds = new int[n];
+        mLightStates = new LightState[n];
+        for (int i = 0; i < n; i++) {
+            mLightIds[i] = changes.keyAt(i);
+            mLightStates[i] = changes.valueAt(i);
         }
     }
 
     /**
-     * Get a list of Light as ids.
+     * Get a list of Light as ids. The ids will returned in same order as the lights passed
+     * in Builder.
      *
-     * @return List of light ids in the request.
+     * @return List of light ids
      */
     public @NonNull List<Integer> getLights() {
-        return mLightIds;
+        List<Integer> lightList = new ArrayList<Integer>(mLightIds.length);
+        for (int i = 0; i < mLightIds.length; i++) {
+            lightList.add(mLightIds[i]);
+        }
+        return lightList;
     }
 
     /**
-     * Get a list of LightState. The states will be returned in same order as the light ids
-     * returned by {@link #getLights()}.
+     * Get a list of LightState.  The states will be returned in same order as the light states
+     * passed in Builder.
      *
      * @return List of light states
      */
     public @NonNull List<LightState> getLightStates() {
-        return mLightStates;
+        return Arrays.asList(mLightStates);
     }
 
     /**
-     * Get a map of lights and states. The map will contain all the lights as keys and
+     * Get a map of light ids and states.  The map will contain all the light ids as keys and
      * the corresponding LightState requested as values.
      */
-    public @NonNull Map<Light, LightState> getLightsAndStates() {
-        return mRequests;
+    public @NonNull Map<Integer, LightState> getLightsAndStates() {
+        Map<Integer, LightState> map = new HashMap<>();
+        for (int i = 0; i < mLightIds.length; i++) {
+            map.put(mLightIds[i], mLightStates[i]);
+        }
+        return map;
     }
 
     /**
@@ -81,7 +93,8 @@ public final class LightsRequest {
      */
     public static final class Builder {
 
-        final Map<Light, LightState> mChanges = new HashMap<>();
+        private final SparseArray<LightState> mChanges = new SparseArray<>();
+
         /**
          * Overrides the color and intensity of a given light.
          *
@@ -91,7 +104,7 @@ public final class LightsRequest {
         public @NonNull Builder addLight(@NonNull Light light, @NonNull LightState state) {
             Preconditions.checkNotNull(light);
             Preconditions.checkNotNull(state);
-            mChanges.put(light, state);
+            mChanges.put(light.getId(), state);
             return this;
         }
 
@@ -116,7 +129,7 @@ public final class LightsRequest {
          */
         public @NonNull Builder clearLight(@NonNull Light light) {
             Preconditions.checkNotNull(light);
-            mChanges.put(light, null);
+            mChanges.put(light.getId(), null);
             return this;
         }
 

@@ -16,7 +16,6 @@
 
 package com.android.systemui.animation;
 
-import android.util.MathUtils;
 import android.view.animation.AccelerateDecelerateInterpolator;
 import android.view.animation.AccelerateInterpolator;
 import android.view.animation.BounceInterpolator;
@@ -73,53 +72,15 @@ public class Interpolators {
             new PathInterpolator(0.9f, 0f, 0.7f, 1f);
 
     /**
-     * Calculate the amount of overshoot using an exponential falloff function with desired
-     * properties, where the overshoot smoothly transitions at the 1.0f boundary into the
-     * overshoot, retaining its acceleration.
-     *
-     * @param progress a progress value going from 0 to 1
-     * @param overshootAmount the amount > 0 of overshoot desired. A value of 0.1 means the max
-     *                        value of the overall progress will be at 1.1.
-     * @param overshootStart the point in (0,1] where the result should reach 1
-     * @return the interpolated overshoot
-     */
-    public static float getOvershootInterpolation(float progress, float overshootAmount,
-            float overshootStart) {
-        if (overshootAmount == 0.0f || overshootStart == 0.0f) {
-            throw new IllegalArgumentException("Invalid values for overshoot");
-        }
-        float b = MathUtils.log((overshootAmount + 1) / (overshootAmount)) / overshootStart;
-        return MathUtils.max(0.0f,
-                (float) (1.0f - Math.exp(-b * progress)) * (overshootAmount + 1.0f));
-    }
-
-    /**
-     * Similar to {@link #getOvershootInterpolation(float, float, float)} but the overshoot
-     * starts immediately here, instead of first having a section of non-overshooting
-     *
-     * @param progress a progress value going from 0 to 1
-     */
-    public static float getOvershootInterpolation(float progress) {
-        return MathUtils.max(0.0f, (float) (1.0f - Math.exp(-4 * progress)));
-    }
-
-    /**
      * Interpolate alpha for notifications background scrim during shade expansion.
      * @param fraction Shade expansion fraction
-     * @param forNotification If we want the alpha of the notification shade or the scrim.
      */
-    public static float getNotificationScrimAlpha(float fraction, boolean forNotification) {
-        if (forNotification) {
-            fraction = MathUtils.constrainedMap(0f, 1f, 0.3f, 1f, fraction);
-        } else {
-            fraction = MathUtils.constrainedMap(0f, 1f, 0f, 0.5f, fraction);
-        }
+    public static float getNotificationScrimAlpha(float fraction) {
         fraction = fraction * 1.2f - 0.2f;
         if (fraction <= 0) {
             return 0;
         } else {
-            final float oneMinusFrac = 1f - fraction;
-            return (float) (1f - 0.5f * (1f - Math.cos(3.14159f * oneMinusFrac * oneMinusFrac)));
+            return (float) (1f - 0.5f * (1f - Math.cos(3.14159f * Math.pow(1f - fraction, 2f))));
         }
     }
 }

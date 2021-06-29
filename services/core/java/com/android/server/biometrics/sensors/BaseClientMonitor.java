@@ -69,31 +69,6 @@ public abstract class BaseClientMonitor extends LoggableMonitor
         }
     }
 
-    /** Holder for wrapping multiple handlers into a single Callback. */
-    protected static class CompositeCallback implements Callback {
-        @NonNull
-        private final Callback[] mCallbacks;
-
-        public CompositeCallback(@NonNull Callback... callbacks) {
-            mCallbacks = callbacks;
-        }
-
-        @Override
-        public final void onClientStarted(@NonNull BaseClientMonitor clientMonitor) {
-            for (int i = 0; i < mCallbacks.length; i++) {
-                mCallbacks[i].onClientStarted(clientMonitor);
-            }
-        }
-
-        @Override
-        public final void onClientFinished(@NonNull BaseClientMonitor clientMonitor,
-                boolean success) {
-            for (int i = mCallbacks.length - 1; i >= 0; i--) {
-                mCallbacks[i].onClientFinished(clientMonitor, success);
-            }
-        }
-    }
-
     private final int mSequentialId;
     @NonNull private final Context mContext;
     private final int mTargetUserId;
@@ -107,20 +82,7 @@ public abstract class BaseClientMonitor extends LoggableMonitor
     private final int mCookie;
     boolean mAlreadyDone;
 
-    // Use an empty callback by default since delayed operations can receive events
-    // before they are started and cause NPE in subclasses that access this field directly.
-    @NonNull protected Callback mCallback = new Callback() {
-        @Override
-        public void onClientStarted(@NonNull BaseClientMonitor clientMonitor) {
-            Slog.e(TAG, "mCallback onClientStarted: called before set (should not happen)");
-        }
-
-        @Override
-        public void onClientFinished(@NonNull BaseClientMonitor clientMonitor,
-                boolean success) {
-            Slog.e(TAG, "mCallback onClientFinished: called before set (should not happen)");
-        }
-    };
+    @NonNull protected Callback mCallback;
 
     /**
      * @return A ClientMonitorEnum constant defined in biometrics.proto
@@ -150,7 +112,7 @@ public abstract class BaseClientMonitor extends LoggableMonitor
             @Nullable IBinder token, @Nullable ClientMonitorCallbackConverter listener, int userId,
             @NonNull String owner, int cookie, int sensorId, int statsModality, int statsAction,
             int statsClient) {
-        super(context, statsModality, statsAction, statsClient);
+        super(statsModality, statsAction, statsClient);
         mSequentialId = sCount++;
         mContext = context;
         mToken = token;
@@ -178,19 +140,10 @@ public abstract class BaseClientMonitor extends LoggableMonitor
      * @param callback invoked when the operation is complete (succeeds, fails, etc)
      */
     public void start(@NonNull Callback callback) {
-        mCallback = wrapCallbackForStart(callback);
+        mCallback = callback;
         mCallback.onClientStarted(this);
     }
 
-    /**
-     * Called during start to provide subclasses a hook for decorating the callback.
-     *
-     * Returns the original callback unless overridden.
-     */
-    @NonNull
-    protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return callback;
-    }
 
     public boolean isAlreadyDone() {
         return mAlreadyDone;

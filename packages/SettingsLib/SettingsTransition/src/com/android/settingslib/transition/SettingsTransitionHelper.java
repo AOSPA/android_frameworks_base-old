@@ -16,7 +16,6 @@
 
 package com.android.settingslib.transition;
 
-import androidx.annotation.IntDef;
 import android.app.Activity;
 import android.content.Context;
 import android.util.Log;
@@ -25,38 +24,15 @@ import android.view.animation.AnimationUtils;
 import android.view.animation.Interpolator;
 
 import androidx.core.os.BuildCompat;
-import androidx.fragment.app.Fragment;
 
 import com.google.android.material.transition.platform.FadeThroughProvider;
 import com.google.android.material.transition.platform.MaterialSharedAxis;
 import com.google.android.material.transition.platform.SlideDistanceProvider;
 
-import java.lang.annotation.Retention;
-import java.lang.annotation.RetentionPolicy;
-
 /**
  * A helper class to apply Settings Transition
  */
 public class SettingsTransitionHelper {
-
-    /**
-     * Flags indicating the type of the transition.
-     */
-    @IntDef({
-            TransitionType.TRANSITION_NONE,
-            TransitionType.TRANSITION_SHARED_AXIS,
-            TransitionType.TRANSITION_SLIDE,
-            TransitionType.TRANSITION_FADE
-    })
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface TransitionType {
-        int TRANSITION_NONE = -1;
-        int TRANSITION_SHARED_AXIS = 0;
-        int TRANSITION_SLIDE = 1;
-        int TRANSITION_FADE = 2;
-    }
-
-    public static final String EXTRA_PAGE_TRANSITION_TYPE = "page_transition_type";
 
     private static final String TAG = "SettingsTransitionHelper";
     private static final long DURATION = 450L;
@@ -93,7 +69,7 @@ public class SettingsTransitionHelper {
      * triggered when the page is launched/entering.
      */
     public static void applyForwardTransition(Activity activity) {
-        if (!isSettingsTransitionEnabled()) {
+        if (!BuildCompat.isAtLeastS()) {
             return;
         }
         if (activity == null) {
@@ -119,7 +95,7 @@ public class SettingsTransitionHelper {
      * previously-started Activity.
      */
     public static void applyBackwardTransition(Activity activity) {
-        if (!isSettingsTransitionEnabled()) {
+        if (!BuildCompat.isAtLeastS()) {
             return;
         }
         if (activity == null) {
@@ -134,50 +110,5 @@ public class SettingsTransitionHelper {
         final MaterialSharedAxis backward = createSettingsSharedAxis(activity, false);
         window.setReturnTransition(backward);
         window.setReenterTransition(backward);
-    }
-
-    /**
-     * Apply the forward transition to the {@link Fragment}, including Exit Transition and Enter
-     * Transition.
-     *
-     * The Exit Transition takes effect when leaving the page, while the Enter Transition is
-     * triggered when the page is launched/entering.
-     */
-    public static void applyForwardTransition(Fragment fragment) {
-        if (!isSettingsTransitionEnabled()) {
-            return;
-        }
-        if (fragment == null) {
-            Log.w(TAG, "applyForwardTransition: Invalid fragment!");
-            return;
-        }
-        final MaterialSharedAxis forward = createSettingsSharedAxis(fragment.getContext(), true);
-        fragment.setExitTransition(forward);
-        fragment.setEnterTransition(forward);
-    }
-
-    /**
-     * Apply the backward transition to the {@link Fragment}, including Return Transition and
-     * Reenter Transition.
-     *
-     * Return Transition will be used to move Views out of the scene when the Window is preparing
-     * to close. Reenter Transition will be used to move Views in to the scene when returning from a
-     * previously-started Fragment.
-     */
-    public static void applyBackwardTransition(Fragment fragment) {
-        if (!isSettingsTransitionEnabled()) {
-            return;
-        }
-        if (fragment == null) {
-            Log.w(TAG, "applyBackwardTransition: Invalid fragment!");
-            return;
-        }
-        final MaterialSharedAxis backward = createSettingsSharedAxis(fragment.getContext(), false);
-        fragment.setReturnTransition(backward);
-        fragment.setReenterTransition(backward);
-    }
-
-    private static boolean isSettingsTransitionEnabled() {
-        return BuildCompat.isAtLeastS();
     }
 }

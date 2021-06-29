@@ -21,15 +21,11 @@ import android.annotation.Nullable;
 import android.content.Context;
 import android.graphics.PointF;
 import android.hardware.fingerprint.IUdfpsOverlayController;
-import android.media.AudioAttributes;
 import android.os.Build;
 import android.os.UserHandle;
-import android.os.VibrationEffect;
-import android.os.Vibrator;
 import android.provider.Settings;
 import android.util.Log;
 import android.util.TypedValue;
-import android.view.accessibility.AccessibilityManager;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -50,25 +46,14 @@ public class UdfpsEnrollHelper {
     // Enroll with two center touches before going to guided enrollment
     private static final int NUM_CENTER_TOUCHES = 2;
 
-    private static final AudioAttributes VIBRATION_SONFICATION_ATTRIBUTES =
-            new AudioAttributes.Builder()
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION)
-                    .setUsage(AudioAttributes.USAGE_ASSISTANCE_SONIFICATION)
-                    .build();
-
     interface Listener {
         void onEnrollmentProgress(int remaining, int totalSteps);
-        void onLastStepAcquired();
     }
 
     @NonNull private final Context mContext;
     // IUdfpsOverlayController reason
     private final int mEnrollReason;
-    private final boolean mAccessibilityEnabled;
     @NonNull private final List<PointF> mGuidedEnrollmentPoints;
-    @NonNull private final Vibrator mVibrator;
-    @NonNull private final VibrationEffect mEffectClick =
-            VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
 
     private int mTotalSteps = -1;
     private int mRemainingSteps = -1;
@@ -82,11 +67,6 @@ public class UdfpsEnrollHelper {
     public UdfpsEnrollHelper(@NonNull Context context, int reason) {
         mContext = context;
         mEnrollReason = reason;
-        mVibrator = context.getSystemService(Vibrator.class);
-
-        final AccessibilityManager am = context.getSystemService(AccessibilityManager.class);
-        mAccessibilityEnabled = am.isEnabled();
-
         mGuidedEnrollmentPoints = new ArrayList<>();
 
         // Number of pixels per mm
@@ -141,7 +121,6 @@ public class UdfpsEnrollHelper {
 
         if (remaining != mRemainingSteps) {
             mLocationsEnrolled++;
-            vibrateSuccess();
         }
 
         mRemainingSteps = remaining;
@@ -169,8 +148,6 @@ public class UdfpsEnrollHelper {
     boolean isCenterEnrollmentComplete() {
         if (mTotalSteps == -1 || mRemainingSteps == -1) {
             return false;
-        } else if (mAccessibilityEnabled) {
-            return false;
         }
         final int stepsEnrolled = mTotalSteps - mRemainingSteps;
         return stepsEnrolled >= NUM_CENTER_TOUCHES;
@@ -178,10 +155,6 @@ public class UdfpsEnrollHelper {
 
     @NonNull
     PointF getNextGuidedEnrollmentPoint() {
-        if (mAccessibilityEnabled) {
-            return new PointF(0f, 0f);
-        }
-
         float scale = SCALE;
         if (Build.IS_ENG || Build.IS_USERDEBUG) {
             scale = Settings.Secure.getFloatForUser(mContext.getContentResolver(),
@@ -192,21 +165,5 @@ public class UdfpsEnrollHelper {
         final PointF originalPoint = mGuidedEnrollmentPoints
                 .get(index % mGuidedEnrollmentPoints.size());
         return new PointF(originalPoint.x * scale, originalPoint.y * scale);
-    }
-
-    void animateIfLastStep() {
-        if (mListener == null) {
-            Log.e(TAG, "animateIfLastStep, null listener");
-            return;
-        }
-
-        if (mRemainingSteps <= 2 && mRemainingSteps >= 0) {
-            mListener.onLastStepAcquired();
-            vibrateSuccess();
-        }
-    }
-
-    private void vibrateSuccess() {
-        mVibrator.vibrate(mEffectClick, VIBRATION_SONFICATION_ATTRIBUTES);
     }
 }

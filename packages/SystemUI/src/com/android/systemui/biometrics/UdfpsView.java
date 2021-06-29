@@ -101,8 +101,8 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
     }
 
     @Override
-    public void setHbmProvider(@Nullable UdfpsHbmProvider hbmProvider) {
-        mHbmSurfaceView.setHbmProvider(hbmProvider);
+    public void setHbmCallback(@Nullable UdfpsHbmCallback callback) {
+        mHbmSurfaceView.setHbmCallback(callback);
     }
 
     @Override

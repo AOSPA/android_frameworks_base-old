@@ -165,17 +165,7 @@ public class RebootEscrowManagerTests {
             mRebootEscrow = null;
             mServerBased = true;
             RebootEscrowProviderServerBasedImpl.Injector injector =
-                    new RebootEscrowProviderServerBasedImpl.Injector(serviceConnection) {
-                        @Override
-                        long getServiceTimeoutInSeconds() {
-                            return 30;
-                        }
-
-                        @Override
-                        long getServerBlobLifetimeInMillis() {
-                            return 600_000;
-                        }
-                    };
+                    new RebootEscrowProviderServerBasedImpl.Injector(serviceConnection);
             mDefaultRebootEscrowProvider = new RebootEscrowProviderServerBasedImpl(
                     storage, injector);
             mUserManager = userManager;
@@ -196,11 +186,6 @@ public class RebootEscrowManagerTests {
         @Override
         public boolean serverBasedResumeOnReboot() {
             return mServerBased;
-        }
-
-        @Override
-        public boolean isNetworkConnected() {
-            return false;
         }
 
         @Override
@@ -617,7 +602,7 @@ public class RebootEscrowManagerTests {
         // Sleep 5s for the retry to complete
         Thread.sleep(5 * 1000);
         assertFalse(metricsSuccessCaptor.getValue());
-        assertEquals(Integer.valueOf(RebootEscrowManager.ERROR_NO_NETWORK),
+        assertEquals(Integer.valueOf(RebootEscrowManager.ERROR_RETRY_COUNT_EXHAUSTED),
                 metricsErrorCodeCaptor.getValue());
     }
 

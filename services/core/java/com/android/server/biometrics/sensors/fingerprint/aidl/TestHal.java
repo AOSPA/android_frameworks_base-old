@@ -33,16 +33,6 @@ public class TestHal extends IFingerprint.Stub {
     private static final String TAG = "fingerprint.aidl.TestHal";
 
     @Override
-    public int getInterfaceVersion() {
-        return this.VERSION;
-    }
-
-    @Override
-    public String getInterfaceHash() {
-        return this.HASH;
-    }
-
-    @Override
     public SensorProps[] getSensorProps() {
         Slog.w(TAG, "getSensorProps");
         return new SensorProps[0];
@@ -53,16 +43,6 @@ public class TestHal extends IFingerprint.Stub {
         Slog.w(TAG, "createSession, sensorId: " + sensorId + " userId: " + userId);
 
         return new ISession.Stub() {
-            @Override
-            public int getInterfaceVersion() {
-                return this.VERSION;
-            }
-
-            @Override
-            public String getInterfaceHash() {
-                return this.HASH;
-            }
-
             @Override
             public void generateChallenge() throws RemoteException {
                 Slog.w(TAG, "generateChallenge");
@@ -83,14 +63,6 @@ public class TestHal extends IFingerprint.Stub {
                     public void cancel() throws RemoteException {
                         cb.onError(Error.CANCELED, 0 /* vendorCode */);
                     }
-                    @Override
-                    public int getInterfaceVersion() {
-                        return this.VERSION;
-                    }
-                    @Override
-                    public String getInterfaceHash() {
-                        return this.HASH;
-                    }
                 };
             }
 
@@ -102,14 +74,6 @@ public class TestHal extends IFingerprint.Stub {
                     public void cancel() throws RemoteException {
                         cb.onError(Error.CANCELED, 0 /* vendorCode */);
                     }
-                    @Override
-                    public int getInterfaceVersion() {
-                        return this.VERSION;
-                    }
-                    @Override
-                    public String getInterfaceHash() {
-                        return this.HASH;
-                    }
                 };
             }
 
@@ -120,14 +84,6 @@ public class TestHal extends IFingerprint.Stub {
                     @Override
                     public void cancel() throws RemoteException {
                         cb.onError(Error.CANCELED, 0 /* vendorCode */);
-                    }
-                    @Override
-                    public int getInterfaceVersion() {
-                        return this.VERSION;
-                    }
-                    @Override
-                    public String getInterfaceHash() {
-                        return this.HASH;
                     }
                 };
             }

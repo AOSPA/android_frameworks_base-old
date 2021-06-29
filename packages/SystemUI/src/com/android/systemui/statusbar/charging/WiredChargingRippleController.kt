@@ -25,8 +25,6 @@ import android.util.DisplayMetrics
 import android.view.View
 import android.view.WindowManager
 import com.android.internal.annotations.VisibleForTesting
-import com.android.internal.logging.UiEvent
-import com.android.internal.logging.UiEventLogger
 import com.android.settingslib.Utils
 import com.android.systemui.dagger.SysUISingleton
 import com.android.systemui.statusbar.FeatureFlags
@@ -57,8 +55,7 @@ class WiredChargingRippleController @Inject constructor(
     featureFlags: FeatureFlags,
     private val context: Context,
     private val windowManager: WindowManager,
-    private val systemClock: SystemClock,
-    private val uiEventLogger: UiEventLogger
+    private val systemClock: SystemClock
 ) {
     private var pluggedIn: Boolean? = null
     private val rippleEnabled: Boolean = featureFlags.isChargingRippleEnabled &&
@@ -86,7 +83,6 @@ class WiredChargingRippleController @Inject constructor(
     var rippleView: ChargingRippleView = ChargingRippleView(context, attrs = null)
 
     init {
-        pluggedIn = batteryController.isPluggedIn
         val batteryStateChangeCallback = object : BatteryController.BatteryStateChangeCallback {
             override fun onBatteryLevelChanged(
                 level: Int,
@@ -167,7 +163,6 @@ class WiredChargingRippleController @Inject constructor(
             }
         })
         windowManager.addView(rippleView, windowLayoutParams)
-        uiEventLogger.log(WiredChargingRippleEvent.CHARGING_RIPPLE_PLAYED)
     }
 
     private fun layoutRipple() {
@@ -206,12 +201,5 @@ class WiredChargingRippleController @Inject constructor(
         override fun help(pw: PrintWriter) {
             pw.println("Usage: adb shell cmd statusbar charging-ripple")
         }
-    }
-
-    enum class WiredChargingRippleEvent(private val _id: Int) : UiEventLogger.UiEventEnum {
-        @UiEvent(doc = "Wired charging ripple effect played")
-        CHARGING_RIPPLE_PLAYED(829);
-
-        override fun getId() = _id
     }
 }

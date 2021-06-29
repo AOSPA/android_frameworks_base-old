@@ -50,6 +50,7 @@ public class Utils {
     @IntDef({CREDENTIAL_PIN, CREDENTIAL_PATTERN, CREDENTIAL_PASSWORD})
     @interface CredentialType {}
 
+
     static float dpToPixels(Context context, float dp) {
         return dp * ((float) context.getResources().getDisplayMetrics().densityDpi
                 / DisplayMetrics.DENSITY_DEFAULT);

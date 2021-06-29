@@ -46,7 +46,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.app.IActivityManager;
 import android.app.Instrumentation;
 import android.app.admin.DevicePolicyManager;
 import android.app.trust.TrustManager;
@@ -70,7 +69,6 @@ import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
 
 import com.android.internal.app.IBatteryStats;
-import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.settingslib.Utils;
 import com.android.settingslib.fuelgauge.BatteryStatus;
@@ -143,10 +141,6 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
     private KeyguardIndicationRotateTextViewController mRotateTextViewController;
     @Mock
     private FalsingManager mFalsingManager;
-    @Mock
-    private LockPatternUtils mLockPatternUtils;
-    @Mock
-    private IActivityManager mIActivityManager;
     @Captor
     private ArgumentCaptor<DockManager.AlignmentStateListener> mAlignmentListener;
     @Captor
@@ -214,8 +208,7 @@ public class KeyguardIndicationControllerTest extends SysuiTestCase {
         mController = new KeyguardIndicationController(mContext, mWakeLockBuilder,
                 mKeyguardStateController, mStatusBarStateController, mKeyguardUpdateMonitor,
                 mDockManager, mBroadcastDispatcher, mDevicePolicyManager, mIBatteryStats,
-                mUserManager, mExecutor, mFalsingManager, mLockPatternUtils, mIActivityManager);
-        mController.init();
+                mUserManager, mExecutor, mFalsingManager);
         mController.setIndicationArea(mIndicationArea);
         verify(mStatusBarStateController).addCallback(mStatusBarStateListenerCaptor.capture());
         mStatusBarStateListener = mStatusBarStateListenerCaptor.getValue();

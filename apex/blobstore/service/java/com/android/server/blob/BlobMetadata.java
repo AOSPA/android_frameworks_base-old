@@ -50,7 +50,6 @@ import android.content.Context;
 import android.content.pm.PackageManager;
 import android.content.res.ResourceId;
 import android.content.res.Resources;
-import android.os.Binder;
 import android.os.ParcelFileDescriptor;
 import android.os.RevocableFileDescriptor;
 import android.os.UserHandle;
@@ -264,7 +263,8 @@ class BlobMetadata {
         return getBlobFile().length();
     }
 
-    boolean isAccessAllowedForCaller(@NonNull String callingPackage, int callingUid) {
+    boolean isAccessAllowedForCaller(@NonNull String callingPackage, int callingUid,
+            @Nullable String attributionTag) {
         // Don't allow the blob to be accessed after it's expiry time has passed.
         if (getBlobHandle().isExpired()) {
             return false;
@@ -293,7 +293,7 @@ class BlobMetadata {
                 // Check if the caller is allowed access as per the access mode specified
                 // by the committer.
                 if (committer.blobAccessMode.isAccessAllowedForCaller(mContext,
-                        callingPackage, committer.packageName)) {
+                        callingPackage, committer.packageName, callingUid, attributionTag)) {
                     return true;
                 }
             }
@@ -309,14 +309,14 @@ class BlobMetadata {
                 if (callingUserId == committerUserId) {
                     continue;
                 }
-                if (!isPackageInstalledOnUser(callingPackage, committerUserId)) {
+                if (!checkCallerCanAccessBlobsAcrossUsers(callingPackage, committerUserId)) {
                     continue;
                 }
 
                 // Check if the caller is allowed access as per the access mode specified
                 // by the committer.
                 if (committer.blobAccessMode.isAccessAllowedForCaller(mContext,
-                        callingPackage, committer.packageName)) {
+                        callingPackage, committer.packageName, callingUid, attributionTag)) {
                     return true;
                 }
             }
@@ -327,25 +327,8 @@ class BlobMetadata {
 
     private static boolean checkCallerCanAccessBlobsAcrossUsers(
             String callingPackage, int callingUserId) {
-        final long token = Binder.clearCallingIdentity();
-        try {
-            return PermissionManager.checkPackageNamePermission(ACCESS_BLOBS_ACROSS_USERS,
-                    callingPackage, callingUserId) == PackageManager.PERMISSION_GRANTED;
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
-    }
-
-    private boolean isPackageInstalledOnUser(String packageName, int userId) {
-        final long token = Binder.clearCallingIdentity();
-        try {
-            mContext.getPackageManager().getPackageInfoAsUser(packageName, 0, userId);
-            return true;
-        } catch (PackageManager.NameNotFoundException e) {
-            return false;
-        } finally {
-            Binder.restoreCallingIdentity(token);
-        }
+        return PermissionManager.checkPackageNamePermission(ACCESS_BLOBS_ACROSS_USERS,
+                callingPackage, callingUserId) == PackageManager.PERMISSION_GRANTED;
     }
 
     boolean hasACommitterOrLeaseeInUser(int userId) {
@@ -419,19 +402,6 @@ class BlobMetadata {
             }
         }
         return null;
-    }
-
-    boolean shouldAttributeToUser(int userId) {
-        synchronized (mMetadataLock) {
-            for (int i = 0, size = mLeasees.size(); i < size; ++i) {
-                final Leasee leasee = mLeasees.valueAt(i);
-                // Don't attribute the blob to userId if there is a lease on it from another user.
-                if (userId != UserHandle.getUserId(leasee.uid)) {
-                    return false;
-                }
-            }
-        }
-        return true;
     }
 
     boolean shouldAttributeToLeasee(@NonNull String packageName, int userId,

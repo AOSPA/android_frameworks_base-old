@@ -19,7 +19,6 @@ package android.security;
 import android.annotation.NonNull;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.Disabled;
-import android.os.Binder;
 import android.os.RemoteException;
 import android.os.ServiceManager;
 import android.os.ServiceSpecificException;
@@ -141,7 +140,6 @@ public class KeyStore2 {
         if (mBinder == null || retryLookup) {
             mBinder = IKeystoreService.Stub.asInterface(ServiceManager
                     .getService(KEYSTORE2_SERVICE_NAME));
-            Binder.allowBlocking(mBinder.asBinder());
         }
         return mBinder;
     }

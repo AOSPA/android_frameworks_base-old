@@ -14,7 +14,6 @@
 
 package com.android.systemui.statusbar;
 
-import static android.hardware.biometrics.BiometricAuthenticator.TYPE_FACE;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.InsetsState.ITYPE_NAVIGATION_BAR;
 import static android.view.InsetsState.ITYPE_STATUS_BAR;
@@ -28,7 +27,6 @@ import static org.mockito.Mockito.verifyNoMoreInteractions;
 
 import android.content.ComponentName;
 import android.graphics.Rect;
-import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
 import android.hardware.fingerprint.IUdfpsHbmListener;
@@ -425,15 +423,13 @@ public class CommandQueueTest extends SysuiTestCase {
         final int userId = 10;
         final String packageName = "test";
         final long operationId = 1;
-        final int multiSensorConfig = BiometricManager.BIOMETRIC_MULTI_SENSOR_DEFAULT;
 
         mCommandQueue.showAuthenticationDialog(promptInfo, receiver, sensorIds,
-                credentialAllowed, requireConfirmation , userId, packageName, operationId,
-                multiSensorConfig);
+                credentialAllowed, requireConfirmation , userId, packageName, operationId);
         waitForIdleSync();
         verify(mCallbacks).showAuthenticationDialog(eq(promptInfo), eq(receiver), eq(sensorIds),
                 eq(credentialAllowed), eq(requireConfirmation), eq(userId), eq(packageName),
-                eq(operationId), eq(multiSensorConfig));
+                eq(operationId));
     }
 
     @Test
@@ -445,11 +441,10 @@ public class CommandQueueTest extends SysuiTestCase {
 
     @Test
     public void testOnBiometricHelp() {
-        final int modality = TYPE_FACE;
-        final String helpMessage = "test_help_message";
-        mCommandQueue.onBiometricHelp(modality, helpMessage);
+        String helpMessage = "test_help_message";
+        mCommandQueue.onBiometricHelp(helpMessage);
         waitForIdleSync();
-        verify(mCallbacks).onBiometricHelp(eq(modality), eq(helpMessage));
+        verify(mCallbacks).onBiometricHelp(eq(helpMessage));
     }
 
     @Test

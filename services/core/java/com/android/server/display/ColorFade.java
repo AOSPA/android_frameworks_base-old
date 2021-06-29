@@ -93,7 +93,6 @@ final class ColorFade {
     private int mDisplayHeight;     // real height, not rotated
     private SurfaceControl mSurfaceControl;
     private Surface mSurface;
-    private SurfaceControl mBLASTSurfaceControl;
     private BLASTBufferQueue mBLASTBufferQueue;
     private NaturalSurfaceLayout mSurfaceLayout;
     private EGLDisplay mEglDisplay;
@@ -577,7 +576,7 @@ final class ColorFade {
             if (mMode == MODE_FADE) {
                 builder.setColorLayer();
             } else {
-                builder.setContainerLayer();
+                builder.setBLASTLayer();
             }
             mSurfaceControl = builder.build();
         } catch (OutOfResourcesException ex) {
@@ -593,14 +592,7 @@ final class ColorFade {
         mTransaction.apply();
 
         if (mMode != MODE_FADE) {
-            final SurfaceControl.Builder b = new SurfaceControl.Builder()
-                    .setName("ColorFade BLAST")
-                    .setParent(mSurfaceControl)
-                    .setHidden(false)
-                    .setSecure(isSecure)
-                    .setBLASTLayer();
-            mBLASTSurfaceControl = b.build();
-            mBLASTBufferQueue = new BLASTBufferQueue("ColorFade", mBLASTSurfaceControl,
+            mBLASTBufferQueue = new BLASTBufferQueue("ColorFade", mSurfaceControl,
                     mDisplayWidth, mDisplayHeight, PixelFormat.TRANSLUCENT);
             mSurface = mBLASTBufferQueue.createSurface();
         }
@@ -731,16 +723,10 @@ final class ColorFade {
             mTransaction.remove(mSurfaceControl).apply();
             if (mSurface != null) {
                 mSurface.release();
-                mSurface = null;
-            }
-
-            if (mBLASTSurfaceControl != null) {
-                mBLASTSurfaceControl.release();
-                mBLASTSurfaceControl = null;
                 mBLASTBufferQueue.destroy();
+                mSurface = null;
                 mBLASTBufferQueue = null;
             }
-
             mSurfaceControl = null;
             mSurfaceVisible = false;
             mSurfaceAlpha = 0f;

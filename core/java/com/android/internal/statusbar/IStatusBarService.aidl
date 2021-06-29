@@ -110,12 +110,12 @@ interface IStatusBarService
     // Used to show the authentication dialog (Biometrics, Device Credential)
     void showAuthenticationDialog(in PromptInfo promptInfo, IBiometricSysuiReceiver sysuiReceiver,
             in int[] sensorIds, boolean credentialAllowed, boolean requireConfirmation,
-            int userId, String opPackageName, long operationId, int multiSensorConfig);
+            int userId, String opPackageName,long operationId);
 
     // Used to notify the authentication dialog that a biometric has been authenticated
     void onBiometricAuthenticated();
     // Used to set a temporary message, e.g. fingerprint not recognized, finger moved too fast, etc
-    void onBiometricHelp(int modality, String message);
+    void onBiometricHelp(String message);
     // Used to show an error - the dialog will dismiss after a certain amount of time
     void onBiometricError(int modality, int error, int vendorCode);
     // Used to hide the authentication dialog, e.g. when the application cancels authentication

@@ -16,14 +16,8 @@
 
 package android.content.pm;
 
-import android.annotation.SuppressLint;
-import android.app.Activity;
-import android.app.Service;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.BroadcastReceiver;
 import android.content.ComponentName;
-import android.content.ContentResolver;
-import android.content.Context;
 import android.graphics.drawable.Drawable;
 import android.os.Build;
 import android.os.Parcel;
@@ -56,25 +50,6 @@ public class ComponentInfo extends PackageItemInfo {
      * Null if the component was declared in the base APK.
      */
     public String splitName;
-
-    /**
-     * Set of attribution tags that should be automatically applied to this
-     * component.
-     * <p>
-     * When this component represents an {@link Activity}, {@link Service},
-     * {@link ContentResolver} or {@link BroadcastReceiver}, each instance will
-     * be automatically configured with {@link Context#createAttributionContext}
-     * using the first attribution tag contained here.
-     * <p>
-     * Additionally, when this component represents a {@link BroadcastReceiver}
-     * and the sender of a broadcast requires the receiver to hold one or more
-     * specific permissions, those permission checks will be performed using
-     * each of the attributions tags contained here.
-     *
-     * @see Context#createAttributionContext(String)
-     */
-    @SuppressLint({"MissingNullability", "MutableBareField"})
-    public String[] attributionTags;
 
     /**
      * A string resource identifier (in the package's resources) containing
@@ -112,7 +87,6 @@ public class ComponentInfo extends PackageItemInfo {
         applicationInfo = orig.applicationInfo;
         processName = orig.processName;
         splitName = orig.splitName;
-        attributionTags = orig.attributionTags;
         descriptionRes = orig.descriptionRes;
         enabled = orig.enabled;
         exported = orig.exported;
@@ -198,15 +172,6 @@ public class ComponentInfo extends PackageItemInfo {
         if (splitName != null) {
             pw.println(prefix + "splitName=" + splitName);
         }
-        if (attributionTags != null && attributionTags.length > 0) {
-            StringBuilder tags = new StringBuilder();
-            tags.append(attributionTags[0]);
-            for (int i = 1; i < attributionTags.length; i++) {
-                tags.append(", ");
-                tags.append(attributionTags[i]);
-            }
-            pw.println(prefix + "attributionTags=[" + tags + "]");
-        }
         pw.println(prefix + "enabled=" + enabled + " exported=" + exported
                 + " directBootAware=" + directBootAware);
         if (descriptionRes != 0) {
@@ -235,7 +200,6 @@ public class ComponentInfo extends PackageItemInfo {
         applicationInfo.writeToParcel(dest, parcelableFlags);
         dest.writeString8(processName);
         dest.writeString8(splitName);
-        dest.writeString8Array(attributionTags);
         dest.writeInt(descriptionRes);
         dest.writeInt(enabled ? 1 : 0);
         dest.writeInt(exported ? 1 : 0);
@@ -247,7 +211,6 @@ public class ComponentInfo extends PackageItemInfo {
         applicationInfo = ApplicationInfo.CREATOR.createFromParcel(source);
         processName = source.readString8();
         splitName = source.readString8();
-        attributionTags = source.createString8Array();
         descriptionRes = source.readInt();
         enabled = (source.readInt() != 0);
         exported = (source.readInt() != 0);

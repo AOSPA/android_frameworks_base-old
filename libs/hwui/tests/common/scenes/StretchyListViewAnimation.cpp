@@ -186,7 +186,7 @@ private:
 
     void doFrame(int frameNr) override {
         if (frameNr == 0) {
-            Properties::setStretchEffectBehavior(stretchBehavior());
+            Properties::stretchEffectBehavior = stretchBehavior();
             if (forceLayer()) {
                 mListView->mutateStagingProperties().mutateLayerProperties().setType(
                         LayerType::RenderLayer);

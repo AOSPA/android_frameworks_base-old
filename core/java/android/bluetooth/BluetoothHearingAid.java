@@ -28,7 +28,6 @@ import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothPermission;
 import android.annotation.SystemApi;
 import android.compat.annotation.UnsupportedAppUsage;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.content.Context;
 import android.os.Binder;
@@ -249,7 +248,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         final IBluetoothHearingAid service = getService();
         try {
             if (service != null && isEnabled()) {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getConnectedDevices(mAttributionSource), mAttributionSource);
             }
             if (service == null) Log.w(TAG, "Proxy not attached to service");
@@ -272,7 +271,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         final IBluetoothHearingAid service = getService();
         try {
             if (service != null && isEnabled()) {
-                return Attributable.setAttributionSource(
+                return BluetoothDevice.setAttributionSource(
                         service.getDevicesMatchingConnectionStates(states, mAttributionSource),
                         mAttributionSource);
             }
@@ -364,8 +363,7 @@ public final class BluetoothHearingAid implements BluetoothProfile {
         final IBluetoothHearingAid service = getService();
         try {
             if (service != null && isEnabled()) {
-                return Attributable.setAttributionSource(
-                        service.getActiveDevices(mAttributionSource), mAttributionSource);
+                return service.getActiveDevices(mAttributionSource);
             }
             if (service == null) Log.w(TAG, "Proxy not attached to service");
             return new ArrayList<>();

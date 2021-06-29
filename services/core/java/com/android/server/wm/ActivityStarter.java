@@ -193,7 +193,6 @@ class ActivityStarter {
     private boolean mKeepCurTransition;
     private boolean mAvoidMoveToFront;
     private boolean mFrozeTaskList;
-    private boolean mTransientLaunch;
 
     // We must track when we deliver the new intent since multiple code paths invoke
     // {@link #deliverNewIntent}. This is due to early returns in the code path. This flag is used
@@ -621,10 +620,8 @@ class ActivityStarter {
             final LaunchingState launchingState;
             synchronized (mService.mGlobalLock) {
                 final ActivityRecord caller = ActivityRecord.forTokenLocked(mRequest.resultTo);
-                final int callingUid = mRequest.realCallingUid == Request.DEFAULT_REAL_CALLING_UID
-                        ?  Binder.getCallingUid() : mRequest.realCallingUid;
                 launchingState = mSupervisor.getActivityMetricsLogger().notifyActivityLaunching(
-                        mRequest.intent, caller, callingUid);
+                        mRequest.intent, caller);
             }
 
             // If the caller hasn't already resolved the activity, we're willing
@@ -1128,14 +1125,6 @@ class ActivityStarter {
             intentGrants = null;
 
             aInfo = mSupervisor.resolveActivity(intent, rInfo, startFlags, null /*profilerInfo*/);
-        }
-        // TODO (b/187680964) Correcting the caller/pid/uid when start activity from shortcut
-        // Pending intent launched from systemui also depends on caller app
-        if (callerApp == null && realCallingPid > 0) {
-            final WindowProcessController wpc = mService.mProcessMap.getProcess(realCallingPid);
-            if (wpc != null) {
-                callerApp = wpc;
-            }
         }
         final ActivityRecord r = new ActivityRecord.Builder(mService)
                 .setCaller(callerApp)
@@ -1772,9 +1761,17 @@ class ActivityStarter {
         mRootWindowContainer.startPowerModeLaunchIfNeeded(
                 false /* forceSend */, mStartActivity);
 
+        final boolean startFromSamePackage;
+        if (sourceRecord != null && sourceRecord.mActivityComponent != null) {
+            startFromSamePackage = mStartActivity.mActivityComponent
+                    .getPackageName().equals(sourceRecord.mActivityComponent.getPackageName());
+        } else {
+            startFromSamePackage = false;
+        }
+
         mTargetRootTask.startActivityLocked(mStartActivity,
                 topRootTask != null ? topRootTask.getTopNonFinishingActivity() : null, newTask,
-                mKeepCurTransition, mOptions, sourceRecord);
+                mKeepCurTransition, mOptions, startFromSamePackage);
         if (mDoResume) {
             final ActivityRecord topTaskActivity =
                     mStartActivity.getTask().topRunningActivityLocked();
@@ -1805,7 +1802,7 @@ class ActivityStarter {
                     mTargetRootTask.moveToFront("startActivityInner");
                 }
                 mRootWindowContainer.resumeFocusedTasksTopActivities(
-                        mTargetRootTask, mStartActivity, mOptions, mTransientLaunch);
+                        mTargetRootTask, mStartActivity, mOptions);
             }
         }
         mRootWindowContainer.updateUserRootTask(mStartActivity.mUserId, mTargetRootTask);
@@ -2222,7 +2219,6 @@ class ActivityStarter {
         mKeepCurTransition = false;
         mAvoidMoveToFront = false;
         mFrozeTaskList = false;
-        mTransientLaunch = false;
 
         mVoiceSession = null;
         mVoiceInteractor = null;
@@ -2325,7 +2321,6 @@ class ActivityStarter {
                 mDoResume = false;
                 mAvoidMoveToFront = true;
             }
-            mTransientLaunch = mOptions.getTransientLaunch();
             mTargetRootTask = Task.fromWindowContainerToken(mOptions.getLaunchRootTask());
         }
 
@@ -2657,7 +2652,7 @@ class ActivityStarter {
             }
             if (mTargetRootTask.isFocusable()) {
                 mRootWindowContainer.resumeFocusedTasksTopActivities(mTargetRootTask, null,
-                        mOptions, mTransientLaunch);
+                        mOptions);
             } else {
                 mRootWindowContainer.ensureActivitiesVisible(null, 0, !PRESERVE_WINDOWS);
             }

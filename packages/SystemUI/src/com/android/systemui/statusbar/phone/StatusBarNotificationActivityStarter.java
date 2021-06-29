@@ -41,7 +41,6 @@ import android.text.TextUtils;
 import android.util.EventLog;
 import android.view.View;
 
-import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.statusbar.NotificationVisibility;
 import com.android.internal.widget.LockPatternUtils;
@@ -253,33 +252,23 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         }
 
         boolean isActivityIntent = intent != null && intent.isActivity() && !isBubble;
-        final boolean willLaunchResolverActivity = isActivityIntent
+        final boolean afterKeyguardGone = isActivityIntent
                 && mActivityIntentHelper.wouldLaunchResolverActivity(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
-        final boolean animate = !willLaunchResolverActivity
-                && mStatusBar.shouldAnimateLaunch(isActivityIntent);
+        final boolean wasOccluded = mStatusBar.isOccluded();
         boolean showOverLockscreen = mKeyguardStateController.isShowing() && intent != null
                 && mActivityIntentHelper.wouldShowOverLockscreen(intent.getIntent(),
                 mLockscreenUserManager.getCurrentUserId());
-        ActivityStarter.OnDismissAction postKeyguardAction = new ActivityStarter.OnDismissAction() {
-            @Override
-            public boolean onDismiss() {
-                return handleNotificationClickAfterKeyguardDismissed(
+        ActivityStarter.OnDismissAction postKeyguardAction =
+                () -> handleNotificationClickAfterKeyguardDismissed(
                         entry, row, controller, intent,
-                        isActivityIntent, animate, showOverLockscreen);
-            }
-
-            @Override
-            public boolean willRunAnimationOnKeyguard() {
-                return animate;
-            }
-        };
+                        isActivityIntent, wasOccluded, showOverLockscreen);
         if (showOverLockscreen) {
             mIsCollapsingToShowActivityOverLockscreen = true;
             postKeyguardAction.onDismiss();
         } else {
             mActivityStarter.dismissKeyguardThenExecute(
-                    postKeyguardAction, null /* cancel */, willLaunchResolverActivity);
+                    postKeyguardAction, null /* cancel */, afterKeyguardGone);
         }
     }
 
@@ -289,13 +278,22 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             RemoteInputController controller,
             PendingIntent intent,
             boolean isActivityIntent,
-            boolean animate,
+            boolean wasOccluded,
             boolean showOverLockscreen) {
         mLogger.logHandleClickAfterKeyguardDismissed(entry.getKey());
 
+        // TODO: Some of this code may be able to move to NotificationEntryManager.
+        String key = row.getEntry().getSbn().getKey();
+        if (mHeadsUpManager != null && mHeadsUpManager.isAlerting(key)) {
+            // Release the HUN notification to the shade.
+            if (mPresenter.isPresenterFullyCollapsed()) {
+                HeadsUpUtil.setIsClickedHeadsUpNotification(row, true);
+            }
+        }
+
         final Runnable runnable = () -> handleNotificationClickAfterPanelCollapsed(
                 entry, row, controller, intent,
-                isActivityIntent, animate);
+                isActivityIntent, wasOccluded);
 
         if (showOverLockscreen) {
             mShadeController.addPostCollapseAction(runnable);
@@ -307,9 +305,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         } else {
             runnable.run();
         }
-
-        // Always defer the keyguard dismiss when animating.
-        return animate || !mNotificationPanel.isFullyCollapsed();
+        return !mNotificationPanel.isFullyCollapsed();
     }
 
     private void handleNotificationClickAfterPanelCollapsed(
@@ -318,7 +314,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             RemoteInputController controller,
             PendingIntent intent,
             boolean isActivityIntent,
-            boolean animate) {
+            boolean wasOccluded) {
         String notificationKey = entry.getKey();
         mLogger.logHandleClickAfterPanelCollapsed(notificationKey);
 
@@ -341,7 +337,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                 // bypass work challenge
                 if (mStatusBarRemoteInputCallback.startWorkChallengeIfNecessary(userId,
                         intent.getIntentSender(), notificationKey)) {
-                    removeHunAfterClick(row);
+                    removeHUN(row);
                     // Show work challenge, do not run PendingIntent and
                     // remove notification
                     collapseOnMainThread();
@@ -361,10 +357,11 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
         final boolean canBubble = entry.canBubble();
         if (canBubble) {
             mLogger.logExpandingBubble(notificationKey);
-            removeHunAfterClick(row);
+            removeHUN(row);
             expandBubbleStackOnMainThread(entry);
         } else {
-            startNotificationIntent(intent, fillInIntent, entry, row, animate, isActivityIntent);
+            startNotificationIntent(
+                    intent, fillInIntent, entry, row, wasOccluded, isActivityIntent);
         }
         if (isActivityIntent || canBubble) {
             mAssistManagerLazy.get().hideAssist();
@@ -429,7 +426,7 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
             Intent fillInIntent,
             NotificationEntry entry,
             ExpandableNotificationRow row,
-            boolean animate,
+            boolean wasOccluded,
             boolean isActivityIntent) {
         mLogger.logStartNotificationIntent(entry.getKey(), intent);
         try {
@@ -439,7 +436,8 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
                             isActivityIntent);
 
             mActivityLaunchAnimator.startPendingIntentWithAnimation(animationController,
-                    animate, intent.getCreatorPackage(), (adapter) -> {
+                    !wasOccluded && mStatusBar.areLaunchAnimationsEnabled(),
+                    (adapter) -> {
                         long eventTime = row.getAndResetLastActionUpTime();
                         Bundle options = eventTime > 0
                                 ? getActivityOptions(
@@ -462,87 +460,57 @@ public class StatusBarNotificationActivityStarter implements NotificationActivit
     @Override
     public void startNotificationGutsIntent(final Intent intent, final int appUid,
             ExpandableNotificationRow row) {
-        boolean animate = mStatusBar.shouldAnimateLaunch(true /* isActivityIntent */);
-        ActivityStarter.OnDismissAction onDismissAction = new ActivityStarter.OnDismissAction() {
-            @Override
-            public boolean onDismiss() {
-                AsyncTask.execute(() -> {
-                    ActivityLaunchAnimator.Controller animationController =
-                            new StatusBarLaunchAnimatorController(
-                                    mNotificationAnimationProvider.getAnimatorController(row),
-                                    mStatusBar, true /* isActivityIntent */);
+        mActivityStarter.dismissKeyguardThenExecute(() -> {
+            AsyncTask.execute(() -> {
+                ActivityLaunchAnimator.Controller animationController =
+                        new StatusBarLaunchAnimatorController(
+                                mNotificationAnimationProvider.getAnimatorController(row),
+                                mStatusBar, true /* isActivityIntent */);
 
-                    mActivityLaunchAnimator.startIntentWithAnimation(
-                            animationController, animate, intent.getPackage(),
-                            (adapter) -> TaskStackBuilder.create(mContext)
-                                    .addNextIntentWithParentStack(intent)
-                                    .startActivities(getActivityOptions(
-                                            mStatusBar.getDisplayId(),
-                                            adapter),
-                                            new UserHandle(UserHandle.getUserId(appUid))));
-                });
-                return true;
-            }
-
-            @Override
-            public boolean willRunAnimationOnKeyguard() {
-                return animate;
-            }
-        };
-        mActivityStarter.dismissKeyguardThenExecute(onDismissAction, null,
-                false /* afterKeyguardGone */);
+                mActivityLaunchAnimator.startIntentWithAnimation(
+                        animationController, mStatusBar.areLaunchAnimationsEnabled(),
+                        (adapter) -> TaskStackBuilder.create(mContext)
+                                .addNextIntentWithParentStack(intent)
+                                .startActivities(getActivityOptions(
+                                        mStatusBar.getDisplayId(),
+                                        adapter),
+                                        new UserHandle(UserHandle.getUserId(appUid))));
+            });
+            return true;
+        }, null, false /* afterKeyguardGone */);
     }
 
     @Override
     public void startHistoryIntent(View view, boolean showHistory) {
-        boolean animate = mStatusBar.shouldAnimateLaunch(true /* isActivityIntent */);
-        ActivityStarter.OnDismissAction onDismissAction = new ActivityStarter.OnDismissAction() {
-            @Override
-            public boolean onDismiss() {
-                AsyncTask.execute(() -> {
-                    Intent intent = showHistory ? new Intent(
-                            Settings.ACTION_NOTIFICATION_HISTORY) : new Intent(
-                            Settings.ACTION_NOTIFICATION_SETTINGS);
-                    TaskStackBuilder tsb = TaskStackBuilder.create(mContext)
-                            .addNextIntent(new Intent(Settings.ACTION_NOTIFICATION_SETTINGS));
-                    if (showHistory) {
-                        tsb.addNextIntent(intent);
-                    }
+        mActivityStarter.dismissKeyguardThenExecute(() -> {
+            AsyncTask.execute(() -> {
+                Intent intent = showHistory ? new Intent(
+                        Settings.ACTION_NOTIFICATION_HISTORY) : new Intent(
+                        Settings.ACTION_NOTIFICATION_SETTINGS);
+                TaskStackBuilder tsb = TaskStackBuilder.create(mContext)
+                        .addNextIntent(new Intent(Settings.ACTION_NOTIFICATION_SETTINGS));
+                if (showHistory) {
+                    tsb.addNextIntent(intent);
+                }
 
-                    ActivityLaunchAnimator.Controller viewController =
-                            ActivityLaunchAnimator.Controller.fromView(view,
-                                    InteractionJankMonitor.CUJ_SHADE_APP_LAUNCH_FROM_HISTORY_BUTTON
-                            );
-                    ActivityLaunchAnimator.Controller animationController =
-                            new StatusBarLaunchAnimatorController(viewController, mStatusBar,
-                                    true /* isActivityIntent */);
+                ActivityLaunchAnimator.Controller animationController =
+                        new StatusBarLaunchAnimatorController(
+                                ActivityLaunchAnimator.Controller.fromView(view), mStatusBar,
+                                true /* isActivityIntent */);
 
-                    mActivityLaunchAnimator.startIntentWithAnimation(animationController, animate,
-                            intent.getPackage(),
-                            (adapter) -> tsb.startActivities(
-                                    getActivityOptions(mStatusBar.getDisplayId(), adapter),
-                                    UserHandle.CURRENT));
-                });
-                return true;
-            }
-
-            @Override
-            public boolean willRunAnimationOnKeyguard() {
-                return animate;
-            }
-        };
-        mActivityStarter.dismissKeyguardThenExecute(onDismissAction, null,
-                false /* afterKeyguardGone */);
+                mActivityLaunchAnimator.startIntentWithAnimation(animationController,
+                        mStatusBar.areLaunchAnimationsEnabled(),
+                        (adapter) -> tsb.startActivities(
+                                getActivityOptions(mStatusBar.getDisplayId(), adapter),
+                                UserHandle.CURRENT));
+            });
+            return true;
+        }, null, false /* afterKeyguardGone */);
     }
 
-    private void removeHunAfterClick(ExpandableNotificationRow row) {
+    private void removeHUN(ExpandableNotificationRow row) {
         String key = row.getEntry().getSbn().getKey();
         if (mHeadsUpManager != null && mHeadsUpManager.isAlerting(key)) {
-            // Release the HUN notification to the shade.
-            if (mPresenter.isPresenterFullyCollapsed()) {
-                HeadsUpUtil.setNeedsHeadsUpDisappearAnimationAfterClick(row, true);
-            }
-
             // In most cases, when FLAG_AUTO_CANCEL is set, the notification will
             // become canceled shortly by NoMan, but we can't assume that.
             mHeadsUpManager.removeNotification(key, true /* releaseImmediately */);

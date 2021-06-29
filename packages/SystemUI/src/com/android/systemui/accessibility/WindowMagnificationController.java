@@ -66,7 +66,6 @@ import com.android.systemui.shared.system.WindowManagerWrapper;
 
 import java.io.PrintWriter;
 import java.text.NumberFormat;
-import java.util.Collections;
 import java.util.Locale;
 
 /**
@@ -179,13 +178,7 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         // Initialize listeners.
         mMirrorViewRunnable = () -> {
             if (mMirrorView != null) {
-                final Rect oldViewBounds = new Rect(mMirrorViewBounds);
                 mMirrorView.getBoundsOnScreen(mMirrorViewBounds);
-                if (oldViewBounds.width() != mMirrorViewBounds.width()
-                        || oldViewBounds.height() != mMirrorViewBounds.height()) {
-                    mMirrorView.setSystemGestureExclusionRects(Collections.singletonList(
-                            new Rect(0, 0, mMirrorViewBounds.width(), mMirrorViewBounds.height())));
-                }
                 updateSystemUIStateIfNeeded();
                 mWindowMagnifierCallback.onWindowMagnifierBoundsChanged(
                         mDisplayId, mMirrorViewBounds);
@@ -276,7 +269,6 @@ class WindowMagnificationController implements View.OnTouchListener, SurfaceHold
         if (mMirrorWindowControl != null) {
             mMirrorWindowControl.destroyControl();
         }
-        mMirrorViewBounds.setEmpty();
         updateSystemUIStateIfNeeded();
     }
 

@@ -16,7 +16,6 @@
 package android.app.appsearch.aidl;
 
 import android.os.Bundle;
-import android.os.UserHandle;
 
 import android.app.appsearch.aidl.IAppSearchBatchResultCallback;
 import android.app.appsearch.aidl.IAppSearchResultCallback;
@@ -37,8 +36,7 @@ interface IAppSearchManager {
      * @param forceOverride Whether to apply the new schema even if it is incompatible. All
      *     incompatible documents will be deleted.
      * @param schemaVersion  The overall schema version number of the request.
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Bundle}&gt;, where the value are
      *     {@link SetSchemaResponse} bundle.
@@ -51,8 +49,7 @@ interface IAppSearchManager {
         in Map<String, List<Bundle>> schemasPackageAccessibleBundles,
         boolean forceOverride,
         in int schemaVersion,
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -60,14 +57,14 @@ interface IAppSearchManager {
      *
      * @param packageName The name of the package that owns the schema.
      * @param databaseName  The name of the database to retrieve.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Bundle}&gt; where the bundle is a GetSchemaResponse.
      */
     void getSchema(
         in String packageName,
         in String databaseName,
-        in UserHandle userHandle,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -75,14 +72,14 @@ interface IAppSearchManager {
      *
      * @param packageName The name of the package that owns the schema.
      * @param databaseName  The name of the database to retrieve.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link List}&lt;{@link String}&gt;&gt;.
      */
     void getNamespaces(
         in String packageName,
         in String databaseName,
-        in UserHandle userHandle,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -91,7 +88,7 @@ interface IAppSearchManager {
      * @param packageName The name of the package that owns this document.
      * @param databaseName  The name of the database where this document lives.
      * @param documentBundes List of GenericDocument bundles.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      * @param binderCallStartTimeMillis start timestamp of binder call in Millis
      * @param callback
      *     If the call fails to start, {@link IAppSearchBatchResultCallback#onSystemError}
@@ -104,7 +101,7 @@ interface IAppSearchManager {
         in String packageName,
         in String databaseName,
         in List<Bundle> documentBundles,
-        in UserHandle userHandle,
+        in int userId,
         in long binderCallStartTimeMillis,
         in IAppSearchBatchResultCallback callback);
 
@@ -117,8 +114,7 @@ interface IAppSearchManager {
      * @param ids The IDs of the documents to retrieve
      * @param typePropertyPaths A map of schema type to a list of property paths to return in the
      *     result.
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback
      *     If the call fails to start, {@link IAppSearchBatchResultCallback#onSystemError}
      *     will be called with the cause throwable. Otherwise,
@@ -132,8 +128,7 @@ interface IAppSearchManager {
         in String namespace,
         in List<String> ids,
         in Map<String, List<String>> typePropertyPaths,
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
+        in int userId,
         in IAppSearchBatchResultCallback callback);
 
     /**
@@ -143,8 +138,7 @@ interface IAppSearchManager {
      * @param databaseName The databaseName this query for.
      * @param queryExpression String to search for
      * @param searchSpecBundle SearchSpec bundle
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback {@link AppSearchResult}&lt;{@link Bundle}&gt; of performing this
      *         operation.
      */
@@ -153,8 +147,7 @@ interface IAppSearchManager {
         in String databaseName,
         in String queryExpression,
         in Bundle searchSpecBundle,
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -164,8 +157,7 @@ interface IAppSearchManager {
      * @param packageName The name of the package making the query.
      * @param queryExpression String to search for
      * @param searchSpecBundle SearchSpec bundle
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback {@link AppSearchResult}&lt;{@link Bundle}&gt; of performing this
      *         operation.
      */
@@ -173,8 +165,7 @@ interface IAppSearchManager {
         in String packageName,
         in String queryExpression,
         in Bundle searchSpecBundle,
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -182,20 +173,20 @@ interface IAppSearchManager {
      * next-page token is invalid or all pages have been returned.
      *
      * @param nextPageToken The token of pre-loaded results of previously executed query.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      * @param callback {@link AppSearchResult}&lt;{@link Bundle}&gt; of performing this
      *                  operation.
      */
-    void getNextPage(in long nextPageToken, in UserHandle userHandle, in IAppSearchResultCallback callback);
+    void getNextPage(in long nextPageToken, in int userId, in IAppSearchResultCallback callback);
 
     /**
      * Invalidates the next-page token so that no more results of the related query can be returned.
      *
      * @param nextPageToken The token of pre-loaded results of previously executed query to be
      *                      Invalidated.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      */
-    void invalidateNextPageToken(in long nextPageToken, in UserHandle userHandle);
+    void invalidateNextPageToken(in long nextPageToken, in int userId);
 
     /**
     * Searches a document based on a given specifications.
@@ -207,7 +198,7 @@ interface IAppSearchManager {
     * @param fileDescriptor The ParcelFileDescriptor where documents should be written to.
     * @param queryExpression String to search for.
     * @param searchSpecBundle SearchSpec bundle.
-    * @param userHandle Handle of the calling user.
+    * @param userId Id of the calling user.
     * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
     *        {@link AppSearchResult}&lt;{@code Void}&gt;.
     */
@@ -217,7 +208,7 @@ interface IAppSearchManager {
         in ParcelFileDescriptor fileDescriptor,
         in String queryExpression,
         in Bundle searchSpecBundle,
-        in UserHandle userHandle,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -226,7 +217,7 @@ interface IAppSearchManager {
     * @param packageName The name of the package that owns this document.
     * @param databaseName  The name of the database where this document lives.
     * @param fileDescriptor The ParcelFileDescriptor where documents should be read from.
-    * @param userHandle Handle of the calling user.
+    * @param userId Id of the calling user.
     * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
     *     {@link AppSearchResult}&lt;{@link List}&lt;{@link Bundle}&gt;&gt;, where the value are
     *     MigrationFailure bundles.
@@ -235,7 +226,7 @@ interface IAppSearchManager {
         in String packageName,
         in String databaseName,
         in ParcelFileDescriptor fileDescriptor,
-        in UserHandle userHandle,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -256,7 +247,7 @@ interface IAppSearchManager {
      * @param id ID of the document being used.
      * @param usageTimestampMillis The timestamp at which the document was used.
      * @param systemUsage Whether the usage was reported by a system app against another app's doc.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Void}&gt;.
      */
@@ -267,7 +258,7 @@ interface IAppSearchManager {
          in String id,
          in long usageTimestampMillis,
          in boolean systemUsage,
-         in UserHandle userHandle,
+         in int userId,
          in IAppSearchResultCallback callback);
 
     /**
@@ -277,8 +268,7 @@ interface IAppSearchManager {
      * @param databaseName The databaseName the document is in.
      * @param namespace    Namespace of the document to remove.
      * @param ids The IDs of the documents to delete
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback
      *     If the call fails to start, {@link IAppSearchBatchResultCallback#onSystemError}
      *     will be called with the cause throwable. Otherwise,
@@ -292,8 +282,7 @@ interface IAppSearchManager {
         in String databaseName,
         in String namespace,
         in List<String> ids,
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
+        in int userId,
         in IAppSearchBatchResultCallback callback);
 
     /**
@@ -303,8 +292,7 @@ interface IAppSearchManager {
      * @param databaseName The databaseName this query for.
      * @param queryExpression String to search for
      * @param searchSpecBundle SearchSpec bundle
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Void}&gt;.
      */
@@ -313,8 +301,7 @@ interface IAppSearchManager {
         in String databaseName,
         in String queryExpression,
         in Bundle searchSpecBundle,
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
@@ -322,7 +309,7 @@ interface IAppSearchManager {
      *
      * @param packageName The name of the package to get the storage info for.
      * @param databaseName The databaseName to get the storage info for.
-     * @param userHandle Handle of the calling user
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Bundle}&gt;, where the value is a
      *     {@link StorageInfo}.
@@ -330,27 +317,22 @@ interface IAppSearchManager {
     void getStorageInfo(
         in String packageName,
         in String databaseName,
-        in UserHandle userHandle,
+        in int userId,
         in IAppSearchResultCallback callback);
 
     /**
      * Persists all update/delete requests to the disk.
      *
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      */
-    void persistToDisk(in UserHandle userHandle, in long binderCallStartTimeMillis);
+    void persistToDisk(in int userId);
 
     /**
      * Creates and initializes AppSearchImpl for the calling app.
      *
-     * @param userHandle Handle of the calling user
-     * @param binderCallStartTimeMillis start timestamp of binder call in Millis
+     * @param userId Id of the calling user
      * @param callback {@link IAppSearchResultCallback#onResult} will be called with an
      *     {@link AppSearchResult}&lt;{@link Void}&gt;.
      */
-    void initialize(
-        in UserHandle userHandle,
-        in long binderCallStartTimeMillis,
-        in IAppSearchResultCallback callback);
+    void initialize(in int userId, in IAppSearchResultCallback callback);
 }

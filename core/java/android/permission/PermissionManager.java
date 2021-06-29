@@ -158,8 +158,6 @@ public final class PermissionManager {
         mPermissionManager = IPermissionManager.Stub.asInterface(ServiceManager.getServiceOrThrow(
                 "permissionmgr"));
         mLegacyPermissionManager = context.getSystemService(LegacyPermissionManager.class);
-        //TODO ntmyren: there should be a way to only enable the watcher when requested
-        mUsageHelper = new PermissionUsageHelper(context);
     }
 
     /**
@@ -880,6 +878,10 @@ public final class PermissionManager {
     @NonNull
     @RequiresPermission(Manifest.permission.GET_APP_OPS_STATS)
     public List<PermGroupUsage> getIndicatorAppOpUsageData() {
+        // Lazily initialize the usage helper
+        if (mUsageHelper == null) {
+            mUsageHelper = new PermissionUsageHelper(mContext);
+        }
         return mUsageHelper.getOpUsageData(new AudioManager().isMicrophoneMute());
     }
 
@@ -1154,12 +1156,13 @@ public final class PermissionManager {
      * @hide
      */
     @TestApi
-    public void registerAttributionSource(@NonNull AttributionSource source) {
+    public @NonNull AttributionSource registerAttributionSource(@NonNull AttributionSource source) {
         try {
-            mPermissionManager.registerAttributionSource(source);
+            return mPermissionManager.registerAttributionSource(source);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         }
+        return null;
     }
 
     /**

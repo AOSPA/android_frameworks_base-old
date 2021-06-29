@@ -835,7 +835,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         final boolean forceResizable = Settings.Global.getInt(
                 resolver, DEVELOPMENT_FORCE_RESIZABLE_ACTIVITIES, 0) != 0;
         final boolean devEnableNonResizableMultiWindow = Settings.Global.getInt(
-                resolver, DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 0) != 0;
+                resolver, DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1) != 0;
         final int supportsNonResizableMultiWindow = mContext.getResources().getInteger(
                 com.android.internal.R.integer.config_supportsNonResizableMultiWindow);
         final int respectsActivityMinWidthHeightMultiWindow = mContext.getResources().getInteger(
@@ -1381,7 +1381,6 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
                 getActivityStartController().obtainStarter(intent, "dream")
                         .setCallingUid(callingUid)
                         .setCallingPid(callingPid)
-                        .setCallingPackage(intent.getPackage())
                         .setActivityInfo(a)
                         .setActivityOptions(options.toBundle())
                         // To start the dream from background, we need to start it from a persistent
@@ -1639,20 +1638,15 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         mAmInternal.enforceCallingPermission(BIND_VOICE_INTERACTION, "startAssistantActivity()");
         userId = handleIncomingUser(callingPid, callingUid, userId, "startAssistantActivity");
 
-        final long origId = Binder.clearCallingIdentity();
-        try {
-            return getActivityStartController().obtainStarter(intent, "startAssistantActivity")
-                    .setCallingUid(callingUid)
-                    .setCallingPackage(callingPackage)
-                    .setCallingFeatureId(callingFeatureId)
-                    .setResolvedType(resolvedType)
-                    .setActivityOptions(bOptions)
-                    .setUserId(userId)
-                    .setAllowBackgroundActivityStart(true)
-                    .execute();
-        } finally {
-            Binder.restoreCallingIdentity(origId);
-        }
+        return getActivityStartController().obtainStarter(intent, "startAssistantActivity")
+                .setCallingUid(callingUid)
+                .setCallingPackage(callingPackage)
+                .setCallingFeatureId(callingFeatureId)
+                .setResolvedType(resolvedType)
+                .setActivityOptions(bOptions)
+                .setUserId(userId)
+                .setAllowBackgroundActivityStart(true)
+                .execute();
     }
 
     /**
@@ -2835,7 +2829,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         List<IBinder> topActivityToken = new ArrayList<>();
         topActivityToken.add(tokens.getActivityToken());
         requester.requestAssistData(topActivityToken, true /* fetchData */,
-                false /* fetchScreenshot */, false /* fetchStructure */, true /* allowFetchData */,
+                false /* fetchScreenshot */, true /* allowFetchData */,
                 false /* allowFetchScreenshot*/, true /* ignoreFocusCheck */,
                 Binder.getCallingUid(), callingPackageName);
 
@@ -6391,7 +6385,9 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
         @Override
         public PackageConfigurationUpdater createPackageConfigurationUpdater() {
-            return new PackageConfigurationUpdaterImpl(Binder.getCallingPid());
+            synchronized (mGlobalLock) {
+                return new PackageConfigurationUpdaterImpl(Binder.getCallingPid());
+            }
         }
 
         @Override
@@ -6404,7 +6400,7 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
 
     final class PackageConfigurationUpdaterImpl implements
             ActivityTaskManagerInternal.PackageConfigurationUpdater {
-        private final int mPid;
+        private int mPid;
         private int mNightMode;
 
         PackageConfigurationUpdaterImpl(int pid) {
@@ -6418,26 +6414,24 @@ public class ActivityTaskManagerService extends IActivityTaskManager.Stub {
         }
 
         @Override
-        public void commit() {
+        public void commit() throws RemoteException {
+            if (mPid == 0) {
+                throw new RemoteException("Invalid process");
+            }
             synchronized (mGlobalLock) {
-                final long ident = Binder.clearCallingIdentity();
-                try {
-                    final WindowProcessController wpc = mProcessMap.getProcess(mPid);
-                    if (wpc == null) {
-                        Slog.w(TAG, "Override application configuration: cannot find pid " + mPid);
-                        return;
-                    }
-                    if (wpc.getNightMode() == mNightMode) {
-                        return;
-                    }
-                    if (!wpc.setOverrideNightMode(mNightMode)) {
-                        return;
-                    }
-                    wpc.updateNightModeForAllActivities(mNightMode);
-                    mPackageConfigPersister.updateFromImpl(wpc.mName, wpc.mUserId, this);
-                } finally {
-                    Binder.restoreCallingIdentity(ident);
+                final WindowProcessController wpc = mProcessMap.getProcess(mPid);
+                if (wpc == null) {
+                    Slog.w(TAG, "Override application configuration: cannot find application");
+                    return;
                 }
+                if (wpc.getNightMode() == mNightMode) {
+                    return;
+                }
+                if (!wpc.setOverrideNightMode(mNightMode)) {
+                    return;
+                }
+                wpc.updateNightModeForAllActivities(mNightMode);
+                mPackageConfigPersister.updateFromImpl(wpc.mName, wpc.mUserId, this);
             }
         }
 

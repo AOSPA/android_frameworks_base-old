@@ -19,8 +19,6 @@ import android.hardware.camera2.impl.CameraMetadataNative;
 
 import android.hardware.camera2.extension.CaptureStageImpl;
 import android.hardware.camera2.extension.ICaptureProcessorImpl;
-import android.hardware.camera2.extension.LatencyRange;
-import android.hardware.camera2.extension.Size;
 import android.hardware.camera2.extension.SizeList;
 
 /** @hide */
@@ -38,5 +36,4 @@ interface IImageCaptureExtenderImpl
     @nullable List<CaptureStageImpl> getCaptureStages();
     int getMaxCaptureStage();
     @nullable List<SizeList> getSupportedResolutions();
-    LatencyRange getEstimatedCaptureLatencyRange(in Size outputSize);
 }

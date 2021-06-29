@@ -164,8 +164,7 @@ public class ScrollViewCaptureHelperTest {
         assertRectEquals(request, scrollResult.requestedArea);
         assertRectEquals(request, scrollResult.availableArea);
         assertRequestedRectCompletelyVisible(startScrollY, request, getVisibleRect(mContent));
-        assertEquals(CAPTURE_HEIGHT + (WINDOW_HEIGHT - CAPTURE_HEIGHT) / 2,
-                scrollResult.scrollDelta);
+        assertEquals(CAPTURE_HEIGHT, scrollResult.scrollDelta);
     }
 
     @Test
@@ -183,8 +182,7 @@ public class ScrollViewCaptureHelperTest {
         assertRectEquals(request, scrollResult.requestedArea);
         assertRectEquals(request, scrollResult.availableArea);
         assertRequestedRectCompletelyVisible(startScrollY, request, getVisibleRect(mContent));
-        assertEquals(-CAPTURE_HEIGHT - (WINDOW_HEIGHT - CAPTURE_HEIGHT) / 2,
-                scrollResult.scrollDelta);
+        assertEquals(-CAPTURE_HEIGHT, scrollResult.scrollDelta);
     }
 
     @Test
@@ -203,8 +201,7 @@ public class ScrollViewCaptureHelperTest {
         assertRectEquals(request, scrollResult.requestedArea);
         assertRectEquals(request, scrollResult.availableArea);
         assertRequestedRectCompletelyVisible(startScrollY, request, getVisibleRect(mContent));
-        assertEquals(CAPTURE_HEIGHT + (WINDOW_HEIGHT - CAPTURE_HEIGHT) / 2,
-                scrollResult.scrollDelta);
+        assertEquals(CAPTURE_HEIGHT, scrollResult.scrollDelta);
 
     }
 
@@ -223,8 +220,7 @@ public class ScrollViewCaptureHelperTest {
         assertRectEquals(request, scrollResult.requestedArea);
         assertRectEquals(request, scrollResult.availableArea);
         assertRequestedRectCompletelyVisible(startScrollY, request, getVisibleRect(mContent));
-        assertEquals(-CAPTURE_HEIGHT - (WINDOW_HEIGHT - CAPTURE_HEIGHT) / 2,
-                scrollResult.scrollDelta);
+        assertEquals(-CAPTURE_HEIGHT, scrollResult.scrollDelta);
     }
 
     @Test

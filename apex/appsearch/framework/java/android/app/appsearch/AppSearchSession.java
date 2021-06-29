@@ -18,6 +18,7 @@ package android.app.appsearch;
 
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.app.appsearch.aidl.AppSearchBatchResultParcel;
 import android.app.appsearch.aidl.AppSearchResultParcel;
 import android.app.appsearch.aidl.IAppSearchBatchResultCallback;
@@ -29,7 +30,6 @@ import android.compat.annotation.UnsupportedAppUsage;
 import android.os.Bundle;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
@@ -61,25 +61,26 @@ public final class AppSearchSession implements Closeable {
 
     private final String mPackageName;
     private final String mDatabaseName;
-    private final UserHandle mUserHandle;
+    @UserIdInt
+    private final int mUserId;
     private final IAppSearchManager mService;
 
     private boolean mIsMutated = false;
     private boolean mIsClosed = false;
 
     /**
-     * Creates a search session for the client, defined by the {@code userHandle} and
+     * Creates a search session for the client, defined by the {@code userId} and
      * {@code packageName}.
      */
     static void createSearchSession(
             @NonNull AppSearchManager.SearchContext searchContext,
             @NonNull IAppSearchManager service,
-            @NonNull UserHandle userHandle,
+            @UserIdInt int userId,
             @NonNull String packageName,
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<AppSearchSession>> callback) {
         AppSearchSession searchSession =
-                new AppSearchSession(service, userHandle, packageName, searchContext.mDatabaseName);
+                new AppSearchSession(service, userId, packageName, searchContext.mDatabaseName);
         searchSession.initialize(executor, callback);
     }
 
@@ -89,21 +90,17 @@ public final class AppSearchSession implements Closeable {
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<AppSearchSession>> callback) {
         try {
-            mService.initialize(
-                    mUserHandle,
-                    /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
-                    new IAppSearchResultCallback.Stub() {
-                        @Override
-                        public void onResult(AppSearchResultParcel resultParcel) {
-                            executor.execute(() -> {
-                                AppSearchResult<Void> result = resultParcel.getResult();
-                                if (result.isSuccess()) {
-                                    callback.accept(
-                                            AppSearchResult.newSuccessfulResult(
-                                                    AppSearchSession.this));
-                                } else {
-                                    callback.accept(AppSearchResult.newFailedResult(result));
-                                }
+            mService.initialize(mUserId, new IAppSearchResultCallback.Stub() {
+                @Override
+                public void onResult(AppSearchResultParcel resultParcel) {
+                    executor.execute(() -> {
+                        AppSearchResult<Void> result = resultParcel.getResult();
+                        if (result.isSuccess()) {
+                            callback.accept(
+                                    AppSearchResult.newSuccessfulResult(AppSearchSession.this));
+                        } else {
+                            callback.accept(AppSearchResult.newFailedResult(result));
+                        }
                     });
                 }
             });
@@ -112,10 +109,10 @@ public final class AppSearchSession implements Closeable {
         }
     }
 
-    private AppSearchSession(@NonNull IAppSearchManager service, @NonNull UserHandle userHandle,
+    private AppSearchSession(@NonNull IAppSearchManager service, @UserIdInt int userId,
             @NonNull String packageName, @NonNull String databaseName) {
         mService = service;
-        mUserHandle = userHandle;
+        mUserId = userId;
         mPackageName = packageName;
         mDatabaseName = databaseName;
     }
@@ -199,7 +196,7 @@ public final class AppSearchSession implements Closeable {
             mService.getSchema(
                     mPackageName,
                     mDatabaseName,
-                    mUserHandle,
+                    mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -236,7 +233,7 @@ public final class AppSearchSession implements Closeable {
             mService.getNamespaces(
                     mPackageName,
                     mDatabaseName,
-                    mUserHandle,
+                    mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -289,7 +286,7 @@ public final class AppSearchSession implements Closeable {
             documentBundles.add(documents.get(i).getBundle());
         }
         try {
-            mService.putDocuments(mPackageName, mDatabaseName, documentBundles, mUserHandle,
+            mService.putDocuments(mPackageName, mDatabaseName, documentBundles, mUserId,
                     /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
                     new IAppSearchBatchResultCallback.Stub() {
                         @Override
@@ -352,8 +349,7 @@ public final class AppSearchSession implements Closeable {
                     request.getNamespace(),
                     new ArrayList<>(request.getIds()),
                     request.getProjectionsInternal(),
-                    mUserHandle,
-                    /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
+                    mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchBatchResultParcel resultParcel) {
@@ -472,7 +468,7 @@ public final class AppSearchSession implements Closeable {
         Objects.requireNonNull(searchSpec);
         Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         return new SearchResults(mService, mPackageName, mDatabaseName, queryExpression,
-                searchSpec, mUserHandle);
+                searchSpec, mUserId);
     }
 
     /**
@@ -508,7 +504,7 @@ public final class AppSearchSession implements Closeable {
                     request.getDocumentId(),
                     request.getUsageTimestampMillis(),
                     /*systemUsage=*/ false,
-                    mUserHandle,
+                    mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -565,13 +561,8 @@ public final class AppSearchSession implements Closeable {
         Objects.requireNonNull(callback);
         Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         try {
-            mService.removeByDocumentId(
-                    mPackageName,
-                    mDatabaseName,
-                    request.getNamespace(),
-                    new ArrayList<>(request.getIds()),
-                    mUserHandle,
-                    /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
+            mService.removeByDocumentId(mPackageName, mDatabaseName, request.getNamespace(),
+                    new ArrayList<>(request.getIds()), mUserId,
                     new IAppSearchBatchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchBatchResultParcel resultParcel) {
@@ -620,13 +611,8 @@ public final class AppSearchSession implements Closeable {
         Objects.requireNonNull(callback);
         Preconditions.checkState(!mIsClosed, "AppSearchSession has already been closed");
         try {
-            mService.removeByQuery(
-                    mPackageName,
-                    mDatabaseName,
-                    queryExpression,
-                    searchSpec.getBundle(),
-                    mUserHandle,
-                    /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
+            mService.removeByQuery(mPackageName, mDatabaseName, queryExpression,
+                    searchSpec.getBundle(), mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -658,7 +644,7 @@ public final class AppSearchSession implements Closeable {
             mService.getStorageInfo(
                     mPackageName,
                     mDatabaseName,
-                    mUserHandle,
+                    mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -686,8 +672,7 @@ public final class AppSearchSession implements Closeable {
     public void close() {
         if (mIsMutated && !mIsClosed) {
             try {
-                mService.persistToDisk(
-                        mUserHandle, /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime());
+                mService.persistToDisk(mUserId);
                 mIsClosed = true;
             } catch (RemoteException e) {
                 Log.e(TAG, "Unable to close the AppSearchSession", e);
@@ -716,8 +701,7 @@ public final class AppSearchSession implements Closeable {
                     schemasPackageAccessibleBundles,
                     request.isForceOverride(),
                     request.getVersion(),
-                    mUserHandle,
-                    /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
+                    mUserId,
                     new IAppSearchResultCallback.Stub() {
                         @Override
                         public void onResult(AppSearchResultParcel resultParcel) {
@@ -804,8 +788,7 @@ public final class AppSearchSession implements Closeable {
                         schemasPackageAccessibleBundles,
                         /*forceOverride=*/ false,
                         request.getVersion(),
-                        mUserHandle,
-                        /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
+                        mUserId,
                         new IAppSearchResultCallback.Stub() {
                             @Override
                             public void onResult(AppSearchResultParcel resultParcel) {
@@ -830,7 +813,7 @@ public final class AppSearchSession implements Closeable {
                 }
 
                 try (AppSearchMigrationHelper migrationHelper = new AppSearchMigrationHelper(
-                        mService, mUserHandle, mPackageName, mDatabaseName, request.getSchemas())) {
+                        mService, mUserId, mPackageName, mDatabaseName, request.getSchemas())) {
 
                     // 4. Trigger migration for all migrators.
                     // TODO(b/177266929) trigger migration for all types together rather than
@@ -856,8 +839,7 @@ public final class AppSearchSession implements Closeable {
                                 schemasPackageAccessibleBundles,
                                 /*forceOverride=*/ true,
                                 request.getVersion(),
-                                mUserHandle,
-                                /*binderCallStartTimeMillis=*/ SystemClock.elapsedRealtime(),
+                                mUserId,
                                 new IAppSearchResultCallback.Stub() {
                                     @Override
                                     public void onResult(AppSearchResultParcel resultParcel) {

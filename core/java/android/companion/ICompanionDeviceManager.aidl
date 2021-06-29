@@ -52,6 +52,5 @@ interface ICompanionDeviceManager {
 
     boolean canPairWithoutPrompt(in String packageName, in String deviceMacAddress, int userId);
 
-    void createAssociation(in String packageName, in String macAddress, int userId,
-        in byte[] certificate);
+    void createAssociation(in String packageName, in String macAddress, int userId);
 }

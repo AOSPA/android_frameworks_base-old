@@ -231,7 +231,7 @@ public class StubTransaction extends SurfaceControl.Transaction {
 
     @Override
     public SurfaceControl.Transaction setFrameRate(SurfaceControl sc, float frameRate,
-            int compatibility, int changeFrameRateStrategy) {
+            int compatibility) {
         return this;
     }
 

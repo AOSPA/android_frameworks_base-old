@@ -379,15 +379,7 @@ public class ClipboardService extends SystemService {
                 return null;
             }
             synchronized (mLock) {
-                try {
-                    addActiveOwnerLocked(intendingUid, pkg);
-                } catch (SecurityException e) {
-                    // Permission could not be granted - URI may be invalid
-                    Slog.i(TAG, "Could not grant permission to primary clip. Clearing clipboard.");
-                    setPrimaryClipInternalLocked(null, intendingUid, pkg);
-                    return null;
-                }
-
+                addActiveOwnerLocked(intendingUid, pkg);
                 PerUserClipboard clipboard = getClipboardLocked(intendingUserId);
                 showAccessNotificationLocked(pkg, intendingUid, intendingUserId, clipboard);
                 notifyTextClassifierLocked(clipboard, pkg, intendingUid);

@@ -520,7 +520,7 @@ class SurfaceAnimator {
     /**
      * Converts {@link AnimationType} to String.
      */
-    static String animationTypeToString(@AnimationType int type) {
+    private static String animationTypeToString(@AnimationType int type) {
         switch (type) {
             case ANIMATION_TYPE_NONE: return "none";
             case ANIMATION_TYPE_APP_TRANSITION: return "app_transition";

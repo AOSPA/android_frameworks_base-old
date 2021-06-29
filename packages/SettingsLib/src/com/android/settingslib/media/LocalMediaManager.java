@@ -408,13 +408,6 @@ public class LocalMediaManager implements BluetoothCallback {
         return mInfoMediaManager.shouldDisableMediaOutput(packageName);
     }
 
-    /**
-     * Returns {@code true} if needed to enable volume seekbar, otherwise returns {@code false}.
-     */
-    public boolean shouldEnableVolumeSeekBar(RoutingSessionInfo sessionInfo) {
-        return mInfoMediaManager.shouldEnableVolumeSeekBar(sessionInfo);
-    }
-
     @VisibleForTesting
     MediaDevice updateCurrentConnectedDevice() {
         MediaDevice connectedDevice = null;

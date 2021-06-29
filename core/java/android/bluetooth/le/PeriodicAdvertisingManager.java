@@ -25,7 +25,6 @@ import android.bluetooth.IBluetoothManager;
 import android.bluetooth.annotations.RequiresBluetoothLocationPermission;
 import android.bluetooth.annotations.RequiresBluetoothScanPermission;
 import android.bluetooth.annotations.RequiresLegacyBluetoothAdminPermission;
-import android.content.Attributable;
 import android.content.AttributionSource;
 import android.os.Handler;
 import android.os.Looper;
@@ -221,7 +220,7 @@ public final class PeriodicAdvertisingManager {
         return new IPeriodicAdvertisingCallback.Stub() {
             public void onSyncEstablished(int syncHandle, BluetoothDevice device,
                     int advertisingSid, int skip, int timeout, int status) {
-                Attributable.setAttributionSource(device, mAttributionSource);
+
                 handler.post(new Runnable() {
                     @Override
                     public void run() {

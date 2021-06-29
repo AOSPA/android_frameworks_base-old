@@ -16,15 +16,16 @@
 
 package com.android.server.wm.flicker.launch
 
+import android.platform.test.annotations.Presubmit
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
-import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.helpers.reopenAppFromOverview
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.startRotation
+import com.android.server.wm.flicker.launcherWindowBecomesInvisible
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import org.junit.FixMethodOrder
 import org.junit.Test
@@ -40,7 +41,6 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@Group1
 class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) : OpenAppTransition(testSpec) {
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
         get() = {
@@ -63,16 +63,15 @@ class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) : OpenAppTransitio
             }
         }
 
-    @FlakyTest
+    @Presubmit
     @Test
-    override fun navBarLayerIsAlwaysVisible() {
-        super.navBarLayerIsAlwaysVisible()
-    }
+    override fun appWindowReplacesLauncherAsTopWindow() =
+        super.appWindowReplacesLauncherAsTopWindow()
 
-    @FlakyTest
+    @Presubmit
     @Test
-    override fun statusBarLayerIsAlwaysVisible() {
-        super.statusBarLayerIsAlwaysVisible()
+    override fun launcherWindowBecomesInvisible() {
+        testSpec.launcherWindowBecomesInvisible()
     }
 
     @FlakyTest
@@ -91,6 +90,18 @@ class OpenAppFromOverviewTest(testSpec: FlickerTestParameter) : OpenAppTransitio
     @Test
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() {
         super.visibleLayersShownMoreThanOneConsecutiveEntry()
+    }
+
+    @FlakyTest
+    @Test
+    override fun focusChanges() {
+        super.focusChanges()
+    }
+
+    @FlakyTest(bugId = 185400889)
+    @Test
+    override fun noUncoveredRegions() {
+        super.noUncoveredRegions()
     }
 
     companion object {

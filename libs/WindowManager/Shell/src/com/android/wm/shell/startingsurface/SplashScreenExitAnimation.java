@@ -85,7 +85,7 @@ public class SplashScreenExitAnimation implements Animator.AnimatorListener {
         }
 
         View iconView = view.getIconView();
-        if (iconView == null || iconView.getBackground() == null) {
+        if (iconView == null) {
             mIconFadeOutDuration = 0;
             mIconStartAlpha = 0;
             mAppRevealDelay = 0;

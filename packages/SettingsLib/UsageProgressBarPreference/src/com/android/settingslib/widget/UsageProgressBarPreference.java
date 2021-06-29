@@ -156,9 +156,6 @@ public class UsageProgressBarPreference extends Preference {
     public void onBindViewHolder(PreferenceViewHolder holder) {
         super.onBindViewHolder(holder);
 
-        holder.setDividerAllowedAbove(false);
-        holder.setDividerAllowedBelow(false);
-
         final TextView usageSummary = (TextView) holder.findViewById(R.id.usage_summary);
         usageSummary.setText(enlargeFontOfNumber(mUsageSummary));
 

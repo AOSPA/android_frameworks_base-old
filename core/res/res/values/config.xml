@@ -27,8 +27,6 @@
     <!-- Do not translate. Defines the slots for the right-hand side icons.  That is to say, the
          icons in the status bar that are not notifications. -->
     <string-array name="config_statusBarIcons">
-        <item><xliff:g id="id">@string/status_bar_no_calling</xliff:g></item>
-        <item><xliff:g id="id">@string/status_bar_call_strength</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_alarm_clock</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_rotate</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_headset</xliff:g></item>
@@ -60,6 +58,8 @@
         <item><xliff:g id="id">@string/status_bar_hotspot</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_mobile</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_airplane</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_no_calling</xliff:g></item>
+        <item><xliff:g id="id">@string/status_bar_call_strength</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_battery</xliff:g></item>
         <item><xliff:g id="id">@string/status_bar_sensors_off</xliff:g></item>
     </string-array>
@@ -157,16 +157,16 @@
     <integer name="config_screen_rotation_fade_out">116</integer>
 
     <!-- Fade in time for screen rotation -->
-    <integer name="config_screen_rotation_fade_in">200</integer>
+    <integer name="config_screen_rotation_fade_in">233</integer>
 
     <!-- Fade in delay time for screen rotation -->
-    <integer name="config_screen_rotation_fade_in_delay">83</integer>
+    <integer name="config_screen_rotation_fade_in_delay">100</integer>
 
     <!-- Total time for 90 degree screen rotation animations -->
-    <integer name="config_screen_rotation_total_90">283</integer>
+    <integer name="config_screen_rotation_total_90">333</integer>
 
     <!-- Total time for 180 degree screen rotation animation -->
-    <integer name="config_screen_rotation_total_180">383</integer>
+    <integer name="config_screen_rotation_total_180">433</integer>
 
     <!-- Total time for the rotation background color transition -->
     <integer name="config_screen_rotation_color_transition">200</integer>
@@ -955,7 +955,7 @@
             4 - Go to voice assist
             5 - Go to assistant (Settings.Secure.ASSISTANT)
     -->
-    <integer name="config_longPressOnPowerBehavior">5</integer>
+    <integer name="config_longPressOnPowerBehavior">1</integer>
 
     <!-- Whether the setting to change long press on power behaviour from default to assistant (5)
          is available in Settings.
@@ -973,7 +973,7 @@
             1 - Mute toggle
             2 - Global actions menu
     -->
-    <integer name="config_keyChordPowerVolumeUp">2</integer>
+    <integer name="config_keyChordPowerVolumeUp">1</integer>
 
     <!-- Control the behavior when the user long presses the back button.  Non-zero values are only
          valid for watches as part of CDD/CTS.
@@ -1653,38 +1653,29 @@
     <integer name="config_timeZoneRulesCheckRetryCount">5</integer>
 
     <!-- Whether the geolocation time zone detection feature is enabled. Setting this to false means
-         the feature cannot be used. Setting this to true means system server components can be
-         tested and location time zone detection may be used if other configuration allows (see
-         location time zone provider configuration settings below). -->
+         the feature cannot be used. Setting this to true means it may be used if other
+         configuration allows (see provider configuration below, also compile time overlays). -->
     <bool name="config_enableGeolocationTimeZoneDetection" translatable="false">true</bool>
 
-    <!-- Whether the primary location time zone provider is enabled.
-         This setting is ignored if config_enableGeolocationTimeZoneDetection is false.
-
-         AOSP does not configure a primary location time zone provider. -->
+    <!-- Whether the primary LocationTimeZoneProvider is enabled.
+         Ignored if config_enableGeolocationTimeZoneDetection is false -->
     <bool name="config_enablePrimaryLocationTimeZoneProvider" translatable="false">false</bool>
-
-    <!-- The package hosting the primary location time zone provider.
+    <!-- The package name providing the primary location time zone provider.
          Only used when config_enableGeolocationTimeZoneDetection and
-         config_enablePrimaryLocationTimeZoneProvider are true.
+         enablePrimaryLocationTimeZoneProvider are true. -->
+    <string name="config_primaryLocationTimeZoneProviderPackageName" translatable="false">@null</string>
 
-         See android.service.timezone.TimeZoneProviderService for how to host location time zone
-         provider services. -->
-    <string name="config_primaryLocationTimeZoneProviderPackageName" translatable="false"></string>
+    <!-- Whether the secondary LocationTimeZoneProvider is enabled.
+         Ignored if config_enableGeolocationTimeZoneDetection is false -->
+    <bool name="config_enableSecondaryLocationTimeZoneProvider" translatable="false">true</bool>
+    <!-- Package name providing the secondary location time zone provider. Used only when
+         config_enableSecondaryLocationTimeZoneOverlay is false.
 
-    <!-- Whether the secondary location time zone provider is enabled.
-         This setting is ignored if config_enableGeolocationTimeZoneDetection is false.
-
-         AOSP does not configure a secondary location time zone provider. -->
-    <bool name="config_enableSecondaryLocationTimeZoneProvider" translatable="false">false</bool>
-
-    <!-- The package hosting the secondary location time zone provider.
-         Only used when config_enableGeolocationTimeZoneDetection and
-         config_enableSecondaryLocationTimeZoneProvider are true.
-
-         See android.service.timezone.TimeZoneProviderService for how to host location time zone
-         provider services. -->
-    <string name="config_secondaryLocationTimeZoneProviderPackageName" translatable="false"></string>
+         By default, set to "android" to pick up the default LocationTimeZoneProvider configured in
+         the system server's AndroidManifest.xml. See the
+         com.android.location.timezone.service.v1.SecondaryLocationTimeZoneProvider intent-filter
+         definition there for more information. -->
+    <string name="config_secondaryLocationTimeZoneProviderPackageName" translatable="false">android</string>
 
     <!-- Whether to enable network location overlay which allows network location provider to be
          replaced by an app at run-time. When disabled, only the
@@ -1759,13 +1750,6 @@
         <item>com.android.location.fused</item>
     </string-array>
 
-    <!-- Package name(s) of Advanced Driver Assistance applications. These packages have additional
-    management of access to location, specific to driving assistance use-cases. They must be system
-    packages. This configuration is only applicable to devices that declare
-    PackageManager.FEATURE_AUTOMOTIVE. -->
-    <string-array name="config_locationDriverAssistancePackageNames" translatable="false">
-    </string-array>
-
     <!-- This string array can be overriden to enable test location providers initially. -->
     <!-- Array of "[locationProviderName],[requiresNetwork],
          [requiresSatellite],[requiresCell],[hasMonetaryCost],
@@ -1798,9 +1782,6 @@
 
     <!-- Boolean indicating if placing the phone face down will result in a screen off. -->
     <bool name="config_flipToScreenOffEnabled">true</bool>
-
-    <!-- Integer to set a max latency the accelerometer will batch sensor requests with. -->
-    <integer name="config_flipToScreenOffMaxLatencyMicros">2000000</integer>
 
     <!-- Component name of the combo network location provider. -->
     <string name="config_comboNetworkLocationProvider" translatable="false">com.qualcomm.location</string>
@@ -1981,9 +1962,6 @@
     <string name="config_systemActivityRecognizer" translatable="false"></string>
     <!-- The name of the package that will hold the system ui role -->
     <string name="config_systemUi" translatable="false">com.android.systemui</string>
-    <!-- The name of the package that will hold the television remote service role.
-        TODO(b/189347385) make this a @SystemAPI -->
-    <string name="config_systemTelevisionRemoteService" translatable="false">@string/config_tvRemoteServicePackage</string>
 
     <!-- The name of the package that will be allowed to change its components' label/icon. -->
     <string name="config_overrideComponentUiPackage" translatable="false">com.android.stk</string>
@@ -3360,15 +3338,6 @@
      (e.g. accessibility, alarms). This is mainly for Wear devices that don't have speakers. -->
     <bool name="config_allowPriorityVibrationsInLowPowerMode">false</bool>
 
-    <!-- The duration (in milliseconds) that should be used to convert vibration ramps to a sequence
-         of fixed amplitude steps on devices without PWLE support. -->
-    <integer name="config_vibrationWaveformRampStepDuration">5</integer>
-
-    <!-- The duration (in milliseconds) that should be applied to waveform vibrations that ends in
-         non-zero amplitudes, . The waveform will
-         be played as a PWLE instead of on/off calls if this value is set. -->
-    <integer name="config_vibrationWaveformRampDownDuration">0</integer>
-
     <!-- Number of retries Cell Data should attempt for a given error code before
          restarting the modem.
          Error codes not listed will not lead to modem restarts.
@@ -3802,23 +3771,6 @@
     -->
     <string name="config_companionDeviceManagerPackage" translatable="false"></string>
 
-    <!-- A list of packages managing companion device(s) by the same manufacturers as the main
-         device. It will fall back to showing a prompt if the association has been called multiple
-         times in a short period.
-         Note that config_companionDeviceManagerPackage and config_companionDeviceCerts are
-         parallel arrays.
-     -->
-    <string-array name="config_companionDevicePackages" translatable="false"></string-array>
-
-    <!-- A list of SHA256 Certificates managing companion device(s) by the same manufacturers as
-         the main device. It will fall back to showing a prompt if the association has been called
-         multiple times in a short period.
-         Note that config_companionDeviceCerts and config_companionDeviceManagerPackage are parallel
-         arrays.
-         Example: "1A:2B:3C:4D"
-     -->
-    <string-array name="config_companionDeviceCerts" translatable="false"></string-array>
-
     <!-- The package name for the default wellbeing app.
          This package must be trusted, as it has the permissions to control other applications
          on the device.
@@ -3990,17 +3942,11 @@
     <!-- Handle volume keys directly in Window Manager without passing them to the foreground app -->
     <bool name="config_handleVolumeKeysInWindowManager">false</bool>
 
-    <!-- Rely or not on hardcoded aliased streams table within AudioService -->
-    <bool name="config_handleVolumeAliasesUsingVolumeGroups">false</bool>
-
     <!-- Volume level of in-call notification tone playback [0..1] -->
     <item name="config_inCallNotificationVolume" format="float" type="dimen">.10</item>
 
     <!-- URI for in call notification sound -->
     <string translatable="false" name="config_inCallNotificationSound">/product/media/audio/ui/InCallNotification.ogg</string>
-
-    <!-- URI for default ringtone sound file to be used for silent ringer vibration -->
-    <string translatable="false" name="config_defaultRingtoneVibrationSound">/product/media/audio/ui/AttentionalHaptics.ogg</string>
 
     <!-- Default number of notifications from the same app before they are automatically grouped by the OS -->
     <integer translatable="false" name="config_autoGroupAtCount">4</integer>
@@ -4869,9 +4815,8 @@
     <!-- Whether to select voice/data/sms preference without user confirmation -->
     <bool name="config_voice_data_sms_auto_fallback">false</bool>
 
-    <!-- Whether to enable dynamic keyguard positioning for wide screen devices (e.g. only using
-         half of the screen, to be accessible using only one hand). -->
-    <bool name="config_enableDynamicKeyguardPositioning">false</bool>
+    <!-- Whether to enable the one-handed keyguard on the lock screen for wide-screen devices. -->
+    <bool name="config_enableOneHandedKeyguard">false</bool>
 
     <!-- Whether to allow the caching of the SIM PIN for verification after unattended reboot -->
     <bool name="config_allow_pin_storage_for_unattended_reboot">true</bool>
@@ -5007,15 +4952,6 @@
 
     <!-- List containing the allowed install sources for accessibility service. -->
     <string-array name="config_accessibility_allowed_install_source" translatable="false"/>
-
-    <!-- Default value for Settings.ASSIST_LONG_PRESS_HOME_ENABLED -->
-    <bool name="config_assistLongPressHomeEnabledDefault">true</bool>
-    <!-- Default value for Settings.ASSIST_TOUCH_GESTURE_ENABLED -->
-    <bool name="config_assistTouchGestureEnabledDefault">true</bool>
-
-    <!-- The amount of dimming to apply to wallpapers with mid range luminance. 0 displays
-         the wallpaper at full brightness. 1 displays the wallpaper as fully black. -->
-    <item name="config_wallpaperDimAmount" format="float" type="dimen">0.05</item>
 
     <!-- Configure emergency apn -->
     <string name="config_emergency_apn" translatable="false">sos</string>

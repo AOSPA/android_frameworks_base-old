@@ -88,12 +88,6 @@ class FaceAuthenticationClient extends AuthenticationClient<IBiometricsFace> {
                 "face_custom_success_error", 0) == 1;
     }
 
-    @NonNull
-    @Override
-    protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return new CompositeCallback(createALSCallback(), callback);
-    }
-
     @Override
     protected void startHalOperation() {
         try {
@@ -192,6 +186,7 @@ class FaceAuthenticationClient extends AuthenticationClient<IBiometricsFace> {
 
     @Override
     public void onAcquired(int acquireInfo, int vendorCode) {
+
         mLastAcquire = acquireInfo;
 
         if (acquireInfo == FaceManager.FACE_ACQUIRED_RECALIBRATE) {

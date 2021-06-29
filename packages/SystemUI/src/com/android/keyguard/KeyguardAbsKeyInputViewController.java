@@ -173,7 +173,6 @@ public abstract class KeyguardAbsKeyInputViewController<T extends KeyguardAbsKey
             getKeyguardSecurityCallback().reportUnlockAttempt(userId, true, 0);
             if (dismissKeyguard) {
                 mDismissing = true;
-                mLatencyTracker.onActionStart(LatencyTracker.ACTION_LOCKSCREEN_UNLOCK);
                 getKeyguardSecurityCallback().dismiss(true, userId);
             }
         } else {

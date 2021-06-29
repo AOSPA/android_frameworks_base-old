@@ -92,6 +92,10 @@ public class VcnGatewayConnectionConfigTest {
             builder.addExposedCapability(caps);
         }
 
+        for (int caps : UNDERLYING_CAPS) {
+            builder.addRequiredUnderlyingCapability(caps);
+        }
+
         return builder.build();
     }
 
@@ -137,7 +141,9 @@ public class VcnGatewayConnectionConfigTest {
     @Test
     public void testBuilderRequiresNonEmptyExposedCaps() {
         try {
-            newBuilder().build();
+            newBuilder()
+                    .addRequiredUnderlyingCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+                    .build();
 
             fail("Expected exception due to invalid exposed capabilities");
         } catch (IllegalArgumentException e) {
@@ -180,6 +186,10 @@ public class VcnGatewayConnectionConfigTest {
         int[] exposedCaps = config.getExposedCapabilities();
         Arrays.sort(exposedCaps);
         assertArrayEquals(EXPOSED_CAPS, exposedCaps);
+
+        int[] underlyingCaps = config.getRequiredUnderlyingCapabilities();
+        Arrays.sort(underlyingCaps);
+        assertArrayEquals(UNDERLYING_CAPS, underlyingCaps);
 
         assertEquals(TUNNEL_CONNECTION_PARAMS, config.getTunnelConnectionParams());
 

@@ -23,7 +23,6 @@ import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
-import android.os.UserHandle;
 import android.provider.Settings;
 import android.testing.AndroidTestingRunner;
 
@@ -56,18 +55,17 @@ public class AccessibilityButtonModeObserverTest extends SysuiTestCase {
 
     @Before
     public void setUp() {
-        Settings.Secure.putIntForUser(mContext.getContentResolver(),
+        Settings.Secure.putInt(mContext.getContentResolver(),
                 Settings.Secure.ACCESSIBILITY_BUTTON_MODE,
-                Settings.Secure.ACCESSIBILITY_BUTTON_MODE_NAVIGATION_BAR, UserHandle.USER_CURRENT);
+                Settings.Secure.ACCESSIBILITY_BUTTON_MODE_NAVIGATION_BAR);
         mAccessibilityButtonModeObserver = new AccessibilityButtonModeObserver(mContext);
     }
 
     @Test
     public void onChange_haveListener_invokeCallback() {
         mAccessibilityButtonModeObserver.addListener(mListener);
-        Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_BUTTON_MODE, TEST_A11Y_BTN_MODE_VALUE,
-                UserHandle.USER_CURRENT);
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_BUTTON_MODE, TEST_A11Y_BTN_MODE_VALUE);
 
         mAccessibilityButtonModeObserver.mContentObserver.onChange(false);
 
@@ -78,9 +76,8 @@ public class AccessibilityButtonModeObserverTest extends SysuiTestCase {
     public void onChange_noListener_noInvokeCallback() {
         mAccessibilityButtonModeObserver.addListener(mListener);
         mAccessibilityButtonModeObserver.removeListener(mListener);
-        Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_BUTTON_MODE, TEST_A11Y_BTN_MODE_VALUE,
-                UserHandle.USER_CURRENT);
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_BUTTON_MODE, TEST_A11Y_BTN_MODE_VALUE);
 
         mAccessibilityButtonModeObserver.mContentObserver.onChange(false);
 
@@ -89,9 +86,8 @@ public class AccessibilityButtonModeObserverTest extends SysuiTestCase {
 
     @Test
     public void getCurrentAccessibilityButtonMode_expectedValue() {
-        Settings.Secure.putIntForUser(mContext.getContentResolver(),
-                Settings.Secure.ACCESSIBILITY_BUTTON_MODE, TEST_A11Y_BTN_MODE_VALUE,
-                UserHandle.USER_CURRENT);
+        Settings.Secure.putInt(mContext.getContentResolver(),
+                Settings.Secure.ACCESSIBILITY_BUTTON_MODE, TEST_A11Y_BTN_MODE_VALUE);
 
         final int actualValue =
                 mAccessibilityButtonModeObserver.getCurrentAccessibilityButtonMode();

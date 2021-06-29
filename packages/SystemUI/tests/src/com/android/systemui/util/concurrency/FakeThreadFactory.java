@@ -27,7 +27,6 @@ import java.util.concurrent.Executor;
 public class FakeThreadFactory implements ThreadFactory {
     private final FakeExecutor mFakeExecutor;
     private Handler mHandler;
-    private Looper mLooper;
 
     public FakeThreadFactory(FakeExecutor fakeExecutor) {
         mFakeExecutor = fakeExecutor;
@@ -37,17 +36,8 @@ public class FakeThreadFactory implements ThreadFactory {
         mHandler = handler;
     }
 
-    public void setLooper(Looper looper) {
-        mLooper = looper;
-    }
-
     @Override
-    public Looper buildLooperOnNewThread(String threadName) {
-        return mLooper;
-    }
-
-    @Override
-    public Handler buildHandlerOnNewThread(String threadName) {
+    public Handler builderHandlerOnNewThread(String threadName) {
         return mHandler;
     }
 

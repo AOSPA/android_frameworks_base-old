@@ -93,8 +93,8 @@ public:
      */
     float computeStretchedPositionY(float normalizedY) const;
 
-    sk_sp<SkShader> getShader(float width, float height, const sk_sp<SkImage>& snapshotImage,
-                              const SkMatrix* matrix) const;
+    sk_sp<SkShader> getShader(float width, float height,
+                              const sk_sp<SkImage>& snapshotImage) const;
 
     float maxStretchAmountX = 0;
     float maxStretchAmountY = 0;
@@ -110,7 +110,8 @@ public:
     }
 
     bool requiresLayer() const {
-        return !isEmpty();
+        return !(isEmpty() ||
+                 Properties::stretchEffectBehavior == StretchEffectBehavior::UniformScale);
     }
 
 private:

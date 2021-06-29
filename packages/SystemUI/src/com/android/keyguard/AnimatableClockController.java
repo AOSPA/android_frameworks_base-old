@@ -37,8 +37,7 @@ import java.util.Objects;
 import java.util.TimeZone;
 
 /**
- * Controller for an AnimatableClockView on the keyguard. Instantiated by
- * {@link KeyguardClockSwitchController}.
+ * Controller for an AnimatableClockView. Instantiated by {@link KeyguardClockSwitchController}.
  */
 public class AnimatableClockController extends ViewController<AnimatableClockView> {
     private static final int FORMAT_NUMBER = 1234567890;
@@ -47,14 +46,12 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
     private final BroadcastDispatcher mBroadcastDispatcher;
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private final KeyguardBypassController mBypassController;
-    private final BatteryController mBatteryController;
     private final int mDozingColor = Color.WHITE;
     private int mLockScreenColor;
 
     private boolean mIsDozing;
     private boolean mIsCharging;
     private float mDozeAmount;
-    boolean mKeyguardShowing;
     private Locale mLocale;
 
     private final NumberFormat mBurmeseNf = NumberFormat.getInstance(Locale.forLanguageTag("my"));
@@ -76,72 +73,28 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
         mBroadcastDispatcher = broadcastDispatcher;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mBypassController = bypassController;
-        mBatteryController = batteryController;
 
         mBurmeseNumerals = mBurmeseNf.format(FORMAT_NUMBER);
         mBurmeseLineSpacing = getContext().getResources().getFloat(
                 R.dimen.keyguard_clock_line_spacing_scale_burmese);
         mDefaultLineSpacing = getContext().getResources().getFloat(
                 R.dimen.keyguard_clock_line_spacing_scale);
-    }
 
-    private void reset() {
-        mView.animateDoze(mIsDozing, false);
-    }
-
-    private final BatteryController.BatteryStateChangeCallback mBatteryCallback =
-            new BatteryController.BatteryStateChangeCallback() {
-        @Override
-        public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
-            if (mKeyguardShowing && !mIsCharging && charging) {
-                mView.animateCharge(mIsDozing);
+        batteryController.addCallback(new BatteryController.BatteryStateChangeCallback() {
+            @Override
+            public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
+                if (!mIsCharging && charging) {
+                    mView.animateCharge(mIsDozing);
+                }
+                mIsCharging = charging;
             }
-            mIsCharging = charging;
-        }
-    };
+        });
+    }
 
-    private final BroadcastReceiver mLocaleBroadcastReceiver = new BroadcastReceiver() {
+    private BroadcastReceiver mLocaleBroadcastReceiver = new BroadcastReceiver() {
         @Override
         public void onReceive(Context context, Intent intent) {
             updateLocale();
-        }
-    };
-
-    private final StatusBarStateController.StateListener mStatusBarStatePersistentListener =
-            new StatusBarStateController.StateListener() {
-                @Override
-                public void onDozeAmountChanged(float linear, float eased) {
-                    boolean noAnimation = (mDozeAmount == 0f && linear == 1f)
-                            || (mDozeAmount == 1f && linear == 0f);
-                    boolean isDozing = linear > mDozeAmount;
-                    mDozeAmount = linear;
-                    if (mIsDozing != isDozing) {
-                        mIsDozing = isDozing;
-                        mView.animateDoze(mIsDozing, !noAnimation);
-                    }
-                }
-            };
-
-    private final KeyguardUpdateMonitorCallback mKeyguardUpdateMonitorCallback =
-            new KeyguardUpdateMonitorCallback() {
-        @Override
-        public void onBiometricAuthenticated(int userId, BiometricSourceType biometricSourceType,
-                boolean isStrongBiometric) {
-            // Strong auth will force the bouncer regardless of a successful face auth
-            if (biometricSourceType == BiometricSourceType.FACE
-                    && mBypassController.canBypass()
-                    && !mKeyguardUpdateMonitor.userNeedsStrongAuth()) {
-                mView.animateDisappear();
-            }
-        }
-
-        @Override
-        public void onKeyguardVisibilityChanged(boolean showing) {
-            mKeyguardShowing = showing;
-            if (!mKeyguardShowing) {
-                // reset state (ie: after animateDisappear)
-                reset();
-            }
         }
     };
 
@@ -150,33 +103,32 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
         updateLocale();
         mBroadcastDispatcher.registerReceiver(mLocaleBroadcastReceiver,
                 new IntentFilter(Intent.ACTION_LOCALE_CHANGED));
+        mStatusBarStateController.addCallback(mStatusBarStateListener);
         mIsDozing = mStatusBarStateController.isDozing();
         mDozeAmount = mStatusBarStateController.getDozeAmount();
-        mBatteryController.addCallback(mBatteryCallback);
         mKeyguardUpdateMonitor.registerCallback(mKeyguardUpdateMonitorCallback);
-        mKeyguardShowing = true;
-
-        mStatusBarStateController.removeCallback(mStatusBarStatePersistentListener);
-        mStatusBarStateController.addCallback(mStatusBarStatePersistentListener);
 
         refreshTime();
         initColors();
-        mView.animateDoze(mIsDozing, false);
     }
+
+    private final KeyguardUpdateMonitorCallback mKeyguardUpdateMonitorCallback =
+            new KeyguardUpdateMonitorCallback() {
+        @Override
+        public void onBiometricAuthenticated(int userId, BiometricSourceType biometricSourceType,
+                boolean isStrongBiometric) {
+            if (biometricSourceType == BiometricSourceType.FACE
+                    && mBypassController.canBypass()) {
+                mView.animateDisappear();
+            }
+        }
+    };
 
     @Override
     protected void onViewDetached() {
         mBroadcastDispatcher.unregisterReceiver(mLocaleBroadcastReceiver);
+        mStatusBarStateController.removeCallback(mStatusBarStateListener);
         mKeyguardUpdateMonitor.removeCallback(mKeyguardUpdateMonitorCallback);
-        mBatteryController.removeCallback(mBatteryCallback);
-        if (!mView.isAttachedToWindow()) {
-            mStatusBarStateController.removeCallback(mStatusBarStatePersistentListener);
-        }
-    }
-
-    /** Animate the clock appearance */
-    public void animateAppear() {
-        if (!mIsDozing) mView.animateAppearOnLockscreen();
     }
 
     /**
@@ -219,4 +171,19 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
         mView.setColors(mDozingColor, mLockScreenColor);
         mView.animateDoze(mIsDozing, false);
     }
+
+    private final StatusBarStateController.StateListener mStatusBarStateListener =
+            new StatusBarStateController.StateListener() {
+                @Override
+                public void onDozeAmountChanged(float linear, float eased) {
+                    boolean noAnimation = (mDozeAmount == 0f && linear == 1f)
+                            || (mDozeAmount == 1f && linear == 0f);
+                    boolean isDozing = linear > mDozeAmount;
+                    mDozeAmount = linear;
+                    if (mIsDozing != isDozing) {
+                        mIsDozing = isDozing;
+                        mView.animateDoze(mIsDozing, !noAnimation);
+                    }
+                }
+            };
 }

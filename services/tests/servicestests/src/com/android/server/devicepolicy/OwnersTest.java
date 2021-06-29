@@ -21,8 +21,6 @@ import static android.app.admin.DevicePolicyManager.DEVICE_OWNER_TYPE_FINANCED;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.Mockito.verify;
-
 import android.content.ComponentName;
 import android.os.UserHandle;
 import android.test.suitebuilder.annotation.SmallTest;
@@ -31,13 +29,8 @@ import androidx.test.runner.AndroidJUnit4;
 
 import com.android.server.devicepolicy.DevicePolicyManagerServiceTestable.OwnersTestable;
 
-import com.google.android.collect.Lists;
-
 import org.junit.Test;
 import org.junit.runner.RunWith;
-
-import java.util.ArrayList;
-import java.util.List;
 
 /**
  * Tests for the DeviceOwner object that saves & loads device and policy owner information.
@@ -49,9 +42,6 @@ import java.util.List;
 @SmallTest
 @RunWith(AndroidJUnit4.class)
 public class OwnersTest extends DpmTestBase {
-
-    private static final List<String> DEVICE_OWNER_PROTECTED_PACKAGES =
-            Lists.newArrayList("package_1", "package_2");
 
     @Test
     public void testUpgrade01() throws Exception {
@@ -81,8 +71,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_NULL);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
             assertThat(owners.getSystemUpdatePolicy()).isNull();
             assertThat(owners.getProfileOwnerKeys()).isEmpty();
 
@@ -108,8 +96,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_NULL);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
             assertThat(owners.getSystemUpdatePolicy()).isNull();
             assertThat(owners.getProfileOwnerKeys()).isEmpty();
 
@@ -150,8 +136,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_SYSTEM);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getSystemUpdatePolicy()).isNull();
             assertThat(owners.getProfileOwnerKeys()).isEmpty();
@@ -174,8 +158,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_SYSTEM);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getSystemUpdatePolicy()).isNull();
             assertThat(owners.getProfileOwnerKeys()).isEmpty();
@@ -216,8 +198,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getSystemUpdatePolicy()).isNull();
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getProfileOwnerKeys()).hasSize(2);
             assertThat(owners.getProfileOwnerComponent(10))
@@ -248,8 +228,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getSystemUpdatePolicy()).isNull();
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getProfileOwnerKeys()).hasSize(2);
             assertThat(owners.getProfileOwnerComponent(10))
@@ -304,8 +282,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_SYSTEM);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getSystemUpdatePolicy()).isNotNull();
             assertThat(owners.getSystemUpdatePolicy().getPolicyType()).isEqualTo(5);
@@ -340,8 +316,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_SYSTEM);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getSystemUpdatePolicy()).isNotNull();
             assertThat(owners.getSystemUpdatePolicy().getPolicyType()).isEqualTo(5);
@@ -370,14 +344,6 @@ public class OwnersTest extends DpmTestBase {
                     DEVICE_OWNER_TYPE_FINANCED);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_FINANCED);
-
-            owners.setDeviceOwnerProtectedPackages(
-                    owners.getDeviceOwnerPackageName(), DEVICE_OWNER_PROTECTED_PACKAGES);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEqualTo(DEVICE_OWNER_PROTECTED_PACKAGES);
-            verify(getServices().packageManagerInternal)
-                    .setDeviceOwnerProtectedPackages(
-                            owners.getDeviceOwnerPackageName(), DEVICE_OWNER_PROTECTED_PACKAGES);
         }
 
         {
@@ -387,8 +353,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.hasDeviceOwner()).isTrue();
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_FINANCED);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEqualTo(DEVICE_OWNER_PROTECTED_PACKAGES);
 
             assertThat(owners.getDeviceOwnerUserRestrictionsNeedsMigration()).isFalse();
             assertThat(owners.getProfileOwnerUserRestrictionsNeedsMigration(10)).isTrue();
@@ -403,14 +367,6 @@ public class OwnersTest extends DpmTestBase {
             // The previous device owner type should persist.
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_FINANCED);
-
-            owners.setDeviceOwnerProtectedPackages(
-                    owners.getDeviceOwnerPackageName(), new ArrayList<>());
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
-            verify(getServices().packageManagerInternal)
-                    .setDeviceOwnerProtectedPackages(
-                            owners.getDeviceOwnerPackageName(), new ArrayList<>());
         }
 
         {
@@ -420,8 +376,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.hasDeviceOwner()).isTrue();
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_FINANCED);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
             assertThat(owners.getDeviceOwnerUserRestrictionsNeedsMigration()).isFalse();
             assertThat(owners.getProfileOwnerUserRestrictionsNeedsMigration(10)).isTrue();
@@ -460,8 +414,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_NULL);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
 
             assertThat(owners.getSystemUpdatePolicy()).isNull();
@@ -483,8 +435,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_NULL);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
 
 
             assertThat(owners.getSystemUpdatePolicy()).isNull();
@@ -524,8 +474,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_NULL);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
             assertThat(owners.getProfileOwnerKeys()).isEmpty();
 
             assertThat(owners.getSystemUpdatePolicy()).isNotNull();
@@ -547,8 +495,6 @@ public class OwnersTest extends DpmTestBase {
             assertThat(owners.getDeviceOwnerUserId()).isEqualTo(UserHandle.USER_NULL);
             assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                     DEVICE_OWNER_TYPE_DEFAULT);
-            assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                    .isEmpty();
             assertThat(owners.getProfileOwnerKeys()).isEmpty();
 
             assertThat(owners.getSystemUpdatePolicy()).isNotNull();
@@ -579,8 +525,6 @@ public class OwnersTest extends DpmTestBase {
         assertThat(owners.getDeviceOwnerFile().exists()).isTrue();
         assertThat(owners.getDeviceOwnerType(owners.getDeviceOwnerPackageName())).isEqualTo(
                 DEVICE_OWNER_TYPE_DEFAULT);
-        assertThat(owners.getDeviceOwnerProtectedPackages(owners.getDeviceOwnerPackageName()))
-                .isEmpty();
         assertThat(owners.getProfileOwnerFile(10).exists()).isTrue();
         assertThat(owners.getProfileOwnerFile(11).exists()).isTrue();
 
@@ -588,13 +532,6 @@ public class OwnersTest extends DpmTestBase {
         owners.setDeviceOwnerType(previousDeviceOwnerPackageName, DEVICE_OWNER_TYPE_FINANCED);
         assertThat(owners.getDeviceOwnerType(previousDeviceOwnerPackageName)).isEqualTo(
                 DEVICE_OWNER_TYPE_FINANCED);
-        owners.setDeviceOwnerProtectedPackages(
-                previousDeviceOwnerPackageName, DEVICE_OWNER_PROTECTED_PACKAGES);
-        assertThat(owners.getDeviceOwnerProtectedPackages(previousDeviceOwnerPackageName))
-                .isEqualTo(DEVICE_OWNER_PROTECTED_PACKAGES);
-        verify(getServices().packageManagerInternal)
-                .setDeviceOwnerProtectedPackages(
-                        owners.getDeviceOwnerPackageName(), DEVICE_OWNER_PROTECTED_PACKAGES);
 
         // Then clear all information and save.
         owners.clearDeviceOwner();
@@ -615,10 +552,5 @@ public class OwnersTest extends DpmTestBase {
 
         assertThat(owners.getDeviceOwnerType(previousDeviceOwnerPackageName)).isEqualTo(
                 DEVICE_OWNER_TYPE_DEFAULT);
-        assertThat(owners.getDeviceOwnerProtectedPackages(previousDeviceOwnerPackageName))
-                .isEmpty();
-        verify(getServices().packageManagerInternal)
-                .setDeviceOwnerProtectedPackages(
-                        previousDeviceOwnerPackageName, new ArrayList<>());
     }
 }

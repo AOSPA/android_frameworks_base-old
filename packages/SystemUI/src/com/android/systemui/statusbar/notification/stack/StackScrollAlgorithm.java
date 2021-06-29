@@ -24,8 +24,8 @@ import android.util.MathUtils;
 import android.view.View;
 import android.view.ViewGroup;
 
-import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.R;
 import com.android.systemui.statusbar.NotificationShelf;
 import com.android.systemui.statusbar.notification.dagger.SilentHeader;
 import com.android.systemui.statusbar.notification.row.ActivatableNotificationView;
@@ -156,8 +156,8 @@ public class StackScrollAlgorithm {
 
     private void updateClipping(StackScrollAlgorithmState algorithmState,
             AmbientState ambientState) {
-        float drawStart = ambientState.isOnKeyguard() ? 0
-                : ambientState.getStackY() - ambientState.getScrollY();
+        float drawStart = !ambientState.isOnKeyguard()
+                ? ambientState.getStackY() - ambientState.getScrollY() : 0;
         float clipStart = 0;
         int childCount = algorithmState.visibleChildren.size();
         boolean firstHeadsUp = true;
@@ -225,8 +225,6 @@ public class StackScrollAlgorithm {
         // already accounted for by the top padding and doesn't need an additional adaption
         scrollY = Math.max(0, scrollY);
         state.scrollY = (int) (scrollY + bottomOverScroll);
-        state.mCurrentYPosition = -state.scrollY;
-        state.mCurrentExpandedYPosition = -state.scrollY;
 
         //now init the visible children and update paddings
         int childCount = hostView.getChildCount();
@@ -258,14 +256,16 @@ public class StackScrollAlgorithm {
             }
         }
 
-        // Save the index of first view in shelf from when shade is fully
+        // Save (height of view before shelf, index of first view in shelf) from when shade is fully
         // expanded. Consider updating these states in updateContentView instead so that we don't
         // have to recalculate in every frame.
         float currentY = -scrollY;
         if (!ambientState.isOnKeyguard()) {
             currentY += mNotificationScrimPadding;
         }
+        float previousY = 0;
         state.firstViewInShelf = null;
+        state.viewHeightBeforeShelf = -1;
         for (int i = 0; i < state.visibleChildren.size(); i++) {
             final ExpandableView view = state.visibleChildren.get(i);
 
@@ -283,8 +283,17 @@ public class StackScrollAlgorithm {
                         && !(view instanceof FooterView)
                         && state.firstViewInShelf == null) {
                     state.firstViewInShelf = view;
+                    // There might be a section gap right before the shelf.
+                    // Limit the height of the view before the shelf so that it does not include
+                    // a gap and become taller than it normally is.
+                    state.viewHeightBeforeShelf = Math.min(getMaxAllowedChildHeight(view),
+                            ambientState.getStackEndHeight()
+                            - ambientState.getShelf().getIntrinsicHeight()
+                            - mPaddingBetweenElements
+                            - previousY);
                 }
             }
+            previousY = currentY;
             currentY = currentY
                     + getMaxAllowedChildHeight(view)
                     + mPaddingBetweenElements;
@@ -312,14 +321,14 @@ public class StackScrollAlgorithm {
      */
     private void updatePositionsForState(StackScrollAlgorithmState algorithmState,
             AmbientState ambientState) {
+        // The y coordinate of the current child.
+        float currentYPosition = -algorithmState.scrollY;
         if (!ambientState.isOnKeyguard()) {
-            algorithmState.mCurrentYPosition += mNotificationScrimPadding;
-            algorithmState.mCurrentExpandedYPosition += mNotificationScrimPadding;
+            currentYPosition += mNotificationScrimPadding;
         }
-
         int childCount = algorithmState.visibleChildren.size();
         for (int i = 0; i < childCount; i++) {
-            updateChild(i, algorithmState, ambientState);
+            currentYPosition = updateChild(i, algorithmState, ambientState, currentYPosition);
         }
     }
 
@@ -339,14 +348,14 @@ public class StackScrollAlgorithm {
             StackScrollAlgorithmState algorithmState,
             AmbientState ambientState) {
 
-        final boolean showingShelf = ambientState.getShelf() != null
+        final boolean isShowingShelf = ambientState.getShelf() != null
                 && algorithmState.firstViewInShelf != null;
 
-        final float shelfHeight = showingShelf ? ambientState.getShelf().getIntrinsicHeight() : 0f;
-        final float scrimPadding = ambientState.isOnKeyguard() ? 0 : mNotificationScrimPadding;
+        final float stackHeight = ambientState.getStackHeight()
+                - (isShowingShelf ? ambientState.getShelf().getIntrinsicHeight() : 0f);
 
-        final float stackHeight = ambientState.getStackHeight()  - shelfHeight - scrimPadding;
-        final float stackEndHeight = ambientState.getStackEndHeight() - shelfHeight - scrimPadding;
+        float stackEndHeight = ambientState.getStackEndHeight()
+                - (isShowingShelf ? ambientState.getShelf().getIntrinsicHeight() : 0f);
 
         return stackHeight / stackEndHeight;
     }
@@ -359,27 +368,27 @@ public class StackScrollAlgorithm {
      * {@link StackScrollAlgorithmState#visibleChildren}.
      * @param algorithmState   The overall output state of the algorithm.
      * @param ambientState     The input state provided to the algorithm.
+     * @param currentYPosition The Y position of the current pass of the algorithm.  For a forward
+     *                         pass, this should be the top of the child; for a reverse pass, the
+     *                         bottom of the child.
+     * @return The Y position after laying out the child.  This will be the {@code currentYPosition}
+     * for the next call to this method, after adjusting for any gaps between children.
      */
-    protected void updateChild(
+    protected float updateChild(
             int i,
             StackScrollAlgorithmState algorithmState,
-            AmbientState ambientState) {
+            AmbientState ambientState,
+            float currentYPosition) {
 
         ExpandableView view = algorithmState.visibleChildren.get(i);
         ExpandableViewState viewState = view.getViewState();
         viewState.location = ExpandableViewState.LOCATION_UNKNOWN;
 
-        final boolean isHunGoingToShade = ambientState.isShadeExpanded()
-                && view == ambientState.getTrackedHeadsUpRow();
-        if (isHunGoingToShade) {
-            // Keep 100% opacity for heads up notification going to shade.
-        } else if (ambientState.isOnKeyguard()) {
-            // Adjust alpha for wakeup to lockscreen.
-            viewState.alpha = 1f - ambientState.getHideAmount();
-        } else if (ambientState.isExpansionChanging()) {
-            // Adjust alpha for shade open & close.
+        if (ambientState.isExpansionChanging() && !ambientState.isOnKeyguard()) {
             viewState.alpha = Interpolators.getNotificationScrimAlpha(
-                    ambientState.getExpansionFraction(), true /* notification */);
+                    ambientState.getExpansionFraction());
+        } else {
+            viewState.alpha = 1f - ambientState.getHideAmount();
         }
 
         if (view.mustStayOnScreen() && viewState.yTranslation >= 0) {
@@ -398,21 +407,23 @@ public class StackScrollAlgorithm {
                         ambientState.getSectionProvider(), i,
                         view, getPreviousView(i, algorithmState));
         if (applyGapHeight) {
-            algorithmState.mCurrentYPosition += expansionFraction * mGapHeight;
-            algorithmState.mCurrentExpandedYPosition += mGapHeight;
+            currentYPosition += expansionFraction * mGapHeight;
         }
 
-        viewState.yTranslation = algorithmState.mCurrentYPosition;
+        viewState.yTranslation = currentYPosition;
+        if (view instanceof SectionHeaderView) {
+            // Add padding before sections for overscroll effect.
+            viewState.yTranslation += expansionFraction * ambientState.getSectionPadding();
+        }
 
         if (view instanceof FooterView) {
-            final boolean shadeClosed = !ambientState.isShadeExpanded();
             final boolean isShelfShowing = algorithmState.firstViewInShelf != null;
 
-            final float footerEnd = algorithmState.mCurrentExpandedYPosition
-                    + view.getIntrinsicHeight();
-            final boolean noSpaceForFooter = footerEnd > ambientState.getStackEndHeight();
-            ((FooterView.FooterViewState) viewState).hideContent =
-                    shadeClosed || isShelfShowing || noSpaceForFooter;
+            final float footerEnd = viewState.yTranslation + view.getIntrinsicHeight();
+            final boolean noSpaceForFooter = footerEnd > ambientState.getStackHeight();
+
+            viewState.hidden = isShelfShowing
+                    || (!ambientState.isExpansionChanging() && noSpaceForFooter);
 
         } else if (view != ambientState.getTrackedHeadsUpRow()) {
             if (ambientState.isExpansionChanging()) {
@@ -439,16 +450,23 @@ public class StackScrollAlgorithm {
             }
 
             // Clip height of view right before shelf.
-            viewState.height = (int) (getMaxAllowedChildHeight(view) * expansionFraction);
+            float maxViewHeight = getMaxAllowedChildHeight(view);
+            if (ambientState.isExpansionChanging()
+                    && algorithmState.viewHeightBeforeShelf != -1) {
+                final int indexOfFirstViewInShelf = algorithmState.visibleChildren.indexOf(
+                        algorithmState.firstViewInShelf);
+                if (i == indexOfFirstViewInShelf - 1) {
+                    maxViewHeight = algorithmState.viewHeightBeforeShelf;
+                }
+            }
+            viewState.height = (int) MathUtils.lerp(maxViewHeight * START_FRACTION, maxViewHeight,
+                    expansionFraction);
         }
 
-        algorithmState.mCurrentYPosition += viewState.height
-                + expansionFraction * mPaddingBetweenElements;
-        algorithmState.mCurrentExpandedYPosition += view.getIntrinsicHeight()
-                + mPaddingBetweenElements;
-
-        setLocation(view.getViewState(), algorithmState.mCurrentYPosition, i);
+        currentYPosition += viewState.height + expansionFraction * mPaddingBetweenElements;
+        setLocation(view.getViewState(), currentYPosition, i);
         viewState.yTranslation += ambientState.getStackY();
+        return currentYPosition;
     }
 
     /**
@@ -534,7 +552,7 @@ public class StackScrollAlgorithm {
                 continue;
             }
             ExpandableNotificationRow row = (ExpandableNotificationRow) child;
-            if (!(row.isHeadsUp() || row.isHeadsUpAnimatingAway())) {
+            if (!row.isHeadsUp()) {
                 continue;
             }
             ExpandableViewState childState = row.getViewState();
@@ -581,7 +599,6 @@ public class StackScrollAlgorithm {
                 }
             }
             if (row.isHeadsUpAnimatingAway()) {
-                childState.yTranslation = Math.max(childState.yTranslation, mHeadsUpInset);
                 childState.hidden = false;
             }
         }
@@ -714,21 +731,14 @@ public class StackScrollAlgorithm {
         public ExpandableView firstViewInShelf;
 
         /**
+         * Height of view right before the shelf.
+         */
+        public float viewHeightBeforeShelf;
+
+        /**
          * The children from the host view which are not gone.
          */
         public final ArrayList<ExpandableView> visibleChildren = new ArrayList<>();
-
-        /**
-         * Y position of the current view during updating children
-         * with expansion factor applied.
-         */
-        private int mCurrentYPosition;
-
-        /**
-         * Y position of the current view during updating children
-         * without applying the expansion factor.
-         */
-        private int mCurrentExpandedYPosition;
     }
 
     /**

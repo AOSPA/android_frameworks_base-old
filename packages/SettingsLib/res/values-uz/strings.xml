@@ -118,7 +118,7 @@
     <string name="bluetooth_pairing_decline" msgid="6483118841204885890">"Bekor qilish"</string>
     <string name="bluetooth_pairing_will_share_phonebook" msgid="3064334458659165176">"Agar ulanishga ruxsat bersangiz, ulangan vaqtda kontakt va qo‘ng‘iroqlaringiz tarixiga kirishi mumkin."</string>
     <string name="bluetooth_pairing_error_message" msgid="6626399020672335565">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> bilan biriktirib bo‘lmadi."</string>
-    <string name="bluetooth_pairing_pin_error_message" msgid="264422127613704940">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> qurilmasiga ulanilmadi, chunki PIN kod yoki parol xato kiritildi."</string>
+    <string name="bluetooth_pairing_pin_error_message" msgid="264422127613704940">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> qurilmasiga ulanib bo‘lmadi, chunki PIN-kod yoki parol noto‘g‘ri kiritildi."</string>
     <string name="bluetooth_pairing_device_down_error_message" msgid="2554424863101358857">"“<xliff:g id="DEVICE_NAME">%1$s</xliff:g>” qurilmasi bilan aloqa o‘rnatib bo‘lmayapti."</string>
     <string name="bluetooth_pairing_rejected_error_message" msgid="5943444352777314442">"<xliff:g id="DEVICE_NAME">%1$s</xliff:g> biriktirish so‘rovini rad qildi."</string>
     <string name="bluetooth_talkback_computer" msgid="3736623135703893773">"Kompyuter"</string>
@@ -156,7 +156,7 @@
     <string name="launch_defaults_some" msgid="3631650616557252926">"Ba’zi birlamchi sozlamalar o‘rnatilgan"</string>
     <string name="launch_defaults_none" msgid="8049374306261262709">"Birlamchi sozlamalar belgilanmagan"</string>
     <string name="tts_settings" msgid="8130616705989351312">"Matnni nutqqa aylantirish sozlamalari"</string>
-    <string name="tts_settings_title" msgid="7602210956640483039">"Matnni nutqqa aylantirish"</string>
+    <string name="tts_settings_title" msgid="7602210956640483039">"Nutq sintezi"</string>
     <string name="tts_default_rate_title" msgid="3964187817364304022">"Nutq tezligi"</string>
     <string name="tts_default_rate_summary" msgid="3781937042151716987">"Matnni o‘qish tezligi"</string>
     <string name="tts_default_pitch_title" msgid="6988592215554485479">"Ohang"</string>
@@ -179,7 +179,7 @@
     <string name="tts_status_checking" msgid="8026559918948285013">"Tekshirilmoqda…"</string>
     <string name="tts_engine_settings_title" msgid="7849477533103566291">"<xliff:g id="TTS_ENGINE_NAME">%s</xliff:g> sozlamalari"</string>
     <string name="tts_engine_settings_button" msgid="477155276199968948">"Mexanizm sozlamalarini ishga tushirish"</string>
-    <string name="tts_engine_preference_section_title" msgid="3861562305498624904">"Asosiy vosita"</string>
+    <string name="tts_engine_preference_section_title" msgid="3861562305498624904">"Standart tizim"</string>
     <string name="tts_general_section_title" msgid="8919671529502364567">"Umumiy"</string>
     <string name="tts_reset_speech_pitch_title" msgid="7149398585468413246">"Standart ohang"</string>
     <string name="tts_reset_speech_pitch_summary" msgid="6822904157021406449">"Matnni o‘qish ohangini standart holatga qaytarish."</string>
@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Simsiz monitor sertifikatlari"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Batafsil Wi-Fi jurnali"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Wi‑Fi tarmoqni taqsimlab skanlash"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Wi‑Fi MAC manzilini muddatli tasodiflash"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi‑Fi tarmoqdagi tasodifiy MAC manzil"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Mobil internet doim yoniq tursin"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Modem rejimida apparatli tezlashtirish"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Bluetooth qurilmalarini nomlarisiz ko‘rsatish"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Klip, maydon va h.k. chegaralarini ko‘rsatish"</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"O‘ngdan chapga qarab yozish"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Barcha tillarda o‘ngdan chapga qarab yozish"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"Oyna xiralashga ruxsat"</string>
     <string name="force_msaa" msgid="4081288296137775550">"4x MSAAni yoqish"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"OpenGL ES 2.0 ilovasidan 4x MSAAni yoqish"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"To‘g‘ri burchakli bo‘lmagan kesishma amallarini tuzatish"</string>
@@ -452,16 +451,16 @@
     <string name="power_remaining_duration_shutdown_imminent" product="tablet" msgid="7703677921000858479">"Planshet tez orada oʻchib qolishi mumkin (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_remaining_duration_shutdown_imminent" product="device" msgid="4374784375644214578">"Qurilma tez orada oʻchib qolishi mumkin (<xliff:g id="LEVEL">%1$s</xliff:g>)"</string>
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="STATE">%2$s</xliff:g>"</string>
-    <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"Toʻlishiga <xliff:g id="TIME">%1$s</xliff:g> qoldi"</string>
-    <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> – Toʻlishiga <xliff:g id="TIME">%2$s</xliff:g> qoldi"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> – Quvvatlash vaqtincha cheklangan"</string>
+    <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"Quvvat olishiga <xliff:g id="TIME">%1$s</xliff:g> qoldi"</string>
+    <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - Quvvat olishiga <xliff:g id="TIME">%2$s</xliff:g> qoldi"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> – Batareya uchun optimizatsiya"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Noma’lum"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Quvvat olmoqda"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Tezkor quvvat olmoqda"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Sekin quvvat olmoqda"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Simsiz quvvat olmoqda"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Quvvat olmayapti"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Ulangan, quvvat olmayapti"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Ulangan, lekin quvvat olmayapti"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Quvvat oldi"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Administrator tomonidan boshqariladi"</string>
     <string name="disabled" msgid="8017887509554714950">"Yoqilmagan"</string>
@@ -507,7 +506,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Signal va eslatmalar"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Signal va eslatmalarni sozlashga ruxsat berish"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Signal va eslatmalar"</string>
-    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"Bu ilovaga signal oʻrnatish va vaqtga asoslangan amallarni rejalashtirishga ruxsat berish. Bunda ilovaga orqa fonda ishlashiga imkon beriladi, shu sababli batareya ortiqcha sarflanishi mumkin.\n\nAgar bu ruxsat oʻchirilsa, ushbu ilova tomonidan rejalashtirilgan mavjud signallar va vaqtga asoslangan tadbirlar ishlamaydi."</string>
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Bu ilovaga signal oʻrnatish va boshqa amallarni rejalashtirishga ruxsat berish Bu ilova telefon qoʻlingizda emasligida ham ishlaydi va batareya quvvatini koʻproq sarflaydi. Agar ruxsat berilmasa, bu ilova odatiy ishlaydi va uning signallari rejalashtirilmaydi."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Bu ilovaga signal oʻrnatish va boshqa amallarni rejalashtirishga ruxsat berish Bu ilova planshet qoʻlingizda emasligida ham ishlaydi va batareya quvvatini koʻproq sarflaydi. Agar ruxsat berilmasa, bu ilova odatiy ishlaydi va uning signallari rejalashtirilmaydi."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Bu ilovaga signal oʻrnatish va boshqa amallarni rejalashtirishga ruxsat berish Bu ilova qurilma qoʻlingizda emasligida ham ishlaydi va batareya quvvatini koʻproq sarflaydi. Agar ruxsat berilmasa, bu ilova odatiy ishlaydi va uning signallari rejalashtirilmaydi."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"reja, signal, eslatma, soat"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Yoqish"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"Bezovta qilinmasin rejimini yoqing"</string>

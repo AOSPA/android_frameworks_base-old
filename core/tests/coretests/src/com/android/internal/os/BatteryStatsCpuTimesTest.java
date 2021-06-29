@@ -363,6 +363,7 @@ public class BatteryStatsCpuTimesTest {
             assertEquals("Unexpected system cpu time for uid=" + testUids[i],
                     uidTimesUs[i][1], u.getSystemCpuTimeUs(STATS_SINCE_CHARGED));
         }
+        verify(mCpuUidUserSysTimeReader).removeUid(isolatedUid);
 
         // Add an isolated uid mapping and repeat the test.
 
@@ -452,6 +453,7 @@ public class BatteryStatsCpuTimesTest {
         }
         assertNull("There shouldn't be an entry for invalid uid=" + invalidUid,
                 mBatteryStatsImpl.getUidStats().get(invalidUid));
+        verify(mCpuUidUserSysTimeReader).removeUid(invalidUid);
     }
 
     @Test
@@ -941,6 +943,7 @@ public class BatteryStatsCpuTimesTest {
             assertNull("Unexpected screen-off cpu times for uid=" + testUids[i],
                     u.getScreenOffCpuFreqTimes(STATS_SINCE_CHARGED));
         }
+        verify(mCpuUidFreqTimeReader).removeUid(isolatedUid);
 
 
         // Add an isolated uid mapping and repeat the test.
@@ -1035,6 +1038,7 @@ public class BatteryStatsCpuTimesTest {
         }
         assertNull("There shouldn't be an entry for invalid uid=" + invalidUid,
                 mBatteryStatsImpl.getUidStats().get(invalidUid));
+        verify(mCpuUidFreqTimeReader).removeUid(invalidUid);
     }
 
     @Test
@@ -1138,6 +1142,7 @@ public class BatteryStatsCpuTimesTest {
         }
         assertNull("There shouldn't be an entry for invalid uid=" + invalidUid,
                 mBatteryStatsImpl.getUidStats().get(invalidUid));
+        verify(mCpuUidActiveTimeReader).removeUid(invalidUid);
     }
 
     @Test
@@ -1254,6 +1259,7 @@ public class BatteryStatsCpuTimesTest {
         }
         assertNull("There shouldn't be an entry for invalid uid=" + invalidUid,
                 mBatteryStatsImpl.getUidStats().get(invalidUid));
+        verify(mCpuUidClusterTimeReader).removeUid(invalidUid);
     }
 
     @Test

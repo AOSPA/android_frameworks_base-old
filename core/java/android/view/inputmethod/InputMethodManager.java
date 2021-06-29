@@ -49,6 +49,7 @@ import android.content.ComponentName;
 import android.content.ContentResolver;
 import android.content.Context;
 import android.content.pm.PackageManager;
+import android.graphics.Matrix;
 import android.graphics.Rect;
 import android.inputmethodservice.InputMethodService;
 import android.os.Binder;
@@ -442,6 +443,17 @@ public final class InputMethodManager {
     private CursorAnchorInfo mCursorAnchorInfo = null;
 
     /**
+     * A special {@link Matrix} that can be provided by the system when this instance is running
+     * inside a virtual display that is managed by {@link android.app.ActivityView}.
+     *
+     * <p>If this is non-{@code null}, {@link #updateCursorAnchorInfo(View, CursorAnchorInfo)}
+     * should be adjusted with this {@link Matrix}.</p>
+     *
+     * <p>{@code null} when not used.</p>
+     */
+    private Matrix mActivityViewToScreenMatrix = null;
+
+    /**
      * As reported by {@link InputBindResult}. This value is determined by
      * {@link com.android.internal.R.styleable#InputMethod_suppressesSpellChecking}.
      */
@@ -508,6 +520,7 @@ public final class InputMethodManager {
     static final int MSG_TIMEOUT_INPUT_EVENT = 6;
     static final int MSG_FLUSH_INPUT_EVENT = 7;
     static final int MSG_REPORT_FULLSCREEN_MODE = 10;
+    static final int MSG_UPDATE_ACTIVITY_VIEW_TO_SCREEN_MATRIX = 30;
 
     private static boolean isAutofillUIShowing(View servedView) {
         AutofillManager afm = servedView.getContext().getSystemService(AutofillManager.class);
@@ -882,6 +895,7 @@ public final class InputMethodManager {
                                 InputMethodSessionWrapper.createOrNull(res.method);
                         mCurId = res.id;
                         mBindSequence = res.sequence;
+                        mActivityViewToScreenMatrix = res.getActivityViewToScreenMatrix();
                         mIsInputMethodSuppressingSpellChecker =
                                 res.isInputMethodSuppressingSpellChecker;
                     }
@@ -988,6 +1002,45 @@ public final class InputMethodManager {
                     }
                     return;
                 }
+                case MSG_UPDATE_ACTIVITY_VIEW_TO_SCREEN_MATRIX: {
+                    final float[] matrixValues = (float[]) msg.obj;
+                    final int bindSequence = msg.arg1;
+                    synchronized (mH) {
+                        if (mBindSequence != bindSequence) {
+                            return;
+                        }
+                        if (matrixValues == null || mActivityViewToScreenMatrix == null) {
+                            // Either InputBoundResult#mActivityViewToScreenMatrixValues is null
+                            // OR this app is unbound from the parent ActivityView. In this case,
+                            // calling updateCursorAnchorInfo() isn't safe. Only clear the matrix.
+                            mActivityViewToScreenMatrix = null;
+                            return;
+                        }
+
+                        final float[] currentValues = new float[9];
+                        mActivityViewToScreenMatrix.getValues(currentValues);
+                        if (Arrays.equals(currentValues, matrixValues)) {
+                            return;
+                        }
+                        mActivityViewToScreenMatrix.setValues(matrixValues);
+
+                        if (mCursorAnchorInfo == null || mCurrentInputMethodSession == null
+                                || mServedInputConnectionWrapper == null) {
+                            return;
+                        }
+                        final boolean isMonitoring = (mRequestUpdateCursorAnchorInfoMonitorMode
+                                & InputConnection.CURSOR_UPDATE_MONITOR) != 0;
+                        if (!isMonitoring) {
+                            return;
+                        }
+                        // Since the host ActivityView is moved, we need to issue
+                        // IMS#updateCursorAnchorInfo() again.
+                        mCurrentInputMethodSession.updateCursorAnchorInfo(
+                                CursorAnchorInfo.createForAdditionalParentMatrix(
+                                        mCursorAnchorInfo, mActivityViewToScreenMatrix));
+                    }
+                    return;
+                }
             }
         }
     }
@@ -1040,6 +1093,12 @@ public final class InputMethodManager {
         public void reportFullscreenMode(boolean fullscreen) {
             mH.obtainMessage(MSG_REPORT_FULLSCREEN_MODE, fullscreen ? 1 : 0, 0)
                     .sendToTarget();
+        }
+
+        @Override
+        public void updateActivityViewToScreenMatrix(int bindSequence, float[] matrixValues) {
+            mH.obtainMessage(MSG_UPDATE_ACTIVITY_VIEW_TO_SCREEN_MATRIX, bindSequence, 0,
+                    matrixValues).sendToTarget();
         }
 
         @Override
@@ -1460,25 +1519,17 @@ public final class InputMethodManager {
     }
 
     void setInputChannelLocked(InputChannel channel) {
-        if (mCurChannel == channel) {
-            return;
+        if (mCurChannel != channel) {
+            if (mCurSender != null) {
+                flushPendingEventsLocked();
+                mCurSender.dispose();
+                mCurSender = null;
+            }
+            if (mCurChannel != null) {
+                mCurChannel.dispose();
+            }
+            mCurChannel = channel;
         }
-        if (mCurChannel != null && channel != null
-                && mCurChannel.getToken() == channel.getToken()) {
-            // channel is a dupe of 'mCurChannel', because they have the same token, and represent
-            // the same connection. Ignore the incoming channel and keep using 'mCurChannel' to
-            // avoid confusing the InputEventReceiver.
-            return;
-        }
-        if (mCurSender != null) {
-            flushPendingEventsLocked();
-            mCurSender.dispose();
-            mCurSender = null;
-        }
-        if (mCurChannel != null) {
-            mCurChannel.dispose();
-        }
-        mCurChannel = channel;
     }
 
     /**
@@ -1498,6 +1549,7 @@ public final class InputMethodManager {
      */
     @UnsupportedAppUsage
     void finishInputLocked() {
+        mActivityViewToScreenMatrix = null;
         mIsInputMethodSuppressingSpellChecker = false;
         setNextServedViewLocked(null);
         if (getServedViewLocked() != null) {
@@ -2050,6 +2102,7 @@ public final class InputMethodManager {
                         + InputMethodDebug.startInputFlagsToString(startInputFlags));
                 return false;
             }
+            mActivityViewToScreenMatrix = res.getActivityViewToScreenMatrix();
             mIsInputMethodSuppressingSpellChecker = res.isInputMethodSuppressingSpellChecker;
             if (res.id != null) {
                 setInputChannelLocked(res.channel);
@@ -2438,7 +2491,13 @@ public final class InputMethodManager {
                 return;
             }
             if (DEBUG) Log.v(TAG, "updateCursorAnchorInfo: " + cursorAnchorInfo);
-            mCurrentInputMethodSession.updateCursorAnchorInfo(cursorAnchorInfo);
+            if (mActivityViewToScreenMatrix != null) {
+                mCurrentInputMethodSession.updateCursorAnchorInfo(
+                        CursorAnchorInfo.createForAdditionalParentMatrix(
+                            cursorAnchorInfo, mActivityViewToScreenMatrix));
+            } else {
+                mCurrentInputMethodSession.updateCursorAnchorInfo(cursorAnchorInfo);
+            }
             mCursorAnchorInfo = cursorAnchorInfo;
             // Clear immediate bit (if any).
             mRequestUpdateCursorAnchorInfoMonitorMode &= ~InputConnection.CURSOR_UPDATE_IMMEDIATE;
@@ -3024,6 +3083,30 @@ public final class InputMethodManager {
             final Completable.Int value = Completable.createInt();
             mService.getInputMethodWindowVisibleHeight(ResultCallbacks.of(value));
             return Completable.getIntResult(value);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * An internal API for {@link android.app.ActivityView} to report where its embedded virtual
+     * display is placed.
+     *
+     * @param childDisplayId Display ID of the embedded virtual display.
+     * @param matrix {@link Matrix} to convert virtual display screen coordinates to
+     *               the host screen coordinates. {@code null} to clear the relationship.
+     * @hide
+     */
+    public void reportActivityView(int childDisplayId, @Nullable Matrix matrix) {
+        try {
+            final float[] matrixValues;
+            if (matrix == null) {
+                matrixValues = null;
+            } else {
+                matrixValues = new float[9];
+                matrix.getValues(matrixValues);
+            }
+            mService.reportActivityViewAsync(mClient, childDisplayId, matrixValues);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

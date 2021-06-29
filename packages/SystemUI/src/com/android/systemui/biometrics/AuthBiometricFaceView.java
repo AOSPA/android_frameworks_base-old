@@ -21,7 +21,6 @@ import android.content.Context;
 import android.graphics.drawable.Animatable2;
 import android.graphics.drawable.AnimatedVectorDrawable;
 import android.graphics.drawable.Drawable;
-import android.hardware.biometrics.BiometricAuthenticator.Modality;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.AttributeSet;
@@ -30,9 +29,6 @@ import android.view.View;
 import android.widget.ImageView;
 import android.widget.TextView;
 
-import androidx.annotation.Nullable;
-
-import com.android.internal.annotations.VisibleForTesting;
 import com.android.systemui.R;
 
 public class AuthBiometricFaceView extends AuthBiometricView {
@@ -152,11 +148,6 @@ public class AuthBiometricFaceView extends AuthBiometricView {
         super(context, attrs);
     }
 
-    @VisibleForTesting
-    AuthBiometricFaceView(Context context, AttributeSet attrs, Injector injector) {
-        super(context, attrs, injector);
-    }
-
     @Override
     protected int getDelayAfterAuthenticatedDurationMs() {
         return HIDE_DELAY_MS;
@@ -209,7 +200,7 @@ public class AuthBiometricFaceView extends AuthBiometricView {
     }
 
     @Override
-    public void onAuthenticationFailed(@Modality int modality, @Nullable String failureReason) {
+    public void onAuthenticationFailed(String failureReason) {
         if (getSize() == AuthDialog.SIZE_MEDIUM) {
             if (supportsManualRetry()) {
                 mTryAgainButton.setVisibility(View.VISIBLE);
@@ -219,7 +210,7 @@ public class AuthBiometricFaceView extends AuthBiometricView {
 
         // Do this last since we want to know if the button is being animated (in the case of
         // small -> medium dialog)
-        super.onAuthenticationFailed(modality, failureReason);
+        super.onAuthenticationFailed(failureReason);
     }
 
     private void resetErrorView() {

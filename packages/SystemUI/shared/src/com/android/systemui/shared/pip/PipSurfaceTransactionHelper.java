@@ -46,13 +46,12 @@ public class PipSurfaceTransactionHelper {
         mTmpSourceRectF.set(sourceBounds);
         mTmpDestinationRectF.set(destinationBounds);
         mTmpTransform.setRectToRect(mTmpSourceRectF, mTmpDestinationRectF, Matrix.ScaleToFit.FILL);
-        final float cornerRadius = getScaledCornerRadius(sourceBounds, destinationBounds);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setPosition(leash, mTmpDestinationRectF.left, mTmpDestinationRectF.top)
-                .setCornerRadius(leash, cornerRadius);
+                .setCornerRadius(leash, mCornerRadius);
         return new PictureInPictureSurfaceTransaction(
                 mTmpDestinationRectF.left, mTmpDestinationRectF.top,
-                mTmpFloat9, 0 /* rotation */, cornerRadius, sourceBounds);
+                mTmpFloat9, 0 /* rotation */, mCornerRadius, sourceBounds);
     }
 
     public PictureInPictureSurfaceTransaction scale(
@@ -63,12 +62,11 @@ public class PipSurfaceTransactionHelper {
         mTmpDestinationRectF.set(destinationBounds);
         mTmpTransform.setRectToRect(mTmpSourceRectF, mTmpDestinationRectF, Matrix.ScaleToFit.FILL);
         mTmpTransform.postRotate(degree, 0, 0);
-        final float cornerRadius = getScaledCornerRadius(sourceBounds, destinationBounds);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setPosition(leash, positionX, positionY)
-                .setCornerRadius(leash, cornerRadius);
+                .setCornerRadius(leash, mCornerRadius);
         return new PictureInPictureSurfaceTransaction(
-                positionX, positionY, mTmpFloat9, degree, cornerRadius, sourceBounds);
+                positionX, positionY, mTmpFloat9, degree, mCornerRadius, sourceBounds);
     }
 
     public PictureInPictureSurfaceTransaction scaleAndCrop(
@@ -85,13 +83,12 @@ public class PipSurfaceTransactionHelper {
         final float left = destinationBounds.left - insets.left * scale;
         final float top = destinationBounds.top - insets.top * scale;
         mTmpTransform.setScale(scale, scale);
-        final float cornerRadius = getScaledCornerRadius(mTmpDestinationRect, destinationBounds);
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setWindowCrop(leash, mTmpDestinationRect)
                 .setPosition(leash, left, top)
-                .setCornerRadius(leash, cornerRadius);
+                .setCornerRadius(leash, mCornerRadius);
         return new PictureInPictureSurfaceTransaction(
-                left, top, mTmpFloat9, 0 /* rotation */, cornerRadius, mTmpDestinationRect);
+                left, top, mTmpFloat9, 0 /* rotation */, mCornerRadius, mTmpDestinationRect);
     }
 
     public PictureInPictureSurfaceTransaction scaleAndRotate(
@@ -108,30 +105,12 @@ public class PipSurfaceTransactionHelper {
                 : (float) destinationBounds.height() / sourceBounds.height();
         mTmpTransform.setRotate(degree, 0, 0);
         mTmpTransform.postScale(scale, scale);
-        final float cornerRadius = getScaledCornerRadius(mTmpDestinationRect, destinationBounds);
-        // adjust the positions, take account also the insets
-        final float adjustedPositionX, adjustedPositionY;
-        if (degree < 0) {
-            adjustedPositionX = positionX + insets.top * scale;
-            adjustedPositionY = positionY + insets.left * scale;
-        } else {
-            adjustedPositionX = positionX - insets.top * scale;
-            adjustedPositionY = positionY - insets.left * scale;
-        }
         tx.setMatrix(leash, mTmpTransform, mTmpFloat9)
                 .setWindowCrop(leash, mTmpDestinationRect)
-                .setPosition(leash, adjustedPositionX, adjustedPositionY)
-                .setCornerRadius(leash, cornerRadius);
+                .setPosition(leash, positionX, positionY)
+                .setCornerRadius(leash, mCornerRadius);
         return new PictureInPictureSurfaceTransaction(
-                adjustedPositionX, adjustedPositionY,
-                mTmpFloat9, degree, cornerRadius, mTmpDestinationRect);
-    }
-
-    /** @return the round corner radius scaled by given from and to bounds */
-    private float getScaledCornerRadius(Rect fromBounds, Rect toBounds) {
-        final float scale = (float) (Math.hypot(fromBounds.width(), fromBounds.height())
-                / Math.hypot(toBounds.width(), toBounds.height()));
-        return mCornerRadius * scale;
+                positionX, positionY, mTmpFloat9, degree, mCornerRadius, mTmpDestinationRect);
     }
 
     /** @return {@link SurfaceControl.Transaction} instance with vsync-id */

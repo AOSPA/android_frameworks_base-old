@@ -201,10 +201,7 @@ public class CpuPowerCalculator extends PowerCalculator {
         result.packageWithHighestDrain = packageWithHighestDrain;
     }
 
-    /**
-     * Calculates CPU power consumed by the specified app, using the PowerProfile model.
-     */
-    public double calculateUidModeledPowerMah(BatteryStats.Uid u, int statsType) {
+    private double calculateUidModeledPowerMah(BatteryStats.Uid u, int statsType) {
         // Constant battery drain when CPU is active
         double powerMah = calculateActiveCpuPowerMah(u.getCpuActiveTime());
 

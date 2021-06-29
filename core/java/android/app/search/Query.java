@@ -37,14 +37,6 @@ import android.os.Parcelable;
 public final class Query implements Parcelable {
 
     /**
-     * The lookup key for a integer that indicates what the height of the soft keyboard
-     * (e.g., IME, also known as Input Method Editor) was on the client window
-     * in dp (density-independent pixels). This information is to be used by the consumer
-     * of the API in estimating how many search results will be visible above the keyboard.
-     */
-    public static final String EXTRA_IME_HEIGHT = "android.app.search.extra.IME_HEIGHT";
-
-    /**
      * string typed from the client.
      */
     @NonNull
@@ -53,7 +45,7 @@ public final class Query implements Parcelable {
     private final long mTimestampMillis;
 
     /**
-     * Contains other client UI constraints related data (e.g., {@link #EXTRA_IME_HEIGHT}.
+     * Contains other client UI constraints related data
      */
     @NonNull
     private final Bundle mExtras;

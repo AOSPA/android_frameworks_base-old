@@ -48,23 +48,6 @@ import java.util.Set;
  */
 public abstract class ActivityManagerInternal {
 
-    public enum ServiceNotificationPolicy {
-        /**
-         * The Notification is not associated with any foreground service.
-         */
-        NOT_FOREGROUND_SERVICE,
-        /**
-         * The Notification is associated with a foreground service, but the
-         * notification system should handle it just like non-FGS notifications.
-         */
-        SHOW_IMMEDIATELY,
-        /**
-         * The Notification is associated with a foreground service, and the
-         * notification system should ignore it unless it has already been shown (in
-         * which case it should be used to update the currently displayed UI).
-         */
-        UPDATE_ONLY
-    }
 
     // Access modes for handleIncomingUser.
     public static final int ALLOW_NON_FULL = 0;
@@ -253,9 +236,6 @@ public abstract class ActivityManagerInternal {
 
     /** Returns the current user id. */
     public abstract int getCurrentUserId();
-
-    /** Returns the currently started user ids. */
-    public abstract int[] getStartedUserIds();
 
     /** Returns true if the user is running. */
     public abstract boolean isUserRunning(@UserIdInt int userId, int flags);
@@ -478,24 +458,6 @@ public abstract class ActivityManagerInternal {
             String channelId);
 
     /**
-     * Tell the service lifecycle logic that the given Notification content is now
-     * canonical for any foreground-service visibility policy purposes.
-     *
-     * Returns a description of any FGs-related policy around the given Notification:
-     * not associated with an FGS; ensure display; or only update if already displayed.
-     */
-    public abstract ServiceNotificationPolicy applyForegroundServiceNotification(
-            Notification notification, int id, String pkg, @UserIdInt int userId);
-
-    /**
-     * Callback from the notification subsystem that the given FGS notification has
-     * been evaluated, and either shown or explicitly overlooked.  This can happen
-     * after either Service.startForeground() or NotificationManager.notify().
-     */
-    public abstract void onForegroundServiceNotificationUpdate(boolean shown,
-            Notification notification, int id, String pkg, @UserIdInt int userId);
-
-    /**
      * If the given app has any FGSs whose notifications are in the given channel,
      * stop them.
      */
@@ -604,14 +566,6 @@ public abstract class ActivityManagerInternal {
      */
     public abstract PendingIntent getPendingIntentActivityAsApp(
             int requestCode, @NonNull Intent intent, int flags, Bundle options,
-            String ownerPkgName, int ownerUid);
-
-    /**
-     * Effectively PendingIntent.getActivityForUser(), but the PendingIntent is
-     * owned by the given uid rather than by the caller (i.e. the system).
-     */
-    public abstract PendingIntent getPendingIntentActivityAsApp(
-            int requestCode, @NonNull Intent[] intents, int flags, Bundle options,
             String ownerPkgName, int ownerUid);
 
     /**

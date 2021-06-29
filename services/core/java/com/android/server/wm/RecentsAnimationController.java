@@ -152,11 +152,8 @@ public class RecentsAnimationController implements DeathRecipient {
     private boolean mCancelDeferredWithScreenshot;
 
     @VisibleForTesting
-    boolean mIsAddingTaskToTargets;
-    @VisibleForTesting
     boolean mShouldAttachNavBarToAppDuringTransition;
     private boolean mNavigationBarAttachedToApp;
-    private ActivityRecord mNavBarAttachedApp;
 
     /**
      * Animates the screenshot of task that used to be controlled by RecentsAnimation.
@@ -234,8 +231,7 @@ public class RecentsAnimationController implements DeathRecipient {
 
         @Override
         public void setFinishTaskTransaction(int taskId,
-                PictureInPictureSurfaceTransaction finishTransaction,
-                SurfaceControl overlay) {
+                PictureInPictureSurfaceTransaction finishTransaction) {
             ProtoLog.d(WM_DEBUG_RECENTS_ANIMATIONS,
                     "setFinishTaskTransaction(%d): transaction=%s", taskId, finishTransaction);
             final long token = Binder.clearCallingIdentity();
@@ -245,7 +241,6 @@ public class RecentsAnimationController implements DeathRecipient {
                         final TaskAnimationAdapter taskAdapter = mPendingAnimations.get(i);
                         if (taskAdapter.mTask.mTaskId == taskId) {
                             taskAdapter.mFinishTransaction = finishTransaction;
-                            taskAdapter.mFinishOverlay = overlay;
                             break;
                         }
                     }
@@ -294,6 +289,12 @@ public class RecentsAnimationController implements DeathRecipient {
                         }
                     }
                     if (!behindSystemBars) {
+                        // Make sure to update the correct IME parent in case that the IME parent
+                        // may be computed as display layer when re-layout window happens during
+                        // rotation but there is intermediate state that the bounds of task and
+                        // the IME target's activity is not the same during rotating.
+                        mDisplayContent.updateImeParent();
+
                         // Hiding IME if IME window is not attached to app.
                         // Since some windowing mode is not proper to snapshot Task with IME window
                         // while the app transitioning to the next task (e.g. split-screen mode)
@@ -304,13 +305,6 @@ public class RecentsAnimationController implements DeathRecipient {
                                 inputMethodManagerInternal.hideCurrentInputMethod(
                                         SoftInputShowHideReason.HIDE_RECENTS_ANIMATION);
                             }
-                        } else {
-                            // Disable IME icon explicitly when IME attached to the app in case
-                            // IME icon might flickering while swiping to the next app task still
-                            // in animating before the next app window focused, or IME icon
-                            // persists on the bottom when swiping the task to recents.
-                            InputMethodManagerInternal.get().updateImeWindowStatus(
-                                    true /* disableImeIcon */);
                         }
                     }
                     mService.mWindowPlacerLocked.requestTraversal();
@@ -385,21 +379,8 @@ public class RecentsAnimationController implements DeathRecipient {
             final long token = Binder.clearCallingIdentity();
             try {
                 synchronized (mService.getWindowManagerLock()) {
-                    restoreNavigationBarFromApp(
-                            moveHomeToTop || mIsAddingTaskToTargets /* animate */);
+                    restoreNavigationBarFromApp(moveHomeToTop);
                     mService.mWindowPlacerLocked.requestTraversal();
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
-        }
-
-        @Override
-        public void animateNavigationBarToApp(long duration) {
-            final long token = Binder.clearCallingIdentity();
-            try {
-                synchronized (mService.getWindowManagerLock()) {
-                    animateNavigationBarForAppLaunch(duration);
                 }
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -626,6 +607,7 @@ public class RecentsAnimationController implements DeathRecipient {
                 || mDisplayContent.getFadeRotationAnimationController() != null) {
             return;
         }
+        ActivityRecord topActivity = null;
         boolean shouldTranslateNavBar = false;
         final boolean isDisplayLandscape =
                 mDisplayContent.getConfiguration().orientation == ORIENTATION_LANDSCAPE;
@@ -642,22 +624,21 @@ public class RecentsAnimationController implements DeathRecipient {
                 continue;
             }
             shouldTranslateNavBar = isSplitScreenSecondary;
-            mNavBarAttachedApp = task.getTopVisibleActivity();
+            topActivity = task.getTopVisibleActivity();
             break;
         }
 
         final WindowState navWindow = getNavigationBarWindow();
-        if (mNavBarAttachedApp == null || navWindow == null || navWindow.mToken == null) {
+        if (topActivity == null || navWindow == null || navWindow.mToken == null) {
             return;
         }
         mNavigationBarAttachedToApp = true;
-        navWindow.mToken.cancelAnimation();
         final SurfaceControl.Transaction t = navWindow.mToken.getPendingTransaction();
         final SurfaceControl navSurfaceControl = navWindow.mToken.getSurfaceControl();
         if (shouldTranslateNavBar) {
-            navWindow.setSurfaceTranslationY(-mNavBarAttachedApp.getBounds().top);
+            navWindow.setSurfaceTranslationY(-topActivity.getBounds().top);
         }
-        t.reparent(navSurfaceControl, mNavBarAttachedApp.getSurfaceControl());
+        t.reparent(navSurfaceControl, topActivity.getSurfaceControl());
         t.show(navSurfaceControl);
 
         final WindowContainer imeContainer = mDisplayContent.getImeContainer();
@@ -672,13 +653,10 @@ public class RecentsAnimationController implements DeathRecipient {
         }
     }
 
-    @VisibleForTesting
-    void restoreNavigationBarFromApp(boolean animate) {
+    private void restoreNavigationBarFromApp(boolean animate) {
         if (!mNavigationBarAttachedToApp) {
             return;
         }
-        mNavigationBarAttachedToApp = false;
-
         if (mStatusBar != null) {
             mStatusBar.setNavigationBarLumaSamplingEnabled(mDisplayId, true);
         }
@@ -698,34 +676,31 @@ public class RecentsAnimationController implements DeathRecipient {
         t.setLayer(navToken.getSurfaceControl(), navToken.getLastLayer());
 
         if (animate) {
-            final NavBarFadeAnimationController controller =
-                        new NavBarFadeAnimationController(mDisplayContent);
-            controller.fadeWindowToken(true);
+            final NavBarFadeAnimationController navBarFadeAnimationController =
+                    mDisplayContent.getDisplayPolicy().getNavBarFadeAnimationController();
+            final Runnable fadeInAnim = () -> {
+                // Reparent the SurfaceControl of nav bar token back.
+                t.reparent(navToken.getSurfaceControl(), parent.getSurfaceControl());
+                // Run fade-in animation to show navigation bar back to bottom of the display.
+                if (navBarFadeAnimationController != null) {
+                    navBarFadeAnimationController.fadeWindowToken(true);
+                }
+            };
+            final FadeRotationAnimationController fadeRotationAnimationController =
+                    mDisplayContent.getFadeRotationAnimationController();
+            if (fadeRotationAnimationController != null) {
+                fadeRotationAnimationController.setOnShowRunnable(fadeInAnim);
+            } else {
+                fadeInAnim.run();
+            }
         } else {
             // Reparent the SurfaceControl of nav bar token back.
             t.reparent(navToken.getSurfaceControl(), parent.getSurfaceControl());
         }
     }
 
-    void animateNavigationBarForAppLaunch(long duration) {
-        if (!mShouldAttachNavBarToAppDuringTransition
-                // Skip the case where the nav bar is controlled by fade rotation.
-                || mDisplayContent.getFadeRotationAnimationController() != null
-                || mNavigationBarAttachedToApp
-                || mNavBarAttachedApp == null) {
-            return;
-        }
-
-        final NavBarFadeAnimationController controller =
-                new NavBarFadeAnimationController(mDisplayContent);
-        controller.fadeOutAndInSequentially(duration, null /* fadeOutParent */,
-                mNavBarAttachedApp.getSurfaceControl());
-    }
-
     void addTaskToTargets(Task task, OnAnimationFinishedCallback finishedCallback) {
         if (mRunner != null) {
-            mIsAddingTaskToTargets = task != null;
-            mNavBarAttachedApp = task == null ? null : task.getTopVisibleActivity();
             // No need to send task appeared when the task target already exists, or when the
             // task is being managed as a multi-window mode outside of recents (e.g. bubbles).
             if (isAnimatingTask(task) || skipAnimation(task)) {
@@ -942,8 +917,7 @@ public class RecentsAnimationController implements DeathRecipient {
             removeWallpaperAnimation(wallpaperAdapter);
         }
 
-        restoreNavigationBarFromApp(
-                reorderMode == REORDER_MOVE_TO_TOP || mIsAddingTaskToTargets /* animate */);
+        restoreNavigationBarFromApp(reorderMode == REORDER_MOVE_TO_TOP);
 
         // Clear any pending failsafe runnables
         mService.mH.removeCallbacks(mFailsafeRunnable);
@@ -958,12 +932,6 @@ public class RecentsAnimationController implements DeathRecipient {
         if (mRecentScreenshotAnimator != null) {
             mRecentScreenshotAnimator.cancelAnimation();
             mRecentScreenshotAnimator = null;
-        }
-
-        // Restore IME icon only when moving the original app task to front from recents, in case
-        // IME icon may missing if the moving task has already been the current focused task.
-        if (reorderMode == REORDER_MOVE_TO_ORIGINAL_POSITION && !mIsAddingTaskToTargets) {
-            InputMethodManagerInternal.get().updateImeWindowStatus(false /* disableImeIcon */);
         }
 
         // Update the input windows after the animation is complete
@@ -1138,8 +1106,6 @@ public class RecentsAnimationController implements DeathRecipient {
         private final Rect mLocalBounds = new Rect();
         // The final surface transaction when animation is finished.
         private PictureInPictureSurfaceTransaction mFinishTransaction;
-        // An overlay used to mask the content as an app goes into PIP
-        private SurfaceControl mFinishOverlay;
 
         TaskAnimationAdapter(Task task, boolean isRecentTaskInvisible) {
             mTask = task;
@@ -1177,31 +1143,16 @@ public class RecentsAnimationController implements DeathRecipient {
         void onCleanup() {
             if (mFinishTransaction != null) {
                 final Transaction pendingTransaction = mTask.getPendingTransaction();
-
-                // Reparent the overlay
-                if (mFinishOverlay != null) {
-                    pendingTransaction.reparent(mFinishOverlay, mTask.mSurfaceControl);
-                }
-
-                // Transfer the transform from the leash to the task
                 PictureInPictureSurfaceTransaction.apply(mFinishTransaction,
                         mTask.mSurfaceControl, pendingTransaction);
-                mTask.setLastRecentsAnimationTransaction(mFinishTransaction, mFinishOverlay);
+                mTask.setLastRecentsAnimationTransaction(mFinishTransaction);
                 if (mDisplayContent.isFixedRotationLaunchingApp(mTargetActivityRecord)) {
                     // The transaction is needed for position when rotating the display.
                     mDisplayContent.mPinnedTaskController.setEnterPipTransaction(
                             mFinishTransaction);
                 }
                 mFinishTransaction = null;
-                mFinishOverlay = null;
                 pendingTransaction.apply();
-
-                // In the case where we are transferring the transform to the task in preparation 
-                // for entering PIP, we disable the task being able to affect sysui flags otherwise
-                // it may cause a flash
-                if (mTask.getActivityType() != mTargetActivityType) {
-                    mTask.setCanAffectSystemUiFlags(false);
-                }
             } else if (!mTask.isAttached()) {
                 // Apply the task's pending transaction in case it is detached and its transaction
                 // is not reachable.

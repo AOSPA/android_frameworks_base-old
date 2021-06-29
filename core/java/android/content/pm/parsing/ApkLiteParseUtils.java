@@ -19,9 +19,6 @@ package android.content.pm.parsing;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_PACKAGE_NAME;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED;
 import static android.content.pm.parsing.ParsingPackageUtils.validateName;
-import static android.content.pm.parsing.ParsingUtils.ANDROID_RES_NAMESPACE;
-import static android.content.pm.parsing.ParsingUtils.DEFAULT_MIN_SDK_VERSION;
-import static android.content.pm.parsing.ParsingUtils.DEFAULT_TARGET_SDK_VERSION;
 import static android.os.Trace.TRACE_TAG_PACKAGE_MANAGER;
 
 import android.annotation.NonNull;
@@ -34,12 +31,12 @@ import android.content.pm.parsing.result.ParseResult;
 import android.content.res.ApkAssets;
 import android.content.res.XmlResourceParser;
 import android.os.Trace;
-import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.AttributeSet;
 import android.util.Pair;
 import android.util.Slog;
 
+import com.android.internal.R;
 import com.android.internal.util.ArrayUtils;
 
 import libcore.io.IoUtils;
@@ -61,6 +58,10 @@ import java.util.Objects;
 public class ApkLiteParseUtils {
 
     private static final String TAG = ParsingUtils.TAG;
+
+    // TODO(b/135203078): Consolidate constants
+    private static final int DEFAULT_MIN_SDK_VERSION = 1;
+    private static final int DEFAULT_TARGET_SDK_VERSION = 0;
 
     private static final int PARSE_DEFAULT_INSTALL_LOCATION =
             PackageInfo.INSTALL_LOCATION_UNSPECIFIED;
@@ -322,7 +323,8 @@ public class ApkLiteParseUtils {
                 signingDetails = PackageParser.SigningDetails.UNKNOWN;
             }
 
-            return parseApkLite(input, apkPath, parser, signingDetails);
+            final AttributeSet attrs = parser;
+            return parseApkLite(input, apkPath, parser, attrs, signingDetails);
         } catch (XmlPullParserException | IOException | RuntimeException e) {
             Slog.w(TAG, "Failed to parse " + apkPath, e);
             return input.error(PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
@@ -340,39 +342,32 @@ public class ApkLiteParseUtils {
     }
 
     private static ParseResult<ApkLite> parseApkLite(ParseInput input, String codePath,
-            XmlResourceParser parser, PackageParser.SigningDetails signingDetails)
+            XmlPullParser parser, AttributeSet attrs, PackageParser.SigningDetails signingDetails)
             throws IOException, XmlPullParserException {
-        ParseResult<Pair<String, String>> result = parsePackageSplitNames(input, parser);
+        ParseResult<Pair<String, String>> result = parsePackageSplitNames(input, parser, attrs);
         if (result.isError()) {
             return input.error(result);
         }
 
         Pair<String, String> packageSplit = result.getResult();
 
-        int installLocation = parser.getAttributeIntValue(ANDROID_RES_NAMESPACE,
-                "installLocation", PARSE_DEFAULT_INSTALL_LOCATION);
-        int versionCode = parser.getAttributeIntValue(ANDROID_RES_NAMESPACE, "versionCode", 0);
-        int versionCodeMajor = parser.getAttributeIntValue(ANDROID_RES_NAMESPACE,
-                "versionCodeMajor",
-                0);
-        int revisionCode = parser.getAttributeIntValue(ANDROID_RES_NAMESPACE, "revisionCode", 0);
-        boolean coreApp = parser.getAttributeBooleanValue(null, "coreApp", false);
-        boolean isolatedSplits = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE,
-                "isolatedSplits", false);
-        boolean isFeatureSplit = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE,
-                "isFeatureSplit", false);
-        boolean isSplitRequired = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE,
-                "isSplitRequired", false);
-        String configForSplit = parser.getAttributeValue(null, "configForSplit");
-
+        int installLocation = PARSE_DEFAULT_INSTALL_LOCATION;
+        int versionCode = 0;
+        int versionCodeMajor = 0;
         int targetSdkVersion = DEFAULT_TARGET_SDK_VERSION;
         int minSdkVersion = DEFAULT_MIN_SDK_VERSION;
+        int revisionCode = 0;
+        boolean coreApp = false;
         boolean debuggable = false;
         boolean profilableByShell = false;
         boolean multiArch = false;
         boolean use32bitAbi = false;
         boolean extractNativeLibs = true;
+        boolean isolatedSplits = false;
+        boolean isFeatureSplit = false;
+        boolean isSplitRequired = false;
         boolean useEmbeddedDex = false;
+        String configForSplit = null;
         String usesSplitName = null;
         String targetPackage = null;
         boolean overlayIsStatic = false;
@@ -381,6 +376,40 @@ public class ApkLiteParseUtils {
 
         String requiredSystemPropertyName = null;
         String requiredSystemPropertyValue = null;
+
+        for (int i = 0; i < attrs.getAttributeCount(); i++) {
+            final String attr = attrs.getAttributeName(i);
+            switch (attr) {
+                case "installLocation":
+                    installLocation = attrs.getAttributeIntValue(i,
+                            PARSE_DEFAULT_INSTALL_LOCATION);
+                    break;
+                case "versionCode":
+                    versionCode = attrs.getAttributeIntValue(i, 0);
+                    break;
+                case "versionCodeMajor":
+                    versionCodeMajor = attrs.getAttributeIntValue(i, 0);
+                    break;
+                case "revisionCode":
+                    revisionCode = attrs.getAttributeIntValue(i, 0);
+                    break;
+                case "coreApp":
+                    coreApp = attrs.getAttributeBooleanValue(i, false);
+                    break;
+                case "isolatedSplits":
+                    isolatedSplits = attrs.getAttributeBooleanValue(i, false);
+                    break;
+                case "configForSplit":
+                    configForSplit = attrs.getAttributeValue(i);
+                    break;
+                case "isFeatureSplit":
+                    isFeatureSplit = attrs.getAttributeBooleanValue(i, false);
+                    break;
+                case "isSplitRequired":
+                    isSplitRequired = attrs.getAttributeBooleanValue(i, false);
+                    break;
+            }
+        }
 
         // Only search the tree when the tag is the direct child of <manifest> tag
         int type;
@@ -398,23 +427,34 @@ public class ApkLiteParseUtils {
             }
 
             if (ParsingPackageUtils.TAG_PACKAGE_VERIFIER.equals(parser.getName())) {
-                final VerifierInfo verifier = parseVerifier(parser);
+                final VerifierInfo verifier = parseVerifier(attrs);
                 if (verifier != null) {
                     verifiers.add(verifier);
                 }
             } else if (ParsingPackageUtils.TAG_APPLICATION.equals(parser.getName())) {
-                debuggable = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE, "debuggable",
-                        false);
-                multiArch = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE, "multiArch",
-                        false);
-                use32bitAbi = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE, "use32bitAbi",
-                        false);
-                extractNativeLibs = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE,
-                        "extractNativeLibs", true);
-                useEmbeddedDex = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE,
-                        "useEmbeddedDex", false);
-                rollbackDataPolicy = parser.getAttributeIntValue(ANDROID_RES_NAMESPACE,
-                        "rollbackDataPolicy", 0);
+                for (int i = 0; i < attrs.getAttributeCount(); ++i) {
+                    final String attr = attrs.getAttributeName(i);
+                    switch (attr) {
+                        case "debuggable":
+                            debuggable = attrs.getAttributeBooleanValue(i, false);
+                            break;
+                        case "multiArch":
+                            multiArch = attrs.getAttributeBooleanValue(i, false);
+                            break;
+                        case "use32bitAbi":
+                            use32bitAbi = attrs.getAttributeBooleanValue(i, false);
+                            break;
+                        case "extractNativeLibs":
+                            extractNativeLibs = attrs.getAttributeBooleanValue(i, true);
+                            break;
+                        case "useEmbeddedDex":
+                            useEmbeddedDex = attrs.getAttributeBooleanValue(i, false);
+                            break;
+                        case "rollbackDataPolicy":
+                            rollbackDataPolicy = attrs.getAttributeIntValue(i, 0);
+                            break;
+                    }
+                }
 
                 final int innerDepth = parser.getDepth();
                 int innerType;
@@ -430,78 +470,52 @@ public class ApkLiteParseUtils {
                     }
 
                     if (ParsingPackageUtils.TAG_PROFILEABLE.equals(parser.getName())) {
-                        profilableByShell = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE,
-                                "shell", profilableByShell);
+                        for (int i = 0; i < attrs.getAttributeCount(); ++i) {
+                            final String attr = attrs.getAttributeName(i);
+                            if ("shell".equals(attr)) {
+                                profilableByShell = attrs.getAttributeBooleanValue(i,
+                                        profilableByShell);
+                            }
+                        }
                     }
                 }
             } else if (ParsingPackageUtils.TAG_OVERLAY.equals(parser.getName())) {
-                requiredSystemPropertyName = parser.getAttributeValue(ANDROID_RES_NAMESPACE,
-                        "requiredSystemPropertyName");
-                requiredSystemPropertyValue = parser.getAttributeValue(ANDROID_RES_NAMESPACE,
-                        "requiredSystemPropertyValue");
-                targetPackage = parser.getAttributeValue(ANDROID_RES_NAMESPACE, "targetPackage");
-                overlayIsStatic = parser.getAttributeBooleanValue(ANDROID_RES_NAMESPACE, "isStatic",
-                        false);
-                overlayPriority = parser.getAttributeIntValue(ANDROID_RES_NAMESPACE, "priority", 0);
+                for (int i = 0; i < attrs.getAttributeCount(); ++i) {
+                    final String attr = attrs.getAttributeName(i);
+                    if ("requiredSystemPropertyName".equals(attr)) {
+                        requiredSystemPropertyName = attrs.getAttributeValue(i);
+                    } else if ("requiredSystemPropertyValue".equals(attr)) {
+                        requiredSystemPropertyValue = attrs.getAttributeValue(i);
+                    } else if ("targetPackage".equals(attr)) {
+                        targetPackage = attrs.getAttributeValue(i);;
+                    } else if ("isStatic".equals(attr)) {
+                        overlayIsStatic = attrs.getAttributeBooleanValue(i, false);
+                    } else if ("priority".equals(attr)) {
+                        overlayPriority = attrs.getAttributeIntValue(i, 0);
+                    }
+                }
             } else if (ParsingPackageUtils.TAG_USES_SPLIT.equals(parser.getName())) {
                 if (usesSplitName != null) {
                     Slog.w(TAG, "Only one <uses-split> permitted. Ignoring others.");
                     continue;
                 }
 
-                usesSplitName = parser.getAttributeValue(ANDROID_RES_NAMESPACE, "name");
+                usesSplitName = attrs.getAttributeValue(PackageParser.ANDROID_RESOURCES, "name");
                 if (usesSplitName == null) {
                     return input.error(PackageManager.INSTALL_PARSE_FAILED_MANIFEST_MALFORMED,
                             "<uses-split> tag requires 'android:name' attribute");
                 }
             } else if (ParsingPackageUtils.TAG_USES_SDK.equals(parser.getName())) {
-                // Mirrors ParsingPackageUtils#parseUsesSdk until lite and full parsing is combined
-                String minSdkVersionString = parser.getAttributeValue(ANDROID_RES_NAMESPACE,
-                        "minSdkVersion");
-                String targetSdkVersionString = parser.getAttributeValue(ANDROID_RES_NAMESPACE,
-                        "targetSdkVersion");
-
-                int minVer = DEFAULT_MIN_SDK_VERSION;
-                String minCode = null;
-                int targetVer = DEFAULT_TARGET_SDK_VERSION;
-                String targetCode = null;
-
-                if (!TextUtils.isEmpty(minSdkVersionString)) {
-                    try {
-                        minVer = Integer.parseInt(minSdkVersionString);
-                    } catch (NumberFormatException ignored) {
-                        minCode = minSdkVersionString;
+                for (int i = 0; i < attrs.getAttributeCount(); ++i) {
+                    final String attr = attrs.getAttributeName(i);
+                    if ("targetSdkVersion".equals(attr)) {
+                        targetSdkVersion = attrs.getAttributeIntValue(i,
+                                DEFAULT_TARGET_SDK_VERSION);
+                    }
+                    if ("minSdkVersion".equals(attr)) {
+                        minSdkVersion = attrs.getAttributeIntValue(i, DEFAULT_MIN_SDK_VERSION);
                     }
                 }
-
-                if (!TextUtils.isEmpty(targetSdkVersionString)) {
-                    try {
-                        targetVer = Integer.parseInt(targetSdkVersionString);
-                    } catch (NumberFormatException ignored) {
-                        targetCode = targetSdkVersionString;
-                        if (minCode == null) {
-                            minCode = targetCode;
-                        }
-                    }
-                } else {
-                    targetVer = minVer;
-                    targetCode = minCode;
-                }
-
-                ParseResult<Integer> targetResult = ParsingPackageUtils.computeTargetSdkVersion(
-                        targetVer, targetCode, ParsingPackageUtils.SDK_CODENAMES, input);
-                if (targetResult.isError()) {
-                    return input.error(targetResult);
-                }
-                targetSdkVersion = targetResult.getResult();
-
-                ParseResult<Integer> minResult = ParsingPackageUtils.computeMinSdkVersion(
-                        minVer, minCode, ParsingPackageUtils.SDK_VERSION,
-                        ParsingPackageUtils.SDK_CODENAMES, input);
-                if (minResult.isError()) {
-                    return input.error(minResult);
-                }
-                minSdkVersion = minResult.getResult();
             }
         }
 
@@ -527,7 +541,7 @@ public class ApkLiteParseUtils {
     }
 
     public static ParseResult<Pair<String, String>> parsePackageSplitNames(ParseInput input,
-            XmlResourceParser parser) throws IOException, XmlPullParserException {
+            XmlPullParser parser, AttributeSet attrs) throws IOException, XmlPullParserException {
         int type;
         while ((type = parser.next()) != XmlPullParser.START_TAG
                 && type != XmlPullParser.END_DOCUMENT) {
@@ -542,7 +556,7 @@ public class ApkLiteParseUtils {
                     "No <manifest> tag");
         }
 
-        final String packageName = parser.getAttributeValue(null, "package");
+        final String packageName = attrs.getAttributeValue(null, "package");
         if (!"android".equals(packageName)) {
             final ParseResult<?> nameResult = validateName(input, packageName, true, true);
             if (nameResult.isError()) {
@@ -551,7 +565,7 @@ public class ApkLiteParseUtils {
             }
         }
 
-        String splitName = parser.getAttributeValue(null, "split");
+        String splitName = attrs.getAttributeValue(null, "split");
         if (splitName != null) {
             if (splitName.length() == 0) {
                 splitName = null;
@@ -569,8 +583,22 @@ public class ApkLiteParseUtils {
     }
 
     public static VerifierInfo parseVerifier(AttributeSet attrs) {
-        String packageName = attrs.getAttributeValue(ANDROID_RES_NAMESPACE, "name");
-        String encodedPublicKey = attrs.getAttributeValue(ANDROID_RES_NAMESPACE, "publicKey");
+        String packageName = null;
+        String encodedPublicKey = null;
+
+        final int attrCount = attrs.getAttributeCount();
+        for (int i = 0; i < attrCount; i++) {
+            final int attrResId = attrs.getAttributeNameResource(i);
+            switch (attrResId) {
+                case R.attr.name:
+                    packageName = attrs.getAttributeValue(i);
+                    break;
+
+                case R.attr.publicKey:
+                    encodedPublicKey = attrs.getAttributeValue(i);
+                    break;
+            }
+        }
 
         if (packageName == null || packageName.length() == 0) {
             Slog.i(TAG, "verifier package name was null; skipping");

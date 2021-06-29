@@ -63,19 +63,14 @@ public class KeyguardSimPinViewController
     KeyguardUpdateMonitorCallback mUpdateMonitorCallback = new KeyguardUpdateMonitorCallback() {
         @Override
         public void onSimStateChanged(int subId, int slotId, int simState) {
-            if (DEBUG) Log.v(TAG, "onSimStateChanged(subId=" + subId + ",slotId=" + slotId
-                + ",simState=" + simState + ")");
-
-            if ((simState == TelephonyManager.SIM_STATE_READY)
-                || (simState == TelephonyManager.SIM_STATE_LOADED)) {
+            if (DEBUG) Log.v(TAG, "onSimStateChanged(subId=" + subId + ",state=" + simState + ")");
+            if (simState == TelephonyManager.SIM_STATE_READY) {
                 mRemainingAttempts = -1;
                 resetState();
             } else {
                 resetState();
             }
         }
-
-
     };
 
     protected KeyguardSimPinViewController(KeyguardSimPinView view,
@@ -102,7 +97,7 @@ public class KeyguardSimPinViewController
     @Override
     void resetState() {
         super.resetState();
-        if (DEBUG) Log.v(TAG, "Resetting state mShowDefaultMessage="+mShowDefaultMessage);
+        if (DEBUG) Log.v(TAG, "Resetting state");
         handleSubInfoChangeIfNeeded();
         mMessageAreaController.setMessage("");
         if (mShowDefaultMessage) {
@@ -121,6 +116,7 @@ public class KeyguardSimPinViewController
     public void onResume(int reason) {
         super.onResume(reason);
         mKeyguardUpdateMonitor.registerCallback(mUpdateMonitorCallback);
+        mView.resetState();
     }
 
     @Override
@@ -133,8 +129,6 @@ public class KeyguardSimPinViewController
             mSimUnlockProgressDialog.dismiss();
             mSimUnlockProgressDialog = null;
         }
-
-        mMessageAreaController.setMessage("");
     }
 
     @Override
@@ -352,17 +346,11 @@ public class KeyguardSimPinViewController
 
     private void handleSubInfoChangeIfNeeded() {
         int subId = mKeyguardUpdateMonitor
-                .getUnlockedSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
-        if (SubscriptionManager.isValidSubscriptionId(subId)) {
-           if (DEBUG) Log.v(TAG, "handleSubInfoChangeIfNeeded mSubId="+mSubId+" subId="+ subId);
+                .getNextSubIdForState(TelephonyManager.SIM_STATE_PIN_REQUIRED);
+        if (subId != mSubId && SubscriptionManager.isValidSubscriptionId(subId)) {
+            mSubId = subId;
             mShowDefaultMessage = true;
-            if(subId != mSubId){
-              mSubId = subId;
-              mRemainingAttempts = -1;
-            }
-        }else{
-            //false by default and keep false except in PIN lock state
-            mShowDefaultMessage = false;
+            mRemainingAttempts = -1;
         }
     }
 }

@@ -19,6 +19,5 @@
     package="com.android.emojirenderingtestapp">
     <application>
         <activity android:name=".EmojiRenderingTestActivity"/>
-        <activity android:name=".GetAvailableFontsTestActivity"/>
     </application>
 </manifest>

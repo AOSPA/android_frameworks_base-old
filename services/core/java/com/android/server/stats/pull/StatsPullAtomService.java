@@ -126,7 +126,6 @@ import android.os.Trace;
 import android.os.UserHandle;
 import android.os.UserManager;
 import android.os.connectivity.WifiActivityEnergyInfo;
-import android.os.incremental.IncrementalManager;
 import android.os.storage.DiskInfo;
 import android.os.storage.StorageManager;
 import android.os.storage.VolumeInfo;
@@ -427,7 +426,6 @@ public class StatsPullAtomService extends SystemService {
     private final Object mHealthHalLock = new Object();
     private final Object mAttributedAppOpsLock = new Object();
     private final Object mSettingsStatsLock = new Object();
-    private final Object mInstalledIncrementalPackagesLock = new Object();
 
     public StatsPullAtomService(Context context) {
         super(context);
@@ -544,8 +542,6 @@ public class StatsPullAtomService extends SystemService {
                         return pullProcessDmabufMemory(atomTag, data);
                     case FrameworkStatsLog.SYSTEM_MEMORY:
                         return pullSystemMemory(atomTag, data);
-                    case FrameworkStatsLog.VMSTAT:
-                        return pullVmStat(atomTag, data);
                     case FrameworkStatsLog.TEMPERATURE:
                         synchronized (mTemperatureLock) {
                             return pullTemperatureLocked(atomTag, data);
@@ -699,10 +695,6 @@ public class StatsPullAtomService extends SystemService {
                         synchronized (mSettingsStatsLock) {
                             return pullSettingsStatsLocked(atomTag, data);
                         }
-                    case FrameworkStatsLog.INSTALLED_INCREMENTAL_PACKAGE:
-                        synchronized (mInstalledIncrementalPackagesLock) {
-                            return pullInstalledIncrementalPackagesLocked(atomTag, data);
-                        }
                     default:
                         throw new UnsupportedOperationException("Unknown tagId=" + atomTag);
                 }
@@ -844,7 +836,6 @@ public class StatsPullAtomService extends SystemService {
         registerProcessSystemIonHeapSize();
         registerSystemMemory();
         registerProcessDmabufMemory();
-        registerVmStat();
         registerTemperature();
         registerCoolingDevice();
         registerBinderCallsStats();
@@ -886,7 +877,6 @@ public class StatsPullAtomService extends SystemService {
         registerBatteryVoltage();
         registerBatteryCycleCount();
         registerSettingsStats();
-        registerInstalledIncrementalPackages();
     }
 
     private void initAndRegisterNetworkStatsPullers() {
@@ -2273,27 +2263,6 @@ public class StatsPullAtomService extends SystemService {
                         metrics.gpuTotalUsageKb,
                         metrics.gpuPrivateAllocationsKb,
                         metrics.dmaBufTotalExportedKb));
-        return StatsManager.PULL_SUCCESS;
-    }
-
-    private void registerVmStat() {
-        int tagId = FrameworkStatsLog.VMSTAT;
-        mStatsManager.setPullAtomCallback(
-                tagId,
-                null, // use default PullAtomMetadata values
-                DIRECT_EXECUTOR,
-                mStatsCallbackImpl
-        );
-    }
-
-    int pullVmStat(int atomTag, List<StatsEvent> pulledData) {
-        ProcfsMemoryUtil.VmStat vmStat = ProcfsMemoryUtil.readVmStat();
-        if (vmStat != null) {
-            pulledData.add(
-                    FrameworkStatsLog.buildStatsEvent(
-                            atomTag,
-                            vmStat.oomKillCount));
-        }
         return StatsManager.PULL_SUCCESS;
     }
 
@@ -3976,31 +3945,6 @@ public class StatsPullAtomService extends SystemService {
             return StatsManager.PULL_SKIP;
         } finally {
             Binder.restoreCallingIdentity(token);
-        }
-        return StatsManager.PULL_SUCCESS;
-    }
-
-    private void registerInstalledIncrementalPackages() {
-        int tagId = FrameworkStatsLog.INSTALLED_INCREMENTAL_PACKAGE;
-        mStatsManager.setPullAtomCallback(
-                tagId,
-                null, // use default PullAtomMetadata values
-                DIRECT_EXECUTOR,
-                mStatsCallbackImpl
-        );
-    }
-
-    int pullInstalledIncrementalPackagesLocked(int atomTag, List<StatsEvent> pulledData) {
-        final PackageManager pm = mContext.getPackageManager();
-        if (!pm.hasSystemFeature(PackageManager.FEATURE_INCREMENTAL_DELIVERY)) {
-            // Incremental is not enabled on this device. The result list will be empty.
-            return StatsManager.PULL_SUCCESS;
-        }
-        List<PackageInfo> installedPackages = pm.getInstalledPackages(0);
-        for (PackageInfo pi : installedPackages) {
-            if (IncrementalManager.isIncrementalPath(pi.applicationInfo.getBaseCodePath())) {
-                pulledData.add(FrameworkStatsLog.buildStatsEvent(atomTag, pi.applicationInfo.uid));
-            }
         }
         return StatsManager.PULL_SUCCESS;
     }

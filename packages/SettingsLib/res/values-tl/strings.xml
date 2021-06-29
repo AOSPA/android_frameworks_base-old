@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Certification ng wireless display"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"I-enable ang Pagla-log sa Wi‑Fi Verbose"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Pag-throttle ng pag-scan ng Wi‑Fi"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Pag-randomize sa MAC ng hindi persistent na Wi‑Fi"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"MAC randomization na pinahusay ng Wi‑Fi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Palaging aktibo ang mobile data"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Hardware acceleration para sa pag-tether"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Ipakita ang mga Bluetooth device na walang pangalan"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Ipakita ang mga hangganan ng clip, margin, atbp."</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Ipilit ang RTL na dir. ng layout"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Ipilit ang RTL na direksyon ng screen layout sa lahat ng lokal"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"Payagan ang pag-blur sa antas ng window"</string>
     <string name="force_msaa" msgid="4081288296137775550">"Puwersahin ang 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"Paganahin ang 4x MSAA sa OpenGL ES 2.0 na apps"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"I-debug ang di-parihabang mga clip operation"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> na lang bago mapuno"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> na lang bago mapuno"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - Pansamantalang limitado ang pag-charge"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - Ino-optimize para sa tagal ng baterya"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Hindi Kilala"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Nagcha-charge"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Mabilis na charge"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Mabagal na charge"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Wireless na nagcha-charge"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Hindi nagcha-charge"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Nakakonekta, hindi nagcha-charge"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Nakasaksak, hindi makapag-charge sa ngayon"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Nasingil"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Pinapamahalaan ng admin"</string>
     <string name="disabled" msgid="8017887509554714950">"Naka-disable"</string>
@@ -507,7 +506,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Mga alarm at paalala"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Payagan ang pagtakda ng mga alarm at paalala"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Mga alarm at paalala"</string>
-    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"Payagan ang app na ito na magtakda ng mga alarm at mag-iskedyul ng mga pagkilos na may limitadong oras. Papayagan nitong tumakbo ang app sa background, na posibleng gumamit ng mas maraming baterya.\n\nKung naka-off ang pahintulot na ito, hindi gagana ang mga kasalukuyang alarm at event na nakabatay sa oras na naiskedyul ng app na ito."</string>
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Payagan ang app na ito na magtakda ng mga alarm at mag-iskedyul ng iba pang aksyon. Posibleng gamitin ang app na ito kapag hindi mo ginagamit ang iyong telepono, na posibleng gumamit ng mas maraming baterya. Kung naka-off ang pahintulot na ito, posibleng hindi gumana nang normal ang app na ito, at hindi gagana ang mga alarm nito gaya ng nakaiskedyul."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Payagan ang app na ito na magtakda ng mga alarm at mag-iskedyul ng iba pang aksyon. Posibleng gamitin ang app na ito kapag hindi mo ginagamit ang iyong tablet, na posibleng gumamit ng mas maraming baterya. Kung naka-off ang pahintulot na ito, posibleng hindi gumana nang normal ang app na ito, at hindi gagana ang mga alarm nito gaya ng nakaiskedyul."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Payagan ang app na ito na magtakda ng mga alarm at mag-iskedyul ng iba pang aksyon. Posibleng gamitin ang app na ito kapag hindi mo ginagamit ang iyong device, na posibleng gumamit ng mas maraming baterya. Kung naka-off ang pahintulot na ito, posibleng hindi gumana nang normal ang app na ito, at hindi gagana ang mga alarm nito gaya ng nakaiskedyul."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"iskedyul, alarm, paalala, orasan"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"I-on"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"I-on ang Huwag Istorbohin"</string>

@@ -53,8 +53,7 @@ public class AmbientDisplayConfiguration {
                 || pickupGestureEnabled(user)
                 || tapGestureEnabled(user)
                 || doubleTapGestureEnabled(user)
-                || quickPickupSensorEnabled(user)
-                || screenOffUdfpsEnabled(user);
+                || quickPickupSensorEnabled(user);
     }
 
     /** {@hide} */
@@ -104,12 +103,6 @@ public class AmbientDisplayConfiguration {
     /** {@hide} */
     public boolean quickPickupSensorEnabled(int user) {
         return !TextUtils.isEmpty(quickPickupSensorType()) && !alwaysOnEnabled(user);
-    }
-
-    /** {@hide} */
-    public boolean screenOffUdfpsEnabled(int user) {
-        return !TextUtils.isEmpty(udfpsLongPressSensorType())
-            && boolSettingDefaultOff("screen_off_udfps_enabled", user);
     }
 
     /** {@hide} */

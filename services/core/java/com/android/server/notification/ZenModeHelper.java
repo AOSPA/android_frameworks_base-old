@@ -307,8 +307,7 @@ public class ZenModeHelper {
         return null;
     }
 
-    public String addAutomaticZenRule(String pkg, AutomaticZenRule automaticZenRule,
-            String reason) {
+    public String addAutomaticZenRule(AutomaticZenRule automaticZenRule, String reason) {
         if (!isSystemRule(automaticZenRule)) {
             PackageItemInfo component = getServiceInfo(automaticZenRule.getOwner());
             if (component == null) {
@@ -341,7 +340,7 @@ public class ZenModeHelper {
             }
             newConfig = mConfig.copy();
             ZenRule rule = new ZenRule();
-            populateZenRule(pkg, automaticZenRule, rule, true);
+            populateZenRule(automaticZenRule, rule, true);
             newConfig.automaticRules.put(rule.id, rule);
             if (setConfigLocked(newConfig, reason, rule.component, true)) {
                 return rule.id;
@@ -377,7 +376,7 @@ public class ZenModeHelper {
                                 ? AUTOMATIC_RULE_STATUS_ENABLED : AUTOMATIC_RULE_STATUS_DISABLED);
             }
 
-            populateZenRule(rule.pkg, automaticZenRule, rule, false);
+            populateZenRule(automaticZenRule, rule, false);
             return setConfigLocked(newConfig, reason, rule.component, true);
         }
     }
@@ -586,8 +585,7 @@ public class ZenModeHelper {
         return null;
     }
 
-    private void populateZenRule(String pkg, AutomaticZenRule automaticZenRule, ZenRule rule,
-            boolean isNew) {
+    private void populateZenRule(AutomaticZenRule automaticZenRule, ZenRule rule, boolean isNew) {
         rule.name = automaticZenRule.getName();
         rule.condition = null;
         rule.conditionId = automaticZenRule.getConditionId();
@@ -602,7 +600,9 @@ public class ZenModeHelper {
             rule.id = ZenModeConfig.newRuleId();
             rule.creationTime = System.currentTimeMillis();
             rule.component = automaticZenRule.getOwner();
-            rule.pkg = pkg;
+            rule.pkg = (rule.component != null)
+                    ? rule.component.getPackageName()
+                    : rule.configurationActivity.getPackageName();
         }
 
         if (rule.enabled != automaticZenRule.isEnabled()) {
@@ -611,13 +611,10 @@ public class ZenModeHelper {
     }
 
     protected AutomaticZenRule createAutomaticZenRule(ZenRule rule) {
-        AutomaticZenRule azr =  new AutomaticZenRule(rule.name, rule.component,
-                rule.configurationActivity,
+        return new AutomaticZenRule(rule.name, rule.component, rule.configurationActivity,
                 rule.conditionId, rule.zenPolicy,
                 NotificationManager.zenModeToInterruptionFilter(rule.zenMode),
                 rule.enabled, rule.creationTime);
-        azr.setPackageName(rule.pkg);
-        return azr;
     }
 
     public void setManualZenMode(int zenMode, Uri conditionId, String caller, String reason) {

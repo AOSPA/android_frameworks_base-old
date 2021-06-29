@@ -34,6 +34,7 @@ import android.content.Context;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.UserHandle;
+import android.security.keystore.KeyGenParameterSpec;
 import android.security.keystore.KeyProperties;
 import android.util.Slog;
 
@@ -95,27 +96,6 @@ public class BiometricManager {
             BIOMETRIC_ERROR_SECURITY_UPDATE_REQUIRED})
     @Retention(RetentionPolicy.SOURCE)
     public @interface BiometricError {}
-
-    /**
-     * Single sensor or unspecified multi-sensor behavior (prefer an explicit choice if the
-     * device is multi-sensor).
-     * @hide
-     */
-    public static final int BIOMETRIC_MULTI_SENSOR_DEFAULT = 0;
-
-    /**
-     * Prefer the face sensor and fall back to fingerprint when needed.
-     * @hide
-     */
-    public static final int BIOMETRIC_MULTI_SENSOR_FACE_THEN_FINGERPRINT = 1;
-
-    /**
-     * @hide
-     */
-    @IntDef({BIOMETRIC_MULTI_SENSOR_DEFAULT,
-            BIOMETRIC_MULTI_SENSOR_FACE_THEN_FINGERPRINT})
-    @Retention(RetentionPolicy.SOURCE)
-    public @interface BiometricMultiSensorMode {}
 
     /**
      * Types of authenticators, defined at a level of granularity supported by

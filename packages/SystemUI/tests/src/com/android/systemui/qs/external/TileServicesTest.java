@@ -118,8 +118,7 @@ public class TileServicesTest extends SysuiTestCase {
                 mQSLogger,
                 mUiEventLogger,
                 mUserTracker,
-                mSecureSettings,
-                mock(CustomTileStatePersister.class));
+                mSecureSettings);
         mTileService = new TestTileServices(host, Looper.getMainLooper(), mBroadcastDispatcher,
                 mUserTracker);
     }

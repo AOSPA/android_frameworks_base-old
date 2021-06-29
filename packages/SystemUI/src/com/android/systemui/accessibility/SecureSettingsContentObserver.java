@@ -21,7 +21,6 @@ import android.content.Context;
 import android.database.ContentObserver;
 import android.os.Handler;
 import android.os.Looper;
-import android.os.UserHandle;
 import android.provider.Settings;
 
 import androidx.annotation.NonNull;
@@ -76,7 +75,7 @@ public abstract class SecureSettingsContentObserver<T> {
         if (mListeners.size() == 1) {
             mContentResolver.registerContentObserver(
                     Settings.Secure.getUriFor(mKey), /* notifyForDescendants= */
-                    false, mContentObserver, UserHandle.USER_ALL);
+                    false, mContentObserver);
         }
     }
 
@@ -101,7 +100,7 @@ public abstract class SecureSettingsContentObserver<T> {
      * See {@link Settings.Secure}.
      */
     public final String getSettingsValue() {
-        return Settings.Secure.getStringForUser(mContentResolver, mKey, UserHandle.USER_CURRENT);
+        return Settings.Secure.getString(mContentResolver, mKey);
     }
 
     private void updateValueChanged() {

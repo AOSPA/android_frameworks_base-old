@@ -37,6 +37,7 @@ import android.os.IThermalService;
 import android.os.Looper;
 import android.os.PowerManager;
 import android.os.test.TestLooper;
+import android.provider.Settings;
 
 import androidx.test.InstrumentationRegistry;
 import androidx.test.filters.SmallTest;
@@ -50,7 +51,6 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
-import java.util.Collections;
 
 /** Tests for {@link OneTouchPlayAction} */
 @SmallTest
@@ -69,7 +69,6 @@ public class OneTouchPlayActionTest {
     private Context mContextSpy;
     private HdmiControlService mHdmiControlService;
     private FakeNativeWrapper mNativeWrapper;
-    private FakeHdmiCecConfig mHdmiCecConfig;
 
     private TestLooper mTestLooper = new TestLooper();
     private ArrayList<HdmiCecLocalDevice> mLocalDevices = new ArrayList<>();
@@ -89,7 +88,6 @@ public class OneTouchPlayActionTest {
         MockitoAnnotations.initMocks(this);
 
         mContextSpy = spy(new ContextWrapper(InstrumentationRegistry.getTargetContext()));
-        mHdmiCecConfig = new FakeHdmiCecConfig(mContextSpy);
 
         setHdmiControlEnabled(hdmiControlEnabled);
 
@@ -101,7 +99,7 @@ public class OneTouchPlayActionTest {
                 mIThermalServiceMock, new Handler(mTestLooper.getLooper())));
         when(mIPowerManagerMock.isInteractive()).thenReturn(true);
 
-        mHdmiControlService = new HdmiControlService(mContextSpy, Collections.emptyList()) {
+        mHdmiControlService = new HdmiControlService(mContextSpy) {
             @Override
             AudioManager getAudioManager() {
                 return new AudioManager() {
@@ -136,7 +134,7 @@ public class OneTouchPlayActionTest {
 
         Looper looper = mTestLooper.getLooper();
         mHdmiControlService.setIoLooper(looper);
-        mHdmiControlService.setHdmiCecConfig(mHdmiCecConfig);
+        mHdmiControlService.setHdmiCecConfig(new FakeHdmiCecConfig(mContextSpy));
         mNativeWrapper = new FakeNativeWrapper();
         HdmiCecController hdmiCecController = HdmiCecController.createWithNativeWrapper(
                 this.mHdmiControlService, mNativeWrapper, mHdmiControlService.getAtomWriter());
@@ -481,7 +479,7 @@ public class OneTouchPlayActionTest {
         mTestLooper.dispatchAll();
 
         assertThat(callback.hasResult()).isFalse();
-        mNativeWrapper.clearResultMessages();
+        assertThat(playbackDevice.isActiveSource()).isFalse();
 
         setHdmiControlEnabled(true);
         mHdmiControlService.allocateLogicalAddress(mLocalDevices, INITIATED_BY_ENABLE_CEC);
@@ -500,12 +498,6 @@ public class OneTouchPlayActionTest {
         assertThat(mHdmiControlService.isAddressAllocated()).isTrue();
         assertThat(callback.getResult()).isEqualTo(HdmiControlManager.RESULT_SUCCESS);
         assertThat(playbackDevice.isActiveSource()).isTrue();
-        HdmiCecMessage activeSource = HdmiCecMessageBuilder.buildActiveSource(
-                playbackDevice.mAddress, mPhysicalAddress);
-        HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(playbackDevice.mAddress,
-                ADDR_TV);
-        assertThat(mNativeWrapper.getResultMessages()).contains(activeSource);
-        assertThat(mNativeWrapper.getResultMessages()).contains(textViewOn);
     }
 
     @Test
@@ -535,12 +527,6 @@ public class OneTouchPlayActionTest {
 
         assertThat(callback.getResult()).isEqualTo(HdmiControlManager.RESULT_SUCCESS);
         assertThat(playbackDevice.isActiveSource()).isTrue();
-        HdmiCecMessage activeSource = HdmiCecMessageBuilder.buildActiveSource(
-                playbackDevice.mAddress, mPhysicalAddress);
-        HdmiCecMessage textViewOn = HdmiCecMessageBuilder.buildTextViewOn(playbackDevice.mAddress,
-                ADDR_TV);
-        assertThat(mNativeWrapper.getResultMessages()).contains(activeSource);
-        assertThat(mNativeWrapper.getResultMessages()).contains(textViewOn);
     }
 
     @Test
@@ -616,8 +602,8 @@ public class OneTouchPlayActionTest {
     }
 
     private void setHdmiControlEnabled(boolean enabled) {
-        int value = enabled ? HdmiControlManager.HDMI_CEC_CONTROL_ENABLED :
-                HdmiControlManager.HDMI_CEC_CONTROL_DISABLED;
-        mHdmiCecConfig.setIntValue(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED, value);
+        int value = enabled ? 1 : 0;
+        Settings.Global.putInt(mContextSpy.getContentResolver(),
+                Settings.Global.HDMI_CONTROL_ENABLED, value);
     }
 }

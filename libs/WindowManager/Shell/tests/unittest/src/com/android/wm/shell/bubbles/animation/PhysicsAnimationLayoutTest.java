@@ -249,7 +249,7 @@ public class PhysicsAnimationLayoutTest extends PhysicsAnimationLayoutTestCase {
         Mockito.verify(mTestableController, Mockito.never())
                 .getNextAnimationInChain(eq(DynamicAnimation.SCALE_X), anyInt());
         Mockito.verify(mTestableController, Mockito.never())
-                .getOffsetForChainedPropertyAnimation(eq(DynamicAnimation.SCALE_X), anyInt());
+                .getOffsetForChainedPropertyAnimation(eq(DynamicAnimation.SCALE_X));
 
         // Make sure we asked the new controller about its animated properties, and configuration
         // options.
@@ -258,7 +258,7 @@ public class PhysicsAnimationLayoutTest extends PhysicsAnimationLayoutTestCase {
         Mockito.verify(secondController, Mockito.atLeastOnce())
                 .getNextAnimationInChain(eq(DynamicAnimation.SCALE_X), anyInt());
         Mockito.verify(secondController, Mockito.atLeastOnce())
-                .getOffsetForChainedPropertyAnimation(eq(DynamicAnimation.SCALE_X), anyInt());
+                .getOffsetForChainedPropertyAnimation(eq(DynamicAnimation.SCALE_X));
 
         mLayout.setActiveController(mTestableController);
         mTestableController.animationForChildAtIndex(0)
@@ -271,7 +271,7 @@ public class PhysicsAnimationLayoutTest extends PhysicsAnimationLayoutTestCase {
         Mockito.verify(secondController, Mockito.never())
                 .getNextAnimationInChain(eq(DynamicAnimation.TRANSLATION_X), anyInt());
         Mockito.verify(secondController, Mockito.never())
-                .getOffsetForChainedPropertyAnimation(eq(DynamicAnimation.TRANSLATION_X), anyInt());
+                .getOffsetForChainedPropertyAnimation(eq(DynamicAnimation.TRANSLATION_X));
 
     }
 
@@ -479,8 +479,7 @@ public class PhysicsAnimationLayoutTest extends PhysicsAnimationLayoutTestCase {
         }
 
         @Override
-        float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property,
-                int index) {
+        float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property) {
             return mOffsetForProperty.getOrDefault(property, 0f);
         }
 

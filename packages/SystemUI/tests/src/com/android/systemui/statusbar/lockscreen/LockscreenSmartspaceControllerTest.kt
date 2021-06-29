@@ -16,6 +16,7 @@
 
 package com.android.systemui.statusbar.lockscreen
 
+
 import android.app.smartspace.SmartspaceManager
 import android.app.smartspace.SmartspaceSession
 import android.app.smartspace.SmartspaceSession.OnTargetsAvailableListener
@@ -414,9 +415,8 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         clearInvocations(smartspaceManager)
         clearInvocations(plugin)
 
-        // WHEN we're asked to connect a second time and add to a parent
-        val view = controller.buildAndConnectView(fakeParent)
-        fakeParent.addView(view)
+        // WHEN we're asked to connect a second time
+        controller.buildAndConnectView(fakeParent)
 
         // THEN the existing view and session are reused
         verify(smartspaceManager, never()).createSmartspaceSession(any())
@@ -424,8 +424,8 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         assertEquals(fakeSmartspaceView, controller.view)
     }
 
-    private fun connectSession() {
-        controller.buildAndConnectView(fakeParent)
+    private fun connectSession(): View {
+        val view = controller.buildAndConnectView(fakeParent)
 
         verify(smartspaceSession)
                 .addOnTargetsAvailableListener(any(), capture(sessionListenerCaptor))
@@ -454,7 +454,7 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         verify(fakeSmartspaceView).setDozeAmount(0.5f)
         clearInvocations(fakeSmartspaceView)
 
-        fakeParent.addView(fakeSmartspaceView)
+        return view
     }
 
     private fun setActiveUser(userHandle: UserHandle) {
@@ -510,9 +510,6 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         }
 
         override fun setNextAlarm(image: Drawable?, description: String?) {
-        }
-
-        override fun setMediaTarget(target: SmartspaceTarget?) {
         }
     })
 }

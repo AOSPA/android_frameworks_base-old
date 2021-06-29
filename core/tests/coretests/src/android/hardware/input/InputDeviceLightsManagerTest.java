@@ -23,8 +23,6 @@ import static com.google.common.truth.Truth.assertThat;
 import static junit.framework.TestCase.assertEquals;
 import static junit.framework.TestCase.assertNotNull;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
@@ -130,12 +128,9 @@ public class InputDeviceLightsManagerTest {
         assertNotNull(device);
 
         Light[] mockedLights = {
-            new Light(1 /* id */, "Light1", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        Light.LIGHT_CAPABILITY_BRIGHTNESS),
-            new Light(2 /* id */, "Light2", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        Light.LIGHT_CAPABILITY_RGB),
-            new Light(3 /* id */, "Light3", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        0 /* capabilities */)
+            new Light(1 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_SINGLE),
+            new Light(2 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_RGB),
+            new Light(3 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_PLAYER_ID)
         };
         mockLights(mockedLights);
 
@@ -151,14 +146,10 @@ public class InputDeviceLightsManagerTest {
         assertNotNull(device);
 
         Light[] mockedLights = {
-            new Light(1 /* id */, "Light1", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        Light.LIGHT_CAPABILITY_RGB),
-            new Light(2 /* id */, "Light2", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        Light.LIGHT_CAPABILITY_RGB),
-            new Light(3 /* id */, "Light3", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        Light.LIGHT_CAPABILITY_RGB),
-            new Light(4 /* id */, "Light4", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                        Light.LIGHT_CAPABILITY_RGB)
+            new Light(1 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_RGB),
+            new Light(2 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_RGB),
+            new Light(3 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_RGB),
+            new Light(4 /* id */, 0 /* ordinal */, Light.LIGHT_TYPE_INPUT_RGB)
         };
         mockLights(mockedLights);
 
@@ -203,12 +194,9 @@ public class InputDeviceLightsManagerTest {
         assertNotNull(device);
 
         Light[] mockedLights = {
-                new Light(1 /* id */, "Light1", 0 /* ordinal */, Light.LIGHT_TYPE_PLAYER_ID,
-                            0 /* capabilities */),
-                new Light(2 /* id */, "Light2", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                            Light.LIGHT_CAPABILITY_RGB | Light.LIGHT_CAPABILITY_BRIGHTNESS),
-                new Light(3 /* id */, "Light3", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                            Light.LIGHT_CAPABILITY_BRIGHTNESS)
+            new Light(1 /* id */, 0 /* ordinal */,  Light.LIGHT_TYPE_INPUT_PLAYER_ID),
+            new Light(2 /* id */, 0 /* ordinal */,  Light.LIGHT_TYPE_INPUT_SINGLE),
+            new Light(3 /* id */, 0 /* ordinal */,  Light.LIGHT_TYPE_INPUT_RGB),
         };
         mockLights(mockedLights);
 
@@ -239,42 +227,23 @@ public class InputDeviceLightsManagerTest {
     }
 
     @Test
-    public void testLightCapabilities() throws Exception {
-        Light light = new Light(1 /* id */, "Light1", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                Light.LIGHT_CAPABILITY_RGB | Light.LIGHT_CAPABILITY_BRIGHTNESS);
-        assertThat(light.getType()).isEqualTo(Light.LIGHT_TYPE_INPUT);
-        assertThat(light.getCapabilities()).isEqualTo(Light.LIGHT_CAPABILITY_RGB
-                | Light.LIGHT_CAPABILITY_BRIGHTNESS);
-        assertTrue(light.hasBrightnessControl());
-        assertTrue(light.hasRgbControl());
-    }
-
-    @Test
     public void testLightsRequest() throws Exception {
-        Light light1 = new Light(1 /* id */, "Light1", 0 /* ordinal */, Light.LIGHT_TYPE_INPUT,
-                0 /* capabilities */);
-        Light light2 = new Light(2 /* id */, "Light2", 0 /* ordinal */, Light.LIGHT_TYPE_PLAYER_ID,
-                0 /* capabilities */);
-        LightState state1 = new LightState(0xf1);
-        LightState state2 = new LightState(0xf2, PLAYER_ID);
-        LightsRequest request = new Builder().addLight(light1, state1)
-                .addLight(light2, state2).build();
+        Light light = new Light(1 /* id */, 0 /* ordinal */,  Light.LIGHT_TYPE_INPUT_PLAYER_ID);
+        LightState state = new LightState(0xf1);
+        LightsRequest request = new Builder().addLight(light, state).build();
 
         // Covers the LightsRequest.getLights
-        assertThat(request.getLights().size()).isEqualTo(2);
+        assertThat(request.getLights().size()).isEqualTo(1);
         assertThat(request.getLights().get(0)).isEqualTo(1);
-        assertThat(request.getLights().get(1)).isEqualTo(2);
 
         // Covers the LightsRequest.getLightStates
-        assertThat(request.getLightStates().size()).isEqualTo(2);
-        assertThat(request.getLightStates().get(0)).isEqualTo(state1);
-        assertThat(request.getLightStates().get(1)).isEqualTo(state2);
+        assertThat(request.getLightStates().size()).isEqualTo(1);
+        assertThat(request.getLightStates().get(0)).isEqualTo(state);
 
         // Covers the LightsRequest.getLightsAndStates
-        assertThat(request.getLightsAndStates().size()).isEqualTo(2);
-        assertThat(request.getLightsAndStates().containsKey(light1)).isTrue();
-        assertThat(request.getLightsAndStates().get(light1)).isEqualTo(state1);
-        assertThat(request.getLightsAndStates().get(light2)).isEqualTo(state2);
+        assertThat(request.getLightsAndStates().size()).isEqualTo(1);
+        assertThat(request.getLightsAndStates().containsKey(1)).isTrue();
+        assertThat(request.getLightsAndStates().get(1)).isEqualTo(state);
     }
 
 }

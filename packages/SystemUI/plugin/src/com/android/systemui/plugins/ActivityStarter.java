@@ -87,17 +87,8 @@ public interface ActivityStarter {
 
     interface OnDismissAction {
         /**
-         * @return {@code true} if the dismiss should be deferred. When returning true, make sure to
-         *         call {@link com.android.keyguard.ViewMediatorCallback#readyForKeyguardDone()}
-         *         *after* returning to start hiding the keyguard.
+         * @return {@code true} if the dismiss should be deferred
          */
         boolean onDismiss();
-
-        /**
-         * Whether running this action when we are locked will start an animation on the keyguard.
-         */
-        default boolean willRunAnimationOnKeyguard() {
-            return false;
-        }
     }
 }

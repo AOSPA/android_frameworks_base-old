@@ -22,15 +22,11 @@
     android:id="@+id/navigation_bar_view"
     android:layout_height="match_parent"
     android:layout_width="match_parent"
-    android:clipChildren="false"
-    android:clipToPadding="false"
     android:background="@drawable/system_bar_background">
 
     <com.android.systemui.navigationbar.NavigationBarInflaterView
         android:id="@+id/navigation_inflater"
         android:layout_width="match_parent"
-        android:layout_height="match_parent"
-        android:clipChildren="false"
-        android:clipToPadding="false" />
+        android:layout_height="match_parent" />
 
 </com.android.systemui.navigationbar.NavigationBarView>

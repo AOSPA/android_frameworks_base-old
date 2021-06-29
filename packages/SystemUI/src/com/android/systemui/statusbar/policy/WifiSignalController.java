@@ -141,9 +141,7 @@ public class WifiSignalController extends
     @Override
     public void notifyListeners(SignalCallback callback) {
         if (mCurrentState.isCarrierMerged) {
-            if (mCurrentState.isDefault) {
-                notifyListenersForCarrierWifi(callback);
-            }
+            notifyListenersForCarrierWifi(callback);
         } else {
             notifyListenersForNonCarrierWifi(callback);
         }

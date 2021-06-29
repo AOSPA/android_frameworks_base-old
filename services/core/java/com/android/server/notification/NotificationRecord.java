@@ -47,7 +47,6 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.IBinder;
 import android.os.UserHandle;
-import android.os.VibrationEffect;
 import android.provider.Settings;
 import android.service.notification.Adjustment;
 import android.service.notification.NotificationListenerService;
@@ -159,7 +158,7 @@ public final class NotificationRecord {
     private String mUserExplanation;
     private boolean mPreChannelsNotification = true;
     private Uri mSound;
-    private VibrationEffect mVibration;
+    private long[] mVibration;
     private AudioAttributes mAttributes;
     private NotificationChannel mChannel;
     private ArrayList<String> mPeopleOverride;
@@ -288,28 +287,29 @@ public final class NotificationRecord {
         return light;
     }
 
-    private VibrationEffect calculateVibration() {
-        VibratorHelper helper = new VibratorHelper(mContext);
-        final Notification notification = getSbn().getNotification();
-        final boolean insistent = (notification.flags & Notification.FLAG_INSISTENT) != 0;
-        VibrationEffect defaultVibration = helper.createDefaultVibration(insistent);
-        VibrationEffect vibration;
+    private long[] calculateVibration() {
+        long[] vibration;
+        final long[] defaultVibration =  NotificationManagerService.getLongArray(
+                mContext.getResources(),
+                com.android.internal.R.array.config_defaultNotificationVibePattern,
+                NotificationManagerService.VIBRATE_PATTERN_MAXLEN,
+                NotificationManagerService.DEFAULT_VIBRATE_PATTERN);
         if (getChannel().shouldVibrate()) {
             vibration = getChannel().getVibrationPattern() == null
-                    ? defaultVibration
-                    : helper.createWaveformVibration(getChannel().getVibrationPattern(), insistent);
+                    ? defaultVibration : getChannel().getVibrationPattern();
         } else {
             vibration = null;
         }
         if (mPreChannelsNotification
                 && (getChannel().getUserLockedFields()
                 & NotificationChannel.USER_LOCKED_VIBRATION) == 0) {
+            final Notification notification = getSbn().getNotification();
             final boolean useDefaultVibrate =
                     (notification.defaults & Notification.DEFAULT_VIBRATE) != 0;
             if (useDefaultVibrate) {
                 vibration = defaultVibration;
             } else {
-                vibration = helper.createWaveformVibration(notification.vibrate, insistent);
+                vibration = notification.vibrate;
             }
         }
         return vibration;
@@ -877,10 +877,6 @@ public final class NotificationRecord {
         return mHidden;
     }
 
-    public boolean isForegroundService() {
-        return 0 != (getFlags() & Notification.FLAG_FOREGROUND_SERVICE);
-    }
-
     /**
      * Override of all alerting information on the channel and notification. Used when notifications
      * are reposted in response to direct user action and thus don't need to alert.
@@ -1071,7 +1067,7 @@ public final class NotificationRecord {
         return mSound;
     }
 
-    public VibrationEffect getVibration() {
+    public long[] getVibration() {
         return mVibration;
     }
 
@@ -1389,9 +1385,10 @@ public final class NotificationRecord {
 
     public boolean hasUndecoratedRemoteView() {
         Notification notification = getNotification();
-        boolean hasDecoratedStyle =
-                notification.isStyle(Notification.DecoratedCustomViewStyle.class)
-                || notification.isStyle(Notification.DecoratedMediaCustomViewStyle.class);
+        Class<? extends Notification.Style> style = notification.getNotificationStyle();
+        boolean hasDecoratedStyle = style != null
+                && (Notification.DecoratedCustomViewStyle.class.equals(style)
+                || Notification.DecoratedMediaCustomViewStyle.class.equals(style));
         boolean hasCustomRemoteView = notification.contentView != null
                 || notification.bigContentView != null
                 || notification.headsUpContentView != null;
@@ -1431,7 +1428,7 @@ public final class NotificationRecord {
         if (mIsNotConversationOverride) {
             return false;
         }
-        if (!notification.isStyle(Notification.MessagingStyle.class)) {
+        if (!Notification.MessagingStyle.class.equals(notification.getNotificationStyle())) {
             // some non-msgStyle notifs can temporarily appear in the conversation space if category
             // is right
             if (mPkgAllowedAsConvo && mTargetSdkVersion < Build.VERSION_CODES.R
@@ -1442,7 +1439,7 @@ public final class NotificationRecord {
         }
 
         if (mTargetSdkVersion >= Build.VERSION_CODES.R
-                && notification.isStyle(Notification.MessagingStyle.class)
+                && Notification.MessagingStyle.class.equals(notification.getNotificationStyle())
                 && (mShortcutInfo == null || isOnlyBots(mShortcutInfo.getPersons()))) {
             return false;
         }

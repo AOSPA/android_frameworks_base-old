@@ -43,7 +43,6 @@ import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.RemoteException;
 import android.view.SurfaceControl;
-import android.view.SurfaceSession;
 import android.window.IRemoteTransition;
 import android.window.IRemoteTransitionFinishedCallback;
 import android.window.TransitionInfo;
@@ -81,7 +80,6 @@ public class SplitTransitionTests extends ShellTestCase {
     @Mock private DisplayImeController mDisplayImeController;
     @Mock private TransactionPool mTransactionPool;
     @Mock private Transitions mTransitions;
-    @Mock private SurfaceSession mSurfaceSession;
     private SplitLayout mSplitLayout;
     private MainStage mMainStage;
     private SideStage mSideStage;
@@ -100,10 +98,10 @@ public class SplitTransitionTests extends ShellTestCase {
         doReturn(mock(SurfaceControl.Transaction.class)).when(mTransactionPool).acquire();
         mSplitLayout = SplitTestUtils.createMockSplitLayout();
         mMainStage = new MainStage(mTaskOrganizer, DEFAULT_DISPLAY, mock(
-                StageTaskListener.StageListenerCallbacks.class), mSyncQueue, mSurfaceSession);
+                StageTaskListener.StageListenerCallbacks.class), mSyncQueue);
         mMainStage.onTaskAppeared(new TestRunningTaskInfoBuilder().build(), createMockSurface());
         mSideStage = new SideStage(mTaskOrganizer, DEFAULT_DISPLAY, mock(
-                StageTaskListener.StageListenerCallbacks.class), mSyncQueue, mSurfaceSession);
+                StageTaskListener.StageListenerCallbacks.class), mSyncQueue);
         mSideStage.onTaskAppeared(new TestRunningTaskInfoBuilder().build(), createMockSurface());
         mStageCoordinator = new SplitTestUtils.TestStageCoordinator(mContext, DEFAULT_DISPLAY,
                     mSyncQueue, mRootTDAOrganizer, mTaskOrganizer, mMainStage, mSideStage,

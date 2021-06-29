@@ -17,16 +17,13 @@
 package com.android.server.appsearch.stats;
 
 import android.annotation.NonNull;
+import android.annotation.UserIdInt;
 import android.content.Context;
-import android.os.UserHandle;
-import android.util.ArrayMap;
+import android.util.SparseArray;
+import android.util.SparseIntArray;
 
 import com.android.internal.annotations.GuardedBy;
-import com.android.server.appsearch.AppSearchConfig;
 import com.android.server.appsearch.AppSearchManagerService;
-
-import java.util.Map;
-import java.util.Objects;
 
 /**
  * Manages the lifecycle of instances of {@link PlatformLogger}.
@@ -34,10 +31,16 @@ import java.util.Objects;
  * <p>These instances are managed per unique device-user.
  */
 public final class LoggerInstanceManager {
+    // TODO(b/173532925) flags to control those three
+    // So probably we can't pass those three in the constructor but need to fetch the latest value
+    // every time we need them in the logger.
+    private static final int MIN_TIME_INTERVAL_BETWEEN_SAMPLES_MILLIS = 100;
+    private static final int DEFAULT_SAMPLING_RATIO = 10;
+
     private static volatile LoggerInstanceManager sLoggerInstanceManager;
 
     @GuardedBy("mInstancesLocked")
-    private final Map<UserHandle, PlatformLogger> mInstancesLocked = new ArrayMap<>();
+    private final SparseArray<PlatformLogger> mInstancesLocked = new SparseArray<>();
 
     private LoggerInstanceManager() {
     }
@@ -64,24 +67,28 @@ public final class LoggerInstanceManager {
     /**
      * Gets an instance of PlatformLogger for the given user, or creates one if none exists.
      *
-     * @param context    The context
-     * @param userHandle The multi-user handle of the device user calling AppSearch
+     * @param context The context
+     * @param userId  The multi-user userId of the device user calling AppSearch
      * @return An initialized {@link PlatformLogger} for this user
      */
     @NonNull
     public PlatformLogger getOrCreatePlatformLogger(
-            @NonNull Context context, @NonNull UserHandle userHandle,
-            @NonNull AppSearchConfig config) {
-        Objects.requireNonNull(userHandle);
+            @NonNull Context context, @UserIdInt int userId) {
         synchronized (mInstancesLocked) {
-            PlatformLogger instance = mInstancesLocked.get(userHandle);
+            PlatformLogger instance = mInstancesLocked.get(userId);
             if (instance == null) {
-                instance = new PlatformLogger(context, userHandle, config);
-                mInstancesLocked.put(userHandle, instance);
+                instance = new PlatformLogger(context, userId, new PlatformLogger.Config(
+                        MIN_TIME_INTERVAL_BETWEEN_SAMPLES_MILLIS,
+                        DEFAULT_SAMPLING_RATIO,
+                        // TODO(b/173532925) re-enable sampling ratios for different stats types
+                        // once we have P/H flag manager setup in ag/13977824
+                        /*samplingRatios=*/ new SparseIntArray()));
+                mInstancesLocked.put(userId, instance);
             }
             return instance;
         }
     }
+
 
     /**
      * Gets an instance of PlatformLogger for the given user.
@@ -89,21 +96,20 @@ public final class LoggerInstanceManager {
      * <p>This method should only be called by an initialized SearchSession, which has been already
      * created the PlatformLogger instance for the given user.
      *
-     * @param userHandle The multi-user handle of the device user calling AppSearch
+     * @param userId The multi-user userId of the device user calling AppSearch
      * @return An initialized {@link PlatformLogger} for this user
      * @throws IllegalStateException if {@link PlatformLogger} haven't created for the given user.
      */
     @NonNull
-    public PlatformLogger getPlatformLogger(@NonNull UserHandle userHandle) {
-        Objects.requireNonNull(userHandle);
+    public PlatformLogger getPlatformLogger(@UserIdInt int userId) {
         synchronized (mInstancesLocked) {
-            PlatformLogger instance = mInstancesLocked.get(userHandle);
+            PlatformLogger instance = mInstancesLocked.get(userId);
             if (instance == null) {
                 // Impossible scenario, user cannot call an uninitialized SearchSession,
                 // getInstance should always find the instance for the given user and never try to
                 // create an instance for this user again.
                 throw new IllegalStateException(
-                        "PlatformLogger has never been created for: " + userHandle);
+                        "PlatformLogger has never been created for this user: " + userId);
             }
             return instance;
         }
@@ -115,12 +121,11 @@ public final class LoggerInstanceManager {
      * <p>This method should only be called if {@link AppSearchManagerService} receives an
      * ACTION_USER_REMOVED, which the logger instance of given user should be removed.
      *
-     * @param userHandle The multi-user handle of the user that need to be removed.
+     * @param userId The multi-user userId of the user that need to be removed.
      */
-    public void removePlatformLoggerForUser(@NonNull UserHandle userHandle) {
-        Objects.requireNonNull(userHandle);
+    public void removePlatformLoggerForUser(@UserIdInt int userId) {
         synchronized (mInstancesLocked) {
-            mInstancesLocked.remove(userHandle);
+            mInstancesLocked.remove(userId);
         }
     }
 }

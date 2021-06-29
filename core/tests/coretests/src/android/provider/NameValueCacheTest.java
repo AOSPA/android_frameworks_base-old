@@ -96,8 +96,7 @@ public class NameValueCacheTest {
                     mCacheGenerationStore.set(0, ++mCurrentGeneration);
 
                     Bundle result = new Bundle();
-                    result.putInt(Settings.KEY_CONFIG_SET_ALL_RETURN,
-                            Settings.SET_ALL_RESULT_SUCCESS);
+                    result.putBoolean(Settings.KEY_CONFIG_SET_RETURN, true);
                     return result;
                 });
 

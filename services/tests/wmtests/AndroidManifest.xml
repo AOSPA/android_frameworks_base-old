@@ -41,8 +41,6 @@
     <uses-permission android:name="android.permission.CAPTURE_VIDEO_OUTPUT" />
     <uses-permission android:name="android.permission.READ_COMPAT_CHANGE_CONFIG" />
     <uses-permission android:name="android.permission.LOG_COMPAT_CHANGE" />
-    <uses-permission android:name="android.permission.CAPTURE_BLACKOUT_CONTENT"/>
-    <uses-permission android:name="android.permission.WRITE_DEVICE_CONFIG" />
 
     <!-- TODO: Remove largeHeap hack when memory leak is fixed (b/123984854) -->
     <application android:debuggable="true"
@@ -77,7 +75,6 @@
         <activity android:name="com.android.server.wm.ActivityOptionsTest$MainActivity"
                   android:turnScreenOn="true"
                   android:showWhenLocked="true" />
-        <activity android:name="com.android.server.wm.ScreenshotTests$ScreenshotActivity" />
     </application>
 
     <instrumentation

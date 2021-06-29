@@ -65,20 +65,13 @@ oneway interface IWindow {
 
     /**
      * Called when the window insets configuration has changed.
-     *
-     * @param willMove The window frame will be moved soon.
-     * @param willResize The window frame will be resized soon.
      */
-    void insetsChanged(in InsetsState insetsState, in boolean willMove, in boolean willResize);
+    void insetsChanged(in InsetsState insetsState);
 
     /**
      * Called when this window retrieved control over a specified set of insets sources.
-     *
-     * @param willMove The window frame will be moved soon.
-     * @param willResize The window frame will be resized soon.
      */
-    void insetsControlChanged(in InsetsState insetsState, in InsetsSourceControl[] activeControls,
-            in boolean willMove, in boolean willResize);
+    void insetsControlChanged(in InsetsState insetsState, in InsetsSourceControl[] activeControls);
 
     /**
      * Called when a set of insets source window should be shown by policy.

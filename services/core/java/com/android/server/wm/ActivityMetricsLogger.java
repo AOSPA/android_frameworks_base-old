@@ -77,15 +77,14 @@ import android.app.WindowConfiguration.WindowingMode;
 import android.content.ComponentName;
 import android.content.Intent;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.IncrementalStatesInfo;
 import android.content.pm.dex.ArtManagerInternal;
 import android.content.pm.dex.PackageOptimizationInfo;
 import android.metrics.LogMaker;
+import android.os.Binder;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.SystemClock;
 import android.os.Trace;
-import android.os.incremental.IncrementalManager;
 import android.util.ArrayMap;
 import android.util.BoostFramework;
 import android.util.EventLog;
@@ -104,6 +103,7 @@ import com.android.server.apphibernation.AppHibernationManagerInternal;
 import com.android.server.apphibernation.AppHibernationService;
 
 import java.util.ArrayList;
+import java.util.LinkedList;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -220,7 +220,7 @@ class ActivityMetricsLogger {
         /** whether the process of the launching activity didn't have any active activity. */
         final boolean mProcessSwitch;
         /** The activities that should be drawn. */
-        final ArrayList<ActivityRecord> mPendingDrawActivities = new ArrayList<>(2);
+        final LinkedList<ActivityRecord> mPendingDrawActivities = new LinkedList<>();
         /** The latest activity to have been launched. */
         @NonNull ActivityRecord mLastLaunchedActivity;
 
@@ -317,12 +317,6 @@ class ActivityMetricsLogger {
             }
         }
 
-        /** Returns {@code true} if the incoming activity can belong to this transition. */
-        boolean canCoalesce(ActivityRecord r) {
-            return mLastLaunchedActivity.mDisplayContent == r.mDisplayContent
-                    && mLastLaunchedActivity.getWindowingMode() == r.getWindowingMode();
-        }
-
         /** @return {@code true} if the activity matches a launched activity in this transition. */
         boolean contains(ActivityRecord r) {
             return r != null && (r == mLastLaunchedActivity || mPendingDrawActivities.contains(r));
@@ -336,17 +330,6 @@ class ActivityMetricsLogger {
 
         boolean allDrawn() {
             return mPendingDrawActivities.isEmpty();
-        }
-
-        /** Only keep the records which can be drawn. */
-        void updatePendingDraw() {
-            for (int i = mPendingDrawActivities.size() - 1; i >= 0; i--) {
-                final ActivityRecord r = mPendingDrawActivities.get(i);
-                if (!r.mVisibleRequested) {
-                    if (DEBUG_METRICS) Slog.i(TAG, "Discard pending draw " + r);
-                    mPendingDrawActivities.remove(i);
-                }
-            }
         }
 
         /**
@@ -528,12 +511,21 @@ class ActivityMetricsLogger {
     }
 
     /**
+     * If the caller is found in an active transition, it will be considered as consecutive launch
+     * and coalesced into the active transition.
+     *
+     * @see #notifyActivityLaunching(Intent, ActivityRecord, int)
+     */
+    LaunchingState notifyActivityLaunching(Intent intent, @Nullable ActivityRecord caller) {
+        return notifyActivityLaunching(intent, caller, Binder.getCallingUid());
+    }
+
+    /**
      * Notifies the tracker at the earliest possible point when we are starting to launch an
      * activity. The caller must ensure that {@link #notifyActivityLaunched} will be called later
-     * with the returned {@link LaunchingState}. If the caller is found in an active transition,
-     * it will be considered as consecutive launch and coalesced into the active transition.
+     * with the returned {@link LaunchingState}.
      */
-    LaunchingState notifyActivityLaunching(Intent intent, @Nullable ActivityRecord caller,
+    private LaunchingState notifyActivityLaunching(Intent intent, @Nullable ActivityRecord caller,
             int callingUid) {
         final long transitionStartTimeNs = SystemClock.elapsedRealtimeNanos();
         TransitionInfo existingInfo = null;
@@ -615,7 +607,8 @@ class ActivityMetricsLogger {
             return;
         }
 
-        if (info != null && info.canCoalesce(launchedActivity)) {
+        final DisplayContent targetDisplay = launchedActivity.mDisplayContent;
+        if (info != null && info.mLastLaunchedActivity.mDisplayContent == targetDisplay) {
             // If we are already in an existing transition on the same display, only update the
             // activity name, but not the other attributes.
 
@@ -643,7 +636,7 @@ class ActivityMetricsLogger {
             // As abort for no process switch.
             launchObserverNotifyIntentFailed();
         }
-        if (launchedActivity.mDisplayContent.isSleeping()) {
+        if (targetDisplay.isSleeping()) {
             // It is unknown whether the activity can be drawn or not, e.g. ut depends on the
             // keyguard states and the attributes or flags set by the activity. If the activity
             // keeps invisible in the grace period, the tracker will be cancelled so it won't get
@@ -721,7 +714,6 @@ class ActivityMetricsLogger {
             info.mCurrentTransitionDelayMs = info.calculateDelay(timestampNs);
             info.mReason = activityToReason.valueAt(index);
             info.mLoggedTransitionStarting = true;
-            info.updatePendingDraw();
             if (info.allDrawn()) {
                 done(false /* abort */, info, "notifyTransitionStarting - all windows drawn",
                         timestampNs);
@@ -801,7 +793,7 @@ class ActivityMetricsLogger {
             // window drawn event should report later to complete the transition. Otherwise all
             // activities in this task may be finished, invisible or drawn, so the transition event
             // should be cancelled.
-            if (t != null && t.forAllActivities(
+            if (t.forAllActivities(
                     a -> a.mVisibleRequested && !a.isReportedDrawn() && !a.finishing)) {
                 return;
             }
@@ -963,14 +955,6 @@ class ActivityMetricsLogger {
         builder.addTaggedData(PACKAGE_OPTIMIZATION_COMPILATION_FILTER,
                 packageOptimizationInfo.getCompilationFilter());
         mMetricsLogger.write(builder);
-
-        // Incremental info
-        boolean isIncremental = false, isLoading = false;
-        final String codePath = info.applicationInfo.getCodePath();
-        if (codePath != null && IncrementalManager.isIncrementalPath(codePath)) {
-            isIncremental = true;
-            isLoading = isIncrementalLoading(info.packageName, info.userId);
-        }
         FrameworkStatsLog.write(
                 FrameworkStatsLog.APP_START_OCCURRED,
                 info.applicationInfo.uid,
@@ -990,10 +974,7 @@ class ActivityMetricsLogger {
                 packageOptimizationInfo.getCompilationFilter(),
                 info.sourceType,
                 info.sourceEventDelayMs,
-                isHibernating,
-                isIncremental,
-                isLoading,
-                info.launchedActivityName.hashCode());
+                isHibernating);
 
         if (DEBUG_METRICS) {
             Slog.i(TAG, String.format("APP_START_OCCURRED(%s, %s, %s, %s, %s)",
@@ -1006,12 +987,6 @@ class ActivityMetricsLogger {
 
 
         logAppStartMemoryStateCapture(info);
-    }
-
-    private boolean isIncrementalLoading(String packageName, int userId) {
-        final IncrementalStatesInfo info = mSupervisor.mService.getPackageManagerInternalLocked()
-                .getIncrementalStatesInfo(packageName, 0 /* filterCallingUid */, userId);
-        return info != null && info.isLoading();
     }
 
     private void logAppDisplayed(TransitionInfoSnapshot info) {
@@ -1122,14 +1097,6 @@ class ActivityMetricsLogger {
         mMetricsLogger.write(builder);
         final PackageOptimizationInfo packageOptimizationInfo =
                 infoSnapshot.getPackageOptimizationInfo(getArtManagerInternal());
-        // Incremental info
-        boolean isIncremental = false, isLoading = false;
-        final String codePath = info.mLastLaunchedActivity.info.applicationInfo.getCodePath();
-        if (codePath != null && IncrementalManager.isIncrementalPath(codePath)) {
-            isIncremental = true;
-            isLoading = isIncrementalLoading(info.mLastLaunchedActivity.packageName,
-                            info.mLastLaunchedActivity.mUserId);
-        }
         FrameworkStatsLog.write(
                 FrameworkStatsLog.APP_START_FULLY_DRAWN,
                 info.mLastLaunchedActivity.info.applicationInfo.uid,
@@ -1143,10 +1110,7 @@ class ActivityMetricsLogger {
                 packageOptimizationInfo.getCompilationReason(),
                 packageOptimizationInfo.getCompilationFilter(),
                 info.mSourceType,
-                info.mSourceEventDelayMs,
-                isIncremental,
-                isLoading,
-                info.mLastLaunchedActivity.info.name.hashCode());
+                info.mSourceEventDelayMs);
 
         // Ends the trace started at the beginning of this function. This is located here to allow
         // the trace slice to have a noticable duration.

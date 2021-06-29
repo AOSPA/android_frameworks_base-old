@@ -365,8 +365,7 @@ void android_os_Process_setProcessGroup(JNIEnv* env, jobject clazz, int pid, jin
 void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, int uid, int pid, jint grp, jboolean dex2oat_only)
 {
     int fd;
-    char pathV1[255], pathV2[255];
-    static bool isCgroupV2 = false;
+    char path[255];
     if ((grp == SP_FOREGROUND) || (grp > SP_MAX)) {
         signalExceptionForGroupError(env, EINVAL, pid);
         return;
@@ -376,21 +375,8 @@ void android_os_Process_setCgroupProcsProcessGroup(JNIEnv* env, jobject clazz, i
     android_os_Process_setProcessGroup(env, clazz, pid, grp);
 
     //find processes in the same cgroup.procs of current uid and pid
-    snprintf(pathV1, sizeof(pathV1), "/acct/uid_%d/pid_%d/cgroup.procs", uid, pid);
-    snprintf(pathV2, sizeof(pathV2), "/sys/fs/cgroup/uid_%d/pid_%d/cgroup.procs", uid, pid);
-    if (isCgroupV2) {
-        // read from V2 only
-        fd = open(pathV2, O_RDONLY);
-    } else {
-        // first try V1
-        fd = open(pathV1, O_RDONLY);
-        if (fd < 0) {
-            fd = open(pathV2, O_RDONLY);
-            if (fd >= 0) {
-                isCgroupV2 = true;
-            }
-        }
-    }
+    snprintf(path, sizeof(path), "/acct/uid_%d/pid_%d/cgroup.procs", uid, pid);
+    fd = open(path, O_RDONLY);
     if (fd >= 0) {
         char buffer[256];
         char ch;

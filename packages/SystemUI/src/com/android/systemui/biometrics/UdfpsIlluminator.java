@@ -24,9 +24,9 @@ import android.annotation.Nullable;
  */
 interface UdfpsIlluminator {
     /**
-     * @param hbmProvider Invoked when HBM should be enabled or disabled.
+     * @param callback Invoked when HBM should be enabled or disabled.
      */
-    void setHbmProvider(@Nullable UdfpsHbmProvider hbmProvider);
+    void setHbmCallback(@Nullable UdfpsHbmCallback callback);
 
     /**
      * Invoked when illumination should start.

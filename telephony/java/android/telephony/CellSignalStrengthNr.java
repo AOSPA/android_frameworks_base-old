@@ -419,11 +419,7 @@ public final class CellSignalStrengthNr extends CellSignalStrength implements Pa
         int ssRsrqLevel = SignalStrength.INVALID;
         int ssSinrLevel = SignalStrength.INVALID;
         if (isLevelForParameter(USE_SSRSRP)) {
-            int rsrpBoost = 0;
-            if (ss != null) {
-                rsrpBoost = ss.getArfcnRsrpBoost();
-            }
-            ssRsrpLevel = updateLevelWithMeasure(mSsRsrp + rsrpBoost, mSsRsrpThresholds);
+            ssRsrpLevel = updateLevelWithMeasure(mSsRsrp, mSsRsrpThresholds);
             if (VDBG) {
                 Rlog.i(TAG, "Updated 5G NR SSRSRP Level: " + ssRsrpLevel);
             }

@@ -138,9 +138,7 @@ public class UserRestrictionsUtils {
             UserManager.DISALLOW_AMBIENT_DISPLAY,
             UserManager.DISALLOW_CONFIG_SCREEN_TIMEOUT,
             UserManager.DISALLOW_PRINTING,
-            UserManager.DISALLOW_CONFIG_PRIVATE_DNS,
-            UserManager.DISALLOW_MICROPHONE_TOGGLE,
-            UserManager.DISALLOW_CAMERA_TOGGLE
+            UserManager.DISALLOW_CONFIG_PRIVATE_DNS
     });
 
     public static final Set<String> DEPRECATED_USER_RESTRICTIONS = Sets.newArraySet(
@@ -182,9 +180,7 @@ public class UserRestrictionsUtils {
      */
     private static final Set<String> DEVICE_OWNER_ONLY_RESTRICTIONS = Sets.newArraySet(
             UserManager.DISALLOW_USER_SWITCH,
-            UserManager.DISALLOW_CONFIG_PRIVATE_DNS,
-            UserManager.DISALLOW_MICROPHONE_TOGGLE,
-            UserManager.DISALLOW_CAMERA_TOGGLE
+            UserManager.DISALLOW_CONFIG_PRIVATE_DNS
     );
 
     /**

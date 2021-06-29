@@ -58,7 +58,6 @@ import android.os.Process;
 import android.os.RemoteCallback;
 import android.os.RemoteException;
 import android.os.SystemClock;
-import android.os.Trace;
 import android.os.UserHandle;
 import android.provider.Settings;
 import android.text.TextUtils;
@@ -246,7 +245,7 @@ public class ContentProviderHelper {
 
                     checkTime(startTime, "getContentProviderImpl: before updateOomAdj");
                     final int verifiedAdj = cpr.proc.mState.getVerifiedAdj();
-                    boolean success = mService.updateOomAdjLocked(cpr.proc,
+                    boolean success = mService.updateOomAdjLocked(cpr.proc, true,
                             OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER);
                     // XXX things have changed so updateOomAdjLocked doesn't actually tell us
                     // if the process has been successfully adjusted.  So to reduce races with
@@ -502,38 +501,37 @@ public class ContentProviderHelper {
 
             mService.grantImplicitAccess(userId, null, callingUid,
                     UserHandle.getAppId(cpi.applicationInfo.uid));
+        }
 
-            if (caller != null) {
-                // The client will be waiting, and we'll notify it when the provider is ready.
-                synchronized (cpr) {
-                    if (cpr.provider == null) {
-                        if (cpr.launchingApp == null) {
-                            Slog.w(TAG, "Unable to launch app "
-                                    + cpi.applicationInfo.packageName + "/"
-                                    + cpi.applicationInfo.uid + " for provider "
-                                    + name + ": launching app became null");
-                            EventLogTags.writeAmProviderLostProcess(
-                                    UserHandle.getUserId(cpi.applicationInfo.uid),
-                                    cpi.applicationInfo.packageName,
-                                    cpi.applicationInfo.uid, name);
-                            return null;
-                        }
-
-                        if (conn != null) {
-                            conn.waiting = true;
-                        }
-                        Message msg = mService.mHandler.obtainMessage(
-                                ActivityManagerService.WAIT_FOR_CONTENT_PROVIDER_TIMEOUT_MSG);
-                        msg.obj = cpr;
-                        mService.mHandler.sendMessageDelayed(msg,
-                                ContentResolver.CONTENT_PROVIDER_READY_TIMEOUT_MILLIS);
+        if (caller != null) {
+            // The client will be waiting, and we'll notify it when the provider is ready.
+            synchronized (cpr) {
+                if (cpr.provider == null) {
+                    if (cpr.launchingApp == null) {
+                        Slog.w(TAG, "Unable to launch app "
+                                + cpi.applicationInfo.packageName + "/"
+                                + cpi.applicationInfo.uid + " for provider "
+                                + name + ": launching app became null");
+                        EventLogTags.writeAmProviderLostProcess(
+                                UserHandle.getUserId(cpi.applicationInfo.uid),
+                                cpi.applicationInfo.packageName,
+                                cpi.applicationInfo.uid, name);
+                        return null;
                     }
+
+                    if (conn != null) {
+                        conn.waiting = true;
+                    }
+                    Message msg = mService.mHandler.obtainMessage(
+                            ActivityManagerService.WAIT_FOR_CONTENT_PROVIDER_TIMEOUT_MSG);
+                    msg.obj = cpr;
+                    mService.mHandler.sendMessageDelayed(msg,
+                            ContentResolver.CONTENT_PROVIDER_READY_TIMEOUT_MILLIS);
                 }
-                // Return a holder instance even if we are waiting for the publishing of the
-                // provider, client will check for the holder.provider to see if it needs to wait
-                // for it.
-                return cpr.newHolder(conn, false);
             }
+            // Return a holder instance even if we are waiting for the publishing of the provider,
+            // client will check for the holder.provider to see if it needs to wait for it.
+            return cpr.newHolder(conn, false);
         }
 
         // Because of the provider's external client (i.e., SHELL), we'll have to wait right here.
@@ -686,7 +684,7 @@ public class ContentProviderHelper {
 
             // update the app's oom adj value and each provider's usage stats
             if (providersPublished) {
-                mService.updateOomAdjLocked(r, OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER);
+                mService.updateOomAdjLocked(r, true, OomAdjuster.OOM_ADJ_REASON_GET_PROVIDER);
                 for (int i = 0, size = providers.size(); i < size; i++) {
                     ContentProviderHolder src = providers.get(i);
                     if (src == null || src.info == null || src.provider == null) {
@@ -708,28 +706,20 @@ public class ContentProviderHelper {
         mService.enforceNotIsolatedCaller("removeContentProvider");
         final long ident = Binder.clearCallingIdentity();
         try {
-            ContentProviderConnection conn;
-            try {
-                conn = (ContentProviderConnection) connection;
-            } catch (ClassCastException e) {
-                String msg = "removeContentProvider: " + connection
-                        + " not a ContentProviderConnection";
-                Slog.w(TAG, msg);
-                throw new IllegalArgumentException(msg);
-            }
-            if (conn == null) {
-                throw new NullPointerException("connection is null");
-            }
-            ActivityManagerService.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
-                    "removeContentProvider: ",
-                    (conn.provider != null && conn.provider.info != null
-                    ? conn.provider.info.authority : ""));
-            try {
-                synchronized (mService) {
-                    decProviderCountLocked(conn, null, null, stable, true, true);
+            synchronized (mService) {
+                ContentProviderConnection conn;
+                try {
+                    conn = (ContentProviderConnection) connection;
+                } catch (ClassCastException e) {
+                    String msg = "removeContentProvider: " + connection
+                            + " not a ContentProviderConnection";
+                    Slog.w(TAG, msg);
+                    throw new IllegalArgumentException(msg);
                 }
-            } finally {
-                Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+                if (conn == null) {
+                    throw new NullPointerException("connection is null");
+                }
+                decProviderCountLocked(conn, null, null, stable, true, true);
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -790,15 +780,8 @@ public class ContentProviderHelper {
             throw new NullPointerException("connection is null");
         }
 
-        ActivityManagerService.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER, "refContentProvider: ",
-                (conn.provider != null && conn.provider.info != null
-                ? conn.provider.info.authority : ""));
-        try {
-            conn.adjustCounts(stable, unstable);
-            return !conn.dead;
-        } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
-        }
+        conn.adjustCounts(stable, unstable);
+        return !conn.dead;
     }
 
     void unstableProviderDied(IBinder connection) {
@@ -814,60 +797,50 @@ public class ContentProviderHelper {
             throw new NullPointerException("connection is null");
         }
 
-        ActivityManagerService.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
-                "unstableProviderDied: ",
-                (conn.provider != null && conn.provider.info != null
-                ? conn.provider.info.authority : ""));
+        // Safely retrieve the content provider associated with the connection.
+        IContentProvider provider;
+        synchronized (mService) {
+            provider = conn.provider.provider;
+        }
 
-        try {
-            // Safely retrieve the content provider associated with the connection.
-            IContentProvider provider;
+        if (provider == null) {
+            // Um, yeah, we're way ahead of you.
+            return;
+        }
+
+        // Make sure the caller is being honest with us.
+        if (provider.asBinder().pingBinder()) {
+            // Er, no, still looks good to us.
             synchronized (mService) {
-                provider = conn.provider.provider;
+                Slog.w(TAG, "unstableProviderDied: caller " + Binder.getCallingUid()
+                        + " says " + conn + " died, but we don't agree");
+                return;
             }
+        }
 
-            if (provider == null) {
-                // Um, yeah, we're way ahead of you.
+        // Well look at that!  It's dead!
+        synchronized (mService) {
+            if (conn.provider.provider != provider) {
+                // But something changed...  good enough.
                 return;
             }
 
-            // Make sure the caller is being honest with us.
-            if (provider.asBinder().pingBinder()) {
-                // Er, no, still looks good to us.
-                synchronized (mService) {
-                    Slog.w(TAG, "unstableProviderDied: caller " + Binder.getCallingUid()
-                            + " says " + conn + " died, but we don't agree");
-                    return;
-                }
+            ProcessRecord proc = conn.provider.proc;
+            if (proc == null || proc.getThread() == null) {
+                // Seems like the process is already cleaned up.
+                return;
             }
 
-            // Well look at that!  It's dead!
-            synchronized (mService) {
-                if (conn.provider.provider != provider) {
-                    // But something changed...  good enough.
-                    return;
-                }
-
-                ProcessRecord proc = conn.provider.proc;
-                if (proc == null || proc.getThread() == null) {
-                    // Seems like the process is already cleaned up.
-                    return;
-                }
-
-                // As far as we're concerned, this is just like receiving a
-                // death notification...  just a bit prematurely.
-                mService.reportUidInfoMessageLocked(TAG, "Process " + proc.processName
-                                + " (pid " + proc.getPid() + ") early provider death",
-                                proc.info.uid);
-                final long token = Binder.clearCallingIdentity();
-                try {
-                    mService.appDiedLocked(proc, "unstable content provider");
-                } finally {
-                    Binder.restoreCallingIdentity(token);
-                }
+            // As far as we're concerned, this is just like receiving a
+            // death notification...  just a bit prematurely.
+            mService.reportUidInfoMessageLocked(TAG, "Process " + proc.processName
+                            + " (pid " + proc.getPid() + ") early provider death", proc.info.uid);
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mService.appDiedLocked(proc, "unstable content provider");
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
-        } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
 
@@ -881,21 +854,13 @@ public class ContentProviderHelper {
             return;
         }
 
-        ActivityManagerService.traceBegin(Trace.TRACE_TAG_ACTIVITY_MANAGER,
-                "appNotRespondingViaProvider: ",
-                (conn.provider != null && conn.provider.info != null
-                ? conn.provider.info.authority : ""));
-        try {
-            final ProcessRecord host = conn.provider.proc;
-            if (host == null) {
-                Slog.w(TAG, "Failed to find hosting ProcessRecord");
-                return;
-            }
-
-            mService.mAnrHelper.appNotResponding(host, "ContentProvider not responding");
-        } finally {
-            Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
+        final ProcessRecord host = conn.provider.proc;
+        if (host == null) {
+            Slog.w(TAG, "Failed to find hosting ProcessRecord");
+            return;
         }
+
+        mService.mAnrHelper.appNotResponding(host, "ContentProvider not responding");
     }
 
     /**

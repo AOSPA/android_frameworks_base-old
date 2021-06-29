@@ -199,13 +199,10 @@ public class QSContainerImpl extends FrameLayout {
 
     void updateResources(QSPanelController qsPanelController,
             QuickStatusBarHeaderController quickStatusBarHeaderController) {
-        mQSPanelContainer.setPaddingRelative(
-                getPaddingStart(),
-                mContext.getResources().getDimensionPixelSize(
-                com.android.internal.R.dimen.quick_qs_offset_height),
-                getPaddingEnd(),
-                getPaddingBottom()
-        );
+        LayoutParams layoutParams = (LayoutParams) mQSPanelContainer.getLayoutParams();
+        layoutParams.topMargin = mContext.getResources().getDimensionPixelSize(
+                com.android.internal.R.dimen.quick_qs_offset_height);
+        mQSPanelContainer.setLayoutParams(layoutParams);
 
         int sideMargins = getResources().getDimensionPixelSize(R.dimen.notification_side_paddings);
         int padding = getResources().getDimensionPixelSize(
@@ -295,7 +292,7 @@ public class QSContainerImpl extends FrameLayout {
                 qsPanelController.setContentMargins(mContentPadding, mContentPadding);
                 // Set it as double the side margin (to simulate end margin of current page +
                 // start margin of next page).
-                qsPanelController.setPageMargin(mSideMargins);
+                qsPanelController.setPageMargin(2 * mSideMargins);
             } else if (view == mHeader) {
                 // No content padding for the header.
             } else {

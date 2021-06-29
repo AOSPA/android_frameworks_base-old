@@ -444,6 +444,11 @@ public class WindowlessWindowManager implements IWindowSession {
     }
 
     @Override
+    public void reparentDisplayContent(android.view.IWindow window, android.view.SurfaceControl sc,
+            int displayId) {
+    }
+
+    @Override
     public void updateDisplayContentLocation(android.view.IWindow window, int x, int y,
             int displayId) {
     }

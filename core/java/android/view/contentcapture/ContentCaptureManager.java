@@ -212,9 +212,6 @@ public final class ContentCaptureManager {
 
     private static final String TAG = ContentCaptureManager.class.getSimpleName();
 
-    /** @hide */
-    public static final boolean DEBUG = false;
-
     /** Error happened during the data sharing session. */
     public static final int DATA_SHARE_ERROR_UNKNOWN = 1;
 

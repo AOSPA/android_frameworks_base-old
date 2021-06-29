@@ -40,6 +40,7 @@ public class ButtonDispatcher {
     private final ArrayList<View> mViews = new ArrayList<>();
 
     private final int mId;
+    private final AssistManager mAssistManager;
 
     private View.OnClickListener mClickListener;
     private View.OnTouchListener mTouchListener;
@@ -72,6 +73,7 @@ public class ButtonDispatcher {
 
     public ButtonDispatcher(int id) {
         mId = id;
+        mAssistManager = Dependency.get(AssistManager.class);
     }
 
     public void clear() {

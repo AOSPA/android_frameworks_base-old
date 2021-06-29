@@ -16,8 +16,11 @@
 
 package android.net.vcn;
 
+import static android.net.NetworkCapabilities.REDACT_ALL;
 import static android.net.NetworkCapabilities.REDACT_FOR_NETWORK_SETTINGS;
 import static android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID;
+
+import static com.android.internal.annotations.VisibleForTesting.Visibility.PRIVATE;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -27,6 +30,8 @@ import android.net.wifi.WifiInfo;
 import android.os.Parcel;
 import android.os.Parcelable;
 import android.telephony.SubscriptionManager;
+
+import com.android.internal.annotations.VisibleForTesting;
 
 import java.util.Objects;
 
@@ -50,17 +55,32 @@ public class VcnTransportInfo implements TransportInfo, Parcelable {
     @Nullable private final WifiInfo mWifiInfo;
     private final int mSubId;
 
+    /**
+     * The redaction scheme to use when parcelling.
+     *
+     * <p>The TransportInfo/NetworkCapabilities redaction mechanisms rely on redaction being
+     * performed at parcelling time. This means that the redaction scheme must be stored for later
+     * use.
+     *
+     * <p>Since the redaction scheme itself is not parcelled, this field is listed as a transient.
+     *
+     * <p>Defaults to REDACT_ALL when constructed using public constructors, or creating from
+     * parcels.
+     */
+    private final transient long mRedactions;
+
     public VcnTransportInfo(@NonNull WifiInfo wifiInfo) {
-        this(wifiInfo, INVALID_SUBSCRIPTION_ID);
+        this(wifiInfo, INVALID_SUBSCRIPTION_ID, REDACT_ALL);
     }
 
     public VcnTransportInfo(int subId) {
-        this(null /* wifiInfo */, subId);
+        this(null /* wifiInfo */, subId, REDACT_ALL);
     }
 
-    private VcnTransportInfo(@Nullable WifiInfo wifiInfo, int subId) {
+    private VcnTransportInfo(@Nullable WifiInfo wifiInfo, int subId, long redactions) {
         mWifiInfo = wifiInfo;
         mSubId = subId;
+        mRedactions = redactions;
     }
 
     /**
@@ -82,14 +102,25 @@ public class VcnTransportInfo implements TransportInfo, Parcelable {
      * SubscriptionManager#INVALID_SUBSCRIPTION_ID}.
      *
      * @return the Subscription ID if a cellular underlying Network is present, else {@link
-     *     android.telephony.SubscriptionManager#INVALID_SUBSCRIPTION_ID}.
+     *     android.telephony.SubscriptionManager.INVALID_SUBSCRIPTION_ID}.
      */
     public int getSubId() {
         return mSubId;
     }
 
+    /**
+     * Gets the redaction scheme
+     *
+     * @hide
+     */
+    @VisibleForTesting(visibility = PRIVATE)
+    public long getRedaction() {
+        return mRedactions;
+    }
+
     @Override
     public int hashCode() {
+        // mRedactions not hashed, as it is a transient, for control of parcelling
         return Objects.hash(mWifiInfo, mSubId);
     }
 
@@ -97,6 +128,8 @@ public class VcnTransportInfo implements TransportInfo, Parcelable {
     public boolean equals(Object o) {
         if (!(o instanceof VcnTransportInfo)) return false;
         final VcnTransportInfo that = (VcnTransportInfo) o;
+
+        // mRedactions not compared, as it is a transient, for control of parcelling
         return Objects.equals(mWifiInfo, that.mWifiInfo) && mSubId == that.mSubId;
     }
 
@@ -109,12 +142,8 @@ public class VcnTransportInfo implements TransportInfo, Parcelable {
     @Override
     @NonNull
     public TransportInfo makeCopy(long redactions) {
-        if ((redactions & NetworkCapabilities.REDACT_FOR_NETWORK_SETTINGS) != 0) {
-            return new VcnTransportInfo(null, INVALID_SUBSCRIPTION_ID);
-        }
-
         return new VcnTransportInfo(
-                (mWifiInfo == null) ? null : mWifiInfo.makeCopy(redactions), mSubId);
+                mWifiInfo == null ? null : mWifiInfo.makeCopy(redactions), mSubId, redactions);
     }
 
     @Override
@@ -129,11 +158,16 @@ public class VcnTransportInfo implements TransportInfo, Parcelable {
         return redactions;
     }
 
+    private boolean shouldParcelNetworkSettingsFields() {
+        return (mRedactions & NetworkCapabilities.REDACT_FOR_NETWORK_SETTINGS) == 0;
+    }
+
     /** {@inheritDoc} */
     @Override
     public void writeToParcel(@NonNull Parcel dest, int flags) {
-        dest.writeInt(mSubId);
-        dest.writeParcelable(mWifiInfo, flags);
+        dest.writeInt(shouldParcelNetworkSettingsFields() ? mSubId : INVALID_SUBSCRIPTION_ID);
+        dest.writeParcelable(
+                shouldParcelNetworkSettingsFields() ? (Parcelable) mWifiInfo : null, flags);
     }
 
     @Override
@@ -155,7 +189,9 @@ public class VcnTransportInfo implements TransportInfo, Parcelable {
                         return null;
                     }
 
-                    return new VcnTransportInfo(wifiInfo, subId);
+                    // Prevent further forwarding by redacting everything in future parcels from
+                    // this VcnTransportInfo
+                    return new VcnTransportInfo(wifiInfo, subId, REDACT_ALL);
                 }
 
                 public VcnTransportInfo[] newArray(int size) {

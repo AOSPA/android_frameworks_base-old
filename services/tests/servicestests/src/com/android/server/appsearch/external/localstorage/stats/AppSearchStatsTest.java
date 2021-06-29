@@ -29,46 +29,62 @@ public class AppSearchStatsTest {
     static final int TEST_TOTAL_LATENCY_MILLIS = 20;
 
     @Test
+    public void testAppSearchStats_GeneralStats() {
+        final GeneralStats gStats =
+                new GeneralStats.Builder(TEST_PACKAGE_NAME, TEST_DATA_BASE)
+                        .setStatusCode(TEST_STATUS_CODE)
+                        .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS)
+                        .build();
+
+        assertThat(gStats.getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
+        assertThat(gStats.getDatabase()).isEqualTo(TEST_DATA_BASE);
+        assertThat(gStats.getStatusCode()).isEqualTo(TEST_STATUS_CODE);
+        assertThat(gStats.getTotalLatencyMillis()).isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
+    }
+
+    /** Make sure status code is UNKNOWN if not set in {@link GeneralStats} */
+    @Test
+    public void testAppSearchStats_GeneralStats_defaultStatsCode_Unknown() {
+        final GeneralStats gStats =
+                new GeneralStats.Builder(TEST_PACKAGE_NAME, TEST_DATA_BASE)
+                        .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS)
+                        .build();
+
+        assertThat(gStats.getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
+        assertThat(gStats.getDatabase()).isEqualTo(TEST_DATA_BASE);
+        assertThat(gStats.getStatusCode()).isEqualTo(AppSearchResult.RESULT_UNKNOWN_ERROR);
+        assertThat(gStats.getTotalLatencyMillis()).isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
+    }
+
+    @Test
     public void testAppSearchStats_CallStats() {
         final int estimatedBinderLatencyMillis = 1;
         final int numOperationsSucceeded = 2;
         final int numOperationsFailed = 3;
         final @CallStats.CallType int callType = CallStats.CALL_TYPE_PUT_DOCUMENTS;
 
-        final CallStats cStats =
-                new CallStats.Builder()
-                        .setPackageName(TEST_PACKAGE_NAME)
-                        .setDatabase(TEST_DATA_BASE)
-                        .setStatusCode(TEST_STATUS_CODE)
-                        .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS)
+        final CallStats.Builder cStatsBuilder =
+                new CallStats.Builder(TEST_PACKAGE_NAME, TEST_DATA_BASE)
                         .setCallType(callType)
                         .setEstimatedBinderLatencyMillis(estimatedBinderLatencyMillis)
                         .setNumOperationsSucceeded(numOperationsSucceeded)
-                        .setNumOperationsFailed(numOperationsFailed)
-                        .build();
+                        .setNumOperationsFailed(numOperationsFailed);
+        cStatsBuilder
+                .getGeneralStatsBuilder()
+                .setStatusCode(TEST_STATUS_CODE)
+                .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS);
+        final CallStats cStats = cStatsBuilder.build();
 
-        assertThat(cStats.getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
-        assertThat(cStats.getDatabase()).isEqualTo(TEST_DATA_BASE);
-        assertThat(cStats.getStatusCode()).isEqualTo(TEST_STATUS_CODE);
-        assertThat(cStats.getTotalLatencyMillis()).isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
+        assertThat(cStats.getGeneralStats().getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
+        assertThat(cStats.getGeneralStats().getDatabase()).isEqualTo(TEST_DATA_BASE);
+        assertThat(cStats.getGeneralStats().getStatusCode()).isEqualTo(TEST_STATUS_CODE);
+        assertThat(cStats.getGeneralStats().getTotalLatencyMillis())
+                .isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
         assertThat(cStats.getEstimatedBinderLatencyMillis())
                 .isEqualTo(estimatedBinderLatencyMillis);
         assertThat(cStats.getCallType()).isEqualTo(callType);
         assertThat(cStats.getNumOperationsSucceeded()).isEqualTo(numOperationsSucceeded);
         assertThat(cStats.getNumOperationsFailed()).isEqualTo(numOperationsFailed);
-    }
-
-    @Test
-    public void testAppSearchCallStats_nullValues() {
-        final @CallStats.CallType int callType = CallStats.CALL_TYPE_PUT_DOCUMENTS;
-
-        final CallStats.Builder cStatsBuilder = new CallStats.Builder().setCallType(callType);
-
-        final CallStats cStats = cStatsBuilder.build();
-
-        assertThat(cStats.getPackageName()).isNull();
-        assertThat(cStats.getDatabase()).isNull();
-        assertThat(cStats.getCallType()).isEqualTo(callType);
     }
 
     @Test
@@ -84,8 +100,6 @@ public class AppSearchStatsTest {
         final boolean nativeExceededMaxNumTokens = true;
         final PutDocumentStats.Builder pStatsBuilder =
                 new PutDocumentStats.Builder(TEST_PACKAGE_NAME, TEST_DATA_BASE)
-                        .setStatusCode(TEST_STATUS_CODE)
-                        .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS)
                         .setGenerateDocumentProtoLatencyMillis(generateDocumentProtoLatencyMillis)
                         .setRewriteDocumentTypesLatencyMillis(rewriteDocumentTypesLatencyMillis)
                         .setNativeLatencyMillis(nativeLatencyMillis)
@@ -95,13 +109,17 @@ public class AppSearchStatsTest {
                         .setNativeDocumentSizeBytes(nativeDocumentSize)
                         .setNativeNumTokensIndexed(nativeNumTokensIndexed)
                         .setNativeExceededMaxNumTokens(nativeExceededMaxNumTokens);
-
+        pStatsBuilder
+                .getGeneralStatsBuilder()
+                .setStatusCode(TEST_STATUS_CODE)
+                .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS);
         final PutDocumentStats pStats = pStatsBuilder.build();
 
-        assertThat(pStats.getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
-        assertThat(pStats.getDatabase()).isEqualTo(TEST_DATA_BASE);
-        assertThat(pStats.getStatusCode()).isEqualTo(TEST_STATUS_CODE);
-        assertThat(pStats.getTotalLatencyMillis()).isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
+        assertThat(pStats.getGeneralStats().getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
+        assertThat(pStats.getGeneralStats().getDatabase()).isEqualTo(TEST_DATA_BASE);
+        assertThat(pStats.getGeneralStats().getStatusCode()).isEqualTo(TEST_STATUS_CODE);
+        assertThat(pStats.getGeneralStats().getTotalLatencyMillis())
+                .isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
         assertThat(pStats.getGenerateDocumentProtoLatencyMillis())
                 .isEqualTo(generateDocumentProtoLatencyMillis);
         assertThat(pStats.getRewriteDocumentTypesLatencyMillis())
@@ -150,9 +168,7 @@ public class AppSearchStatsTest {
                         .setSchemaStoreRecoveryLatencyMillis(nativeSchemaStoreRecoveryLatencyMillis)
                         .setDocumentStoreDataStatus(nativeDocumentStoreDataStatus)
                         .setDocumentCount(nativeNumDocuments)
-                        .setSchemaTypeCount(nativeNumSchemaTypes)
-                        .setHasReset(true)
-                        .setResetStatusCode(AppSearchResult.RESULT_INVALID_SCHEMA);
+                        .setSchemaTypeCount(nativeNumSchemaTypes);
         final InitializeStats iStats = iStatsBuilder.build();
 
         assertThat(iStats.getStatusCode()).isEqualTo(TEST_STATUS_CODE);
@@ -176,8 +192,6 @@ public class AppSearchStatsTest {
         assertThat(iStats.getDocumentStoreDataStatus()).isEqualTo(nativeDocumentStoreDataStatus);
         assertThat(iStats.getDocumentCount()).isEqualTo(nativeNumDocuments);
         assertThat(iStats.getSchemaTypeCount()).isEqualTo(nativeNumSchemaTypes);
-        assertThat(iStats.hasReset()).isTrue();
-        assertThat(iStats.getResetStatusCode()).isEqualTo(AppSearchResult.RESULT_INVALID_SCHEMA);
     }
 
     @Test
@@ -282,29 +296,5 @@ public class AppSearchStatsTest {
                 .isEqualTo(indexIncompatibleTypeChangeCount);
         assertThat(sStats.getBackwardsIncompatibleTypeChangeCount())
                 .isEqualTo(backwardsIncompatibleTypeChangeCount);
-    }
-
-    @Test
-    public void testAppSearchStats_RemoveStats() {
-        int nativeLatencyMillis = 1;
-        @RemoveStats.DeleteType int deleteType = 2;
-        int documentDeletedCount = 3;
-
-        final RemoveStats rStats =
-                new RemoveStats.Builder(TEST_PACKAGE_NAME, TEST_DATA_BASE)
-                        .setStatusCode(TEST_STATUS_CODE)
-                        .setTotalLatencyMillis(TEST_TOTAL_LATENCY_MILLIS)
-                        .setNativeLatencyMillis(nativeLatencyMillis)
-                        .setDeleteType(deleteType)
-                        .setDeletedDocumentCount(documentDeletedCount)
-                        .build();
-
-        assertThat(rStats.getPackageName()).isEqualTo(TEST_PACKAGE_NAME);
-        assertThat(rStats.getDatabase()).isEqualTo(TEST_DATA_BASE);
-        assertThat(rStats.getStatusCode()).isEqualTo(TEST_STATUS_CODE);
-        assertThat(rStats.getTotalLatencyMillis()).isEqualTo(TEST_TOTAL_LATENCY_MILLIS);
-        assertThat(rStats.getNativeLatencyMillis()).isEqualTo(nativeLatencyMillis);
-        assertThat(rStats.getDeleteType()).isEqualTo(deleteType);
-        assertThat(rStats.getDeletedDocumentCount()).isEqualTo(documentDeletedCount);
     }
 }

@@ -18,11 +18,10 @@ package com.android.settingslib.widget;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.when;
+
 import android.content.Context;
 import android.util.AttributeSet;
-import android.view.View;
-import android.widget.FrameLayout;
-import android.widget.ImageView;
 
 import com.airbnb.lottie.LottieAnimationView;
 
@@ -42,38 +41,28 @@ public class IllustrationPreferenceTest {
     @Mock
     LottieAnimationView mAnimationView;
 
-    private Context mContext;
     private IllustrationPreference mPreference;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
-        mContext = RuntimeEnvironment.application;
+        final Context context = RuntimeEnvironment.application;
         final AttributeSet attributeSet = Robolectric.buildAttributeSet().build();
-        mPreference = new IllustrationPreference(mContext, attributeSet);
+        mPreference = new IllustrationPreference(context, attributeSet);
         ReflectionHelpers.setField(mPreference, "mIllustrationView", mAnimationView);
     }
 
     @Test
-    public void setMiddleGroundView_middleGroundView_shouldVisible() {
-        final View view = new View(mContext);
-        final FrameLayout layout = new FrameLayout(mContext);
-        layout.setVisibility(View.GONE);
-        ReflectionHelpers.setField(mPreference, "mMiddleGroundView", view);
-        ReflectionHelpers.setField(mPreference, "mMiddleGroundLayout", layout);
+    public void isAnimating_lottieAnimationViewIsNotAnimating_shouldReturnFalse() {
+        when(mAnimationView.isAnimating()).thenReturn(false);
 
-        mPreference.setMiddleGroundView(view);
-
-        assertThat(layout.getVisibility()).isEqualTo(View.VISIBLE);
+        assertThat(mPreference.isAnimating()).isFalse();
     }
 
     @Test
-    public void enableAnimationAutoScale_shouldChangeScaleType() {
-        final LottieAnimationView animationView = new LottieAnimationView(mContext);
-        ReflectionHelpers.setField(mPreference, "mIllustrationView", animationView);
+    public void isAnimating_lottieAnimationViewIsAnimating_shouldReturnTrue() {
+        when(mAnimationView.isAnimating()).thenReturn(true);
 
-        mPreference.enableAnimationAutoScale(true);
-
-        assertThat(animationView.getScaleType()).isEqualTo(ImageView.ScaleType.CENTER_CROP);
+        assertThat(mPreference.isAnimating()).isTrue();
     }
 }

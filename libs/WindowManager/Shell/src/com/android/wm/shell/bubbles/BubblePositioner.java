@@ -56,29 +56,28 @@ public class BubblePositioner {
     public static final int TASKBAR_POSITION_LEFT = 1;
     public static final int TASKBAR_POSITION_BOTTOM = 2;
 
-    /** When the bubbles are collapsed in a stack only some of them are shown, this is how many. **/
-    public static final int NUM_VISIBLE_WHEN_RESTING = 2;
+    /**
+     * The bitmap in the bubble is slightly smaller than the overall size of the bubble.
+     * This is the percentage to scale the image down based on the overall bubble size.
+     */
+    private static final float BUBBLE_BITMAP_SIZE_PERCENT = 0.86f;
 
     private Context mContext;
     private WindowManager mWindowManager;
     private Rect mPositionRect;
     private @Surface.Rotation int mRotation = Surface.ROTATION_0;
     private Insets mInsets;
-    private int mDefaultMaxBubbles;
-    private int mMaxBubbles;
 
     private int mBubbleSize;
-    private int mBubbleBadgeSize;
-    private int mSpacingBetweenBubbles;
+    private int mBubbleBitmapSize;
     private int mExpandedViewLargeScreenWidth;
     private int mExpandedViewPadding;
-    private int mPointerMargin;
-    private float mPointerWidth;
-    private float mPointerHeight;
+    private int mPointerHeight;
+    private int mBubblePaddingTop;
 
     private PointF mPinLocation;
     private PointF mRestingStackPosition;
-    private int[] mPaddings = new int[4];
+    private int[] mLeftRightPadding = new int[2];
 
     private boolean mIsLargeScreen;
     private boolean mShowingInTaskbar;
@@ -150,45 +149,16 @@ public class BubblePositioner {
         mPositionRect.bottom -= mInsets.bottom;
 
         Resources res = mContext.getResources();
-        mBubbleSize = res.getDimensionPixelSize(R.dimen.bubble_size);
-        mBubbleBadgeSize = res.getDimensionPixelSize(R.dimen.bubble_badge_size);
-        mSpacingBetweenBubbles = res.getDimensionPixelSize(R.dimen.bubble_spacing);
-        mDefaultMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
-
+        mBubbleSize = res.getDimensionPixelSize(R.dimen.individual_bubble_size);
+        mBubbleBitmapSize = res.getDimensionPixelSize(R.dimen.bubble_bitmap_size);
         mExpandedViewLargeScreenWidth = res.getDimensionPixelSize(
                 R.dimen.bubble_expanded_view_tablet_width);
         mExpandedViewPadding = res.getDimensionPixelSize(R.dimen.bubble_expanded_view_padding);
-        mPointerWidth = res.getDimensionPixelSize(R.dimen.bubble_pointer_width);
         mPointerHeight = res.getDimensionPixelSize(R.dimen.bubble_pointer_height);
-        mPointerMargin = res.getDimensionPixelSize(R.dimen.bubble_pointer_margin);
-
-        mMaxBubbles = calculateMaxBubbles();
-
+        mBubblePaddingTop = res.getDimensionPixelSize(R.dimen.bubble_padding_top);
         if (mShowingInTaskbar) {
             adjustForTaskbar();
         }
-    }
-
-    /**
-     * @return the maximum number of bubbles that can fit on the screen when expanded. If the
-     * screen size / screen density is too small to support the default maximum number, then
-     * the number will be adjust to something lower to ensure everything is presented nicely.
-     */
-    private int calculateMaxBubbles() {
-        // Use the shortest edge.
-        // In portrait the bubbles should align with the expanded view so subtract its padding.
-        // We always show the overflow so subtract one bubble size.
-        int padding = showBubblesVertically() ? 0 : (mExpandedViewPadding * 2);
-        int availableSpace = Math.min(mPositionRect.width(), mPositionRect.height())
-                - padding
-                - mBubbleSize;
-        // Each of the bubbles have spacing because the overflow is at the end.
-        int howManyFit = availableSpace / (mBubbleSize + mSpacingBetweenBubbles);
-        if (howManyFit < mDefaultMaxBubbles) {
-            // Not enough space for the default.
-            return howManyFit;
-        }
-        return mDefaultMaxBubbles;
     }
 
     /**
@@ -253,16 +223,20 @@ public class BubblePositioner {
         return isLandscape() || mShowingInTaskbar || mIsLargeScreen;
     }
 
-    /** Size of the bubble. */
+    /** Size of the bubble account for badge & dot. */
     public int getBubbleSize() {
-        return (mShowingInTaskbar && mTaskbarIconSize > 0)
+        int bsize = (mShowingInTaskbar && mTaskbarIconSize > 0)
                 ? mTaskbarIconSize
                 : mBubbleSize;
+        return bsize;
     }
 
-    /** The maximum number of bubbles that can be displayed comfortably on screen. */
-    public int getMaxBubbles() {
-        return mMaxBubbles;
+    /** Size of the bitmap within the bubble */
+    public int getBubbleBitmapSize() {
+        float size =  (mShowingInTaskbar && mTaskbarIconSize > 0)
+                ? (mTaskbarIconSize * BUBBLE_BITMAP_SIZE_PERCENT)
+                : mBubbleBitmapSize;
+        return (int) size;
     }
 
     /**
@@ -277,32 +251,30 @@ public class BubblePositioner {
         final boolean isLargeOrOverflow = mIsLargeScreen || isOverflow;
         if (showBubblesVertically()) {
             if (!onLeft) {
-                rightPadding += mBubbleSize - mPointerHeight;
+                rightPadding += mPointerHeight + mBubbleSize;
                 leftPadding += isLargeOrOverflow
                         ? (mPositionRect.width() - rightPadding - mExpandedViewLargeScreenWidth)
                         : 0;
             } else {
-                leftPadding += mBubbleSize - mPointerHeight;
+                //TODO: pointer height should be padding between pointer & bubbles here & above
+                leftPadding += mPointerHeight + mBubbleSize;
                 rightPadding += isLargeOrOverflow
                         ? (mPositionRect.width() - leftPadding - mExpandedViewLargeScreenWidth)
                         : 0;
             }
         }
-        // [left, top, right, bottom]
-        mPaddings[0] = leftPadding;
-        mPaddings[1] = showBubblesVertically() ? 0 : mPointerMargin;
-        mPaddings[2] = rightPadding;
-        mPaddings[3] = 0;
-        return mPaddings;
+        mLeftRightPadding[0] = leftPadding;
+        mLeftRightPadding[1] = rightPadding;
+        return mLeftRightPadding;
     }
 
     /** Calculates the y position of the expanded view when it is expanded. */
     public float getExpandedViewY() {
         final int top = getAvailableRect().top;
         if (showBubblesVertically()) {
-            return top - mPointerWidth;
+            return top + mExpandedViewPadding;
         } else {
-            return top + mBubbleSize + mPointerMargin;
+            return top + mBubbleSize + mBubblePaddingTop;
         }
     }
 

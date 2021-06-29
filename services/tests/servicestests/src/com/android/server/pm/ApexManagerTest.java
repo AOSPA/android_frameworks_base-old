@@ -20,7 +20,6 @@ import static com.google.common.truth.Truth.assertThat;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.doThrow;
@@ -30,7 +29,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.testng.Assert.assertThrows;
-import static org.testng.Assert.expectThrows;
 
 import android.apex.ApexInfo;
 import android.apex.ApexSessionInfo;
@@ -86,7 +84,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetPackageInfo_setFlagsMatchActivePackage() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, false));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, false));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
         final PackageInfo activePkgPi = mApexManager.getPackageInfo(TEST_APEX_PKG,
@@ -103,7 +101,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetPackageInfo_setFlagsMatchFactoryPackage() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(false, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
         PackageInfo factoryPkgPi = mApexManager.getPackageInfo(TEST_APEX_PKG,
@@ -120,7 +118,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetPackageInfo_setFlagsNone() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(false, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -129,7 +127,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetActivePackages() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -138,7 +136,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetActivePackages_noneActivePackages() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(false, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -147,7 +145,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetFactoryPackages() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(false, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -156,7 +154,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetFactoryPackages_noneFactoryPackages() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, false));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, false));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -165,7 +163,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetInactivePackages() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(false, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -174,7 +172,7 @@ public class ApexManagerTest {
 
     @Test
     public void testGetInactivePackages_noneInactivePackages() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, false));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, false));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -183,7 +181,7 @@ public class ApexManagerTest {
 
     @Test
     public void testIsApexPackage() throws RemoteException {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(false, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(false, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -278,11 +276,11 @@ public class ApexManagerTest {
 
     @Test
     public void testReportErrorWithApkInApex() throws RemoteException {
-        when(mApexService.getActivePackages()).thenReturn(createApexInfoForTestPkg(true, true));
+        when(mApexService.getActivePackages()).thenReturn(createApexInfo(true, true));
         final ApexManager.ActiveApexInfo activeApex = mApexManager.getActiveApexInfos().get(0);
         assertThat(activeApex.apexModuleName).isEqualTo(TEST_APEX_PKG);
 
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -299,7 +297,7 @@ public class ApexManagerTest {
      */
     @Test
     public void testRegisterApkInApexDoesNotRegisterSimilarPrefix() throws RemoteException {
-        when(mApexService.getActivePackages()).thenReturn(createApexInfoForTestPkg(true, true));
+        when(mApexService.getActivePackages()).thenReturn(createApexInfo(true, true));
         final ApexManager.ActiveApexInfo activeApex = mApexManager.getActiveApexInfos().get(0);
         assertThat(activeApex.apexModuleName).isEqualTo(TEST_APEX_PKG);
 
@@ -307,7 +305,7 @@ public class ApexManagerTest {
         when(fakeApkInApex.getBaseApkPath()).thenReturn("/apex/" + TEST_APEX_PKG + "randomSuffix");
         when(fakeApkInApex.getPackageName()).thenReturn("randomPackageName");
 
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, true));
+        when(mApexService.getAllPackages()).thenReturn(createApexInfo(true, true));
         mApexManager.scanApexPackagesTraced(mPackageParser2,
                 ParallelPackageParser.makeExecutorService());
 
@@ -316,112 +314,7 @@ public class ApexManagerTest {
         assertThat(mApexManager.getApksInApex(activeApex.apexModuleName)).isEmpty();
     }
 
-    @Test
-    public void testInstallPackageFailsToInstallNewApex() throws Exception {
-        when(mApexService.getAllPackages()).thenReturn(createApexInfoForTestPkg(true, false));
-        mApexManager.scanApexPackagesTraced(mPackageParser2,
-                ParallelPackageParser.makeExecutorService());
-
-        File apex = extractResource("test.apex_rebootless_v1", "test.rebootless_apex_v1.apex");
-        PackageManagerException e = expectThrows(PackageManagerException.class,
-                () -> mApexManager.installPackage(apex, mPackageParser2));
-        assertThat(e).hasMessageThat().contains("It is forbidden to install new APEX packages");
-    }
-
-    @Test
-    public void testInstallPackageDowngrade() throws Exception {
-        File activeApex = extractResource("test.apex_rebootless_v2",
-                "test.rebootless_apex_v2.apex");
-        ApexInfo activeApexInfo = createApexInfo("test.apex_rebootless", 2, /* isActive= */ true,
-                /* isFactory= */ false, activeApex);
-        when(mApexService.getAllPackages()).thenReturn(new ApexInfo[]{activeApexInfo});
-        mApexManager.scanApexPackagesTraced(mPackageParser2,
-                ParallelPackageParser.makeExecutorService());
-
-        File installedApex = extractResource("test.apex_rebootless_v1",
-                "test.rebootless_apex_v1.apex");
-        PackageManagerException e = expectThrows(PackageManagerException.class,
-                () -> mApexManager.installPackage(installedApex, mPackageParser2));
-        assertThat(e).hasMessageThat().contains(
-                "Downgrade of APEX package test.apex.rebootless is not allowed");
-    }
-
-    @Test
-    public void testInstallPackage() throws Exception {
-        ApexInfo activeApexInfo = createApexInfo("test.apex_rebootless", 1, /* isActive= */ true,
-                /* isFactory= */ false, extractResource("test.apex_rebootless_v1",
-                  "test.rebootless_apex_v1.apex"));
-        when(mApexService.getAllPackages()).thenReturn(new ApexInfo[]{activeApexInfo});
-        mApexManager.scanApexPackagesTraced(mPackageParser2,
-                ParallelPackageParser.makeExecutorService());
-
-        File finalApex = extractResource("test.rebootles_apex_v2", "test.rebootless_apex_v2.apex");
-        ApexInfo newApexInfo = createApexInfo("test.apex_rebootless", 2, /* isActive= */ true,
-                /* isFactory= */ false, finalApex);
-        when(mApexService.installAndActivatePackage(anyString())).thenReturn(newApexInfo);
-
-        File installedApex = extractResource("installed", "test.rebootless_apex_v2.apex");
-        mApexManager.installPackage(installedApex, mPackageParser2);
-
-        PackageInfo newInfo = mApexManager.getPackageInfo("test.apex.rebootless",
-                ApexManager.MATCH_ACTIVE_PACKAGE);
-        assertThat(newInfo.applicationInfo.sourceDir).isEqualTo(finalApex.getAbsolutePath());
-        assertThat(newInfo.applicationInfo.longVersionCode).isEqualTo(2);
-    }
-
-    @Test
-    public void testInstallPackageBinderCallFails() throws Exception {
-        ApexInfo activeApexInfo = createApexInfo("test.apex_rebootless", 1, /* isActive= */ true,
-                /* isFactory= */ false, extractResource("test.apex_rebootless_v1",
-                  "test.rebootless_apex_v1.apex"));
-        when(mApexService.getAllPackages()).thenReturn(new ApexInfo[]{activeApexInfo});
-        mApexManager.scanApexPackagesTraced(mPackageParser2,
-                ParallelPackageParser.makeExecutorService());
-
-        when(mApexService.installAndActivatePackage(anyString())).thenThrow(
-                new RuntimeException("install failed :("));
-
-        File installedApex = extractResource("test.apex_rebootless_v1",
-                "test.rebootless_apex_v1.apex");
-        assertThrows(PackageManagerException.class,
-                () -> mApexManager.installPackage(installedApex, mPackageParser2));
-    }
-
-    @Test
-    public void testInstallPackageSignedWithWrongCertificate() throws Exception {
-        File activeApex = extractResource("shim_v1", "com.android.apex.cts.shim.apex");
-        ApexInfo activeApexInfo = createApexInfo("com.android.apex.cts.shim", 1,
-                /* isActive= */ true, /* isFactory= */ false, activeApex);
-        when(mApexService.getAllPackages()).thenReturn(new ApexInfo[]{activeApexInfo});
-        mApexManager.scanApexPackagesTraced(mPackageParser2,
-                ParallelPackageParser.makeExecutorService());
-
-        File installedApex = extractResource("shim_different_certificate",
-                "com.android.apex.cts.shim.v2_different_certificate.apex");
-        PackageManagerException e = expectThrows(PackageManagerException.class,
-                () -> mApexManager.installPackage(installedApex, mPackageParser2));
-        assertThat(e).hasMessageThat().contains("APK container signature of ");
-        assertThat(e).hasMessageThat().contains(
-                "is not compatible with currently installed on device");
-    }
-
-    @Test
-    public void testInstallPackageUnsignedApexContainer() throws Exception {
-        File activeApex = extractResource("shim_v1", "com.android.apex.cts.shim.apex");
-        ApexInfo activeApexInfo = createApexInfo("com.android.apex.cts.shim", 1,
-                /* isActive= */ true, /* isFactory= */ false, activeApex);
-        when(mApexService.getAllPackages()).thenReturn(new ApexInfo[]{activeApexInfo});
-        mApexManager.scanApexPackagesTraced(mPackageParser2,
-                ParallelPackageParser.makeExecutorService());
-
-        File installedApex = extractResource("shim_unsigned_apk_container",
-                "com.android.apex.cts.shim.v2_unsigned_apk_container.apex");
-        PackageManagerException e = expectThrows(PackageManagerException.class,
-                () -> mApexManager.installPackage(installedApex, mPackageParser2));
-        assertThat(e).hasMessageThat().contains("Failed to collect certificates from ");
-    }
-
-    private ApexInfo[] createApexInfoForTestPkg(boolean isActive, boolean isFactory) {
+    private ApexInfo[] createApexInfo(boolean isActive, boolean isFactory) {
         File apexFile = extractResource(TEST_APEX_PKG,  TEST_APEX_FILE_NAME);
         ApexInfo apexInfo = new ApexInfo();
         apexInfo.isActive = isActive;
@@ -432,17 +325,6 @@ public class ApexManagerTest {
         apexInfo.preinstalledModulePath = apexFile.getPath();
 
         return new ApexInfo[]{apexInfo};
-    }
-
-    private ApexInfo createApexInfo(String moduleName, int versionCode, boolean isActive,
-            boolean isFactory, File apexFile) {
-        ApexInfo apexInfo = new ApexInfo();
-        apexInfo.moduleName = moduleName;
-        apexInfo.versionCode = versionCode;
-        apexInfo.isActive = isActive;
-        apexInfo.isFactory = isFactory;
-        apexInfo.modulePath = apexFile.getPath();
-        return apexInfo;
     }
 
     private ApexSessionInfo getFakeStagedSessionInfo() {
@@ -476,7 +358,6 @@ public class ApexManagerTest {
         } catch (IOException e) {
             throw new AssertionError("CreateTempFile IOException" + e);
         }
-
         try (
                 InputStream in = ApexManager.class.getClassLoader()
                         .getResourceAsStream(fullResourceName);

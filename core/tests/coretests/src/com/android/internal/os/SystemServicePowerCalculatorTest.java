@@ -18,28 +18,25 @@ package com.android.internal.os;
 
 import static com.google.common.truth.Truth.assertThat;
 
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
 import android.os.BatteryConsumer;
+import android.os.BatteryStats;
+import android.os.BatteryUsageStatsQuery;
 import android.os.Binder;
 import android.os.Process;
+import android.os.UidBatteryConsumer;
 
+import androidx.annotation.Nullable;
 import androidx.test.filters.SmallTest;
 import androidx.test.runner.AndroidJUnit4;
-
-import com.android.internal.power.MeasuredEnergyStats;
 
 import org.junit.Before;
 import org.junit.Rule;
 import org.junit.Test;
 import org.junit.runner.RunWith;
-import org.mockito.Mock;
-import org.mockito.MockitoAnnotations;
 
 import java.io.IOException;
 import java.util.ArrayList;
@@ -50,8 +47,6 @@ import java.util.Collection;
 public class SystemServicePowerCalculatorTest {
 
     private static final double PRECISION = 0.000001;
-    private static final int APP_UID1 = 100;
-    private static final int APP_UID2 = 200;
 
     @Rule
     public final BatteryUsageStatsRule mStatsRule = new BatteryUsageStatsRule()
@@ -66,52 +61,73 @@ public class SystemServicePowerCalculatorTest {
             .setAveragePowerForCpuCore(1, 0, 500)
             .setAveragePowerForCpuCore(1, 1, 600);
 
-    @Mock
     private BatteryStatsImpl.UserInfoProvider mMockUserInfoProvider;
-    @Mock
-    private KernelCpuUidTimeReader.KernelCpuUidClusterTimeReader mMockKernelCpuUidClusterTimeReader;
-    @Mock
-    private KernelCpuUidTimeReader.KernelCpuUidFreqTimeReader mMockCpuUidFreqTimeReader;
-    @Mock
-    private KernelCpuUidTimeReader.KernelCpuUidUserSysTimeReader mMockKernelCpuUidUserSysTimeReader;
-    @Mock
-    private KernelCpuUidTimeReader.KernelCpuUidActiveTimeReader mMockKerneCpuUidActiveTimeReader;
-    @Mock
-    private SystemServerCpuThreadReader mMockSystemServerCpuThreadReader;
-
-    private final KernelCpuSpeedReader[] mMockKernelCpuSpeedReaders = new KernelCpuSpeedReader[]{
-            mock(KernelCpuSpeedReader.class),
-            mock(KernelCpuSpeedReader.class),
-    };
-
     private MockBatteryStatsImpl mMockBatteryStats;
+    private MockKernelCpuUidFreqTimeReader mMockCpuUidFreqTimeReader;
+    private MockSystemServerCpuThreadReader mMockSystemServerCpuThreadReader;
 
     @Before
     public void setUp() throws IOException {
-        MockitoAnnotations.initMocks(this);
+        mMockUserInfoProvider = mock(BatteryStatsImpl.UserInfoProvider.class);
+        mMockSystemServerCpuThreadReader = new MockSystemServerCpuThreadReader();
+        mMockCpuUidFreqTimeReader = new MockKernelCpuUidFreqTimeReader();
         mMockBatteryStats = mStatsRule.getBatteryStats()
-                .setUserInfoProvider(mMockUserInfoProvider)
-                .setKernelCpuSpeedReaders(mMockKernelCpuSpeedReaders)
+                .setSystemServerCpuThreadReader(mMockSystemServerCpuThreadReader)
                 .setKernelCpuUidFreqTimeReader(mMockCpuUidFreqTimeReader)
-                .setKernelCpuUidClusterTimeReader(mMockKernelCpuUidClusterTimeReader)
-                .setKernelCpuUidUserSysTimeReader(mMockKernelCpuUidUserSysTimeReader)
-                .setKernelCpuUidActiveTimeReader(mMockKerneCpuUidActiveTimeReader)
-                .setSystemServerCpuThreadReader(mMockSystemServerCpuThreadReader);
+                .setUserInfoProvider(mMockUserInfoProvider);
     }
 
     @Test
     public void testPowerProfileBasedModel() {
-        prepareBatteryStats(null);
+        when(mMockUserInfoProvider.exists(anyInt())).thenReturn(true);
+
+        // Test Power Profile has two CPU clusters with 2 speeds each, thus 4 freq times total
+        mMockSystemServerCpuThreadReader.setCpuTimes(
+                new long[] {30000, 40000, 50000, 60000},
+                new long[] {20000, 30000, 40000, 50000});
+
+        mMockCpuUidFreqTimeReader.setSystemServerCpuTimes(
+                new long[] {10000, 20000, 30000, 40000}
+        );
+
+        mMockBatteryStats.readKernelUidCpuFreqTimesLocked(null, true, false, null);
+
+        int workSourceUid1 = 100;
+        int workSourceUid2 = 200;
+        int transactionCode = 42;
+
+        Collection<BinderCallsStats.CallStat> callStats = new ArrayList<>();
+        BinderCallsStats.CallStat stat1 = new BinderCallsStats.CallStat(workSourceUid1,
+                Binder.class, transactionCode, true /*screenInteractive */);
+        stat1.incrementalCallCount = 100;
+        stat1.recordedCallCount = 100;
+        stat1.cpuTimeMicros = 1000000;
+        callStats.add(stat1);
+
+        mMockBatteryStats.noteBinderCallStats(workSourceUid1, 100, callStats);
+
+        callStats.clear();
+        BinderCallsStats.CallStat stat2 = new BinderCallsStats.CallStat(workSourceUid2,
+                Binder.class, transactionCode, true /*screenInteractive */);
+        stat2.incrementalCallCount = 100;
+        stat2.recordedCallCount = 100;
+        stat2.cpuTimeMicros = 9000000;
+        callStats.add(stat2);
+
+        mMockBatteryStats.noteBinderCallStats(workSourceUid2, 100, callStats);
+
+        mMockBatteryStats.updateSystemServiceCallStats();
+        mMockBatteryStats.updateSystemServerThreadStats();
 
         SystemServicePowerCalculator calculator = new SystemServicePowerCalculator(
                 mStatsRule.getPowerProfile());
 
-        mStatsRule.apply(new CpuPowerCalculator(mStatsRule.getPowerProfile()), calculator);
+        mStatsRule.apply(new FakeCpuPowerCalculator(), calculator);
 
-        assertThat(mStatsRule.getUidBatteryConsumer(APP_UID1)
+        assertThat(mStatsRule.getUidBatteryConsumer(workSourceUid1)
                 .getConsumedPower(BatteryConsumer.POWER_COMPONENT_SYSTEM_SERVICES))
                 .isWithin(PRECISION).of(1.888888);
-        assertThat(mStatsRule.getUidBatteryConsumer(APP_UID2)
+        assertThat(mStatsRule.getUidBatteryConsumer(workSourceUid2)
                 .getConsumedPower(BatteryConsumer.POWER_COMPONENT_SYSTEM_SERVICES))
                 .isWithin(PRECISION).of(17.0);
         assertThat(mStatsRule.getUidBatteryConsumer(Process.SYSTEM_UID)
@@ -125,105 +141,58 @@ public class SystemServicePowerCalculatorTest {
                 .isWithin(PRECISION).of(18.888888);
     }
 
-    @Test
-    public void testMeasuredEnergyBasedModel() {
-        final boolean[] supportedPowerBuckets =
-                new boolean[MeasuredEnergyStats.NUMBER_STANDARD_POWER_BUCKETS];
-        supportedPowerBuckets[MeasuredEnergyStats.POWER_BUCKET_CPU] = true;
-        mStatsRule.getBatteryStats()
-                .initMeasuredEnergyStatsLocked(supportedPowerBuckets, new String[0]);
+    private static class MockKernelCpuUidFreqTimeReader extends
+            KernelCpuUidTimeReader.KernelCpuUidFreqTimeReader {
+        private long[] mSystemServerCpuTimes;
 
-        prepareBatteryStats(new long[]{50000000, 100000000});
+        MockKernelCpuUidFreqTimeReader() {
+            super(/*throttle */false);
+        }
 
-        SystemServicePowerCalculator calculator = new SystemServicePowerCalculator(
-                mStatsRule.getPowerProfile());
+        void setSystemServerCpuTimes(long[] systemServerCpuTimes) {
+            mSystemServerCpuTimes = systemServerCpuTimes;
+        }
 
-        mStatsRule.apply(new CpuPowerCalculator(mStatsRule.getPowerProfile()), calculator);
+        @Override
+        public boolean perClusterTimesAvailable() {
+            return true;
+        }
 
-        assertThat(mStatsRule.getUidBatteryConsumer(APP_UID1)
-                .getConsumedPower(BatteryConsumer.POWER_COMPONENT_SYSTEM_SERVICES))
-                .isWithin(PRECISION).of(1.979351);
-        assertThat(mStatsRule.getUidBatteryConsumer(APP_UID2)
-                .getConsumedPower(BatteryConsumer.POWER_COMPONENT_SYSTEM_SERVICES))
-                .isWithin(PRECISION).of(17.814165);
-        assertThat(mStatsRule.getUidBatteryConsumer(Process.SYSTEM_UID)
-                .getConsumedPower(BatteryConsumer.POWER_COMPONENT_REATTRIBUTED_TO_OTHER_CONSUMERS))
-                .isWithin(PRECISION).of(-19.793517);
-        assertThat(mStatsRule.getDeviceBatteryConsumer()
-                .getConsumedPower(BatteryConsumer.POWER_COMPONENT_SYSTEM_SERVICES))
-                .isWithin(PRECISION).of(19.793517);
-        assertThat(mStatsRule.getAppsBatteryConsumer()
-                .getConsumedPower(BatteryConsumer.POWER_COMPONENT_SYSTEM_SERVICES))
-                .isWithin(PRECISION).of(19.793517);
+        @Override
+        public void readDelta(boolean forcedRead, @Nullable Callback<long[]> cb) {
+            if (cb != null) {
+                cb.onUidCpuTime(Process.SYSTEM_UID, mSystemServerCpuTimes);
+            }
+        }
     }
 
-    private void prepareBatteryStats(long[] clusterChargesUc) {
-        when(mMockUserInfoProvider.exists(anyInt())).thenReturn(true);
+    private static class MockSystemServerCpuThreadReader extends SystemServerCpuThreadReader {
+        private final SystemServiceCpuThreadTimes mThreadTimes = new SystemServiceCpuThreadTimes();
 
-        when(mMockKernelCpuSpeedReaders[0].readDelta()).thenReturn(new long[]{1000, 2000});
-        when(mMockKernelCpuSpeedReaders[1].readDelta()).thenReturn(new long[]{3000, 4000});
+        MockSystemServerCpuThreadReader() {
+            super(null);
+        }
 
-        when(mMockCpuUidFreqTimeReader.perClusterTimesAvailable()).thenReturn(false);
+        public void setCpuTimes(long[] threadCpuTimesUs, long[] binderThreadCpuTimesUs) {
+            mThreadTimes.threadCpuTimesUs = threadCpuTimesUs;
+            mThreadTimes.binderThreadCpuTimesUs = binderThreadCpuTimesUs;
+        }
 
-        // User/System CPU time in microseconds
-        doAnswer(invocation -> {
-            final KernelCpuUidTimeReader.Callback<long[]> callback = invocation.getArgument(1);
-            callback.onUidCpuTime(APP_UID1, new long[]{1_000_000, 2_000_000});
-            callback.onUidCpuTime(APP_UID2, new long[]{3_000_000, 4_000_000});
-            callback.onUidCpuTime(Process.SYSTEM_UID, new long[]{60_000_000, 80_000_000});
-            return null;
-        }).when(mMockKernelCpuUidUserSysTimeReader).readDelta(anyBoolean(), any());
+        @Override
+        public SystemServiceCpuThreadTimes readDelta() {
+            return mThreadTimes;
+        }
+    }
 
-        // Active CPU time in milliseconds
-        doAnswer(invocation -> {
-            final KernelCpuUidTimeReader.Callback<Long> callback = invocation.getArgument(1);
-            callback.onUidCpuTime(APP_UID1, 1111L);
-            callback.onUidCpuTime(APP_UID2, 3333L);
-            callback.onUidCpuTime(Process.SYSTEM_UID, 10000L);
-            return null;
-        }).when(mMockKerneCpuUidActiveTimeReader).readDelta(anyBoolean(), any());
-
-        // Per-cluster CPU time in milliseconds
-        doAnswer(invocation -> {
-            final KernelCpuUidTimeReader.Callback<long[]> callback = invocation.getArgument(1);
-            callback.onUidCpuTime(APP_UID1, new long[]{1111, 2222});
-            callback.onUidCpuTime(APP_UID2, new long[]{3333, 4444});
-            callback.onUidCpuTime(Process.SYSTEM_UID, new long[]{50_000, 80_000});
-            return null;
-        }).when(mMockKernelCpuUidClusterTimeReader).readDelta(anyBoolean(), any());
-
-        // System service CPU time
-        final SystemServerCpuThreadReader.SystemServiceCpuThreadTimes threadTimes =
-                new SystemServerCpuThreadReader.SystemServiceCpuThreadTimes();
-        threadTimes.binderThreadCpuTimesUs =
-                new long[]{20_000_000, 30_000_000, 40_000_000, 50_000_000};
-
-        when(mMockSystemServerCpuThreadReader.readDelta()).thenReturn(threadTimes);
-
-        int transactionCode = 42;
-
-        Collection<BinderCallsStats.CallStat> callStats = new ArrayList<>();
-        BinderCallsStats.CallStat stat1 = new BinderCallsStats.CallStat(APP_UID1,
-                Binder.class, transactionCode, true /*screenInteractive */);
-        stat1.incrementalCallCount = 100;
-        stat1.recordedCallCount = 100;
-        stat1.cpuTimeMicros = 1_000_000;
-        callStats.add(stat1);
-
-        mMockBatteryStats.noteBinderCallStats(APP_UID1, 100, callStats);
-
-        callStats.clear();
-        BinderCallsStats.CallStat stat2 = new BinderCallsStats.CallStat(APP_UID2,
-                Binder.class, transactionCode, true /*screenInteractive */);
-        stat2.incrementalCallCount = 100;
-        stat2.recordedCallCount = 100;
-        stat2.cpuTimeMicros = 9_000_000;
-        callStats.add(stat2);
-
-        mMockBatteryStats.noteBinderCallStats(APP_UID2, 100, callStats);
-
-        mMockBatteryStats.updateCpuTimeLocked(true, true, clusterChargesUc);
-
-        mMockBatteryStats.prepareForDumpLocked();
+    private static class FakeCpuPowerCalculator extends PowerCalculator {
+        @Override
+        protected void calculateApp(UidBatteryConsumer.Builder app, BatteryStats.Uid u,
+                long rawRealtimeUs, long rawUptimeUs, BatteryUsageStatsQuery query) {
+            if (u.getUid() == Process.SYSTEM_UID) {
+                // SystemServer must be attributed at least as much power as the total
+                // of all system services requested by apps.
+                app.setConsumedPower(BatteryConsumer.POWER_COMPONENT_CPU, 1000000);
+            }
+        }
     }
 }

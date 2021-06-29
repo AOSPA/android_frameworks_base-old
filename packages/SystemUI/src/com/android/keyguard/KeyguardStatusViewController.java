@@ -17,16 +17,14 @@
 package com.android.keyguard;
 
 import android.graphics.Rect;
+import android.os.UserHandle;
 import android.util.Slog;
 
-import com.android.systemui.keyguard.KeyguardUnlockAnimationController;
-import com.android.systemui.shared.system.smartspace.SmartspaceTransitionController;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
 import com.android.systemui.statusbar.notification.stack.AnimationProperties;
 import com.android.systemui.statusbar.notification.stack.StackStateAnimator;
 import com.android.systemui.statusbar.phone.DozeParameters;
-import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.ViewController;
@@ -51,9 +49,6 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     private final ConfigurationController mConfigurationController;
     private final DozeParameters mDozeParameters;
     private final KeyguardVisibilityHelper mKeyguardVisibilityHelper;
-    private final KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
-    private final KeyguardStateController mKeyguardStateController;
-    private SmartspaceTransitionController mSmartspaceTransitionController;
     private final Rect mClipBounds = new Rect();
 
     @Inject
@@ -64,38 +59,22 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             KeyguardStateController keyguardStateController,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
             ConfigurationController configurationController,
-            DozeParameters dozeParameters,
-            KeyguardUnlockAnimationController keyguardUnlockAnimationController,
-            SmartspaceTransitionController smartspaceTransitionController,
-            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController) {
+            DozeParameters dozeParameters) {
         super(keyguardStatusView);
         mKeyguardSliceViewController = keyguardSliceViewController;
         mKeyguardClockSwitchController = keyguardClockSwitchController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mConfigurationController = configurationController;
         mDozeParameters = dozeParameters;
-        mKeyguardStateController = keyguardStateController;
         mKeyguardVisibilityHelper = new KeyguardVisibilityHelper(mView, keyguardStateController,
-                dozeParameters, unlockedScreenOffAnimationController, /* animateYPos= */ true);
-        mKeyguardUnlockAnimationController = keyguardUnlockAnimationController;
-        mSmartspaceTransitionController = smartspaceTransitionController;
-
-        mKeyguardStateController.addCallback(new KeyguardStateController.Callback() {
-            @Override
-            public void onKeyguardShowingChanged() {
-                // If we explicitly re-show the keyguard, make sure that all the child views are
-                // visible. They might have been animating out as part of the SmartSpace shared
-                // element transition.
-                if (keyguardStateController.isShowing()) {
-                    mView.setChildrenAlphaExcludingClockView(1f);
-                }
-            }
-        });
+                dozeParameters);
     }
 
     @Override
     public void onInit() {
         mKeyguardClockSwitchController.init();
+        mView.setEnableMarquee(mKeyguardUpdateMonitor.isDeviceInteractive());
+        mView.updateLogoutView(shouldShowLogout());
     }
 
     @Override
@@ -140,28 +119,25 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
     }
 
     /**
+     * Get the height of the logout button.
+     */
+    public int getLogoutButtonHeight() {
+        return mView.getLogoutButtonHeight();
+    }
+
+    /**
+     * Get the height of the owner information view.
+     */
+    public int getOwnerInfoHeight() {
+        return mView.getOwnerInfoHeight();
+    }
+
+    /**
      * Set keyguard status view alpha.
      */
     public void setAlpha(float alpha) {
         if (!mKeyguardVisibilityHelper.isVisibilityAnimating()) {
-            // If we're capable of performing the SmartSpace shared element transition, and we are
-            // going to (we're swiping to dismiss vs. bringing up the PIN screen), then fade out
-            // everything except for the SmartSpace.
-            if (mKeyguardUnlockAnimationController.isUnlockingWithSmartSpaceTransition()) {
-                mView.setChildrenAlphaExcludingClockView(alpha);
-                mKeyguardClockSwitchController.setChildrenAlphaExcludingSmartspace(alpha);
-            } else if (!mKeyguardVisibilityHelper.isVisibilityAnimating()) {
-                // Otherwise, we can just set the alpha for the entire container.
-                mView.setAlpha(alpha);
-
-                // If we previously unlocked with the shared element transition, some child views
-                // might still have alpha = 0f. Set them back to 1f since we're just using the
-                // parent container's alpha.
-                if (mView.getChildrenAlphaExcludingSmartSpace() < 1f) {
-                    mView.setChildrenAlphaExcludingClockView(1f);
-                    mKeyguardClockSwitchController.setChildrenAlphaExcludingSmartspace(1f);
-                }
-            }
+            mView.setAlpha(alpha);
         }
     }
 
@@ -184,6 +160,16 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
      */
     public float getClockTextSize() {
         return mKeyguardClockSwitchController.getClockTextSize();
+    }
+
+    /**
+     * Returns the preferred Y position of the clock.
+     *
+     * @param totalHeight The height available to position the clock.
+     * @return Y position of clock.
+     */
+    public int getClockPreferredY(int totalHeight) {
+        return mKeyguardClockSwitchController.getClockPreferredY(totalHeight);
     }
 
     /**
@@ -227,6 +213,11 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         mKeyguardClockSwitchController.refresh();
     }
 
+    private boolean shouldShowLogout() {
+        return mKeyguardUpdateMonitor.isLogoutEnabled()
+                && KeyguardUpdateMonitor.getCurrentUser() != UserHandle.USER_SYSTEM;
+    }
+
     private final ConfigurationController.ConfigurationListener mConfigurationListener =
             new ConfigurationController.ConfigurationListener() {
         @Override
@@ -237,6 +228,7 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         @Override
         public void onDensityOrFontScaleChanged() {
             mKeyguardClockSwitchController.onDensityOrFontScaleChanged();
+            mView.onDensityOrFontScaleChanged();
         }
     };
 
@@ -244,16 +236,13 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
         @Override
         public void onLockScreenModeChanged(int mode) {
             mKeyguardSliceViewController.updateLockScreenMode(mode);
+            mView.setCanShowOwnerInfo(false);
+            mView.updateLogoutView(false);
         }
 
         @Override
         public void onTimeChanged() {
             refreshTime();
-        }
-
-        @Override
-        public void onTimeFormatChanged(String timeFormat) {
-            mKeyguardClockSwitchController.refreshFormat();
         }
 
         @Override
@@ -266,12 +255,30 @@ public class KeyguardStatusViewController extends ViewController<KeyguardStatusV
             if (showing) {
                 if (DEBUG) Slog.v(TAG, "refresh statusview showing:" + showing);
                 refreshTime();
+                mView.updateOwnerInfo();
+                mView.updateLogoutView(shouldShowLogout());
             }
         }
 
         @Override
+        public void onStartedWakingUp() {
+            mView.setEnableMarquee(true);
+        }
+
+        @Override
+        public void onFinishedGoingToSleep(int why) {
+            mView.setEnableMarquee(false);
+        }
+
+        @Override
         public void onUserSwitchComplete(int userId) {
-            mKeyguardClockSwitchController.refreshFormat();
+            mView.updateOwnerInfo();
+            mView.updateLogoutView(shouldShowLogout());
+        }
+
+        @Override
+        public void onLogoutEnabledChanged() {
+            mView.updateLogoutView(shouldShowLogout());
         }
     };
 

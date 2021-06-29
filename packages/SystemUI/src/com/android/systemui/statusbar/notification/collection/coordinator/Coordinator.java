@@ -16,8 +16,6 @@
 
 package com.android.systemui.statusbar.notification.collection.coordinator;
 
-import androidx.annotation.NonNull;
-
 import com.android.systemui.statusbar.notification.collection.NotifPipeline;
 import com.android.systemui.statusbar.notification.collection.listbuilder.pluggable.Pluggable;
 
@@ -29,5 +27,5 @@ public interface Coordinator {
      * Called after the NewNotifPipeline is initialized.
      * Coordinators should register their listeners and {@link Pluggable}s to the pipeline.
      */
-    void attach(@NonNull NotifPipeline pipeline);
+    void attach(NotifPipeline pipeline);
 }

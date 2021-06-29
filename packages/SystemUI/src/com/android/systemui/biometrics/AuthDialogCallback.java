@@ -67,12 +67,7 @@ public interface AuthDialogCallback {
     void onSystemEvent(int event);
 
     /**
-     * Notifies when the dialog has finished animating.
+     * Notifies when the dialog has finished animating in.
      */
     void onDialogAnimatedIn();
-
-    /**
-     * Notifies that the fingerprint sensor should be started now.
-     */
-    void onStartFingerprintNow();
 }

@@ -312,13 +312,6 @@ public class FlingAnimationUtils {
     }
 
     /**
-     * @return a velocity considered fast
-     */
-    public float getHighVelocityPxPerSecond() {
-        return mHighVelocityPxPerSecond;
-    }
-
-    /**
      * An interpolator which interpolates two interpolators with an interpolator.
      */
     private static final class InterpolatorInterpolator implements Interpolator {

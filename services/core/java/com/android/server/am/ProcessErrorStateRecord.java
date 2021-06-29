@@ -56,7 +56,7 @@ import java.io.File;
 import java.io.PrintWriter;
 import java.io.StringWriter;
 import java.util.ArrayList;
-import java.util.UUID;
+
 /**
  * The error state of the process, such as if it's crashing/ANR etc.
  */
@@ -236,7 +236,6 @@ class ProcessErrorStateRecord {
 
         final boolean isSilentAnr;
         final int pid = mApp.getPid();
-        final UUID errorId;
         synchronized (mService) {
             // PowerManager.reboot() can block for a long time, so ignore ANRs while shutting down.
             if (mService.mAtmInternal.isShuttingDown()) {
@@ -265,20 +264,6 @@ class ProcessErrorStateRecord {
             // Log the ANR to the event log.
             EventLog.writeEvent(EventLogTags.AM_ANR, mApp.userId, pid, mApp.processName,
                     mApp.info.flags, annotation);
-
-            if (mService.mTraceErrorLogger.isAddErrorIdEnabled()) {
-                errorId = mService.mTraceErrorLogger.generateErrorId();
-                mService.mTraceErrorLogger.addErrorIdToTrace(errorId);
-            } else {
-                errorId = null;
-            }
-
-            // This atom is only logged with the purpose of triggering Perfetto and the logging
-            // needs to happen as close as possible to the time when the ANR is detected.
-            // Also, it needs to be logged after adding the error id to the trace, to make sure
-            // the error id is present in the trace when the Perfetto trace is captured.
-            FrameworkStatsLog.write(FrameworkStatsLog.ANR_OCCURRED_PROCESSING_STARTED,
-                    mApp.processName);
 
             // Dump thread traces as quickly as we can, starting with "interesting" processes.
             firstPids.add(pid);
@@ -331,9 +316,6 @@ class ProcessErrorStateRecord {
                 && parentShortComponentName.equals(activityShortComponentName)) {
             info.append("Parent: ").append(parentShortComponentName).append("\n");
         }
-        if (errorId != null) {
-            info.append("ErrorId: ").append(errorId.toString()).append("\n");
-        }
 
         // Retrieve controller with max ANR delay from AnrControllers
         // Note that we retrieve the controller before dumping stacks because dumping stacks can
@@ -383,7 +365,7 @@ class ProcessErrorStateRecord {
         final long[] offsets = new long[2];
         File tracesFile = ActivityManagerService.dumpStackTraces(firstPids,
                 isSilentAnr ? null : processCpuTracker, isSilentAnr ? null : lastPids,
-                nativePids, tracesFileException, offsets, annotation);
+                nativePids, tracesFileException, offsets);
 
         if (isMonitorCpuUsage()) {
             mService.updateCpuStatsNow();
@@ -469,14 +451,12 @@ class ProcessErrorStateRecord {
                 incrementalMetrics != null ? incrementalMetrics.getMillisSinceLastReadError()
                         : -1,
                 incrementalMetrics != null ? incrementalMetrics.getLastReadErrorNumber()
-                        : 0,
-                incrementalMetrics != null ? incrementalMetrics.getTotalDelayedReadsDurationMillis()
-                        : -1);
+                        : 0);
         final ProcessRecord parentPr = parentProcess != null
                 ? (ProcessRecord) parentProcess.mOwner : null;
         mService.addErrorToDropBox("anr", mApp, mApp.processName, activityShortComponentName,
-                parentShortComponentName, parentPr, null, report.toString(), tracesFile,
-                null, new Float(loadingProgress), incrementalMetrics, errorId);
+                parentShortComponentName, parentPr, annotation, report.toString(), tracesFile,
+                null, new Float(loadingProgress), incrementalMetrics);
 
         if (mApp.getWindowProcessController().appNotResponding(info.toString(),
                 () -> {

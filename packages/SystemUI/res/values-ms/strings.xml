@@ -136,7 +136,6 @@
     <string name="accessibility_camera_button" msgid="2938898391716647247">"Kamera"</string>
     <string name="accessibility_phone_button" msgid="4256353121703100427">"Telefon"</string>
     <string name="accessibility_voice_assist_button" msgid="6497706615649754510">"Bantuan Suara"</string>
-    <string name="accessibility_wallet_button" msgid="1458258783460555507">"Dompet"</string>
     <string name="accessibility_unlock_button" msgid="122785427241471085">"Buka kunci"</string>
     <string name="accessibility_lock_icon" msgid="661492842417875775">"Peranti dikunci"</string>
     <string name="accessibility_waiting_for_fingerprint" msgid="5209142744692162598">"Menunggu cap jari"</string>
@@ -290,7 +289,9 @@
     <string name="accessibility_quick_settings_hotspot_changed_off" msgid="7002061268910095176">"Tempat liputan mudah alih bergerak dimatikan."</string>
     <string name="accessibility_quick_settings_hotspot_changed_on" msgid="2576895346762408840">"Tempat liputan mudah alih bergerak dihidupkan."</string>
     <string name="accessibility_casting_turned_off" msgid="1387906158563374962">"Penghantaran skrin dihentikan."</string>
-    <string name="accessibility_quick_settings_work_mode_changed_off" msgid="6422896967647049692">"Mod kerja dijeda."</string>
+    <string name="accessibility_quick_settings_work_mode_off" msgid="9106217884005620744">"Mod kerja dijeda."</string>
+    <string name="accessibility_quick_settings_work_mode_on" msgid="2779253456042059110">"Mod kerja hidup."</string>
+    <string name="accessibility_quick_settings_work_mode_changed_off" msgid="2653550342355027441">"Mod kerja dijeda."</string>
     <string name="accessibility_quick_settings_work_mode_changed_on" msgid="1105258550138313384">"Mod kerja dihidupkan."</string>
     <string name="accessibility_quick_settings_data_saver_changed_off" msgid="4910847127871603832">"Penjimat Data dimatikan."</string>
     <string name="accessibility_quick_settings_data_saver_changed_on" msgid="6370606590802623078">"Penjimat Data dihidupkan."</string>
@@ -408,7 +409,8 @@
     <string name="quick_settings_cellular_detail_data_used" msgid="6798849610647988987">"<xliff:g id="DATA_USED">%s</xliff:g> digunakan"</string>
     <string name="quick_settings_cellular_detail_data_limit" msgid="1791389609409211628">"<xliff:g id="DATA_LIMIT">%s</xliff:g> had"</string>
     <string name="quick_settings_cellular_detail_data_warning" msgid="7957253810481086455">"Amaran <xliff:g id="DATA_LIMIT">%s</xliff:g>"</string>
-    <string name="quick_settings_work_mode_label" msgid="6440531507319809121">"Apl kerja"</string>
+    <string name="quick_settings_work_mode_label" msgid="2754212289804324685">"Profil kerja"</string>
+    <string name="quick_settings_work_mode_paused" msgid="4841109346916998613">"Dijeda"</string>
     <string name="quick_settings_night_display_label" msgid="8180030659141778180">"Cahaya Malam"</string>
     <string name="quick_settings_night_secondary_label_on_at_sunset" msgid="3358706312129866626">"Dihidupkan pd senja"</string>
     <string name="quick_settings_night_secondary_label_until_sunrise" msgid="4063448287758262485">"Hingga matahari terbit"</string>
@@ -423,7 +425,7 @@
     <string name="quick_settings_nfc_label" msgid="1054317416221168085">"NFC"</string>
     <string name="quick_settings_nfc_off" msgid="3465000058515424663">"NFC dilumpuhkan"</string>
     <string name="quick_settings_nfc_on" msgid="1004976611203202230">"NFC didayakan"</string>
-    <string name="quick_settings_screen_record_label" msgid="8650355346742003694">"Rakam skrin"</string>
+    <string name="quick_settings_screen_record_label" msgid="1594046461509776676">"Rakam Skrin"</string>
     <string name="quick_settings_screen_record_start" msgid="1574725369331638985">"Mula"</string>
     <string name="quick_settings_screen_record_stop" msgid="8087348522976412119">"Berhenti"</string>
     <string name="sensor_privacy_start_use_mic_dialog_title" msgid="563796653825944944">"Nyahsekat mikrofon peranti?"</string>
@@ -452,7 +454,6 @@
     <string name="keyguard_more_overflow_text" msgid="5819512373606638727">"+<xliff:g id="NUMBER_OF_NOTIFICATIONS">%d</xliff:g>"</string>
     <string name="speed_bump_explanation" msgid="7248696377626341060">"Pemberitahuan kurang penting di bawah"</string>
     <string name="notification_tap_again" msgid="4477318164947497249">"Ketik lagi untuk membuka"</string>
-    <string name="tap_again" msgid="1315420114387908655">"Ketik sekali lagi"</string>
     <string name="keyguard_unlock" msgid="8031975796351361601">"Leret ke atas untuk buka"</string>
     <string name="keyguard_retry" msgid="886802522584053523">"Leret ke atas untuk mencuba lagi"</string>
     <string name="require_unlock_for_nfc" msgid="1305686454823018831">"Buka kunci untuk menggunakan NFC"</string>
@@ -469,10 +470,14 @@
     <string name="interruption_level_none_twoline" msgid="8579382742855486372">"Senyap\nsepenuhnya"</string>
     <string name="interruption_level_priority_twoline" msgid="8523482736582498083">"Keutamaan\nsahaja"</string>
     <string name="interruption_level_alarms_twoline" msgid="2045067991335708767">"Penggera\nsahaja"</string>
-    <string name="keyguard_indication_charging_time_wireless" msgid="577856646141738675">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Mengecas secara wayarles • Penuh dalam masa <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
-    <string name="keyguard_indication_charging_time" msgid="6492711711891071502">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Mengecas • Penuh dalam masa <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
-    <string name="keyguard_indication_charging_time_fast" msgid="8390311020603859480">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Mengecas dengan cepat • Penuh dalam masa <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
-    <string name="keyguard_indication_charging_time_slowly" msgid="301936949731705417">"<xliff:g id="PERCENTAGE">%2$s</xliff:g> • Mengecas dengan perlahan • Penuh dalam masa <xliff:g id="CHARGING_TIME_LEFT">%1$s</xliff:g>"</string>
+    <!-- no translation found for keyguard_indication_charging_time_wireless (577856646141738675) -->
+    <skip />
+    <!-- no translation found for keyguard_indication_charging_time (6492711711891071502) -->
+    <skip />
+    <!-- no translation found for keyguard_indication_charging_time_fast (8390311020603859480) -->
+    <skip />
+    <!-- no translation found for keyguard_indication_charging_time_slowly (301936949731705417) -->
+    <skip />
     <string name="accessibility_multi_user_switch_switcher" msgid="5330448341251092660">"Tukar pengguna"</string>
     <string name="accessibility_multi_user_switch_switcher_with_current" msgid="5759855008166759399">"Tukar pengguna, pengguna semasa <xliff:g id="CURRENT_USER_NAME">%s</xliff:g>"</string>
     <string name="accessibility_multi_user_switch_inactive" msgid="383168614528618402">"Pengguna semasa <xliff:g id="CURRENT_USER_NAME">%s</xliff:g>"</string>
@@ -666,7 +671,6 @@
     <string name="status_bar_ethernet" msgid="5690979758988647484">"Ethernet"</string>
     <string name="status_bar_alarm" msgid="87160847643623352">"Penggera"</string>
     <string name="wallet_title" msgid="5369767670735827105">"Wallet"</string>
-    <string name="wallet_empty_state_label" msgid="7776761245237530394">"Buat persediaan untuk membuat pembelian yang lebih pantas dan selamat dengan telefon anda"</string>
     <string name="wallet_app_button_label" msgid="7123784239111190992">"Tunjukkan semua"</string>
     <string name="wallet_action_button_label_unlock" msgid="8663239748726774487">"Buka kunci untuk membayar"</string>
     <string name="wallet_secondary_label_no_card" msgid="1282609666895946317">"Tidak disediakan"</string>
@@ -890,7 +894,7 @@
     <string name="right_keycode" msgid="2480715509844798438">"Kod kunci kanan"</string>
     <string name="left_icon" msgid="5036278531966897006">"Ikon kiri"</string>
     <string name="right_icon" msgid="1103955040645237425">"Ikon kanan"</string>
-    <string name="drag_to_add_tiles" msgid="8933270127508303672">"Tahan dan seret untuk menambahkan jubin"</string>
+    <string name="drag_to_add_tiles" msgid="8933270127508303672">"Tahan dan seret untuk menambah jubin"</string>
     <string name="drag_to_rearrange_tiles" msgid="2143204300089638620">"Tahan dan seret untuk mengatur semula jubin"</string>
     <string name="drag_to_remove_tiles" msgid="4682194717573850385">"Seret ke sini untuk mengalih keluar"</string>
     <string name="drag_to_remove_disabled" msgid="933046987838658850">"Anda memerlukan sekurang-kurangnya <xliff:g id="MIN_NUM_TILES">%1$d</xliff:g> jubin"</string>
@@ -1034,7 +1038,7 @@
     <string name="magnification_mode_switch_state_window" msgid="8597100249594076965">"Besarkan sebahagian skrin"</string>
     <string name="magnification_mode_switch_click_label" msgid="2786203505805898199">"Tukar"</string>
     <string name="accessibility_floating_button_migration_tooltip" msgid="4431046858918714564">"Butang kebolehaksesan menggantikan gerak isyarat kebolehaksesan\n\n"<annotation id="link">"Lihat tetapan"</annotation></string>
-    <string name="accessibility_floating_button_docking_tooltip" msgid="6814897496767461517">"Gerakkan butang ke tepi untuk disembunyikan buat sementara waktu"</string>
+    <string name="accessibility_floating_button_docking_tooltip" msgid="6814897496767461517">"Gerakkan butang ke tepi untuk menyembunyikannya buat sementara waktu"</string>
     <string name="accessibility_floating_button_action_move_top_left" msgid="6253520703618545705">"Alihkan ke atas sebelah kiri"</string>
     <string name="accessibility_floating_button_action_move_top_right" msgid="6106225581993479711">"Alihkan ke atas sebelah kanan"</string>
     <string name="accessibility_floating_button_action_move_bottom_left" msgid="8063394111137429725">"Alihkan ke bawah sebelah kiri"</string>
@@ -1042,8 +1046,11 @@
     <string name="accessibility_floating_button_action_move_to_edge_and_hide_to_half" msgid="662401168245782658">"Alihkan ke tepi dan sorokkan"</string>
     <string name="accessibility_floating_button_action_move_out_edge_and_show" msgid="8354760891651663326">"Alihkan ke tepi dan tunjukkan"</string>
     <string name="accessibility_floating_button_action_double_tap_to_toggle" msgid="7976492639670692037">"togol"</string>
-    <string name="quick_controls_title" msgid="7095074621086860062">"Kawalan rumah"</string>
-    <string name="controls_providers_title" msgid="6879775889857085056">"Pilih apl untuk menambahkan kawalan"</string>
+    <string name="quick_controls_title" msgid="6839108006171302273">"Kawalan peranti"</string>
+    <string name="quick_controls_subtitle" msgid="1667408093326318053">"Tambah kawalan untuk peranti yang disambungkan"</string>
+    <string name="quick_controls_setup_title" msgid="8901436655997849822">"Sediakan kawalan peranti"</string>
+    <string name="quick_controls_setup_subtitle" msgid="1681506617879773824">"Tahan butang Kuasa untuk mengakses kawalan anda"</string>
+    <string name="controls_providers_title" msgid="6879775889857085056">"Pilih apl untuk menambah kawalan"</string>
     <plurals name="controls_number_of_favorites" formatted="false" msgid="1057347832073807380">
       <item quantity="other"><xliff:g id="NUMBER_1">%s</xliff:g> kawalan ditambah.</item>
       <item quantity="one"><xliff:g id="NUMBER_0">%s</xliff:g> kawalan ditambah.</item>
@@ -1056,7 +1063,7 @@
     <string name="accessibility_control_change_unfavorite" msgid="6997408061750740327">"nyahgemari"</string>
     <string name="accessibility_control_move" msgid="8980344493796647792">"Alih ke kedudukan <xliff:g id="NUMBER">%d</xliff:g>"</string>
     <string name="controls_favorite_default_title" msgid="967742178688938137">"Kawalan"</string>
-    <string name="controls_favorite_subtitle" msgid="6481675111056961083">"Pilih kawalan untuk diakses daripada Tetapan Pantas"</string>
+    <string name="controls_favorite_subtitle" msgid="6604402232298443956">"Pilih kawalan untuk diakses daripada menu kuasa"</string>
     <string name="controls_favorite_rearrange" msgid="5616952398043063519">"Tahan &amp; seret untuk mengatur semula kawalan"</string>
     <string name="controls_favorite_removed" msgid="5276978408529217272">"Semua kawalan dialih keluar"</string>
     <string name="controls_favorite_toast_no_changes" msgid="7094494210840877931">"Perubahan tidak disimpan"</string>
@@ -1085,11 +1092,7 @@
     <string name="controls_media_dismiss_button" msgid="9081375542265132213">"Tolak"</string>
     <string name="controls_media_resume" msgid="1933520684481586053">"Sambung semula"</string>
     <string name="controls_media_settings_button" msgid="5815790345117172504">"Tetapan"</string>
-    <string name="controls_media_playing_item_description" msgid="4531853311504359098">"<xliff:g id="SONG_NAME">%1$s</xliff:g> oleh <xliff:g id="ARTIST_NAME">%2$s</xliff:g> dimainkan daripada <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
     <string name="controls_media_smartspace_rec_title" msgid="1699818353932537407">"Main"</string>
-    <string name="controls_media_smartspace_rec_description" msgid="4136242327044070732">"Buka <xliff:g id="APP_LABEL">%1$s</xliff:g>"</string>
-    <string name="controls_media_smartspace_rec_item_description" msgid="2189271793070870883">"Mainkan <xliff:g id="SONG_NAME">%1$s</xliff:g> oleh <xliff:g id="ARTIST_NAME">%2$s</xliff:g> daripada <xliff:g id="APP_LABEL">%3$s</xliff:g>"</string>
-    <string name="controls_media_smartspace_rec_item_no_artist_description" msgid="8703614798636591077">"Mainkan <xliff:g id="SONG_NAME">%1$s</xliff:g> daripada <xliff:g id="APP_LABEL">%2$s</xliff:g>"</string>
     <string name="controls_error_timeout" msgid="794197289772728958">"Tidak aktif, semak apl"</string>
     <string name="controls_error_retryable" msgid="864025882878378470">"Ralat, mencuba semula…"</string>
     <string name="controls_error_removed" msgid="6675638069846014366">"Tidak ditemukan"</string>
@@ -1099,7 +1102,7 @@
     <string name="controls_error_generic" msgid="352500456918362905">"Tidak dapat memuatkan status"</string>
     <string name="controls_error_failed" msgid="960228639198558525">"Ralat, cuba lagi"</string>
     <string name="controls_in_progress" msgid="4421080500238215939">"Sedang berlangsung"</string>
-    <string name="controls_added_tooltip" msgid="5866098408470111984">"Buka Tetapan Pantas untuk melihat kawalan baharu"</string>
+    <string name="controls_added_tooltip" msgid="4842812921719153085">"Tahan butang Kuasa untuk melihat kawalan baharu"</string>
     <string name="controls_menu_add" msgid="4447246119229920050">"Tambah kawalan"</string>
     <string name="controls_menu_edit" msgid="890623986951347062">"Edit kawalan"</string>
     <string name="media_output_dialog_add_output" msgid="5642703238877329518">"Tambah output"</string>
@@ -1118,11 +1121,9 @@
     <string name="priority_conversations" msgid="3967482288896653039">"Perbualan keutamaan"</string>
     <string name="recent_conversations" msgid="8531874684782574622">"Perbualan terbaharu"</string>
     <string name="okay" msgid="6490552955618608554">"Okey"</string>
-    <string name="days_timestamp" msgid="5821854736213214331">"<xliff:g id="DURATION">%1$s</xliff:g> hari lalu"</string>
-    <string name="one_week_timestamp" msgid="4925600765473875590">"1 minggu yang lalu"</string>
-    <string name="two_weeks_timestamp" msgid="9111801081871962155">"2 minggu yang lalu"</string>
-    <string name="over_one_week_timestamp" msgid="3770560704420807142">"Lebih 1 minggu yang lalu"</string>
-    <string name="over_two_weeks_timestamp" msgid="6300507859007874050">"Lebih 2 minggu yang lalu"</string>
+    <string name="timestamp" msgid="6577851592534538533">"<xliff:g id="DURATION">%1$s</xliff:g> yang lalu"</string>
+    <string name="less_than_timestamp" msgid="6598972791137724517">"Kurang daripada <xliff:g id="DURATION">%1$s</xliff:g> lalu"</string>
+    <string name="over_timestamp" msgid="4765793502859358634">"Lebih <xliff:g id="DURATION">%1$s</xliff:g> yang lalu"</string>
     <string name="birthday_status" msgid="2596961629465396761">"Hari Lahir"</string>
     <string name="birthday_status_content_description" msgid="682836371128282925">"Hari ini hari lahir <xliff:g id="NAME">%1$s</xliff:g>"</string>
     <string name="upcoming_birthday_status" msgid="2005452239256870351">"Hari lahir tak lama lagi"</string>
@@ -1153,6 +1154,4 @@
     <string name="accessibility_authenticate_hint" msgid="798914151813205721">"sahkan"</string>
     <string name="accessibility_enter_hint" msgid="2617864063504824834">"akses peranti"</string>
     <string name="keyguard_try_fingerprint" msgid="2825130772993061165">"Gunakan cap jari untuk membuka"</string>
-    <string name="accessibility_fingerprint_bouncer" msgid="7189102492498735519">"Pengesahan diperlukan. Sentuh penderia cap jari untuk pengesahan."</string>
-    <string name="ongoing_phone_call_content_description" msgid="5332334388483099947">"Panggilan telefon yang sedang berjalan"</string>
 </resources>

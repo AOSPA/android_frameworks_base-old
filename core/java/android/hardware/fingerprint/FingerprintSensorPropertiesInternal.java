@@ -16,7 +16,6 @@
 
 package android.hardware.fingerprint;
 
-import static android.hardware.fingerprint.FingerprintSensorProperties.TYPE_POWER_BUTTON;
 import static android.hardware.fingerprint.FingerprintSensorProperties.TYPE_UDFPS_OPTICAL;
 import static android.hardware.fingerprint.FingerprintSensorProperties.TYPE_UDFPS_ULTRASONIC;
 
@@ -131,19 +130,6 @@ public class FingerprintSensorPropertiesInternal extends SensorPropertiesInterna
         switch (sensorType) {
             case TYPE_UDFPS_OPTICAL:
             case TYPE_UDFPS_ULTRASONIC:
-                return true;
-            default:
-                return false;
-        }
-    }
-
-    /**
-     * Returns if sensor type is side-FPS
-     * @return true if sensor is side-fps, false otherwise
-     */
-    public boolean isAnySidefpsType() {
-        switch (sensorType) {
-            case TYPE_POWER_BUTTON:
                 return true;
             default:
                 return false;

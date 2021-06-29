@@ -45,7 +45,6 @@ import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
-import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -71,7 +70,6 @@ public class NotificationShadeWindowControllerImplTest extends SysuiTestCase {
     @Mock private SysuiColorExtractor mColorExtractor;
     @Mock ColorExtractor.GradientColors mGradientColors;
     @Mock private DumpManager mDumpManager;
-    @Mock private KeyguardStateController mKeyguardStateController;
     @Captor private ArgumentCaptor<WindowManager.LayoutParams> mLayoutParameters;
 
     private NotificationShadeWindowControllerImpl mNotificationShadeWindowController;
@@ -85,7 +83,7 @@ public class NotificationShadeWindowControllerImplTest extends SysuiTestCase {
         mNotificationShadeWindowController = new NotificationShadeWindowControllerImpl(mContext,
                 mWindowManager, mActivityManager, mDozeParameters, mStatusBarStateController,
                 mConfigurationController, mKeyguardViewMediator, mKeyguardBypassController,
-                mColorExtractor, mDumpManager, mKeyguardStateController);
+                mColorExtractor, mDumpManager);
         mNotificationShadeWindowController.setNotificationShadeView(mNotificationShadeWindowView);
 
         mNotificationShadeWindowController.attach();

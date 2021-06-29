@@ -33,6 +33,7 @@ import android.annotation.Nullable;
 import android.location.LocationRequest;
 import android.location.provider.ProviderRequest;
 import android.location.util.identity.CallerIdentity;
+import android.os.Build;
 import android.os.PowerManager.LocationPowerSaveMode;
 import android.os.SystemClock;
 import android.util.ArrayMap;
@@ -46,8 +47,8 @@ public class LocationEventLog extends LocalEventLog {
     public static final LocationEventLog EVENT_LOG = new LocationEventLog();
 
     private static int getLogSize() {
-        if (D) {
-            return 600;
+        if (Build.IS_DEBUGGABLE || D) {
+            return 500;
         } else {
             return 200;
         }
@@ -151,7 +152,7 @@ public class LocationEventLog extends LocalEventLog {
 
     /** Logs a client for a location provider entering the foreground state. */
     public void logProviderClientForeground(String provider, CallerIdentity identity) {
-        if (D) {
+        if (Build.IS_DEBUGGABLE || D) {
             addLogEvent(EVENT_PROVIDER_CLIENT_FOREGROUND, provider, identity);
         }
         getAggregateStats(provider, identity).markRequestForeground();
@@ -159,7 +160,7 @@ public class LocationEventLog extends LocalEventLog {
 
     /** Logs a client for a location provider leaving the foreground state. */
     public void logProviderClientBackground(String provider, CallerIdentity identity) {
-        if (D) {
+        if (Build.IS_DEBUGGABLE || D) {
             addLogEvent(EVENT_PROVIDER_CLIENT_BACKGROUND, provider, identity);
         }
         getAggregateStats(provider, identity).markRequestBackground();
@@ -167,14 +168,14 @@ public class LocationEventLog extends LocalEventLog {
 
     /** Logs a client for a location provider entering the permitted state. */
     public void logProviderClientPermitted(String provider, CallerIdentity identity) {
-        if (D) {
+        if (Build.IS_DEBUGGABLE || D) {
             addLogEvent(EVENT_PROVIDER_CLIENT_PERMITTED, provider, identity);
         }
     }
 
     /** Logs a client for a location provider leaving the permitted state. */
     public void logProviderClientUnpermitted(String provider, CallerIdentity identity) {
-        if (D) {
+        if (Build.IS_DEBUGGABLE || D) {
             addLogEvent(EVENT_PROVIDER_CLIENT_UNPERMITTED, provider, identity);
         }
     }
@@ -186,7 +187,7 @@ public class LocationEventLog extends LocalEventLog {
 
     /** Logs a new incoming location for a location provider. */
     public void logProviderReceivedLocations(String provider, int numLocations) {
-        if (D) {
+        if (Build.IS_DEBUGGABLE || D) {
             addLogEvent(EVENT_PROVIDER_RECEIVE_LOCATION, provider, numLocations);
         }
     }
@@ -194,7 +195,7 @@ public class LocationEventLog extends LocalEventLog {
     /** Logs a location deliver for a client of a location provider. */
     public void logProviderDeliveredLocations(String provider, int numLocations,
             CallerIdentity identity) {
-        if (D) {
+        if (Build.IS_DEBUGGABLE || D) {
             addLogEvent(EVENT_PROVIDER_DELIVER_LOCATION, provider, numLocations, identity);
         }
         getAggregateStats(provider, identity).markLocationDelivered();

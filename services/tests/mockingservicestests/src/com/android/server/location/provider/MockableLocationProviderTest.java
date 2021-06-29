@@ -158,7 +158,7 @@ public class MockableLocationProviderTest {
 
     @Test
     public void testSetState() {
-        assertThat(mProvider.getState().allowed).isFalse();
+        assertThat(mProvider.isAllowed()).isFalse();
 
         AbstractLocationProvider.State newState;
 

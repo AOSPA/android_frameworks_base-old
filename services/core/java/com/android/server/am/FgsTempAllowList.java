@@ -20,12 +20,11 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_AM;
 
 import android.annotation.Nullable;
 import android.os.SystemClock;
-import android.os.UserHandle;
+import android.util.ArrayMap;
 import android.util.Pair;
 import android.util.Slog;
-import android.util.SparseArray;
 
-import java.util.function.BiConsumer;
+import java.util.Set;
 
 /**
  * List of keys that have expiration time.
@@ -34,18 +33,19 @@ import java.util.function.BiConsumer;
  *
  * <p>This is used for both FGS-BG-start restriction, and FGS-while-in-use permissions check.</p>
  *
- * <p>Note: the underlying data structure is an {@link SparseArray}, for performance reason,
- * it is only suitable to hold up to hundreds of entries.</p>
+ * <p>Note: the underlying data structure is an {@link ArrayMap}, for performance reason, it is only
+ * suitable to hold up to hundreds of entries.</p>
+ * @param <K> type of the key.
  * @param <E> type of the additional optional info.
  */
-public class FgsTempAllowList<E> {
+public class FgsTempAllowList<K, E> {
     private static final int DEFAULT_MAX_SIZE = 100;
 
     /**
      * The value is Pair type, Pair.first is the expirationTime(an elapsedRealtime),
      * Pair.second is the optional information entry about this key.
      */
-    private final SparseArray<Pair<Long, E>> mTempAllowList = new SparseArray<>();
+    private final ArrayMap<K, Pair<Long, E>> mTempAllowList = new ArrayMap<>();
     private int mMaxSize = DEFAULT_MAX_SIZE;
     private final Object mLock = new Object();
 
@@ -70,14 +70,15 @@ public class FgsTempAllowList<E> {
 
     /**
      * Add a key and its duration with optional info into the temp allowlist.
+     * @param key
      * @param durationMs temp-allowlisted duration in milliseconds.
      * @param entry additional optional information of this key, could be null.
      */
-    public void add(int uid, long durationMs, @Nullable E entry) {
+    public void add(K key, long durationMs, @Nullable E entry) {
         synchronized (mLock) {
             if (durationMs <= 0) {
                 Slog.e(TAG_AM, "FgsTempAllowList bad duration:" + durationMs + " key: "
-                        + uid);
+                        + key);
                 return;
             }
             // The temp allowlist should be a short list with only a few entries in it.
@@ -93,10 +94,10 @@ public class FgsTempAllowList<E> {
                     }
                 }
             }
-            final Pair<Long, E> existing = mTempAllowList.get(uid);
+            final Pair<Long, E> existing = mTempAllowList.get(key);
             final long expirationTime = now + durationMs;
             if (existing == null || existing.first < expirationTime) {
-                mTempAllowList.put(uid, new Pair(expirationTime, entry));
+                mTempAllowList.put(key, new Pair(expirationTime, entry));
             }
         }
     }
@@ -104,12 +105,13 @@ public class FgsTempAllowList<E> {
     /**
      * If the key has not expired (AKA allowed), return its non-null value.
      * If the key has expired, return null.
+     * @param key
      * @return
      */
     @Nullable
-    public Pair<Long, E> get(int uid) {
+    public Pair<Long, E> get(K key) {
         synchronized (mLock) {
-            final int index = mTempAllowList.indexOfKey(uid);
+            final int index = mTempAllowList.indexOfKey(key);
             if (index < 0) {
                 return null;
             } else if (mTempAllowList.valueAt(index).first < SystemClock.elapsedRealtime()) {
@@ -124,48 +126,23 @@ public class FgsTempAllowList<E> {
     /**
      * If the key has not expired (AKA allowed), return true.
      * If the key has expired, return false.
+     * @param key
+     * @return
      */
-    public boolean isAllowed(int uid) {
-        Pair<Long, E> entry = get(uid);
+    public boolean isAllowed(K key) {
+        Pair<Long, E> entry = get(key);
         return entry != null;
     }
 
-    /**
-     * Remove a given UID.
-     */
-    public void removeUid(int uid) {
+    public void remove(K key) {
         synchronized (mLock) {
-            mTempAllowList.remove(uid);
+            mTempAllowList.remove(key);
         }
     }
 
-    /**
-     * Remove by appId.
-     */
-    public void removeAppId(int appId) {
+    public Set<K> keySet() {
         synchronized (mLock) {
-            // Find all UIDs matching the appId.
-            for (int i = mTempAllowList.size() - 1; i >= 0; i--) {
-                final int uid = mTempAllowList.keyAt(i);
-                if (UserHandle.getAppId(uid) == appId) {
-                    mTempAllowList.removeAt(i);
-                }
-            }
-        }
-    }
-
-    /**
-     * Iterate over the entries.
-     */
-    public void forEach(BiConsumer<Integer, Pair<Long, E>> callback) {
-        synchronized (mLock) {
-            for (int i = 0; i < mTempAllowList.size(); i++) {
-                final int uid = mTempAllowList.keyAt(i);
-                final Pair<Long, E> entry = mTempAllowList.valueAt(i);
-                if (entry != null) {
-                    callback.accept(uid, entry);
-                }
-            }
+            return mTempAllowList.keySet();
         }
     }
 }

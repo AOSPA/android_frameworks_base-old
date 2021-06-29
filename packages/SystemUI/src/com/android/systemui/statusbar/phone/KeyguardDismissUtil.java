@@ -50,14 +50,13 @@ public class KeyguardDismissUtil implements KeyguardDismissHandler {
      * @param requiresShadeOpen does the shade need to be forced open when hiding the keyguard?
      */
     @Override
-    public void executeWhenUnlocked(OnDismissAction action, boolean requiresShadeOpen,
-            boolean afterKeyguardGone) {
+    public void executeWhenUnlocked(OnDismissAction action, boolean requiresShadeOpen) {
         KeyguardDismissHandler dismissHandler = mDismissHandler;
         if (dismissHandler == null) {
             Log.wtf(TAG, "KeyguardDismissHandler not set.");
             action.onDismiss();
             return;
         }
-        dismissHandler.executeWhenUnlocked(action, requiresShadeOpen, afterKeyguardGone);
+        dismissHandler.executeWhenUnlocked(action, requiresShadeOpen);
     }
 }

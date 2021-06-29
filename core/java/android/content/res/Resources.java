@@ -341,7 +341,7 @@ public class Resources {
 
     /**
      * Set the underlying implementation (containing all the resources and caches)
-     * and updates all Theme implementations as well.
+     * and updates all Theme references to new implementations as well.
      * @hide
      */
     @UnsupportedAppUsage
@@ -353,14 +353,14 @@ public class Resources {
         mBaseApkAssetsSize = ArrayUtils.size(impl.getAssets().getApkAssets());
         mResourcesImpl = impl;
 
-        // Rebase the ThemeImpls using the new ResourcesImpl.
+        // Create new ThemeImpls that are identical to the ones we have.
         synchronized (mThemeRefs) {
             final int count = mThemeRefs.size();
             for (int i = 0; i < count; i++) {
                 WeakReference<Theme> weakThemeRef = mThemeRefs.get(i);
                 Theme theme = weakThemeRef != null ? weakThemeRef.get() : null;
                 if (theme != null) {
-                    theme.rebase(mResourcesImpl);
+                    theme.setNewResourcesImpl(mResourcesImpl);
                 }
             }
         }
@@ -1515,6 +1515,12 @@ public class Resources {
             }
         }
 
+        void setNewResourcesImpl(ResourcesImpl resImpl) {
+            synchronized (mLock) {
+                mThemeImpl = resImpl.newThemeImpl(mThemeImpl.getKey());
+            }
+        }
+
         /**
          * Place new attribute values into the theme.  The style resource
          * specified by <var>resid</var> will be retrieved from this Theme's
@@ -1838,12 +1844,6 @@ public class Resources {
         public void rebase() {
             synchronized (mLock) {
                 mThemeImpl.rebase();
-            }
-        }
-
-        void rebase(ResourcesImpl resImpl) {
-            synchronized (mLock) {
-                mThemeImpl.rebase(resImpl.mAssets);
             }
         }
 

@@ -17,7 +17,6 @@
 package com.android.systemui.biometrics;
 
 import static android.hardware.biometrics.BiometricManager.Authenticators;
-import static android.hardware.biometrics.BiometricManager.BIOMETRIC_MULTI_SENSOR_FACE_THEN_FINGERPRINT;
 
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertNull;
@@ -42,7 +41,6 @@ import android.content.pm.PackageManager;
 import android.content.res.Configuration;
 import android.hardware.biometrics.BiometricAuthenticator;
 import android.hardware.biometrics.BiometricConstants;
-import android.hardware.biometrics.BiometricManager;
 import android.hardware.biometrics.BiometricPrompt;
 import android.hardware.biometrics.ComponentInfoInternal;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
@@ -62,6 +60,7 @@ import android.testing.TestableLooper.RunWithLooper;
 
 import com.android.internal.R;
 import com.android.systemui.SysuiTestCase;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 
 import org.junit.Before;
@@ -95,6 +94,8 @@ public class AuthControllerTest extends SysuiTestCase {
     @Mock
     private CommandQueue mCommandQueue;
     @Mock
+    private StatusBarStateController mStatusBarStateController;
+    @Mock
     private ActivityTaskManager mActivityTaskManager;
     @Mock
     private FingerprintManager mFingerprintManager;
@@ -102,8 +103,6 @@ public class AuthControllerTest extends SysuiTestCase {
     private FaceManager mFaceManager;
     @Mock
     private UdfpsController mUdfpsController;
-    @Mock
-    private SidefpsController mSidefpsController;
     @Captor
     ArgumentCaptor<IFingerprintAuthenticatorsRegisteredCallback> mAuthenticatorsRegisteredCaptor;
 
@@ -149,8 +148,8 @@ public class AuthControllerTest extends SysuiTestCase {
         when(mFingerprintManager.getSensorPropertiesInternal()).thenReturn(props);
 
         mAuthController = new TestableAuthController(context, mCommandQueue,
-                mActivityTaskManager, mFingerprintManager, mFaceManager,
-                () -> mUdfpsController, () -> mSidefpsController);
+                mStatusBarStateController, mActivityTaskManager, mFingerprintManager, mFaceManager,
+                () -> mUdfpsController);
 
         mAuthController.start();
         verify(mFingerprintManager).addAuthenticatorsRegisteredCallback(
@@ -252,67 +251,52 @@ public class AuthControllerTest extends SysuiTestCase {
     @Test
     public void testOnAuthenticationFailedInvoked_whenBiometricRejected() {
         showDialog(new int[] {1} /* sensorIds */, false /* credentialAllowed */);
-        final int modality = BiometricAuthenticator.TYPE_NONE;
-        mAuthController.onBiometricError(modality,
+        mAuthController.onBiometricError(BiometricAuthenticator.TYPE_NONE,
                 BiometricConstants.BIOMETRIC_PAUSED_REJECTED,
                 0 /* vendorCode */);
 
-        ArgumentCaptor<Integer> modalityCaptor = ArgumentCaptor.forClass(Integer.class);
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mDialog1).onAuthenticationFailed(modalityCaptor.capture(), messageCaptor.capture());
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(mDialog1).onAuthenticationFailed(captor.capture());
 
-        assertEquals(modalityCaptor.getValue().intValue(), modality);
-        assertEquals(messageCaptor.getValue(),
-                mContext.getString(R.string.biometric_not_recognized));
+        assertEquals(captor.getValue(), mContext.getString(R.string.biometric_not_recognized));
     }
 
     @Test
     public void testOnAuthenticationFailedInvoked_whenBiometricTimedOut() {
         showDialog(new int[] {1} /* sensorIds */, false /* credentialAllowed */);
-        final int modality = BiometricAuthenticator.TYPE_FACE;
         final int error = BiometricConstants.BIOMETRIC_ERROR_TIMEOUT;
         final int vendorCode = 0;
-        mAuthController.onBiometricError(modality, error, vendorCode);
+        mAuthController.onBiometricError(BiometricAuthenticator.TYPE_FACE, error, vendorCode);
 
-        ArgumentCaptor<Integer> modalityCaptor = ArgumentCaptor.forClass(Integer.class);
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mDialog1).onAuthenticationFailed(modalityCaptor.capture(), messageCaptor.capture());
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(mDialog1).onAuthenticationFailed(captor.capture());
 
-        assertEquals(modalityCaptor.getValue().intValue(), modality);
-        assertEquals(messageCaptor.getValue(),
-                FaceManager.getErrorString(mContext, error, vendorCode));
+        assertEquals(captor.getValue(), FaceManager.getErrorString(mContext, error, vendorCode));
     }
 
     @Test
     public void testOnHelpInvoked_whenSystemRequested() {
         showDialog(new int[] {1} /* sensorIds */, false /* credentialAllowed */);
-        final int modality = BiometricAuthenticator.TYPE_IRIS;
         final String helpMessage = "help";
-        mAuthController.onBiometricHelp(modality, helpMessage);
+        mAuthController.onBiometricHelp(helpMessage);
 
-        ArgumentCaptor<Integer> modalityCaptor = ArgumentCaptor.forClass(Integer.class);
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mDialog1).onHelp(modalityCaptor.capture(), messageCaptor.capture());
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(mDialog1).onHelp(captor.capture());
 
-        assertEquals(modalityCaptor.getValue().intValue(), modality);
-        assertEquals(messageCaptor.getValue(), helpMessage);
+        assertEquals(captor.getValue(), helpMessage);
     }
 
     @Test
     public void testOnErrorInvoked_whenSystemRequested() {
         showDialog(new int[] {1} /* sensorIds */, false /* credentialAllowed */);
-        final int modality = BiometricAuthenticator.TYPE_FACE;
         final int error = 1;
         final int vendorCode = 0;
-        mAuthController.onBiometricError(modality, error, vendorCode);
+        mAuthController.onBiometricError(BiometricAuthenticator.TYPE_FACE, error, vendorCode);
 
-        ArgumentCaptor<Integer> modalityCaptor = ArgumentCaptor.forClass(Integer.class);
-        ArgumentCaptor<String> messageCaptor = ArgumentCaptor.forClass(String.class);
-        verify(mDialog1).onError(modalityCaptor.capture(), messageCaptor.capture());
+        ArgumentCaptor<String> captor = ArgumentCaptor.forClass(String.class);
+        verify(mDialog1).onError(captor.capture());
 
-        assertEquals(modalityCaptor.getValue().intValue(), modality);
-        assertEquals(messageCaptor.getValue(),
-                FaceManager.getErrorString(mContext, error, vendorCode));
+        assertEquals(captor.getValue(), FaceManager.getErrorString(mContext, error, vendorCode));
     }
 
     @Test
@@ -324,7 +308,7 @@ public class AuthControllerTest extends SysuiTestCase {
         when(mDialog1.isAllowDeviceCredentials()).thenReturn(true);
 
         mAuthController.onBiometricError(BiometricAuthenticator.TYPE_FACE, error, vendorCode);
-        verify(mDialog1, never()).onError(anyInt(), anyString());
+        verify(mDialog1, never()).onError(anyString());
         verify(mDialog1).animateToCredentialUI();
     }
 
@@ -337,37 +321,33 @@ public class AuthControllerTest extends SysuiTestCase {
         when(mDialog1.isAllowDeviceCredentials()).thenReturn(true);
 
         mAuthController.onBiometricError(BiometricAuthenticator.TYPE_FACE, error, vendorCode);
-        verify(mDialog1, never()).onError(anyInt(), anyString());
+        verify(mDialog1, never()).onError(anyString());
         verify(mDialog1).animateToCredentialUI();
     }
 
     @Test
     public void testErrorLockout_whenCredentialNotAllowed_sendsOnError() {
         showDialog(new int[] {1} /* sensorIds */, false /* credentialAllowed */);
-        final int modality = BiometricAuthenticator.TYPE_FACE;
         final int error = BiometricConstants.BIOMETRIC_ERROR_LOCKOUT;
         final int vendorCode = 0;
 
         when(mDialog1.isAllowDeviceCredentials()).thenReturn(false);
 
-        mAuthController.onBiometricError(modality, error, vendorCode);
-        verify(mDialog1).onError(
-                eq(modality), eq(FaceManager.getErrorString(mContext, error, vendorCode)));
+        mAuthController.onBiometricError(BiometricAuthenticator.TYPE_FACE, error, vendorCode);
+        verify(mDialog1).onError(eq(FaceManager.getErrorString(mContext, error, vendorCode)));
         verify(mDialog1, never()).animateToCredentialUI();
     }
 
     @Test
     public void testErrorLockoutPermanent_whenCredentialNotAllowed_sendsOnError() {
         showDialog(new int[] {1} /* sensorIds */, false /* credentialAllowed */);
-        final int modality = BiometricAuthenticator.TYPE_FACE;
         final int error = BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT;
         final int vendorCode = 0;
 
         when(mDialog1.isAllowDeviceCredentials()).thenReturn(false);
 
-        mAuthController.onBiometricError(modality, error, vendorCode);
-        verify(mDialog1).onError(
-                eq(modality), eq(FaceManager.getErrorString(mContext, error, vendorCode)));
+        mAuthController.onBiometricError(BiometricAuthenticator.TYPE_FACE, error, vendorCode);
+        verify(mDialog1).onError(eq(FaceManager.getErrorString(mContext, error, vendorCode)));
         verify(mDialog1, never()).animateToCredentialUI();
     }
 
@@ -546,8 +526,7 @@ public class AuthControllerTest extends SysuiTestCase {
                 true /* requireConfirmation */,
                 0 /* userId */,
                 "testPackage",
-                0 /* operationId */,
-                BIOMETRIC_MULTI_SENSOR_FACE_THEN_FINGERPRINT);
+                0 /* operationId */);
     }
 
     private PromptInfo createTestPromptInfo() {
@@ -577,21 +556,19 @@ public class AuthControllerTest extends SysuiTestCase {
         private PromptInfo mLastBiometricPromptInfo;
 
         TestableAuthController(Context context, CommandQueue commandQueue,
+                StatusBarStateController statusBarStateController,
                 ActivityTaskManager activityTaskManager,
                 FingerprintManager fingerprintManager,
                 FaceManager faceManager,
-                Provider<UdfpsController> udfpsControllerFactory,
-                Provider<SidefpsController> sidefpsControllerFactory) {
-            super(context, commandQueue, activityTaskManager,
-                    fingerprintManager, faceManager, udfpsControllerFactory,
-                    sidefpsControllerFactory);
+                Provider<UdfpsController> udfpsControllerFactory) {
+            super(context, commandQueue, statusBarStateController, activityTaskManager,
+                    fingerprintManager, faceManager, udfpsControllerFactory);
         }
 
         @Override
         protected AuthDialog buildDialog(PromptInfo promptInfo,
                 boolean requireConfirmation, int userId, int[] sensorIds, boolean credentialAllowed,
-                String opPackageName, boolean skipIntro, long operationId,
-                @BiometricManager.BiometricMultiSensorMode int multiSensorConfig) {
+                String opPackageName, boolean skipIntro, long operationId) {
 
             mLastBiometricPromptInfo = promptInfo;
 

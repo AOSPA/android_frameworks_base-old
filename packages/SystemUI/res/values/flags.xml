@@ -28,21 +28,25 @@
     <bool name="flag_notification_twocolumn">false</bool>
 
     <!-- AOD/Lockscreen alternate layout -->
-    <bool name="flag_keyguard_layout">true</bool>
+    <bool name="flag_keyguard_layout">false</bool>
 
     <!-- People Tile flag -->
     <bool name="flag_conversations">false</bool>
 
+    <bool name="flag_wallet">false</bool>
+
     <!-- The new animations to/from lockscreen and AOD! -->
     <bool name="flag_lockscreen_animations">false</bool>
 
-    <bool name="flag_pm_lite">true</bool>
+    <bool name="flag_toast_style">false</bool>
+
+    <bool name="flag_pm_lite">false</bool>
+
+    <bool name="flag_alarm_tile">false</bool>
 
     <bool name="flag_charging_ripple">false</bool>
 
     <bool name="flag_ongoing_call_status_bar_chip">true</bool>
 
     <bool name="flag_smartspace">false</bool>
-
-    <bool name="flag_smartspace_deduping">true</bool>
 </resources>

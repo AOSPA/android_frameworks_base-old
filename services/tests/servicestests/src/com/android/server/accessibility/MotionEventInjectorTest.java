@@ -19,7 +19,6 @@ package com.android.server.accessibility;
 import static android.view.MotionEvent.ACTION_DOWN;
 import static android.view.MotionEvent.ACTION_HOVER_MOVE;
 import static android.view.MotionEvent.ACTION_UP;
-import static android.view.WindowManagerPolicyConstants.FLAG_INJECTED_FROM_ACCESSIBILITY;
 import static android.view.WindowManagerPolicyConstants.FLAG_PASS_TO_USER;
 
 import static org.hamcrest.CoreMatchers.allOf;
@@ -187,9 +186,9 @@ public class MotionEventInjectorTest {
         verifyNoMoreInteractions(next);
         mMessageCapturingHandler.sendOneMessage(); // Send a motion event
 
-        final int expectedFlags = FLAG_PASS_TO_USER | FLAG_INJECTED_FROM_ACCESSIBILITY;
-        verify(next).onMotionEvent(mCaptor1.capture(), mCaptor2.capture(), eq(expectedFlags));
-        verify(next).onMotionEvent(argThat(mIsLineStart), argThat(mIsLineStart), eq(expectedFlags));
+        verify(next).onMotionEvent(mCaptor1.capture(), mCaptor2.capture(), eq(FLAG_PASS_TO_USER));
+        verify(next).onMotionEvent(argThat(mIsLineStart), argThat(mIsLineStart),
+                eq(FLAG_PASS_TO_USER));
         verifyNoMoreInteractions(next);
         reset(next);
 
@@ -197,7 +196,7 @@ public class MotionEventInjectorTest {
 
         mMessageCapturingHandler.sendOneMessage(); // Send a motion event
         verify(next).onMotionEvent(argThat(allOf(mIsLineMiddle, hasRightDownTime)),
-                argThat(allOf(mIsLineMiddle, hasRightDownTime)), eq(expectedFlags));
+                argThat(allOf(mIsLineMiddle, hasRightDownTime)), eq(FLAG_PASS_TO_USER));
         verifyNoMoreInteractions(next);
         reset(next);
 
@@ -205,7 +204,7 @@ public class MotionEventInjectorTest {
 
         mMessageCapturingHandler.sendOneMessage(); // Send a motion event
         verify(next).onMotionEvent(argThat(allOf(mIsLineEnd, hasRightDownTime)),
-                argThat(allOf(mIsLineEnd, hasRightDownTime)), eq(expectedFlags));
+                argThat(allOf(mIsLineEnd, hasRightDownTime)), eq(FLAG_PASS_TO_USER));
         verifyNoMoreInteractions(next);
 
         verify(mServiceInterface).onPerformGestureResult(LINE_SEQUENCE, true);
@@ -243,8 +242,7 @@ public class MotionEventInjectorTest {
         mMessageCapturingHandler.sendAllMessages(); // Send all motion events
         reset(next);
         mMotionEventInjector.onMotionEvent(mClickDownEvent, mClickDownEvent, 0);
-        verify(next).onMotionEvent(argThat(mIsClickDown), argThat(mIsClickDown),
-                eq(FLAG_INJECTED_FROM_ACCESSIBILITY));
+        verify(next).onMotionEvent(argThat(mIsClickDown), argThat(mIsClickDown), eq(0));
     }
 
     @Test
@@ -260,8 +258,7 @@ public class MotionEventInjectorTest {
 
         mMessageCapturingHandler.sendOneMessage(); // Send a motion event
         verify(next).onMotionEvent(
-                argThat(mIsLineStart), argThat(mIsLineStart),
-                eq(FLAG_PASS_TO_USER | FLAG_INJECTED_FROM_ACCESSIBILITY));
+                argThat(mIsLineStart), argThat(mIsLineStart), eq(FLAG_PASS_TO_USER));
     }
 
     @Test
@@ -292,11 +289,9 @@ public class MotionEventInjectorTest {
         reset(next);
 
         mMessageCapturingHandler.sendOneMessage(); // Send a motion event
-        verify(next).onMotionEvent(mCaptor1.capture(), mCaptor2.capture(),
-                eq(FLAG_PASS_TO_USER | FLAG_INJECTED_FROM_ACCESSIBILITY));
+        verify(next).onMotionEvent(mCaptor1.capture(), mCaptor2.capture(), eq(FLAG_PASS_TO_USER));
         verify(next).onMotionEvent(
-                argThat(mIsLineStart), argThat(mIsLineStart),
-                eq(FLAG_PASS_TO_USER | FLAG_INJECTED_FROM_ACCESSIBILITY));
+                argThat(mIsLineStart), argThat(mIsLineStart), eq(FLAG_PASS_TO_USER));
     }
 
     @Test

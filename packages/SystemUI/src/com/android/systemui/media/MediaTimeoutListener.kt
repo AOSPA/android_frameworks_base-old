@@ -50,12 +50,7 @@ class MediaTimeoutListener @Inject constructor(
      */
     lateinit var timeoutCallback: (String, Boolean) -> Unit
 
-    override fun onMediaDataLoaded(
-        key: String,
-        oldKey: String?,
-        data: MediaData,
-        immediately: Boolean
-    ) {
+    override fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {
         var reusedListener: PlaybackStateListener? = null
 
         // First check if we already have a listener

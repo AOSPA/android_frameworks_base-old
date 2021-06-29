@@ -19,7 +19,6 @@ package com.android.server.uwb;
 import android.annotation.NonNull;
 import android.content.AttributionSource;
 import android.content.Context;
-import android.os.Binder;
 import android.os.IBinder;
 import android.os.PersistableBundle;
 import android.os.RemoteException;
@@ -172,10 +171,8 @@ public class UwbServiceImpl extends IUwbAdapter.Stub implements IBinder.DeathRec
                 RangingReport rangingReport)
                 throws RemoteException {
             if (!mIsValid) return;
-            boolean permissionGranted = Binder.withCleanCallingIdentity(
-                    () -> mUwbInjector.checkUwbRangingPermissionForDataDelivery(
-                            mAttributionSource, "uwb ranging result"));
-            if (!permissionGranted) {
+            if (!mUwbInjector.checkUwbRangingPermissionForDataDelivery(
+                    mAttributionSource, "uwb ranging result")) {
                 Log.e(TAG, "Not delivering ranging result because of permission denial"
                         + mSessionHandle);
                 return;

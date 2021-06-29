@@ -278,7 +278,7 @@ public class KeyguardSecurityContainer extends FrameLayout {
     private boolean canUseOneHandedBouncer() {
         // Is it enabled?
         if (!getResources().getBoolean(
-                com.android.internal.R.bool.config_enableDynamicKeyguardPositioning)) {
+                com.android.internal.R.bool.config_enableOneHandedKeyguard)) {
             return false;
         }
 

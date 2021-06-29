@@ -458,7 +458,6 @@ class AssetManager2 {
         INITIAL,
         BETTER_MATCH,
         OVERLAID,
-        OVERLAID_INLINE,
         SKIPPED,
         NO_ENTRY,
       };
@@ -469,6 +468,10 @@ class AssetManager2 {
       // Built name of configuration for this step.
       String8 config_name;
 
+      // Marks the package name of the better resource found in this step.
+      const std::string* package_name;
+
+      //
       ApkAssetsCookie cookie = kInvalidCookie;
     };
 
@@ -508,18 +511,13 @@ class Theme {
   // data failed.
   base::expected<std::monostate, NullOrIOError> ApplyStyle(uint32_t resid, bool force = false);
 
-  // Clears the existing theme, sets the new asset manager to use for this theme, and applies the
-  // styles in `style_ids` through repeated invocations of `ApplyStyle`.
-  void Rebase(AssetManager2* am, const uint32_t* style_ids, const uint8_t* force,
-              size_t style_count);
-
-  // Sets this Theme to be a copy of `source` if `source` has the same AssetManager as this Theme.
+  // Sets this Theme to be a copy of `other` if `other` has the same AssetManager as this Theme.
   //
-  // If `source` does not have the same AssetManager as this theme, only attributes from ApkAssets
+  // If `other` does not have the same AssetManager as this theme, only attributes from ApkAssets
   // loaded into both AssetManagers will be copied to this theme.
   //
   // Returns an I/O error if reading resource data failed.
-  base::expected<std::monostate, IOError> SetTo(const Theme& source);
+  base::expected<std::monostate, IOError> SetTo(const Theme& other);
 
   void Clear();
 
@@ -551,16 +549,20 @@ class Theme {
 
   void Dump() const;
 
-  struct Entry;
  private:
   DISALLOW_COPY_AND_ASSIGN(Theme);
 
+  // Called by AssetManager2.
   explicit Theme(AssetManager2* asset_manager);
 
-  AssetManager2* asset_manager_ = nullptr;
+  AssetManager2* asset_manager_;
   uint32_t type_spec_flags_ = 0u;
 
-  std::vector<Entry> entries_;
+  // Defined in the cpp.
+  struct Package;
+
+  constexpr static size_t kPackageCount = std::numeric_limits<uint8_t>::max() + 1;
+  std::array<std::unique_ptr<Package>, kPackageCount> packages_;
 };
 
 inline const ResolvedBag::Entry* begin(const ResolvedBag* bag) {

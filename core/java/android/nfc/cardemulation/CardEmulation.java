@@ -294,23 +294,9 @@ public final class CardEmulation {
      */
     public int getSelectionModeForCategory(String category) {
         if (CATEGORY_PAYMENT.equals(category)) {
-            boolean paymentRegistered = false;
-            try {
-                paymentRegistered = sService.isDefaultPaymentRegistered();
-            } catch (RemoteException e) {
-                recoverService();
-                if (sService == null) {
-                    Log.e(TAG, "Failed to recover CardEmulationService.");
-                    return SELECTION_MODE_ALWAYS_ASK;
-                }
-                try {
-                    paymentRegistered = sService.isDefaultPaymentRegistered();
-                } catch (RemoteException ee) {
-                    Log.e(TAG, "Failed to reach CardEmulationService.");
-                    return SELECTION_MODE_ALWAYS_ASK;
-                }
-            }
-            if (paymentRegistered) {
+            String defaultComponent = Settings.Secure.getString(mContext.getContentResolver(),
+                    Settings.Secure.NFC_PAYMENT_DEFAULT_COMPONENT);
+            if (defaultComponent != null) {
                 return SELECTION_MODE_PREFER_DEFAULT;
             } else {
                 return SELECTION_MODE_ALWAYS_ASK;

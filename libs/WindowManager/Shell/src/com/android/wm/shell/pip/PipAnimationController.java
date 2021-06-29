@@ -89,11 +89,6 @@ public class PipAnimationController {
                 || direction == TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN;
     }
 
-    /** Whether the given direction represents removing PIP. */
-    public static boolean isRemovePipDirection(@TransitionDirection int direction) {
-        return direction == TRANSITION_DIRECTION_REMOVE_STACK;
-    }
-
     private final PipSurfaceTransactionHelper mSurfaceTransactionHelper;
 
     private final ThreadLocal<AnimationHandler> mSfAnimationHandlerThreadLocal =
@@ -435,8 +430,7 @@ public class PipAnimationController {
                         SurfaceControl.Transaction tx, float fraction) {
                     final float alpha = getStartValue() * (1 - fraction) + getEndValue() * fraction;
                     setCurrentValue(alpha);
-                    getSurfaceTransactionHelper().alpha(tx, leash, alpha)
-                            .round(tx, leash, shouldApplyCornerRadius());
+                    getSurfaceTransactionHelper().alpha(tx, leash, alpha);
                     tx.apply();
                 }
 
@@ -527,22 +521,16 @@ public class PipAnimationController {
                     float angle = (1.0f - fraction) * startingAngle;
                     setCurrentValue(bounds);
                     if (inScaleTransition() || sourceHintRect == null) {
+
                         if (isOutPipDirection) {
                             getSurfaceTransactionHelper().scale(tx, leash, end, bounds);
                         } else {
-                            getSurfaceTransactionHelper().scale(tx, leash, base, bounds, angle)
-                                    .round(tx, leash, base, bounds);
+                            getSurfaceTransactionHelper().scale(tx, leash, base, bounds, angle);
                         }
                     } else {
                         final Rect insets = computeInsets(fraction);
                         getSurfaceTransactionHelper().scaleAndCrop(tx, leash,
                                 initialSourceValue, bounds, insets);
-                        if (shouldApplyCornerRadius()) {
-                            final Rect destinationBounds = new Rect(bounds);
-                            destinationBounds.inset(insets);
-                            getSurfaceTransactionHelper().round(tx, leash,
-                                    initialContainerRect, destinationBounds);
-                        }
                     }
                     if (!handlePipTransaction(leash, tx, bounds)) {
                         tx.apply();
@@ -571,11 +559,9 @@ public class PipAnimationController {
                         x = fraction * (end.left - start.left) + start.left;
                         y = fraction * (end.bottom - start.top) + start.top;
                     }
-                    getSurfaceTransactionHelper()
-                            .rotateAndScaleWithCrop(tx, leash, initialContainerRect, bounds,
-                                    insets, degree, x, y, isOutPipDirection,
-                                    rotationDelta == ROTATION_270 /* clockwise */)
-                            .round(tx, leash, initialContainerRect, bounds);
+                    getSurfaceTransactionHelper().rotateAndScaleWithCrop(tx, leash,
+                            initialContainerRect, bounds, insets, degree, x, y, isOutPipDirection,
+                            rotationDelta == ROTATION_270 /* clockwise */);
                     tx.apply();
                 }
 

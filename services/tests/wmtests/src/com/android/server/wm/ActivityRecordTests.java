@@ -26,7 +26,6 @@ import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_ALWAYS;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_DEFAULT;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_IF_ALLOWLISTED;
 import static android.content.pm.ActivityInfo.LOCK_TASK_LAUNCH_MODE_NEVER;
-import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_PORTRAIT;
@@ -113,7 +112,6 @@ import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Bundle;
 import android.os.PersistableBundle;
-import android.os.Process;
 import android.os.RemoteException;
 import android.platform.test.annotations.Presubmit;
 import android.util.MergedConfiguration;
@@ -547,7 +545,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void ignoreRequestedOrientationForResizableInSplitWindows() {
+    public void ignoreRequestedOrientationInSplitWindows() {
         final ActivityRecord activity = createActivityWith2LevelTask();
         final Task task = activity.getTask();
         final Task rootTask = activity.getRootTask();
@@ -579,45 +577,13 @@ public class ActivityRecordTests extends WindowTestsBase {
         }
         task.setBounds(bounds);
 
-        final int activityCurOrientation = activity.getConfiguration().orientation;
-
         // Requests orientation that's different from its bounds.
-        activity.setRequestedOrientation(activityCurOrientation == ORIENTATION_LANDSCAPE
-                ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
+        activity.setRequestedOrientation(
+                isScreenPortrait ? SCREEN_ORIENTATION_PORTRAIT : SCREEN_ORIENTATION_LANDSCAPE);
 
-        // Asserts fixed orientation request is ignored, and the orientation is not changed
-        // (fill Task).
-        assertEquals(activityCurOrientation, activity.getConfiguration().orientation);
-        assertFalse(activity.isLetterboxedForFixedOrientationAndAspectRatio());
-    }
-
-    @Test
-    public void respectRequestedOrientationForNonResizableInSplitWindows() {
-        final Task task = new TaskBuilder(mSupervisor)
-                .setCreateParentTask(true).setCreateActivity(true).build();
-        final Task rootTask = task.getRootTask();
-        final ActivityRecord activity = new ActivityBuilder(mAtm)
-                .setParentTask(task)
-                .setOnTop(true)
-                .setResizeMode(RESIZE_MODE_UNRESIZEABLE)
-                .setScreenOrientation(SCREEN_ORIENTATION_PORTRAIT)
-                .build();
-
-        // Task in landscape.
-        rootTask.setWindowingMode(WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        task.setBounds(0, 0, 1000, 500);
-        assertEquals(ORIENTATION_LANDSCAPE, task.getConfiguration().orientation);
-
-        // Asserts fixed orientation request is respected, and the orientation is not changed.
-        assertEquals(ORIENTATION_PORTRAIT, activity.getConfiguration().orientation);
-
-        // Clear size compat.
-        activity.clearSizeCompatMode();
-        activity.ensureActivityConfiguration(0 /* globalChanges */, false /* preserveWindow */);
-        activity.mDisplayContent.sendNewConfiguration();
-
-        // Relaunching the app should still respect the orientation request.
-        assertEquals(ORIENTATION_PORTRAIT, activity.getConfiguration().orientation);
+        // Asserts it has orientation derived requested orientation (fixed orientation letterbox).
+        assertEquals(isScreenPortrait ? ORIENTATION_PORTRAIT : ORIENTATION_LANDSCAPE,
+                activity.getConfiguration().orientation);
         assertTrue(activity.isLetterboxedForFixedOrientationAndAspectRatio());
     }
 
@@ -2068,28 +2034,19 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE)
                 .build();
 
-        // Not allow non-resizable
+        // Non-resizable
         mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mDevEnableNonResizableMultiWindow = false;
         assertFalse(activity.supportsSplitScreenWindowingMode());
 
         // Force resizable
         mAtm.mForceResizableActivities = true;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mDevEnableNonResizableMultiWindow = false;
         assertTrue(activity.supportsSplitScreenWindowingMode());
 
-        // Use development option to allow non-resizable
+        // Allow non-resizable
         mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mDevEnableNonResizableMultiWindow = true;
-        assertTrue(activity.supportsSplitScreenWindowingMode());
-
-        // Always allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = 1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
         assertTrue(activity.supportsSplitScreenWindowingMode());
     }
 
@@ -2101,28 +2058,19 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE)
                 .build();
 
-        // Not allow non-resizable
+        // Non-resizable
         mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mDevEnableNonResizableMultiWindow = false;
         assertFalse(activity.supportsFreeform());
 
         // Force resizable
         mAtm.mForceResizableActivities = true;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mDevEnableNonResizableMultiWindow = false;
         assertTrue(activity.supportsFreeform());
 
-        // Use development option to allow non-resizable
+        // Allow non-resizable
         mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mDevEnableNonResizableMultiWindow = true;
-        assertTrue(activity.supportsFreeform());
-
-        // Always allow non-resizable
-        mAtm.mForceResizableActivities = false;
-        mAtm.mSupportsNonResizableMultiWindow = 1;
-        mAtm.mDevEnableNonResizableMultiWindow = false;
         assertTrue(activity.supportsFreeform());
     }
 
@@ -2518,26 +2466,6 @@ public class ActivityRecordTests extends WindowTestsBase {
         doReturn(true).when(activity2).isAnimating();
         assertTrue(activity2.applyAnimation(null, TRANSIT_OLD_ACTIVITY_OPEN, true, false, sources));
     }
-    @Test
-    public void testTrackingStartingWindowThroughTrampoline() {
-        final ActivityRecord sourceRecord = new ActivityBuilder(mAtm)
-                .setCreateTask(true).setLaunchedFromUid(Process.SYSTEM_UID).build();
-        sourceRecord.showStartingWindow(null /* prev */, true /* newTask */, false,
-                0 /* splashScreenTheme */, null);
-
-        final ActivityRecord secondRecord = new ActivityBuilder(mAtm)
-                .setTask(sourceRecord.getTask()).build();
-        secondRecord.showStartingWindow(null /* prev */, true /* newTask */, false,
-                0 /* splashScreenTheme */, sourceRecord);
-        assertFalse(secondRecord.mSplashScreenStyleEmpty);
-        secondRecord.onStartingWindowDrawn();
-
-        final ActivityRecord finalRecord = new ActivityBuilder(mAtm)
-                .setTask(sourceRecord.getTask()).build();
-        finalRecord.showStartingWindow(null /* prev */, true /* newTask */, false,
-                0 /* splashScreenTheme */, secondRecord);
-        assertTrue(finalRecord.mSplashScreenStyleEmpty);
-    }
 
     @Test
     public void testTransferStartingWindowFromFinishingActivity() {
@@ -2548,13 +2476,13 @@ public class ActivityRecordTests extends WindowTestsBase {
                 "Test", 0 /* labelRes */, 0 /* icon */, 0 /* logo */, 0 /* windowFlags */,
                 null /* transferFrom */, true /* newTask */, true /* taskSwitch */,
                 false /* processRunning */, false /* allowTaskSnapshot */,
-                false /* activityCreate */, false /* suggestEmpty */);
+                false /* activityCreate */, false /* samePackage */);
         waitUntilHandlersIdle();
         assertHasStartingWindow(activity);
         activity.mStartingWindowState = ActivityRecord.STARTING_WINDOW_SHOWN;
 
         doCallRealMethod().when(task).startActivityLocked(
-                any(), any(), anyBoolean(), anyBoolean(), any(), any());
+                any(), any(), anyBoolean(), anyBoolean(), any(), anyBoolean());
         // In normal case, resumeFocusedTasksTopActivities() should be called after
         // startActivityLocked(). So skip resumeFocusedTasksTopActivities() in ActivityBuilder.
         doReturn(false).when(mRootWindowContainer).resumeFocusedTasksTopActivities();
@@ -2562,7 +2490,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord middle = new ActivityBuilder(mAtm).setTask(task).build();
         task.startActivityLocked(middle, null /* focusedTopActivity */,
                 false /* newTask */, false /* keepCurTransition */, null /* options */,
-                null /* sourceRecord */);
+                false /* samePackage */);
         middle.makeFinishingLocked();
 
         assertNull(activity.mStartingWindow);
@@ -2575,7 +2503,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         // The finishing middle should be able to transfer starting window to top.
         task.startActivityLocked(top, null /* focusedTopActivity */,
                 false /* newTask */, false /* keepCurTransition */, null /* options */,
-                null /* sourceRecord */);
+                false /* samePackage */);
 
         assertNull(middle.mStartingWindow);
         assertHasStartingWindow(top);

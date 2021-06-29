@@ -31,9 +31,9 @@ import android.util.SparseArray;
 import android.util.SparseIntArray;
 import android.view.InputDevice;
 import android.view.MotionEvent;
-import android.view.WindowManagerPolicyConstants;
 
 import com.android.internal.os.SomeArgs;
+import com.android.server.policy.WindowManagerPolicy;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -122,12 +122,6 @@ public class MotionEventInjector extends BaseEventStreamTransformation implement
             return;
         }
         cancelAnyPendingInjectedEvents();
-        // The events injected from outside of system_server are not trusted. Remove the flag to
-        // prevent accessibility service from impersonating a real input device.
-        policyFlags &= ~WindowManagerPolicyConstants.FLAG_INPUTFILTER_TRUSTED;
-        // Indicate that the input event is injected from accessibility, to let applications
-        // distinguish it from events injected by other means.
-        policyFlags |= WindowManagerPolicyConstants.FLAG_INJECTED_FROM_ACCESSIBILITY;
         sendMotionEventToNext(event, rawEvent, policyFlags);
     }
 
@@ -162,9 +156,7 @@ public class MotionEventInjector extends BaseEventStreamTransformation implement
             return false;
         }
         MotionEvent motionEvent = (MotionEvent) message.obj;
-        sendMotionEventToNext(motionEvent, motionEvent,
-                WindowManagerPolicyConstants.FLAG_PASS_TO_USER
-                | WindowManagerPolicyConstants.FLAG_INJECTED_FROM_ACCESSIBILITY);
+        sendMotionEventToNext(motionEvent, motionEvent, WindowManagerPolicy.FLAG_PASS_TO_USER);
         boolean isEndOfSequence = message.arg1 != 0;
         if (isEndOfSequence) {
             notifyService(mServiceInterfaceForCurrentGesture, mSequencesInProgress.get(0), true);
@@ -316,8 +308,7 @@ public class MotionEventInjector extends BaseEventStreamTransformation implement
             MotionEvent cancelEvent =
                     obtainMotionEvent(now, now, MotionEvent.ACTION_CANCEL, getLastTouchPoints(), 1);
             sendMotionEventToNext(cancelEvent, cancelEvent,
-                    WindowManagerPolicyConstants.FLAG_PASS_TO_USER
-                    | WindowManagerPolicyConstants.FLAG_INJECTED_FROM_ACCESSIBILITY);
+                    WindowManagerPolicy.FLAG_PASS_TO_USER);
             mOpenGesturesInProgress.put(source, false);
         }
     }

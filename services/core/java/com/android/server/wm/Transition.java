@@ -401,8 +401,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (dc == null) {
             return;
         }
-        if (transit == TRANSIT_KEYGUARD_GOING_AWAY
-                && !WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
+        if (transit == TRANSIT_KEYGUARD_GOING_AWAY) {
             if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0
                     && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION) == 0
                     && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION) == 0) {

@@ -14,10 +14,9 @@
  * limitations under the License.
  */
 
-#ifndef IDMAP2_INCLUDE_IDMAP2_RESOURCECONTAINER_H_
-#define IDMAP2_INCLUDE_IDMAP2_RESOURCECONTAINER_H_
+#ifndef IDMAP2_INCLUDE_IDMAP2_RESOURCECONTAINER_H
+#define IDMAP2_INCLUDE_IDMAP2_RESOURCECONTAINER_H
 
-#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -104,4 +103,4 @@ struct OverlayResourceContainer : public ResourceContainer {
 
 }  // namespace android::idmap2
 
-#endif  // IDMAP2_INCLUDE_IDMAP2_RESOURCECONTAINER_H_
+#endif  // IDMAP2_INCLUDE_IDMAP2_RESOURCECONTAINER_H

@@ -46,8 +46,6 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageView
 import android.widget.TextView
-import androidx.annotation.ColorInt
-import androidx.annotation.VisibleForTesting
 import com.android.internal.graphics.ColorUtils
 import com.android.systemui.R
 import com.android.systemui.animation.Interpolators
@@ -315,8 +313,7 @@ class ControlViewHolder(
         @ColorRes bgColor: Int
     ) {
         val bg = context.resources.getColor(R.color.control_default_background, context.theme)
-
-        val (newClipColor, newAlpha) = if (enabled) {
+        var (newClipColor, newAlpha) = if (enabled) {
             // allow color overrides for the enabled state only
             val color = cws.control?.getCustomColor()?.let {
                 val state = intArrayOf(android.R.attr.state_enabled)
@@ -329,85 +326,56 @@ class ControlViewHolder(
                 ALPHA_DISABLED
             )
         }
-        val newBaseColor = if (behavior is ToggleRangeBehavior) {
-            ColorUtils.blendARGB(bg, newClipColor, toggleBackgroundIntensity)
-        } else {
-            bg
-        }
 
-        clipLayer.drawable?.apply {
+        clipLayer.getDrawable().apply {
             clipLayer.alpha = ALPHA_DISABLED
+
+            val newBaseColor = if (behavior is ToggleRangeBehavior) {
+                ColorUtils.blendARGB(bg, newClipColor, toggleBackgroundIntensity)
+            } else {
+                bg
+            }
             stateAnimator?.cancel()
             if (animated) {
-                startBackgroundAnimation(this, newAlpha, newClipColor, newBaseColor)
-            } else {
-                applyBackgroundChange(
-                        this, newAlpha, newClipColor, newBaseColor, newLayoutAlpha = 1f
-                )
-            }
-        }
-    }
-
-    private fun startBackgroundAnimation(
-        clipDrawable: Drawable,
-        newAlpha: Int,
-        @ColorInt newClipColor: Int,
-        @ColorInt newBaseColor: Int
-    ) {
-        val oldClipColor = if (clipDrawable is GradientDrawable) {
-            clipDrawable.color?.defaultColor ?: newClipColor
-        } else {
-            newClipColor
-        }
-        val oldBaseColor = baseLayer.color?.defaultColor ?: newBaseColor
-        val oldAlpha = layout.alpha
-
-        stateAnimator = ValueAnimator.ofInt(clipLayer.alpha, newAlpha).apply {
-            addUpdateListener {
-                val updatedAlpha = it.animatedValue as Int
-                val updatedClipColor = ColorUtils.blendARGB(oldClipColor, newClipColor,
-                        it.animatedFraction)
-                val updatedBaseColor = ColorUtils.blendARGB(oldBaseColor, newBaseColor,
-                        it.animatedFraction)
-                val updatedLayoutAlpha = MathUtils.lerp(oldAlpha, 1f, it.animatedFraction)
-                applyBackgroundChange(
-                        clipDrawable,
-                        updatedAlpha,
-                        updatedClipColor,
-                        updatedBaseColor,
-                        updatedLayoutAlpha
-                )
-            }
-            addListener(object : AnimatorListenerAdapter() {
-                override fun onAnimationEnd(animation: Animator?) {
-                    stateAnimator = null
+                val oldColor = if (this is GradientDrawable) {
+                    this.color?.defaultColor ?: newClipColor
+                } else {
+                    newClipColor
                 }
-            })
-            duration = STATE_ANIMATION_DURATION
-            interpolator = Interpolators.CONTROL_STATE
-            start()
-        }
-    }
+                val oldBaseColor = baseLayer.color?.defaultColor ?: newBaseColor
+                val oldAlpha = layout.alpha
 
-    /**
-     * Applies a change in background.
-     *
-     * Updates both alpha and background colors. Only updates colors for GradientDrawables and not
-     * static images as used for the ThumbnailTemplate.
-     */
-    private fun applyBackgroundChange(
-        clipDrawable: Drawable,
-        newAlpha: Int,
-        @ColorInt newClipColor: Int,
-        @ColorInt newBaseColor: Int,
-        newLayoutAlpha: Float
-    ) {
-        clipDrawable.alpha = newAlpha
-        if (clipDrawable is GradientDrawable) {
-            clipDrawable.setColor(newClipColor)
+                // Animate both alpha and background colors. Only animate colors for
+                // GradientDrawables and not static images as used for the ThumbnailTemplate.
+                stateAnimator = ValueAnimator.ofInt(clipLayer.alpha, newAlpha).apply {
+                    addUpdateListener {
+                        alpha = it.animatedValue as Int
+                        if (this is GradientDrawable) {
+                            this.setColor(ColorUtils.blendARGB(oldColor, newClipColor,
+                                it.animatedFraction))
+                        }
+                        baseLayer.setColor(ColorUtils.blendARGB(oldBaseColor, newBaseColor,
+                                it.animatedFraction))
+                        layout.alpha = MathUtils.lerp(oldAlpha, 1f, it.animatedFraction)
+                    }
+                    addListener(object : AnimatorListenerAdapter() {
+                        override fun onAnimationEnd(animation: Animator?) {
+                            stateAnimator = null
+                        }
+                    })
+                    duration = STATE_ANIMATION_DURATION
+                    interpolator = Interpolators.CONTROL_STATE
+                    start()
+                }
+            } else {
+                alpha = newAlpha
+                if (this is GradientDrawable) {
+                    this.setColor(newClipColor)
+                }
+                baseLayer.setColor(newBaseColor)
+                layout.alpha = 1f
+            }
         }
-        baseLayer.setColor(newBaseColor)
-        layout.alpha = newLayoutAlpha
     }
 
     private fun animateStatusChange(animated: Boolean, statusRowUpdater: () -> Unit) {
@@ -455,8 +423,7 @@ class ControlViewHolder(
         }
     }
 
-    @VisibleForTesting
-    internal fun updateStatusRow(
+    private fun updateStatusRow(
         enabled: Boolean,
         text: CharSequence,
         drawable: Drawable,
@@ -471,8 +438,11 @@ class ControlViewHolder(
         status.setTextColor(color)
 
         control?.getCustomIcon()?.let {
+            // do not tint custom icons, assume the intended icon color is correct
+            if (icon.imageTintList != null) {
+                icon.imageTintList = null
+            }
             icon.setImageIcon(it)
-            icon.imageTintList = it.tintList
         } ?: run {
             if (drawable is StateListDrawable) {
                 // Only reset the drawable if it is a different resource, as it will interfere

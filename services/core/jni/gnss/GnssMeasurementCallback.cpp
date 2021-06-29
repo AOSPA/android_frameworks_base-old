@@ -313,52 +313,40 @@ void GnssMeasurementCallbackAidl::translateSingleGnssMeasurement(JNIEnv* env,
 
     if (measurement.flags & static_cast<uint32_t>(GnssMeasurement::HAS_SATELLITE_PVT)) {
         const SatellitePvt& satellitePvt = measurement.satellitePvt;
-        uint16_t satFlags = static_cast<uint16_t>(satellitePvt.flags);
-        jobject positionEcef = nullptr;
-        jobject velocityEcef = nullptr;
-        jobject clockInfo = nullptr;
+        jobject positionEcef = env->NewObject(class_positionEcef, method_positionEcef,
+                                              satellitePvt.satPosEcef.posXMeters,
+                                              satellitePvt.satPosEcef.posYMeters,
+                                              satellitePvt.satPosEcef.posZMeters,
+                                              satellitePvt.satPosEcef.ureMeters);
+        jobject velocityEcef =
+                env->NewObject(class_velocityEcef, method_velocityEcef,
+                               satellitePvt.satVelEcef.velXMps, satellitePvt.satVelEcef.velYMps,
+                               satellitePvt.satVelEcef.velZMps, satellitePvt.satVelEcef.ureRateMps);
+        jobject clockInfo = env->NewObject(class_clockInfo, method_clockInfo,
+                                           satellitePvt.satClockInfo.satHardwareCodeBiasMeters,
+                                           satellitePvt.satClockInfo.satTimeCorrectionMeters,
+                                           satellitePvt.satClockInfo.satClkDriftMps);
         jobject satellitePvtBuilderObject =
                 env->NewObject(class_satellitePvtBuilder, method_satellitePvtBuilderCtor);
 
-        if (satFlags & SatellitePvt::HAS_POSITION_VELOCITY_CLOCK_INFO) {
-            positionEcef = env->NewObject(class_positionEcef, method_positionEcef,
-                                          satellitePvt.satPosEcef.posXMeters,
-                                          satellitePvt.satPosEcef.posYMeters,
-                                          satellitePvt.satPosEcef.posZMeters,
-                                          satellitePvt.satPosEcef.ureMeters);
-            velocityEcef =
-                    env->NewObject(class_velocityEcef, method_velocityEcef,
-                                   satellitePvt.satVelEcef.velXMps, satellitePvt.satVelEcef.velYMps,
-                                   satellitePvt.satVelEcef.velZMps,
-                                   satellitePvt.satVelEcef.ureRateMps);
-            clockInfo = env->NewObject(class_clockInfo, method_clockInfo,
-                                       satellitePvt.satClockInfo.satHardwareCodeBiasMeters,
-                                       satellitePvt.satClockInfo.satTimeCorrectionMeters,
-                                       satellitePvt.satClockInfo.satClkDriftMps);
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetPositionEcef, positionEcef);
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetVelocityEcef, velocityEcef);
-            env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderSetClockInfo,
-                                  clockInfo);
-        }
-
-        if (satFlags & SatellitePvt::HAS_IONO) {
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetIonoDelayMeters,
-                                  satellitePvt.ionoDelayMeters);
-        }
-
-        if (satFlags & SatellitePvt::HAS_TROPO) {
-            env->CallObjectMethod(satellitePvtBuilderObject,
-                                  method_satellitePvtBuilderSetTropoDelayMeters,
-                                  satellitePvt.tropoDelayMeters);
-        }
-
+        env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderSetPositionEcef,
+                              positionEcef);
+        env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderSetVelocityEcef,
+                              velocityEcef);
+        env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderSetClockInfo,
+                              clockInfo);
+        env->CallObjectMethod(satellitePvtBuilderObject,
+                              method_satellitePvtBuilderSetIonoDelayMeters,
+                              satellitePvt.ionoDelayMeters);
+        env->CallObjectMethod(satellitePvtBuilderObject,
+                              method_satellitePvtBuilderSetTropoDelayMeters,
+                              satellitePvt.tropoDelayMeters);
         jobject satellitePvtObject =
                 env->CallObjectMethod(satellitePvtBuilderObject, method_satellitePvtBuilderBuild);
+
         env->CallVoidMethod(object.get(), method_gnssMeasurementsSetSatellitePvt,
                             satellitePvtObject);
+
         env->DeleteLocalRef(positionEcef);
         env->DeleteLocalRef(velocityEcef);
         env->DeleteLocalRef(clockInfo);

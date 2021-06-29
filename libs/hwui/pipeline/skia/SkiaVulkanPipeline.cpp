@@ -16,7 +16,6 @@
 
 #include "SkiaVulkanPipeline.h"
 
-#include <gui/TraceUtils.h>
 #include "DeferredLayerUpdater.h"
 #include "LightingInfo.h"
 #include "Readback.h"
@@ -26,6 +25,7 @@
 #include "VkInteropFunctorDrawable.h"
 #include "renderstate/RenderState.h"
 #include "renderthread/Frame.h"
+#include "utils/TraceUtils.h"
 
 #include <SkSurface.h>
 #include <SkTypes.h>

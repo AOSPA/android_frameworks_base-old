@@ -1,5 +1,6 @@
 package com.android.systemui.media
 
+import android.app.smartspace.SmartspaceTarget
 import android.graphics.Rect
 import android.util.ArraySet
 import android.view.View
@@ -27,11 +28,6 @@ class MediaHost constructor(
     private var inited: Boolean = false
 
     /**
-     * Are we listening to media data changes?
-     */
-    private var listeningToMediaData = false
-
-    /**
      * Get the current bounds on the screen. This makes sure the state is fresh and up to date
      */
     val currentBounds: Rect = Rect()
@@ -56,22 +52,11 @@ class MediaHost constructor(
         }
 
     private val listener = object : MediaDataManager.Listener {
-        override fun onMediaDataLoaded(
-            key: String,
-            oldKey: String?,
-            data: MediaData,
-            immediately: Boolean
-        ) {
-            if (immediately) {
-                updateViewVisibility()
-            }
+        override fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {
+            updateViewVisibility()
         }
 
-        override fun onSmartspaceMediaDataLoaded(
-            key: String,
-            data: SmartspaceMediaData,
-            shouldPrioritize: Boolean
-        ) {
+        override fun onSmartspaceMediaDataLoaded(key: String, data: SmartspaceTarget) {
             updateViewVisibility()
         }
 
@@ -79,10 +64,8 @@ class MediaHost constructor(
             updateViewVisibility()
         }
 
-        override fun onSmartspaceMediaDataRemoved(key: String, immediately: Boolean) {
-            if (immediately) {
-                updateViewVisibility()
-            }
+        override fun onSmartspaceMediaDataRemoved(key: String) {
+            updateViewVisibility()
         }
     }
 
@@ -110,17 +93,18 @@ class MediaHost constructor(
 
         this.location = location
         hostView = mediaHierarchyManager.register(this)
-        // Listen by default, as the host might not be attached by our clients, until
-        // they get a visibility change. We still want to stay up to date in that case!
-        setListeningToMediaData(true)
         hostView.addOnAttachStateChangeListener(object : OnAttachStateChangeListener {
             override fun onViewAttachedToWindow(v: View?) {
-                setListeningToMediaData(true)
+                // we should listen to the combined state change, since otherwise there might
+                // be a delay until the views and the controllers are initialized, leaving us
+                // with either a blank view or the controllers not yet initialized and the
+                // measuring wrong
+                mediaDataManager.addListener(listener)
                 updateViewVisibility()
             }
 
             override fun onViewDetachedFromWindow(v: View?) {
-                setListeningToMediaData(false)
+                mediaDataManager.removeListener(listener)
             }
         })
 
@@ -147,19 +131,8 @@ class MediaHost constructor(
         updateViewVisibility()
     }
 
-    private fun setListeningToMediaData(listen: Boolean) {
-        if (listen != listeningToMediaData) {
-            listeningToMediaData = listen
-            if (listen) {
-                mediaDataManager.addListener(listener)
-            } else {
-                mediaDataManager.removeListener(listener)
-            }
-        }
-    }
-
     private fun updateViewVisibility() {
-        state.visible = if (showsOnlyActiveMedia) {
+        visible = if (showsOnlyActiveMedia) {
             mediaDataManager.hasActiveMedia()
         } else {
             mediaDataManager.hasAnyMedia()
@@ -323,7 +296,7 @@ interface MediaHostState {
     /**
      * If the view should be VISIBLE or GONE.
      */
-    val visible: Boolean
+    var visible: Boolean
 
     /**
      * Does this host need any falsing protection?

@@ -21,7 +21,9 @@ import static com.android.internal.util.ConcurrentUtils.DIRECT_EXECUTOR;
 import android.annotation.Nullable;
 import android.location.Location;
 import android.location.LocationResult;
+import android.location.provider.ProviderProperties;
 import android.location.provider.ProviderRequest;
+import android.location.util.identity.CallerIdentity;
 import android.os.Bundle;
 
 import com.android.internal.annotations.GuardedBy;
@@ -287,21 +289,17 @@ public class MockableLocationProvider extends AbstractLocationProvider {
         Preconditions.checkState(!Thread.holdsLock(mOwnerLock));
 
         AbstractLocationProvider provider;
-        State providerState;
         synchronized (mOwnerLock) {
             provider = mProvider;
-            providerState = getState();
-        }
-
-        pw.println("allowed=" + providerState.allowed);
-        if (providerState.identity != null) {
-            pw.println("identity=" + providerState.identity);
-        }
-        if (!providerState.extraAttributionTags.isEmpty()) {
-            pw.println("extra attribution tags=" + providerState.extraAttributionTags);
-        }
-        if (providerState.properties != null) {
-            pw.println("properties=" + providerState.properties);
+            pw.println("allowed=" + isAllowed());
+            CallerIdentity identity = getIdentity();
+            if (identity != null) {
+                pw.println("identity=" + identity);
+            }
+            ProviderProperties properties = getProperties();
+            if (properties != null) {
+                pw.println("properties=" + properties);
+            }
         }
 
         if (provider != null) {

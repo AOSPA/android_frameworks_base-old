@@ -63,7 +63,6 @@ public class DozeParameters implements TunerService.Tunable,
     private final Resources mResources;
     private final BatteryController mBatteryController;
     private final FeatureFlags mFeatureFlags;
-    private final UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
 
     private final Set<Callback> mCallbacks = new HashSet<>();
 
@@ -79,8 +78,7 @@ public class DozeParameters implements TunerService.Tunable,
             BatteryController batteryController,
             TunerService tunerService,
             DumpManager dumpManager,
-            FeatureFlags featureFlags,
-            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController) {
+            FeatureFlags featureFlags) {
         mResources = resources;
         mAmbientDisplayConfiguration = ambientDisplayConfiguration;
         mAlwaysOnPolicy = alwaysOnDisplayPolicy;
@@ -91,7 +89,6 @@ public class DozeParameters implements TunerService.Tunable,
         mPowerManager = powerManager;
         mPowerManager.setDozeAfterScreenOff(!mControlScreenOffAnimation);
         mFeatureFlags = featureFlags;
-        mUnlockedScreenOffAnimationController = unlockedScreenOffAnimationController;
 
         tunerService.addTunable(
                 this,
@@ -223,8 +220,7 @@ public class DozeParameters implements TunerService.Tunable,
      * then abruptly showing AOD.
      */
     public boolean shouldControlUnlockedScreenOff() {
-        return getAlwaysOn() && mFeatureFlags.useNewLockscreenAnimations()
-                && mUnlockedScreenOffAnimationController.shouldPlayUnlockedScreenOffAnimation();
+        return getAlwaysOn() && mFeatureFlags.useNewLockscreenAnimations();
     }
 
     private boolean getBoolean(String propName, int resId) {

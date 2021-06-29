@@ -243,8 +243,7 @@ public class CameraDeviceBinderTest extends AndroidTestCase {
         mMockCb = spy(dummyCallbacks);
 
         mCameraUser = mUtils.getCameraService().connectDevice(mMockCb, mCameraId,
-                clientPackageName, clientAttributionTag, ICameraService.USE_CALLING_UID,
-                /*oomScoreOffset*/0);
+                clientPackageName, clientAttributionTag, ICameraService.USE_CALLING_UID);
         assertNotNull(String.format("Camera %s was null", mCameraId), mCameraUser);
         mHandlerThread = new HandlerThread(TAG);
         mHandlerThread.start();

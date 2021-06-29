@@ -51,7 +51,6 @@ import com.android.internal.accessibility.AccessibilityShortcutController;
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
-import java.util.Arrays;
 import java.util.Collection;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -573,15 +572,6 @@ class AccessibilityUserState {
                 pw.append(", ");
                 pw.append(componentName.toShortString());
             }
-        }
-        pw.println("}");
-        pw.println("     Client list info:{");
-        mUserClients.dump(pw, "          Client list ");
-        pw.println("          Registered clients:{");
-        for (int i = 0; i < mUserClients.getRegisteredCallbackCount(); i++) {
-            AccessibilityManagerService.Client client = (AccessibilityManagerService.Client)
-                    mUserClients.getRegisteredCallbackCookie(i);
-            pw.append(Arrays.toString(client.mPackageNames));
         }
         pw.println("}]");
     }

@@ -73,7 +73,6 @@ public class DozeConfigurationUtil {
         when(config.dozePickupSensorAvailable()).thenReturn(false);
         when(config.wakeScreenGestureAvailable()).thenReturn(false);
         when(config.quickPickupSensorEnabled(anyInt())).thenReturn(false);
-        when(config.screenOffUdfpsEnabled(anyInt())).thenReturn(false);
 
         doneHolder[0] = true;
         return config;

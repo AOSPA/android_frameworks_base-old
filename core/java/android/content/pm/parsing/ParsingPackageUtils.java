@@ -582,12 +582,12 @@ public class ParsingPackageUtils {
      */
     private ParseResult<ParsingPackage> parseBaseApk(ParseInput input, String apkPath,
             String codePath, Resources res, XmlResourceParser parser, int flags)
-            throws XmlPullParserException, IOException {
+            throws XmlPullParserException, IOException, PackageParserException {
         final String splitName;
         final String pkgName;
 
         ParseResult<Pair<String, String>> packageSplitResult =
-                ApkLiteParseUtils.parsePackageSplitNames(input, parser);
+                ApkLiteParseUtils.parsePackageSplitNames(input, parser, parser);
         if (packageSplitResult.isError()) {
             return input.error(packageSplitResult);
         }
@@ -1460,9 +1460,9 @@ public class ParsingPackageUtils {
         if (SDK_VERSION > 0) {
             TypedArray sa = res.obtainAttributes(parser, R.styleable.AndroidManifestUsesSdk);
             try {
-                int minVers = ParsingUtils.DEFAULT_MIN_SDK_VERSION;
+                int minVers = 1;
                 String minCode = null;
-                int targetVers = ParsingUtils.DEFAULT_TARGET_SDK_VERSION;
+                int targetVers = 0;
                 String targetCode = null;
 
                 TypedValue val = sa.peekValue(R.styleable.AndroidManifestUsesSdk_minSdkVersion);
@@ -1609,7 +1609,7 @@ public class ParsingPackageUtils {
             @Nullable String minCode, @IntRange(from = 1) int platformSdkVersion,
             @NonNull String[] platformSdkCodenames, @NonNull ParseInput input) {
         // If it's a release SDK, make sure we meet the minimum SDK requirement.
-        if (minCode == null || true) {
+        if (minCode == null) {
             if (minVers <= platformSdkVersion) {
                 return input.success(minVers);
             }
@@ -1647,7 +1647,7 @@ public class ParsingPackageUtils {
             @Nullable String targetCode, @NonNull String[] platformSdkCodenames,
             @NonNull ParseInput input) {
         // If it's a release SDK, return the version number unmodified.
-        if (targetCode == null || true) {
+        if (targetCode == null) {
             return input.success(targetVers);
         }
 
@@ -2198,7 +2198,6 @@ public class ParsingPackageUtils {
                 .setUsesNonSdkApi(bool(false, R.styleable.AndroidManifestApplication_usesNonSdkApi, sa))
                 .setVmSafeMode(bool(false, R.styleable.AndroidManifestApplication_vmSafeMode, sa))
                 .setAutoRevokePermissions(anInt(R.styleable.AndroidManifestApplication_autoRevokePermissions, sa))
-                .setAttributionsAreUserVisible(bool(false, R.styleable.AndroidManifestApplication_attributionsAreUserVisible, sa))
                 // targetSdkVersion gated
                 .setAllowAudioPlaybackCapture(bool(targetSdk >= Build.VERSION_CODES.Q, R.styleable.AndroidManifestApplication_allowAudioPlaybackCapture, sa))
                 .setBaseHardwareAccelerated(bool(targetSdk >= Build.VERSION_CODES.ICE_CREAM_SANDWICH, R.styleable.AndroidManifestApplication_hardwareAccelerated, sa))
@@ -2817,7 +2816,15 @@ public class ParsingPackageUtils {
         }
     }
 
+    @SuppressWarnings("AndroidFrameworkCompatChange")
     private void convertSplitPermissions(ParsingPackage pkg) {
+        // STOPSHIP(b/183905675): REMOVE THIS TERRIBLE, HORRIBLE, NO GOOD, VERY BAD HACK
+        if ("com.android.chrome".equals(pkg.getPackageName())
+                && pkg.getVersionCode() <= 445500399
+                && pkg.getTargetSdkVersion() > Build.VERSION_CODES.R) {
+            pkg.setTargetSdkVersion(Build.VERSION_CODES.R);
+        }
+
         final int listSize = mSplitPermissionInfos.size();
         for (int is = 0; is < listSize; is++) {
             final PermissionManager.SplitPermissionInfo spi = mSplitPermissionInfos.get(is);

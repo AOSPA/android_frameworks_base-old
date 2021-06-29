@@ -58,12 +58,10 @@ import com.android.server.compat.CompatChange;
 import com.android.server.om.OverlayReferenceMapper;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.utils.Snappable;
-import com.android.server.utils.SnapshotCache;
 import com.android.server.utils.Snapshots;
 import com.android.server.utils.Watchable;
 import com.android.server.utils.WatchableImpl;
 import com.android.server.utils.WatchedArrayMap;
-import com.android.server.utils.WatchedSparseBooleanMatrix;
 import com.android.server.utils.Watcher;
 
 import java.io.PrintWriter;
@@ -86,7 +84,6 @@ public class AppsFilter implements Watchable, Snappable {
     // Logs all filtering instead of enforcing
     private static final boolean DEBUG_ALLOW_ALL = false;
     private static final boolean DEBUG_LOGGING = false;
-    private static final boolean DEBUG_TRACING = false;
 
     /**
      * This contains a list of app UIDs that are implicitly queryable because another app explicitly
@@ -160,21 +157,12 @@ public class AppsFilter implements Watchable, Snappable {
      * initial scam and is null until {@link #onSystemReady()} is called.
      */
     @GuardedBy("mCacheLock")
-    private volatile WatchedSparseBooleanMatrix mShouldFilterCache;
+    private volatile SparseArray<SparseBooleanArray> mShouldFilterCache;
 
     /**
      * A cached snapshot.
      */
-    private final SnapshotCache<AppsFilter> mSnapshot;
-
-    private SnapshotCache<AppsFilter> makeCache() {
-        return new SnapshotCache<AppsFilter>(this, this) {
-            @Override
-            public AppsFilter createSnapshot() {
-                AppsFilter s = new AppsFilter(mSource);
-                return s;
-            }};
-    }
+    private volatile AppsFilter mSnapshot = null;
 
     /**
      * Watchable machinery
@@ -222,6 +210,7 @@ public class AppsFilter implements Watchable, Snappable {
      */
     @Override
     public void dispatchChange(@Nullable Watchable what) {
+        mSnapshot = null;
         mWatchable.dispatchChange(what);
     }
 
@@ -246,7 +235,6 @@ public class AppsFilter implements Watchable, Snappable {
                 overlayProvider);
         mStateProvider = stateProvider;
         mBackgroundExecutor = backgroundExecutor;
-        mSnapshot = makeCache();
     }
 
     /**
@@ -269,14 +257,8 @@ public class AppsFilter implements Watchable, Snappable {
         mSystemSigningDetails = orig.mSystemSigningDetails;
         mProtectedBroadcasts = orig.mProtectedBroadcasts;
         mShouldFilterCache = orig.mShouldFilterCache;
-        if (mShouldFilterCache != null) {
-            synchronized (orig.mCacheLock) {
-                mShouldFilterCache = mShouldFilterCache.snapshot();
-            }
-        }
 
         mBackgroundExecutor = null;
-        mSnapshot = new SnapshotCache.Sealed<>();
     }
 
     /**
@@ -285,7 +267,13 @@ public class AppsFilter implements Watchable, Snappable {
      * condition causes the cached snapshot to be cleared asynchronously to this method.
      */
     public AppsFilter snapshot() {
-        return mSnapshot.snapshot();
+        AppsFilter s = mSnapshot;
+        if (s == null) {
+            s = new AppsFilter(this);
+            s.mWatchable.seal();
+            mSnapshot = s;
+        }
+        return s;
     }
 
     /**
@@ -375,29 +363,21 @@ public class AppsFilter implements Watchable, Snappable {
 
         @Override
         public boolean isGloballyEnabled() {
-            if (DEBUG_TRACING) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "isGloballyEnabled");
-            }
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "isGloballyEnabled");
             try {
                 return mFeatureEnabled;
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
         }
 
         @Override
         public boolean packageIsEnabled(AndroidPackage pkg) {
-            if (DEBUG_TRACING) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "packageIsEnabled");
-            }
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "packageIsEnabled");
             try {
                 return !mDisabledPackages.contains(pkg.getPackageName());
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
         }
 
@@ -647,7 +627,12 @@ public class AppsFilter implements Watchable, Snappable {
             if (mShouldFilterCache != null) {
                 // update the cache in a one-off manner since we've got all the information we
                 // need.
-                mShouldFilterCache.put(recipientUid, visibleUid, false);
+                SparseBooleanArray visibleUids = mShouldFilterCache.get(recipientUid);
+                if (visibleUids == null) {
+                    visibleUids = new SparseBooleanArray();
+                    mShouldFilterCache.put(recipientUid, visibleUids);
+                }
+                visibleUids.put(visibleUid, false);
             }
         }
         if (changed) {
@@ -671,9 +656,7 @@ public class AppsFilter implements Watchable, Snappable {
      * @param isReplace if the package is being replaced and may need extra cleanup.
      */
     public void addPackage(PackageSetting newPkgSetting, boolean isReplace) {
-        if (DEBUG_TRACING) {
-            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "filter.addPackage");
-        }
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "filter.addPackage");
         try {
             if (isReplace) {
                 // let's first remove any prior rules for this package
@@ -706,9 +689,7 @@ public class AppsFilter implements Watchable, Snappable {
             });
         } finally {
             onChanged();
-            if (DEBUG_TRACING) {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
     }
 
@@ -819,21 +800,23 @@ public class AppsFilter implements Watchable, Snappable {
         if (mShouldFilterCache == null) {
             return;
         }
-        for (int i = 0; i < mShouldFilterCache.size(); i++) {
+        for (int i = mShouldFilterCache.size() - 1; i >= 0; i--) {
             if (UserHandle.getAppId(mShouldFilterCache.keyAt(i)) == appId) {
                 mShouldFilterCache.removeAt(i);
-                // The key was deleted so the list of keys has shifted left.  That means i
-                // is now pointing at the next key to be examined.  The decrement here and
-                // the loop increment together mean that i will be unchanged in the need
-                // iteration and will correctly point to the next key to be examined.
-                i--;
+                continue;
+            }
+            SparseBooleanArray targetSparseArray = mShouldFilterCache.valueAt(i);
+            for (int j = targetSparseArray.size() - 1; j >= 0; j--) {
+                if (UserHandle.getAppId(targetSparseArray.keyAt(j)) == appId) {
+                    targetSparseArray.removeAt(j);
+                }
             }
         }
     }
 
     private void updateEntireShouldFilterCache() {
         mStateProvider.runWithState((settings, users) -> {
-            WatchedSparseBooleanMatrix cache =
+            SparseArray<SparseBooleanArray> cache =
                     updateEntireShouldFilterCacheInner(settings, users);
             synchronized (mCacheLock) {
                 mShouldFilterCache = cache;
@@ -841,10 +824,10 @@ public class AppsFilter implements Watchable, Snappable {
         });
     }
 
-    private WatchedSparseBooleanMatrix updateEntireShouldFilterCacheInner(
+    private SparseArray<SparseBooleanArray> updateEntireShouldFilterCacheInner(
             ArrayMap<String, PackageSetting> settings, UserInfo[] users) {
-        WatchedSparseBooleanMatrix cache =
-                new WatchedSparseBooleanMatrix(users.length * settings.size());
+        SparseArray<SparseBooleanArray> cache =
+                new SparseArray<>(users.length * settings.size());
         for (int i = settings.size() - 1; i >= 0; i--) {
             updateShouldFilterCacheForPackage(cache,
                     null /*skipPackage*/, settings.valueAt(i), settings, users, i);
@@ -868,7 +851,7 @@ public class AppsFilter implements Watchable, Snappable {
                     packagesCache.put(settings.keyAt(i), pkg);
                 }
             });
-            WatchedSparseBooleanMatrix cache =
+            SparseArray<SparseBooleanArray> cache =
                     updateEntireShouldFilterCacheInner(settingsCopy, usersRef[0]);
             boolean[] changed = new boolean[1];
             // We have a cache, let's make sure the world hasn't changed out from under us.
@@ -920,7 +903,7 @@ public class AppsFilter implements Watchable, Snappable {
         }
     }
 
-    private void updateShouldFilterCacheForPackage(WatchedSparseBooleanMatrix cache,
+    private void updateShouldFilterCacheForPackage(SparseArray<SparseBooleanArray> cache,
             @Nullable String skipPackageName, PackageSetting subjectSetting, ArrayMap<String,
             PackageSetting> allSettings, UserInfo[] allUsers, int maxIndex) {
         for (int i = Math.min(maxIndex, allSettings.size() - 1); i >= 0; i--) {
@@ -939,11 +922,17 @@ public class AppsFilter implements Watchable, Snappable {
                 for (int ou = 0; ou < userCount; ou++) {
                     int otherUser = allUsers[ou].id;
                     int subjectUid = UserHandle.getUid(subjectUser, subjectSetting.appId);
+                    if (!cache.contains(subjectUid)) {
+                        cache.put(subjectUid, new SparseBooleanArray(appxUidCount));
+                    }
                     int otherUid = UserHandle.getUid(otherUser, otherSetting.appId);
-                    cache.put(subjectUid, otherUid,
+                    if (!cache.contains(otherUid)) {
+                        cache.put(otherUid, new SparseBooleanArray(appxUidCount));
+                    }
+                    cache.get(subjectUid).put(otherUid,
                             shouldFilterApplicationInternal(
                                     subjectUid, subjectSetting, otherSetting, otherUser));
-                    cache.put(otherUid, subjectUid,
+                    cache.get(otherUid).put(subjectUid,
                             shouldFilterApplicationInternal(
                                     otherUid, otherSetting, subjectSetting, subjectUser));
                 }
@@ -1184,9 +1173,7 @@ public class AppsFilter implements Watchable, Snappable {
      */
     public boolean shouldFilterApplication(int callingUid, @Nullable SettingBase callingSetting,
             PackageSetting targetPkgSetting, int userId) {
-        if (DEBUG_TRACING) {
-            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "shouldFilterApplication");
-        }
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "shouldFilterApplication");
         try {
             int callingAppId = UserHandle.getAppId(callingUid);
             if (callingAppId < Process.FIRST_APPLICATION_UID
@@ -1196,20 +1183,22 @@ public class AppsFilter implements Watchable, Snappable {
             }
             synchronized (mCacheLock) {
                 if (mShouldFilterCache != null) { // use cache
-                    final int callingIndex = mShouldFilterCache.indexOfKey(callingUid);
-                    if (callingIndex < 0) {
+                    SparseBooleanArray shouldFilterTargets = mShouldFilterCache.get(callingUid);
+                    final int targetUid = UserHandle.getUid(userId, targetPkgSetting.appId);
+                    if (shouldFilterTargets == null) {
                         Slog.wtf(TAG, "Encountered calling uid with no cached rules: "
                                 + callingUid);
                         return true;
                     }
-                    final int targetUid = UserHandle.getUid(userId, targetPkgSetting.appId);
-                    final int targetIndex = mShouldFilterCache.indexOfKey(targetUid);
-                    if (targetIndex < 0) {
+                    int indexOfTargetUid = shouldFilterTargets.indexOfKey(targetUid);
+                    if (indexOfTargetUid < 0) {
                         Slog.w(TAG, "Encountered calling -> target with no cached rules: "
                                 + callingUid + " -> " + targetUid);
                         return true;
                     }
-                    return mShouldFilterCache.valueAt(callingIndex, targetIndex);
+                    if (!shouldFilterTargets.valueAt(indexOfTargetUid)) {
+                        return false;
+                    }
                 } else {
                     if (!shouldFilterApplicationInternal(
                             callingUid, callingSetting, targetPkgSetting, userId)) {
@@ -1222,17 +1211,13 @@ public class AppsFilter implements Watchable, Snappable {
             }
             return !DEBUG_ALLOW_ALL;
         } finally {
-            if (DEBUG_TRACING) {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
     }
 
     private boolean shouldFilterApplicationInternal(int callingUid, SettingBase callingSetting,
             PackageSetting targetPkgSetting, int targetUserId) {
-        if (DEBUG_TRACING) {
-            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "shouldFilterApplicationInternal");
-        }
+        Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "shouldFilterApplicationInternal");
         try {
             final boolean featureEnabled = mFeatureConfig.isGloballyEnabled();
             if (!featureEnabled) {
@@ -1247,9 +1232,7 @@ public class AppsFilter implements Watchable, Snappable {
             }
             final PackageSetting callingPkgSetting;
             final ArraySet<PackageSetting> callingSharedPkgSettings;
-            if (DEBUG_TRACING) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "callingSetting instanceof");
-            }
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "callingSetting instanceof");
             if (callingSetting instanceof PackageSetting) {
                 if (((PackageSetting) callingSetting).sharedUser == null) {
                     callingPkgSetting = (PackageSetting) callingSetting;
@@ -1263,9 +1246,7 @@ public class AppsFilter implements Watchable, Snappable {
                 callingPkgSetting = null;
                 callingSharedPkgSettings = ((SharedUserSetting) callingSetting).packages;
             }
-            if (DEBUG_TRACING) {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
 
             if (callingPkgSetting != null) {
                 if (callingPkgSetting.pkg != null
@@ -1301,9 +1282,7 @@ public class AppsFilter implements Watchable, Snappable {
                 return false;
             }
             final String targetName = targetPkg.getPackageName();
-            if (DEBUG_TRACING) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "getAppId");
-            }
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "getAppId");
             final int callingAppId;
             if (callingPkgSetting != null) {
                 callingAppId = callingPkgSetting.appId;
@@ -1311,9 +1290,7 @@ public class AppsFilter implements Watchable, Snappable {
                 callingAppId = callingSharedPkgSettings.valueAt(0).appId; // all should be the same
             }
             final int targetAppId = targetPkgSetting.appId;
-            if (DEBUG_TRACING) {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             if (callingAppId == targetAppId) {
                 if (DEBUG_LOGGING) {
                     log(callingSetting, targetPkgSetting, "same app id");
@@ -1322,9 +1299,7 @@ public class AppsFilter implements Watchable, Snappable {
             }
 
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "requestsQueryAllPackages");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "requestsQueryAllPackages");
                 if (callingPkgSetting != null) {
                         if (callingPkgSetting.pkg != null
                                 && requestsQueryAllPackages(callingPkgSetting.pkg)) {
@@ -1339,14 +1314,10 @@ public class AppsFilter implements Watchable, Snappable {
                     }
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mForceQueryable");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mForceQueryable");
                 if (mForceQueryable.contains(targetAppId)) {
                     if (DEBUG_LOGGING) {
                         log(callingSetting, targetPkgSetting, "force queryable");
@@ -1354,14 +1325,10 @@ public class AppsFilter implements Watchable, Snappable {
                     return false;
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueriesViaPackage");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueriesViaPackage");
                 if (mQueriesViaPackage.contains(callingAppId, targetAppId)) {
                     if (DEBUG_LOGGING) {
                         log(callingSetting, targetPkgSetting, "queries package");
@@ -1369,14 +1336,10 @@ public class AppsFilter implements Watchable, Snappable {
                     return false;
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueriesViaComponent");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueriesViaComponent");
                 if (mQueriesViaComponentRequireRecompute) {
                     mStateProvider.runWithState((settings, users) -> {
                         recomputeComponentVisibility(settings);
@@ -1389,15 +1352,11 @@ public class AppsFilter implements Watchable, Snappable {
                     return false;
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
 
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mImplicitlyQueryable");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mImplicitlyQueryable");
                 final int targetUid = UserHandle.getUid(targetUserId, targetAppId);
                 if (mImplicitlyQueryable.contains(callingUid, targetUid)) {
                     if (DEBUG_LOGGING) {
@@ -1406,15 +1365,11 @@ public class AppsFilter implements Watchable, Snappable {
                     return false;
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
 
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mOverlayReferenceMapper");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mOverlayReferenceMapper");
                 if (callingSharedPkgSettings != null) {
                     int size = callingSharedPkgSettings.size();
                     for (int index = 0; index < size; index++) {
@@ -1437,15 +1392,11 @@ public class AppsFilter implements Watchable, Snappable {
                     }
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
 
             try {
-                if (DEBUG_TRACING) {
-                    Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueryableViaUsesLibrary");
-                }
+                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "mQueryableViaUsesLibrary");
                 if (mQueryableViaUsesLibrary.contains(callingAppId, targetAppId)) {
                     if (DEBUG_LOGGING) {
                         log(callingSetting, targetPkgSetting, "queryable for library users");
@@ -1453,16 +1404,12 @@ public class AppsFilter implements Watchable, Snappable {
                     return false;
                 }
             } finally {
-                if (DEBUG_TRACING) {
-                    Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-                }
+                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
             }
 
             return true;
         } finally {
-            if (DEBUG_TRACING) {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
     }
 
@@ -1478,9 +1425,7 @@ public class AppsFilter implements Watchable, Snappable {
     private static boolean pkgInstruments(
             @NonNull AndroidPackage source, @NonNull AndroidPackage target) {
         try {
-            if (DEBUG_TRACING) {
-                Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "pkgInstruments");
-            }
+            Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "pkgInstruments");
             final String packageName = target.getPackageName();
             final List<ParsedInstrumentation> inst = source.getInstrumentations();
             for (int i = ArrayUtils.size(inst) - 1; i >= 0; i--) {
@@ -1490,9 +1435,7 @@ public class AppsFilter implements Watchable, Snappable {
             }
             return false;
         } finally {
-            if (DEBUG_TRACING) {
-                Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            }
+            Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
     }
 

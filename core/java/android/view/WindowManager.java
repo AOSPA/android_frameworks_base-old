@@ -2371,14 +2371,6 @@ public interface WindowManager extends ViewManager {
         public static final int PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY = 0x00100000;
 
         /**
-         * Flag to prevent the window from being magnified by the accessibility magnifier.
-         *
-         * TODO(b/190623172): This is a temporary solution and need to find out another way instead.
-         * @hide
-         */
-        public static final int PRIVATE_FLAG_NOT_MAGNIFIABLE = 0x00400000;
-
-        /**
          * Flag to indicate that the status bar window is in a state such that it forces showing
          * the navigation bar unless the navigation bar window is explicitly set to
          * {@link View#GONE}.
@@ -2481,7 +2473,6 @@ public interface WindowManager extends ViewManager {
                 PRIVATE_FLAG_SUSTAINED_PERFORMANCE_MODE,
                 SYSTEM_FLAG_HIDE_NON_SYSTEM_OVERLAY_WINDOWS,
                 PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY,
-                PRIVATE_FLAG_NOT_MAGNIFIABLE,
                 PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
                 PRIVATE_FLAG_COLOR_SPACE_AGNOSTIC,
                 PRIVATE_FLAG_USE_BLAST,
@@ -2561,10 +2552,6 @@ public interface WindowManager extends ViewManager {
                         mask = PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY,
                         equals = PRIVATE_FLAG_IS_ROUNDED_CORNERS_OVERLAY,
                         name = "IS_ROUNDED_CORNERS_OVERLAY"),
-                @ViewDebug.FlagToString(
-                        mask = PRIVATE_FLAG_NOT_MAGNIFIABLE,
-                        equals = PRIVATE_FLAG_NOT_MAGNIFIABLE,
-                        name = "NOT_MAGNIFIABLE"),
                 @ViewDebug.FlagToString(
                         mask = PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
                         equals = PRIVATE_FLAG_STATUS_FORCE_SHOW_NAVIGATION,
@@ -3021,14 +3008,6 @@ public interface WindowManager extends ViewManager {
          * @see Display.Mode#getModeId()
          */
         public int preferredDisplayModeId;
-
-        /**
-         * The max display refresh rate while the window is in focus.
-         *
-         * This value is ignored if {@link #preferredDisplayModeId} is set.
-         * @hide
-         */
-        public float preferredMaxDisplayRefreshRate;
 
         /**
          * An internal annotation for flags that can be specified to {@link #systemUiVisibility}

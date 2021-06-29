@@ -20,38 +20,32 @@
     android:layout_height="wrap_content"
     android:layout_width="match_parent"
     android:background="?android:attr/colorBackground"
-    android:importantForAccessibility="noHideDescendants"
     android:gravity="center"
     android:orientation="horizontal">
 
-    <FrameLayout
-        android:id="@+id/illustration_frame"
-        android:layout_width="wrap_content"
-        android:layout_height="@dimen/settingslib_illustration_height"
+    <View
+        android:id="@+id/protection_layer"
+        android:layout_width="412dp"
+        android:layout_height="300dp"
         android:layout_gravity="center"
-        android:gravity="center_vertical"
         android:padding="@dimen/settingslib_illustration_padding"
-        android:orientation="vertical">
+        android:background="@drawable/protection_background"/>
 
-        <View
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@drawable/protection_background"/>
+    <com.airbnb.lottie.LottieAnimationView
+        android:id="@+id/lottie_view"
+        android:layout_width="412dp"
+        android:layout_height="300dp"
+        android:layout_gravity="center"
+        android:padding="@dimen/settingslib_illustration_padding"
+        android:importantForAccessibility="no"/>
 
-        <com.airbnb.lottie.LottieAnimationView
-            android:id="@+id/lottie_view"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:layout_gravity="center" />
-
-        <FrameLayout
-            android:id="@+id/middleground_layout"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent"
-            android:background="@android:color/transparent"
-            android:layout_gravity="center"
-            android:visibility="gone"/>
-    </FrameLayout>
+    <ImageView
+        android:id="@+id/video_play_button"
+        android:layout_width="36dp"
+        android:layout_height="36dp"
+        android:layout_gravity="center"
+        android:visibility="gone"
+        android:src="@drawable/ic_gesture_play_button"/>
 
 </FrameLayout>
 

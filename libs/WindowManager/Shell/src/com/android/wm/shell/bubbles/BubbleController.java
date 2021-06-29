@@ -368,13 +368,6 @@ public class BubbleController {
                         return;
                     }
                 }
-                for (Bubble b : mBubbleData.getOverflowBubbles()) {
-                    if (task.taskId == b.getTaskId()) {
-                        promoteBubbleFromOverflow(b);
-                        mBubbleData.setExpanded(true);
-                        return;
-                    }
-                }
             }
         });
 
@@ -620,18 +613,6 @@ public class BubbleController {
         }
     }
 
-    /** For the overflow to be focusable & receive key events the flags must be update. **/
-    void updateWindowFlagsForOverflow(boolean showingOverflow) {
-        if (mStackView != null && mAddedToWindowManager) {
-            mWmLayoutParams.flags = showingOverflow
-                    ? 0
-                    : WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                            | WindowManager.LayoutParams.FLAG_NOT_TOUCH_MODAL;
-            mWmLayoutParams.flags |= WindowManager.LayoutParams.FLAG_HARDWARE_ACCELERATED;
-            mWindowManager.updateViewLayout(mStackView, mWmLayoutParams);
-        }
-    }
-
     /** Removes the BubbleStackView from the WindowManager if it's there. */
     private void removeFromWindowManagerMaybe() {
         if (!mAddedToWindowManager) {
@@ -729,13 +710,12 @@ public class BubbleController {
                     || !newConfig.windowConfiguration.getBounds().equals(mScreenBounds)) {
                 mDensityDpi = newConfig.densityDpi;
                 mScreenBounds.set(newConfig.windowConfiguration.getBounds());
-                mBubbleData.onMaxBubblesChanged();
                 mBubbleIconFactory = new BubbleIconFactory(mContext);
                 mStackView.onDisplaySizeChanged();
             }
             if (newConfig.fontScale != mFontScale) {
                 mFontScale = newConfig.fontScale;
-                mStackView.updateFontScale();
+                mStackView.updateFontScale(mFontScale);
             }
             if (newConfig.getLayoutDirection() != mLayoutDirection) {
                 mLayoutDirection = newConfig.getLayoutDirection();
@@ -822,35 +802,7 @@ public class BubbleController {
         setIsBubble(bubble, true /* isBubble */);
     }
 
-    /**
-     * Expands and selects the provided bubble as long as it already exists in the stack or the
-     * overflow.
-     *
-     * This is currently only used when opening a bubble via clicking on a conversation widget.
-     */
-    public void expandStackAndSelectBubble(Bubble b) {
-        if (b == null) {
-            return;
-        }
-        if (mBubbleData.hasBubbleInStackWithKey(b.getKey())) {
-            // already in the stack
-            mBubbleData.setSelectedBubble(b);
-            mBubbleData.setExpanded(true);
-        } else if (mBubbleData.hasOverflowBubbleWithKey(b.getKey())) {
-            // promote it out of the overflow
-            promoteBubbleFromOverflow(b);
-        }
-    }
-
-    /**
-     * Expands and selects a bubble based on the provided {@link BubbleEntry}. If no bubble
-     * exists for this entry, and it is able to bubble, a new bubble will be created.
-     *
-     * This is the method to use when opening a bubble via a notification or in a state where
-     * the device might not be unlocked.
-     *
-     * @param entry the entry to use for the bubble.
-     */
+    @VisibleForTesting
     public void expandStackAndSelectBubble(BubbleEntry entry) {
         if (mIsStatusBarShade) {
             mNotifEntryToExpandOnShadeUnlock = null;
@@ -1415,21 +1367,6 @@ public class BubbleController {
             mMainExecutor.execute(() -> {
                 BubbleController.this.expandStackAndSelectBubble(entry);
             });
-        }
-
-        @Override
-        public void expandStackAndSelectBubble(Bubble bubble) {
-            mMainExecutor.execute(() -> {
-                BubbleController.this.expandStackAndSelectBubble(bubble);
-            });
-        }
-
-        @Override
-        @Nullable
-        public Bubble getBubbleWithShortcutId(String shortcutId) {
-            return mMainExecutor.executeBlockingForResult(() -> {
-                return BubbleController.this.mBubbleData.getAnyBubbleWithShortcutId(shortcutId);
-            }, Bubble.class);
         }
 
         @Override

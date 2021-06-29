@@ -46,11 +46,9 @@ import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.classifier.FalsingCollectorFake;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.navigationbar.NavigationModeController;
-import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.phone.DozeParameters;
 import com.android.systemui.statusbar.phone.StatusBarKeyguardViewManager;
-import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.DeviceConfigProxyFake;
@@ -83,9 +81,7 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
     private @Mock DozeParameters mDozeParameters;
     private @Mock SysuiStatusBarStateController mStatusBarStateController;
     private @Mock KeyguardStateController mKeyguardStateController;
-    private @Mock NotificationShadeDepthController mNotificationShadeDepthController;
     private @Mock KeyguardUnlockAnimationController mKeyguardUnlockAnimationController;
-    private @Mock UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
     private DeviceConfigProxy mDeviceConfig = new DeviceConfigProxyFake();
     private FakeExecutor mUiBgExecutor = new FakeExecutor(new FakeSystemClock());
 
@@ -105,8 +101,7 @@ public class KeyguardViewMediatorTest extends SysuiTestCase {
                 mDismissCallbackRegistry, mUpdateMonitor, mDumpManager, mUiBgExecutor,
                 mPowerManager, mTrustManager, mDeviceConfig, mNavigationModeController,
                 mKeyguardDisplayManager, mDozeParameters, mStatusBarStateController,
-                mKeyguardStateController, () -> mKeyguardUnlockAnimationController,
-                mUnlockedScreenOffAnimationController, () -> mNotificationShadeDepthController);
+                mKeyguardStateController, () -> mKeyguardUnlockAnimationController);
         mViewMediator.start();
     }
 

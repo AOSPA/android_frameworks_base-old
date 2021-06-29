@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"وائرلیس ڈسپلے سرٹیفیکیشن"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"‏Wi‑Fi وربوس لاگنگ فعال کریں"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"‏Wi‑Fi اسکین کو زبردستی روکا جا رہا ہے"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"‏Wi-Fi غیر مستقل MAC کی رینڈمائزیشن"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"‏بہتر Wi-Fi ‏ MAC رینڈمائزیشن"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"موبائل ڈیٹا ہمیشہ فعال رکھیں"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"ٹیدرنگ ہارڈویئر سرعت کاری"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"بغیر نام والے بلوٹوتھ آلات دکھائیں"</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"کلپ باؤنڈز، حاشیے وغیرہ دکھائیں"</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"‏RTL لے آؤٹ سمت زبردستی نافذ کریں"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"‏سبھی زبانوں کیلئے اسکرین لے آؤٹ کی سمت کو RTL پر مجبور کریں"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"ونڈو کی سطح پر دھندلاپن کی اجازت دیں"</string>
     <string name="force_msaa" msgid="4081288296137775550">"‏4x MSAA زبردستی نافذ کریں"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"‏OpenGL ES 2.0 ایپس میں 4x MSAA فعال کریں"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"غیر مستطیل نما کلپ آپریشنز ڈیبگ کریں"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"‎<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>‎"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"مکمل چارج ہونے میں <xliff:g id="TIME">%1$s</xliff:g> باقی ہے"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"مکمل چارج ہونے میں <xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="TIME">%2$s</xliff:g> باقی ہے"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> • چارجنگ عارضی طور پر محدود ہے"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - بیٹری کی صحت کیلئے بہتر بنایا جا رہا ہے"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"نامعلوم"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"چارج ہو رہا ہے"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"تیزی سے چارج ہو رہا ہے"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"آہستہ چارج ہو رہا ہے"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"وائرلیس طریقے سے چارج ہو رہی ہے"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"چارج نہیں ہو رہا ہے"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"منسلک ہے، چارج نہیں ہو رہی ہے"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"پلگ ان ہے، ابھی چارج نہیں کر سکتے"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"چارج ہو گئی"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"کنٹرول کردہ بذریعہ منتظم"</string>
     <string name="disabled" msgid="8017887509554714950">"غیر فعال"</string>
@@ -507,8 +506,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"الارمز اور یاد دہانیاں"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"الارمز اور یاد دہانیاں سیٹ کرنے کی اجازت دیں"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"الارمز اور یاد دہانیاں"</string>
-    <!-- no translation found for alarms_and_reminders_footer_title (6302587438389079695) -->
-    <skip />
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"اس ایپ کو الارمز سیٹ کرنے اور دیگر کارروائیوں کو شیڈول کرنے کی اجازت دیں۔ اس ایپ کا استعمال اس وقت کیا جا سکتا ہے جب آپ اپنا آلہ استعمال نہ کر رہے ہوں جس میں زیادہ بیٹری کا استعمال ہو سکتا ہے۔ اجازت غیر فعال ہونے کی صورت میں ہو سکتا ہے یہ ایپ عام طور پر کام نہ کرے اور اس کے الارمز شیڈول کے مطابق کام نہیں کریں گے۔"</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"اس ایپ کو الارمز سیٹ کرنے اور دیگر کارروائیوں کو شیڈول کرنے کی اجازت دیں۔ اس ایپ کا استعمال اس وقت کیا جا سکتا ہے جب آپ اپنا آلہ استعمال نہ کر رہے ہوں جس میں زیادہ بیٹری کا استعمال ہو سکتا ہے۔ اجازت غیر فعال ہونے کی صورت میں ہو سکتا ہے یہ ایپ عام طور پر کام نہ کرے اور اس کے الارمز شیڈول کے مطابق کام نہیں کریں گے۔"</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"اس ایپ کو الارمز سیٹ کرنے اور دیگر کارروائیوں کو شیڈول کرنے کی اجازت دیں۔ اس ایپ کا استعمال اس وقت کیا جا سکتا ہے جب آپ اپنا آلہ استعمال نہ کر رہے ہوں جس میں زیادہ بیٹری کا استعمال ہو سکتا ہے۔ اجازت غیر فعال ہونے کی صورت میں ہو سکتا ہے یہ ایپ عام طور پر کام نہ کرے اور اس کے الارمز شیڈول کے مطابق کام نہیں کریں گے۔"</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"شیڈول، الارم، یاد دہانی، گھڑی"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"آن کریں"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"\'ڈسٹرب نہ کریں\' کو آن کریں"</string>

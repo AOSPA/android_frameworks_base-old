@@ -100,16 +100,6 @@ public class LatencyTracker {
      */
     public static final int ACTION_ROTATE_SCREEN_SENSOR = 9;
 
-    /**
-     * Time it takes to for the camera based algorithm to rotate the screen.
-     */
-    public static final int ACTION_ROTATE_SCREEN_CAMERA_CHECK = 10;
-
-    /**
-     * Time it takes to start unlock animation .
-     */
-    public static final int ACTION_LOCKSCREEN_UNLOCK = 11;
-
     private static final int[] ACTIONS_ALL = {
         ACTION_EXPAND_PANEL,
         ACTION_TOGGLE_RECENTS,
@@ -120,9 +110,7 @@ public class LatencyTracker {
         ACTION_ROTATE_SCREEN,
         ACTION_FACE_WAKE_AND_UNLOCK,
         ACTION_START_RECENTS_ANIMATION,
-        ACTION_ROTATE_SCREEN_SENSOR,
-        ACTION_ROTATE_SCREEN_CAMERA_CHECK,
-        ACTION_LOCKSCREEN_UNLOCK
+        ACTION_ROTATE_SCREEN_SENSOR
     };
 
     /** @hide */
@@ -136,9 +124,7 @@ public class LatencyTracker {
         ACTION_ROTATE_SCREEN,
         ACTION_FACE_WAKE_AND_UNLOCK,
         ACTION_START_RECENTS_ANIMATION,
-        ACTION_ROTATE_SCREEN_SENSOR,
-        ACTION_ROTATE_SCREEN_CAMERA_CHECK,
-        ACTION_LOCKSCREEN_UNLOCK
+        ACTION_ROTATE_SCREEN_SENSOR
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface Action {
@@ -154,9 +140,7 @@ public class LatencyTracker {
             FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_ROTATE_SCREEN,
             FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_FACE_WAKE_AND_UNLOCK,
             FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_START_RECENTS_ANIMATION,
-            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_ROTATE_SCREEN_SENSOR,
-            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_ROTATE_SCREEN_CAMERA_CHECK,
-            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_LOCKSCREEN_UNLOCK
+            FrameworkStatsLog.UIACTION_LATENCY_REPORTED__ACTION__ACTION_ROTATE_SCREEN_SENSOR
     };
 
     private static LatencyTracker sLatencyTracker;
@@ -233,12 +217,8 @@ public class LatencyTracker {
                 return "ACTION_FACE_WAKE_AND_UNLOCK";
             case 9:
                 return "ACTION_START_RECENTS_ANIMATION";
-            case 10:
-                return "ACTION_ROTATE_SCREEN_CAMERA_CHECK";
             case 11:
                 return "ACTION_ROTATE_SCREEN_SENSOR";
-            case 12:
-                return "ACTION_LOCKSCREEN_UNLOCK";
             default:
                 throw new IllegalArgumentException("Invalid action");
         }

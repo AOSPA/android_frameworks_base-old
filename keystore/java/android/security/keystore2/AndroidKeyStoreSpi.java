@@ -41,8 +41,6 @@ import android.system.keystore2.KeyMetadata;
 import android.system.keystore2.ResponseCode;
 import android.util.Log;
 
-import com.android.internal.annotations.VisibleForTesting;
-
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
@@ -976,6 +974,7 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
     }
 
     private Set<String> getUniqueAliases() {
+
         try {
             final KeyDescriptor[] keys = mKeyStore.list(
                     getTargetDomain(),
@@ -988,7 +987,7 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
             return aliases;
         } catch (android.security.KeyStoreException e) {
             Log.e(TAG, "Failed to list keystore entries.", e);
-            return new HashSet<>();
+            return null;
         }
     }
 
@@ -1098,17 +1097,6 @@ public class AndroidKeyStoreSpi extends KeyStoreSpi {
             }
         }
         return caAlias;
-    }
-
-    /**
-     * Used by Tests to initialize with a fake KeyStore2.
-     * @hide
-     * @param keystore
-     */
-    @VisibleForTesting
-    public void initForTesting(KeyStore2 keystore) {
-        mKeyStore = keystore;
-        mNamespace = KeyProperties.NAMESPACE_APPLICATION;
     }
 
     @Override

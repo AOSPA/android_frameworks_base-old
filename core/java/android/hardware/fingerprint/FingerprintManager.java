@@ -85,6 +85,7 @@ import javax.crypto.Mac;
 @SystemService(Context.FINGERPRINT_SERVICE)
 @RequiresFeature(PackageManager.FEATURE_FINGERPRINT)
 public class FingerprintManager implements BiometricAuthenticator, BiometricFingerprintConstants {
+
     private static final String TAG = "FingerprintManager";
     private static final boolean DEBUG = true;
     private static final int MSG_ENROLL_RESULT = 100;
@@ -879,24 +880,6 @@ public class FingerprintManager implements BiometricAuthenticator, BiometricFing
             throw e.rethrowFromSystemServer();
         }
     }
-
-    /**
-     * @hide
-     */
-    @RequiresPermission(USE_BIOMETRIC_INTERNAL)
-    public void setSidefpsController(@NonNull ISidefpsController controller) {
-        if (mService == null) {
-            Slog.w(TAG, "setSidefpsController: no fingerprint service");
-            return;
-        }
-
-        try {
-            mService.setSidefpsController(controller);
-        } catch (RemoteException e) {
-            throw e.rethrowFromSystemServer();
-        }
-    }
-
 
     /**
      * Forwards FingerprintStateListener to FingerprintService

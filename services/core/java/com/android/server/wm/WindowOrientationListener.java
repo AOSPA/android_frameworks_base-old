@@ -31,7 +31,9 @@ import android.os.CancellationSignal;
 import android.os.Handler;
 import android.os.SystemClock;
 import android.os.SystemProperties;
+import android.os.UserHandle;
 import android.provider.DeviceConfig;
+import android.provider.Settings;
 import android.rotationresolver.RotationResolverInternal;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
@@ -64,11 +66,9 @@ public abstract class WindowOrientationListener {
 
     private static final boolean USE_GRAVITY_SENSOR = false;
     private static final int DEFAULT_BATCH_LATENCY = 100000;
+    private static final int DEFAULT_ROTATION_RESOLVER_ENABLED = 0; // disabled
     private static final String KEY_ROTATION_RESOLVER_TIMEOUT = "rotation_resolver_timeout_millis";
-    private static final String KEY_ROTATION_MEMORIZATION_TIMEOUT =
-            "rotation_memorization_timeout_millis";
     private static final long DEFAULT_ROTATION_RESOLVER_TIMEOUT_MILLIS = 700L;
-    private static final long DEFAULT_ROTATION_MEMORIZATION_TIMEOUT_MILLIS = 300_000L; // 5 minutes
 
     private Handler mHandler;
     private SensorManager mSensorManager;
@@ -278,7 +278,11 @@ public abstract class WindowOrientationListener {
      * screen rotation.
      */
     @VisibleForTesting
-    abstract boolean isRotationResolverEnabled();
+    boolean isRotationResolverEnabled() {
+        return Settings.Secure.getIntForUser(mContext.getContentResolver(),
+                Settings.Secure.CAMERA_AUTOROTATE, DEFAULT_ROTATION_RESOLVER_ENABLED,
+                UserHandle.USER_CURRENT) == 1;
+    }
 
     /**
      * Called when the rotation view of the device has changed.
@@ -293,12 +297,6 @@ public abstract class WindowOrientationListener {
      * @see android.view.Surface
      */
     public abstract void onProposedRotationChanged(int rotation);
-
-    /**
-     * Whether the device is in the lock screen.
-     * @return returns true if the screen is locked. Otherwise, returns false.
-     */
-    public abstract boolean isKeyguardLocked();
 
     public void dumpDebug(ProtoOutputStream proto, long fieldId) {
         final long token = proto.start(fieldId);
@@ -1071,20 +1069,13 @@ public abstract class WindowOrientationListener {
     }
 
     final class OrientationSensorJudge extends OrientationJudge {
-        private static final int ROTATION_UNSET = -1;
         private boolean mTouching;
         private long mTouchEndedTimestampNanos = Long.MIN_VALUE;
         private int mProposedRotation = -1;
         private int mDesiredRotation = -1;
         private boolean mRotationEvaluationScheduled;
         private long mRotationResolverTimeoutMillis;
-        private long mRotationMemorizationTimeoutMillis;
         private final ActivityTaskManagerInternal mActivityTaskManagerInternal;
-        private long mLastRotationResolutionTimeStamp;
-        private int mLastRotationResolution = ROTATION_UNSET;
-        private int mCurrentCallbackId = 0;
-        private Runnable mCancelRotationResolverRequest;
-
         OrientationSensorJudge() {
             super();
             setupRotationResolverParameters();
@@ -1097,8 +1088,7 @@ public abstract class WindowOrientationListener {
             DeviceConfig.addOnPropertiesChangedListener(NAMESPACE_WINDOW_MANAGER,
                     ActivityThread.currentApplication().getMainExecutor(), (properties) -> {
                         final Set<String> keys = properties.getKeyset();
-                        if (keys.contains(KEY_ROTATION_RESOLVER_TIMEOUT)
-                                || keys.contains(KEY_ROTATION_MEMORIZATION_TIMEOUT)) {
+                        if (keys.contains(KEY_ROTATION_RESOLVER_TIMEOUT)) {
                             readRotationResolverParameters();
                         }
                     });
@@ -1107,13 +1097,9 @@ public abstract class WindowOrientationListener {
 
         private void readRotationResolverParameters() {
             mRotationResolverTimeoutMillis = DeviceConfig.getLong(
-                    NAMESPACE_WINDOW_MANAGER,
+                    DeviceConfig.NAMESPACE_WINDOW_MANAGER,
                     KEY_ROTATION_RESOLVER_TIMEOUT,
                     DEFAULT_ROTATION_RESOLVER_TIMEOUT_MILLIS);
-            mRotationMemorizationTimeoutMillis = DeviceConfig.getLong(
-                    NAMESPACE_WINDOW_MANAGER,
-                    KEY_ROTATION_MEMORIZATION_TIMEOUT,
-                    DEFAULT_ROTATION_MEMORIZATION_TIMEOUT_MILLIS);
         }
 
         @Override
@@ -1151,23 +1137,12 @@ public abstract class WindowOrientationListener {
                     FrameworkStatsLog.DEVICE_ROTATED__ROTATION_EVENT_TYPE__ACTUAL_EVENT);
 
             if (isRotationResolverEnabled()) {
-                if (isKeyguardLocked()) {
-                    if (mLastRotationResolution != ROTATION_UNSET
-                            && SystemClock.uptimeMillis() - mLastRotationResolutionTimeStamp
-                            < mRotationMemorizationTimeoutMillis) {
-                        Slog.d(TAG,
-                                "Reusing the last rotation resolution: " + mLastRotationResolution);
-                        finalizeRotation(mLastRotationResolution);
-                    } else {
-                        finalizeRotation(Surface.ROTATION_0);
-                    }
-                    return;
-                }
-
                 if (mRotationResolverService == null) {
                     mRotationResolverService = LocalServices.getService(
                             RotationResolverInternal.class);
                 }
+
+                final CancellationSignal cancellationSignal = new CancellationSignal();
 
                 String packageName = null;
                 if (mActivityTaskManagerInternal != null) {
@@ -1180,40 +1155,16 @@ public abstract class WindowOrientationListener {
                     }
                 }
 
-                mCurrentCallbackId++;
-
-                if (mCancelRotationResolverRequest != null) {
-                    getHandler().removeCallbacks(mCancelRotationResolverRequest);
-                }
-                final CancellationSignal cancellationSignal = new CancellationSignal();
-                mCancelRotationResolverRequest = cancellationSignal::cancel;
-                getHandler().postDelayed(
-                        mCancelRotationResolverRequest, mRotationResolverTimeoutMillis);
-
                 mRotationResolverService.resolveRotation(
                         new RotationResolverInternal.RotationResolverCallbackInternal() {
-                            private final int mCallbackId = mCurrentCallbackId;
                             @Override
                             public void onSuccess(int result) {
-                                finalizeRotationIfFresh(result);
+                                finalizeRotation(result);
                             }
 
                             @Override
                             public void onFailure(int error) {
-                                finalizeRotationIfFresh(reportedRotation);
-                            }
-
-                            private void finalizeRotationIfFresh(int rotation) {
-                                // Ignore the callback if it's not the latest.
-                                if (mCallbackId == mCurrentCallbackId) {
-                                    getHandler().removeCallbacks(mCancelRotationResolverRequest);
-                                    finalizeRotation(rotation);
-                                } else {
-                                    Slog.d(TAG, String.format(
-                                            "An outdated callback received [%s vs. %s]. Ignoring "
-                                                    + "it.",
-                                            mCallbackId, mCurrentCallbackId));
-                                }
+                                finalizeRotation(reportedRotation);
                             }
                         },
                         packageName,
@@ -1221,6 +1172,8 @@ public abstract class WindowOrientationListener {
                         mCurrentRotation,
                         mRotationResolverTimeoutMillis,
                         cancellationSignal);
+                getHandler().postDelayed(cancellationSignal::cancel,
+                        mRotationResolverTimeoutMillis);
             } else {
                 finalizeRotation(reportedRotation);
             }
@@ -1238,7 +1191,6 @@ public abstract class WindowOrientationListener {
                     + Surface.rotationToString(mProposedRotation));
             pw.println(prefix + "mTouching=" + mTouching);
             pw.println(prefix + "mTouchEndedTimestampNanos=" + mTouchEndedTimestampNanos);
-            pw.println(prefix + "mLastRotationResolution=" + mLastRotationResolution);
         }
 
         @Override
@@ -1274,8 +1226,6 @@ public abstract class WindowOrientationListener {
                 newRotation = evaluateRotationChangeLocked();
             }
             if (newRotation >= 0) {
-                mLastRotationResolution = newRotation;
-                mLastRotationResolutionTimeStamp = SystemClock.uptimeMillis();
                 onProposedRotationChanged(newRotation);
             }
         }

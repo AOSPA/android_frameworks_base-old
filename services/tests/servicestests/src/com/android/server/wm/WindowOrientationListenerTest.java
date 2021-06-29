@@ -31,7 +31,6 @@ import android.hardware.input.InputSensorInfo;
 import android.os.CancellationSignal;
 import android.os.Handler;
 import android.rotationresolver.RotationResolverInternal;
-import android.service.rotationresolver.RotationResolverService;
 import android.view.Surface;
 
 import org.junit.Before;
@@ -43,38 +42,37 @@ import org.mockito.MockitoAnnotations;
  * Tests for {@link com.android.server.wm.WindowOrientationListener}
  */
 public class WindowOrientationListenerTest {
-    private static final int DEFAULT_SENSOR_ROTATION = Surface.ROTATION_90;
 
     @Mock
     private Context mMockContext;
     @Mock
+    private Handler mMockHandler;
+    @Mock
     private InputSensorInfo mMockInputSensorInfo;
     @Mock
     private SensorManager mMockSensorManager;
+
     private TestableRotationResolver mFakeRotationResolverInternal;
-    private TestableWindowOrientationListener mWindowOrientationListener;
+    private com.android.server.wm.WindowOrientationListener mWindowOrientationListener;
     private int mFinalizedRotation;
     private boolean mRotationResolverEnabled;
     private SensorEvent mFakeSensorEvent;
     private Sensor mFakeSensor;
-    private Handler mHandler;
 
     @Before
     public void setUp() {
         MockitoAnnotations.initMocks(this);
         mRotationResolverEnabled = true;
-        mHandler = Handler.getMain();
 
         mFakeRotationResolverInternal = new TestableRotationResolver();
         doReturn(mMockSensorManager).when(mMockContext).getSystemService(Context.SENSOR_SERVICE);
         mWindowOrientationListener = new TestableWindowOrientationListener(mMockContext,
-                mHandler);
+                mMockHandler);
         mWindowOrientationListener.mRotationResolverService = mFakeRotationResolverInternal;
-        mWindowOrientationListener.mIsScreenLocked = false;
 
         mFakeSensor = new Sensor(mMockInputSensorInfo);
         mFakeSensorEvent = new SensorEvent(mFakeSensor, /* accuracy */ 1, /* timestamp */ 1L,
-                new float[]{(float) DEFAULT_SENSOR_ROTATION});
+                new float[]{(float) Surface.ROTATION_90});
     }
 
     @Test
@@ -83,49 +81,21 @@ public class WindowOrientationListenerTest {
 
         mWindowOrientationListener.mOrientationJudge.onSensorChanged(mFakeSensorEvent);
 
-        assertThat(mFinalizedRotation).isEqualTo(DEFAULT_SENSOR_ROTATION);
+        assertThat(mFinalizedRotation).isEqualTo(Surface.ROTATION_90);
     }
 
     @Test
-    public void testOnSensorChanged_callbackNotTheLatest_IgnoreResult() {
-        mWindowOrientationListener.mOrientationJudge.onSensorChanged(mFakeSensorEvent);
-        final RotationResolverInternal.RotationResolverCallbackInternal callback1 =
-                mFakeRotationResolverInternal.getCallback();
+    public void testOnSensorChanged_normalCase() {
+        mFakeRotationResolverInternal.mResult = Surface.ROTATION_180;
 
         mWindowOrientationListener.mOrientationJudge.onSensorChanged(mFakeSensorEvent);
-        final RotationResolverInternal.RotationResolverCallbackInternal callback2 =
-                mFakeRotationResolverInternal.getCallback();
-
-        callback1.onSuccess(Surface.ROTATION_180);
-        assertThat(mWindowOrientationListener.mIsOnProposedRotationChangedCalled).isFalse();
-
-        callback2.onSuccess(Surface.ROTATION_270);
-        assertThat(mWindowOrientationListener.mIsOnProposedRotationChangedCalled).isTrue();
-        assertThat(mFinalizedRotation).isEqualTo(Surface.ROTATION_270);
-    }
-
-    @Test
-    public void testOnSensorChanged_normalCase1() {
-        mWindowOrientationListener.mOrientationJudge.onSensorChanged(mFakeSensorEvent);
-
-        mFakeRotationResolverInternal.callbackWithSuccessResult(Surface.ROTATION_180);
 
         assertThat(mFinalizedRotation).isEqualTo(Surface.ROTATION_180);
     }
 
-    @Test
-    public void testSensorChanged_normalCase2() {
-        mWindowOrientationListener.mOrientationJudge.onSensorChanged(mFakeSensorEvent);
-
-        mFakeRotationResolverInternal.callbackWithFailureResult(
-                RotationResolverService.ROTATION_RESULT_FAILURE_CANCELLED);
-
-        assertThat(mFinalizedRotation).isEqualTo(DEFAULT_SENSOR_ROTATION);
-    }
-
-    static final class TestableRotationResolver extends RotationResolverInternal {
+    final class TestableRotationResolver extends RotationResolverInternal {
         @Surface.Rotation
-        RotationResolverCallbackInternal mCallback;
+        int mResult;
 
         @Override
         public boolean isRotationResolverSupported() {
@@ -137,38 +107,11 @@ public class WindowOrientationListenerTest {
                 String packageName, @Surface.Rotation int proposedRotation,
                 @Surface.Rotation int currentRotation, @DurationMillisLong long timeoutMillis,
                 @NonNull CancellationSignal cancellationSignal) {
-            mCallback = callback;
+            callback.onSuccess(mResult);
         }
-
-        public RotationResolverCallbackInternal getCallback() {
-            return mCallback;
-        }
-
-        public void callbackWithSuccessResult(int result) {
-            if (mCallback != null) {
-                mCallback.onSuccess(result);
-            }
-        }
-
-        public void callbackWithFailureResult(int error) {
-            if (mCallback != null) {
-                mCallback.onFailure(error);
-            }
-        }
-    }
-
-    @Test
-    public void testOnSensorChanged_inLockScreen_doNotCallRotationResolver() {
-        mWindowOrientationListener.mIsScreenLocked = true;
-
-        mWindowOrientationListener.mOrientationJudge.onSensorChanged(mFakeSensorEvent);
-
-        assertThat(mWindowOrientationListener.mIsOnProposedRotationChangedCalled).isFalse();
     }
 
     final class TestableWindowOrientationListener extends WindowOrientationListener {
-        private boolean mIsOnProposedRotationChangedCalled = false;
-        private boolean mIsScreenLocked;
 
         TestableWindowOrientationListener(Context context, Handler handler) {
             super(context, handler);
@@ -176,14 +119,8 @@ public class WindowOrientationListenerTest {
         }
 
         @Override
-        public boolean isKeyguardLocked() {
-            return mIsScreenLocked;
-        }
-
-        @Override
         public void onProposedRotationChanged(int rotation) {
             mFinalizedRotation = rotation;
-            mIsOnProposedRotationChangedCalled = true;
         }
 
         @Override

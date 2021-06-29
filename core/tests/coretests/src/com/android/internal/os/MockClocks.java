@@ -21,8 +21,6 @@ public class MockClocks implements BatteryStatsImpl.Clocks {
     public long realtime;
     /** Uptime in ms */
     public long uptime;
-    /** Current time in ms */
-    public long currentTime;
 
     @Override
     public long elapsedRealtime() {
@@ -32,10 +30,5 @@ public class MockClocks implements BatteryStatsImpl.Clocks {
     @Override
     public long uptimeMillis() {
         return uptime;
-    }
-
-    @Override
-    public long currentTimeMillis() {
-        return currentTime;
     }
 }

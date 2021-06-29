@@ -48,7 +48,6 @@ import com.android.systemui.plugins.ActivityStarter.OnDismissAction;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.KeyguardIndicationController;
-import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationPresenter;
@@ -113,7 +112,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
     private final KeyguardIndicationController mKeyguardIndicationController;
     private final StatusBar mStatusBar;
     private final ShadeController mShadeController;
-    private final LockscreenShadeTransitionController mShadeTransitionController;
     private final CommandQueue mCommandQueue;
 
     private final AccessibilityManager mAccessibilityManager;
@@ -140,7 +138,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
             KeyguardIndicationController keyguardIndicationController,
             StatusBar statusBar,
             ShadeController shadeController,
-            LockscreenShadeTransitionController shadeTransitionController,
             CommandQueue commandQueue,
             InitController initController,
             NotificationInterruptStateProvider notificationInterruptStateProvider) {
@@ -152,7 +149,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         // TODO: use KeyguardStateController#isOccluded to remove this dependency
         mStatusBar = statusBar;
         mShadeController = shadeController;
-        mShadeTransitionController = shadeTransitionController;
         mCommandQueue = commandQueue;
         mAboveShelfObserver = new AboveShelfObserver(stackScrollerController.getView());
         mNotificationShadeWindowController = notificationShadeWindowController;
@@ -198,7 +194,6 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
                 }
             };
 
-            mKeyguardIndicationController.init();
             mViewHierarchyManager.setUpWithPresenter(this,
                     stackScrollerController.getNotificationListContainer());
             mEntryManager.setUpWithPresenter(this);
@@ -398,7 +393,7 @@ public class StatusBarNotificationPresenter implements NotificationPresenter,
         mHeadsUpManager.setExpanded(clickedEntry, nowExpanded);
         if (nowExpanded) {
             if (mStatusBarStateController.getState() == StatusBarState.KEYGUARD) {
-                mShadeTransitionController.goToLockedShade(clickedEntry.getRow());
+                mShadeController.goToLockedShade(clickedEntry.getRow());
             } else if (clickedEntry.isSensitive()
                     && mDynamicPrivacyController.isInLockedDownShade()) {
                 mStatusBarStateController.setLeaveOpenOnKeyguardHide(true);

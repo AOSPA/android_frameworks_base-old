@@ -38,9 +38,11 @@ import android.media.session.MediaController.PlaybackInfo;
 import android.media.session.MediaSession.Token;
 import android.net.Uri;
 import android.os.Handler;
+import android.os.HandlerThread;
 import android.os.Looper;
 import android.os.Message;
 import android.os.RemoteException;
+import android.os.ServiceManager;
 import android.os.UserHandle;
 import android.os.VibrationEffect;
 import android.os.Vibrator;
@@ -64,9 +66,9 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.plugins.VolumeDialogController;
 import com.android.systemui.qs.tiles.DndTile;
+import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.util.RingerModeLiveData;
 import com.android.systemui.util.RingerModeTracker;
-import com.android.systemui.util.concurrency.ThreadFactory;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -77,6 +79,8 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 import javax.inject.Inject;
+
+import dagger.Lazy;
 
 /**
  *  Source of truth for all state / events related to the volume dialog.  No presentation.
@@ -114,13 +118,12 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         STREAMS.put(AudioSystem.STREAM_VOICE_CALL, R.string.stream_voice_call);
     }
 
+    private final HandlerThread mWorkerThread;
     private final W mWorker;
     private final Context mContext;
-    private final Looper mWorkerLooper;
-    private final PackageManager mPackageManager;
-    private final WakefulnessLifecycle mWakefulnessLifecycle;
     private AudioManager mAudio;
     private IAudioService mAudioService;
+    private final Optional<Lazy<StatusBar>> mStatusBarOptionalLazy;
     private final NotificationManager mNoMan;
     private final SettingObserver mObserver;
     private final Receiver mReceiver = new Receiver();
@@ -129,13 +132,13 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     protected C mCallbacks = new C();
     private final State mState = new State();
     protected final MediaSessionsCallbacks mMediaSessionsCallbacksW = new MediaSessionsCallbacks();
-    private final Optional<Vibrator> mVibrator;
+    private final Vibrator mVibrator;
     private final boolean mHasVibrator;
     private boolean mShowA11yStream;
     private boolean mShowVolumeDialog;
     private boolean mShowSafetyWarning;
     private long mLastToggledRingerOn;
-    private boolean mDeviceInteractive;
+    private final NotificationManager mNotificationManager;
 
     private boolean mDestroyed;
     private VolumePolicy mVolumePolicy;
@@ -146,42 +149,26 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     protected final VC mVolumeController = new VC();
     protected final BroadcastDispatcher mBroadcastDispatcher;
 
-    private final WakefulnessLifecycle.Observer mWakefullnessLifecycleObserver =
-            new WakefulnessLifecycle.Observer() {
-        @Override
-        public void onStartedWakingUp() {
-            mDeviceInteractive = true;
-        }
-
-        @Override
-        public void onFinishedGoingToSleep() {
-            mDeviceInteractive = false;
-        }
-    };
-
     @Inject
-    public VolumeDialogControllerImpl(
-            Context context,
-            BroadcastDispatcher broadcastDispatcher,
-            RingerModeTracker ringerModeTracker,
-            ThreadFactory theadFactory,
-            AudioManager audioManager,
-            NotificationManager notificationManager,
-            Optional<Vibrator> optionalVibrator,
-            IAudioService iAudioService,
-            AccessibilityManager accessibilityManager,
-            PackageManager packageManager,
-            WakefulnessLifecycle wakefulnessLifecycle) {
+    public VolumeDialogControllerImpl(Context context, BroadcastDispatcher broadcastDispatcher,
+            Optional<Lazy<StatusBar>> statusBarOptionalLazy, RingerModeTracker ringerModeTracker) {
         mContext = context.getApplicationContext();
-        mPackageManager = packageManager;
-        mWakefulnessLifecycle = wakefulnessLifecycle;
+        // TODO(b/150663459): remove this TV workaround once StatusBar is "unbound" on TVs
+        if (mContext.getPackageManager().hasSystemFeature(PackageManager.FEATURE_LEANBACK)) {
+            mStatusBarOptionalLazy = Optional.empty();
+        } else {
+            mStatusBarOptionalLazy = statusBarOptionalLazy;
+        }
+        mNotificationManager = (NotificationManager) mContext.getSystemService(
+                Context.NOTIFICATION_SERVICE);
         Events.writeEvent(Events.EVENT_COLLECTION_STARTED);
-        mWorkerLooper = theadFactory.buildLooperOnNewThread(
-                VolumeDialogControllerImpl.class.getSimpleName());
-        mWorker = new W(mWorkerLooper);
-        mMediaSessions = createMediaSessions(mContext, mWorkerLooper, mMediaSessionsCallbacksW);
-        mAudio = audioManager;
-        mNoMan = notificationManager;
+        mWorkerThread = new HandlerThread(VolumeDialogControllerImpl.class.getSimpleName());
+        mWorkerThread.start();
+        mWorker = new W(mWorkerThread.getLooper());
+        mMediaSessions = createMediaSessions(mContext, mWorkerThread.getLooper(),
+                mMediaSessionsCallbacksW);
+        mAudio = (AudioManager) mContext.getSystemService(Context.AUDIO_SERVICE);
+        mNoMan = (NotificationManager) mContext.getSystemService(Context.NOTIFICATION_SERVICE);
         mObserver = new SettingObserver(mWorker);
         mRingerModeObservers = new RingerModeObservers(
                 (RingerModeLiveData) ringerModeTracker.getRingerMode(),
@@ -191,17 +178,16 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
         mBroadcastDispatcher = broadcastDispatcher;
         mObserver.init();
         mReceiver.init();
-        mVibrator = optionalVibrator;
-        mHasVibrator = mVibrator.isPresent() && mVibrator.get().hasVibrator();
-        mAudioService = iAudioService;
+        mVibrator = (Vibrator) mContext.getSystemService(Context.VIBRATOR_SERVICE);
+        mHasVibrator = mVibrator != null && mVibrator.hasVibrator();
+        mAudioService = IAudioService.Stub.asInterface(
+                ServiceManager.getService(Context.AUDIO_SERVICE));
 
-        boolean accessibilityVolumeStreamActive = accessibilityManager
-                .isAccessibilityVolumeStreamActive();
+        boolean accessibilityVolumeStreamActive = context.getSystemService(
+                AccessibilityManager.class).isAccessibilityVolumeStreamActive();
         mVolumeController.setA11yMode(accessibilityVolumeStreamActive ?
                     VolumePolicy.A11Y_MODE_INDEPENDENT_A11Y_VOLUME :
                         VolumePolicy.A11Y_MODE_MEDIA_A11Y_VOLUME);
-
-        mWakefulnessLifecycle.addObserver(mWakefullnessLifecycleObserver);
     }
 
     public AudioManager getAudioManager() {
@@ -217,6 +203,7 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
             mAudio.setVolumeController(mVolumeController);
         } catch (SecurityException e) {
             Log.w(TAG, "Unable to set the volume controller", e);
+            return;
         }
     }
 
@@ -260,6 +247,18 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     protected MediaSessions createMediaSessions(Context context, Looper looper,
             MediaSessions.Callbacks callbacks) {
         return new MediaSessions(context, looper, callbacks);
+    }
+
+    public void destroy() {
+        if (D.BUG) Log.d(TAG, "destroy");
+        if (mDestroyed) return;
+        mDestroyed = true;
+        Events.writeEvent(Events.EVENT_COLLECTION_STOPPED);
+        mMediaSessions.destroy();
+        mObserver.destroy();
+        mReceiver.destroy();
+        mRingerModeObservers.destroy();
+        mWorkerThread.quitSafely();
     }
 
     public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
@@ -384,8 +383,9 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     public void vibrate(VibrationEffect effect) {
-        mVibrator.ifPresent(
-                vibrator -> vibrator.vibrate(effect, SONIFICIATION_VIBRATION_ATTRIBUTES));
+        if (mHasVibrator) {
+            mVibrator.vibrate(effect, SONIFICIATION_VIBRATION_ATTRIBUTES);
+        }
     }
 
     public boolean hasVibrator() {
@@ -437,8 +437,9 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
                 return;
             }
 
+            PackageManager packageManager = mContext.getPackageManager();
             mCallbacks.onCaptionComponentStateChanged(
-                    mPackageManager.getComponentEnabledSetting(componentName)
+                    packageManager.getComponentEnabledSetting(componentName)
                     == PackageManager.COMPONENT_ENABLED_STATE_ENABLED, fromTooltip);
         } catch (Exception ex) {
             Log.e(TAG,
@@ -465,11 +466,17 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     private boolean shouldShowUI(int flags) {
-        int wakefulness = mWakefulnessLifecycle.getWakefulness();
-        return wakefulness != WakefulnessLifecycle.WAKEFULNESS_ASLEEP
-                && wakefulness != WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP
-                && mDeviceInteractive && (flags & AudioManager.FLAG_SHOW_UI) != 0
-                && mShowVolumeDialog;
+        // if status bar isn't null, check if phone is in AOD, else check flags
+        // since we could be using a different status bar
+        return mStatusBarOptionalLazy.map(statusBarLazy -> {
+            StatusBar statusBar = statusBarLazy.get();
+            return statusBar.getWakefulnessState() != WakefulnessLifecycle.WAKEFULNESS_ASLEEP
+                    && statusBar.getWakefulnessState()
+                    != WakefulnessLifecycle.WAKEFULNESS_GOING_TO_SLEEP
+                    && statusBar.isDeviceInteractive() && (flags & AudioManager.FLAG_SHOW_UI) != 0
+                    && mShowVolumeDialog;
+        }).orElse(
+                mShowVolumeDialog && (flags & AudioManager.FLAG_SHOW_UI) != 0);
     }
 
     boolean onVolumeChangedW(int stream, int flags) {
@@ -593,15 +600,15 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     private boolean updateEffectsSuppressorW(ComponentName effectsSuppressor) {
         if (Objects.equals(mState.effectsSuppressor, effectsSuppressor)) return false;
         mState.effectsSuppressor = effectsSuppressor;
-        mState.effectsSuppressorName =
-                getApplicationName(mPackageManager, mState.effectsSuppressor);
+        mState.effectsSuppressorName = getApplicationName(mContext, mState.effectsSuppressor);
         Events.writeEvent(Events.EVENT_SUPPRESSOR_CHANGED, mState.effectsSuppressor,
                 mState.effectsSuppressorName);
         return true;
     }
 
-    private static String getApplicationName(PackageManager pm, ComponentName component) {
+    private static String getApplicationName(Context context, ComponentName component) {
         if (component == null) return null;
+        final PackageManager pm = context.getPackageManager();
         final String pkg = component.getPackageName();
         try {
             final ApplicationInfo ai = pm.getApplicationInfo(pkg, 0);
@@ -623,7 +630,8 @@ public class VolumeDialogControllerImpl implements VolumeDialogController, Dumpa
     }
 
     private boolean updateZenConfig() {
-        final NotificationManager.Policy policy = mNoMan.getConsolidatedNotificationPolicy();
+        final NotificationManager.Policy policy =
+                mNotificationManager.getConsolidatedNotificationPolicy();
         boolean disallowAlarms = (policy.priorityCategories & NotificationManager.Policy
                 .PRIORITY_CATEGORY_ALARMS) == 0;
         boolean disallowMedia = (policy.priorityCategories & NotificationManager.Policy

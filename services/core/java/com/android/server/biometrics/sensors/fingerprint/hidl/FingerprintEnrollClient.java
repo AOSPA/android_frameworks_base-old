@@ -25,7 +25,6 @@ import android.hardware.biometrics.BiometricsProtoEnums;
 import android.hardware.biometrics.fingerprint.V2_1.IBiometricsFingerprint;
 import android.hardware.fingerprint.Fingerprint;
 import android.hardware.fingerprint.FingerprintManager;
-import android.hardware.fingerprint.ISidefpsController;
 import android.hardware.fingerprint.IUdfpsOverlayController;
 import android.os.IBinder;
 import android.os.RemoteException;
@@ -34,7 +33,6 @@ import android.util.Slog;
 import com.android.server.biometrics.sensors.BiometricUtils;
 import com.android.server.biometrics.sensors.ClientMonitorCallbackConverter;
 import com.android.server.biometrics.sensors.EnrollClient;
-import com.android.server.biometrics.sensors.fingerprint.SidefpsHelper;
 import com.android.server.biometrics.sensors.fingerprint.Udfps;
 import com.android.server.biometrics.sensors.fingerprint.UdfpsHelper;
 
@@ -49,7 +47,6 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
     private static final String TAG = "FingerprintEnrollClient";
 
     @Nullable private final IUdfpsOverlayController mUdfpsOverlayController;
-    @Nullable private final ISidefpsController mSidefpsController;
     private final @FingerprintManager.EnrollReason int mEnrollReason;
 
     FingerprintEnrollClient(@NonNull Context context,
@@ -58,24 +55,16 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
             @NonNull byte[] hardwareAuthToken, @NonNull String owner,
             @NonNull BiometricUtils<Fingerprint> utils, int timeoutSec, int sensorId,
             @Nullable IUdfpsOverlayController udfpsOverlayController,
-            @Nullable ISidefpsController sidefpsController,
             @FingerprintManager.EnrollReason int enrollReason) {
         super(context, lazyDaemon, token, listener, userId, hardwareAuthToken, owner, utils,
                 timeoutSec, BiometricsProtoEnums.MODALITY_FINGERPRINT, sensorId,
                 true /* shouldVibrate */);
         mUdfpsOverlayController = udfpsOverlayController;
-        mSidefpsController = sidefpsController;
 
         mEnrollReason = enrollReason;
         if (enrollReason == FingerprintManager.ENROLL_FIND_SENSOR) {
             setShouldLog(false);
         }
-    }
-
-    @NonNull
-    @Override
-    protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return new CompositeCallback(createALSCallback(), callback);
     }
 
     @Override
@@ -96,7 +85,6 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
         UdfpsHelper.showUdfpsOverlay(getSensorId(),
                 UdfpsHelper.getReasonFromEnrollReason(mEnrollReason),
                 mUdfpsOverlayController, this);
-        SidefpsHelper.showOverlay(mSidefpsController);
         try {
             // GroupId was never used. In fact, groupId is always the same as userId.
             getFreshDaemon().enroll(mHardwareAuthToken, getTargetUserId(), mTimeoutSec);
@@ -105,7 +93,6 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
             onError(BiometricFingerprintConstants.FINGERPRINT_ERROR_HW_UNAVAILABLE,
                     0 /* vendorCode */);
             UdfpsHelper.hideUdfpsOverlay(getSensorId(), mUdfpsOverlayController);
-            SidefpsHelper.hideOverlay(mSidefpsController);
             mCallback.onClientFinished(this, false /* success */);
         }
     }
@@ -113,7 +100,6 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
     @Override
     protected void stopHalOperation() {
         UdfpsHelper.hideUdfpsOverlay(getSensorId(), mUdfpsOverlayController);
-        SidefpsHelper.hideOverlay(mSidefpsController);
         try {
             getFreshDaemon().cancel();
         } catch (RemoteException e) {
@@ -132,7 +118,6 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
 
         if (remaining == 0) {
             UdfpsHelper.hideUdfpsOverlay(getSensorId(), mUdfpsOverlayController);
-            SidefpsHelper.hideOverlay(mSidefpsController);
         }
     }
 
@@ -150,7 +135,6 @@ public class FingerprintEnrollClient extends EnrollClient<IBiometricsFingerprint
         super.onError(errorCode, vendorCode);
 
         UdfpsHelper.hideUdfpsOverlay(getSensorId(), mUdfpsOverlayController);
-        SidefpsHelper.hideOverlay(mSidefpsController);
     }
 
     @Override

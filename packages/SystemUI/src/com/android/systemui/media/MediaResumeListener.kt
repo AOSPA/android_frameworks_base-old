@@ -23,6 +23,7 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.pm.PackageManager
 import android.media.MediaDescription
+import android.media.session.MediaController
 import android.os.UserHandle
 import android.provider.Settings
 import android.service.media.MediaBrowserService
@@ -58,6 +59,7 @@ class MediaResumeListener @Inject constructor(
 
     private var useMediaResumption: Boolean = Utils.useMediaResumption(context)
     private val resumeComponents: ConcurrentLinkedQueue<ComponentName> = ConcurrentLinkedQueue()
+    private var blockedApps: MutableSet<String> = Utils.getBlockedMediaApps(context)
 
     private lateinit var mediaDataManager: MediaDataManager
 
@@ -122,6 +124,14 @@ class MediaResumeListener @Inject constructor(
                 mediaDataManager.setMediaResumptionEnabled(useMediaResumption)
             }
         }, Settings.Secure.MEDIA_CONTROLS_RESUME)
+
+        // Listen to changes in which apps are allowed to persist
+        tunerService.addTunable(object : TunerService.Tunable {
+            override fun onTuningChanged(key: String?, newValue: String?) {
+                blockedApps = Utils.getBlockedMediaApps(context)
+                mediaDataManager.appsBlockedFromResume = blockedApps
+            }
+        }, Settings.Secure.MEDIA_CONTROLS_RESUME_BLOCKED)
     }
 
     private fun loadSavedComponents() {
@@ -150,25 +160,20 @@ class MediaResumeListener @Inject constructor(
         }
 
         resumeComponents.forEach {
-            val browser = mediaBrowserFactory.create(mediaBrowserCallback, it)
-            browser.findRecentMedia()
+            if (!blockedApps.contains(it.packageName)) {
+                val browser = mediaBrowserFactory.create(mediaBrowserCallback, it)
+                browser.findRecentMedia()
+            }
         }
     }
 
-    override fun onMediaDataLoaded(
-        key: String,
-        oldKey: String?,
-        data: MediaData,
-        immediately: Boolean
-    ) {
+    override fun onMediaDataLoaded(key: String, oldKey: String?, data: MediaData) {
         if (useMediaResumption) {
             // If this had been started from a resume state, disconnect now that it's live
-            if (!key.equals(oldKey)) {
-                mediaBrowser?.disconnect()
-                mediaBrowser = null
-            }
+            mediaBrowser?.disconnect()
             // If we don't have a resume action, check if we haven't already
-            if (data.resumeAction == null && !data.hasCheckedForResume && data.isLocalSession) {
+            if (data.resumeAction == null && !data.hasCheckedForResume &&
+                    !blockedApps.contains(data.packageName) && data.isLocalSession) {
                 // TODO also check for a media button receiver intended for restarting (b/154127084)
                 Log.d(TAG, "Checking for service component for " + data.packageName)
                 val pm = context.packageManager
@@ -196,8 +201,6 @@ class MediaResumeListener @Inject constructor(
      */
     private fun tryUpdateResumptionList(key: String, componentName: ComponentName) {
         Log.d(TAG, "Testing if we can connect to $componentName")
-        // Set null action to prevent additional attempts to connect
-        mediaDataManager.setResumeAction(key, null)
         mediaBrowser?.disconnect()
         mediaBrowser = mediaBrowserFactory.create(
                 object : ResumeMediaBrowser.Callback() {
@@ -207,6 +210,8 @@ class MediaResumeListener @Inject constructor(
 
                     override fun onError() {
                         Log.e(TAG, "Cannot resume with $componentName")
+                        mediaDataManager.setResumeAction(key, null)
+                        mediaBrowser?.disconnect()
                         mediaBrowser = null
                     }
 
@@ -219,6 +224,7 @@ class MediaResumeListener @Inject constructor(
                         Log.d(TAG, "Can get resumable media from $componentName")
                         mediaDataManager.setResumeAction(key, getResumeAction(componentName))
                         updateResumptionList(componentName)
+                        mediaBrowser?.disconnect()
                         mediaBrowser = null
                     }
                 },
@@ -256,7 +262,30 @@ class MediaResumeListener @Inject constructor(
      */
     private fun getResumeAction(componentName: ComponentName): Runnable {
         return Runnable {
-            mediaBrowser = mediaBrowserFactory.create(null, componentName)
+            mediaBrowser?.disconnect()
+            mediaBrowser = mediaBrowserFactory.create(
+                object : ResumeMediaBrowser.Callback() {
+                    override fun onConnected() {
+                        if (mediaBrowser?.token == null) {
+                            Log.e(TAG, "Error after connect")
+                            mediaBrowser?.disconnect()
+                            mediaBrowser = null
+                            return
+                        }
+                        Log.d(TAG, "Connected for restart $componentName")
+                        val controller = MediaController(context, mediaBrowser!!.token)
+                        val controls = controller.transportControls
+                        controls.prepare()
+                        controls.play()
+                    }
+
+                    override fun onError() {
+                        Log.e(TAG, "Resume failed for $componentName")
+                        mediaBrowser?.disconnect()
+                        mediaBrowser = null
+                    }
+                },
+                componentName)
             mediaBrowser?.restart()
         }
     }

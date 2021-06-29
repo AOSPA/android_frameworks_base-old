@@ -236,7 +236,7 @@
     <string name="adb_wireless_no_network_msg" msgid="2365795244718494658">"Повежите се на WiFi мрежу"</string>
     <string name="keywords_adb_wireless" msgid="6507505581882171240">"adb, отклањање грешака, програмер"</string>
     <string name="bugreport_in_power" msgid="8664089072534638709">"Пречица за извештај о грешкама"</string>
-    <string name="bugreport_in_power_summary" msgid="1885529649381831775">"Приказује дугме у менију дугмета за укључивање за прављење извештаја о грешкама"</string>
+    <string name="bugreport_in_power_summary" msgid="1885529649381831775">"Приказује дугме у менију напајања за прављење извештаја о грешкама"</string>
     <string name="keep_screen_on" msgid="1187161672348797558">"Не закључавај"</string>
     <string name="keep_screen_on_summary" msgid="1510731514101925829">"Екран неће бити у режиму спавања током пуњења"</string>
     <string name="bt_hci_snoop_log" msgid="7291287955649081448">"Омогући snoop евид. за Bluetooth HCI"</string>
@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Сертификација бежичног екрана"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Омогући детаљнију евиденцију за Wi‑Fi"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Успоравање WiFi скенирања"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Насумично разврставање MAC адреса по WiFi-ју са прекидима"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Насумично MAC разврставање по Wi‑Fi‑ју"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Мобилни подаци су увек активни"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Хардверско убрзање привезивања"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Прикажи Bluetooth уређаје без назива"</string>
@@ -301,9 +301,9 @@
     <string name="mobile_data_always_on_summary" msgid="1112156365594371019">"Мобилни подаци су увек активни, чак и када је Wi‑Fi активан (ради брзе промене мреже)."</string>
     <string name="tethering_hardware_offload_summary" msgid="7801345335142803029">"Користи се хардверско убрзање привезивања ако је доступно"</string>
     <string name="adb_warning_title" msgid="7708653449506485728">"Дозволи отклањање USB грешака?"</string>
-    <string name="adb_warning_message" msgid="8145270656419669221">"Отклањање USB грешака намењено је само за сврхе програмирања. Користите га за копирање података са рачунара на уређај и обратно, инсталирање апликација на уређају без обавештења и читање података из евиденције."</string>
+    <string name="adb_warning_message" msgid="8145270656419669221">"Отклањање USB грешака намењено је само за сврхе програмирања. Користите га за копирање података са рачунара на уређај и обрнуто, инсталирање апликација на уређају без обавештења и читање података из евиденције."</string>
     <string name="adbwifi_warning_title" msgid="727104571653031865">"Желите да дозволите бежично отклањање грешака?"</string>
-    <string name="adbwifi_warning_message" msgid="8005936574322702388">"Бежично отклањање грешака намењено је само програмирању. Користите га за копирање података са рачунара на уређај и обратно, инсталирање апликација на уређају без обавештења и читање података из евиденције."</string>
+    <string name="adbwifi_warning_message" msgid="8005936574322702388">"Бежично отклањање грешака намењено је само програмирању. Користите га за копирање података са рачунара на уређај и обрнуто, инсталирање апликација на уређају без обавештења и читање података из евиденције."</string>
     <string name="adb_keys_warning_message" msgid="2968555274488101220">"Желите ли да опозовете приступ отклањању USB грешака са свих рачунара које сте претходно одобрили?"</string>
     <string name="dev_settings_warning_title" msgid="8251234890169074553">"Желите ли да омогућите програмерска подешавања?"</string>
     <string name="dev_settings_warning_message" msgid="37741686486073668">"Ова подешавања су намењена само за програмирање. Могу да изазову престанак функционисања или неочекивано понашање уређаја и апликација на њему."</string>
@@ -353,7 +353,6 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Приказује границе клипа, маргине итд."</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Наметни смер распореда здесна налево"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Намеће смер распореда екрана здесна налево за све локалитете"</string>
-    <string name="window_blurs" msgid="6831008984828425106">"Дозволи замагљења прозора"</string>
     <string name="force_msaa" msgid="4081288296137775550">"Наметни 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"Омогућава 4x MSAA у OpenGL ES 2.0 апликацијама"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"Отклони грешке исецања области неправоугаоног облика"</string>
@@ -454,14 +453,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> до краја пуњења"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="TIME">%2$s</xliff:g> до краја пуњења"</string>
-    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> – Пуњење је привремено ограничено"</string>
+    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> – Оптимизује се ради бољег стања батерије"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Непознато"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Пуни се"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Брзо се пуни"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Споро се пуни"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Бежично пуњење"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Не пуни се"</string>
-    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Повезано, не пуни се"</string>
+    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Прикључено је, али пуњење тренутно није могуће"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Напуњено"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Контролише администратор"</string>
     <string name="disabled" msgid="8017887509554714950">"Онемогућено"</string>
@@ -508,7 +507,9 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Аларми и подсетници"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Омогући подешавање аларма и подсетника"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Аларми и подсетници"</string>
-    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"Омогућите овој апликацији да подешава аларме и заказује временски осетљиве радње. То омогућава да апликација буде покренута у позадини, што може да троши више батерије.\n\nАко је ова дозвола искључена, постојећи аларми и догађаји засновани на времену заказани помоћу ове апликације неће радити."</string>
+    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Омогућите овој апликацији да подешава аларме и заказује друге радње. Ова апликација може да се користи када не користите телефон, што може да додатно троши батерију. Ако је ова дозвола искључена, ова апликација можда неће радити нормално и њени аларми неће радити по распореду."</string>
+    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Омогућите овој апликацији да подешава аларме и заказује друге радње. Ова апликација може да се користи када не користите таблет, што може да додатно троши батерију. Ако је ова дозвола искључена, ова апликација можда неће радити нормално и њени аларми неће радити по распореду."</string>
+    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Омогућите овој апликацији да подешава аларме и заказује друге радње. Ова апликација може да се користи када не користите уређај, што може да додатно троши батерију. Ако је ова дозвола искључена, ова апликација можда неће радити нормално и њени аларми неће радити по распореду."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"заказати, аларм, подсетник, сат"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Укључи"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"Укључите режим Не узнемиравај"</string>

@@ -16,36 +16,22 @@
 package com.android.keyguard;
 
 import android.content.Context;
-import android.content.res.ColorStateList;
-import android.graphics.drawable.Drawable;
 import android.graphics.drawable.RippleDrawable;
-import android.graphics.drawable.VectorDrawable;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
-
-import androidx.annotation.Nullable;
-
-import com.android.settingslib.Utils;
-import com.android.systemui.R;
 
 /**
  * Similar to the {@link NumPadKey}, but displays an image.
  */
 public class NumPadButton extends AlphaOptimizedImageButton {
 
-    @Nullable
     private NumPadAnimator mAnimator;
 
     public NumPadButton(Context context, AttributeSet attrs) {
         super(context, attrs);
 
-        Drawable background = getBackground();
-        if (background instanceof RippleDrawable) {
-            mAnimator = new NumPadAnimator(context, (RippleDrawable) getBackground(),
-                    attrs.getStyleAttribute());
-        } else {
-            mAnimator = null;
-        }
+        mAnimator = new NumPadAnimator(context, (RippleDrawable) getBackground(),
+                attrs.getStyleAttribute());
     }
 
     @Override
@@ -55,7 +41,7 @@ public class NumPadButton extends AlphaOptimizedImageButton {
         // Set width/height to the same value to ensure a smooth circle for the bg, but shrink
         // the height to match the old pin bouncer
         int width = getMeasuredWidth();
-        int height = mAnimator == null ? (int) (width * .75f) : width;
+        int height = width;
 
         setMeasuredDimension(getMeasuredWidth(), height);
     }
@@ -64,12 +50,12 @@ public class NumPadButton extends AlphaOptimizedImageButton {
     protected void onLayout(boolean changed, int l, int t, int r, int b) {
         super.onLayout(changed, l, t, r, b);
 
-        if (mAnimator != null) mAnimator.onLayout(b - t);
+        mAnimator.onLayout(b - t);
     }
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        if (event.getActionMasked() == MotionEvent.ACTION_DOWN && mAnimator != null) {
+        if (event.getActionMasked() == MotionEvent.ACTION_DOWN) {
             mAnimator.start();
         }
         return super.onTouchEvent(event);
@@ -79,13 +65,6 @@ public class NumPadButton extends AlphaOptimizedImageButton {
      * Reload colors from resources.
      **/
     public void reloadColors() {
-        if (mAnimator != null) {
-            mAnimator.reloadColors(getContext());
-	} else {
-            // Needed for old style pin
-            int textColor = Utils.getColorAttr(getContext(), android.R.attr.textColorPrimary)
-                    .getDefaultColor();
-            ((VectorDrawable) getDrawable()).setTintList(ColorStateList.valueOf(textColor));
-        }
+        mAnimator.reloadColors(getContext());
     }
 }

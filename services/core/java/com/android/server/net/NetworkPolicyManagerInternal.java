@@ -17,11 +17,9 @@
 package com.android.server.net;
 
 import android.annotation.NonNull;
-import android.annotation.Nullable;
 import android.net.Network;
 import android.net.NetworkTemplate;
 import android.net.netstats.provider.NetworkStatsProvider;
-import android.os.PowerExemptionManager.ReasonCode;
 import android.telephony.SubscriptionPlan;
 
 import java.util.Set;
@@ -43,13 +41,9 @@ public abstract class NetworkPolicyManagerInternal {
      * that network rules for that appId can be updated.
      *
      * @param appId The appId which has been updated in the allowlist.
-     * @param added Denotes whether the {@code appId} has been added or removed from the allowlist.
-     * @param reasonCode one of {@link ReasonCode} indicating the reason for the change.
-     *                   Only valid when {@code added} is {@code true}.
-     * @param reason an optional human-readable reason explaining why the app is temp allow-listed.
+     * @param added Denotes whether the {@param appId} has been added or removed from the allowlist.
      */
-    public abstract void onTempPowerSaveWhitelistChange(int appId, boolean added,
-            @ReasonCode int reasonCode, @Nullable String reason);
+    public abstract void onTempPowerSaveWhitelistChange(int appId, boolean added);
 
     /**
      * Return the active {@link SubscriptionPlan} for the given network.

@@ -165,7 +165,7 @@ class ControlsUiControllerImpl @Inject constructor (
         controlActionCoordinator.activityContext = activityContext
 
         allStructures = controlsController.get().getFavorites()
-        selectedStructure = getPreferredStructure(allStructures)
+        selectedStructure = loadPreference(allStructures)
 
         if (controlsController.get().addSeedingFavoritesCallback(onSeedingComplete)) {
             listingCallback = createCallback(::showSeedingView)
@@ -217,8 +217,22 @@ class ControlsUiControllerImpl @Inject constructor (
     }
 
     private fun showInitialSetupView(items: List<SelectionItem>) {
-        startProviderSelectorActivity()
-        onDismiss.run()
+        val inflater = LayoutInflater.from(context)
+        inflater.inflate(R.layout.controls_no_favorites, parent, true)
+
+        val viewGroup = parent.requireViewById(R.id.controls_no_favorites_group) as ViewGroup
+        viewGroup.setOnClickListener { _: View -> startProviderSelectorActivity() }
+
+        val subtitle = parent.requireViewById<TextView>(R.id.controls_subtitle)
+        subtitle.setText(context.resources.getString(R.string.quick_controls_subtitle))
+
+        val iconRowGroup = parent.requireViewById(R.id.controls_icon_row) as ViewGroup
+        items.forEach {
+            val imageView = inflater.inflate(R.layout.controls_icon, viewGroup, false) as ImageView
+            imageView.setContentDescription(it.getTitle())
+            imageView.setImageDrawable(it.icon)
+            iconRowGroup.addView(imageView)
+        }
     }
 
     private fun startFavoritingActivity(si: StructureInfo) {
@@ -247,9 +261,7 @@ class ControlsUiControllerImpl @Inject constructor (
     }
 
     private fun startProviderSelectorActivity() {
-        val i = Intent(activityContext, ControlsProviderSelectorActivity::class.java)
-        i.putExtra(ControlsProviderSelectorActivity.BACK_SHOULD_EXIT, true)
-        startActivity(i)
+        startActivity(Intent(activityContext, ControlsProviderSelectorActivity::class.java))
     }
 
     private fun startActivity(intent: Intent) {
@@ -399,12 +411,6 @@ class ControlsUiControllerImpl @Inject constructor (
                 val baseLayout = inflater.inflate(
                     R.layout.controls_base_item, lastRow, false) as ViewGroup
                 lastRow.addView(baseLayout)
-
-                // Use ConstraintLayout in the future... for now, manually adjust margins
-                if (lastRow.getChildCount() == 1) {
-                    val lp = baseLayout.getLayoutParams() as ViewGroup.MarginLayoutParams
-                    lp.setMarginStart(0)
-                }
                 val cvh = ControlViewHolder(
                     baseLayout,
                     controlsController.get(),
@@ -422,12 +428,8 @@ class ControlsUiControllerImpl @Inject constructor (
         // add spacers if necessary to keep control size consistent
         val mod = selectedStructure.controls.size % maxColumns
         var spacersToAdd = if (mod == 0) 0 else maxColumns - mod
-        val margin = context.resources.getDimensionPixelSize(R.dimen.control_spacing)
         while (spacersToAdd > 0) {
-            val lp = LinearLayout.LayoutParams(0, 0, 1f).apply {
-                setMarginStart(margin)
-            }
-            lastRow.addView(Space(context), lp)
+            lastRow.addView(Space(context), LinearLayout.LayoutParams(0, 0, 1f))
             spacersToAdd--
         }
     }
@@ -458,7 +460,7 @@ class ControlsUiControllerImpl @Inject constructor (
         return maxColumns
     }
 
-    override fun getPreferredStructure(structures: List<StructureInfo>): StructureInfo {
+    private fun loadPreference(structures: List<StructureInfo>): StructureInfo {
         if (structures.isEmpty()) return EMPTY_STRUCTURE
 
         val component = sharedPreferences.getString(PREF_COMPONENT, null)?.let {

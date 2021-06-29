@@ -18,7 +18,6 @@ package android.app.appsearch;
 import android.annotation.CallbackExecutor;
 import android.annotation.NonNull;
 import android.annotation.SystemService;
-import android.annotation.UserHandleAware;
 import android.app.appsearch.aidl.IAppSearchManager;
 import android.content.Context;
 
@@ -196,7 +195,6 @@ public class AppSearchManager {
      *     this operation. Or a {@link AppSearchResult} with failure reason code and error
      *     information.
      */
-    @UserHandleAware
     public void createSearchSession(
             @NonNull SearchContext searchContext,
             @NonNull @CallbackExecutor Executor executor,
@@ -207,7 +205,7 @@ public class AppSearchManager {
         AppSearchSession.createSearchSession(
                 searchContext,
                 mService,
-                mContext.getUser(),
+                mContext.getUserId(),
                 getPackageName(),
                 executor,
                 callback);
@@ -224,14 +222,13 @@ public class AppSearchManager {
      *     this operation. Or a {@link AppSearchResult} with failure reason code and error
      *     information.
      */
-    @UserHandleAware
     public void createGlobalSearchSession(
             @NonNull @CallbackExecutor Executor executor,
             @NonNull Consumer<AppSearchResult<GlobalSearchSession>> callback) {
         Objects.requireNonNull(executor);
         Objects.requireNonNull(callback);
         GlobalSearchSession.createGlobalSearchSession(
-                mService, mContext.getUser(), getPackageName(), executor, callback);
+                mService, mContext.getUserId(), getPackageName(), executor, callback);
     }
 
     /** Returns the package name that should be used for uid verification. */

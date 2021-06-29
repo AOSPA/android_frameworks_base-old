@@ -30,7 +30,6 @@ import static org.mockito.Mockito.when;
 import android.app.IActivityManager;
 import android.app.admin.DevicePolicyManager;
 import android.app.trust.TrustManager;
-import android.content.pm.PackageManager;
 import android.content.res.Resources;
 import android.graphics.Color;
 import android.media.AudioManager;
@@ -39,9 +38,8 @@ import android.os.UserManager;
 import android.service.dreams.IDreamManager;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper;
-import android.view.GestureDetector;
 import android.view.IWindowManager;
-import android.view.MotionEvent;
+import android.view.View;
 import android.view.WindowManagerPolicyConstants;
 
 import androidx.test.filters.SmallTest;
@@ -59,7 +57,6 @@ import com.android.systemui.plugins.GlobalActions;
 import com.android.systemui.settings.UserContextProvider;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
-import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -106,14 +103,11 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
     @Mock private IWindowManager mWindowManager;
     @Mock private Executor mBackgroundExecutor;
     @Mock private UiEventLogger mUiEventLogger;
-    @Mock private GlobalActionsInfoProvider mInfoProvider;
     @Mock private RingerModeTracker mRingerModeTracker;
     @Mock private RingerModeLiveData mRingerModeLiveData;
     @Mock private SysUiState mSysUiState;
-    @Mock private PackageManager mPackageManager;
     @Mock private Handler mHandler;
     @Mock private UserContextProvider mUserContextProvider;
-    @Mock private StatusBar mStatusBar;
 
     private TestableLooper mTestableLooper;
 
@@ -125,8 +119,6 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
 
         when(mRingerModeTracker.getRingerMode()).thenReturn(mRingerModeLiveData);
         when(mUserContextProvider.getUserContext()).thenReturn(mContext);
-        when(mResources.getConfiguration()).thenReturn(
-                getContext().getResources().getConfiguration());
 
         mGlobalActionsDialogLite = new GlobalActionsDialogLite(mContext,
                 mWindowManagerFuncs,
@@ -154,12 +146,9 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
                 mWindowManager,
                 mBackgroundExecutor,
                 mUiEventLogger,
-                mInfoProvider,
                 mRingerModeTracker,
                 mSysUiState,
-                mHandler,
-                mPackageManager,
-                mStatusBar
+                mHandler
         );
         mGlobalActionsDialogLite.setZeroDialogPressDelayForTesting();
 
@@ -203,7 +192,7 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
     }
 
     @Test
-    public void testSingleTap_logAndDismiss() {
+    public void testShouldLogOnTapOutside() {
         mGlobalActionsDialogLite = spy(mGlobalActionsDialogLite);
         doReturn(4).when(mGlobalActionsDialogLite).getMaxShownPowerItems();
         doReturn(true).when(mGlobalActionsDialogLite).shouldDisplayLockdown(any());
@@ -216,58 +205,9 @@ public class GlobalActionsDialogLiteTest extends SysuiTestCase {
         };
         doReturn(actions).when(mGlobalActionsDialogLite).getDefaultActions();
         GlobalActionsDialogLite.ActionsDialogLite dialog = mGlobalActionsDialogLite.createDialog();
-
-        GestureDetector.SimpleOnGestureListener gestureListener = spy(dialog.mGestureListener);
-        gestureListener.onSingleTapConfirmed(null);
+        View container = dialog.findViewById(com.android.systemui.R.id.global_actions_container);
+        container.callOnClick();
         verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_CLOSE_TAP_OUTSIDE);
-    }
-
-    @Test
-    public void testSwipeDownLockscreen_logAndOpenQS() {
-        mGlobalActionsDialogLite = spy(mGlobalActionsDialogLite);
-        doReturn(4).when(mGlobalActionsDialogLite).getMaxShownPowerItems();
-        doReturn(true).when(mGlobalActionsDialogLite).shouldDisplayLockdown(any());
-        doReturn(true).when(mGlobalActionsDialogLite).shouldShowAction(any());
-        doReturn(true).when(mStatusBar).isKeyguardShowing();
-        String[] actions = {
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_EMERGENCY,
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_LOCKDOWN,
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_POWER,
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_RESTART,
-        };
-        doReturn(actions).when(mGlobalActionsDialogLite).getDefaultActions();
-        GlobalActionsDialogLite.ActionsDialogLite dialog = mGlobalActionsDialogLite.createDialog();
-
-        GestureDetector.SimpleOnGestureListener gestureListener = spy(dialog.mGestureListener);
-        MotionEvent start = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
-        MotionEvent end = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 500, 0);
-        gestureListener.onFling(start, end, 0, 1000);
-        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_CLOSE_TAP_OUTSIDE);
-        verify(mStatusBar).animateExpandSettingsPanel(null);
-    }
-
-    @Test
-    public void testSwipeDown_logAndOpenNotificationShade() {
-        mGlobalActionsDialogLite = spy(mGlobalActionsDialogLite);
-        doReturn(4).when(mGlobalActionsDialogLite).getMaxShownPowerItems();
-        doReturn(true).when(mGlobalActionsDialogLite).shouldDisplayLockdown(any());
-        doReturn(true).when(mGlobalActionsDialogLite).shouldShowAction(any());
-        doReturn(false).when(mStatusBar).isKeyguardShowing();
-        String[] actions = {
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_EMERGENCY,
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_LOCKDOWN,
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_POWER,
-                GlobalActionsDialog.GLOBAL_ACTION_KEY_RESTART,
-        };
-        doReturn(actions).when(mGlobalActionsDialogLite).getDefaultActions();
-        GlobalActionsDialogLite.ActionsDialogLite dialog = mGlobalActionsDialogLite.createDialog();
-
-        GestureDetector.SimpleOnGestureListener gestureListener = spy(dialog.mGestureListener);
-        MotionEvent start = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 0, 0);
-        MotionEvent end = MotionEvent.obtain(0, 0, MotionEvent.ACTION_DOWN, 0, 500, 0);
-        gestureListener.onFling(start, end, 0, 1000);
-        verifyLogPosted(GlobalActionsDialog.GlobalActionsEvent.GA_CLOSE_TAP_OUTSIDE);
-        verify(mStatusBar).animateExpandNotificationsPanel();
     }
 
     @Test

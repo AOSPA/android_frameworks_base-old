@@ -23,7 +23,6 @@ import android.testing.AndroidTestingRunner
 import android.testing.TestableLooper
 import android.text.TextUtils
 import android.view.View
-import android.widget.TextView
 import androidx.test.filters.SmallTest
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
@@ -53,7 +52,6 @@ class QSTileViewImplTest : SysuiTestCase() {
     @Before
     fun setUp() {
         MockitoAnnotations.initMocks(this)
-        context.ensureTestableResources()
 
         tileView = FakeTileView(context, iconView, false)
         customDrawableView = tileView.requireViewById(R.id.customDrawable)
@@ -119,7 +117,7 @@ class QSTileViewImplTest : SysuiTestCase() {
     }
 
     @Test
-    fun testSecondaryLabelDescription_unavailable_default() {
+    fun testSecondaryLabelDescription_unavailable() {
         val state = QSTile.State()
         state.state = Tile.STATE_UNAVAILABLE
         state.secondaryLabel = ""
@@ -132,7 +130,7 @@ class QSTileViewImplTest : SysuiTestCase() {
     }
 
     @Test
-    fun testSecondaryLabelDescription_booleanInactive_default() {
+    fun testSecondaryLabelDescription_booleanInactive() {
         val state = QSTile.BooleanState()
         state.state = Tile.STATE_INACTIVE
         state.secondaryLabel = ""
@@ -145,7 +143,7 @@ class QSTileViewImplTest : SysuiTestCase() {
     }
 
     @Test
-    fun testSecondaryLabelDescription_booleanActive_default() {
+    fun testSecondaryLabelDescription_booleanActive() {
         val state = QSTile.BooleanState()
         state.state = Tile.STATE_ACTIVE
         state.secondaryLabel = ""
@@ -220,41 +218,6 @@ class QSTileViewImplTest : SysuiTestCase() {
 
         assertThat(customDrawableView.visibility).isEqualTo(View.GONE)
         assertThat(chevronView.visibility).isEqualTo(View.GONE)
-    }
-
-    @Test
-    fun testUseStateStringsForKnownSpec_Boolean() {
-        val state = QSTile.BooleanState()
-        val spec = "internet"
-        state.spec = spec
-
-        val unavailableString = "${spec}_unavailable"
-        val offString = "${spec}_off"
-        val onString = "${spec}_on"
-
-        context.orCreateTestableResources.addOverride(R.array.tile_states_internet, arrayOf(
-            unavailableString,
-            offString,
-            onString
-        ))
-
-        // State UNAVAILABLE
-        state.secondaryLabel = ""
-        state.state = Tile.STATE_UNAVAILABLE
-        tileView.changeState(state)
-        assertThat((tileView.secondaryLabel as TextView).text).isEqualTo(unavailableString)
-
-        // State INACTIVE
-        state.secondaryLabel = ""
-        state.state = Tile.STATE_INACTIVE
-        tileView.changeState(state)
-        assertThat((tileView.secondaryLabel as TextView).text).isEqualTo(offString)
-
-        // State ACTIVE
-        state.secondaryLabel = ""
-        state.state = Tile.STATE_ACTIVE
-        tileView.changeState(state)
-        assertThat((tileView.secondaryLabel as TextView).text).isEqualTo(onString)
     }
 
     class FakeTileView(

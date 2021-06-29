@@ -91,8 +91,8 @@ public class PeopleSpaceActivity extends Activity {
             // than the activity's background.
             LinearLayout item = findViewById(R.id.item);
             GradientDrawable shape = (GradientDrawable) item.getBackground();
-            final TypedArray ta = mContext.getTheme().obtainStyledAttributes(
-                    new int[]{com.android.internal.R.attr.colorSurface});
+            final TypedArray ta = mContext.obtainStyledAttributes(
+                    new int[]{android.R.attr.colorBackgroundFloating});
             shape.setColor(ta.getColor(0, Color.WHITE));
             return;
         }
@@ -183,5 +183,11 @@ public class PeopleSpaceActivity extends Activity {
         super.onResume();
         // Refresh tile views to sync new conversations.
         buildActivity();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        finish();
     }
 }

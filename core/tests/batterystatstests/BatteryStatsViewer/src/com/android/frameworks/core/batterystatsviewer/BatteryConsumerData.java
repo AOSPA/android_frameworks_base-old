@@ -124,8 +124,7 @@ public class BatteryConsumerData {
         for (int component = 0; component < BatteryConsumer.POWER_COMPONENT_COUNT; component++) {
             final String metricTitle = getPowerMetricTitle(component);
             final int powerModel = requestedBatteryConsumer.getPowerModel(component);
-            if (powerModel == BatteryConsumer.POWER_MODEL_POWER_PROFILE
-                    || powerModel == BatteryConsumer.POWER_MODEL_UNDEFINED) {
+            if (powerModel == BatteryConsumer.POWER_MODEL_POWER_PROFILE) {
                 addEntry(metricTitle, EntryType.UID_POWER_MODELED,
                         requestedBatteryConsumer.getConsumedPower(component),
                         totalPowerByComponentMah[component]
@@ -203,8 +202,7 @@ public class BatteryConsumerData {
         for (int component = 0; component < BatteryConsumer.POWER_COMPONENT_COUNT; component++) {
             final String metricTitle = getPowerMetricTitle(component);
             final int powerModel = deviceBatteryConsumer.getPowerModel(component);
-            if (powerModel == BatteryConsumer.POWER_MODEL_POWER_PROFILE
-                    || powerModel == BatteryConsumer.POWER_MODEL_UNDEFINED) {
+            if (powerModel == BatteryConsumer.POWER_MODEL_POWER_PROFILE) {
                 addEntry(metricTitle, EntryType.DEVICE_POWER_MODELED,
                         deviceBatteryConsumer.getConsumedPower(component),
                         appsBatteryConsumer.getConsumedPower(component));
@@ -239,9 +237,8 @@ public class BatteryConsumerData {
 
     private boolean isPowerProfileModelsOnly(BatteryConsumer batteryConsumer) {
         for (int component = 0; component < BatteryConsumer.POWER_COMPONENT_COUNT; component++) {
-            final int powerModel = batteryConsumer.getPowerModel(component);
-            if (powerModel != BatteryConsumer.POWER_MODEL_POWER_PROFILE
-                    && powerModel != BatteryConsumer.POWER_MODEL_UNDEFINED) {
+            if (batteryConsumer.getPowerModel(component)
+                    != BatteryConsumer.POWER_MODEL_POWER_PROFILE) {
                 return false;
             }
         }

@@ -17,6 +17,7 @@
 package com.android.systemui.toast;
 
 import static android.view.accessibility.AccessibilityManager.STATE_FLAG_ACCESSIBILITY_ENABLED;
+import static android.widget.ToastPresenter.TEXT_TOAST_LAYOUT;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -30,20 +31,13 @@ import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.app.Application;
 import android.app.INotificationManager;
 import android.app.ITransientNotificationCallback;
 import android.content.Context;
-import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageManager;
 import android.os.Binder;
-import android.os.Build;
 import android.os.Parcel;
 import android.os.Parcelable;
-import android.os.RemoteException;
-import android.os.UserHandle;
 import android.testing.AndroidTestingRunner;
-import android.testing.TestableLooper;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
@@ -53,11 +47,12 @@ import android.view.accessibility.IAccessibilityManager;
 import android.widget.FrameLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+import android.widget.ToastPresenter;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.R;
 import com.android.internal.util.IntPair;
-import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.shared.plugins.PluginManager;
@@ -75,7 +70,6 @@ import org.mockito.stubbing.Answer;
 
 @SmallTest
 @RunWith(AndroidTestingRunner.class)
-@TestableLooper.RunWithLooper
 public class ToastUITest extends SysuiTestCase {
     private static final int ANDROID_UID = 1000;
     private static final int SYSTEMUI_UID = 10140;
@@ -84,7 +78,6 @@ public class ToastUITest extends SysuiTestCase {
     private static final String PACKAGE_NAME_1 = "com.example1.test";
     private static final Binder TOKEN_1 = new Binder();
     private static final Binder WINDOW_TOKEN_1 = new Binder();
-    private static final int USER_ID = 1;
 
     private static final int UID_2 = 10256;
     private static final String PACKAGE_NAME_2 = "com.example2.test";
@@ -92,14 +85,12 @@ public class ToastUITest extends SysuiTestCase {
     private static final Binder WINDOW_TOKEN_2 = new Binder();
 
     private static final String TEXT = "Hello World";
-    private static final int MESSAGE_RES_ID = R.id.text;
+    private static final int MESSAGE_RES_ID = R.id.message;
 
     private Context mContextSpy;
     private ToastUI mToastUI;
-    private View mToastView;
-    @Mock private Application mApplication;
-    @Mock private CommandQueue mCommandQueue;
     @Mock private LayoutInflater mLayoutInflater;
+    @Mock private CommandQueue mCommandQueue;
     @Mock private WindowManager mWindowManager;
     @Mock private INotificationManager mNotificationManager;
     @Mock private IAccessibilityManager mAccessibilityManager;
@@ -107,7 +98,6 @@ public class ToastUITest extends SysuiTestCase {
     @Mock private DumpManager mDumpManager;
     @Mock private ToastLogger mToastLogger;
     @Mock private FeatureFlags mFeatureFlags;
-    @Mock private PackageManager mPackageManager;
 
     @Mock private ITransientNotificationCallback mCallback;
     @Captor private ArgumentCaptor<View> mViewCaptor;
@@ -116,33 +106,29 @@ public class ToastUITest extends SysuiTestCase {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
-        mToastView = LayoutInflater.from(mContext).inflate(R.layout.text_toast, null);
-        when(mLayoutInflater.inflate(anyInt(), eq(null))).thenReturn(mToastView);
+        when(mLayoutInflater.inflate(eq(TEXT_TOAST_LAYOUT), any())).thenReturn(
+                ToastPresenter.getTextToastView(mContext, TEXT));
+        when(mFeatureFlags.isToastStyleEnabled()).thenReturn(false);
+
         mContext.addMockSystemService(WindowManager.class, mWindowManager);
         mContextSpy = spy(mContext);
-        when(mContextSpy.getPackageManager()).thenReturn(mPackageManager);
         doReturn(mContextSpy).when(mContextSpy).createContextAsUser(any(), anyInt());
-        mToastUI = new ToastUI(
-                mContextSpy,
-                mCommandQueue,
-                mNotificationManager,
-                mAccessibilityManager,
-                new ToastFactory(
-                        mLayoutInflater,
-                        mPluginManager,
-                        mDumpManager),
-                mToastLogger);
+
+        doReturn(mContextSpy).when(mContextSpy).createContextAsUser(any(), anyInt());
+        mToastUI = new ToastUI(mContextSpy, mCommandQueue, mNotificationManager,
+                mAccessibilityManager, new ToastFactory(mLayoutInflater, mPluginManager,
+                mDumpManager, mFeatureFlags), mToastLogger);
     }
 
     @Test
-    public void testStart_addToastUIAsCallbackToCommandQueue() {
+    public void testStart_addToastUIAsCallbackToCommandQueue() throws Exception {
         mToastUI.start();
 
         verify(mCommandQueue).addCallback(mToastUI);
     }
 
     @Test
-    public void testShowToast_addsCorrectViewToWindowManager() {
+    public void testShowToast_addsCorrectViewToWindowManager() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 null);
 
@@ -152,7 +138,7 @@ public class ToastUITest extends SysuiTestCase {
     }
 
     @Test
-    public void testShowToast_addsViewWithCorrectLayoutParamsToWindowManager() {
+    public void testShowToast_addsViewWithCorrectLayoutParamsToWindowManager() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 null);
 
@@ -228,25 +214,12 @@ public class ToastUITest extends SysuiTestCase {
     }
 
     @Test
-    public void testShowToast_accessibilityManagerClientIsRemoved() throws Exception {
-        when(mContextSpy.getUserId()).thenReturn(USER_ID);
-        mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
-                null);
-        verify(mAccessibilityManager).removeClient(any(), eq(USER_ID));
-    }
-
-    @Test
     public void testHideToast_removesView() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        final SystemUIToast toast = mToastUI.mToast;
-
         View view = verifyWmAddViewAndAttachToParent();
+
         mToastUI.hideToast(PACKAGE_NAME_1, TOKEN_1);
-        if (toast.getOutAnimation() != null) {
-            assertThat(toast.getOutAnimation().isRunning()).isTrue();
-            toast.getOutAnimation().cancel(); // if applicable, try to finish anim early
-        }
 
         verify(mWindowManager).removeViewImmediate(view);
     }
@@ -255,80 +228,50 @@ public class ToastUITest extends SysuiTestCase {
     public void testHideToast_finishesToken() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        final SystemUIToast toast = mToastUI.mToast;
 
-        verifyWmAddViewAndAttachToParent();
         mToastUI.hideToast(PACKAGE_NAME_1, TOKEN_1);
-        if (toast.getOutAnimation() != null) {
-            assertThat(toast.getOutAnimation().isRunning()).isTrue();
-            toast.getOutAnimation().cancel(); // if applicable, try to finish anim early
-        }
 
         verify(mNotificationManager).finishToken(PACKAGE_NAME_1, TOKEN_1);
     }
 
     @Test
-    public void testHideToast_callsCallback() throws RemoteException {
+    public void testHideToast_callsCallback() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        final SystemUIToast toast = mToastUI.mToast;
 
-        verifyWmAddViewAndAttachToParent();
         mToastUI.hideToast(PACKAGE_NAME_1, TOKEN_1);
-        if (toast.getOutAnimation() != null) {
-            assertThat(toast.getOutAnimation().isRunning()).isTrue();
-            toast.getOutAnimation().cancel();
-        }
 
         verify(mCallback).onToastHidden();
     }
 
     @Test
-    public void testHideToast_whenNotCurrentToastToken_doesNotHideToast() throws RemoteException {
+    public void testHideToast_whenNotCurrentToastToken_doesNotHideToast() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        final SystemUIToast toast = mToastUI.mToast;
 
-        verifyWmAddViewAndAttachToParent();
         mToastUI.hideToast(PACKAGE_NAME_1, TOKEN_2);
 
-        if (toast.getOutAnimation() != null) {
-            assertThat(toast.getOutAnimation().isRunning()).isFalse();
-        }
-
         verify(mCallback, never()).onToastHidden();
     }
 
     @Test
-    public void testHideToast_whenNotCurrentToastPackage_doesNotHideToast() throws RemoteException {
+    public void testHideToast_whenNotCurrentToastPackage_doesNotHideToast() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        final SystemUIToast toast = mToastUI.mToast;
 
-        verifyWmAddViewAndAttachToParent();
         mToastUI.hideToast(PACKAGE_NAME_2, TOKEN_1);
 
-        if (toast.getOutAnimation() != null) {
-            assertThat(toast.getOutAnimation().isRunning()).isFalse();
-        }
-
         verify(mCallback, never()).onToastHidden();
     }
 
     @Test
-    public void testShowToast_afterShowToast_hidesCurrentToast() throws RemoteException {
+    public void testShowToast_afterShowToast_hidesCurrentToast() throws Exception {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        final SystemUIToast toast = mToastUI.mToast;
-
         View view = verifyWmAddViewAndAttachToParent();
+
         mToastUI.showToast(UID_2, PACKAGE_NAME_2, TOKEN_2, TEXT, WINDOW_TOKEN_2, Toast.LENGTH_LONG,
                 null);
-
-        if (toast.getOutAnimation() != null) {
-            assertThat(toast.getOutAnimation().isRunning()).isTrue();
-            toast.getOutAnimation().cancel(); // end early if applicable
-        }
 
         verify(mWindowManager).removeViewImmediate(view);
         verify(mNotificationManager).finishToken(PACKAGE_NAME_1, TOKEN_1);
@@ -344,48 +287,9 @@ public class ToastUITest extends SysuiTestCase {
     }
 
     @Test
-    public void testShowToast_targetsPreS_unlimitedLines_noAppIcon()
-            throws PackageManager.NameNotFoundException {
-        // GIVEN the application targets R
-        ApplicationInfo applicationInfo = new ApplicationInfo();
-        applicationInfo.targetSdkVersion = Build.VERSION_CODES.R;
-        when(mPackageManager.getApplicationInfoAsUser(PACKAGE_NAME_1, 0,
-                UserHandle.getUserHandleForUid(UID_1).getIdentifier())).thenReturn(applicationInfo);
-
-        // WHEN the package posts a toast
-        mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
-                mCallback);
-
-        // THEN the view can have unlimited lines
-        assertThat(((TextView) mToastUI.mToast.getView()
-                .findViewById(com.android.systemui.R.id.text))
-                .getMaxLines()).isEqualTo(Integer.MAX_VALUE);
-    }
-
-    @Test
-    public void testShowToast_targetsS_twoLineLimit_noAppIcon()
-            throws PackageManager.NameNotFoundException {
-        // GIVEN the application targets S
-        ApplicationInfo applicationInfo = new ApplicationInfo();
-        applicationInfo.targetSdkVersion = Build.VERSION_CODES.S;
-        when(mPackageManager.getApplicationInfoAsUser(PACKAGE_NAME_1, 0,
-                UserHandle.getUserHandleForUid(UID_1).getIdentifier())).thenReturn(applicationInfo);
-
-        // WHEN the package posts a toast
-        mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
-                mCallback);
-
-        // THEN the view is limited to 2 lines
-        assertThat(((TextView) mToastUI.mToast.getView()
-                .findViewById(com.android.systemui.R.id.text))
-                .getMaxLines()).isEqualTo(2);
-    }
-
-    @Test
     public void testHideToast_logs() {
         mToastUI.showToast(UID_1, PACKAGE_NAME_1, TOKEN_1, TEXT, WINDOW_TOKEN_1, Toast.LENGTH_LONG,
                 mCallback);
-        verifyWmAddViewAndAttachToParent();
         mToastUI.hideToast(PACKAGE_NAME_1, TOKEN_1);
         verify(mToastLogger).logOnHideToast(PACKAGE_NAME_1, TOKEN_1.toString());
     }
@@ -394,7 +298,6 @@ public class ToastUITest extends SysuiTestCase {
     public void testHideToast_error_noLog() {
         // no toast was shown, so this hide is invalid
         mToastUI.hideToast(PACKAGE_NAME_1, TOKEN_1);
-        assertThat(mToastUI.mToast).isNull();
         verify(mToastLogger, never()).logOnHideToast(PACKAGE_NAME_1, TOKEN_1.toString());
     }
 

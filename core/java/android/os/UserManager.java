@@ -575,8 +575,6 @@ public class UserManager {
      * <p>This restriction also prevents VPNs from starting. However, in Android 7.0
      * ({@linkplain android.os.Build.VERSION_CODES#N API level 24}) or higher, the system does
      * start always-on VPNs created by the device or profile owner.
-     * <p>From Android 12 ({@linkplain android.os.Build.VERSION_CODES#S API level 31}) enforcing
-     * this restriction clears currently active VPN if it was configured by the user.
      *
      * <p>Key for user restrictions.
      * <p>Type: Boolean
@@ -1288,58 +1286,6 @@ public class UserManager {
             "disallow_config_private_dns";
 
     /**
-     * Specifies whether the microphone toggle is available to the user. If this restriction is set,
-     * the user will not be able to block microphone access via the system toggle. If microphone
-     * access is blocked when the restriction is added, it will be automatically re-enabled.
-     *
-     * This restriction can only be set by a device owner.
-     *
-     * <p>The default value is <code>false</code>.
-     *
-     * @see android.hardware.SensorPrivacyManager
-     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
-     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
-     * @see #getUserRestrictions()
-     */
-    public static final String DISALLOW_MICROPHONE_TOGGLE =
-            "disallow_microphone_toggle";
-
-    /**
-     * Specifies whether the camera toggle is available to the user. If this restriction is set,
-     * the user will not be able to block camera access via the system toggle. If camera
-     * access is blocked when the restriction is added, it will be automatically re-enabled.
-     *
-     * This restriction can only be set by a device owner.
-     *
-     * <p>The default value is <code>false</code>.
-     *
-     * @see android.hardware.SensorPrivacyManager
-     * @see DevicePolicyManager#addUserRestriction(ComponentName, String)
-     * @see DevicePolicyManager#clearUserRestriction(ComponentName, String)
-     * @see #getUserRestrictions()
-     */
-    public static final String DISALLOW_CAMERA_TOGGLE =
-            "disallow_camera_toggle";
-
-    /**
-     * This is really not a user restriction in the normal sense. This can't be set to a user,
-     * via UserManager nor via DevicePolicyManager. This is not even set in UserSettingsUtils.
-     * This is defined here purely for convenience within the settings app.
-     *
-     * TODO(b/191306258): Refactor the Settings app to remove the need for this field, and delete it
-     *
-     * Specifies whether biometrics are available to the user. This is used internally only,
-     * as a means of communications between biometric settings and
-     * {@link com.android.settingslib.enterprise.ActionDisabledByAdminControllerFactory}.
-     *
-     * @see {@link android.hardware.biometrics.ParentalControlsUtilsInternal}
-     * @see {@link com.android.settings.biometrics.ParentalControlsUtils}
-     *
-     * @hide
-     */
-    public static final String DISALLOW_BIOMETRIC = "disallow_biometric";
-
-    /**
      * Application restriction key that is used to indicate the pending arrival
      * of real restrictions for the app.
      *
@@ -1430,10 +1376,7 @@ public class UserManager {
             DISALLOW_SHARE_INTO_MANAGED_PROFILE,
             DISALLOW_PRINTING,
             DISALLOW_CONFIG_PRIVATE_DNS,
-            DISALLOW_MICROPHONE_TOGGLE,
-            DISALLOW_CAMERA_TOGGLE,
             KEY_RESTRICTIONS_PENDING,
-            DISALLOW_BIOMETRIC,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface UserRestrictionKey {}

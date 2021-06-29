@@ -25,7 +25,6 @@ import android.content.pm.PackageManager.NameNotFoundException;
 import android.graphics.drawable.Drawable;
 import android.os.UserHandle;
 import android.os.UserManager;
-import android.permission.PermissionManager;
 import android.text.format.DateUtils;
 import android.util.IconDrawableFactory;
 import android.util.Log;
@@ -133,8 +132,7 @@ public class RecentLocationAccesses {
                     }
                 }
             }
-            if (showApp && PermissionManager.shouldShowPackageForIndicatorCached(mContext,
-                    packageName)) {
+            if (showApp) {
                 Access access = getAccessFromOps(now, ops);
                 if (access != null) {
                     accesses.add(access);
