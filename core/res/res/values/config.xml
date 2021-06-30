@@ -5017,6 +5017,4 @@
          the wallpaper at full brightness. 1 displays the wallpaper as fully black. -->
     <item name="config_wallpaperDimAmount" format="float" type="dimen">0.05</item>
 
-    <!-- Configure emergency apn -->
-    <string name="config_emergency_apn" translatable="false">sos</string>
 </resources>
