@@ -142,9 +142,6 @@ public final class PendingIntent implements Parcelable {
     @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.R)
     static final long PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED = 160794467L;
 
-    static final boolean flagMutableImmutableHandled = SystemProperties.getBoolean(
-                                                       "pending.intent.mutable.enforcement",
-                                                       false);
 
     /** @hide */
     @IntDef(flag = true,
@@ -365,22 +362,20 @@ public final class PendingIntent implements Parcelable {
         final boolean flagImmutableSet = (flags & PendingIntent.FLAG_IMMUTABLE) != 0;
         final boolean flagMutableSet = (flags & PendingIntent.FLAG_MUTABLE) != 0;
 
-        if (flagMutableImmutableHandled) {
-            if (flagImmutableSet && flagMutableSet) {
-                throw new IllegalArgumentException(
-                    "Cannot set both FLAG_IMMUTABLE and FLAG_MUTABLE for PendingIntent");
-            }
+        if (flagImmutableSet && flagMutableSet) {
+            throw new IllegalArgumentException(
+                "Cannot set both FLAG_IMMUTABLE and FLAG_MUTABLE for PendingIntent");
+        }
 
-            if (Compatibility.isChangeEnabled(PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED)
-                    && !flagImmutableSet && !flagMutableSet) {
-                String msg = packageName + ": Targeting S+ (version " + Build.VERSION_CODES.S
-                        + " and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE"
-                        + " be specified when creating a PendingIntent.\nStrongly consider"
-                        + " using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality"
-                        + " depends on the PendingIntent being mutable, e.g. if it needs to"
-                        + " be used with inline replies or bubbles.";
-                    throw new IllegalArgumentException(msg);
-            }
+        if (Compatibility.isChangeEnabled(PENDING_INTENT_EXPLICIT_MUTABILITY_REQUIRED)
+                && !flagImmutableSet && !flagMutableSet) {
+            String msg = packageName + ": Targeting S+ (version " + Build.VERSION_CODES.S
+                    + " and above) requires that one of FLAG_IMMUTABLE or FLAG_MUTABLE"
+                    + " be specified when creating a PendingIntent.\nStrongly consider"
+                    + " using FLAG_IMMUTABLE, only use FLAG_MUTABLE if some functionality"
+                    + " depends on the PendingIntent being mutable, e.g. if it needs to"
+                    + " be used with inline replies or bubbles.";
+                throw new IllegalArgumentException(msg);
         }
     }
 
