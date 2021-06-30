@@ -20,11 +20,14 @@ import android.annotation.IntDef;
 import android.view.View;
 
 import com.android.internal.jank.InteractionJankMonitor;
+import com.android.internal.jank.InteractionJankMonitor.Configuration;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
 
 public final class InteractionJankMonitorWrapper {
+    private static final String TAG = "JankMonitorWrapper";
+
     // Launcher journeys.
     public static final int CUJ_APP_LAUNCH_FROM_RECENTS =
             InteractionJankMonitor.CUJ_LAUNCHER_APP_LAUNCH_FROM_RECENTS;
@@ -40,6 +43,8 @@ public final class InteractionJankMonitorWrapper {
             InteractionJankMonitor.CUJ_LAUNCHER_OPEN_ALL_APPS;
     public static final int CUJ_ALL_APPS_SCROLL =
             InteractionJankMonitor.CUJ_LAUNCHER_ALL_APPS_SCROLL;
+    public static final int CUJ_APP_LAUNCH_FROM_WIDGET =
+            InteractionJankMonitor.CUJ_LAUNCHER_APP_LAUNCH_FROM_WIDGET;
 
     @IntDef({
             CUJ_APP_LAUNCH_FROM_RECENTS,
@@ -47,6 +52,7 @@ public final class InteractionJankMonitorWrapper {
             CUJ_APP_CLOSE_TO_HOME,
             CUJ_APP_CLOSE_TO_PIP,
             CUJ_QUICK_SWITCH,
+            CUJ_APP_LAUNCH_FROM_WIDGET,
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface CujType {
@@ -57,7 +63,11 @@ public final class InteractionJankMonitorWrapper {
     }
 
     public static boolean begin(View v, @CujType int cujType, long timeout) {
-        return InteractionJankMonitor.getInstance().begin(v, cujType, timeout);
+        Configuration.Builder builder =
+                new Configuration.Builder(cujType)
+                        .setView(v)
+                        .setTimeout(timeout);
+        return InteractionJankMonitor.getInstance().begin(builder);
     }
 
     public static boolean end(@CujType int cujType) {

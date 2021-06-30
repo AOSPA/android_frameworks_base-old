@@ -21,6 +21,7 @@ import static org.xmlpull.v1.XmlPullParser.START_TAG;
 
 import android.Manifest;
 import android.annotation.NonNull;
+import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.app.AppGlobals;
 import android.app.AppOpsManager;
@@ -193,6 +194,9 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     /** Sessions allocated to legacy users */
     @GuardedBy("mSessions")
     private final SparseBooleanArray mLegacySessions = new SparseBooleanArray();
+
+    /** Policy for allowing a silent update. */
+    private final SilentUpdatePolicy mSilentUpdatePolicy = new SilentUpdatePolicy();
 
     private static final FilenameFilter sStageFilter = new FilenameFilter() {
         @Override
@@ -409,7 +413,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                         try {
                             session = PackageInstallerSession.readFromXml(in, mInternalCallback,
                                     mContext, mPm, mInstallThread.getLooper(), mStagingManager,
-                                    mSessionsDir, this);
+                                    mSessionsDir, this, mSilentUpdatePolicy);
                         } catch (Exception e) {
                             Slog.e(TAG, "Could not read session", e);
                             continue;
@@ -623,7 +627,14 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
 
         boolean isApex = (params.installFlags & PackageManager.INSTALL_APEX) != 0;
-        if (params.isStaged || isApex) {
+        if (isApex) {
+            if (mContext.checkCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGE_UPDATES)
+                    == PackageManager.PERMISSION_DENIED
+                    && mContext.checkCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES)
+                    == PackageManager.PERMISSION_DENIED) {
+                throw new SecurityException("Not allowed to perform APEX updates");
+            }
+        } else if (params.isStaged) {
             mContext.enforceCallingOrSelfPermission(Manifest.permission.INSTALL_PACKAGES, TAG);
         }
 
@@ -632,12 +643,13 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 throw new IllegalArgumentException(
                     "This device doesn't support the installation of APEX files");
             }
-            if (!params.isStaged) {
-                throw new IllegalArgumentException(
-                    "APEX files can only be installed as part of a staged session.");
-            }
             if (params.isMultiPackage) {
                 throw new IllegalArgumentException("A multi-session can't be set as APEX.");
+            }
+            if (!params.isStaged
+                    && (params.installFlags & PackageManager.INSTALL_ENABLE_ROLLBACK) != 0) {
+                throw new IllegalArgumentException(
+                    "Non-staged APEX session doesn't support INSTALL_ENABLE_ROLLBACK");
             }
         }
 
@@ -649,13 +661,20 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
         }
 
         if (params.isStaged && !isCalledBySystemOrShell(callingUid)) {
-            if (mBypassNextStagedInstallerCheck) {
-                mBypassNextStagedInstallerCheck = false;
-            } else if (!isStagedInstallerAllowed(requestedInstallerPackageName)) {
+            if (!mBypassNextStagedInstallerCheck
+                    && !isStagedInstallerAllowed(requestedInstallerPackageName)) {
                 throw new SecurityException("Installer not allowed to commit staged install");
             }
         }
+        if (isApex && !isCalledBySystemOrShell(callingUid)) {
+            if (!mBypassNextStagedInstallerCheck
+                    && !isStagedInstallerAllowed(requestedInstallerPackageName)) {
+                throw new SecurityException(
+                        "Installer not allowed to commit non-staged APEX install");
+            }
+        }
 
+        mBypassNextStagedInstallerCheck = false;
         if (!params.isMultiPackage) {
             // Only system components can circumvent runtime permissions when installing.
             if ((params.installFlags & PackageManager.INSTALL_GRANT_RUNTIME_PERMISSIONS) != 0
@@ -756,10 +775,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
                 originatingPackageName, requestedInstallerPackageName,
                 installerAttributionTag);
         session = new PackageInstallerSession(mInternalCallback, mContext, mPm, this,
-                mInstallThread.getLooper(), mStagingManager, sessionId, userId, callingUid,
-                installSource, params, createdMillis, 0L, stageDir, stageCid, null, null, false,
-                false, false, false, null, SessionInfo.INVALID_ID, false, false, false,
-                SessionInfo.STAGED_SESSION_NO_ERROR, "");
+                mSilentUpdatePolicy, mInstallThread.getLooper(), mStagingManager, sessionId,
+                userId, callingUid, installSource, params, createdMillis, 0L, stageDir, stageCid,
+                null, null, false, false, false, false, null, SessionInfo.INVALID_ID,
+                false, false, false, SessionInfo.STAGED_SESSION_NO_ERROR, "");
 
         synchronized (mSessions) {
             mSessions.put(sessionId, session);
@@ -874,7 +893,7 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
     }
 
     private File buildSessionDir(int sessionId, SessionParams params) {
-        if (params.isStaged) {
+        if (params.isStaged || (params.installFlags & PackageManager.INSTALL_APEX) != 0) {
             final File sessionStagingDir = Environment.getDataStagingDirectory(params.volumeUuid);
             return new File(sessionStagingDir, "session_" + sessionId);
         }
@@ -1086,6 +1105,28 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             throw new SecurityException("Caller not allowed to bypass staged installer check");
         }
         mBypassNextStagedInstallerCheck = value;
+    }
+
+    /**
+     * Set an installer to allow for the unlimited silent updates.
+     */
+    @Override
+    public void setAllowUnlimitedSilentUpdates(@Nullable String installerPackageName) {
+        if (!isCalledBySystemOrShell(Binder.getCallingUid())) {
+            throw new SecurityException("Caller not allowed to unlimite silent updates");
+        }
+        mSilentUpdatePolicy.setAllowUnlimitedSilentUpdates(installerPackageName);
+    }
+
+    /**
+     * Set the silent updates throttle time in seconds.
+     */
+    @Override
+    public void setSilentUpdatesThrottleTime(long throttleTimeInSeconds) {
+        if (!isCalledBySystemOrShell(Binder.getCallingUid())) {
+            throw new SecurityException("Caller not allowed to set silent updates throttle time");
+        }
+        mSilentUpdatePolicy.setSilentUpdatesThrottleTime(throttleTimeInSeconds);
     }
 
     private static int getSessionCount(SparseArray<PackageInstallerSession> sessions,
@@ -1370,8 +1411,10 @@ public class PackageInstallerService extends IPackageInstaller.Stub implements
             pw.println("Legacy install sessions:");
             pw.increaseIndent();
             pw.println(mLegacySessions.toString());
+            pw.println();
             pw.decreaseIndent();
         }
+        mSilentUpdatePolicy.dump(pw);
     }
 
     class InternalCallback {

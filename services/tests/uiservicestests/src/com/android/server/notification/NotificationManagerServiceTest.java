@@ -65,6 +65,8 @@ import static com.android.server.notification.NotificationManagerService.ACTION_
 import static com.android.server.notification.NotificationManagerService.ACTION_ENABLE_NAS;
 import static com.android.server.notification.NotificationManagerService.ACTION_LEARNMORE_NAS;
 
+import static com.google.common.truth.Truth.assertThat;
+
 import static junit.framework.Assert.assertEquals;
 import static junit.framework.Assert.assertFalse;
 import static junit.framework.Assert.assertNotNull;
@@ -260,6 +262,8 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     private LauncherApps mLauncherApps;
     @Mock
     private ShortcutServiceInternal mShortcutServiceInternal;
+    @Mock
+    private UserManager mUserManager;
     @Mock
     ActivityManager mActivityManager;
     @Mock
@@ -526,6 +530,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         mShortcutHelper = mService.getShortcutHelper();
         mShortcutHelper.setLauncherApps(mLauncherApps);
         mShortcutHelper.setShortcutServiceInternal(mShortcutServiceInternal);
+        mShortcutHelper.setUserManager(mUserManager);
 
         // Capture PackageIntentReceiver
         ArgumentCaptor<BroadcastReceiver> broadcastReceiverCaptor =
@@ -567,6 +572,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         when(mLauncherApps.getShortcuts(any(), any())).thenReturn(shortcutInfos);
         when(mShortcutServiceInternal.isSharingShortcut(anyInt(), anyString(), anyString(),
                 anyString(), anyInt(), any())).thenReturn(true);
+        when(mUserManager.isUserUnlocked(any(UserHandle.class))).thenReturn(true);
 
         // Set the testable bubble extractor
         RankingHelper rankingHelper = mService.getRankingHelper();
@@ -3002,6 +3008,54 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
     }
 
     @Test
+    public void testSetNASMigrationDoneAndResetDefault_enableNAS() throws Exception {
+        int userId = 10;
+        when(mUm.getProfileIds(userId, false)).thenReturn(new int[]{userId});
+
+        mBinderService.setNASMigrationDoneAndResetDefault(userId, true);
+
+        assertTrue(mService.isNASMigrationDone(userId));
+        verify(mAssistants, times(1)).resetDefaultFromConfig();
+    }
+
+    @Test
+    public void testSetNASMigrationDoneAndResetDefault_disableNAS() throws Exception {
+        int userId = 10;
+        when(mUm.getProfileIds(userId, false)).thenReturn(new int[]{userId});
+
+        mBinderService.setNASMigrationDoneAndResetDefault(userId, false);
+
+        assertTrue(mService.isNASMigrationDone(userId));
+        verify(mAssistants, times(1)).clearDefaults();
+    }
+
+    @Test
+    public void testSetNASMigrationDoneAndResetDefault_multiProfile() throws Exception {
+        int userId1 = 11;
+        int userId2 = 12; //work profile
+        setUsers(new int[]{userId1, userId2});
+        when(mUm.isManagedProfile(userId2)).thenReturn(true);
+        when(mUm.getProfileIds(userId1, false)).thenReturn(new int[]{userId1, userId2});
+
+        mBinderService.setNASMigrationDoneAndResetDefault(userId1, true);
+        assertTrue(mService.isNASMigrationDone(userId1));
+        assertTrue(mService.isNASMigrationDone(userId2));
+    }
+
+    @Test
+    public void testSetNASMigrationDoneAndResetDefault_multiUser() throws Exception {
+        int userId1 = 11;
+        int userId2 = 12;
+        setUsers(new int[]{userId1, userId2});
+        when(mUm.getProfileIds(userId1, false)).thenReturn(new int[]{userId1});
+        when(mUm.getProfileIds(userId2, false)).thenReturn(new int[]{userId2});
+
+        mBinderService.setNASMigrationDoneAndResetDefault(userId1, true);
+        assertTrue(mService.isNASMigrationDone(userId1));
+        assertFalse(mService.isNASMigrationDone(userId2));
+    }
+
+    @Test
     public void testSetDndAccessForUser() throws Exception {
         UserHandle user = UserHandle.of(mContext.getUserId() + 10);
         ComponentName c = ComponentName.unflattenFromString("package/Component");
@@ -3394,16 +3448,16 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         // anything that's currently enqueued or posted
         int userId = UserHandle.getUserId(mUid);
         assertEquals(40,
-                mService.getNotificationCountLocked(PKG, userId, 0, null));
+                mService.getNotificationCount(PKG, userId, 0, null));
         assertEquals(40,
-                mService.getNotificationCountLocked(PKG, userId, 0, "tag2"));
+                mService.getNotificationCount(PKG, userId, 0, "tag2"));
 
         // return all for package "a" - "banana" tag isn't used
         assertEquals(2,
-                mService.getNotificationCountLocked("a", userId, 0, "banana"));
+                mService.getNotificationCount("a", userId, 0, "banana"));
 
         // exclude a known notification - it's excluded from only the posted list, not enqueued
-        assertEquals(39, mService.getNotificationCountLocked(
+        assertEquals(39, mService.getNotificationCount(
                 PKG, userId, sampleIdToExclude, sampleTagToExclude));
     }
 
@@ -6418,7 +6472,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 zenPolicy, NotificationManager.INTERRUPTION_FILTER_NONE, isEnabled);
 
         try {
-            mBinderService.addAutomaticZenRule(rule);
+            mBinderService.addAutomaticZenRule(rule, mContext.getPackageName());
             fail("Zen policy only applies to priority only mode");
         } catch (IllegalArgumentException e) {
             // yay
@@ -6426,11 +6480,11 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
 
         rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
                 zenPolicy, NotificationManager.INTERRUPTION_FILTER_PRIORITY, isEnabled);
-        mBinderService.addAutomaticZenRule(rule);
+        mBinderService.addAutomaticZenRule(rule, mContext.getPackageName());
 
         rule = new AutomaticZenRule("test", owner, owner, mock(Uri.class),
                 null, NotificationManager.INTERRUPTION_FILTER_NONE, isEnabled);
-        mBinderService.addAutomaticZenRule(rule);
+        mBinderService.addAutomaticZenRule(rule, mContext.getPackageName());
     }
 
     @Test
@@ -7223,6 +7277,47 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mNotificationRecordLogger.event(0));
     }
 
+    /**
+     * When something is bubble'd and the bubble is dismissed, but the notification is still
+     * visible, clicking on the notification shouldn't auto-cancel it because clicking on
+     * it will produce a bubble.
+     */
+    @Test
+    public void testNotificationBubbles_bubbleStays_whenClicked_afterBubbleDismissed()
+            throws Exception {
+        setUpPrefsForBubbles(PKG, mUid,
+                true /* global */,
+                BUBBLE_PREFERENCE_ALL /* app */,
+                true /* channel */);
+
+        // GIVEN a notification that has the auto cancels flag (cancel on click) and is a bubble
+        final NotificationRecord nr = generateNotificationRecord(mTestNotificationChannel);
+        nr.getSbn().getNotification().flags |= FLAG_BUBBLE | FLAG_AUTO_CANCEL;
+        nr.setAllowBubble(true);
+        mService.addNotification(nr);
+
+        // And the bubble is dismissed
+        mService.mNotificationDelegate.onNotificationBubbleChanged(nr.getKey(),
+                false /* isBubble */, 0 /* bubbleFlags */);
+        waitForIdle();
+        assertTrue(nr.isFlagBubbleRemoved());
+
+        // WHEN we click the notification
+        final NotificationVisibility nv = NotificationVisibility.obtain(nr.getKey(), 1, 2, true);
+        mService.mNotificationDelegate.onNotificationClick(mUid, Binder.getCallingPid(),
+                nr.getKey(), nv);
+        waitForIdle();
+
+        // THEN the bubble should still exist
+        StatusBarNotification[] notifsAfter = mBinderService.getActiveNotifications(PKG);
+        assertEquals(1, notifsAfter.length);
+
+        // Check we got the click log
+        assertEquals(1, mNotificationRecordLogger.numCalls());
+        assertEquals(NotificationRecordLogger.NotificationEvent.NOTIFICATION_CLICKED,
+                mNotificationRecordLogger.event(0));
+    }
+
     @Test
     public void testLoadDefaultApprovedServices_emptyResources() {
         TestableResources tr = mContext.getOrCreateTestableResources();
@@ -7417,6 +7512,13 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
                 mBinderService.getConversationsForPackage(PKG_P, mUid).getList();
         assertEquals(si, conversations.get(0).getShortcutInfo());
         assertEquals(si, conversations.get(1).getShortcutInfo());
+
+        // Returns null shortcuts when locked.
+        when(mUserManager.isUserUnlocked(any(UserHandle.class))).thenReturn(false);
+        conversations =
+                mBinderService.getConversationsForPackage(PKG_P, mUid).getList();
+        assertThat(conversations.get(0).getShortcutInfo()).isNull();
+        assertThat(conversations.get(1).getShortcutInfo()).isNull();
     }
 
     @Test
@@ -7770,8 +7872,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         inOrder.verify(child).recordDismissalSentiment(anyInt());
     }
 
-    // TODO (b/171418004): renable after app outreach
-    /*@Test
+    @Test
     public void testImmutableBubbleIntent() throws Exception {
         when(mAmi.getPendingIntentFlags(pi1))
                 .thenReturn(FLAG_IMMUTABLE | FLAG_ONE_SHOT);
@@ -7786,7 +7887,7 @@ public class NotificationManagerServiceTest extends UiServiceTestCase {
         } catch (IllegalArgumentException e) {
             // good
         }
-    }*/
+    }
 
     @Test
     public void testMutableBubbleIntent() throws Exception {

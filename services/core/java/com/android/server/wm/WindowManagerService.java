@@ -106,6 +106,7 @@ import static com.android.server.wm.ActivityTaskManagerService.POWER_MODE_REASON
 import static com.android.server.wm.DisplayContent.IME_TARGET_CONTROL;
 import static com.android.server.wm.DisplayContent.IME_TARGET_INPUT;
 import static com.android.server.wm.DisplayContent.IME_TARGET_LAYERING;
+import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_ALL;
 import static com.android.server.wm.WindowContainer.AnimationFlags.CHILDREN;
 import static com.android.server.wm.WindowContainer.AnimationFlags.PARENTS;
 import static com.android.server.wm.WindowContainer.AnimationFlags.TRANSITION;
@@ -423,18 +424,41 @@ public class WindowManagerService extends IWindowManager.Stub
             SystemProperties.getBoolean(DISABLE_CUSTOM_TASK_ANIMATION_PROPERTY, true);
 
     /**
+     * Use WMShell for app transition.
+     */
+    public static final String ENABLE_SHELL_TRANSITIONS = "persist.debug.shell_transit";
+
+    /**
+     * @see #ENABLE_SHELL_TRANSITIONS
+     */
+    public static final boolean sEnableShellTransitions =
+            SystemProperties.getBoolean(ENABLE_SHELL_TRANSITIONS, false);
+
+    /**
      * Run Keyguard animation as remote animation in System UI instead of local animation in
      * the server process.
+     *
+     * 0: Runs all keyguard animation as local animation
+     * 1: Only runs keyguard going away animation as remote animation
+     * 2: Runs all keyguard animation as remote animation
      */
     private static final String ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY =
             "persist.wm.enable_remote_keyguard_animation";
 
+    private static final int sEnableRemoteKeyguardAnimation =
+            SystemProperties.getInt(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, 1);
+
     /**
      * @see #ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY
      */
-    public static boolean sEnableRemoteKeyguardAnimation =
-            SystemProperties.getBoolean(ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY, false);
+    public static final boolean sEnableRemoteKeyguardGoingAwayAnimation = !sEnableShellTransitions
+            && sEnableRemoteKeyguardAnimation >= 1;
 
+    /**
+     * @see #ENABLE_REMOTE_KEYGUARD_ANIMATION_PROPERTY
+     */
+    public static final boolean sEnableRemoteKeyguardOccludeAnimation = !sEnableShellTransitions
+            && sEnableRemoteKeyguardAnimation >= 2;
 
     /**
      * Allows a fullscreen windowing mode activity to launch in its desired orientation directly
@@ -951,7 +975,7 @@ public class WindowManagerService extends IWindowManager.Stub
         void updateDevEnableNonResizableMultiWindow() {
             ContentResolver resolver = mContext.getContentResolver();
             final boolean devEnableNonResizableMultiWindow = Settings.Global.getInt(resolver,
-                    DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 1) != 0;
+                    DEVELOPMENT_ENABLE_NON_RESIZABLE_MULTI_WINDOW, 0) != 0;
 
             mAtmService.mDevEnableNonResizableMultiWindow = devEnableNonResizableMultiWindow;
         }
@@ -2332,6 +2356,17 @@ public class WindowManagerService extends IWindowManager.Stub
                 }
                 result |= RELAYOUT_RES_SURFACE_CHANGED;
                 if (!win.mWillReplaceWindow) {
+                    // When FLAG_SHOW_WALLPAPER flag is removed from a window, we usually set a flag
+                    // in DC#pendingLayoutChanges and update the wallpaper target later.
+                    // However it's possible that FLAG_SHOW_WALLPAPER flag is removed from a window
+                    // when the window is about to exit, so we update the wallpaper target
+                    // immediately here. Otherwise this window will be stuck in exiting and its
+                    // surface remains on the screen.
+                    // TODO(b/189856716): Allow destroying surface even if it belongs to the
+                    //  keyguard target.
+                    if (wallpaperMayMove) {
+                        displayContent.mWallpaperController.adjustWallpaperWindows();
+                    }
                     focusMayChange = tryStartExitingAnimation(win, winAnimator, focusMayChange);
                 }
             }
@@ -2879,6 +2914,7 @@ public class WindowManagerService extends IWindowManager.Stub
                         + " for the display " + displayId + " that does not exist.");
                 return;
             }
+            remoteAnimationAdapter.setCallingPidUid(Binder.getCallingPid(), Binder.getCallingUid());
             displayContent.mAppTransition.overridePendingAppTransitionRemote(
                     remoteAnimationAdapter);
         }
@@ -5375,25 +5411,6 @@ public class WindowManagerService extends IWindowManager.Stub
         }
     }
 
-    void setSandboxDisplayApis(int displayId, boolean sandboxDisplayApis) {
-        if (mContext.checkCallingOrSelfPermission(WRITE_SECURE_SETTINGS)
-                != PackageManager.PERMISSION_GRANTED) {
-            throw new SecurityException("Must hold permission " + WRITE_SECURE_SETTINGS);
-        }
-
-        final long ident = Binder.clearCallingIdentity();
-        try {
-            synchronized (mGlobalLock) {
-                final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
-                if (displayContent != null) {
-                    displayContent.setSandboxDisplayApis(sandboxDisplayApis);
-                }
-            }
-        } finally {
-            Binder.restoreCallingIdentity(ident);
-        }
-    }
-
     /** The global settings only apply to default display. */
     private boolean applyForcedPropertiesForDefaultDisplay() {
         boolean changed = false;
@@ -5969,6 +5986,20 @@ public class WindowManagerService extends IWindowManager.Stub
                 displayContent.getInsetsPolicy().hideTransient();
             } else {
                 Slog.w(TAG, "hideTransientBars with invalid displayId=" + displayId);
+            }
+        }
+    }
+
+    @Override
+    public void updateStaticPrivacyIndicatorBounds(int displayId,
+            Rect[] staticBounds) {
+        synchronized (mGlobalLock) {
+            final DisplayContent displayContent = mRoot.getDisplayContent(displayId);
+            if (displayContent != null) {
+                displayContent.updatePrivacyIndicatorBounds(staticBounds);
+            } else {
+                Slog.w(TAG, "updateStaticPrivacyIndicatorBounds with invalid displayId="
+                        + displayId);
             }
         }
     }
@@ -6971,32 +7002,6 @@ public class WindowManagerService extends IWindowManager.Stub
         final int displayOwnerUid = display.getOwnerUid();
         if (callingUid != displayOwnerUid) {
             throw new SecurityException("The caller doesn't own the display.");
-        }
-    }
-
-    /** @see Session#reparentDisplayContent(IWindow, SurfaceControl, int)  */
-    void reparentDisplayContent(IWindow client, SurfaceControl sc, int displayId) {
-        checkCallerOwnsDisplay(displayId);
-
-        synchronized (mGlobalLock) {
-            int uid = Binder.getCallingUid();
-            final long token = Binder.clearCallingIdentity();
-            try {
-                final WindowState win = windowForClientLocked(null, client, false);
-                if (win == null) {
-                    ProtoLog.w(WM_ERROR, "Bad requesting window %s", client);
-                    return;
-                }
-                getDisplayContentOrCreate(displayId, null).reparentDisplayContent(win, sc);
-                // Notifies AccessibilityController to re-compute the window observer of
-                // this embedded display
-                if (mAccessibilityController != null) {
-                    mAccessibilityController.handleWindowObserverOfEmbeddedDisplay(
-                            displayId, win, uid);
-                }
-            } finally {
-                Binder.restoreCallingIdentity(token);
-            }
         }
     }
 
@@ -8119,8 +8124,12 @@ public class WindowManagerService extends IWindowManager.Stub
             // This could prevent if there is no container animation, we still have to apply the
             // pending transaction and exit waiting.
             mAnimator.mNotifyWhenNoAnimation = true;
-            while ((mAnimator.isAnimationScheduled()
-                    || mRoot.isAnimating(TRANSITION | CHILDREN)) && timeoutRemaining > 0) {
+            while (timeoutRemaining > 0) {
+                boolean isAnimating = mAnimator.isAnimationScheduled()
+                        || mRoot.isAnimating(TRANSITION | CHILDREN, ANIMATION_TYPE_ALL);
+                if (!isAnimating) {
+                    break;
+                }
                 long startTime = System.currentTimeMillis();
                 try {
                     mGlobalLock.wait(timeoutRemaining);
@@ -8130,9 +8139,16 @@ public class WindowManagerService extends IWindowManager.Stub
             }
             mAnimator.mNotifyWhenNoAnimation = false;
 
-            if (mAnimator.isAnimationScheduled()
-                    || mRoot.isAnimating(TRANSITION | CHILDREN)) {
-                Slog.w(TAG, "Timed out waiting for animations to complete.");
+            WindowContainer animatingContainer;
+            animatingContainer = mRoot.getAnimatingContainer(TRANSITION | CHILDREN,
+                    ANIMATION_TYPE_ALL);
+            if (mAnimator.isAnimationScheduled() || animatingContainer != null) {
+                Slog.w(TAG, "Timed out waiting for animations to complete,"
+                        + " animatingContainer=" + animatingContainer
+                        + " animationType=" + SurfaceAnimator.animationTypeToString(
+                        animatingContainer != null
+                                ? animatingContainer.mSurfaceAnimator.getAnimationType()
+                                : SurfaceAnimator.ANIMATION_TYPE_NONE));
             }
         }
     }

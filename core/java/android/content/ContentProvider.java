@@ -49,6 +49,7 @@ import android.os.RemoteException;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.storage.StorageManager;
+import android.permission.PermissionCheckerManager;
 import android.text.TextUtils;
 import android.util.Log;
 
@@ -264,7 +265,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                 // Return an empty cursor for all columns.
                 return new MatrixCursor(cursor.getColumnNames(), 0);
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "query");
+            traceBegin(TRACE_TAG_DATABASE, "query: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -284,7 +285,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             // getCallingPackage() isn't available in getType(), as the javadoc states.
             uri = validateIncomingUri(uri);
             uri = maybeGetUriWithoutUserId(uri);
-            Trace.traceBegin(TRACE_TAG_DATABASE, "getType");
+            traceBegin(TRACE_TAG_DATABASE, "getType: ", uri.getAuthority());
             try {
                 return mInterface.getType(uri);
             } catch (RemoteException e) {
@@ -322,7 +323,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     setCallingAttributionSource(original);
                 }
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "insert");
+            traceBegin(TRACE_TAG_DATABASE, "insert: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -344,7 +345,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     != PermissionChecker.PERMISSION_GRANTED) {
                 return 0;
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "bulkInsert");
+            traceBegin(TRACE_TAG_DATABASE, "bulkInsert: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -390,7 +391,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     }
                 }
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "applyBatch");
+            traceBegin(TRACE_TAG_DATABASE, "applyBatch: ", authority);
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -422,7 +423,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     != PermissionChecker.PERMISSION_GRANTED) {
                 return 0;
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "delete");
+            traceBegin(TRACE_TAG_DATABASE, "delete: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -444,7 +445,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     != PermissionChecker.PERMISSION_GRANTED) {
                 return 0;
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "update");
+            traceBegin(TRACE_TAG_DATABASE, "update: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -464,7 +465,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             uri = validateIncomingUri(uri);
             uri = maybeGetUriWithoutUserId(uri);
             enforceFilePermission(attributionSource, uri, mode);
-            Trace.traceBegin(TRACE_TAG_DATABASE, "openFile");
+            traceBegin(TRACE_TAG_DATABASE, "openFile: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -485,7 +486,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             uri = validateIncomingUri(uri);
             uri = maybeGetUriWithoutUserId(uri);
             enforceFilePermission(attributionSource, uri, mode);
-            Trace.traceBegin(TRACE_TAG_DATABASE, "openAssetFile");
+            traceBegin(TRACE_TAG_DATABASE, "openAssetFile: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -504,7 +505,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                 String method, @Nullable String arg, @Nullable Bundle extras) {
             validateIncomingAuthority(authority);
             Bundle.setDefusable(extras, true);
-            Trace.traceBegin(TRACE_TAG_DATABASE, "call");
+            traceBegin(TRACE_TAG_DATABASE, "call: ", authority);
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -522,7 +523,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             // getCallingPackage() isn't available in getType(), as the javadoc states.
             uri = validateIncomingUri(uri);
             uri = maybeGetUriWithoutUserId(uri);
-            Trace.traceBegin(TRACE_TAG_DATABASE, "getStreamTypes");
+            traceBegin(TRACE_TAG_DATABASE, "getStreamTypes: ", uri.getAuthority());
             try {
                 return mInterface.getStreamTypes(uri, mimeTypeFilter);
             } catch (RemoteException e) {
@@ -540,7 +541,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             uri = validateIncomingUri(uri);
             uri = maybeGetUriWithoutUserId(uri);
             enforceFilePermission(attributionSource, uri, "r");
-            Trace.traceBegin(TRACE_TAG_DATABASE, "openTypedAssetFile");
+            traceBegin(TRACE_TAG_DATABASE, "openTypedAssetFile: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -568,7 +569,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     != PermissionChecker.PERMISSION_GRANTED) {
                 return null;
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "canonicalize");
+            traceBegin(TRACE_TAG_DATABASE, "canonicalize: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -604,7 +605,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     != PermissionChecker.PERMISSION_GRANTED) {
                 return null;
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "uncanonicalize");
+            traceBegin(TRACE_TAG_DATABASE, "uncanonicalize: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -640,7 +641,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                     != PermissionChecker.PERMISSION_GRANTED) {
                 return false;
             }
-            Trace.traceBegin(TRACE_TAG_DATABASE, "refresh");
+            traceBegin(TRACE_TAG_DATABASE, "refresh: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -657,7 +658,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
                 int uid, int modeFlags) {
             uri = validateIncomingUri(uri);
             uri = maybeGetUriWithoutUserId(uri);
-            Trace.traceBegin(TRACE_TAG_DATABASE, "checkUriPermission");
+            traceBegin(TRACE_TAG_DATABASE, "checkUriPermission: ", uri.getAuthority());
             final AttributionSource original = setCallingAttributionSource(
                     attributionSource);
             try {
@@ -670,7 +671,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             }
         }
 
-        @PermissionChecker.PermissionResult
+        @PermissionCheckerManager.PermissionResult
         private void enforceFilePermission(@NonNull AttributionSource attributionSource,
                 Uri uri, String mode)
                 throws FileNotFoundException, SecurityException {
@@ -687,7 +688,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             }
         }
 
-        @PermissionChecker.PermissionResult
+        @PermissionCheckerManager.PermissionResult
         private int enforceReadPermission(@NonNull AttributionSource attributionSource, Uri uri)
                 throws SecurityException {
             final int result = enforceReadPermissionInner(uri, attributionSource);
@@ -705,7 +706,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             return PermissionChecker.PERMISSION_GRANTED;
         }
 
-        @PermissionChecker.PermissionResult
+        @PermissionCheckerManager.PermissionResult
         private int enforceWritePermission(@NonNull AttributionSource attributionSource, Uri uri)
                 throws SecurityException {
             final int result = enforceWritePermissionInner(uri, attributionSource);
@@ -738,7 +739,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * Verify that calling app holds both the given permission and any app-op
      * associated with that permission.
      */
-    @PermissionChecker.PermissionResult
+    @PermissionCheckerManager.PermissionResult
     private int checkPermission(String permission,
             @NonNull AttributionSource attributionSource) {
         if (Binder.getCallingPid() == Process.myPid()) {
@@ -753,7 +754,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
     }
 
     /** {@hide} */
-    @PermissionChecker.PermissionResult
+    @PermissionCheckerManager.PermissionResult
     protected int enforceReadPermissionInner(Uri uri,
             @NonNull AttributionSource attributionSource) throws SecurityException {
         final Context context = getContext();
@@ -836,7 +837,7 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
     }
 
     /** {@hide} */
-    @PermissionChecker.PermissionResult
+    @PermissionCheckerManager.PermissionResult
     protected int enforceWritePermissionInner(Uri uri,
             @NonNull AttributionSource attributionSource) throws SecurityException {
         final Context context = getContext();
@@ -1885,9 +1886,8 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * in {@link android.provider.MediaStore.MediaColumns}.</p>
      *
      * @param uri The URI whose file is to be opened.
-     * @param mode Access mode for the file.  May be "r" for read-only access,
-     * "rw" for read and write access, or "rwt" for read and write access
-     * that truncates any existing file.
+     * @param mode The string representation of the file mode. Can be "r", "w", "wt", "wa", "rw"
+     *             or "rwt". See{@link ParcelFileDescriptor#parseMode} for more details.
      *
      * @return Returns a new ParcelFileDescriptor which you can use to access
      * the file.
@@ -1948,10 +1948,8 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * in {@link android.provider.MediaStore.MediaColumns}.</p>
      *
      * @param uri The URI whose file is to be opened.
-     * @param mode Access mode for the file. May be "r" for read-only access,
-     *            "w" for write-only access, "rw" for read and write access, or
-     *            "rwt" for read and write access that truncates any existing
-     *            file.
+     * @param mode The string representation of the file mode. Can be "r", "w", "wt", "wa", "rw"
+     *             or "rwt". See{@link ParcelFileDescriptor#parseMode} for more details.
      * @param signal A signal to cancel the operation in progress, or
      *            {@code null} if none. For example, if you are downloading a
      *            file from the network to service a "rw" mode request, you
@@ -2011,11 +2009,8 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * containing at least the columns specified by {@link android.provider.OpenableColumns}.</p>
      *
      * @param uri The URI whose file is to be opened.
-     * @param mode Access mode for the file.  May be "r" for read-only access,
-     * "w" for write-only access (erasing whatever data is currently in
-     * the file), "wa" for write-only access to append to any existing data,
-     * "rw" for read and write access on any existing data, and "rwt" for read
-     * and write access that truncates any existing file.
+     * @param mode The string representation of the file mode. Can be "r", "w", "wt", "wa", "rw"
+     *             or "rwt". See{@link ParcelFileDescriptor#parseMode} for more details.
      *
      * @return Returns a new AssetFileDescriptor which you can use to access
      * the file.
@@ -2068,11 +2063,8 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * containing at least the columns specified by {@link android.provider.OpenableColumns}.</p>
      *
      * @param uri The URI whose file is to be opened.
-     * @param mode Access mode for the file.  May be "r" for read-only access,
-     * "w" for write-only access (erasing whatever data is currently in
-     * the file), "wa" for write-only access to append to any existing data,
-     * "rw" for read and write access on any existing data, and "rwt" for read
-     * and write access that truncates any existing file.
+     * @param mode The string representation of the file mode. Can be "r", "w", "wt", "wa", "rw"
+     *             or "rwt". See{@link ParcelFileDescriptor#parseMode} for more details.
      * @param signal A signal to cancel the operation in progress, or
      *            {@code null} if none. For example, if you are downloading a
      *            file from the network to service a "rw" mode request, you
@@ -2103,11 +2095,8 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
      * by looking up a column named "_data" at the given URI.
      *
      * @param uri The URI to be opened.
-     * @param mode The file mode.  May be "r" for read-only access,
-     * "w" for write-only access (erasing whatever data is currently in
-     * the file), "wa" for write-only access to append to any existing data,
-     * "rw" for read and write access on any existing data, and "rwt" for read
-     * and write access that truncates any existing file.
+     * @param mode The string representation of the file mode. Can be "r", "w", "wt", "wa", "rw"
+     *             or "rwt". See{@link ParcelFileDescriptor#parseMode} for more details.
      *
      * @return Returns a new ParcelFileDescriptor that can be used by the
      * client to access the file.
@@ -2693,5 +2682,11 @@ public abstract class ContentProvider implements ContentInterface, ComponentCall
             }
         }
         return uri;
+    }
+
+    private static void traceBegin(long traceTag, String methodName, String subInfo) {
+        if (Trace.isTagEnabled(traceTag)) {
+            Trace.traceBegin(traceTag, methodName + subInfo);
+        }
     }
 }

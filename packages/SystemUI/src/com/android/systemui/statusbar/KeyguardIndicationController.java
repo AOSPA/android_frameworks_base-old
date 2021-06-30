@@ -33,7 +33,6 @@ import static com.android.systemui.plugins.FalsingManager.LOW_PENALTY;
 
 import android.animation.Animator;
 import android.animation.AnimatorListenerAdapter;
-import android.app.ActivityManager;
 import android.app.IActivityManager;
 import android.app.admin.DevicePolicyManager;
 import android.content.BroadcastReceiver;
@@ -113,6 +112,7 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     private ViewGroup mIndicationArea;
     private KeyguardIndicationTextView mTopIndicationView;
+    private KeyguardIndicationTextView mLockScreenIndicationView;
     private final IBatteryStats mBatteryInfo;
     private final SettableWakeLock mWakeLock;
     private final DockManager mDockManager;
@@ -147,6 +147,7 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
     private long mChargingTimeRemaining;
     private String mMessageToShowOnScreenOn;
     protected int mLockScreenMode;
+    private boolean mInited;
 
     private KeyguardUpdateMonitorCallback mUpdateMonitorCallback;
 
@@ -174,7 +175,9 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
             IBatteryStats iBatteryStats,
             UserManager userManager,
             @Main DelayableExecutor executor,
-            FalsingManager falsingManager) {
+            FalsingManager falsingManager,
+            LockPatternUtils lockPatternUtils,
+            IActivityManager iActivityManager) {
         mContext = context;
         mBroadcastDispatcher = broadcastDispatcher;
         mDevicePolicyManager = devicePolicyManager;
@@ -182,32 +185,45 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
         mStatusBarStateController = statusBarStateController;
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
         mDockManager = dockManager;
-        mDockManager.addAlignmentStateListener(
-                alignState -> mHandler.post(() -> handleAlignStateChanged(alignState)));
         mWakeLock = new SettableWakeLock(
                 wakeLockBuilder.setTag("Doze:KeyguardIndication").build(), TAG);
         mBatteryInfo = iBatteryStats;
         mUserManager = userManager;
         mExecutor = executor;
-        mLockPatternUtils = new LockPatternUtils(context);
-        mIActivityManager = ActivityManager.getService();
+        mLockPatternUtils = lockPatternUtils;
+        mIActivityManager = iActivityManager;
         mFalsingManager = falsingManager;
 
+    }
+
+    /** Call this after construction to finish setting up the instance. */
+    public void init() {
+        if (mInited) {
+            return;
+        }
+        mInited = true;
+
+        mDockManager.addAlignmentStateListener(
+                alignState -> mHandler.post(() -> handleAlignStateChanged(alignState)));
         mKeyguardUpdateMonitor.registerCallback(getKeyguardCallback());
         mKeyguardUpdateMonitor.registerCallback(mTickReceiver);
         mStatusBarStateController.addCallback(mStatusBarStateListener);
         mKeyguardStateController.addCallback(this);
+
+        mStatusBarStateListener.onDozingChanged(mStatusBarStateController.isDozing());
     }
 
     public void setIndicationArea(ViewGroup indicationArea) {
         mIndicationArea = indicationArea;
         mTopIndicationView = indicationArea.findViewById(R.id.keyguard_indication_text);
+        mLockScreenIndicationView = indicationArea.findViewById(
+            R.id.keyguard_indication_text_bottom);
         mInitialTextColorState = mTopIndicationView != null
                 ? mTopIndicationView.getTextColors() : ColorStateList.valueOf(Color.WHITE);
         mRotateTextViewController = new KeyguardIndicationRotateTextViewController(
-                indicationArea.findViewById(R.id.keyguard_indication_text_bottom),
-                mExecutor,
-                mStatusBarStateController);
+            mLockScreenIndicationView,
+            mExecutor,
+            mStatusBarStateController);
         updateIndication(false /* animate */);
         updateDisclosure();
         if (mBroadcastReceiver == null) {
@@ -619,6 +635,7 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
         // should be shown based on user or device state
         // AoD
         if (mDozing) {
+            mLockScreenIndicationView.setVisibility(View.GONE);
             mTopIndicationView.setVisibility(VISIBLE);
             // When dozing we ignore any text color and use white instead, because
             // colors can be hard to read in low brightness.
@@ -648,6 +665,8 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
 
         // LOCK SCREEN
         mTopIndicationView.setVisibility(GONE);
+        mTopIndicationView.setText(null);
+        mLockScreenIndicationView.setVisibility(View.VISIBLE);
         updateIndications(animate, KeyguardUpdateMonitor.getCurrentUser());
     }
 
@@ -903,7 +922,8 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
             } else if (mStatusBarKeyguardViewManager.isBouncerShowing()) {
                 mStatusBarKeyguardViewManager.showBouncerMessage(errString, mInitialTextColorState);
             } else if (mKeyguardUpdateMonitor.isScreenOn()) {
-                showTransientIndication(errString);
+                showTransientIndication(errString, /* isError */ true,
+                    /* hideOnScreenOff */ true);
                 // We want to keep this message around in case the screen was off
                 hideTransientIndicationDelayed(HIDE_DELAY_MS);
             } else {
@@ -1021,9 +1041,8 @@ public class KeyguardIndicationController implements KeyguardStateController.Cal
 
             if (mHideTransientMessageOnScreenOff && mDozing) {
                 hideTransientIndication();
-            } else {
-                updateIndication(false);
             }
+            updateIndication(false);
         }
     };
 }

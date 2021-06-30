@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Зымсыз мониторлорду тастыктамалоо"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Wi‑Fi таржымалы"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Wi‑Fi тармактарын издөөнү жөнгө салуу"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi‑Fi иштетилген MAC даректерин башаламан түзүү"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Wi‑Fi туташуусу туруксуз MAC даректерин башаламан түзүү"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Мобилдик Интернет иштей берет"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Модем режиминде аппараттын иштешин тездетүү"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Аталышсыз Bluetooth түзмөктөрү көрүнсүн"</string>
@@ -353,6 +353,7 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Кесилген нерсенин чектери жана жээктери көрүнөт"</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Интерфейсти чагылдыруу"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Интерфейстин элементтери бардык тилдерде оңдон солго карай жайгашат"</string>
+    <string name="window_blurs" msgid="6831008984828425106">"Терезенин деңгээлинде бүдөмүктөтүүгө уруксат берүү"</string>
     <string name="force_msaa" msgid="4081288296137775550">"4x MSAA иштетүү"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"OpenGL ES 2.0 колдонмолорунда 4x MSAA иштетилет"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"Татаал формаларды кесүү операцияларынын мүчүлүштүктөрүн оңдоо"</string>
@@ -453,14 +454,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> кийин толук кубатталат"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="TIME">%2$s</xliff:g> кийин толук кубатталат"</string>
-    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - Батареянын кубатын үнөмдөө иштетилди"</string>
+    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - Кубаттоо убактылуу чектелген"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Белгисиз"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Кубатталууда"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Ыкчам кубатталууда"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Жай кубатталууда"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Зымсыз кубатталууда"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Кубат алган жок"</string>
-    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"сайылып турат, бирок кубатталган жок"</string>
+    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Туташты, кубатталган жок"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Кубатталды"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Администратор тарабынан көзөмөлдөнөт"</string>
     <string name="disabled" msgid="8017887509554714950">"Өчүрүлгөн"</string>
@@ -482,7 +483,7 @@
     <string name="screen_zoom_summary_extremely_large" msgid="1438045624562358554">"Эң чоң"</string>
     <string name="screen_zoom_summary_custom" msgid="3468154096832912210">"Ыңгайлаштырылган (<xliff:g id="DENSITYDPI">%d</xliff:g>)"</string>
     <string name="content_description_menu_button" msgid="6254844309171779931">"Меню"</string>
-    <string name="retail_demo_reset_message" msgid="5392824901108195463">"Демо режиминде демейки жөндөөлөргө кайтаруу үчүн сырсөздү киргизиңиз"</string>
+    <string name="retail_demo_reset_message" msgid="5392824901108195463">"Демо режиминде баштапкы абалга кайтаруу үчүн сырсөздү киргизиңиз"</string>
     <string name="retail_demo_reset_next" msgid="3688129033843885362">"Кийинки"</string>
     <string name="retail_demo_reset_title" msgid="1866911701095959800">"Сырсөз талап кылынат"</string>
     <string name="active_input_method_subtypes" msgid="4232680535471633046">"Жигердүү киргизүү ыкмалары"</string>
@@ -501,14 +502,12 @@
     </plurals>
     <string name="accessibility_manual_zen_more_time" msgid="5141801092071134235">"Көбүрөөк убакыт."</string>
     <string name="accessibility_manual_zen_less_time" msgid="6828877595848229965">"Азыраак убакыт."</string>
-    <string name="cancel" msgid="5665114069455378395">"Жокко чыгаруу"</string>
+    <string name="cancel" msgid="5665114069455378395">"Жок"</string>
     <string name="okay" msgid="949938843324579502">"OK"</string>
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Ойготкучтар жана эстеткичтер"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Ойготкуч жана эстеткичтерди коюуга уруксат берүү"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Ойготкучтар жана эстеткичтер"</string>
-    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Бул колдонмого ойготкучтарды коюуга жана башка аракеттерди графикке киргизүүгө уруксат берүү. Бул колдонмо телефонуңуз колдонулбай турганда да иштей алат. Мында батареянын кубаты көбүрөөк керектелиши мүмкүн. Бул параметр өчүрүлгөн болсо, бул колдонмо жана анын ойготкучтары жакшы иштебеши мүмкүн."</string>
-    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Бул колдонмого ойготкучтарды коюуга жана башка аракеттерди графикке киргизүүгө уруксат берүү. Бул колдонмо планшетиңиз колдонулбай турганда да иштей алат. Мында батареянын кубаты көбүрөөк керектелиши мүмкүн. Бул параметр өчүрүлгөн болсо, бул колдонмо жана анын ойготкучтары жакшы иштебеши мүмкүн."</string>
-    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Бул колдонмого ойготкучтарды коюуга жана башка аракеттерди графикке киргизүүгө уруксат берүү. Бул колдонмо түзмөгүңүз колдонулбай турганда да иштей алат. Мында батареянын кубаты көбүрөөк керектелиши мүмкүн. Бул параметр өчүрүлгөн болсо, бул колдонмо жана анын ойготкучтары жакшы иштебеши мүмкүн."</string>
+    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"Бул колдонмого ойготкучтарды коюуга жана башка аракеттерди графикке киргизүүгө уруксат берүү. Ушуну менен колдонмо фондо иштеп, батареяны көбүрөөк сарпташы мүмкүн.\n\nЭгер бул уруксат өчүрүлсө, колдонмодогу ойготкучтар жана графикке киргизилген башка аракеттер иштебейт."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"график, ойготкуч, эстеткич, саат"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Күйгүзүү"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"\"Тынчымды алба\" режимин күйгүзүү"</string>

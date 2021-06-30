@@ -26,6 +26,7 @@ import static com.android.systemui.statusbar.phone.BiometricUnlockController.MOD
 import android.content.ComponentCallbacks2;
 import android.content.Context;
 import android.content.res.ColorStateList;
+import android.hardware.biometrics.BiometricSourceType;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.view.KeyEvent;
@@ -35,6 +36,7 @@ import android.view.ViewGroup;
 import android.view.ViewRootImpl;
 import android.view.WindowManagerGlobal;
 
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.annotation.VisibleForTesting;
 
@@ -63,6 +65,7 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 
 import java.io.PrintWriter;
 import java.util.ArrayList;
+import java.util.Objects;
 import java.util.Optional;
 
 import javax.inject.Inject;
@@ -132,6 +135,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
         @Override
         public void onVisibilityChanged(boolean isVisible) {
+            if (!isVisible) {
+                cancelPostAuthActions();
+            }
             if (mAlternateAuthInterceptor != null) {
                 mAlternateAuthInterceptor.onBouncerVisibilityChanged();
             }
@@ -186,6 +192,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
 
     private OnDismissAction mAfterKeyguardGoneAction;
     private Runnable mKeyguardGoneCancelAction;
+    private boolean mDismissActionWillAnimateOnKeyguard;
     private final ArrayList<Runnable> mAfterKeyguardGoneRunnables = new ArrayList<>();
 
     // Dismiss action to be launched when we stop dozing or the keyguard is gone.
@@ -265,10 +272,23 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         registerListeners();
     }
 
-    public void setAlternateAuthInterceptor(@Nullable AlternateAuthInterceptor authInterceptor) {
-        final boolean newlyNull = authInterceptor == null && mAlternateAuthInterceptor != null;
+    /**
+     * Sets the given alt auth interceptor to null if it's the current auth interceptor. Else,
+     * does nothing.
+     */
+    public void removeAlternateAuthInterceptor(@NonNull AlternateAuthInterceptor authInterceptor) {
+        if (Objects.equals(mAlternateAuthInterceptor, authInterceptor)) {
+            mAlternateAuthInterceptor = null;
+            resetAlternateAuth(true);
+        }
+    }
+
+    /**
+     * Sets a new alt auth interceptor.
+     */
+    public void setAlternateAuthInterceptor(@NonNull AlternateAuthInterceptor authInterceptor) {
         mAlternateAuthInterceptor = authInterceptor;
-        resetAlternateAuth(newlyNull);
+        resetAlternateAuth(false);
     }
 
     private void registerListeners() {
@@ -362,6 +382,26 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         return false;
     }
 
+    /**
+     * If applicable, shows the alternate authentication bouncer. Else, shows the input
+     * (pin/password/pattern) bouncer.
+     * @param scrimmed true when the input bouncer should show scrimmed, false when the user will be
+     * dragging it and translation should be deferred {@see KeyguardBouncer#show(boolean, boolean)}
+     */
+    public void showGenericBouncer(boolean scrimmed) {
+        if (mAlternateAuthInterceptor != null) {
+            if (mAlternateAuthInterceptor.showAlternateAuthBouncer()) {
+                mStatusBar.updateScrimController();
+            }
+            return;
+        }
+
+        showBouncer(scrimmed);
+    }
+
+    /**
+     * Hides the input bouncer (pin/password/pattern).
+     */
     @VisibleForTesting
     void hideBouncer(boolean destroyView) {
         if (mBouncer == null) {
@@ -377,7 +417,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     /**
-     * Shows the keyguard bouncer - the password challenge on the lock screen
+     * Shows the keyguard input bouncer - the password challenge on the lock screen
      *
      * @param scrimmed true when the bouncer should show scrimmed, false when the user will be
      * dragging it and translation should be deferred {@see KeyguardBouncer#show(boolean, boolean)}
@@ -406,21 +446,35 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
                 return;
             }
 
+            mAfterKeyguardGoneAction = r;
+            mKeyguardGoneCancelAction = cancelAction;
+            mDismissActionWillAnimateOnKeyguard = r != null && r.willRunAnimationOnKeyguard();
+
+            // If there is an an alternate auth interceptor (like the UDFPS), show that one instead
+            // of the bouncer.
             if (mAlternateAuthInterceptor != null) {
-                mAfterKeyguardGoneAction = r;
-                mKeyguardGoneCancelAction = cancelAction;
+                if (!afterKeyguardGone) {
+                    mBouncer.setDismissAction(mAfterKeyguardGoneAction, mKeyguardGoneCancelAction);
+                    mAfterKeyguardGoneAction = null;
+                    mKeyguardGoneCancelAction = null;
+                }
+
                 if (mAlternateAuthInterceptor.showAlternateAuthBouncer()) {
                     mStatusBar.updateScrimController();
                 }
                 return;
             }
 
-            if (!afterKeyguardGone) {
-                mBouncer.showWithDismissAction(r, cancelAction);
-            } else {
-                mAfterKeyguardGoneAction = r;
-                mKeyguardGoneCancelAction = cancelAction;
+            if (afterKeyguardGone) {
+                // we'll handle the dismiss action after keyguard is gone, so just show the bouncer
                 mBouncer.show(false /* resetSecuritySelection */);
+            } else {
+                // after authentication success, run dismiss action with the option to defer
+                // hiding the keyguard based on the return value of the OnDismissAction
+                mBouncer.showWithDismissAction(mAfterKeyguardGoneAction, mKeyguardGoneCancelAction);
+                // bouncer will handle the dismiss action, so we no longer need to track it here
+                mAfterKeyguardGoneAction = null;
+                mKeyguardGoneCancelAction = null;
             }
         }
         updateStates();
@@ -572,6 +626,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
         if (mBouncer.isShowing()) {
             mBouncer.startPreHideAnimation(finishRunnable);
             mStatusBar.onBouncerPreHideAnimation();
+
+            // We update the state (which will show the keyguard) only if an animation will run on
+            // the keyguard. If there is no animation, we wait before updating the state so that we
+            // go directly from bouncer to launcher/app.
+            if (mDismissActionWillAnimateOnKeyguard) {
+                updateStates();
+            }
         } else if (finishRunnable != null) {
             finishRunnable.run();
         }
@@ -726,9 +787,13 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     private void wakeAndUnlockDejank() {
         if (mBiometricUnlockController.getMode() == MODE_WAKE_AND_UNLOCK
                 && LatencyTracker.isEnabled(mContext)) {
-            DejankUtils.postAfterTraversal(() ->
+            BiometricSourceType type = mBiometricUnlockController.getBiometricType();
+            DejankUtils.postAfterTraversal(() -> {
                     LatencyTracker.getInstance(mContext).onActionEnd(
-                            LatencyTracker.ACTION_FINGERPRINT_WAKE_AND_UNLOCK));
+                            type == BiometricSourceType.FACE
+                                    ? LatencyTracker.ACTION_FACE_WAKE_AND_UNLOCK
+                                    : LatencyTracker.ACTION_FINGERPRINT_WAKE_AND_UNLOCK);
+            });
         }
     }
 
@@ -738,6 +803,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             mAfterKeyguardGoneAction = null;
         }
         mKeyguardGoneCancelAction = null;
+        mDismissActionWillAnimateOnKeyguard = false;
         for (int i = 0; i < mAfterKeyguardGoneRunnables.size(); i++) {
             mAfterKeyguardGoneRunnables.get(i).run();
         }
@@ -806,6 +872,7 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
             return; // allow bouncer to trigger saved actions
         }
         mAfterKeyguardGoneAction = null;
+        mDismissActionWillAnimateOnKeyguard = false;
         if (mKeyguardGoneCancelAction != null) {
             mKeyguardGoneCancelAction.run();
             mKeyguardGoneCancelAction = null;
@@ -832,6 +899,9 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     };
 
     protected void updateStates() {
+        if (mContainer == null ) {
+            return;
+        }
         int vis = mContainer.getSystemUiVisibility();
         boolean showing = mShowing;
         boolean occluded = mOccluded;
@@ -1133,15 +1203,21 @@ public class StatusBarKeyguardViewManager implements RemoteInputController.Callb
     }
 
     /**
-     * Request to show the udfps affordance in a particular color. This can be used if an
-     * occluding app on the keyguard would like to request udfps.  This method does nothing if
-     * {@link KeyguardUpdateMonitor#shouldListenForFingerprint} is false.
+     * Request to authenticate using face.
      */
-    public void requestUdfps(boolean request, int color) {
-        if (mAlternateAuthInterceptor == null) {
-            return;
+    public void requestFace(boolean request) {
+        mKeyguardUpdateManager.requestFaceAuthOnOccludingApp(request);
+    }
+
+    /**
+     * Request to authenticate using the fingerprint sensor.  If the fingerprint sensor is udfps,
+     * uses the color provided by udfpsColor for the fingerprint icon.
+     */
+    public void requestFp(boolean request, int udfpsColor) {
+        mKeyguardUpdateManager.requestFingerprintAuthOnOccludingApp(request);
+        if (mAlternateAuthInterceptor != null) {
+            mAlternateAuthInterceptor.requestUdfps(request, udfpsColor);
         }
-        mAlternateAuthInterceptor.requestUdfps(request, color);
     }
 
     /**

@@ -189,7 +189,7 @@ public class RecordingService extends Service implements MediaRecorder.OnInfoLis
                     // Remove notification
                     mNotificationManager.cancelAsUser(null, NOTIFICATION_VIEW_ID, currentUser);
                     return false;
-                }, false);
+                }, false, false);
 
                 // Close quick shade
                 sendBroadcast(new Intent(Intent.ACTION_CLOSE_SYSTEM_DIALOGS));
@@ -367,8 +367,8 @@ public class RecordingService extends Service implements MediaRecorder.OnInfoLis
         if (thumbnailBitmap != null) {
             Notification.BigPictureStyle pictureStyle = new Notification.BigPictureStyle()
                     .bigPicture(thumbnailBitmap)
-                    .bigLargeIcon((Bitmap) null);
-            builder.setLargeIcon(thumbnailBitmap).setStyle(pictureStyle);
+                    .showBigPictureWhenCollapsed(true);
+            builder.setStyle(pictureStyle);
         }
         return builder.build();
     }

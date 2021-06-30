@@ -24,7 +24,6 @@ import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.Notification;
-import android.app.smartspace.SmartspaceTarget;
 import android.content.Context;
 import android.graphics.Bitmap;
 import android.graphics.drawable.BitmapDrawable;
@@ -55,6 +54,7 @@ import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.media.MediaData;
 import com.android.systemui.media.MediaDataManager;
+import com.android.systemui.media.SmartspaceMediaData;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.dagger.StatusBarModule;
 import com.android.systemui.statusbar.notification.NotificationEntryListener;
@@ -245,12 +245,12 @@ public class NotificationMediaManager implements Dumpable {
         mMediaDataManager.addListener(new MediaDataManager.Listener() {
             @Override
             public void onMediaDataLoaded(@NonNull String key,
-                    @Nullable String oldKey, @NonNull MediaData data) {
+                    @Nullable String oldKey, @NonNull MediaData data, boolean immediately) {
             }
 
             @Override
             public void onSmartspaceMediaDataLoaded(@NonNull String key,
-                    @NonNull SmartspaceTarget data) {
+                    @NonNull SmartspaceMediaData data, boolean shouldPrioritize) {
             }
 
             @Override
@@ -268,7 +268,7 @@ public class NotificationMediaManager implements Dumpable {
             }
 
             @Override
-            public void onSmartspaceMediaDataRemoved(@NonNull String key) {}
+            public void onSmartspaceMediaDataRemoved(@NonNull String key, boolean immediately) {}
         });
     }
 
@@ -318,12 +318,13 @@ public class NotificationMediaManager implements Dumpable {
         mMediaDataManager.addListener(new MediaDataManager.Listener() {
             @Override
             public void onMediaDataLoaded(@NonNull String key,
-                    @Nullable String oldKey, @NonNull MediaData data) {
+                    @Nullable String oldKey, @NonNull MediaData data, boolean immediately) {
             }
 
             @Override
             public void onSmartspaceMediaDataLoaded(@NonNull String key,
-                    @NonNull SmartspaceTarget data) {
+                    @NonNull SmartspaceMediaData data, boolean shouldPrioritize) {
+
             }
 
             @Override
@@ -339,7 +340,7 @@ public class NotificationMediaManager implements Dumpable {
             }
 
             @Override
-            public void onSmartspaceMediaDataRemoved(@NonNull String key) {}
+            public void onSmartspaceMediaDataRemoved(@NonNull String key, boolean immediately) {}
         });
     }
 

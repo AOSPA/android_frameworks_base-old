@@ -50,6 +50,7 @@ import android.graphics.Rect;
 import android.graphics.Shader;
 import android.os.Build;
 import android.util.AttributeSet;
+import android.view.animation.AnimationUtils;
 import android.view.animation.LinearInterpolator;
 
 import com.android.internal.R;
@@ -151,7 +152,7 @@ public class RippleDrawable extends LayerDrawable {
     /** The maximum number of ripples supported. */
     private static final int MAX_RIPPLES = 10;
     private static final LinearInterpolator LINEAR_INTERPOLATOR = new LinearInterpolator();
-    private static final int DEFAULT_EFFECT_COLOR = 0x80ffffff;
+    private static final int DEFAULT_EFFECT_COLOR = 0x8dffffff;
     /** Temporary flag for teamfood. **/
     private static final boolean FORCE_PATTERNED_STYLE = true;
 
@@ -181,6 +182,7 @@ public class RippleDrawable extends LayerDrawable {
     private Canvas mMaskCanvas;
     private Matrix mMaskMatrix;
     private PorterDuffColorFilter mMaskColorFilter;
+    private PorterDuffColorFilter mFocusColorFilter;
     private boolean mHasValidMask;
     private int mComputedRadius = -1;
 
@@ -219,6 +221,7 @@ public class RippleDrawable extends LayerDrawable {
     private boolean mForceSoftware;
 
     // Patterned
+    private boolean mAddRipple = false;
     private float mTargetBackgroundOpacity;
     private ValueAnimator mBackgroundAnimation;
     private float mBackgroundOpacity;
@@ -329,18 +332,18 @@ public class RippleDrawable extends LayerDrawable {
     private void setRippleActive(boolean active) {
         if (mRippleActive != active) {
             mRippleActive = active;
-        }
-        if (mState.mRippleStyle == STYLE_SOLID) {
-            if (active) {
-                tryRippleEnter();
+            if (mState.mRippleStyle == STYLE_SOLID) {
+                if (active) {
+                    tryRippleEnter();
+                } else {
+                    tryRippleExit();
+                }
             } else {
-                tryRippleExit();
-            }
-        } else {
-            if (active) {
-                startPatternedAnimation();
-            } else {
-                exitPatternedAnimation();
+                if (active) {
+                    startPatternedAnimation();
+                } else {
+                    exitPatternedAnimation();
+                }
             }
         }
     }
@@ -714,6 +717,7 @@ public class RippleDrawable extends LayerDrawable {
         }
 
         cancelExitingRipples();
+        exitPatternedAnimation();
     }
 
     @Override
@@ -805,7 +809,7 @@ public class RippleDrawable extends LayerDrawable {
     }
 
     private void startPatternedAnimation() {
-        mRippleActive = true;
+        mAddRipple = true;
         invalidateSelf(false);
     }
 
@@ -860,17 +864,17 @@ public class RippleDrawable extends LayerDrawable {
             h = bounds.height();
             w = bounds.width();
         }
-        boolean shouldAnimate = mRippleActive;
+        boolean addRipple = mAddRipple;
         boolean shouldExit = mExitingAnimation;
-        mRippleActive = false;
         mExitingAnimation = false;
-        if (mRunningAnimations.size() > 0 && !shouldAnimate) {
+        mAddRipple = false;
+        if (mRunningAnimations.size() > 0 && !addRipple) {
             // update paint when view is invalidated
             getRipplePaint();
         }
         drawContent(canvas);
         drawPatternedBackground(canvas, cx, cy);
-        if (shouldAnimate && mRunningAnimations.size() <= MAX_RIPPLES) {
+        if (addRipple && mRunningAnimations.size() <= MAX_RIPPLES) {
             RippleAnimationSession.AnimationProperties<Float, Paint> properties =
                     createAnimationProperties(x, y, cx, cy, w, h);
             mRunningAnimations.add(new RippleAnimationSession(properties, !useCanvasProps)
@@ -937,7 +941,7 @@ public class RippleDrawable extends LayerDrawable {
         final int alpha = Math.min((int) (origAlpha * newOpacity + 0.5f), 255);
         if (alpha > 0) {
             ColorFilter origFilter = p.getColorFilter();
-            p.setColorFilter(mMaskColorFilter);
+            p.setColorFilter(mFocusColorFilter);
             p.setAlpha(alpha);
             c.drawCircle(cx, cy, getComputedRadius(), p);
             p.setAlpha(origAlpha);
@@ -970,15 +974,16 @@ public class RippleDrawable extends LayerDrawable {
                 ? mState.mColor.getColorForState(getState(), Color.BLACK)
                 : mMaskColorFilter.getColor());
         final int effectColor = mState.mEffectColor.getColorForState(getState(), Color.MAGENTA);
+        final float noisePhase = AnimationUtils.currentAnimationTimeMillis();
         shader.setColor(color, effectColor);
         shader.setOrigin(cx, cy);
         shader.setTouch(x, y);
-        shader.setResolution(w, h, mState.mDensity);
-        shader.setNoisePhase(0);
+        shader.setResolution(w, h);
+        shader.setNoisePhase(noisePhase);
         shader.setRadius(radius);
         shader.setProgress(.0f);
         properties = new RippleAnimationSession.AnimationProperties<>(
-                cx, cy, radius, 0f, p, 0f, color, shader);
+                cx, cy, radius, noisePhase, p, 0f, color, shader);
         if (mMaskShader == null) {
             shader.setShader(null);
         } else {
@@ -1089,6 +1094,7 @@ public class RippleDrawable extends LayerDrawable {
 
         if (mMaskColorFilter == null) {
             mMaskColorFilter = new PorterDuffColorFilter(0, PorterDuff.Mode.SRC_IN);
+            mFocusColorFilter = new PorterDuffColorFilter(0, PorterDuff.Mode.SRC_IN);
         }
 
         // Draw the appropriate mask anchored to (0,0).
@@ -1217,6 +1223,8 @@ public class RippleDrawable extends LayerDrawable {
             int maskColor = mState.mRippleStyle == STYLE_PATTERNED ? color : color | 0xFF000000;
             if (mMaskColorFilter.getColor() != maskColor) {
                 mMaskColorFilter = new PorterDuffColorFilter(maskColor, mMaskColorFilter.getMode());
+                mFocusColorFilter = new PorterDuffColorFilter(color | 0xFF000000,
+                        mFocusColorFilter.getMode());
             }
             p.setColor(color & 0xFF000000);
             p.setColorFilter(mMaskColorFilter);

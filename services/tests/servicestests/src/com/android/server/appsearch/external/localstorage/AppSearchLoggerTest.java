@@ -32,7 +32,9 @@ import androidx.test.core.app.ApplicationProvider;
 import com.android.server.appsearch.external.localstorage.stats.CallStats;
 import com.android.server.appsearch.external.localstorage.stats.InitializeStats;
 import com.android.server.appsearch.external.localstorage.stats.PutDocumentStats;
+import com.android.server.appsearch.external.localstorage.stats.RemoveStats;
 import com.android.server.appsearch.external.localstorage.stats.SearchStats;
+import com.android.server.appsearch.proto.DeleteStatsProto;
 import com.android.server.appsearch.proto.InitializeStatsProto;
 import com.android.server.appsearch.proto.PutDocumentStatsProto;
 import com.android.server.appsearch.proto.QueryStatsProto;
@@ -51,6 +53,10 @@ public class AppSearchLoggerTest {
     @Rule public TemporaryFolder mTemporaryFolder = new TemporaryFolder();
     private AppSearchImpl mAppSearchImpl;
     private TestLogger mLogger;
+    /**
+     * Always trigger optimize in this class. OptimizeStrategy will be tested in its own test class.
+     */
+    private static final OptimizeStrategy ALWAYS_OPTIMIZE = optimizeInfo -> true;
 
     @Before
     public void setUp() throws Exception {
@@ -61,18 +67,18 @@ public class AppSearchLoggerTest {
                 AppSearchImpl.create(
                         mTemporaryFolder.newFolder(),
                         context,
-                        VisibilityStore.NO_OP_USER_ID,
-                        /*globalQuerierPackage=*/ context.getPackageName(),
-                        /*logger=*/ null);
+                        /*logger=*/ null,
+                        ALWAYS_OPTIMIZE);
         mLogger = new TestLogger();
     }
 
     // Test only not thread safe.
-    public class TestLogger implements AppSearchLogger {
+    public static class TestLogger implements AppSearchLogger {
         @Nullable CallStats mCallStats;
         @Nullable PutDocumentStats mPutDocumentStats;
         @Nullable InitializeStats mInitializeStats;
         @Nullable SearchStats mSearchStats;
+        @Nullable RemoveStats mRemoveStats;
 
         @Override
         public void logStats(@NonNull CallStats stats) {
@@ -92,6 +98,11 @@ public class AppSearchLoggerTest {
         @Override
         public void logStats(@NonNull SearchStats stats) {
             mSearchStats = stats;
+        }
+
+        @Override
+        public void logStats(@NonNull RemoveStats stats) {
+            mRemoveStats = stats;
         }
     }
 
@@ -193,8 +204,7 @@ public class AppSearchLoggerTest {
     public void testAppSearchLoggerHelper_testCopyNativeStats_search() {
         int nativeLatencyMillis = 4;
         int nativeNumTerms = 5;
-        // TODO(b/185804196) query length needs to be added in the native stats.
-        // int nativeQueryLength = 6;
+        int nativeQueryLength = 6;
         int nativeNumNamespacesFiltered = 7;
         int nativeNumSchemaTypesFiltered = 8;
         int nativeRequestedPageSize = 9;
@@ -211,6 +221,7 @@ public class AppSearchLoggerTest {
                 QueryStatsProto.newBuilder()
                         .setLatencyMs(nativeLatencyMillis)
                         .setNumTerms(nativeNumTerms)
+                        .setQueryLength(nativeQueryLength)
                         .setNumNamespacesFiltered(nativeNumNamespacesFiltered)
                         .setNumSchemaTypesFiltered(nativeNumSchemaTypesFiltered)
                         .setRequestedPageSize(nativeRequestedPageSize)
@@ -235,7 +246,7 @@ public class AppSearchLoggerTest {
         SearchStats sStats = qBuilder.build();
         assertThat(sStats.getNativeLatencyMillis()).isEqualTo(nativeLatencyMillis);
         assertThat(sStats.getTermCount()).isEqualTo(nativeNumTerms);
-        // assertThat(sStats.getNativeQueryLength()).isEqualTo(nativeQueryLength);
+        assertThat(sStats.getQueryLength()).isEqualTo(nativeQueryLength);
         assertThat(sStats.getFilteredNamespaceCount()).isEqualTo(nativeNumNamespacesFiltered);
         assertThat(sStats.getFilteredSchemaTypeCount()).isEqualTo(nativeNumSchemaTypesFiltered);
         assertThat(sStats.getRequestedPageSize()).isEqualTo(nativeRequestedPageSize);
@@ -252,6 +263,27 @@ public class AppSearchLoggerTest {
                 .isEqualTo(nativeDocumentRetrievingLatencyMillis);
     }
 
+    @Test
+    public void testAppSearchLoggerHelper_testCopyNativeStats_remove() {
+        final int nativeLatencyMillis = 1;
+        final int nativeDeleteType = 2;
+        final int nativeNumDocumentDeleted = 3;
+        DeleteStatsProto nativeDeleteStatsProto =
+                DeleteStatsProto.newBuilder()
+                        .setLatencyMs(nativeLatencyMillis)
+                        .setDeleteType(DeleteStatsProto.DeleteType.Code.forNumber(nativeDeleteType))
+                        .setNumDocumentsDeleted(nativeNumDocumentDeleted)
+                        .build();
+        RemoveStats.Builder rBuilder = new RemoveStats.Builder("packageName", "database");
+
+        AppSearchLoggerHelper.copyNativeStats(nativeDeleteStatsProto, rBuilder);
+
+        RemoveStats rStats = rBuilder.build();
+        assertThat(rStats.getNativeLatencyMillis()).isEqualTo(nativeLatencyMillis);
+        assertThat(rStats.getDeleteType()).isEqualTo(nativeDeleteType);
+        assertThat(rStats.getDeletedDocumentCount()).isEqualTo(nativeNumDocumentDeleted);
+    }
+
     //
     // Testing actual logging
     //
@@ -259,13 +291,13 @@ public class AppSearchLoggerTest {
     public void testLoggingStats_initialize() throws Exception {
         Context context = ApplicationProvider.getApplicationContext();
 
+        // Create an unused AppSearchImpl to generated an InitializeStats.
         AppSearchImpl appSearchImpl =
                 AppSearchImpl.create(
                         mTemporaryFolder.newFolder(),
                         context,
-                        VisibilityStore.NO_OP_USER_ID,
-                        /*globalQuerierPackage=*/ context.getPackageName(),
-                        mLogger);
+                        mLogger,
+                        ALWAYS_OPTIMIZE);
 
         InitializeStats iStats = mLogger.mInitializeStats;
         assertThat(iStats).isNotNull();
@@ -300,9 +332,9 @@ public class AppSearchLoggerTest {
 
         PutDocumentStats pStats = mLogger.mPutDocumentStats;
         assertThat(pStats).isNotNull();
-        assertThat(pStats.getGeneralStats().getPackageName()).isEqualTo(testPackageName);
-        assertThat(pStats.getGeneralStats().getDatabase()).isEqualTo(testDatabase);
-        assertThat(pStats.getGeneralStats().getStatusCode()).isEqualTo(AppSearchResult.RESULT_OK);
+        assertThat(pStats.getPackageName()).isEqualTo(testPackageName);
+        assertThat(pStats.getDatabase()).isEqualTo(testDatabase);
+        assertThat(pStats.getStatusCode()).isEqualTo(AppSearchResult.RESULT_OK);
         // The rest of native stats have been tested in testCopyNativeStats
         assertThat(pStats.getNativeDocumentSizeBytes()).isGreaterThan(0);
     }
@@ -354,5 +386,75 @@ public class AppSearchLoggerTest {
         assertThat(sStats.getCurrentPageReturnedResultCount()).isEqualTo(1);
         assertThat(sStats.isFirstPage()).isTrue();
         assertThat(sStats.getScoredDocumentCount()).isEqualTo(1);
+    }
+
+    @Test
+    public void testLoggingStats_remove() throws Exception {
+        // Insert schema
+        final String testPackageName = "testPackage";
+        final String testDatabase = "testDatabase";
+        final String testNamespace = "testNameSpace";
+        final String testId = "id";
+        List<AppSearchSchema> schemas =
+                Collections.singletonList(new AppSearchSchema.Builder("type").build());
+        mAppSearchImpl.setSchema(
+                testPackageName,
+                testDatabase,
+                schemas,
+                /*schemasNotPlatformSurfaceable=*/ Collections.emptyList(),
+                /*schemasPackageAccessible=*/ Collections.emptyMap(),
+                /*forceOverride=*/ false,
+                /*version=*/ 0);
+        GenericDocument document =
+                new GenericDocument.Builder<>(testNamespace, testId, "type").build();
+        mAppSearchImpl.putDocument(testPackageName, testDatabase, document, /*logger=*/ null);
+
+        RemoveStats.Builder rStatsBuilder = new RemoveStats.Builder(testPackageName, testDatabase);
+        mAppSearchImpl.remove(testPackageName, testDatabase, testNamespace, testId, rStatsBuilder);
+        RemoveStats rStats = rStatsBuilder.build();
+
+        assertThat(rStats.getPackageName()).isEqualTo(testPackageName);
+        assertThat(rStats.getDatabase()).isEqualTo(testDatabase);
+        // delete by namespace + id
+        assertThat(rStats.getDeleteType()).isEqualTo(DeleteStatsProto.DeleteType.Code.SINGLE_VALUE);
+        assertThat(rStats.getDeletedDocumentCount()).isEqualTo(1);
+    }
+
+    @Test
+    public void testLoggingStats_removeByQuery() throws Exception {
+        // Insert schema
+        final String testPackageName = "testPackage";
+        final String testDatabase = "testDatabase";
+        final String testNamespace = "testNameSpace";
+        List<AppSearchSchema> schemas =
+                Collections.singletonList(new AppSearchSchema.Builder("type").build());
+        mAppSearchImpl.setSchema(
+                testPackageName,
+                testDatabase,
+                schemas,
+                /*schemasNotPlatformSurfaceable=*/ Collections.emptyList(),
+                /*schemasPackageAccessible=*/ Collections.emptyMap(),
+                /*forceOverride=*/ false,
+                /*version=*/ 0);
+        GenericDocument document1 =
+                new GenericDocument.Builder<>(testNamespace, "id1", "type").build();
+        GenericDocument document2 =
+                new GenericDocument.Builder<>(testNamespace, "id2", "type").build();
+        mAppSearchImpl.putDocument(testPackageName, testDatabase, document1, mLogger);
+        mAppSearchImpl.putDocument(testPackageName, testDatabase, document2, mLogger);
+        // No query filters specified. package2 should only get its own documents back.
+        SearchSpec searchSpec =
+                new SearchSpec.Builder().setTermMatch(TermMatchType.Code.PREFIX_VALUE).build();
+
+        RemoveStats.Builder rStatsBuilder = new RemoveStats.Builder(testPackageName, testDatabase);
+        mAppSearchImpl.removeByQuery(
+                testPackageName, testDatabase, /*queryExpression=*/ "", searchSpec, rStatsBuilder);
+        RemoveStats rStats = rStatsBuilder.build();
+
+        assertThat(rStats.getPackageName()).isEqualTo(testPackageName);
+        assertThat(rStats.getDatabase()).isEqualTo(testDatabase);
+        // delete by query
+        assertThat(rStats.getDeleteType()).isEqualTo(DeleteStatsProto.DeleteType.Code.QUERY_VALUE);
+        assertThat(rStats.getDeletedDocumentCount()).isEqualTo(2);
     }
 }

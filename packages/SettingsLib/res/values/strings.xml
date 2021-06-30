@@ -673,10 +673,12 @@
     <string name="wifi_verbose_logging">Enable Wi\u2011Fi Verbose Logging</string>
     <!-- Setting Checkbox title whether to disable WiFi Scan Throttling. [CHAR LIMIT=40] -->
     <string name="wifi_scan_throttling">Wi\u2011Fi scan throttling</string>
-    <!-- Setting Checkbox title whether to enable WiFi enhanced mac randomization. [CHAR LIMIT=40] -->
-    <string name="wifi_enhanced_mac_randomization">Wi\u2011Fi\u2011enhanced MAC randomization</string>
+    <!-- Setting Checkbox title whether to enable WiFi non-persistent mac randomization. [CHAR LIMIT=80] -->
+    <string name="wifi_enhanced_mac_randomization">Wi\u2011Fi non\u2011persistent MAC randomization</string>
     <!-- Setting Checkbox title whether to always keep mobile data active. [CHAR LIMIT=80] -->
     <string name="mobile_data_always_on">Mobile data always active</string>
+    <!-- Setting Checkbox title whether to allow smart DDS switch. [CHAR LIMIT=80] -->
+    <string name="smart_dds_switch">Smart DDS switch</string>
     <!-- Setting Checkbox title whether to enable hardware acceleration for tethering. [CHAR LIMIT=80] -->
     <string name="tethering_hardware_offload">Tethering hardware acceleration</string>
     <!-- Setting Checkbox title for showing Bluetooth devices without names -->
@@ -774,6 +776,7 @@
     <!-- Setting Checkbox title whether to enable view attribute inspection -->
     <string name="debug_view_attributes">Enable view attribute inspection</string>
     <string name="mobile_data_always_on_summary">Always keep mobile data active, even when Wi\u2011Fi is active (for fast network switching).</string>
+    <string name="smart_dds_switch_summary">Allow modem to intelligently switch the DDS.</string>
     <string name="tethering_hardware_offload_summary">Use tethering hardware acceleration if available</string>
     <!-- Title of warning dialog about the implications of enabling USB debugging -->
     <string name="adb_warning_title">Allow USB debugging?</string>
@@ -908,6 +911,9 @@
     <string name="force_rtl_layout_all_locales">Force RTL layout direction</string>
     <!-- UI debug setting: force right to left layout summary [CHAR LIMIT=100] -->
     <string name="force_rtl_layout_all_locales_summary">Force screen layout direction to RTL for all locales</string>
+
+    <!-- UI debug setting: enable or disable window blurs [CHAR LIMIT=50] -->
+    <string name="window_blurs">Allow window-level blurs</string>
 
     <!-- UI debug setting: force anti-aliasing to render apps [CHAR LIMIT=25] -->
     <string name="force_msaa">Force 4x MSAA</string>
@@ -1156,7 +1162,7 @@
     <!-- [CHAR_LIMIT=40] Label for battery level chart when charging with duration -->
     <string name="power_charging_duration"><xliff:g id="level">%1$s</xliff:g> - <xliff:g id="time">%2$s</xliff:g> left until full</string>
     <!-- [CHAR_LIMIT=80] Label for battery level chart when charge been limited -->
-    <string name="power_charging_limited"><xliff:g id="level">%1$s</xliff:g> - Optimizing for battery health</string>
+    <string name="power_charging_limited"><xliff:g id="level">%1$s</xliff:g> - Charging temporarily limited</string>
 
     <!-- Battery Info screen. Value for a status item.  Used for diagnostic info screens, precise translation isn't needed -->
     <string name="battery_info_status_unknown">Unknown</string>
@@ -1307,25 +1313,10 @@
     <!-- Title for the setting screen for controlling apps that can schedule alarms [CHAR LIMIT=30] -->
     <string name="alarms_and_reminders_title">Alarms &amp; reminders</string>
     <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
-    <string name="alarms_and_reminders_footer_title" product="default">
-        Allow this app to set alarms and schedule other actions.
-        This app may be used when you\u2019re not using your phone, which may use more battery.
-        If this permission is off, this app may not function normally,
-        and its alarms won\u2019t work as scheduled.
-    </string>
-    <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
-    <string name="alarms_and_reminders_footer_title" product="tablet">
-        Allow this app to set alarms and schedule other actions.
-        This app may be used when you\u2019re not using your tablet, which may use more battery.
-        If this permission is off, this app may not function normally,
-        and its alarms won\u2019t work as scheduled.
-    </string>
-    <!-- Description that appears below the alarms_and_reminders switch [CHAR LIMIT=NONE] -->
-    <string name="alarms_and_reminders_footer_title" product="device">
-        Allow this app to set alarms and schedule other actions.
-        This app may be used when you\u2019re not using your device, which may use more battery.
-        If this permission is off, this app may not function normally,
-        and its alarms won\u2019t work as scheduled.
+    <string name="alarms_and_reminders_footer_title">
+        Allow this app to set alarms and schedule time-sensitive actions.
+        This lets the app run in the background, which may use more battery.\n\nIf this permission
+        is off, existing alarms and time-based events scheduled by this app won\u2019t work.
     </string>
     <!-- Keywords for setting screen for controlling apps that can schedule alarms [CHAR LIMIT=100] -->
     <string name="keywords_alarms_and_reminders">schedule, alarm, reminder, clock</string>

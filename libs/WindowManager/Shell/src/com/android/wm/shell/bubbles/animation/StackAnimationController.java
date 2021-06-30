@@ -16,6 +16,8 @@
 
 package com.android.wm.shell.bubbles.animation;
 
+import static com.android.wm.shell.bubbles.BubblePositioner.NUM_VISIBLE_WHEN_RESTING;
+
 import android.content.ContentResolver;
 import android.content.res.Resources;
 import android.graphics.PointF;
@@ -122,9 +124,6 @@ public class StackAnimationController extends
      */
     private Rect mAnimatingToBounds = new Rect();
 
-    /** Initial starting location for the stack. */
-    @Nullable private BubbleStackView.RelativeStackPosition mStackStartPosition;
-
     /** Whether or not the stack's start position has been set. */
     private boolean mStackMovedToStartPosition = false;
 
@@ -182,9 +181,7 @@ public class StackAnimationController extends
     private int mMaxBubbles;
     /** Default bubble elevation. */
     private int mElevation;
-    /** Diameter of the bubble icon. */
-    private int mBubbleBitmapSize;
-    /** Width of the bubble (icon and padding). */
+    /** Diameter of the bubble. */
     private int mBubbleSize;
     /**
      * The amount of space to add between the bubbles and certain UI elements, such as the top of
@@ -257,14 +254,21 @@ public class StackAnimationController extends
      */
     private Runnable mOnBubbleAnimatedOutAction;
 
+    /**
+     * Callback to run whenever the stack is finished being flung somewhere.
+     */
+    private Runnable mOnStackAnimationFinished;
+
     public StackAnimationController(
             FloatingContentCoordinator floatingContentCoordinator,
             IntSupplier bubbleCountSupplier,
             Runnable onBubbleAnimatedOutAction,
+            Runnable onStackAnimationFinished,
             BubblePositioner positioner) {
         mFloatingContentCoordinator = floatingContentCoordinator;
         mBubbleCountSupplier = bubbleCountSupplier;
         mOnBubbleAnimatedOutAction = onBubbleAnimatedOutAction;
+        mOnStackAnimationFinished = onStackAnimationFinished;
         mPositioner = positioner;
     }
 
@@ -302,7 +306,7 @@ public class StackAnimationController extends
             return true; // Default to left, which is where it starts by default.
         }
 
-        float stackCenter = mStackPosition.x + mBubbleBitmapSize / 2;
+        float stackCenter = mStackPosition.x + mBubbleSize / 2;
         float screenCenter = mLayout.getWidth() / 2;
         return stackCenter < screenCenter;
     }
@@ -346,7 +350,7 @@ public class StackAnimationController extends
      * @return The X value that the stack will end up at after the fling/spring.
      */
     public float flingStackThenSpringToEdge(float x, float velX, float velY) {
-        final boolean stackOnLeftSide = x - mBubbleBitmapSize / 2 < mLayout.getWidth() / 2;
+        final boolean stackOnLeftSide = x - mBubbleSize / 2 < mLayout.getWidth() / 2;
 
         final boolean stackShouldFlingLeft = stackOnLeftSide
                 ? velX < ESCAPE_VELOCITY
@@ -525,6 +529,11 @@ public class StackAnimationController extends
         mImeHeight = imeHeight;
     }
 
+    /** Returns the current IME height that the stack is offset by. */
+    public float getImeHeight() {
+        return mImeHeight;
+    }
+
     /**
      * Animates the stack either away from the newly visible IME, or back to its original position
      * due to the IME going away.
@@ -674,6 +683,10 @@ public class StackAnimationController extends
                                 mPositioner.setRestingPosition(mStackPosition);
                             }
 
+                            if (mOnStackAnimationFinished != null) {
+                                mOnStackAnimationFinished.run();
+                            }
+
                             if (after != null) {
                                 for (Runnable callback : after) {
                                     callback.run();
@@ -709,14 +722,16 @@ public class StackAnimationController extends
 
 
     @Override
-    float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property) {
+    float getOffsetForChainedPropertyAnimation(DynamicAnimation.ViewProperty property, int index) {
         if (property.equals(DynamicAnimation.TRANSLATION_Y)) {
             // If we're in the dismiss target, have the bubbles pile on top of each other with no
             // offset.
             if (isStackStuckToTarget()) {
                 return 0f;
             } else {
-                return mStackOffset;
+                // We only show the first two bubbles in the stack & the rest hide behind them
+                // so they don't need an offset.
+                return index > (NUM_VISIBLE_WHEN_RESTING - 1) ? 0f : mStackOffset;
             }
         } else {
             return 0f;
@@ -825,7 +840,8 @@ public class StackAnimationController extends
     private void moveToFinalIndex(View view, int newIndex,
             Runnable finishReorder) {
         final ViewPropertyAnimator animator = view.animate()
-                .translationY(getStackPosition().y + newIndex * mStackOffset)
+                .translationY(getStackPosition().y
+                        + Math.min(newIndex, NUM_VISIBLE_WHEN_RESTING - 1) * mStackOffset)
                 .setDuration(BUBBLE_SWAP_DURATION)
                 .withEndAction(() -> {
                     view.setTag(R.id.reorder_animator_tag, null);
@@ -834,8 +850,9 @@ public class StackAnimationController extends
         view.setTag(R.id.reorder_animator_tag, animator);
     }
 
+    // TODO: do we need this & BubbleStackView#updateBadgesAndZOrder?
     private void updateBadgesAndZOrder(View v, int index) {
-        v.setZ((mMaxBubbles * mElevation) - index);
+        v.setZ(index < NUM_VISIBLE_WHEN_RESTING ? (mMaxBubbles * mElevation) - index : 0f);
         BadgedImageView bv = (BadgedImageView) v;
         if (index == 0) {
             bv.showDotAndBadge(!isStackOnLeftSide());
@@ -855,7 +872,6 @@ public class StackAnimationController extends
         mMaxBubbles = res.getInteger(R.integer.bubbles_max_rendered);
         mElevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
         mBubbleSize = mPositioner.getBubbleSize();
-        mBubbleBitmapSize = mPositioner.getBubbleBitmapSize();
         mBubblePaddingTop = res.getDimensionPixelSize(R.dimen.bubble_padding_top);
         mBubbleOffscreen = res.getDimensionPixelSize(R.dimen.bubble_stack_offscreen);
     }
@@ -912,8 +928,9 @@ public class StackAnimationController extends
         if (mLayout.getChildCount() > 0) {
             property.setValue(mLayout.getChildAt(0), value);
             if (mLayout.getChildCount() > 1) {
+                float newValue = value + getOffsetForChainedPropertyAnimation(property, 0);
                 animationForChildAtIndex(1)
-                        .property(property, value + getOffsetForChainedPropertyAnimation(property))
+                        .property(property, newValue)
                         .start();
             }
         }
@@ -935,12 +952,13 @@ public class StackAnimationController extends
 
             // Since we're not using the chained animations, apply the offsets manually.
             final float xOffset = getOffsetForChainedPropertyAnimation(
-                    DynamicAnimation.TRANSLATION_X);
+                    DynamicAnimation.TRANSLATION_X, 0);
             final float yOffset = getOffsetForChainedPropertyAnimation(
-                    DynamicAnimation.TRANSLATION_Y);
+                    DynamicAnimation.TRANSLATION_Y, 0);
             for (int i = 0; i < mLayout.getChildCount(); i++) {
-                mLayout.getChildAt(i).setTranslationX(pos.x + (i * xOffset));
-                mLayout.getChildAt(i).setTranslationY(pos.y + (i * yOffset));
+                float index = Math.min(i, NUM_VISIBLE_WHEN_RESTING - 1);
+                mLayout.getChildAt(i).setTranslationX(pos.x + (index * xOffset));
+                mLayout.getChildAt(i).setTranslationY(pos.y + (index * yOffset));
             }
         }
     }
@@ -960,7 +978,7 @@ public class StackAnimationController extends
         }
 
         final float yOffset =
-                getOffsetForChainedPropertyAnimation(DynamicAnimation.TRANSLATION_Y);
+                getOffsetForChainedPropertyAnimation(DynamicAnimation.TRANSLATION_Y, 0);
         float endY = mStackPosition.y + yOffset * index;
         float endX = mStackPosition.x;
         if (mPositioner.showBubblesVertically()) {

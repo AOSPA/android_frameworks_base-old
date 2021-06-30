@@ -580,7 +580,7 @@
     <string name="fingerprint_acquired_partial" msgid="694598777291084823">"Установен е частичен отпечатък"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Отпечатъкът не бе обработен. Моля, опитайте отново."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"Почистете сензора"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="1254724478300787385">"Пръстът бе преместен твърде бързо"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="6038375140739678098">"Задръжте пръста си малко по-дълго"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"Преместихте пръста си твърде бавно. Моля, опитайте отново."</string>
     <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"Опитайте с друг отпечатък"</string>
     <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"Твърде светло е"</string>
@@ -609,14 +609,10 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Икона за отпечатък"</string>
-    <string name="permlab_manageFace" msgid="4569549381889283282">"управление на хардуера за отключване с лице"</string>
-    <string name="permdesc_manageFace" msgid="6204569688492710471">"Разрешава на прил. да извиква методи за добавяне и изтриване на лицеви шаблони за ползване"</string>
-    <string name="permlab_useFaceAuthentication" msgid="1011430526454859030">"използване на хардуера за отключване с лице"</string>
-    <string name="permdesc_useFaceAuthentication" msgid="3115697017684668012">"Разрешава на приложението да използва хардуера за отключване с лице с цел удостоверяване"</string>
-    <string name="face_recalibrate_notification_name" msgid="6006095897989257026">"Отключване с лице"</string>
+    <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Отключване с лице"</string>
     <string name="face_recalibrate_notification_title" msgid="5944930528030496897">"Регистрирайте отново лицето си"</string>
     <string name="face_recalibrate_notification_content" msgid="892757485125249962">"С цел подобряване на разпознаването регистрирайте отново лицето си"</string>
-    <string name="face_setup_notification_title" msgid="550617822603450009">"Настройване на отключването с лице"</string>
+    <string name="face_setup_notification_title" msgid="8843461561970741790">"Настройване на отключването с лице"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Отключвайте телефона си, като го погледнете"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Настройване на още начини за отключване на телефона"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Докоснете, за да добавите отпечатък"</string>
@@ -643,18 +639,19 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"Лицето не може да се потвърди. Хардуерът не е налице."</string>
-    <string name="face_error_timeout" msgid="522924647742024699">"Опитайте отново да отключите с лице."</string>
+    <string name="face_error_timeout" msgid="2598544068593889762">"Опитайте отново да отключите с лице"</string>
     <string name="face_error_no_space" msgid="5649264057026021723">"Не може да се запази ново лице. Първо изтрийте старо."</string>
     <string name="face_error_canceled" msgid="2164434737103802131">"Операцията с лице е анулирана."</string>
-    <string name="face_error_user_canceled" msgid="8553045452825849843">"Отключването с лице е анулирано от потребителя."</string>
+    <string name="face_error_user_canceled" msgid="5766472033202928373">"Отключването с лице е анулирано от потребителя"</string>
     <string name="face_error_lockout" msgid="7864408714994529437">"Твърде много опити. Опитайте отново по-късно."</string>
-    <string name="face_error_lockout_permanent" msgid="8277853602168960343">"Твърде много опити. Отключването с лице е деактивирано."</string>
+    <string name="face_error_lockout_permanent" msgid="3277134834042995260">"Твърде много опити. Отключването с лице е деактивирано."</string>
+    <string name="face_error_lockout_screen_lock" msgid="5062609811636860928">"Твърде много опити. Използвайте опцията за заключване на екрана."</string>
     <string name="face_error_unable_to_process" msgid="5723292697366130070">"Лицето не може да се потвърди. Опитайте отново."</string>
-    <string name="face_error_not_enrolled" msgid="7369928733504691611">"Не сте настроили отключването с лице."</string>
-    <string name="face_error_hw_not_present" msgid="1070600921591729944">"Отключването с лице не се поддържа на това устройство."</string>
+    <string name="face_error_not_enrolled" msgid="1134739108536328412">"Не сте настроили отключването с лице"</string>
+    <string name="face_error_hw_not_present" msgid="7940978724978763011">"Отключването с лице не се поддържа на това устройство"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"Сензорът е временно деактивиран."</string>
     <string name="face_name_template" msgid="3877037340223318119">"Лице <xliff:g id="FACEID">%d</xliff:g>"</string>
-    <string name="face_app_setting_name" msgid="8130135875458467243">"Използване на отключв. с лице"</string>
+    <string name="face_app_setting_name" msgid="5854024256907828015">"Отключване с лице"</string>
     <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Използване на отключването с лице или опцията за заключване на екрана"</string>
     <string name="face_dialog_default_subtitle" msgid="6620492813371195429">"Използвайте лицето си, за да продължите"</string>
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Използвайте лицето си или опцията за заключване на екрана, за да продължите"</string>
@@ -957,7 +954,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="4215280881346033434">"Разгъване на областта за отключване."</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2968195219692413046">"Отключване с плъзгане."</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="8669128146589233293">"Отключване с фигура."</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="632407612842329815">"Отключване с лице."</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="4533832120787386728">"Отключване с лице."</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="4020864007967340068">"Отключване с ПИН код."</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="4895939120871890557">"Отключване на SIM картата с ПИН код."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="3459003464041899101">"Отключване на SIM картата с PUK код."</string>
@@ -1022,8 +1019,7 @@
     <string name="text_copied" msgid="2531420577879738860">"Текстът е копиран в буферната памет."</string>
     <string name="copied" msgid="4675902854553014676">"Копирано"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> постави данни от <xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g>"</string>
-    <!-- no translation found for pasted_from_clipboard (7355790625710831847) -->
-    <skip />
+    <string name="pasted_from_clipboard" msgid="7355790625710831847">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> постави данни от буферната памет"</string>
     <string name="pasted_text" msgid="4298871641549173733">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> постави копиран от вас текст"</string>
     <string name="pasted_image" msgid="4729097394781491022">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> постави копирано от вас изображение"</string>
     <string name="pasted_content" msgid="646276353060777131">"<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> постави копирано от вас съдържание"</string>
@@ -1260,14 +1256,10 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"<xliff:g id="APPNAME">%1$s</xliff:g> се подготвя."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Приложенията се стартират."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Зареждането завършва."</string>
-    <!-- no translation found for fp_enrollment_powerbutton_intent_title (3385634173366119903) -->
-    <skip />
-    <!-- no translation found for fp_enrollment_powerbutton_intent_message (6582149052513682522) -->
-    <skip />
-    <!-- no translation found for fp_enrollment_powerbutton_intent_positive_button (5963520983910436791) -->
-    <skip />
-    <!-- no translation found for fp_enrollment_powerbutton_intent_negative_button (6465764183480190748) -->
-    <skip />
+    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Да се изключи ли екранът?"</string>
+    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"При настройването на отпечатъка си натиснахте бутона за захранване.\n\nТова действие обикновено изключва екрана."</string>
+    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Изключване"</string>
+    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Отказ"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> се изпълнява"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Докоснете, за да се върнете към играта"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Избиране на игра"</string>
@@ -1363,7 +1355,7 @@
     <string name="no_permissions" msgid="5729199278862516390">"Не се изискват разрешения"</string>
     <string name="perm_costs_money" msgid="749054595022779685">"това може да ви струва пари"</string>
     <string name="dlg_ok" msgid="5103447663504839312">"OK"</string>
-    <string name="usb_charging_notification_title" msgid="1674124518282666955">"Това устройство се зарежда през USB"</string>
+    <string name="usb_charging_notification_title" msgid="1674124518282666955">"Устройството се зарежда през USB"</string>
     <string name="usb_supplying_notification_title" msgid="5378546632408101811">"Свързаното устройство се зарежда през USB"</string>
     <string name="usb_mtp_notification_title" msgid="1065989144124499810">"Прехвърлянето на файлове през USB е включено"</string>
     <string name="usb_ptp_notification_title" msgid="5043437571863443281">"Режимът PTP през USB е включен"</string>
@@ -1466,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"Разрешава на приложението да заявява изтриване на пакети."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"искане за пренебрегване на оптимизациите на батерията"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"Разрешава на дадено приложение да иска разрешение за пренебрегване на свързаните с него оптимизации на батерията."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"Докоснете двукратно за управление на промяната на мащаба"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"Приспособлението не можа да бъде добавено."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"Старт"</string>
@@ -1874,10 +1870,8 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Актуализирано от администратора ви"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Изтрито от администратора ви"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"ОК"</string>
-    <!-- no translation found for battery_saver_description_with_learn_more (4877297130366222145) -->
-    <skip />
-    <!-- no translation found for battery_saver_description (8518809702138617167) -->
-    <skip />
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"Режимът за запазване на батерията включва тъмната тема и ограничава или изключва активността на заден план, някои визуални ефекти, определени функции и някои връзки с мрежата."</string>
+    <string name="battery_saver_description" msgid="8518809702138617167">"Режимът за запазване на батерията включва тъмната тема и ограничава или изключва активността на заден план, някои визуални ефекти, определени функции и някои връзки с мрежата."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"С цел намаляване на преноса на данни функцията за икономия на данни не позволява на някои приложения да изпращат или получават данни на заден план. Понастоящем използвано от вас приложение може да използва данни, но по-рядко. Това например може да означава, че изображенията не се показват, докато не ги докоснете."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Включване на „Икономия на данни“?"</string>
     <string name="data_saver_enable_button" msgid="4399405762586419726">"Включване"</string>
@@ -1980,10 +1974,8 @@
     <string name="app_suspended_default_message" msgid="6451215678552004172">"В момента няма достъп до <xliff:g id="APP_NAME_0">%1$s</xliff:g>. Това се управлява от <xliff:g id="APP_NAME_1">%2$s</xliff:g>."</string>
     <string name="app_suspended_more_details" msgid="211260942831587014">"Научете повече"</string>
     <string name="app_suspended_unsuspend_message" msgid="1665438589450555459">"Отмяна на паузата за приложението"</string>
-    <!-- no translation found for work_mode_off_title (961171256005852058) -->
-    <skip />
-    <!-- no translation found for work_mode_off_message (7319580997683623309) -->
-    <skip />
+    <string name="work_mode_off_title" msgid="961171256005852058">"Включване на служ. приложения?"</string>
+    <string name="work_mode_off_message" msgid="7319580997683623309">"Получете достъп до служебните си приложения и известия"</string>
     <string name="work_mode_turn_on" msgid="3662561662475962285">"Включване"</string>
     <string name="app_blocked_title" msgid="7353262160455028160">"Приложението не е достъпно"</string>
     <string name="app_blocked_message" msgid="542972921087873023">"В момента няма достъп до <xliff:g id="APP_NAME">%1$s</xliff:g>."</string>
@@ -2104,7 +2096,7 @@
     <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"OK"</string>
     <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"Изключване"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Научете повече"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"Адаптивните известия бяха заменени от функцията за подобрени известия в Android 12. Тя показва предложени действия и отговори и организира известията ви.\n\nФункцията може да осъществява достъп до съдържанието в известията, включително личната информация, като например имената на контактите и текстовите съобщения. Тя има възможност да отхвърля известията или да предприема действия в тях, като например приемане на телефонни обаждания или контролиране на режима „Не безпокойте“."</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Адаптивните известия бяха заменени от функцията за подобрени известия в Android 12. Тя показва предложени действия и отговори и организира известията ви.\n\nФункцията може да осъществява достъп до съдържанието в известията, включително личната информация, като например имената на контактите и текстовите съобщения. Тя има възможност да отхвърля известията или да предприема действия в тях, като например приемане на телефонни обаждания или контролиране на режима „Не безпокойте“."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Известие с информация за режима на поредица"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Батерията може да се изтощи преди обичайното зареждане"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Режимът за запазване на батерията е активиран с цел удължаване на живота на батерията"</string>

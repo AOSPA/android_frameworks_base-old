@@ -31,13 +31,13 @@
 
 #include <sstream>
 
+#include <gui/TraceUtils.h>
 #include "LightingInfo.h"
 #include "VectorDrawable.h"
 #include "thread/CommonPool.h"
 #include "tools/SkSharingProc.h"
 #include "utils/Color.h"
 #include "utils/String8.h"
-#include "utils/TraceUtils.h"
 
 using namespace android::uirenderer::renderthread;
 
@@ -420,7 +420,7 @@ void SkiaPipeline::endCapture(SkSurface* surface) {
                 procs.fTypefaceProc = [](SkTypeface* tf, void* ctx){
                     return tf->serialize(SkTypeface::SerializeBehavior::kDoIncludeData);
                 };
-                auto data = picture->serialize();
+                auto data = picture->serialize(&procs);
                 savePictureAsync(data, mCapturedFile);
                 mCaptureSequence = 0;
                 mCaptureMode = CaptureMode::None;
@@ -470,8 +470,7 @@ void SkiaPipeline::renderFrameImpl(const SkRect& clip,
                                    const SkMatrix& preTransform) {
     SkAutoCanvasRestore saver(canvas, true);
     auto clipRestriction = preTransform.mapRect(clip).roundOut();
-    if (CC_UNLIKELY(mCaptureMode == CaptureMode::SingleFrameSKP
-         || mCaptureMode == CaptureMode::MultiFrameSKP)) {
+    if (CC_UNLIKELY(isCapturingSkp())) {
         canvas->drawAnnotation(SkRect::Make(clipRestriction), "AndroidDeviceClipRestriction",
             nullptr);
     } else {

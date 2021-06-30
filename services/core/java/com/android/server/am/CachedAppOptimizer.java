@@ -961,27 +961,37 @@ public final class CachedAppOptimizer {
 
     @GuardedBy({"mAm", "mProcLock"})
     void freezeAppAsyncLSP(ProcessRecord app) {
-        mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
+        final ProcessCachedOptimizerRecord opt = app.mOptRecord;
+        if (opt.isPendingFreeze()) {
+            // Skip redundant DO_FREEZE message
+            return;
+        }
 
         mFreezeHandler.sendMessageDelayed(
                 mFreezeHandler.obtainMessage(
                     SET_FROZEN_PROCESS_MSG, DO_FREEZE, 0, app),
                 mFreezerDebounceTimeout);
+        opt.setPendingFreeze(true);
+        if (DEBUG_FREEZER) {
+            Slog.d(TAG_AM, "Async freezing " + app.getPid() + " " + app.processName);
+        }
     }
 
     @GuardedBy({"mAm", "mProcLock"})
     void unfreezeAppLSP(ProcessRecord app) {
-        mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
-
         final int pid = app.getPid();
         final ProcessCachedOptimizerRecord opt = app.mOptRecord;
+        if (opt.isPendingFreeze()) {
+            // Remove pending DO_FREEZE message
+            mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
+            opt.setPendingFreeze(false);
+            if (DEBUG_FREEZER) {
+                Slog.d(TAG_AM, "Cancel freezing " + pid + " " + app.processName);
+            }
+        }
+
         opt.setFreezerOverride(false);
         if (!opt.isFrozen()) {
-            if (DEBUG_FREEZER) {
-                Slog.d(TAG_AM,
-                        "Skipping unfreeze for process " + pid + " "
-                        + app.processName + " (not frozen)");
-            }
             return;
         }
 
@@ -997,7 +1007,7 @@ public final class CachedAppOptimizer {
                         + " received sync transactions while frozen, killing");
                 app.killLocked("Sync transaction while in frozen state",
                         ApplicationExitInfo.REASON_OTHER,
-                        ApplicationExitInfo.SUBREASON_INVALID_STATE, true);
+                        ApplicationExitInfo.SUBREASON_FREEZER_BINDER_TRANSACTION, true);
                 processKilled = true;
             }
 
@@ -1010,7 +1020,7 @@ public final class CachedAppOptimizer {
                     + app.processName + ". Killing it. Exception: " + e);
             app.killLocked("Unable to query binder frozen stats",
                     ApplicationExitInfo.REASON_OTHER,
-                    ApplicationExitInfo.SUBREASON_INVALID_STATE, true);
+                    ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
             processKilled = true;
         }
 
@@ -1027,7 +1037,7 @@ public final class CachedAppOptimizer {
                     + ". Killing it");
             app.killLocked("Unable to unfreeze",
                     ApplicationExitInfo.REASON_OTHER,
-                    ApplicationExitInfo.SUBREASON_INVALID_STATE, true);
+                    ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
             return;
         }
 
@@ -1060,7 +1070,12 @@ public final class CachedAppOptimizer {
     @GuardedBy({"mAm", "mProcLock"})
     void unscheduleFreezeAppLSP(ProcessRecord app) {
         if (mUseFreezer) {
-            mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
+            final ProcessCachedOptimizerRecord opt = app.mOptRecord;
+            if (opt.isPendingFreeze()) {
+                // Remove pending DO_FREEZE message
+                mFreezeHandler.removeMessages(SET_FROZEN_PROCESS_MSG, app);
+                opt.setPendingFreeze(false);
+            }
         }
     }
 
@@ -1355,6 +1370,8 @@ public final class CachedAppOptimizer {
             final boolean frozen;
             final ProcessCachedOptimizerRecord opt = proc.mOptRecord;
 
+            opt.setPendingFreeze(false);
+
             try {
                 // pre-check for locks to avoid unnecessary freeze/unfreeze operations
                 if (Process.hasFileLocks(pid)) {
@@ -1405,7 +1422,7 @@ public final class CachedAppOptimizer {
                         synchronized (mAm) {
                             proc.killLocked("Unable to freeze binder interface",
                                     ApplicationExitInfo.REASON_OTHER,
-                                    ApplicationExitInfo.SUBREASON_INVALID_STATE, true);
+                                    ApplicationExitInfo.SUBREASON_FREEZER_BINDER_IOCTL, true);
                         }
                     });
                 }
@@ -1428,7 +1445,6 @@ public final class CachedAppOptimizer {
             if (!frozen) {
                 return;
             }
-
 
             if (DEBUG_FREEZER) {
                 Slog.d(TAG_AM, "froze " + pid + " " + name);

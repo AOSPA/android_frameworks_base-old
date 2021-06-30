@@ -300,11 +300,6 @@ class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeAc
         mCallback.onSnooze(sbn, snoozeOption);
     }
 
-    @Override
-    public void snooze(StatusBarNotification sbn, int hours) {
-        mCallback.onSnooze(sbn, hours);
-    }
-
     @VisibleForTesting
     protected void handleMenuCoveredOrDismissed() {
         View exposedMenuView = getExposedMenuView();
@@ -327,6 +322,11 @@ class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeAc
         } else {
             return superGetViewTranslationAnimator(v, target, listener);
         }
+    }
+
+    @Override
+    protected float getTotalTranslationLength(View animView) {
+        return mCallback.getTotalTranslationLength(animView);
     }
 
     @Override
@@ -470,9 +470,14 @@ class NotificationSwipeHelper extends SwipeHelper implements NotificationSwipeAc
 
         void onSnooze(StatusBarNotification sbn, SnoozeOption snoozeOption);
 
-        void onSnooze(StatusBarNotification sbn, int hours);
-
         void onDismiss();
+
+        /**
+         * Get the total translation length where we want to swipe to when dismissing the view. By
+         * default this is the size of the view, but can also be larger.
+         * @param animView the view to ask about
+         */
+        float getTotalTranslationLength(View animView);
     }
 
     static class Builder {

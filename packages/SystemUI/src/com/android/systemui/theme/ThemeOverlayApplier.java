@@ -69,7 +69,15 @@ public class ThemeOverlayApplier implements Dumpable {
 
     static final String OVERLAY_COLOR_SOURCE = "android.theme.customization.color_source";
 
+    static final String OVERLAY_COLOR_INDEX = "android.theme.customization.color_index";
+
+    static final String OVERLAY_COLOR_BOTH = "android.theme.customization.color_both";
+
     static final String COLOR_SOURCE_PRESET = "preset";
+
+    static final String COLOR_SOURCE_HOME = "home_wallpaper";
+
+    static final String COLOR_SOURCE_LOCK = "lock_wallpaper";
 
     static final String TIMESTAMP_FIELD = "_applied_timestamp";
 

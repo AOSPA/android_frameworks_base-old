@@ -106,7 +106,6 @@ package android {
     field public static final String GET_APP_OPS_STATS = "android.permission.GET_APP_OPS_STATS";
     field public static final String GET_PROCESS_STATE_AND_OOM_SCORE = "android.permission.GET_PROCESS_STATE_AND_OOM_SCORE";
     field public static final String GET_RUNTIME_PERMISSIONS = "android.permission.GET_RUNTIME_PERMISSIONS";
-    field public static final String GET_RUNTIME_PERMISSION_GROUP_MAPPING = "android.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING";
     field public static final String GET_TOP_ACTIVITY_INFO = "android.permission.GET_TOP_ACTIVITY_INFO";
     field @Deprecated public static final String GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS = "android.permission.GRANT_PROFILE_OWNER_DEVICE_IDS_ACCESS";
     field public static final String GRANT_RUNTIME_PERMISSIONS = "android.permission.GRANT_RUNTIME_PERMISSIONS";
@@ -211,6 +210,7 @@ package android {
     field public static final String READ_CONTENT_RATING_SYSTEMS = "android.permission.READ_CONTENT_RATING_SYSTEMS";
     field public static final String READ_DEVICE_CONFIG = "android.permission.READ_DEVICE_CONFIG";
     field public static final String READ_DREAM_STATE = "android.permission.READ_DREAM_STATE";
+    field public static final String READ_GLOBAL_APP_SEARCH_DATA = "android.permission.READ_GLOBAL_APP_SEARCH_DATA";
     field public static final String READ_INSTALL_SESSIONS = "android.permission.READ_INSTALL_SESSIONS";
     field public static final String READ_NETWORK_USAGE_HISTORY = "android.permission.READ_NETWORK_USAGE_HISTORY";
     field public static final String READ_OEM_UNLOCK_STATE = "android.permission.READ_OEM_UNLOCK_STATE";
@@ -317,11 +317,10 @@ package android {
 
   public static final class R.attr {
     field public static final int allowClearUserDataOnFailedRestore = 16844288; // 0x1010600
-    field public static final int durationBetweenRequestsMillis;
-    field public static final int hotwordDetectionService;
+    field public static final int hotwordDetectionService = 16844326; // 0x1010626
     field public static final int isVrOnly = 16844152; // 0x1010578
     field public static final int minExtensionVersion = 16844305; // 0x1010611
-    field public static final int playHomeTransitionSound;
+    field public static final int playHomeTransitionSound = 16844358; // 0x1010646
     field public static final int requiredSystemPropertyName = 16844133; // 0x1010565
     field public static final int requiredSystemPropertyValue = 16844134; // 0x1010566
     field public static final int sdkVersion = 16844304; // 0x1010610
@@ -354,8 +353,8 @@ package android {
   }
 
   public static final class R.string {
-    field public static final int config_customMediaKeyDispatcher;
-    field public static final int config_customMediaSessionPolicyProvider;
+    field public static final int config_customMediaKeyDispatcher = 17039404; // 0x104002c
+    field public static final int config_customMediaSessionPolicyProvider = 17039405; // 0x104002d
     field public static final int config_defaultAssistant = 17039393; // 0x1040021
     field public static final int config_defaultBrowser = 17039394; // 0x1040022
     field public static final int config_defaultCallRedirection = 17039397; // 0x1040025
@@ -368,24 +367,24 @@ package android {
     field public static final int config_helpIntentNameKey = 17039390; // 0x104001e
     field public static final int config_helpPackageNameKey = 17039387; // 0x104001b
     field public static final int config_helpPackageNameValue = 17039388; // 0x104001c
-    field public static final int config_systemActivityRecognizer;
-    field public static final int config_systemAmbientAudioIntelligence;
-    field public static final int config_systemAudioIntelligence;
-    field public static final int config_systemAutomotiveCluster;
-    field public static final int config_systemAutomotiveProjection;
-    field public static final int config_systemCompanionDeviceProvider;
-    field public static final int config_systemContacts;
+    field public static final int config_systemActivityRecognizer = 17039416; // 0x1040038
+    field public static final int config_systemAmbientAudioIntelligence = 17039411; // 0x1040033
+    field public static final int config_systemAudioIntelligence = 17039412; // 0x1040034
+    field public static final int config_systemAutomotiveCluster = 17039400; // 0x1040028
+    field public static final int config_systemAutomotiveProjection = 17039401; // 0x1040029
+    field public static final int config_systemCompanionDeviceProvider = 17039417; // 0x1040039
+    field public static final int config_systemContacts = 17039403; // 0x104002b
     field public static final int config_systemGallery = 17039399; // 0x1040027
-    field public static final int config_systemNotificationIntelligence;
-    field public static final int config_systemShell;
-    field public static final int config_systemSpeechRecognizer;
-    field public static final int config_systemTelevisionNotificationHandler;
-    field public static final int config_systemTextIntelligence;
-    field public static final int config_systemUi;
-    field public static final int config_systemUiIntelligence;
-    field public static final int config_systemVisualIntelligence;
-    field public static final int config_systemWellbeing;
-    field public static final int config_systemWifiCoexManager;
+    field public static final int config_systemNotificationIntelligence = 17039413; // 0x1040035
+    field public static final int config_systemShell = 17039402; // 0x104002a
+    field public static final int config_systemSpeechRecognizer = 17039406; // 0x104002e
+    field public static final int config_systemTelevisionNotificationHandler = 17039409; // 0x1040031
+    field public static final int config_systemTextIntelligence = 17039414; // 0x1040036
+    field public static final int config_systemUi = 17039418; // 0x104003a
+    field public static final int config_systemUiIntelligence = 17039410; // 0x1040032
+    field public static final int config_systemVisualIntelligence = 17039415; // 0x1040037
+    field public static final int config_systemWellbeing = 17039408; // 0x1040030
+    field public static final int config_systemWifiCoexManager = 17039407; // 0x104002f
   }
 
   public static final class R.style {
@@ -487,6 +486,8 @@ package android.app {
     field public static final String OPSTR_MANAGE_ONGOING_CALLS = "android:manage_ongoing_calls";
     field public static final String OPSTR_MUTE_MICROPHONE = "android:mute_microphone";
     field public static final String OPSTR_NEIGHBORING_CELLS = "android:neighboring_cells";
+    field public static final String OPSTR_PHONE_CALL_CAMERA = "android:phone_call_camera";
+    field public static final String OPSTR_PHONE_CALL_MICROPHONE = "android:phone_call_microphone";
     field public static final String OPSTR_PLAY_AUDIO = "android:play_audio";
     field public static final String OPSTR_POST_NOTIFICATION = "android:post_notification";
     field public static final String OPSTR_PROJECT_MEDIA = "android:project_media";
@@ -1242,10 +1243,10 @@ package android.app.backup {
 package android.app.compat {
 
   public final class CompatChanges {
-    method @RequiresPermission(android.Manifest.permission.OVERRIDE_COMPAT_CHANGE_CONFIG_ON_RELEASE_BUILD) public static void addPackageOverrides(@NonNull String, @NonNull java.util.Map<java.lang.Long,android.app.compat.PackageOverride>);
     method public static boolean isChangeEnabled(long);
     method @RequiresPermission(allOf={"android.permission.READ_COMPAT_CHANGE_CONFIG", "android.permission.LOG_COMPAT_CHANGE"}) public static boolean isChangeEnabled(long, @NonNull String, @NonNull android.os.UserHandle);
     method @RequiresPermission(allOf={"android.permission.READ_COMPAT_CHANGE_CONFIG", "android.permission.LOG_COMPAT_CHANGE"}) public static boolean isChangeEnabled(long, int);
+    method @RequiresPermission(android.Manifest.permission.OVERRIDE_COMPAT_CHANGE_CONFIG_ON_RELEASE_BUILD) public static void putPackageOverrides(@NonNull String, @NonNull java.util.Map<java.lang.Long,android.app.compat.PackageOverride>);
     method @RequiresPermission(android.Manifest.permission.OVERRIDE_COMPAT_CHANGE_CONFIG_ON_RELEASE_BUILD) public static void removePackageOverrides(@NonNull String, @NonNull java.util.Set<java.lang.Long>);
   }
 
@@ -1457,6 +1458,7 @@ package android.app.search {
     method public long getTimestampMillis();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.app.search.Query> CREATOR;
+    field public static final String EXTRA_IME_HEIGHT = "android.app.search.extra.IME_HEIGHT";
   }
 
   public final class SearchAction implements android.os.Parcelable {
@@ -1525,7 +1527,7 @@ package android.app.search {
     method @Nullable public android.content.pm.ShortcutInfo getShortcutInfo();
     method @Nullable public android.net.Uri getSliceUri();
     method @NonNull public android.os.UserHandle getUserHandle();
-    method public boolean shouldHide();
+    method public boolean isHidden();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.app.search.SearchTarget> CREATOR;
     field public static final String LAYOUT_TYPE_ICON = "icon";
@@ -1542,12 +1544,12 @@ package android.app.search {
     method @NonNull public android.app.search.SearchTarget build();
     method @NonNull public android.app.search.SearchTarget.Builder setAppWidgetProviderInfo(@NonNull android.appwidget.AppWidgetProviderInfo);
     method @NonNull public android.app.search.SearchTarget.Builder setExtras(@NonNull android.os.Bundle);
+    method @NonNull public android.app.search.SearchTarget.Builder setHidden(boolean);
     method @NonNull public android.app.search.SearchTarget.Builder setPackageName(@NonNull String);
     method @NonNull public android.app.search.SearchTarget.Builder setParentId(@NonNull String);
     method @NonNull public android.app.search.SearchTarget.Builder setScore(@FloatRange(from=0.0f, to=1.0f) float);
     method @NonNull public android.app.search.SearchTarget.Builder setSearchAction(@Nullable android.app.search.SearchAction);
     method @NonNull public android.app.search.SearchTarget.Builder setShortcutInfo(@NonNull android.content.pm.ShortcutInfo);
-    method @NonNull public android.app.search.SearchTarget.Builder setShouldHide(boolean);
     method @NonNull public android.app.search.SearchTarget.Builder setSliceUri(@NonNull android.net.Uri);
     method @NonNull public android.app.search.SearchTarget.Builder setUserHandle(@NonNull android.os.UserHandle);
   }
@@ -1950,9 +1952,6 @@ package android.bluetooth {
     field public static final int ACTIVE_DEVICE_ALL = 2; // 0x2
     field public static final int ACTIVE_DEVICE_AUDIO = 0; // 0x0
     field public static final int ACTIVE_DEVICE_PHONE_CALL = 1; // 0x1
-    field public static final int OOB_ERROR_ADAPTER_DISABLED = 2; // 0x2
-    field public static final int OOB_ERROR_ANOTHER_ACTIVE_REQUEST = 1; // 0x1
-    field public static final int OOB_ERROR_UNKNOWN = 0; // 0x0
   }
 
   public static interface BluetoothAdapter.OnMetadataChangedListener {
@@ -2058,7 +2057,7 @@ package android.bluetooth {
     method @RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_PRIVILEGED, android.Manifest.permission.TETHER_PRIVILEGED}) public void setBluetoothTethering(boolean);
     method @RequiresPermission(allOf={android.Manifest.permission.BLUETOOTH_CONNECT, android.Manifest.permission.BLUETOOTH_PRIVILEGED}) public boolean setConnectionPolicy(@NonNull android.bluetooth.BluetoothDevice, int);
     field @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public static final String ACTION_CONNECTION_STATE_CHANGED = "android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED";
-    field @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT) public static final String ACTION_TETHERING_STATE_CHANGED = "android.bluetooth.action.TETHERING_STATE_CHANGED";
+    field public static final String ACTION_TETHERING_STATE_CHANGED = "android.bluetooth.action.TETHERING_STATE_CHANGED";
     field public static final String EXTRA_LOCAL_ROLE = "android.bluetooth.pan.extra.LOCAL_ROLE";
     field public static final String EXTRA_TETHERING_STATE = "android.bluetooth.extra.TETHERING_STATE";
     field public static final int LOCAL_NAP_ROLE = 1; // 0x1
@@ -2088,6 +2087,10 @@ package android.bluetooth {
     field public static final int PBAP_CLIENT = 17; // 0x11
     field @Deprecated public static final int PRIORITY_OFF = 0; // 0x0
     field @Deprecated public static final int PRIORITY_ON = 100; // 0x64
+  }
+
+  public final class BluetoothStatusCodes {
+    field public static final int ERROR_ANOTHER_ACTIVE_OOB_REQUEST = 1000; // 0x3e8
   }
 
   public final class BluetoothUuid {
@@ -2244,8 +2247,8 @@ package android.bluetooth.le {
 package android.companion {
 
   public final class CompanionDeviceManager {
-    method @RequiresPermission(android.Manifest.permission.ASSOCIATE_COMPANION_DEVICES) public void associate(@NonNull String, @NonNull android.net.MacAddress);
-    method @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES") public boolean canPairWithoutPrompt(@NonNull String, @NonNull String, int);
+    method @RequiresPermission(android.Manifest.permission.ASSOCIATE_COMPANION_DEVICES) public void associate(@NonNull String, @NonNull android.net.MacAddress, @NonNull byte[]);
+    method @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES") public boolean canPairWithoutPrompt(@NonNull String, @NonNull String, @NonNull android.os.UserHandle);
     method @RequiresPermission("android.permission.MANAGE_COMPANION_DEVICES") public boolean isDeviceAssociatedForWifiConnection(@NonNull String, @NonNull android.net.MacAddress, @NonNull android.os.UserHandle);
   }
 
@@ -3116,7 +3119,7 @@ package android.hardware {
     method @RequiresPermission(android.Manifest.permission.OBSERVE_SENSOR_PRIVACY) public void addSensorPrivacyListener(int, @NonNull android.hardware.SensorPrivacyManager.OnSensorPrivacyChangedListener);
     method @RequiresPermission(android.Manifest.permission.OBSERVE_SENSOR_PRIVACY) public void addSensorPrivacyListener(int, @NonNull java.util.concurrent.Executor, @NonNull android.hardware.SensorPrivacyManager.OnSensorPrivacyChangedListener);
     method @RequiresPermission(android.Manifest.permission.OBSERVE_SENSOR_PRIVACY) public boolean isSensorPrivacyEnabled(int);
-    method @RequiresPermission(android.Manifest.permission.OBSERVE_SENSOR_PRIVACY) public void removeSensorPrivacyListener(@NonNull android.hardware.SensorPrivacyManager.OnSensorPrivacyChangedListener);
+    method @RequiresPermission(android.Manifest.permission.OBSERVE_SENSOR_PRIVACY) public void removeSensorPrivacyListener(int, @NonNull android.hardware.SensorPrivacyManager.OnSensorPrivacyChangedListener);
   }
 
   public static interface SensorPrivacyManager.OnSensorPrivacyChangedListener {
@@ -3141,6 +3144,10 @@ package android.hardware.camera2 {
     field public static final int SESSION_OPERATION_MODE_CONSTRAINED_HIGH_SPEED = 1; // 0x1
     field public static final int SESSION_OPERATION_MODE_NORMAL = 0; // 0x0
     field public static final int SESSION_OPERATION_MODE_VENDOR_START = 32768; // 0x8000
+  }
+
+  public final class CameraManager {
+    method @RequiresPermission(allOf={android.Manifest.permission.SYSTEM_CAMERA, android.Manifest.permission.CAMERA}) public void openCamera(@NonNull String, int, @NonNull java.util.concurrent.Executor, @NonNull android.hardware.camera2.CameraDevice.StateCallback) throws android.hardware.camera2.CameraAccessException;
   }
 
   public abstract static class CameraManager.AvailabilityCallback {
@@ -4935,7 +4942,6 @@ package android.location {
     method public boolean isLocationEnabledForUser(@NonNull android.os.UserHandle);
     method public boolean isProviderEnabledForUser(@NonNull String, @NonNull android.os.UserHandle);
     method @Deprecated @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@NonNull String);
-    method @Deprecated @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@Nullable String, @NonNull String);
     method @RequiresPermission(android.Manifest.permission.READ_DEVICE_CONFIG) public boolean isProviderPackage(@Nullable String, @NonNull String, @Nullable String);
     method @Deprecated @RequiresPermission(allOf={android.Manifest.permission.LOCATION_HARDWARE, android.Manifest.permission.UPDATE_APP_OPS_STATS}) public boolean registerGnssBatchedLocationCallback(long, boolean, @NonNull android.location.BatchedLocationCallback, @Nullable android.os.Handler);
     method @Deprecated @RequiresPermission(android.Manifest.permission.ACCESS_FINE_LOCATION) public boolean registerGnssMeasurementsCallback(@NonNull android.location.GnssRequest, @NonNull java.util.concurrent.Executor, @NonNull android.location.GnssMeasurementsEvent.Callback);
@@ -4996,11 +5002,14 @@ package android.location {
 
   public final class SatellitePvt implements android.os.Parcelable {
     method public int describeContents();
-    method @NonNull public android.location.SatellitePvt.ClockInfo getClockInfo();
+    method @Nullable public android.location.SatellitePvt.ClockInfo getClockInfo();
     method @FloatRange public double getIonoDelayMeters();
-    method @NonNull public android.location.SatellitePvt.PositionEcef getPositionEcef();
+    method @Nullable public android.location.SatellitePvt.PositionEcef getPositionEcef();
     method @FloatRange public double getTropoDelayMeters();
-    method @NonNull public android.location.SatellitePvt.VelocityEcef getVelocityEcef();
+    method @Nullable public android.location.SatellitePvt.VelocityEcef getVelocityEcef();
+    method public boolean hasIono();
+    method public boolean hasPositionVelocityClockInfo();
+    method public boolean hasTropo();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.location.SatellitePvt> CREATOR;
   }
@@ -5009,9 +5018,9 @@ package android.location {
     ctor public SatellitePvt.Builder();
     method @NonNull public android.location.SatellitePvt build();
     method @NonNull public android.location.SatellitePvt.Builder setClockInfo(@NonNull android.location.SatellitePvt.ClockInfo);
-    method @NonNull public android.location.SatellitePvt.Builder setIonoDelayMeters(@FloatRange double);
+    method @NonNull public android.location.SatellitePvt.Builder setIonoDelayMeters(@FloatRange(from=0.0f, to=100.0f) double);
     method @NonNull public android.location.SatellitePvt.Builder setPositionEcef(@NonNull android.location.SatellitePvt.PositionEcef);
-    method @NonNull public android.location.SatellitePvt.Builder setTropoDelayMeters(@FloatRange double);
+    method @NonNull public android.location.SatellitePvt.Builder setTropoDelayMeters(@FloatRange(from=0.0f, to=100.0f) double);
     method @NonNull public android.location.SatellitePvt.Builder setVelocityEcef(@NonNull android.location.SatellitePvt.VelocityEcef);
   }
 
@@ -8835,8 +8844,6 @@ package android.permission {
 
   public final class PermissionControllerManager {
     method @RequiresPermission(anyOf={android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS, android.Manifest.permission.RESTORE_RUNTIME_PERMISSIONS}) public void applyStagedRuntimePermissionBackup(@NonNull String, @NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.Boolean>);
-    method @RequiresPermission(android.Manifest.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING) public void getGroupOfPlatformPermission(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.lang.String>);
-    method @RequiresPermission(android.Manifest.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING) public void getPlatformPermissionsForGroup(@NonNull String, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<java.util.List<java.lang.String>>);
     method @RequiresPermission(android.Manifest.permission.GET_RUNTIME_PERMISSIONS) public void getRuntimePermissionBackup(@NonNull android.os.UserHandle, @NonNull java.util.concurrent.Executor, @NonNull java.util.function.Consumer<byte[]>);
     method @RequiresPermission(android.Manifest.permission.REVOKE_RUNTIME_PERMISSIONS) public void revokeRuntimePermissions(@NonNull java.util.Map<java.lang.String,java.util.List<java.lang.String>>, boolean, int, @NonNull java.util.concurrent.Executor, @NonNull android.permission.PermissionControllerManager.OnRevokeRuntimePermissionsCallback);
     method @RequiresPermission(anyOf={android.Manifest.permission.GRANT_RUNTIME_PERMISSIONS, android.Manifest.permission.RESTORE_RUNTIME_PERMISSIONS}) public void stageAndApplyRuntimePermissionsBackup(@NonNull byte[], @NonNull android.os.UserHandle);
@@ -9076,6 +9083,7 @@ package android.provider {
     field public static final String NAMESPACE_GAME_DRIVER = "game_driver";
     field public static final String NAMESPACE_INPUT_NATIVE_BOOT = "input_native_boot";
     field public static final String NAMESPACE_INTELLIGENCE_ATTENTION = "intelligence_attention";
+    field public static final String NAMESPACE_LOCATION = "location";
     field public static final String NAMESPACE_MEDIA = "media";
     field public static final String NAMESPACE_MEDIA_NATIVE = "media_native";
     field public static final String NAMESPACE_NETD_NATIVE = "netd_native";
@@ -9888,9 +9896,9 @@ package android.service.displayhash {
     method @NonNull public final android.os.IBinder onBind(@NonNull android.content.Intent);
     method public abstract void onGenerateDisplayHash(@NonNull byte[], @NonNull android.hardware.HardwareBuffer, @NonNull android.graphics.Rect, @NonNull String, @NonNull android.view.displayhash.DisplayHashResultCallback);
     method @NonNull public abstract java.util.Map<java.lang.String,android.service.displayhash.DisplayHashParams> onGetDisplayHashAlgorithms();
+    method public abstract int onGetIntervalBetweenRequestsMillis();
     method @Nullable public abstract android.view.displayhash.VerifiedDisplayHash onVerifyDisplayHash(@NonNull byte[], @NonNull android.view.displayhash.DisplayHash);
     field public static final String SERVICE_INTERFACE = "android.service.displayhash.DisplayHashingService";
-    field public static final String SERVICE_META_DATA = "android.displayhash.display_hashing_service";
   }
 
 }
@@ -10404,20 +10412,14 @@ package android.service.translation {
     ctor public TranslationService();
     method @Nullable public final android.os.IBinder onBind(@NonNull android.content.Intent);
     method public void onConnected();
-    method public void onCreateTranslationSession(@NonNull android.view.translation.TranslationContext, int, @NonNull java.util.function.Consumer<java.lang.Boolean>);
-    method @Deprecated public abstract void onCreateTranslationSession(@NonNull android.view.translation.TranslationContext, int);
+    method public abstract void onCreateTranslationSession(@NonNull android.view.translation.TranslationContext, int, @NonNull java.util.function.Consumer<java.lang.Boolean>);
     method public void onDisconnected();
     method public abstract void onFinishTranslationSession(int);
     method public abstract void onTranslationCapabilitiesRequest(int, int, @NonNull java.util.function.Consumer<java.util.Set<android.view.translation.TranslationCapability>>);
-    method public abstract void onTranslationRequest(@NonNull android.view.translation.TranslationRequest, int, @Nullable android.os.CancellationSignal, @NonNull android.service.translation.TranslationService.OnTranslationResultCallback);
+    method public abstract void onTranslationRequest(@NonNull android.view.translation.TranslationRequest, int, @Nullable android.os.CancellationSignal, @NonNull java.util.function.Consumer<android.view.translation.TranslationResponse>);
     method public final void updateTranslationCapability(@NonNull android.view.translation.TranslationCapability);
     field public static final String SERVICE_INTERFACE = "android.service.translation.TranslationService";
     field public static final String SERVICE_META_DATA = "android.translation_service";
-  }
-
-  public static interface TranslationService.OnTranslationResultCallback {
-    method @Deprecated public void onError();
-    method public void onTranslationSuccess(@NonNull android.view.translation.TranslationResponse);
   }
 
 }
@@ -10510,9 +10512,11 @@ package android.service.voice {
 
   public final class HotwordDetectedResult implements android.os.Parcelable {
     method public int describeContents();
-    method public int getByteOffset();
+    method public int getAudioChannel();
     method public int getConfidenceLevel();
     method @NonNull public android.os.PersistableBundle getExtras();
+    method public int getHotwordDurationMillis();
+    method public int getHotwordOffsetMillis();
     method public int getHotwordPhraseId();
     method public static int getMaxBundleSize();
     method public static int getMaxHotwordPhraseId();
@@ -10520,17 +10524,29 @@ package android.service.voice {
     method @Nullable public android.media.MediaSyncEvent getMediaSyncEvent();
     method public int getPersonalizedScore();
     method public int getScore();
+    method public boolean isHotwordDetectionPersonalized();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
-    field public static final int BYTE_OFFSET_UNSET = -1; // 0xffffffff
+    field public static final int AUDIO_CHANNEL_UNSET = -1; // 0xffffffff
+    field public static final int CONFIDENCE_LEVEL_HIGH = 5; // 0x5
+    field public static final int CONFIDENCE_LEVEL_LOW = 1; // 0x1
+    field public static final int CONFIDENCE_LEVEL_LOW_MEDIUM = 2; // 0x2
+    field public static final int CONFIDENCE_LEVEL_MEDIUM = 3; // 0x3
+    field public static final int CONFIDENCE_LEVEL_MEDIUM_HIGH = 4; // 0x4
+    field public static final int CONFIDENCE_LEVEL_NONE = 0; // 0x0
+    field public static final int CONFIDENCE_LEVEL_VERY_HIGH = 6; // 0x6
     field @NonNull public static final android.os.Parcelable.Creator<android.service.voice.HotwordDetectedResult> CREATOR;
+    field public static final int HOTWORD_OFFSET_UNSET = -1; // 0xffffffff
   }
 
   public static final class HotwordDetectedResult.Builder {
     ctor public HotwordDetectedResult.Builder();
     method @NonNull public android.service.voice.HotwordDetectedResult build();
-    method @NonNull public android.service.voice.HotwordDetectedResult.Builder setByteOffset(int);
+    method @NonNull public android.service.voice.HotwordDetectedResult.Builder setAudioChannel(int);
     method @NonNull public android.service.voice.HotwordDetectedResult.Builder setConfidenceLevel(int);
     method @NonNull public android.service.voice.HotwordDetectedResult.Builder setExtras(@NonNull android.os.PersistableBundle);
+    method @NonNull public android.service.voice.HotwordDetectedResult.Builder setHotwordDetectionPersonalized(boolean);
+    method @NonNull public android.service.voice.HotwordDetectedResult.Builder setHotwordDurationMillis(int);
+    method @NonNull public android.service.voice.HotwordDetectedResult.Builder setHotwordOffsetMillis(int);
     method @NonNull public android.service.voice.HotwordDetectedResult.Builder setHotwordPhraseId(int);
     method @NonNull public android.service.voice.HotwordDetectedResult.Builder setMediaSyncEvent(@NonNull android.media.MediaSyncEvent);
     method @NonNull public android.service.voice.HotwordDetectedResult.Builder setPersonalizedScore(int);
@@ -10539,15 +10555,13 @@ package android.service.voice {
 
   public abstract class HotwordDetectionService extends android.app.Service {
     ctor public HotwordDetectionService();
+    method public static int getMaxCustomInitializationStatus();
     method @Nullable public final android.os.IBinder onBind(@NonNull android.content.Intent);
-    method @Deprecated public void onDetect(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, long, @NonNull android.service.voice.HotwordDetectionService.Callback);
     method public void onDetect(@NonNull android.service.voice.AlwaysOnHotwordDetector.EventPayload, long, @NonNull android.service.voice.HotwordDetectionService.Callback);
-    method @Deprecated public void onDetect(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @NonNull android.service.voice.HotwordDetectionService.Callback);
     method public void onDetect(@NonNull android.service.voice.HotwordDetectionService.Callback);
     method public void onDetect(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle, @NonNull android.service.voice.HotwordDetectionService.Callback);
+    method public void onStopDetection();
     method public void onUpdateState(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory, long, @Nullable java.util.function.IntConsumer);
-    field public static final int INITIALIZATION_STATUS_CUSTOM_ERROR_1 = 1; // 0x1
-    field public static final int INITIALIZATION_STATUS_CUSTOM_ERROR_2 = 2; // 0x2
     field public static final int INITIALIZATION_STATUS_SUCCESS = 0; // 0x0
     field public static final int INITIALIZATION_STATUS_UNKNOWN = 100; // 0x64
     field public static final String SERVICE_INTERFACE = "android.service.voice.HotwordDetectionService";
@@ -10563,10 +10577,6 @@ package android.service.voice {
     method public boolean startRecognition(@NonNull android.os.ParcelFileDescriptor, @NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle);
     method public boolean stopRecognition();
     method public void updateState(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory);
-    field public static final int CONFIDENCE_LEVEL_HIGH = 3; // 0x3
-    field public static final int CONFIDENCE_LEVEL_LOW = 1; // 0x1
-    field public static final int CONFIDENCE_LEVEL_MEDIUM = 2; // 0x2
-    field public static final int CONFIDENCE_LEVEL_NONE = 0; // 0x0
   }
 
   public static interface HotwordDetector.Callback {
@@ -10583,13 +10593,22 @@ package android.service.voice {
     method public int describeContents();
     method public int getConfidenceLevel();
     method public void writeToParcel(@NonNull android.os.Parcel, int);
+    field public static final int CONFIDENCE_LEVEL_HIGH = 3; // 0x3
+    field public static final int CONFIDENCE_LEVEL_LOW = 1; // 0x1
+    field public static final int CONFIDENCE_LEVEL_MEDIUM = 2; // 0x2
+    field public static final int CONFIDENCE_LEVEL_NONE = 0; // 0x0
     field @NonNull public static final android.os.Parcelable.Creator<android.service.voice.HotwordRejectedResult> CREATOR;
+  }
+
+  public static final class HotwordRejectedResult.Builder {
+    ctor public HotwordRejectedResult.Builder();
+    method @NonNull public android.service.voice.HotwordRejectedResult build();
+    method @NonNull public android.service.voice.HotwordRejectedResult.Builder setConfidenceLevel(int);
   }
 
   public class VoiceInteractionService extends android.app.Service {
     method @NonNull public final android.service.voice.AlwaysOnHotwordDetector createAlwaysOnHotwordDetector(String, java.util.Locale, android.service.voice.AlwaysOnHotwordDetector.Callback);
     method @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_HOTWORD_DETECTION) public final android.service.voice.AlwaysOnHotwordDetector createAlwaysOnHotwordDetector(String, java.util.Locale, @Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory, android.service.voice.AlwaysOnHotwordDetector.Callback);
-    method @Deprecated @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_HOTWORD_DETECTION) public final android.service.voice.HotwordDetector createHotwordDetector(@NonNull android.media.AudioFormat, @Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory, @NonNull android.service.voice.HotwordDetector.Callback);
     method @NonNull @RequiresPermission(android.Manifest.permission.MANAGE_HOTWORD_DETECTION) public final android.service.voice.HotwordDetector createHotwordDetector(@Nullable android.os.PersistableBundle, @Nullable android.os.SharedMemory, @NonNull android.service.voice.HotwordDetector.Callback);
     method @NonNull @RequiresPermission("android.permission.MANAGE_VOICE_KEYPHRASES") public final android.media.voice.KeyphraseModelManager createKeyphraseModelManager();
   }
@@ -12056,10 +12075,10 @@ package android.telephony {
     field public static final int CALL_WAITING_STATUS_ENABLED = 1; // 0x1
     field public static final int CALL_WAITING_STATUS_NOT_SUPPORTED = 4; // 0x4
     field public static final int CALL_WAITING_STATUS_UNKNOWN_ERROR = 3; // 0x3
-    field public static final String CAPABILITY_ALLOWED_NETWORK_TYPES_USED = "CAPABILITY_ALLOWED_NETWORK_TYPES_USED";
     field public static final String CAPABILITY_NR_DUAL_CONNECTIVITY_CONFIGURATION_AVAILABLE = "CAPABILITY_NR_DUAL_CONNECTIVITY_CONFIGURATION_AVAILABLE";
     field public static final String CAPABILITY_SECONDARY_LINK_BANDWIDTH_VISIBLE = "CAPABILITY_SECONDARY_LINK_BANDWIDTH_VISIBLE";
     field public static final String CAPABILITY_THERMAL_MITIGATION_DATA_THROTTLING = "CAPABILITY_THERMAL_MITIGATION_DATA_THROTTLING";
+    field public static final String CAPABILITY_USES_ALLOWED_NETWORK_TYPES_BITMASK = "CAPABILITY_USES_ALLOWED_NETWORK_TYPES_BITMASK";
     field public static final int CARRIER_PRIVILEGE_STATUS_ERROR_LOADING_RULES = -2; // 0xfffffffe
     field public static final int CARRIER_PRIVILEGE_STATUS_HAS_ACCESS = 1; // 0x1
     field public static final int CARRIER_PRIVILEGE_STATUS_NO_ACCESS = 0; // 0x0
@@ -12819,7 +12838,6 @@ package android.telephony.ims {
     method public void onCreated(@NonNull android.telephony.ims.stub.SipDelegate, @Nullable java.util.Set<android.telephony.ims.FeatureTagState>);
     method public void onDestroyed(int);
     method public void onFeatureTagRegistrationChanged(@NonNull android.telephony.ims.DelegateRegistrationState);
-    method @Deprecated public void onImsConfigurationChanged(@NonNull android.telephony.ims.SipDelegateImsConfiguration);
   }
 
   public final class FeatureTagState implements android.os.Parcelable {
@@ -13634,72 +13652,10 @@ package android.telephony.ims {
   }
 
   public interface SipDelegateConnection {
-    method public default void cleanupSession(@NonNull String);
-    method @Deprecated public default void closeDialog(@NonNull String);
+    method public void cleanupSession(@NonNull String);
     method public void notifyMessageReceiveError(@NonNull String, int);
     method public void notifyMessageReceived(@NonNull String);
     method public void sendMessage(@NonNull android.telephony.ims.SipMessage, long);
-  }
-
-  @Deprecated public final class SipDelegateImsConfiguration implements android.os.Parcelable {
-    method @Deprecated public boolean containsKey(@NonNull String);
-    method @Deprecated @NonNull public android.os.PersistableBundle copyBundle();
-    method @Deprecated public int describeContents();
-    method @Deprecated public boolean getBoolean(@NonNull String, boolean);
-    method @Deprecated public int getInt(@NonNull String, int);
-    method @Deprecated @Nullable public String getString(@NonNull String);
-    method @Deprecated public long getVersion();
-    method @Deprecated public void writeToParcel(@NonNull android.os.Parcel, int);
-    field @Deprecated @NonNull public static final android.os.Parcelable.Creator<android.telephony.ims.SipDelegateImsConfiguration> CREATOR;
-    field @Deprecated public static final String IPTYPE_IPV4 = "IPV4";
-    field @Deprecated public static final String IPTYPE_IPV6 = "IPV6";
-    field @Deprecated public static final String KEY_SIP_CONFIG_AUTHENTICATION_HEADER_STRING = "sip_config_auhentication_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_AUTHENTICATION_NONCE_STRING = "sip_config_authentication_nonce_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_CELLULAR_NETWORK_INFO_HEADER_STRING = "sip_config_cellular_network_info_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_HOME_DOMAIN_STRING = "sip_config_home_domain_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IMEI_STRING = "sip_config_imei_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IPTYPE_STRING = "sip_config_iptype_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IS_COMPACT_FORM_ENABLED_BOOL = "sip_config_is_compact_form_enabled_bool";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IS_GRUU_ENABLED_BOOL = "sip_config_is_gruu_enabled_bool";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IS_IPSEC_ENABLED_BOOL = "sip_config_is_ipsec_enabled_bool";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IS_KEEPALIVE_ENABLED_BOOL = "sip_config_is_keepalive_enabled_bool";
-    field @Deprecated public static final String KEY_SIP_CONFIG_IS_NAT_ENABLED_BOOL = "sip_config_is_nat_enabled_bool";
-    field @Deprecated public static final String KEY_SIP_CONFIG_MAX_PAYLOAD_SIZE_ON_UDP_INT = "sip_config_udp_max_payload_size_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_PATH_HEADER_STRING = "sip_config_path_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_P_ACCESS_NETWORK_INFO_HEADER_STRING = "sip_config_p_access_network_info_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_P_ASSOCIATED_URI_HEADER_STRING = "sip_config_p_associated_uri_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_P_LAST_ACCESS_NETWORK_INFO_HEADER_STRING = "sip_config_p_last_access_network_info_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SECURITY_VERIFY_HEADER_STRING = "sip_config_security_verify_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SERVER_DEFAULT_IPADDRESS_STRING = "sip_config_server_default_ipaddress_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SERVER_DEFAULT_PORT_INT = "sip_config_server_default_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SERVER_IPSEC_CLIENT_PORT_INT = "sip_config_server_ipsec_client_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SERVER_IPSEC_OLD_CLIENT_PORT_INT = "sip_config_server_ipsec_old_client_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SERVER_IPSEC_SERVER_PORT_INT = "sip_config_server_ipsec_server_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_SERVICE_ROUTE_HEADER_STRING = "sip_config_service_route_header_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_TRANSPORT_TYPE_STRING = "sip_config_protocol_type_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_DEFAULT_IPADDRESS_STRING = "sip_config_ue_default_ipaddress_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_DEFAULT_PORT_INT = "sip_config_ue_default_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_IPSEC_CLIENT_PORT_INT = "sip_config_ue_ipsec_client_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_IPSEC_OLD_CLIENT_PORT_INT = "sip_config_ue_ipsec_old_client_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_IPSEC_SERVER_PORT_INT = "sip_config_ue_ipsec_server_port_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_PRIVATE_USER_ID_STRING = "sip_config_ue_private_user_id_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_PUBLIC_GRUU_STRING = "sip_config_ue_public_gruu_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_PUBLIC_IPADDRESS_WITH_NAT_STRING = "sip_config_ue_public_ipaddress_with_nat_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_PUBLIC_PORT_WITH_NAT_INT = "sip_config_ue_public_port_with_nat_int";
-    field @Deprecated public static final String KEY_SIP_CONFIG_UE_PUBLIC_USER_ID_STRING = "sip_config_ue_public_user_id_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_URI_USER_PART_STRING = "sip_config_uri_user_part_string";
-    field @Deprecated public static final String KEY_SIP_CONFIG_USER_AGENT_HEADER_STRING = "sip_config_sip_user_agent_header_string";
-    field @Deprecated public static final String SIP_TRANSPORT_TCP = "TCP";
-    field @Deprecated public static final String SIP_TRANSPORT_UDP = "UDP";
-  }
-
-  @Deprecated public static final class SipDelegateImsConfiguration.Builder {
-    ctor @Deprecated public SipDelegateImsConfiguration.Builder(int);
-    ctor @Deprecated public SipDelegateImsConfiguration.Builder(@NonNull android.telephony.ims.SipDelegateImsConfiguration);
-    method @Deprecated @NonNull public android.telephony.ims.SipDelegateImsConfiguration.Builder addBoolean(@NonNull String, boolean);
-    method @Deprecated @NonNull public android.telephony.ims.SipDelegateImsConfiguration.Builder addInt(@NonNull String, int);
-    method @Deprecated @NonNull public android.telephony.ims.SipDelegateImsConfiguration.Builder addString(@NonNull String, @NonNull String);
-    method @Deprecated @NonNull public android.telephony.ims.SipDelegateImsConfiguration build();
   }
 
   public class SipDelegateManager {
@@ -13869,11 +13825,10 @@ package android.telephony.ims.stub {
   }
 
   public interface DelegateConnectionStateCallback {
-    method public default void onConfigurationChanged(@NonNull android.telephony.ims.SipDelegateConfiguration);
+    method public void onConfigurationChanged(@NonNull android.telephony.ims.SipDelegateConfiguration);
     method public void onCreated(@NonNull android.telephony.ims.SipDelegateConnection);
     method public void onDestroyed(int);
     method public void onFeatureTagStatusChanged(@NonNull android.telephony.ims.DelegateRegistrationState, @NonNull java.util.Set<android.telephony.ims.FeatureTagState>);
-    method @Deprecated public default void onImsConfigurationChanged(@NonNull android.telephony.ims.SipDelegateImsConfiguration);
   }
 
   public class ImsCallSessionImplBase implements java.lang.AutoCloseable {
@@ -14088,8 +14043,7 @@ package android.telephony.ims.stub {
   }
 
   public interface SipDelegate {
-    method public default void cleanupSession(@NonNull String);
-    method @Deprecated public default void closeDialog(@NonNull String);
+    method public void cleanupSession(@NonNull String);
     method public void notifyMessageReceiveError(@NonNull String, int);
     method public void notifyMessageReceived(@NonNull String);
     method public void sendMessage(@NonNull android.telephony.ims.SipMessage, long);
@@ -14525,7 +14479,6 @@ package android.view.translation {
     method @RequiresPermission(android.Manifest.permission.MANAGE_UI_TRANSLATION) public void finishTranslation(@NonNull android.app.assist.ActivityId);
     method @RequiresPermission(android.Manifest.permission.MANAGE_UI_TRANSLATION) public void pauseTranslation(@NonNull android.app.assist.ActivityId);
     method @RequiresPermission(android.Manifest.permission.MANAGE_UI_TRANSLATION) public void resumeTranslation(@NonNull android.app.assist.ActivityId);
-    method @Deprecated @RequiresPermission(android.Manifest.permission.MANAGE_UI_TRANSLATION) public void startTranslation(@NonNull android.view.translation.TranslationSpec, @NonNull android.view.translation.TranslationSpec, @NonNull java.util.List<android.view.autofill.AutofillId>, @NonNull android.app.assist.ActivityId);
     method @RequiresPermission(android.Manifest.permission.MANAGE_UI_TRANSLATION) public void startTranslation(@NonNull android.view.translation.TranslationSpec, @NonNull android.view.translation.TranslationSpec, @NonNull java.util.List<android.view.autofill.AutofillId>, @NonNull android.app.assist.ActivityId, @NonNull android.view.translation.UiTranslationSpec);
   }
 
@@ -14729,7 +14682,7 @@ package android.webkit {
     method public String getDataDirectorySuffix();
     method public String getErrorString(android.content.Context, int);
     method public int getPackageId(android.content.res.Resources, String);
-    method @NonNull public long[] getTimestamps();
+    method @NonNull public android.webkit.WebViewFactory.StartupTimestamps getStartupTimestamps();
     method @Deprecated public void invokeDrawGlFunctor(android.view.View, long, boolean);
     method public boolean isMultiProcessEnabled();
     method public boolean isTraceTagEnabled();
@@ -14745,12 +14698,6 @@ package android.webkit {
     method public static android.content.pm.PackageInfo getLoadedPackageInfo();
     method public static int loadWebViewNativeLibraryFromPackage(String, ClassLoader);
     method public static void prepareWebViewInZygote();
-    field public static final int ADD_ASSETS_END = 4; // 0x4
-    field public static final int ADD_ASSETS_START = 3; // 0x3
-    field public static final int CREATE_CONTEXT_END = 2; // 0x2
-    field public static final int CREATE_CONTEXT_START = 1; // 0x1
-    field public static final int GET_CLASS_LOADER_END = 6; // 0x6
-    field public static final int GET_CLASS_LOADER_START = 5; // 0x5
     field public static final int LIBLOAD_ADDRESS_SPACE_NOT_RESERVED = 2; // 0x2
     field public static final int LIBLOAD_FAILED_JNI_CALL = 7; // 0x7
     field public static final int LIBLOAD_FAILED_LISTING_WEBVIEW_PACKAGES = 4; // 0x4
@@ -14761,11 +14708,20 @@ package android.webkit {
     field public static final int LIBLOAD_FAILED_WAITING_FOR_WEBVIEW_REASON_UNKNOWN = 8; // 0x8
     field public static final int LIBLOAD_SUCCESS = 0; // 0x0
     field public static final int LIBLOAD_WRONG_PACKAGE_NAME = 1; // 0x1
-    field public static final int NATIVE_LOAD_END = 8; // 0x8
-    field public static final int NATIVE_LOAD_START = 7; // 0x7
-    field public static final int PROVIDER_CLASS_FOR_NAME_END = 10; // 0xa
-    field public static final int PROVIDER_CLASS_FOR_NAME_START = 9; // 0x9
-    field public static final int WEBVIEW_LOAD_START = 0; // 0x0
+  }
+
+  public static class WebViewFactory.StartupTimestamps {
+    method public long getAddAssetsEnd();
+    method public long getAddAssetsStart();
+    method public long getCreateContextEnd();
+    method public long getCreateContextStart();
+    method public long getGetClassLoaderEnd();
+    method public long getGetClassLoaderStart();
+    method public long getNativeLoadEnd();
+    method public long getNativeLoadStart();
+    method public long getProviderClassForNameEnd();
+    method public long getProviderClassForNameStart();
+    method public long getWebViewLoadStart();
   }
 
   public interface WebViewFactoryProvider {

@@ -271,6 +271,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     private final PackageManagerService mPm;
     private final Handler mHandler;
     private final PackageSessionProvider mSessionProvider;
+    private final SilentUpdatePolicy mSilentUpdatePolicy;
     /**
      * Note all calls must be done outside {@link #mLock} to prevent lock inversion.
      */
@@ -1003,8 +1004,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
     }
 
     public PackageInstallerSession(PackageInstallerService.InternalCallback callback,
-            Context context, PackageManagerService pm,
-            PackageSessionProvider sessionProvider, Looper looper, StagingManager stagingManager,
+            Context context, PackageManagerService pm, PackageSessionProvider sessionProvider,
+            SilentUpdatePolicy silentUpdatePolicy, Looper looper, StagingManager stagingManager,
             int sessionId, int userId, int installerUid, @NonNull InstallSource installSource,
             SessionParams params, long createdMillis, long committedMillis,
             File stageDir, String stageCid, InstallationFile[] files,
@@ -1017,6 +1018,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         mContext = context;
         mPm = pm;
         mSessionProvider = sessionProvider;
+        mSilentUpdatePolicy = silentUpdatePolicy;
         mHandler = new Handler(looper, mHandlerCallback);
         mStagingManager = stagingManager;
 
@@ -2264,12 +2266,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return;
         }
 
-        if (isApexSession()) {
-            destroyInternal();
-            dispatchSessionFinished(PackageManager.INSTALL_FAILED_INTERNAL_ERROR,
-                    "APEX packages can only be installed using staged sessions.", null);
-            return;
-        }
         verify();
     }
 
@@ -2293,6 +2289,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             final List<PackageInstallerSession> childSessions;
             synchronized (mLock) {
                 childSessions = getChildSessionsLocked();
+            }
+            // Spot check to reject a non-staged multi package install of APEXes and APKs.
+            if (!params.isStaged && containsApkSession()
+                    && sessionContains(s -> s.isApexSession())) {
+                throw new PackageManagerException(
+                    PackageManager.INSTALL_FAILED_SESSION_INVALID,
+                    "Non-staged multi package install of APEX and APK packages is not supported");
             }
             List<PackageManagerService.VerificationParams> verifyingChildSessions =
                     new ArrayList<>(childSessions.size());
@@ -2338,8 +2341,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
     private void installNonStaged()
             throws PackageManagerException {
-        Preconditions.checkArgument(containsApkSession());
-
         final PackageManagerService.InstallParams installingSession = makeInstallParams();
         if (installingSession == null) {
             throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
@@ -2404,6 +2405,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             } // else, we'll wait until we parse to determine if we need to
         }
 
+        boolean silentUpdatePolicyEnforceable = false;
         synchronized (mLock) {
             if (mRelinquished) {
                 throw new PackageManagerException(INSTALL_FAILED_INTERNAL_ERROR,
@@ -2428,12 +2430,28 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                 extractNativeLibraries(
                         mPackageLite, stageDir, params.abiOverride, mayInheritNativeLibs());
 
-                if (userActionRequirement == USER_ACTION_PENDING_APK_PARSING
-                        && (result.getTargetSdk() < Build.VERSION_CODES.Q)) {
-                    sendPendingUserActionIntent();
-                    return null;
+                if (userActionRequirement == USER_ACTION_PENDING_APK_PARSING) {
+                    if (result.getTargetSdk() < Build.VERSION_CODES.Q) {
+                        sendPendingUserActionIntent();
+                        return null;
+                    }
+                    if (params.requireUserAction == SessionParams.USER_ACTION_NOT_REQUIRED) {
+                        silentUpdatePolicyEnforceable = true;
+                    }
                 }
             }
+        }
+        if (silentUpdatePolicyEnforceable) {
+            if (!mSilentUpdatePolicy.isSilentUpdateAllowed(
+                    getInstallerPackageName(), getPackageName())) {
+                // Fall back to the non-silent update if a repeated installation is invoked within
+                // the throttle time.
+                sendPendingUserActionIntent();
+                return null;
+            }
+            mSilentUpdatePolicy.track(getInstallerPackageName(), getPackageName());
+        }
+        synchronized (mLock) {
             return makeVerificationParamsLocked();
         }
     }
@@ -2610,8 +2628,9 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             }
         }
 
-        // Do not try to install apex session. Parent session will have at least one apk session.
-        if (!isMultiPackage() && isApexSession()) {
+        // Do not try to install staged apex session. Parent session will have at least one apk
+        // session.
+        if (!isMultiPackage() && isApexSession() && params.isStaged) {
             sendUpdateToRemoteStatusReceiver(INSTALL_SUCCEEDED,
                     "Apex package should have been installed by apexd", null);
             return null;
@@ -2698,12 +2717,20 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         final String packageNameToLog =
                 (params.installFlags & PackageManager.INSTALL_FROM_ADB) == 0 ? packageName : "";
         final long currentTimestamp = System.currentTimeMillis();
+        final int packageUid;
+        if (returnCode != INSTALL_SUCCEEDED) {
+            // Package didn't install; no valid uid
+            packageUid = Process.INVALID_UID;
+        } else {
+            packageUid = mPm.getPackageUid(packageName, 0, userId);
+        }
         FrameworkStatsLog.write(FrameworkStatsLog.PACKAGE_INSTALLER_V2_REPORTED,
                 isIncrementalInstallation(),
                 packageNameToLog,
                 currentTimestamp - createdMillis,
                 returnCode,
-                getApksSize(packageName));
+                getApksSize(packageName),
+                packageUid);
     }
 
     private long getApksSize(String packageName) {
@@ -3758,11 +3785,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             return true;
         }
 
-        // Retrying commit.
-        if (mIncrementalFileStorages != null) {
-            return false;
-        }
-
         final List<InstallationFileParcel> addedFiles = new ArrayList<>();
         final List<String> removedFiles = new ArrayList<>();
 
@@ -3777,13 +3799,6 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         0, file.getName().length() - REMOVE_MARKER_EXTENSION.length());
                 removedFiles.add(name);
             }
-        }
-
-        final DataLoaderManager dataLoaderManager = mContext.getSystemService(
-                DataLoaderManager.class);
-        if (dataLoaderManager == null) {
-            throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
-                    "Failed to find data loader manager service");
         }
 
         final DataLoaderParams params = this.params.dataLoaderParams;
@@ -3810,20 +3825,13 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                     return;
                 }
                 try {
-                    IDataLoader dataLoader = dataLoaderManager.getDataLoader(dataLoaderId);
-                    if (dataLoader == null) {
-                        mDataLoaderFinished = true;
-                        dispatchSessionValidationFailure(INSTALL_FAILED_MEDIA_UNAVAILABLE,
-                                "Failure to obtain data loader");
-                        return;
-                    }
-
                     switch (status) {
                         case IDataLoaderStatusListener.DATA_LOADER_BOUND: {
                             if (manualStartAndDestroy) {
                                 FileSystemControlParcel control = new FileSystemControlParcel();
                                 control.callback = new FileSystemConnector(addedFiles);
-                                dataLoader.create(dataLoaderId, params.getData(), control, this);
+                                getDataLoader(dataLoaderId).create(dataLoaderId, params.getData(),
+                                        control, this);
                             }
 
                             break;
@@ -3832,12 +3840,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             if (manualStartAndDestroy) {
                                 // IncrementalFileStorages will call start after all files are
                                 // created in IncFS.
-                                dataLoader.start(dataLoaderId);
+                                getDataLoader(dataLoaderId).start(dataLoaderId);
                             }
                             break;
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_STARTED: {
-                            dataLoader.prepareImage(
+                            getDataLoader(dataLoaderId).prepareImage(
                                     dataLoaderId,
                                     addedFiles.toArray(
                                             new InstallationFileParcel[addedFiles.size()]),
@@ -3853,7 +3861,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                                 dispatchSessionSealed();
                             }
                             if (manualStartAndDestroy) {
-                                dataLoader.destroy(dataLoaderId);
+                                getDataLoader(dataLoaderId).destroy(dataLoaderId);
                             }
                             break;
                         }
@@ -3862,7 +3870,7 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             dispatchSessionValidationFailure(INSTALL_FAILED_MEDIA_UNAVAILABLE,
                                     "Failed to prepare image.");
                             if (manualStartAndDestroy) {
-                                dataLoader.destroy(dataLoaderId);
+                                getDataLoader(dataLoaderId).destroy(dataLoaderId);
                             }
                             break;
                         }
@@ -3877,11 +3885,12 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                             break;
                         }
                         case IDataLoaderStatusListener.DATA_LOADER_UNRECOVERABLE:
-                            mDataLoaderFinished = true;
-                            dispatchSessionValidationFailure(INSTALL_FAILED_MEDIA_UNAVAILABLE,
+                            throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
                                     "DataLoader reported unrecoverable failure.");
-                            break;
                     }
+                } catch (PackageManagerException e) {
+                    mDataLoaderFinished = true;
+                    dispatchSessionValidationFailure(e.error, ExceptionUtils.getCompleteMessage(e));
                 } catch (RemoteException e) {
                     // In case of streaming failure we don't want to fail or commit the session.
                     // Just return from this method and allow caller to commit again.
@@ -3936,18 +3945,24 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
                         (pkgInfo != null && pkgInfo.applicationInfo != null) ? new File(
                                 pkgInfo.applicationInfo.getCodePath()).getParentFile() : null;
 
-                mIncrementalFileStorages = IncrementalFileStorages.initialize(mContext, stageDir,
-                        inheritedDir, params, statusListener, healthCheckParams, healthListener,
-                        addedFiles, perUidReadTimeouts,
-                        new IPackageLoadingProgressCallback.Stub() {
-                            @Override
-                            public void onPackageLoadingProgressChanged(float progress) {
-                                synchronized (mProgressLock) {
-                                    mIncrementalProgress = progress;
-                                    computeProgressLocked(true);
+                if (mIncrementalFileStorages == null) {
+                    mIncrementalFileStorages = IncrementalFileStorages.initialize(mContext,
+                            stageDir, inheritedDir, params, statusListener, healthCheckParams,
+                            healthListener, addedFiles, perUidReadTimeouts,
+                            new IPackageLoadingProgressCallback.Stub() {
+                                @Override
+                                public void onPackageLoadingProgressChanged(float progress) {
+                                    synchronized (mProgressLock) {
+                                        mIncrementalProgress = progress;
+                                        computeProgressLocked(true);
+                                    }
                                 }
-                            }
-                        });
+                            });
+                } else {
+                    // Retrying commit.
+                    mIncrementalFileStorages.startLoading(params, statusListener, healthCheckParams,
+                            healthListener, perUidReadTimeouts);
+                }
                 return false;
             } catch (IOException e) {
                 throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE, e.getMessage(),
@@ -3956,13 +3971,31 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
         }
 
         final long bindDelayMs = 0;
-        if (!dataLoaderManager.bindToDataLoader(sessionId, params.getData(), bindDelayMs,
+        if (!getDataLoaderManager().bindToDataLoader(sessionId, params.getData(), bindDelayMs,
                 statusListener)) {
             throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
                     "Failed to initialize data loader");
         }
 
         return false;
+    }
+
+    private DataLoaderManager getDataLoaderManager() throws PackageManagerException {
+        DataLoaderManager dataLoaderManager = mContext.getSystemService(DataLoaderManager.class);
+        if (dataLoaderManager == null) {
+            throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
+                    "Failed to find data loader manager service");
+        }
+        return dataLoaderManager;
+    }
+
+    private IDataLoader getDataLoader(int dataLoaderId) throws PackageManagerException {
+        IDataLoader dataLoader = getDataLoaderManager().getDataLoader(dataLoaderId);
+        if (dataLoader == null) {
+            throw new PackageManagerException(INSTALL_FAILED_MEDIA_UNAVAILABLE,
+                    "Failure to obtain data loader");
+        }
+        return dataLoader;
     }
 
     private void dispatchSessionValidationFailure(int error, String detailMessage) {
@@ -4581,7 +4614,8 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
             @NonNull PackageInstallerService.InternalCallback callback, @NonNull Context context,
             @NonNull PackageManagerService pm, Looper installerThread,
             @NonNull StagingManager stagingManager, @NonNull File sessionsDir,
-            @NonNull PackageSessionProvider sessionProvider)
+            @NonNull PackageSessionProvider sessionProvider,
+            @NonNull SilentUpdatePolicy silentUpdatePolicy)
             throws IOException, XmlPullParserException {
         final int sessionId = in.getAttributeInt(null, ATTR_SESSION_ID);
         final int userId = in.getAttributeInt(null, ATTR_USER_ID);
@@ -4755,10 +4789,11 @@ public class PackageInstallerSession extends IPackageInstallerSession.Stub {
 
         InstallSource installSource = InstallSource.create(installInitiatingPackageName,
                 installOriginatingPackageName, installerPackageName, installerAttributionTag);
-        return new PackageInstallerSession(callback, context, pm, sessionProvider, installerThread,
-                stagingManager, sessionId, userId, installerUid, installSource, params,
-                createdMillis, committedMillis, stageDir, stageCid, fileArray, checksumsMap,
-                prepared, committed, destroyed, sealed, childSessionIdsArray, parentSessionId,
-                isReady, isFailed, isApplied, stagedSessionErrorCode, stagedSessionErrorMessage);
+        return new PackageInstallerSession(callback, context, pm, sessionProvider,
+                silentUpdatePolicy, installerThread, stagingManager, sessionId, userId,
+                installerUid, installSource, params, createdMillis, committedMillis, stageDir,
+                stageCid, fileArray, checksumsMap, prepared, committed, destroyed, sealed,
+                childSessionIdsArray, parentSessionId, isReady, isFailed, isApplied,
+                stagedSessionErrorCode, stagedSessionErrorMessage);
     }
 }

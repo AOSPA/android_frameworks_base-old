@@ -23,11 +23,14 @@ import android.content.Context
 import android.graphics.Matrix
 import android.view.RemoteAnimationTarget
 import android.view.SyncRtSurfaceTransactionApplier
+import android.view.View
 import androidx.core.math.MathUtils
 import com.android.internal.R
+import com.android.keyguard.KeyguardClockSwitchController
 import com.android.keyguard.KeyguardViewController
 import com.android.systemui.animation.Interpolators
 import com.android.systemui.dagger.SysUISingleton
+import com.android.systemui.shared.system.smartspace.SmartspaceTransitionController
 import com.android.systemui.statusbar.policy.KeyguardStateController
 import dagger.Lazy
 import javax.inject.Inject
@@ -85,7 +88,8 @@ class KeyguardUnlockAnimationController @Inject constructor(
     context: Context,
     private val keyguardStateController: KeyguardStateController,
     private val keyguardViewMediator: Lazy<KeyguardViewMediator>,
-    private val keyguardViewController: KeyguardViewController
+    private val keyguardViewController: KeyguardViewController,
+    private val smartspaceTransitionController: SmartspaceTransitionController
 ) : KeyguardStateController.Callback {
 
     /**
@@ -131,6 +135,21 @@ class KeyguardUnlockAnimationController @Inject constructor(
     /** Rounded corner radius to apply to the surface behind the keyguard. */
     private var roundedCornerRadius = 0f
 
+    /** The SmartSpace view on the lockscreen, provided by [KeyguardClockSwitchController]. */
+    public var lockscreenSmartSpace: View? = null
+
+    /**
+     * Whether we are currently in the process of unlocking the keyguard, and we are performing the
+     * shared element SmartSpace transition.
+     */
+    private var unlockingWithSmartSpaceTransition: Boolean = false
+
+    /**
+     * Whether we tried to start the SmartSpace shared element transition for this unlock swipe.
+     * It's possible we're unable to do so (if the Launcher SmartSpace is not available).
+     */
+    private var attemptedSmartSpaceTransitionForThisSwipe = false
+
     init {
         surfaceBehindAlphaAnimator.duration = 150
         surfaceBehindAlphaAnimator.interpolator = Interpolators.ALPHA_IN
@@ -143,7 +162,8 @@ class KeyguardUnlockAnimationController @Inject constructor(
                 // If the surface alpha is 0f, it's no longer visible so we can safely be done with
                 // the animation.
                 if (surfaceBehindAlpha == 0f) {
-                    keyguardViewMediator.get().finishSurfaceBehindRemoteAnimation()
+                    keyguardViewMediator.get().finishSurfaceBehindRemoteAnimation(
+                            false /* cancelled */)
                 }
             }
         })
@@ -156,7 +176,8 @@ class KeyguardUnlockAnimationController @Inject constructor(
         }
         surfaceBehindEntryAnimator.addListener(object : AnimatorListenerAdapter() {
             override fun onAnimationEnd(animation: Animator) {
-                keyguardViewMediator.get().onKeyguardExitRemoteAnimationFinished()
+                keyguardViewMediator.get().onKeyguardExitRemoteAnimationFinished(
+                        false /* cancelled */)
             }
         })
 
@@ -211,6 +232,24 @@ class KeyguardUnlockAnimationController @Inject constructor(
 
     fun hideKeyguardViewAfterRemoteAnimation() {
         keyguardViewController.hide(surfaceBehindRemoteAnimationStartTime, 350)
+    }
+
+    /**
+     * Whether we are currently in the process of unlocking the keyguard, and we are performing the
+     * shared element SmartSpace transition.
+     */
+    fun isUnlockingWithSmartSpaceTransition(): Boolean {
+        return unlockingWithSmartSpaceTransition
+    }
+
+    /**
+     * Update the lockscreen SmartSpace to be positioned according to the current dismiss amount. As
+     * the dismiss amount increases, we will increase our SmartSpace's progress to the destination
+     * bounds (the location of the Launcher SmartSpace).
+     */
+    fun updateLockscreenSmartSpacePosition() {
+        smartspaceTransitionController.setProgressToDestinationBounds(
+                keyguardStateController.dismissAmount / DISMISS_AMOUNT_EXIT_KEYGUARD_THRESHOLD)
     }
 
     /**
@@ -280,40 +319,89 @@ class KeyguardUnlockAnimationController @Inject constructor(
     }
 
     override fun onKeyguardDismissAmountChanged() {
-        if (!KeyguardService.sEnableRemoteKeyguardAnimation) {
+        if (!KeyguardService.sEnableRemoteKeyguardGoingAwayAnimation) {
             return
         }
 
+        if (keyguardViewController.isShowing) {
+            updateKeyguardViewMediatorIfThresholdsReached()
+
+            // If the surface is visible or it's about to be, start updating its appearance to
+            // reflect the new dismiss amount.
+            if (keyguardViewMediator.get().requestedShowSurfaceBehindKeyguard() ||
+                    keyguardViewMediator.get().isAnimatingBetweenKeyguardAndSurfaceBehindOrWillBe) {
+                updateSurfaceBehindAppearAmount()
+            }
+        }
+
+        // The end of the SmartSpace transition can occur after the keyguard is hidden (when we tell
+        // Launcher's SmartSpace to become visible again), so update it even if the keyguard view is
+        // no longer showing.
+        updateSmartSpaceTransition()
+    }
+
+    /**
+     * Lets the KeyguardViewMediator know if the dismiss amount has crossed a threshold of interest,
+     * such as reaching the point in the dismiss swipe where we need to make the surface behind the
+     * keyguard visible.
+     */
+    private fun updateKeyguardViewMediatorIfThresholdsReached() {
         val dismissAmount = keyguardStateController.dismissAmount
 
         // Hide the keyguard if we're fully dismissed, or if we're swiping to dismiss and have
         // crossed the threshold to finish the dismissal.
         val reachedHideKeyguardThreshold = (dismissAmount >= 1f ||
                 (keyguardStateController.isDismissingFromSwipe &&
-                // Don't hide if we're flinging during a swipe, since we need to finish
-                // animating it out. This will be called again after the fling ends.
-                !keyguardStateController.isFlingingToDismissKeyguardDuringSwipeGesture &&
-                dismissAmount >= DISMISS_AMOUNT_EXIT_KEYGUARD_THRESHOLD))
+                        // Don't hide if we're flinging during a swipe, since we need to finish
+                        // animating it out. This will be called again after the fling ends.
+                        !keyguardStateController.isFlingingToDismissKeyguardDuringSwipeGesture &&
+                        dismissAmount >= DISMISS_AMOUNT_EXIT_KEYGUARD_THRESHOLD))
 
         if (dismissAmount >= DISMISS_AMOUNT_SHOW_SURFACE_THRESHOLD &&
                 !keyguardViewMediator.get().requestedShowSurfaceBehindKeyguard()) {
-            // We passed the threshold, and we're not yet showing the surface behind the keyguard.
-            // Animate it in.
+            // We passed the threshold, and we're not yet showing the surface behind the
+            // keyguard. Animate it in.
             keyguardViewMediator.get().showSurfaceBehindKeyguard()
             fadeInSurfaceBehind()
         } else if (dismissAmount < DISMISS_AMOUNT_SHOW_SURFACE_THRESHOLD &&
                 keyguardViewMediator.get().requestedShowSurfaceBehindKeyguard()) {
-            // We're no longer past the threshold but we are showing the surface. Animate it out.
+            // We're no longer past the threshold but we are showing the surface. Animate it
+            // out.
             keyguardViewMediator.get().hideSurfaceBehindKeyguard()
             fadeOutSurfaceBehind()
-        } else if (keyguardViewMediator.get().isAnimatingBetweenKeyguardAndSurfaceBehindOrWillBe &&
+        } else if (keyguardViewMediator.get()
+                        .isAnimatingBetweenKeyguardAndSurfaceBehindOrWillBe &&
                 reachedHideKeyguardThreshold) {
-            keyguardViewMediator.get().onKeyguardExitRemoteAnimationFinished()
+            keyguardViewMediator.get().onKeyguardExitRemoteAnimationFinished(false /* cancelled */)
         }
+    }
 
-        if (keyguardViewMediator.get().requestedShowSurfaceBehindKeyguard() ||
-                keyguardViewMediator.get().isAnimatingBetweenKeyguardAndSurfaceBehindOrWillBe) {
-            updateSurfaceBehindAppearAmount()
+    /**
+     * Updates flags related to the SmartSpace transition in response to a change in keyguard
+     * dismiss amount, and also updates the SmartSpaceTransitionController, which will let Launcher
+     * know if it needs to do something as a result.
+     */
+    private fun updateSmartSpaceTransition() {
+        val dismissAmount = keyguardStateController.dismissAmount
+
+        // If we've begun a swipe, and are capable of doing the SmartSpace transition, start it!
+        if (!attemptedSmartSpaceTransitionForThisSwipe &&
+                dismissAmount > 0f &&
+                dismissAmount < 1f &&
+                keyguardViewController.isShowing) {
+            attemptedSmartSpaceTransitionForThisSwipe = true
+
+            smartspaceTransitionController.prepareForUnlockTransition()
+            if (keyguardStateController.canPerformSmartSpaceTransition()) {
+                unlockingWithSmartSpaceTransition = true
+                smartspaceTransitionController.launcherSmartspace?.setVisibility(
+                        View.INVISIBLE)
+            }
+        } else if (attemptedSmartSpaceTransitionForThisSwipe &&
+                (dismissAmount == 0f || dismissAmount == 1f)) {
+            attemptedSmartSpaceTransitionForThisSwipe = false
+            unlockingWithSmartSpaceTransition = false
+            smartspaceTransitionController.launcherSmartspace?.setVisibility(View.VISIBLE)
         }
     }
 

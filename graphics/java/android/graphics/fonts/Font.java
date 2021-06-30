@@ -46,7 +46,10 @@ import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.nio.channels.FileChannel;
 import java.util.Arrays;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.Objects;
+import java.util.Set;
 
 /**
  * A font class can be used for creating FontFamily.
@@ -801,6 +804,15 @@ public final class Font {
         return myBuffer.equals(otherBuffer);
     }
 
+    /** @hide */
+    public boolean paramEquals(@NonNull Font f) {
+        return f.getStyle().equals(getStyle())
+                && f.getTtcIndex() == getTtcIndex()
+                && Arrays.equals(f.getAxes(), getAxes())
+                && Objects.equals(f.getLocaleList(), getLocaleList())
+                && Objects.equals(getFile(), f.getFile());
+    }
+
     @Override
     public boolean equals(@Nullable Object o) {
         if (o == this) {
@@ -818,13 +830,7 @@ public final class Font {
             return true;
         }
 
-        boolean paramEqual = f.getStyle().equals(getStyle())
-                && f.getTtcIndex() == getTtcIndex()
-                && Arrays.equals(f.getAxes(), getAxes())
-                && Objects.equals(f.getLocaleList(), getLocaleList())
-                && Objects.equals(getFile(), f.getFile());
-
-        if (!paramEqual) {
+        if (!paramEquals(f)) {
             return false;
         }
 
@@ -854,6 +860,18 @@ public final class Font {
             + ", localeList=" + getLocaleList()
             + ", buffer=" + getBuffer()
             + "}";
+    }
+
+    /** @hide */
+    public static Set<Font> getAvailableFonts() {
+        // The font uniqueness is already calculated in the native code. So use IdentityHashMap
+        // for avoiding hash/equals calculation.
+        IdentityHashMap<Font, Font> map = new IdentityHashMap<>();
+        for (long nativePtr : nGetAvailableFontSet()) {
+            Font font = new Font(nativePtr);
+            map.put(font, font);
+        }
+        return Collections.unmodifiableSet(map.keySet());
     }
 
     @CriticalNative
@@ -897,4 +915,7 @@ public final class Font {
 
     @CriticalNative
     private static native long nGetAxisInfo(long fontPtr, int i);
+
+    @FastNative
+    private static native long[] nGetAvailableFontSet();
 }

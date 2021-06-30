@@ -21,8 +21,7 @@
     android:id="@+id/keyguard_bottom_area"
     android:layout_height="match_parent"
     android:layout_width="match_parent"
-    android:outlineProvider="none"
-    android:elevation="5dp" > <!-- Put it above the status bar header -->
+    android:outlineProvider="none" > <!-- Put it above the status bar header -->
 
     <LinearLayout
         android:id="@+id/keyguard_indication_area"
@@ -54,6 +53,7 @@
             android:paddingEnd="@dimen/keyguard_indication_text_padding"
             android:textAppearance="@style/TextAppearance.Keyguard.BottomArea"
             android:alpha=".8"
+            android:accessibilityLiveRegion="polite"
             android:visibility="gone"/>
 
     </LinearLayout>
@@ -66,12 +66,6 @@
         android:orientation="vertical"
         android:layout_gravity="bottom|center_horizontal"
         android:gravity="center_horizontal" />
-
-    <FrameLayout
-        android:id="@+id/preview_container"
-        android:layout_width="match_parent"
-        android:layout_height="match_parent">
-    </FrameLayout>
 
     <com.android.systemui.statusbar.KeyguardAffordanceView
         android:id="@+id/camera_button"
@@ -95,8 +89,8 @@
 
     <ImageView
         android:id="@+id/wallet_button"
-        android:layout_height="@dimen/keyguard_affordance_height"
-        android:layout_width="@dimen/keyguard_affordance_width"
+        android:layout_height="@dimen/keyguard_affordance_wallet_height"
+        android:layout_width="@dimen/keyguard_affordance_wallet_width"
         android:layout_gravity="bottom|end"
         android:scaleType="center"
         android:tint="?android:attr/textColorPrimary"
@@ -104,6 +98,7 @@
         android:background="@drawable/wallet_lockscreen_bg"
         android:layout_marginEnd="@dimen/keyguard_affordance_horizontal_offset"
         android:layout_marginBottom="@dimen/keyguard_affordance_vertical_offset"
+        android:contentDescription="@string/accessibility_wallet_button"
         android:visibility="gone" />
 
     <FrameLayout

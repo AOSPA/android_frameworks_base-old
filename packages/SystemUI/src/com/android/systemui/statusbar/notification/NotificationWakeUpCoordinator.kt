@@ -28,6 +28,7 @@ import com.android.systemui.statusbar.notification.stack.StackStateAnimator
 import com.android.systemui.statusbar.phone.DozeParameters
 import com.android.systemui.statusbar.phone.KeyguardBypassController
 import com.android.systemui.statusbar.phone.PanelExpansionListener
+import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController
 import com.android.systemui.statusbar.policy.HeadsUpManager
 import com.android.systemui.statusbar.policy.OnHeadsUpChangedListener
 import javax.inject.Inject
@@ -38,7 +39,8 @@ class NotificationWakeUpCoordinator @Inject constructor(
     private val mHeadsUpManager: HeadsUpManager,
     private val statusBarStateController: StatusBarStateController,
     private val bypassController: KeyguardBypassController,
-    private val dozeParameters: DozeParameters
+    private val dozeParameters: DozeParameters,
+    private val unlockedScreenOffAnimationController: UnlockedScreenOffAnimationController
 ) : OnHeadsUpChangedListener, StatusBarStateController.StateListener, PanelExpansionListener {
 
     private val mNotificationVisibility = object : FloatProperty<NotificationWakeUpCoordinator>(
@@ -95,8 +97,6 @@ class NotificationWakeUpCoordinator @Inject constructor(
                 field = value
             }
         }
-
-    private var animatingScreenOff = false
 
     private var collapsedEnoughToHide: Boolean = false
 
@@ -234,11 +234,11 @@ class NotificationWakeUpCoordinator @Inject constructor(
     }
 
     override fun onDozeAmountChanged(linear: Float, eased: Float) {
-        if (overrideDozeAmountIfBypass()) {
+        if (overrideDozeAmountIfAnimatingScreenOff(linear)) {
             return
         }
 
-        if (overrideDozeAmountIfAnimatingScreenOff(linear)) {
+        if (overrideDozeAmountIfBypass()) {
             return
         }
 
@@ -265,7 +265,7 @@ class NotificationWakeUpCoordinator @Inject constructor(
 
     override fun onStateChanged(newState: Int) {
         if (dozeParameters.shouldControlUnlockedScreenOff()) {
-            if (animatingScreenOff &&
+            if (unlockedScreenOffAnimationController.isScreenOffAnimationPlaying() &&
                     state == StatusBarState.KEYGUARD &&
                     newState == StatusBarState.SHADE) {
                 // If we're animating the screen off and going from KEYGUARD back to SHADE, the
@@ -273,12 +273,16 @@ class NotificationWakeUpCoordinator @Inject constructor(
                 // dozing) so that the notifications are no longer hidden.
                 setDozeAmount(0f, 0f)
             }
-
-            animatingScreenOff =
-                    state == StatusBarState.SHADE && newState == StatusBarState.KEYGUARD
         }
 
-        overrideDozeAmountIfBypass()
+        if (overrideDozeAmountIfAnimatingScreenOff(mLinearDozeAmount)) {
+            return
+        }
+
+        if (overrideDozeAmountIfBypass()) {
+            return
+        }
+
         if (bypassController.bypassEnabled &&
                 newState == StatusBarState.KEYGUARD && state == StatusBarState.SHADE_LOCKED &&
             (!statusBarStateController.isDozing || shouldAnimateVisibility())) {
@@ -328,12 +332,7 @@ class NotificationWakeUpCoordinator @Inject constructor(
      * animation. If true, the original doze amount should be ignored.
      */
     private fun overrideDozeAmountIfAnimatingScreenOff(linearDozeAmount: Float): Boolean {
-        if (animatingScreenOff) {
-            if (linearDozeAmount == 1f) {
-                animatingScreenOff = false
-                return false
-            }
-
+        if (unlockedScreenOffAnimationController.isScreenOffAnimationPlaying()) {
             setDozeAmount(1f, 1f)
             return true
         }

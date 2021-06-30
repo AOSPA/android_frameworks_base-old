@@ -505,6 +505,13 @@ public class DevicePolicyManager {
             "android.app.extra.bugreport_notification_type";
 
     /**
+     * Default value for preferential network service enabling.
+     *
+     * @hide
+     */
+    public static final boolean PREFERENTIAL_NETWORK_SERVICE_ENABLED_DEFAULT = false;
+
+    /**
      * Notification type for a started remote bugreport flow.
      *
      * @hide
@@ -6838,6 +6845,10 @@ public class DevicePolicyManager {
      * <p> Enabling lockdown via {@code lockdownEnabled} argument carries the risk that any failure
      * of the VPN provider could break networking for all apps. This method clears any lockdown
      * allowlist set by {@link #setAlwaysOnVpnPackage(ComponentName, String, boolean, Set)}.
+     * <p> Starting from {@link android.os.Build.VERSION_CODES#S API 31} calling this method with
+     * {@code vpnPackage} set to {@code null} only removes the existing configuration if it was
+     * previously created by this admin. To remove VPN configuration created by the user use
+     * {@link UserManager#DISALLOW_CONFIG_VPN}.
      *
      * @param vpnPackage The package name for an installed VPN app on the device, or {@code null} to
      *        remove an existing always-on VPN configuration.
@@ -10369,11 +10380,11 @@ public class DevicePolicyManager {
     /**
      * Called by device owners to set the user's global location setting.
      *
-     * <p><b>Note: </b> this call is ignored on
-     * {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE automotive builds}.
      *
      * @param admin Which {@link DeviceAdminReceiver} this request is associated with
-     * @param locationEnabled whether location should be enabled or disabled
+     * @param locationEnabled whether location should be enabled or disabled. <b>Note: </b> on
+     * {@link android.content.pm.PackageManager#FEATURE_AUTOMOTIVE automotive builds}, calls to
+     * disable will be ignored.
      * @throws SecurityException if {@code admin} is not a device owner.
      */
     public void setLocationEnabled(@NonNull ComponentName admin, boolean locationEnabled) {
@@ -13077,6 +13088,10 @@ public class DevicePolicyManager {
      * @see #getCrossProfileCalendarPackages(ComponentName)
      * @hide
      */
+    @RequiresPermission(anyOf = {
+            permission.INTERACT_ACROSS_USERS_FULL,
+            permission.INTERACT_ACROSS_USERS
+    }, conditional = true)
     public boolean isPackageAllowedToAccessCalendar(@NonNull  String packageName) {
         throwIfParentInstance("isPackageAllowedToAccessCalendar");
         if (mService != null) {
@@ -13105,6 +13120,10 @@ public class DevicePolicyManager {
      * @see #getCrossProfileCalendarPackages(ComponentName)
      * @hide
      */
+    @RequiresPermission(anyOf = {
+            permission.INTERACT_ACROSS_USERS_FULL,
+            permission.INTERACT_ACROSS_USERS
+    })
     public @Nullable Set<String> getCrossProfileCalendarPackages() {
         throwIfParentInstance("getCrossProfileCalendarPackages");
         if (mService != null) {
@@ -13865,8 +13884,7 @@ public class DevicePolicyManager {
     }
 
     /**
-     * Called by device owner or profile owner of an organization-owned managed profile to return
-     * whether USB data signaling is currently enabled by the admin.
+     * Returns whether USB data signaling is currently enabled by the admin. Callable by any app.
      *
      * @return {@code true} if USB data signaling is enabled, {@code false} otherwise.
      */

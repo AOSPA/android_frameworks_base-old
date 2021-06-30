@@ -37,7 +37,7 @@ import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
 import com.android.wm.shell.onehanded.OneHanded;
-import com.android.wm.shell.onehanded.OneHandedGestureHandler;
+import com.android.wm.shell.onehanded.OneHandedEventCallback;
 import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
 import com.android.wm.shell.pip.Pip;
 
@@ -106,12 +106,8 @@ public class WMShellTest extends SysuiTestCase {
         verify(mKeyguardUpdateMonitor).registerCallback(any(KeyguardUpdateMonitorCallback.class));
         verify(mCommandQueue).addCallback(any(CommandQueue.Callbacks.class));
         verify(mScreenLifecycle).addObserver(any(ScreenLifecycle.Observer.class));
-        verify(mNavigationModeController).addListener(
-                any(NavigationModeController.ModeChangedListener.class));
-
-        verify(mOneHanded).registerGestureCallback(any(
-                OneHandedGestureHandler.OneHandedGestureEventCallback.class));
         verify(mOneHanded).registerTransitionCallback(any(OneHandedTransitionCallback.class));
+        verify(mOneHanded).registerEventCallback(any(OneHandedEventCallback.class));
     }
 
     @Test

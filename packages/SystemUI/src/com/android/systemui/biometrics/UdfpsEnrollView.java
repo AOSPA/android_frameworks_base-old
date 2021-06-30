@@ -17,6 +17,8 @@
 package com.android.systemui.biometrics;
 
 import android.content.Context;
+import android.os.Handler;
+import android.os.Looper;
 import android.util.AttributeSet;
 import android.widget.ImageView;
 
@@ -30,26 +32,25 @@ import com.android.systemui.R;
  */
 public class UdfpsEnrollView extends UdfpsAnimationView {
     @NonNull private final UdfpsEnrollDrawable mFingerprintDrawable;
+    @NonNull private final Handler mHandler;
+
     @NonNull private ImageView mFingerprintView;
-    @NonNull private UdfpsProgressBar mProgressBar;
 
     public UdfpsEnrollView(Context context, @Nullable AttributeSet attrs) {
         super(context, attrs);
         mFingerprintDrawable = new UdfpsEnrollDrawable(mContext);
+        mHandler = new Handler(Looper.getMainLooper());
     }
 
     @Override
     protected void updateAlpha() {
         super.updateAlpha();
-        mProgressBar.setAlpha(calculateAlpha());
-        mProgressBar.getProgressDrawable().setAlpha(calculateAlpha());
     }
 
     @Override
     protected void onFinishInflate() {
         mFingerprintView = findViewById(R.id.udfps_enroll_animation_fp_view);
         mFingerprintView.setImageDrawable(mFingerprintDrawable);
-        mProgressBar = findViewById(R.id.progress_bar);
     }
 
     @Override
@@ -59,5 +60,13 @@ public class UdfpsEnrollView extends UdfpsAnimationView {
 
     void setEnrollHelper(UdfpsEnrollHelper enrollHelper) {
         mFingerprintDrawable.setEnrollHelper(enrollHelper);
+    }
+
+    void onEnrollmentProgress(int remaining, int totalSteps) {
+        mHandler.post(() -> mFingerprintDrawable.onEnrollmentProgress(remaining, totalSteps));
+    }
+
+    void onLastStepAcquired() {
+        mHandler.post(mFingerprintDrawable::onLastStepAcquired);
     }
 }

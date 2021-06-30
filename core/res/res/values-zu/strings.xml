@@ -580,7 +580,7 @@
     <string name="fingerprint_acquired_partial" msgid="694598777291084823">"Kutholwe ingxenye yesigxivizo somunwe"</string>
     <string name="fingerprint_acquired_insufficient" msgid="2545149524031515411">"Ayikwazanga ukucubungula izigxivizo zeminwe. Sicela uzame futhi."</string>
     <string name="fingerprint_acquired_imager_dirty" msgid="5236744087471419479">"Hlanza inzwa"</string>
-    <string name="fingerprint_acquired_too_fast" msgid="1254724478300787385">"Umunwe uhambe ngokushesha"</string>
+    <string name="fingerprint_acquired_too_fast" msgid="6038375140739678098">"Bamba isikhashana esingeziwe"</string>
     <string name="fingerprint_acquired_too_slow" msgid="6683510291554497580">"Umnwe uhanjiswe kancane kakhulu. Sicela uzame futhi."</string>
     <string name="fingerprint_acquired_already_enrolled" msgid="2285166003936206785">"Zama ezinye izigxivizo zeminwe"</string>
     <string name="fingerprint_acquired_too_bright" msgid="3863560181670915607">"Kukhanya kakhulu"</string>
@@ -609,14 +609,10 @@
   <string-array name="fingerprint_error_vendor">
   </string-array>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Isithonjana sezigxivizo zeminwe"</string>
-    <string name="permlab_manageFace" msgid="4569549381889283282">"phatha izingxenyekazi zekhompuyutha ze-face unlock"</string>
-    <string name="permdesc_manageFace" msgid="6204569688492710471">"Ivumela uhlelo lokusebenza ukuthi luhoxise izindlela zokungeza nokususa amathempulethi obuso azosetshenziswa."</string>
-    <string name="permlab_useFaceAuthentication" msgid="1011430526454859030">"sebenzisa izingxenyekazi zekhompuyutha ze-face unlock"</string>
-    <string name="permdesc_useFaceAuthentication" msgid="3115697017684668012">"Ivumela uhlelo lokusebenza ukuthi lusebenzise izingxenyekazi zekhompuyutha ze-face unlock ukuze kufakazelwe ubuqiniso"</string>
-    <string name="face_recalibrate_notification_name" msgid="6006095897989257026">"I-Face unlock"</string>
+    <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Ukuvula ubuso"</string>
     <string name="face_recalibrate_notification_title" msgid="5944930528030496897">"Phinda ubhalise ubuso bakho"</string>
     <string name="face_recalibrate_notification_content" msgid="892757485125249962">"Ukuze uthuthukise ukubonwa, sicela uphinde ubhalise ubuso bakho"</string>
-    <string name="face_setup_notification_title" msgid="550617822603450009">"Setha i-face unlock"</string>
+    <string name="face_setup_notification_title" msgid="8843461561970741790">"Setha Ukuvula ngobuso"</string>
     <string name="face_setup_notification_content" msgid="5463999831057751676">"Vula ifoni yakho ngokuyibheka"</string>
     <string name="fingerprint_setup_notification_title" msgid="2002630611398849495">"Setha izindlela eziningi zokuvula"</string>
     <string name="fingerprint_setup_notification_content" msgid="205578121848324852">"Thepha ukuze ungeze izigxivizo zomunwe"</string>
@@ -643,18 +639,19 @@
   <string-array name="face_acquired_vendor">
   </string-array>
     <string name="face_error_hw_not_available" msgid="5085202213036026288">"Ayikwazi ukuqinisekisa ubuso. Izingxenyekazi zekhompyutha azitholakali."</string>
-    <string name="face_error_timeout" msgid="522924647742024699">"Zama i-face unlock futhi."</string>
+    <string name="face_error_timeout" msgid="2598544068593889762">"Zama Ukuvula ngobuso futhi."</string>
     <string name="face_error_no_space" msgid="5649264057026021723">"Ayikwazi ukulondoloza idatha yobuso. Susa endala."</string>
     <string name="face_error_canceled" msgid="2164434737103802131">"Umsebenzi wobuso ukhanselwe."</string>
-    <string name="face_error_user_canceled" msgid="8553045452825849843">"I-face unlock ikhanselwe umsebenzisi."</string>
+    <string name="face_error_user_canceled" msgid="5766472033202928373">"Ukuvula ngobuso kukhanselwe umsebenzisi."</string>
     <string name="face_error_lockout" msgid="7864408714994529437">"Imizamo eminingi kakhulu. Zama futhi emuva kwesikhathi."</string>
-    <string name="face_error_lockout_permanent" msgid="8277853602168960343">"Imizamo eminingi kakhulu. I-Face unlock ikhutshaziwe."</string>
+    <string name="face_error_lockout_permanent" msgid="3277134834042995260">"Imizamo eminingi kakhulu. Ukuvula ngobuso kukhutshaziwe."</string>
+    <string name="face_error_lockout_screen_lock" msgid="5062609811636860928">"Imizamo eminingi kakhulu. Kunalokho faka ukukhiya isikrini."</string>
     <string name="face_error_unable_to_process" msgid="5723292697366130070">"Ayikwazi ukuqinisekisa ubuso. Zama futhi."</string>
-    <string name="face_error_not_enrolled" msgid="7369928733504691611">"Awukakasethi i-face unlock."</string>
-    <string name="face_error_hw_not_present" msgid="1070600921591729944">"I-face unlock ayisekelwe kule divayisi."</string>
+    <string name="face_error_not_enrolled" msgid="1134739108536328412">"Awukakusethi Ukuvula ngobuso."</string>
+    <string name="face_error_hw_not_present" msgid="7940978724978763011">"Ukuvula ngobuso akusekelwa kule divayisi"</string>
     <string name="face_error_security_update_required" msgid="5076017208528750161">"Inzwa ikhutshazwe okwesikhashana."</string>
     <string name="face_name_template" msgid="3877037340223318119">"Ubuso be-<xliff:g id="FACEID">%d</xliff:g>"</string>
-    <string name="face_app_setting_name" msgid="8130135875458467243">"Sebenzisa i-face unlock"</string>
+    <string name="face_app_setting_name" msgid="5854024256907828015">"Sebenzisa Ukuvula ngobuso"</string>
     <string name="face_or_screen_lock_app_setting_name" msgid="1603149075605709106">"Sebenzisa i-face lock noma ukukhiya isikrini"</string>
     <string name="face_dialog_default_subtitle" msgid="6620492813371195429">"Sebenzisa ubuso bakho ukuze uqhubeke"</string>
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Sebenzisa ubuso bakho noma ukukhiya isikrini ukuze uqhubeke"</string>
@@ -887,7 +884,7 @@
     <string name="lockscreen_pattern_wrong" msgid="2940138714468358458">"Zama futhi"</string>
     <string name="lockscreen_password_wrong" msgid="8605355913868947490">"Zama futhi"</string>
     <string name="lockscreen_storage_locked" msgid="634993789186443380">"Vulela zonke izici nedatha"</string>
-    <string name="faceunlock_multiple_failures" msgid="681991538434031708">"Ukuzama Kokuvula Ubuso Okuningi kudluliwe"</string>
+    <string name="faceunlock_multiple_failures" msgid="681991538434031708">"Ukuzama Kokuvula ngobuso sekweqe umkhawulo"</string>
     <string name="lockscreen_missing_sim_message_short" msgid="1248431165144893792">"Alikho ikhadi le-SIM."</string>
     <string name="lockscreen_missing_sim_message" product="tablet" msgid="8596805728510570760">"Alikho ikhadi le-SIM efonini."</string>
     <string name="lockscreen_missing_sim_message" product="tv" msgid="2582768023352171073">"Ayikho i-SIM card kudivayisi yakho ye-Android TV."</string>
@@ -957,7 +954,7 @@
     <string name="keyguard_accessibility_expand_lock_area" msgid="4215280881346033434">"Nwebisa indawo yokuvula."</string>
     <string name="keyguard_accessibility_slide_unlock" msgid="2968195219692413046">"Ukuvula ngokuslayida."</string>
     <string name="keyguard_accessibility_pattern_unlock" msgid="8669128146589233293">"Ukuvula ngephethini."</string>
-    <string name="keyguard_accessibility_face_unlock" msgid="632407612842329815">"Vula ngobuso"</string>
+    <string name="keyguard_accessibility_face_unlock" msgid="4533832120787386728">"Ukuvula ngobuso."</string>
     <string name="keyguard_accessibility_pin_unlock" msgid="4020864007967340068">"Ukuvula ngephinikhodi."</string>
     <string name="keyguard_accessibility_sim_pin_unlock" msgid="4895939120871890557">"Ukuvulwa kwephinikhodi ye-Sim."</string>
     <string name="keyguard_accessibility_sim_puk_unlock" msgid="3459003464041899101">"Ukuvulwa kwe-puk ye-Sim."</string>
@@ -1022,8 +1019,7 @@
     <string name="text_copied" msgid="2531420577879738860">"Umbhalo ukopishwe ebhodini lokunamathisela."</string>
     <string name="copied" msgid="4675902854553014676">"Kukopishiwe"</string>
     <string name="pasted_from_app" msgid="5627698450808256545">"I-<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> inamathiselwe kusuka ku-<xliff:g id="SOURCE_APP_NAME">%2$s</xliff:g>"</string>
-    <!-- no translation found for pasted_from_clipboard (7355790625710831847) -->
-    <skip />
+    <string name="pasted_from_clipboard" msgid="7355790625710831847">"I-<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> inamathiselwe ebhodini lakho lokunamathisela"</string>
     <string name="pasted_text" msgid="4298871641549173733">"U-<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> unamathisele umbhalo owukopishile"</string>
     <string name="pasted_image" msgid="4729097394781491022">"U-<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> unamathisele isithombe osikopishile"</string>
     <string name="pasted_content" msgid="646276353060777131">"U-<xliff:g id="PASTING_APP_NAME">%1$s</xliff:g> unamathisele okuqukethwe okukopishile"</string>
@@ -1260,14 +1256,10 @@
     <string name="android_preparing_apk" msgid="589736917792300956">"Ukulungisela i-<xliff:g id="APPNAME">%1$s</xliff:g>."</string>
     <string name="android_upgrading_starting_apps" msgid="6206161195076057075">"Qalisa izinhlelo zokusebenza."</string>
     <string name="android_upgrading_complete" msgid="409800058018374746">"Qedela ukuqala kabusha."</string>
-    <!-- no translation found for fp_enrollment_powerbutton_intent_title (3385634173366119903) -->
-    <skip />
-    <!-- no translation found for fp_enrollment_powerbutton_intent_message (6582149052513682522) -->
-    <skip />
-    <!-- no translation found for fp_enrollment_powerbutton_intent_positive_button (5963520983910436791) -->
-    <skip />
-    <!-- no translation found for fp_enrollment_powerbutton_intent_negative_button (6465764183480190748) -->
-    <skip />
+    <string name="fp_enrollment_powerbutton_intent_title" msgid="3385634173366119903">"Vala isikrini?"</string>
+    <string name="fp_enrollment_powerbutton_intent_message" msgid="6582149052513682522">"Lapho usetha izigxivizo zeminwe yakho, ucindezele Inkinobho yamandla.\n\nLokhu kuvame ukuvala isikrini sakho."</string>
+    <string name="fp_enrollment_powerbutton_intent_positive_button" msgid="5963520983910436791">"Vala"</string>
+    <string name="fp_enrollment_powerbutton_intent_negative_button" msgid="6465764183480190748">"Khansela"</string>
     <string name="heavy_weight_notification" msgid="8382784283600329576">"<xliff:g id="APP">%1$s</xliff:g> iyasebenza"</string>
     <string name="heavy_weight_notification_detail" msgid="6802247239468404078">"Thepha ukuze ubuyele emuva kwigeyimu"</string>
     <string name="heavy_weight_switcher_title" msgid="3861984210040100886">"Khetha igeyimu"</string>
@@ -1466,6 +1458,10 @@
     <string name="permdesc_requestDeletePackages" msgid="6133633516423860381">"Ivumela uhlelo lokusebenza ukuthi lucele ukususwa kwamaphakheji."</string>
     <string name="permlab_requestIgnoreBatteryOptimizations" msgid="7646611326036631439">"cela ukuziba ukulungiselelwa kwebhethri"</string>
     <string name="permdesc_requestIgnoreBatteryOptimizations" msgid="634260656917874356">"Ivumela uhlelo lokusebenza ukuthi licele imvume yokuziba ukulungiselela ibhethri yalolo hlelo lokusebenza."</string>
+    <!-- no translation found for permlab_queryAllPackages (2928450604653281650) -->
+    <skip />
+    <!-- no translation found for permdesc_queryAllPackages (5339069855520996010) -->
+    <skip />
     <string name="tutorial_double_tap_to_zoom_message_short" msgid="1842872462124648678">"Thepha kabili ukuthola ukulawula ukusondeza"</string>
     <string name="gadget_host_error_inflating" msgid="2449961590495198720">"Yehlulekile ukwengeza i-widget."</string>
     <string name="ime_action_go" msgid="5536744546326495436">"Iya"</string>
@@ -1718,8 +1714,7 @@
     <string name="leave_accessibility_shortcut_on" msgid="6543362062336990814">"Sebenzisa isinqamuleli"</string>
     <string name="color_inversion_feature_name" msgid="326050048927789012">"Ukuguqulwa kombala"</string>
     <string name="color_correction_feature_name" msgid="3655077237805422597">"Ukulungiswa kombala"</string>
-    <!-- no translation found for one_handed_mode_feature_name (2334330034828094891) -->
-    <skip />
+    <string name="one_handed_mode_feature_name" msgid="2334330034828094891">"Imodi yesandla esisodwa"</string>
     <string name="reduce_bright_colors_feature_name" msgid="3222994553174604132">"Ukufiphaza okwengeziwe"</string>
     <string name="accessibility_shortcut_enabling_service" msgid="5473495203759847687">"Ubambe okhiye bevolumu. I-<xliff:g id="SERVICE_NAME">%1$s</xliff:g> ivuliwe."</string>
     <string name="accessibility_shortcut_disabling_service" msgid="8675244165062700619">"Ubambe okhiye bevolumu. I-<xliff:g id="SERVICE_NAME">%1$s</xliff:g> ivaliwe."</string>
@@ -1875,7 +1870,7 @@
     <string name="package_updated_device_owner" msgid="7560272363805506941">"Kubuyekezwe umlawuli wakho"</string>
     <string name="package_deleted_device_owner" msgid="2292335928930293023">"Kususwe umlawuli wakho"</string>
     <string name="confirm_battery_saver" msgid="5247976246208245754">"KULUNGILE"</string>
-    <string name="battery_saver_description_with_learn_more" msgid="4877297130366222145">"Isilondolozi Sebhethri sivula itimu emnyama futhi sikhawulele noma sivale umsebenzi ongemuva, imiphumela ethile yokubuka, izakhi ezithile, nokuxhumeka kwenethiwekhi ethile.\n\n"<annotation id="url">"Funda kabanzi"</annotation></string>
+    <string name="battery_saver_description_with_learn_more" msgid="5444908404021316250">"Isilondolozi Sebhethri sivula ingqikithi emnyama futhi sibeke umkhawulo noma sivale umsebenzi ongemuva, imiphumela ethile yokubuka, izici ezithile, nokuxhumeka okuthile kwenethiwekhi."</string>
     <string name="battery_saver_description" msgid="8518809702138617167">"Isilondolozi Sebhethri sivula ingqikithi emnyama futhi sibeke umkhawulo noma sivale umsebenzi ongemuva, imiphumela ethile yokubuka, izici ezithile, nokuxhumeka okuthile kwenethiwekhi."</string>
     <string name="data_saver_description" msgid="4995164271550590517">"Ukusiza ukwehlisa ukusetshenziswa kwedatha, iseva yedatha igwema ezinye izinhlelo zokusebenza ukuthi zithumele noma zamukele idatha ngasemuva. Uhlelo lokusebenza olisebenzisa okwamanje lingafinyelela idatha, kodwa lingenza kanjalo kancane. Lokhu kungachaza, isibonelo, ukuthi izithombe azibonisi uze uzithephe."</string>
     <string name="data_saver_enable_title" msgid="7080620065745260137">"Vula iseva yedatha?"</string>
@@ -2096,12 +2091,12 @@
     <string name="notification_feedback_indicator_silenced" msgid="3799442124723177262">"Lesi saziso sehliselwe esikhundleni Sokuthula. Thepha ukuze unikeze impendulo."</string>
     <string name="notification_feedback_indicator_promoted" msgid="9030204303764698640">"Lesi saziso sibekwe ezingeni eliphakeme. Thepha ukuze unikeze impendulo."</string>
     <string name="notification_feedback_indicator_demoted" msgid="8880309924296450875">"Lesi saziso sibekwe ezingeni eliphansi. Thepha ukuze unikeze impendulo."</string>
-    <string name="nas_upgrade_notification_title" msgid="8436359459300146555">"Izaziso ezigqanyisiwe"</string>
+    <string name="nas_upgrade_notification_title" msgid="8436359459300146555">"Izaziso ezandisiwe"</string>
     <string name="nas_upgrade_notification_content" msgid="5157550369837103337">"Izenzo nezimpendulo eziphakanyisiwe manje sezihlinzekwa ngezaziso ezithuthukisiwe. Izaziso ze-Androin Ezivumelana Nezimo azisasekelwe."</string>
     <string name="nas_upgrade_notification_enable_action" msgid="3046406808378726874">"KULUNGILE"</string>
     <string name="nas_upgrade_notification_disable_action" msgid="3794833210043497982">"Vala"</string>
     <string name="nas_upgrade_notification_learn_more_action" msgid="7011130656195423947">"Funda kabanzi"</string>
-    <string name="nas_upgrade_notification_learn_more_content" msgid="2353549817159426430">"Izaziso ezithuthukisiwe zithathe isikhundla sezaziso eziguqukayo ze-Android ku-Android 12. Lesi sici sikhombisa izenzo eziphakanyisiwe nezimpendulo, futhi sihlela izaziso zakho.\n\nIzaziso ezithuthukisiwe zingafinyelela kokuqukethwe kwesaziso, kuhlanganise nemininingwane yomuntu efana namagama woxhumana nabo nemilayezo. Lesi sakhi singacashisa noma siphendule izaziso, njengokuphendula amakholi efoni nokulawula ukuthi Ungaphazamisi."</string>
+    <string name="nas_upgrade_notification_learn_more_content" msgid="3735480566983530650">"Izaziso ezithuthukisiwe zithathe isikhundla sezaziso eziguqukayo ze-Android ku-Android 12. Lesi sakhi sikhombisa izenzo eziphakanyisiwe nezimpendulo, futhi sihlela izaziso zakho.\n\nIzaziso ezithuthukisiwe zingafinyelela kokuqukethwe kwesaziso, kuhlanganise nemininingwane yomuntu efana namagama woxhumana nabo nemilayezo. Lesi sakhi singacashisa noma siphendule izaziso, njengokuphendula amakholi wefoni, nokulawula okuthi Ungaphazamisi."</string>
     <string name="dynamic_mode_notification_channel_name" msgid="2986926422100223328">"Isaziso solwazi lwe-Routine Mode"</string>
     <string name="dynamic_mode_notification_title" msgid="9205715501274608016">"Ibhethri lingaphela ngaphambi kokushaja okuvamile"</string>
     <string name="dynamic_mode_notification_summary" msgid="4141614604437372157">"Isilondolozi sebhethri siyasebenza ngaphandle kwempilo yebhethri"</string>

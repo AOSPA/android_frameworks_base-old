@@ -796,6 +796,9 @@ public class WindowOrganizerTests extends WindowTestsBase {
         @Override
         public void onBackPressedOnTaskRoot(RunningTaskInfo taskInfo) {
         }
+        @Override
+        public void onAppSplashScreenViewRemoved(int taskId) {
+        }
     };
 
     private ActivityRecord makePipableActivity() {
@@ -1193,13 +1196,13 @@ public class WindowOrganizerTests extends WindowTestsBase {
                 splitPrimaryRootTask.mRemoteToken.toWindowContainerToken(), true /* onTop */);
 
         // Can't reparent non-resizable to split screen
-        mAtm.mDevEnableNonResizableMultiWindow = false;
+        mAtm.mSupportsNonResizableMultiWindow = -1;
         mAtm.mWindowOrganizerController.applyTransaction(wct);
 
         assertEquals(rootTask, activity.getRootTask());
 
         // Allow reparent non-resizable to split screen
-        mAtm.mDevEnableNonResizableMultiWindow = true;
+        mAtm.mSupportsNonResizableMultiWindow = 1;
         mAtm.mWindowOrganizerController.applyTransaction(wct);
 
         assertEquals(splitPrimaryRootTask, activity.getRootTask());

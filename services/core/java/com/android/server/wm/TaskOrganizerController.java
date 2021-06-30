@@ -38,12 +38,12 @@ import android.os.Binder;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
-import android.os.SystemProperties;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 import android.view.SurfaceControl;
 import android.window.ITaskOrganizer;
 import android.window.ITaskOrganizerController;
+import android.window.SplashScreenView;
 import android.window.StartingWindowInfo;
 import android.window.TaskAppearedInfo;
 import android.window.TaskSnapshot;
@@ -75,9 +75,6 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
      */
     private static final int REPORT_CONFIGS = CONTROLLABLE_CONFIGS;
     private static final int REPORT_WINDOW_CONFIGS = CONTROLLABLE_WINDOW_CONFIGS;
-
-    private static final boolean DEBUG_ENABLE_REVEAL_ANIMATION =
-            SystemProperties.getBoolean("persist.debug.enable_reveal_animation", false);
 
     // The set of modes that are currently supports
     // TODO: Remove once the task organizer can support all modes
@@ -187,8 +184,8 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             SurfaceControl windowAnimationLeash = null;
             Rect mainFrame = null;
             final boolean playShiftUpAnimation = !task.inMultiWindowMode();
-            if (prepareAnimation && playShiftUpAnimation && DEBUG_ENABLE_REVEAL_ANIMATION) {
-                final ActivityRecord topActivity = task.topActivityWithStartingWindow();
+            if (prepareAnimation && playShiftUpAnimation) {
+                final ActivityRecord topActivity = task.topActivityContainsStartingWindow();
                 if (topActivity != null) {
                     final WindowState mainWindow =
                             topActivity.findMainWindow(false/* includeStartingApp */);
@@ -219,23 +216,23 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             }
         }
 
-        SurfaceControl prepareLeash(Task task, boolean visible, String reason) {
-            SurfaceControl outSurfaceControl = new SurfaceControl(task.getSurfaceControl(), reason);
-            if (!task.mCreatedByOrganizer && !visible) {
-                // To prevent flashes, we hide the task prior to sending the leash to the
-                // task org if the task has previously hidden (ie. when entering PIP)
-                mTransaction.hide(outSurfaceControl);
-                mTransaction.apply();
+        void onAppSplashScreenViewRemoved(Task task) {
+            try {
+                mTaskOrganizer.onAppSplashScreenViewRemoved(task.mTaskId);
+            } catch (RemoteException e) {
+                Slog.e(TAG, "Exception sending onAppSplashScreenViewRemoved callback", e);
             }
-            return outSurfaceControl;
+        }
+
+        SurfaceControl prepareLeash(Task task, String reason) {
+            return new SurfaceControl(task.getSurfaceControl(), reason);
         }
 
         void onTaskAppeared(Task task) {
             ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Task appeared taskId=%d", task.mTaskId);
-            final boolean visible = task.isVisible();
             final RunningTaskInfo taskInfo = task.getTaskInfo();
             try {
-                mTaskOrganizer.onTaskAppeared(taskInfo, prepareLeash(task, visible,
+                mTaskOrganizer.onTaskAppeared(taskInfo, prepareLeash(task,
                         "TaskOrganizerController.onTaskAppeared"));
             } catch (RemoteException e) {
                 Slog.e(TAG, "Exception sending onTaskAppeared callback", e);
@@ -326,6 +323,10 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             mOrganizer.copySplashScreenView(t);
         }
 
+        public void onAppSplashScreenViewRemoved(Task t) {
+            mOrganizer.onAppSplashScreenViewRemoved(t);
+        }
+
         /**
          * Register this task with this state, but doesn't trigger the task appeared callback to
          * the organizer.
@@ -335,7 +336,7 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             if (!mOrganizedTasks.contains(t)) {
                 mOrganizedTasks.add(t);
             }
-            return mOrganizer.prepareLeash(t, t.isVisible(), reason);
+            return mOrganizer.prepareLeash(t, reason);
         }
 
         private boolean addTask(Task t) {
@@ -438,7 +439,6 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
     // Set of organized tasks (by taskId) that dispatch back pressed to their organizers
     private final HashSet<Integer> mInterceptBackPressedOnRootTasks = new HashSet();
 
-    private SurfaceControl.Transaction mTransaction;
     private RunningTaskInfo mTmpTaskInfo;
     private Consumer<Runnable> mDeferTaskOrgCallbacksConsumer;
 
@@ -483,13 +483,6 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
             synchronized (mGlobalLock) {
                 ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Register task organizer=%s uid=%d",
                         organizer.asBinder(), uid);
-
-                // Defer initializing the transaction since the transaction factory can be set up
-                // by the tests after construction of the controller
-                if (mTransaction == null) {
-                    mTransaction = mService.mWindowManager.mTransactionFactory.get();
-                }
-
                 if (!mTaskOrganizerStates.containsKey(organizer.asBinder())) {
                     mTaskOrganizers.add(organizer);
                     mTaskOrganizerStates.put(organizer.asBinder(),
@@ -584,6 +577,22 @@ class TaskOrganizerController extends ITaskOrganizerController.Stub {
                 mTaskOrganizerStates.get(rootTask.mTaskOrganizer.asBinder());
         state.copySplashScreenView(task);
         return true;
+    }
+
+    /**
+     * Notify the shell ({@link com.android.wm.shell.ShellTaskOrganizer} that the client has
+     * removed the splash screen view.
+     * @see com.android.wm.shell.ShellTaskOrganizer#onAppSplashScreenViewRemoved(int)
+     * @see SplashScreenView#remove()
+     */
+    public void onAppSplashScreenViewRemoved(Task task) {
+        final Task rootTask = task.getRootTask();
+        if (rootTask == null || rootTask.mTaskOrganizer == null) {
+            return;
+        }
+        final TaskOrganizerState state =
+                mTaskOrganizerStates.get(rootTask.mTaskOrganizer.asBinder());
+        state.onAppSplashScreenViewRemoved(task);
     }
 
     void onTaskAppeared(ITaskOrganizer organizer, Task task) {

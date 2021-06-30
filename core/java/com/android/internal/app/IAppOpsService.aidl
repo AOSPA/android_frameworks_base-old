@@ -23,6 +23,7 @@ import android.app.RuntimeAppOpAccessMessage;
 import android.content.AttributionSource;
 import android.content.pm.ParceledListSlice;
 import android.os.Bundle;
+import android.os.PackageTagsList;
 import android.os.RemoteCallback;
 import com.android.internal.app.IAppOpsCallback;
 import com.android.internal.app.IAppOpsActiveCallback;
@@ -40,7 +41,8 @@ interface IAppOpsService {
             boolean shouldCollectAsyncNotedOp, String message, boolean shouldCollectMessage);
     SyncNotedAppOp startOperation(IBinder clientId, int code, int uid, String packageName,
             @nullable String attributionTag, boolean startIfModeDefault,
-            boolean shouldCollectAsyncNotedOp, String message, boolean shouldCollectMessage);
+            boolean shouldCollectAsyncNotedOp, String message, boolean shouldCollectMessage,
+            int attributionFlags, int attributionChainId);
     @UnsupportedAppUsage
     void finishOperation(IBinder clientId, int code, int uid, String packageName,
             @nullable String attributionTag);
@@ -56,10 +58,12 @@ interface IAppOpsService {
     SyncNotedAppOp noteProxyOperation(int code, in AttributionSource attributionSource,
             boolean shouldCollectAsyncNotedOp, String message, boolean shouldCollectMessage,
             boolean skipProxyOperation);
-    SyncNotedAppOp startProxyOperation(IBinder clientId, int code, in AttributionSource attributionSource,
+    SyncNotedAppOp startProxyOperation(int code, in AttributionSource attributionSource,
             boolean startIfModeDefault, boolean shouldCollectAsyncNotedOp, String message,
-            boolean shouldCollectMessage, boolean skipProxyOperation);
-    void finishProxyOperation(IBinder clientId, int code, in AttributionSource attributionSource);
+            boolean shouldCollectMessage, boolean skipProxyOperation, int proxyAttributionFlags,
+            int proxiedAttributionFlags, int attributionChainId);
+    void finishProxyOperation(int code, in AttributionSource attributionSource,
+            boolean skipProxyOperation);
 
     // Remaining methods are only used in Java.
     int checkPackage(int uid, String packageName);
@@ -92,7 +96,7 @@ interface IAppOpsService {
     void setAudioRestriction(int code, int usage, int uid, int mode, in String[] exceptionPackages);
 
     void setUserRestrictions(in Bundle restrictions, IBinder token, int userHandle);
-    void setUserRestriction(int code, boolean restricted, IBinder token, int userHandle, in String[] exceptionPackages);
+    void setUserRestriction(int code, boolean restricted, IBinder token, int userHandle, in PackageTagsList excludedPackageTags);
     void removeUser(int userHandle);
 
     void startWatchingActive(in int[] ops, IAppOpsActiveCallback callback);
@@ -113,7 +117,7 @@ interface IAppOpsService {
     void stopWatchingAsyncNoted(String packageName, IAppOpsAsyncNotedCallback callback);
     List<AsyncNotedAppOp> extractAsyncOps(String packageName);
 
-    int checkOperationRaw(int code, int uid, String packageName);
+    int checkOperationRaw(int code, int uid, String packageName, @nullable String attributionTag);
 
     void reloadNonHistoricalState();
 

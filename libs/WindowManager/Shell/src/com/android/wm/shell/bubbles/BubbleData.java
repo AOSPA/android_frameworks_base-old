@@ -26,6 +26,7 @@ import android.app.PendingIntent;
 import android.content.Context;
 import android.content.LocusId;
 import android.content.pm.ShortcutInfo;
+import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Log;
@@ -141,8 +142,10 @@ public class BubbleData {
     private final BubbleOverflow mOverflow;
     private boolean mShowingOverflow;
     private boolean mExpanded;
-    private final int mMaxBubbles;
+    private int mMaxBubbles;
     private int mMaxOverflowBubbles;
+
+    private boolean mNeedsTrimming;
 
     // State tracked during an operation -- keeps track of what listener events to dispatch.
     private Update mStateChange;
@@ -180,7 +183,7 @@ public class BubbleData {
         mOverflowBubbles = new ArrayList<>();
         mPendingBubbles = new HashMap<>();
         mStateChange = new Update(mBubbles, mOverflowBubbles);
-        mMaxBubbles = mContext.getResources().getInteger(R.integer.bubbles_max_rendered);
+        mMaxBubbles = mPositioner.getMaxBubbles();
         mMaxOverflowBubbles = mContext.getResources().getInteger(R.integer.bubbles_max_overflow);
     }
 
@@ -192,6 +195,16 @@ public class BubbleData {
     public void setPendingIntentCancelledListener(
             Bubbles.PendingIntentCanceledListener listener) {
         mCancelledListener = listener;
+    }
+
+    public void onMaxBubblesChanged() {
+        mMaxBubbles = mPositioner.getMaxBubbles();
+        if (!mExpanded) {
+            trim();
+            dispatchPendingChanges();
+        } else {
+            mNeedsTrimming = true;
+        }
     }
 
     public boolean hasBubbles() {
@@ -455,13 +468,19 @@ public class BubbleData {
 
     private void trim() {
         if (mBubbles.size() > mMaxBubbles) {
+            int numtoRemove = mBubbles.size() - mMaxBubbles;
+            ArrayList<Bubble> toRemove = new ArrayList<>();
             mBubbles.stream()
                     // sort oldest first (ascending lastActivity)
                     .sorted(Comparator.comparingLong(Bubble::getLastActivity))
                     // skip the selected bubble
                     .filter((b) -> !b.equals(mSelectedBubble))
-                    .findFirst()
-                    .ifPresent((b) -> doRemove(b.getKey(), Bubbles.DISMISS_AGED));
+                    .forEachOrdered((b) -> {
+                        if (toRemove.size() < numtoRemove) {
+                            toRemove.add(b);
+                        }
+                    });
+            toRemove.forEach((b) -> doRemove(b.getKey(), Bubbles.DISMISS_AGED));
         }
     }
 
@@ -770,6 +789,10 @@ public class BubbleData {
                 }
             }
         }
+        if (mNeedsTrimming) {
+            mNeedsTrimming = false;
+            trim();
+        }
         mExpanded = shouldExpand;
         mStateChange.expanded = shouldExpand;
         mStateChange.expandedChanged = true;
@@ -850,6 +873,34 @@ public class BubbleData {
             b = getOverflowBubbleWithKey(key);
         }
         return b;
+    }
+
+    /** @return any bubble (in the stack or the overflow) that matches the provided shortcutId. */
+    @Nullable
+    Bubble getAnyBubbleWithShortcutId(String shortcutId) {
+        if (TextUtils.isEmpty(shortcutId)) {
+            return null;
+        }
+        for (int i = 0; i < mBubbles.size(); i++) {
+            Bubble bubble = mBubbles.get(i);
+            String bubbleShortcutId = bubble.getShortcutInfo() != null
+                    ? bubble.getShortcutInfo().getId()
+                    : bubble.getMetadataShortcutId();
+            if (shortcutId.equals(bubbleShortcutId)) {
+                return bubble;
+            }
+        }
+
+        for (int i = 0; i < mOverflowBubbles.size(); i++) {
+            Bubble bubble = mOverflowBubbles.get(i);
+            String bubbleShortcutId = bubble.getShortcutInfo() != null
+                    ? bubble.getShortcutInfo().getId()
+                    : bubble.getMetadataShortcutId();
+            if (shortcutId.equals(bubbleShortcutId)) {
+                return bubble;
+            }
+        }
+        return null;
     }
 
     @VisibleForTesting(visibility = PRIVATE)
