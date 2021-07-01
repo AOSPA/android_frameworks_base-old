@@ -164,6 +164,7 @@ class ActivityMetricsLogger {
     private final StringBuilder mStringBuilder = new StringBuilder();
 
     public static BoostFramework mUxPerf = new BoostFramework();
+    public static BoostFramework mPerfBoost = new BoostFramework();
     private static ActivityRecord mLaunchedActivity;
 
     /**
@@ -1029,6 +1030,11 @@ class ActivityMetricsLogger {
         sb.append(info.launchedActivityShortComponentName);
         sb.append(": ");
         TimeUtils.formatDuration(info.windowsDrawnDelayMs, sb);
+
+        if (mPerfBoost != null) {
+            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName,
+                info.processRecord.getPid(), BoostFramework.Draw.EVENT_TYPE_V1);
+        }
 
         if (mUxPerf != null) {
             mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_DISPLAYED_ACT, 0, info.packageName, info.windowsDrawnDelayMs);
