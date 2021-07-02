@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "e75feccc_dda4958b",
+        "filename": "packages/SystemUI/res/values/pa_strings.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 77,
+      "author": {
+        "id": 1000463
+      },
+      "writtenOn": "2021-07-02T17:42:29Z",
+      "side": 1,
+      "message": "Maybe call it as \"Default\" instead?",
+      "revId": "25c476a5ad50621297c87138a9c0e030cc0102ee",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
