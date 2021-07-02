@@ -761,6 +761,13 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
                 - ((mIsLandscape && mDragHandle != null) ? mDragHandle.getHeight() : 0);
     }
 
+    void onQsTintChange(int newValue) {
+        mBrightnessController.updateTintColor(newValue);
+        if (mFooterPageIndicator != null) {
+            mFooterPageIndicator.updateTintColor(newValue);
+        }
+    }
+
     boolean isMediaHostVisible() {
         return mMediaHost.getVisible();
     }
@@ -804,6 +811,7 @@ public class QSPanel extends LinearLayout implements Tunable, Callback, Brightne
             brightnessSlider.setMirror(mirrorSlider);
             brightnessSlider.setMirrorController(mBrightnessMirrorController);
             mBrightnessController.setMirrorView(mBrightnessMirrorController.getMirror());
+            mBrightnessController.updateTintColor();
         }
     }
 

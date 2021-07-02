@@ -17,8 +17,6 @@ package com.android.systemui.qs.tileimpl;
 import android.content.Context;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
-import android.os.UserHandle;
-import android.provider.Settings;
 import android.service.quicksettings.Tile;
 import android.text.TextUtils;
 import android.view.Gravity;
@@ -133,10 +131,7 @@ public class QSTileView extends QSTileBaseView {
                     : View.VISIBLE);
         }
 
-        int setQsUseNewTint = Settings.System.getIntForUser(getContext().getContentResolver(),
-                Settings.System.QS_PANEL_BG_USE_NEW_TINT, 2, UserHandle.USER_CURRENT);
-
-        if (setQsUseNewTint == 1) {
+        if (mQsTint == 1) {
             if (state.state == Tile.STATE_ACTIVE) {
                 mLabel.setTextColor(mColorLabelActive);
             } else if (state.state == Tile.STATE_INACTIVE) {

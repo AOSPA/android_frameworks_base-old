@@ -15,6 +15,23 @@ limitations under the License.
 -->
 
 <menu xmlns:android="http://schemas.android.com/apk/res/android">
+        <item android:id="@+id/menu_item_tint_qs"
+              android:title="@string/qs_menu_item_qs_tint">
+            <menu>
+                <item android:id="@+id/menu_item_tint_disabled"
+                      android:title="@string/qs_menu_item_tint_disabled"
+                      android:checkable="true" />
+                <item android:id="@+id/menu_item_tint_accent"
+                      android:title="@string/qs_menu_item_tint_accent"
+                      android:checkable="true" />
+                <item android:id="@+id/menu_item_tint_oos"
+                      android:title="@string/qs_menu_item_tint_oos"
+                      android:checkable="true" />
+                <item android:id="@+id/menu_item_tint_twelve"
+                      android:title="@string/qs_menu_item_tint_twelve"
+                      android:checkable="true" />
+            </menu>
+        </item>
         <item android:id="@+id/menu_item_columns"
               android:title="@string/qs_menu_item_columns">
             <menu>
@@ -66,23 +83,6 @@ limitations under the License.
                       android:checkable="true" />
                 <item android:id="@+id/menu_item_rows_three"
                       android:title="@string/qs_menu_item_columns_three"
-                      android:checkable="true" />
-            </menu>
-        </item>
-        <item android:id="@+id/menu_item_qs_columns"
-              android:title="@string/qs_menu_item_qs_columns">
-            <menu>
-                <item android:id="@+id/menu_item_qs_columns_six"
-                      android:title="@string/qs_menu_item_columns_six"
-                      android:checkable="true" />
-                <item android:id="@+id/menu_item_qs_columns_seven"
-                      android:title="@string/qs_menu_item_columns_seven"
-                      android:checkable="true" />
-                <item android:id="@+id/menu_item_qs_columns_eight"
-                      android:title="@string/qs_menu_item_columns_eight"
-                      android:checkable="true" />
-                <item android:id="@+id/menu_item_qs_columns_auto"
-                      android:title="@string/qs_menu_item_columns_auto"
                       android:checkable="true" />
             </menu>
         </item>
