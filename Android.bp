@@ -273,6 +273,14 @@ java_library {
     installable: false,
 }
 
+// NOTE: This filegroup is exposed for vendor libraries to depend on and is referenced in
+// documentation. Do not remove without consulting the treble/hidl teams.
+filegroup {
+    name: "framework-jarjar-rules",
+    srcs: ["framework-jarjar-rules.txt"],
+    visibility: ["//visibility:public"],
+}
+
 soong_config_module_type_import {
     from: "device/qcom/qssi/Android.bp",
     module_types: [
@@ -306,16 +314,17 @@ java_defaults {
         generate_get_transaction_name: true,
         local_include_dirs: [
             "media/aidl",
-            // TODO: move to include_dirs when migrated to packages/modules
-            "packages/Connectivity/framework/aidl-export",
         ],
-        include_dirs: ["frameworks/av/aidl"],
+        include_dirs: [
+            "frameworks/av/aidl",
+            "packages/modules/Connectivity/framework/aidl-export",
+        ],
     },
     dxflags: [
         "--core-library",
         "--multi-dex",
     ],
-    jarjar_rules: "framework-jarjar-rules.txt",
+    jarjar_rules: ":framework-jarjar-rules",
     javac_shard_size: 150,
     plugins: [
         "view-inspector-annotation-processor",
@@ -348,6 +357,7 @@ java_defaults {
         "av-types-aidl-java",
         "tv_tuner_resource_manager_aidl_interface-java",
         "soundtrigger_middleware-aidl-java",
+        "modules-utils-preconditions",
         "modules-utils-os",
         "framework-permission-aidl-java",
     ],
@@ -431,6 +441,7 @@ filegroup {
     srcs: [
         // TODO: remove these annotations as soon as we can use andoid.support.annotations.*
         ":framework-annotations",
+        ":modules-utils-preconditions-srcs",
         "core/java/android/net/DhcpResults.java",
         "core/java/android/util/IndentingPrintWriter.java",
         "core/java/android/util/LocalLog.java",
@@ -438,7 +449,6 @@ filegroup {
         "core/java/com/android/internal/util/IndentingPrintWriter.java",
         "core/java/com/android/internal/util/IState.java",
         "core/java/com/android/internal/util/MessageUtils.java",
-        "core/java/com/android/internal/util/Preconditions.java",
         "core/java/com/android/internal/util/RingBufferIndices.java",
         "core/java/com/android/internal/util/State.java",
         "core/java/com/android/internal/util/StateMachine.java",
@@ -468,11 +478,11 @@ java_library {
     sdk_version: "module_current",
     min_sdk_version: "30",
     srcs: [
+        ":modules-utils-preconditions-srcs",
         "core/java/android/os/HandlerExecutor.java",
         "core/java/com/android/internal/util/AsyncChannel.java",
         "core/java/com/android/internal/util/AsyncService.java",
         "core/java/com/android/internal/util/Protocol.java",
-        "core/java/com/android/internal/util/Preconditions.java",
         "telephony/java/android/telephony/Annotation.java",
         ":net-utils-framework-wifi-common-srcs",
     ],
@@ -544,12 +554,12 @@ stubs_defaults {
         local_include_dirs: [
             "apex/media/aidl/stable",
             "media/aidl",
-            // TODO: move to include-dirs for packages/modules/Connectivity when this moves out of
-            // frameworks/base
-            "packages/Connectivity/framework/aidl-export",
             "telephony/java",
         ],
-        include_dirs: ["frameworks/av/aidl"],
+        include_dirs: [
+            "frameworks/av/aidl",
+            "packages/modules/Connectivity/framework/aidl-export",
+        ],
     },
     // These are libs from framework-internal-utils that are required (i.e. being referenced)
     // from framework-non-updatable-sources. Add more here when there's a need.
@@ -593,8 +603,5 @@ build = [
     "StubLibraries.bp",
     "ApiDocs.bp",
     "ProtoLibraries.bp",
+    "TestProtoLibraries.bp",
 ]
-filegroup {
-    name: "framework-jarjar-rules",
-    srcs: ["framework-jarjar-rules.txt"],
-}

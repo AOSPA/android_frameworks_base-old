@@ -267,8 +267,40 @@ public final class Settings {
     /** @hide */
     public static final String EXTRA_NETWORK_TEMPLATE = "network_template";
 
+    /**
+     * The return values for {@link Settings.Config#set}
+     * @hide
+     */
+    @IntDef(prefix = "SET_ALL_RESULT_",
+            value = { SET_ALL_RESULT_FAILURE, SET_ALL_RESULT_SUCCESS, SET_ALL_RESULT_DISABLED })
+    @Retention(RetentionPolicy.SOURCE)
+    @Target({ElementType.TYPE_PARAMETER, ElementType.TYPE_USE})
+    public @interface SetAllResult {}
+
+    /**
+     * A return value for {@link #KEY_CONFIG_SET_ALL_RETURN}, indicates failure.
+     * @hide
+     */
+    public static final int SET_ALL_RESULT_FAILURE = 0;
+
+    /**
+     * A return value for {@link #KEY_CONFIG_SET_ALL_RETURN}, indicates success.
+     * @hide
+     */
+    public static final int SET_ALL_RESULT_SUCCESS = 1;
+
+    /**
+     * A return value for {@link #KEY_CONFIG_SET_ALL_RETURN}, indicates a set all is disabled.
+     * @hide
+     */
+    public static final int SET_ALL_RESULT_DISABLED = 2;
+
     /** @hide */
-    public static final String KEY_CONFIG_SET_RETURN = "config_set_return";
+    public static final String KEY_CONFIG_SET_ALL_RETURN = "config_set_all_return";
+
+    /** @hide */
+    public static final String KEY_CONFIG_IS_SYNC_DISABLED_RETURN =
+            "config_is_sync_disabled_return";
 
     /**
      * An int extra specifying a subscription ID.
@@ -888,6 +920,21 @@ public final class Settings {
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     public static final String ACTION_LOCALE_SETTINGS =
             "android.settings.LOCALE_SETTINGS";
+
+    /**
+     * Activity Action: Show settings to allow configuration of lockscreen.
+     * <p>
+     * In some cases, a matching Activity may not exist, so ensure you
+     * safeguard against this.
+     * <p>
+     * Input: Nothing.
+     * <p>
+     * Output: Nothing.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+    public static final String ACTION_LOCKSCREEN_SETTINGS = "android.settings.LOCK_SCREEN_SETTINGS";
 
     /**
      * Activity Action: Show settings to configure input methods, in particular
@@ -2324,6 +2371,11 @@ public final class Settings {
     public static final String CALL_METHOD_PREFIX_KEY = "_prefix";
 
     /**
+     * @hide - String argument extra to the fast-path call()-based requests
+     */
+    public static final String CALL_METHOD_SYNC_DISABLED_MODE_KEY = "_disabled_mode";
+
+    /**
      * @hide - RemoteCallback monitor callback argument extra to the fast-path call()-based requests
      */
     public static final String CALL_METHOD_MONITOR_CALLBACK_KEY = "_monitor_callback_key";
@@ -2385,6 +2437,15 @@ public final class Settings {
 
     /** @hide - Private call() method to reset to defaults the 'configuration' table */
     public static final String CALL_METHOD_LIST_CONFIG = "LIST_config";
+
+    /** @hide - Private call() method to disable / re-enable syncs to the 'configuration' table */
+    public static final String CALL_METHOD_SET_SYNC_DISABLED_CONFIG = "SET_SYNC_DISABLED_config";
+
+    /**
+     * @hide - Private call() method to return whether syncs are disabled for the 'configuration'
+     * table
+     */
+    public static final String CALL_METHOD_IS_SYNC_DISABLED_CONFIG = "IS_SYNC_DISABLED_config";
 
     /** @hide - Private call() method to register monitor callback for 'configuration' table */
     public static final String CALL_METHOD_REGISTER_MONITOR_CALLBACK_CONFIG =
@@ -2712,6 +2773,7 @@ public final class Settings {
 
         private final ArraySet<String> mReadableFields;
         private final ArraySet<String> mAllFields;
+        private final ArrayMap<String, Integer> mReadableFieldsWithMaxTargetSdk;
 
         @GuardedBy("this")
         private GenerationTracker mGenerationTracker;
@@ -2733,7 +2795,9 @@ public final class Settings {
             mProviderHolder = providerHolder;
             mReadableFields = new ArraySet<>();
             mAllFields = new ArraySet<>();
-            getPublicSettingsForClass(callerClass, mAllFields, mReadableFields);
+            mReadableFieldsWithMaxTargetSdk = new ArrayMap<>();
+            getPublicSettingsForClass(callerClass, mAllFields, mReadableFields,
+                    mReadableFieldsWithMaxTargetSdk);
         }
 
         public boolean putStringForUser(ContentResolver cr, String name, String value,
@@ -2762,11 +2826,11 @@ public final class Settings {
             return true;
         }
 
-        public boolean setStringsForPrefix(ContentResolver cr, String prefix,
+        public @SetAllResult int setStringsForPrefix(ContentResolver cr, String prefix,
                 HashMap<String, String> keyValues) {
             if (mCallSetAllCommand == null) {
                 // This NameValueCache does not support atomically setting multiple flags
-                return false;
+                return SET_ALL_RESULT_FAILURE;
             }
             try {
                 Bundle args = new Bundle();
@@ -2776,10 +2840,10 @@ public final class Settings {
                 Bundle bundle = cp.call(cr.getAttributionSource(),
                         mProviderHolder.mUri.getAuthority(),
                         mCallSetAllCommand, null, args);
-                return bundle.getBoolean(KEY_CONFIG_SET_RETURN);
+                return bundle.getInt(KEY_CONFIG_SET_ALL_RETURN);
             } catch (RemoteException e) {
                 // Not supported by the remote side
-                return false;
+                return SET_ALL_RESULT_FAILURE;
             }
         }
 
@@ -2790,13 +2854,34 @@ public final class Settings {
             // Settings.Global and is not annotated as @Readable.
             // Notice that a key string that is not defined in any of the Settings.* classes will
             // still be regarded as readable.
-            if (!isCallerExemptFromReadableRestriction()
-                    && mAllFields.contains(name) && !mReadableFields.contains(name)) {
-                throw new SecurityException(
-                        "Settings key: <" + name + "> is not readable. From S+, settings keys "
-                                + "annotated with @hide are restricted to system_server and system "
-                                + "apps only, unless they are annotated with @Readable.");
+            if (!isCallerExemptFromReadableRestriction() && mAllFields.contains(name)) {
+                if (!mReadableFields.contains(name)) {
+                    throw new SecurityException(
+                            "Settings key: <" + name + "> is not readable. From S+, settings keys "
+                                    + "annotated with @hide are restricted to system_server and "
+                                    + "system apps only, unless they are annotated with @Readable."
+                    );
+                } else {
+                    // When the target settings key has @Readable annotation, if the caller app's
+                    // target sdk is higher than the maxTargetSdk of the annotation, reject access.
+                    if (mReadableFieldsWithMaxTargetSdk.containsKey(name)) {
+                        final int maxTargetSdk = mReadableFieldsWithMaxTargetSdk.get(name);
+                        final Application application = ActivityThread.currentApplication();
+                        final boolean targetSdkCheckOk = application != null
+                                && application.getApplicationInfo() != null
+                                && application.getApplicationInfo().targetSdkVersion
+                                <= maxTargetSdk;
+                        if (!targetSdkCheckOk) {
+                            throw new SecurityException(
+                                    "Settings key: <" + name + "> is only readable to apps with "
+                                            + "targetSdkVersion lower than or equal to: "
+                                            + maxTargetSdk
+                            );
+                        }
+                    }
+                }
             }
+
             final boolean isSelf = (userHandle == UserHandle.myUserId());
             int currentGeneration = -1;
             if (isSelf) {
@@ -3164,10 +3249,12 @@ public final class Settings {
     @Target({ ElementType.FIELD })
     @Retention(RetentionPolicy.RUNTIME)
     private @interface Readable {
+        int maxTargetSdk() default 0;
     }
 
     private static <T extends NameValueTable> void getPublicSettingsForClass(
-            Class<T> callerClass, Set<String> allKeys, Set<String> readableKeys) {
+            Class<T> callerClass, Set<String> allKeys, Set<String> readableKeys,
+            ArrayMap<String, Integer> keysWithMaxTargetSdk) {
         final Field[] allFields = callerClass.getDeclaredFields();
         try {
             for (int i = 0; i < allFields.length; i++) {
@@ -3180,8 +3267,15 @@ public final class Settings {
                     continue;
                 }
                 allKeys.add((String) value);
-                if (field.getAnnotation(Readable.class) != null) {
-                    readableKeys.add((String) value);
+                final Readable annotation = field.getAnnotation(Readable.class);
+
+                if (annotation != null) {
+                    final String key = (String) value;
+                    final int maxTargetSdk = annotation.maxTargetSdk();
+                    readableKeys.add(key);
+                    if (maxTargetSdk != 0) {
+                        keysWithMaxTargetSdk.put(key, maxTargetSdk);
+                    }
                 }
             }
         } catch (IllegalAccessException ignored) {
@@ -3343,8 +3437,10 @@ public final class Settings {
         }
 
         /** @hide */
-        public static void getPublicSettings(Set<String> allKeys, Set<String> readableKeys) {
-            getPublicSettingsForClass(System.class, allKeys, readableKeys);
+        public static void getPublicSettings(Set<String> allKeys, Set<String> readableKeys,
+                ArrayMap<String, Integer> readableKeysWithMaxTargetSdk) {
+            getPublicSettingsForClass(System.class, allKeys, readableKeys,
+                    readableKeysWithMaxTargetSdk);
         }
 
         /**
@@ -5684,8 +5780,10 @@ public final class Settings {
         }
 
         /** @hide */
-        public static void getPublicSettings(Set<String> allKeys, Set<String> readableKeys) {
-            getPublicSettingsForClass(Secure.class, allKeys, readableKeys);
+        public static void getPublicSettings(Set<String> allKeys, Set<String> readableKeys,
+                ArrayMap<String, Integer> readableKeysWithMaxTargetSdk) {
+            getPublicSettingsForClass(Secure.class, allKeys, readableKeys,
+                    readableKeysWithMaxTargetSdk);
         }
 
         /**
@@ -9465,6 +9563,20 @@ public final class Settings {
                 "power_menu_locked_show_content";
 
         /**
+         * Whether home controls should be accessible from the lockscreen
+         *
+         * @hide
+         */
+        public static final String LOCKSCREEN_SHOW_CONTROLS = "lockscreen_show_controls";
+
+        /**
+         * Whether wallet should be accessible from the lockscreen
+         *
+         * @hide
+         */
+        public static final String LOCKSCREEN_SHOW_WALLET = "lockscreen_show_wallet";
+
+        /**
          * Specifies whether the web action API is enabled.
          *
          * @hide
@@ -9786,12 +9898,10 @@ public final class Settings {
         public static final String MEDIA_CONTROLS_RESUME = "qs_media_resumption";
 
         /**
-         * Controls which packages are blocked from persisting in media controls when resumption is
-         * enabled. The list of packages is set by the user in the Settings app.
-         * @see Settings.Secure#MEDIA_CONTROLS_RESUME
+         * Controls whether contextual suggestions can be shown in the media controls.
          * @hide
          */
-        public static final String MEDIA_CONTROLS_RESUME_BLOCKED = "qs_media_resumption_blocked";
+        public static final String MEDIA_CONTROLS_RECOMMENDATION = "qs_media_recommend";
 
         /**
          * Controls magnification mode when magnification is enabled via a system-wide triple tap
@@ -9996,6 +10106,12 @@ public final class Settings {
         @Readable
         public static final String NAS_SETTINGS_UPDATED = "nas_settings_updated";
 
+        /**
+         * Control whether Game Dashboard shortcut is always on for all games.
+         * @hide
+         */
+        @Readable
+        public static final String GAME_DASHBOARD_ALWAYS_ON = "game_dashboard_always_on";
 
         /**
          * These entries are considered common between the personal and the managed profile,
@@ -10918,10 +11034,12 @@ public final class Settings {
         /**
          * Packages that are whitelisted for ignoring location settings (may retrieve location even
          * when user location settings are off), for emergency purposes.
+         * @deprecated No longer used from Android 12+
          * @hide
          */
         @TestApi
         @Readable
+        @Deprecated
         public static final String LOCATION_IGNORE_SETTINGS_PACKAGE_WHITELIST =
                 "location_ignore_settings_package_whitelist";
 
@@ -10967,6 +11085,15 @@ public final class Settings {
         */
         @Readable
         public static final String MOBILE_DATA_ALWAYS_ON = "mobile_data_always_on";
+
+        /**
+        * Whether to allow modem to intelligently switch DDS without user direction
+        *
+        * (0 = disabled, 1 = enabled)
+        * @hide
+        */
+        @Readable
+        public static final String SMART_DDS_SWITCH = "smart_dds_switch";
 
         /**
          * Whether the wifi data connection should remain active even when higher
@@ -14213,6 +14340,15 @@ public final class Settings {
         public static final String ARE_USER_DISABLED_HDR_FORMATS_ALLOWED =
                 "are_user_disabled_hdr_formats_allowed";
 
+        /**
+         * Whether or not syncs (bulk set operations) for {@link DeviceConfig} are disabled
+         * currently. The value is boolean (1 or 0). The value '1' means that {@link
+         * DeviceConfig#setProperties(DeviceConfig.Properties)} will return {@code false}.
+         *
+         * @hide
+         */
+        public static final String DEVICE_CONFIG_SYNC_DISABLED = "device_config_sync_disabled";
+
         /** @hide */ public static String zenModeToString(int mode) {
             if (mode == ZEN_MODE_IMPORTANT_INTERRUPTIONS) return "ZEN_MODE_IMPORTANT_INTERRUPTIONS";
             if (mode == ZEN_MODE_ALARMS) return "ZEN_MODE_ALARMS";
@@ -14889,8 +15025,10 @@ public final class Settings {
         }
 
         /** @hide */
-        public static void getPublicSettings(Set<String> allKeys, Set<String> readableKeys) {
-            getPublicSettingsForClass(Global.class, allKeys, readableKeys);
+        public static void getPublicSettings(Set<String> allKeys, Set<String> readableKeys,
+                ArrayMap<String, Integer> readableKeysWithMaxTargetSdk) {
+            getPublicSettingsForClass(Global.class, allKeys, readableKeys,
+                    readableKeysWithMaxTargetSdk);
         }
 
         /**
@@ -16055,6 +16193,39 @@ public final class Settings {
      * @hide
      */
     public static final class Config extends NameValueTable {
+
+        /**
+         * The modes that can be used when disabling syncs to the 'config' settings.
+         * @hide
+         */
+        @IntDef(prefix = "DISABLE_SYNC_MODE_",
+                value = { SYNC_DISABLED_MODE_NONE, SYNC_DISABLED_MODE_PERSISTENT,
+                        SYNC_DISABLED_MODE_UNTIL_REBOOT })
+        @Retention(RetentionPolicy.SOURCE)
+        @Target({ElementType.TYPE_PARAMETER, ElementType.TYPE_USE})
+        public @interface SyncDisabledMode {}
+
+        /**
+         * Sync is not not disabled.
+         *
+         * @hide
+         */
+        public static final int SYNC_DISABLED_MODE_NONE = 0;
+
+        /**
+         * Disabling of Config bulk update / syncing is persistent, i.e. it survives a device
+         * reboot.
+         * @hide
+         */
+        public static final int SYNC_DISABLED_MODE_PERSISTENT = 1;
+
+        /**
+         * Disabling of Config bulk update / syncing is not persistent, i.e. it will not survive a
+         * device reboot.
+         * @hide
+         */
+        public static final int SYNC_DISABLED_MODE_UNTIL_REBOOT = 2;
+
         private static final ContentProviderHolder sProviderHolder =
                 new ContentProviderHolder(DeviceConfig.CONTENT_URI);
 
@@ -16147,7 +16318,7 @@ public final class Settings {
          * @param resolver to access the database with.
          * @param namespace to which the names should be set.
          * @param keyValues map of key names (without the prefix) to values.
-         * @return
+         * @return true if the name/value pairs were set, false if setting was blocked
          *
          * @hide
          */
@@ -16160,12 +16331,15 @@ public final class Settings {
                 compositeKeyValueMap.put(
                         createCompositeName(namespace, entry.getKey()), entry.getValue());
             }
-            // If can't set given configuration that means it's bad
-            if (!sNameValueCache.setStringsForPrefix(resolver, createPrefix(namespace),
-                    compositeKeyValueMap)) {
-                throw new DeviceConfig.BadConfigException();
+            int result = sNameValueCache.setStringsForPrefix(
+                    resolver, createPrefix(namespace), compositeKeyValueMap);
+            if (result == SET_ALL_RESULT_SUCCESS) {
+                return true;
+            } else if (result == SET_ALL_RESULT_DISABLED) {
+                return false;
             }
-            return true;
+            // If can't set given configuration that means it's bad
+            throw new DeviceConfig.BadConfigException();
         }
 
         /**
@@ -16198,6 +16372,50 @@ public final class Settings {
             } catch (RemoteException e) {
                 Log.w(TAG, "Can't reset to defaults for " + DeviceConfig.CONTENT_URI, e);
             }
+        }
+
+        /**
+         * Bridge method between {@link DeviceConfig#setSyncDisabled(int)} and the
+         * {@link com.android.providers.settings.SettingsProvider} implementation.
+         *
+         * @hide
+         */
+        @SuppressLint("AndroidFrameworkRequiresPermission")
+        @RequiresPermission(Manifest.permission.WRITE_DEVICE_CONFIG)
+        static void setSyncDisabled(
+                @NonNull ContentResolver resolver, @SyncDisabledMode int disableSyncMode) {
+            try {
+                Bundle args = new Bundle();
+                args.putInt(CALL_METHOD_SYNC_DISABLED_MODE_KEY, disableSyncMode);
+                IContentProvider cp = sProviderHolder.getProvider(resolver);
+                cp.call(resolver.getAttributionSource(),
+                        sProviderHolder.mUri.getAuthority(), CALL_METHOD_SET_SYNC_DISABLED_CONFIG,
+                        null, args);
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't set sync disabled " + DeviceConfig.CONTENT_URI, e);
+            }
+        }
+
+        /**
+         * Bridge method between {@link DeviceConfig#isSyncDisabled()} and the
+         * {@link com.android.providers.settings.SettingsProvider} implementation.
+         *
+         * @hide
+         */
+        @SuppressLint("AndroidFrameworkRequiresPermission")
+        @RequiresPermission(Manifest.permission.WRITE_DEVICE_CONFIG)
+        static boolean isSyncDisabled(@NonNull ContentResolver resolver) {
+            try {
+                Bundle args = Bundle.EMPTY;
+                IContentProvider cp = sProviderHolder.getProvider(resolver);
+                Bundle bundle = cp.call(resolver.getAttributionSource(),
+                        sProviderHolder.mUri.getAuthority(), CALL_METHOD_IS_SYNC_DISABLED_CONFIG,
+                        null, args);
+                return bundle.getBoolean(KEY_CONFIG_IS_SYNC_DISABLED_RETURN);
+            } catch (RemoteException e) {
+                Log.w(TAG, "Can't query sync disabled " + DeviceConfig.CONTENT_URI, e);
+            }
+            return false;
         }
 
         /**

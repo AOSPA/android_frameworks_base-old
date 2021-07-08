@@ -29,6 +29,7 @@ import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHE
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHELL_SHELL_TRANSITIONS;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHELL_SPLIT_SCREEN;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SHELL_STARTING_WINDOW;
+import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SMARTSPACE_TRANSITION_CONTROLLER;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SUPPORTS_WINDOW_CORNERS;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_SYSUI_PROXY;
 import static com.android.systemui.shared.system.QuickStepContract.KEY_EXTRA_WINDOW_CORNER_RADIUS;
@@ -88,6 +89,7 @@ import com.android.systemui.shared.recents.ISystemUiProxy;
 import com.android.systemui.shared.recents.model.Task;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.QuickStepContract;
+import com.android.systemui.shared.system.smartspace.SmartspaceTransitionController;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationShadeWindowController;
 import com.android.systemui.statusbar.phone.StatusBar;
@@ -148,6 +150,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
     private final CommandQueue mCommandQueue;
     private final ShellTransitions mShellTransitions;
     private final Optional<StartingSurface> mStartingSurface;
+    private final SmartspaceTransitionController mSmartspaceTransitionController;
 
     private Region mActiveNavBarRegion;
 
@@ -253,6 +256,21 @@ public class OverviewProxyService extends CurrentUserTracker implements
                     sendEvent(KeyEvent.ACTION_UP, KeyEvent.KEYCODE_BACK);
 
                     notifyBackAction(true, -1, -1, true, false);
+                });
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void setHomeRotationEnabled(boolean enabled) {
+            if (!verifyCaller("setHomeRotationEnabled")) {
+                return;
+            }
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> {
+                    mHandler.post(() -> notifyHomeRotationEnabled(enabled));
                 });
             } finally {
                 Binder.restoreCallingIdentity(token);
@@ -410,20 +428,32 @@ public class OverviewProxyService extends CurrentUserTracker implements
                 mPipOptional.ifPresent(
                         pip -> pip.setPinnedStackAnimationType(
                                 PipAnimationController.ANIM_TYPE_ALPHA));
-                mHandler.post(() -> notifySwipeToHomeFinishedInternal());
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
         }
 
         @Override
-        public void onQuickSwitchToNewTask(@Surface.Rotation int rotation) {
-            if (!verifyCaller("onQuickSwitchToNewTask")) {
+        public void notifySwipeUpGestureStarted() {
+            if (!verifyCaller("notifySwipeUpGestureStarted")) {
                 return;
             }
             final long token = Binder.clearCallingIdentity();
             try {
-                mHandler.post(() -> notifyQuickSwitchToNewTask(rotation));
+                mHandler.post(() -> notifySwipeUpGestureStartedInternal());
+            } finally {
+                Binder.restoreCallingIdentity(token);
+            }
+        }
+
+        @Override
+        public void notifyPrioritizedRotation(@Surface.Rotation int rotation) {
+            if (!verifyCaller("notifyPrioritizedRotation")) {
+                return;
+            }
+            final long token = Binder.clearCallingIdentity();
+            try {
+                mHandler.post(() -> notifyPrioritizedRotationInternal(rotation));
             } finally {
                 Binder.restoreCallingIdentity(token);
             }
@@ -525,10 +555,11 @@ public class OverviewProxyService extends CurrentUserTracker implements
             mStartingSurface.ifPresent((startingwindow) -> params.putBinder(
                     KEY_EXTRA_SHELL_STARTING_WINDOW,
                     startingwindow.createExternalInterface().asBinder()));
+            params.putBinder(
+                    KEY_EXTRA_SMARTSPACE_TRANSITION_CONTROLLER,
+                    mSmartspaceTransitionController.createExternalInterface().asBinder());
 
             try {
-                Log.d(TAG_OPS + " b/182478748", "OverviewProxyService.onInitialize: curUser="
-                        + mCurrentBoundedUserId);
                 mOverviewProxy.onInitialize(params);
             } catch (RemoteException e) {
                 mCurrentBoundedUserId = -1;
@@ -586,7 +617,8 @@ public class OverviewProxyService extends CurrentUserTracker implements
             Optional<OneHanded> oneHandedOptional,
             BroadcastDispatcher broadcastDispatcher,
             ShellTransitions shellTransitions,
-            Optional<StartingSurface> startingSurface) {
+            Optional<StartingSurface> startingSurface,
+            SmartspaceTransitionController smartspaceTransitionController) {
         super(broadcastDispatcher);
         mContext = context;
         mPipOptional = pipOptional;
@@ -612,7 +644,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
         // Listen for nav bar mode changes
         mNavBarMode = navModeController.addListener(this);
-        Log.d(TAG_OPS + " b/182478748", "OverviewProxyService: mode=" + mNavBarMode);
 
         // Listen for launcher package changes
         IntentFilter filter = new IntentFilter(Intent.ACTION_PACKAGE_ADDED);
@@ -648,6 +679,7 @@ public class OverviewProxyService extends CurrentUserTracker implements
         updateEnabledState();
         startConnectionToCurrentUser();
         mStartingSurface = startingSurface;
+        mSmartspaceTransitionController = smartspaceTransitionController;
     }
 
     @Override
@@ -772,7 +804,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
                     mOverviewServiceConnection,
                     Context.BIND_AUTO_CREATE | Context.BIND_FOREGROUND_SERVICE_WHILE_AWAKE,
                     UserHandle.of(getCurrentUserId()));
-            Log.d(TAG_OPS + " b/182478748", "OverviewProxyService.connect: bound=" + mBound);
         } catch (SecurityException e) {
             Log.e(TAG_OPS, "Unable to bind because of security error", e);
         }
@@ -825,9 +856,6 @@ public class OverviewProxyService extends CurrentUserTracker implements
 
     private void disconnectFromLauncherService() {
         if (mBound) {
-            Log.d(TAG_OPS + " b/182478748", "OverviewProxyService.disconnect: curUser="
-                    + mCurrentBoundedUserId);
-
             // Always unbind the service (ie. if called through onNullBinding or onBindingDied)
             mContext.unbindService(mOverviewServiceConnection);
             mBound = false;
@@ -847,6 +875,12 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
     }
 
+    private void notifyHomeRotationEnabled(boolean enabled) {
+        for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
+            mConnectionCallbacks.get(i).onHomeRotationEnabled(enabled);
+        }
+    }
+
     private void notifyConnectionChanged() {
         for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
             mConnectionCallbacks.get(i).onConnectionChanged(mOverviewProxy != null);
@@ -859,9 +893,9 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
     }
 
-    private void notifyQuickSwitchToNewTask(@Surface.Rotation int rotation) {
+    private void notifyPrioritizedRotationInternal(@Surface.Rotation int rotation) {
         for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
-            mConnectionCallbacks.get(i).onQuickSwitchToNewTask(rotation);
+            mConnectionCallbacks.get(i).onPrioritizedRotation(rotation);
         }
     }
 
@@ -889,9 +923,9 @@ public class OverviewProxyService extends CurrentUserTracker implements
         }
     }
 
-    public void notifySwipeToHomeFinishedInternal() {
+    private void notifySwipeUpGestureStartedInternal() {
         for (int i = mConnectionCallbacks.size() - 1; i >= 0; --i) {
-            mConnectionCallbacks.get(i).onSwipeToHomeFinished();
+            mConnectionCallbacks.get(i).onSwipeUpGestureStarted();
         }
     }
 
@@ -952,14 +986,11 @@ public class OverviewProxyService extends CurrentUserTracker implements
         final int currentUser = ActivityManagerWrapper.getInstance().getCurrentUserId();
         mIsEnabled = mContext.getPackageManager().resolveServiceAsUser(mQuickStepIntent,
                 MATCH_SYSTEM_ONLY, currentUser) != null;
-        Log.d(TAG_OPS + " b/182478748", "OverviewProxyService.updateEnabledState: curUser="
-                + currentUser + " enabled=" + mIsEnabled);
     }
 
     @Override
     public void onNavigationModeChanged(int mode) {
         mNavBarMode = mode;
-        Log.d(TAG_OPS + " b/182478748", "OverviewProxyService.onNavModeChanged: mode=" + mode);
     }
 
     @Override
@@ -986,14 +1017,15 @@ public class OverviewProxyService extends CurrentUserTracker implements
     public interface OverviewProxyListener {
         default void onConnectionChanged(boolean isConnected) {}
         default void onQuickStepStarted() {}
-        default void onSwipeToHomeFinished() {}
-        default void onQuickSwitchToNewTask(@Surface.Rotation int rotation) {}
+        default void onSwipeUpGestureStarted() {}
+        default void onPrioritizedRotation(@Surface.Rotation int rotation) {}
         default void onOverviewShown(boolean fromHome) {}
         default void onQuickScrubStarted() {}
         /** Notify the recents app (overview) is started by 3-button navigation. */
         default void onToggleRecentApps() {}
         /** Notify changes in the nav bar button alpha */
         default void onNavBarButtonAlphaChanged(float alpha, boolean animate) {}
+        default void onHomeRotationEnabled(boolean enabled) {}
         default void onSystemUiStateChanged(int sysuiStateFlags) {}
         default void onAssistantProgress(@FloatRange(from = 0.0, to = 1.0) float progress) {}
         default void onAssistantGestureCompletion(float velocity) {}

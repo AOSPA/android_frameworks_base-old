@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Draadlose skermsertifisering"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Aktiveer Wi-Fi-woordryke aanmelding"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Regulering van Wi-Fi-opsporing"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi‑Fi‑verbeterde MAC-verewekansiging"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Nie-aanhoudende MAC-verewekansiging vir wi-fi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Mobiele data is altyd aktief"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Hardewareversnelling vir verbinding"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Wys Bluetooth-toestelle sonder name"</string>
@@ -353,6 +353,7 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Wys snitgrense, kantlyne, ens."</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Dwing RTL-uitlegrigting"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Dwing skermuitlegrigting na RTL vir alle locales"</string>
+    <string name="window_blurs" msgid="6831008984828425106">"Laat venstervlakwasighede toe"</string>
     <string name="force_msaa" msgid="4081288296137775550">"Dwing 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"Aktiveer 4x MSAA in OpenGL ES 2.0-programme"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"Ontfout nie-reghoekige knipbedrywighede"</string>
@@ -453,14 +454,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"<xliff:g id="TIME">%1$s</xliff:g> oor tot vol"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> – <xliff:g id="TIME">%2$s</xliff:g> oor tot vol"</string>
-    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> – Optimeer tans vir batterygesondheid"</string>
+    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> – Laaiproses word tydelik beperk"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Onbekend"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Laai"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Laai tans vinnig"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Laai tans stadig"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Laai tans draadloos"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Laai nie"</string>
-    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Ingeprop; kan nie op die oomblik laai nie"</string>
+    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Gekoppel, laai nie"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Gelaai"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Beheer deur administrateur"</string>
     <string name="disabled" msgid="8017887509554714950">"Gedeaktiveer"</string>
@@ -506,9 +507,7 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Wekkers en onthounotas"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Laat toe dat wekkers en onthounotas gestel word"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Wekkers en onthounotas"</string>
-    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Laat hierdie program toe om wekkers te stel en ander handelinge te skeduleer. Hierdie program kan gebruik word wanneer jy nie jou foon gebruik nie, en kan dalk meer batterykrag gebruik. As hierdie toestemming af is, sal hierdie program dalk nie normaal funksioneer en sy wekkers nie werk soos geskeduleer nie."</string>
-    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Laat hierdie program toe om wekkers te stel en ander handelinge te skeduleer. Hierdie program kan gebruik word wanneer jy nie jou tablet gebruik nie, en kan dalk meer batterykrag gebruik. As hierdie toestemming af is, sal hierdie program dalk nie normaal funksioneer en sy wekkers nie werk soos geskeduleer nie."</string>
-    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Laat hierdie program toe om wekkers te stel en ander handelinge te skeduleer. Hierdie program kan gebruik word wanneer jy nie jou toestel gebruik nie, en kan dalk meer batterykrag gebruik. As hierdie toestemming af is, sal hierdie program dalk nie normaal funksioneer en sy wekkers nie werk soos geskeduleer nie."</string>
+    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"Laat hierdie program toe om wekkers te stel en tydsensitiewe handelinge te skeduleer. Dit laat die program op die agtergrond werk, wat meer batterykrag kan gebruik.\n\nAs hierdie toestemming af is, sal bestaande wekkers en tydgegronde geleenthede wat deur hierdie program geskeduleer is, nie werk nie."</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"skedule, wekker, onthounota, horlosie"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Skakel aan"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"Skakel Moenie steur nie aan"</string>

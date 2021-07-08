@@ -16,6 +16,7 @@
 
 #include "RenderProxy.h"
 
+#include <gui/TraceUtils.h>
 #include "DeferredLayerUpdater.h"
 #include "DisplayList.h"
 #include "Properties.h"
@@ -27,7 +28,6 @@
 #include "renderthread/RenderThread.h"
 #include "utils/Macros.h"
 #include "utils/TimeUtils.h"
-#include "utils/TraceUtils.h"
 
 namespace android {
 namespace uirenderer {
@@ -195,6 +195,17 @@ void RenderProxy::trimMemory(int level) {
     }
 }
 
+void RenderProxy::purgeCaches() {
+    if (RenderThread::hasInstance()) {
+        RenderThread& thread = RenderThread::getInstance();
+        thread.queue().post([&thread]() {
+            if (thread.getGrContext()) {
+                thread.cacheManager().trimMemory(CacheManager::TrimMemoryMode::Complete);
+            }
+        });
+    }
+}
+
 void RenderProxy::overrideProperty(const char* name, const char* value) {
     // expensive, but block here since name/value pointers owned by caller
     RenderThread::getInstance().queue().runSync(
@@ -253,6 +264,13 @@ void RenderProxy::dumpGraphicsMemory(int fd, bool includeProfileData) {
     if (RenderThread::hasInstance()) {
         auto& thread = RenderThread::getInstance();
         thread.queue().runSync([&]() { thread.dumpGraphicsMemory(fd, includeProfileData); });
+    }
+}
+
+void RenderProxy::getMemoryUsage(size_t* cpuUsage, size_t* gpuUsage) {
+    if (RenderThread::hasInstance()) {
+        auto& thread = RenderThread::getInstance();
+        thread.queue().runSync([&]() { thread.getMemoryUsage(cpuUsage, gpuUsage); });
     }
 }
 
@@ -369,6 +387,17 @@ int RenderProxy::copyHWBitmapInto(Bitmap* hwBitmap, SkBitmap* bitmap) {
     } else {
         return thread.queue().runSync(
                 [&]() -> int { return (int)thread.readback().copyHWBitmapInto(hwBitmap, bitmap); });
+    }
+}
+
+int RenderProxy::copyImageInto(const sk_sp<SkImage>& image, SkBitmap* bitmap) {
+    RenderThread& thread = RenderThread::getInstance();
+    if (gettid() == thread.getTid()) {
+        // TODO: fix everything that hits this. We should never be triggering a readback ourselves.
+        return (int)thread.readback().copyImageInto(image, bitmap);
+    } else {
+        return thread.queue().runSync(
+                [&]() -> int { return (int)thread.readback().copyImageInto(image, bitmap); });
     }
 }
 

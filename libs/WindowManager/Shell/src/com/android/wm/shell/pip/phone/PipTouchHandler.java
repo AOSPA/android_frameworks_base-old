@@ -75,6 +75,7 @@ public class PipTouchHandler {
     private final @NonNull PipBoundsState mPipBoundsState;
     private final PipUiEventLogger mPipUiEventLogger;
     private final PipDismissTargetHandler mPipDismissTargetHandler;
+    private final PipTaskOrganizer mPipTaskOrganizer;
     private final ShellExecutor mMainExecutor;
 
     private PipResizeGestureHandler mPipResizeGestureHandler;
@@ -173,6 +174,7 @@ public class PipTouchHandler {
         mAccessibilityManager = context.getSystemService(AccessibilityManager.class);
         mPipBoundsAlgorithm = pipBoundsAlgorithm;
         mPipBoundsState = pipBoundsState;
+        mPipTaskOrganizer = pipTaskOrganizer;
         mMenuController = menuController;
         mPipUiEventLogger = pipUiEventLogger;
         mFloatingContentCoordinator = floatingContentCoordinator;
@@ -204,7 +206,8 @@ public class PipTouchHandler {
                 mainExecutor);
         mConnection = new PipAccessibilityInteractionConnection(mContext, pipBoundsState,
                 mMotionHelper, pipTaskOrganizer, mPipBoundsAlgorithm.getSnapAlgorithm(),
-                this::onAccessibilityShowMenu, this::updateMovementBounds, mainExecutor);
+                this::onAccessibilityShowMenu, this::updateMovementBounds,
+                this::animateToUnStashedState, mainExecutor);
     }
 
     public void init() {
@@ -472,17 +475,20 @@ public class PipTouchHandler {
             float aspectRatio) {
         final int shorterLength = Math.min(mPipBoundsState.getDisplayBounds().width(),
                 mPipBoundsState.getDisplayBounds().height());
-        final int totalPadding = insetBounds.left * 2;
+        final int totalHorizontalPadding = insetBounds.left
+                + (mPipBoundsState.getDisplayBounds().width() - insetBounds.right);
+        final int totalVerticalPadding = insetBounds.top
+                + (mPipBoundsState.getDisplayBounds().height() - insetBounds.bottom);
         final int minWidth, minHeight, maxWidth, maxHeight;
         if (aspectRatio > 1f) {
             minWidth = (int) Math.min(normalBounds.width(), shorterLength * MINIMUM_SIZE_PERCENT);
             minHeight = (int) (minWidth / aspectRatio);
-            maxWidth = (int) Math.max(normalBounds.width(), shorterLength - totalPadding);
+            maxWidth = (int) Math.max(normalBounds.width(), shorterLength - totalHorizontalPadding);
             maxHeight = (int) (maxWidth / aspectRatio);
         } else {
             minHeight = (int) Math.min(normalBounds.height(), shorterLength * MINIMUM_SIZE_PERCENT);
             minWidth = (int) (minHeight * aspectRatio);
-            maxHeight = (int) Math.max(normalBounds.height(), shorterLength - totalPadding);
+            maxHeight = (int) Math.max(normalBounds.height(), shorterLength - totalVerticalPadding);
             maxWidth = (int) (maxHeight * aspectRatio);
         }
 
@@ -663,7 +669,9 @@ public class PipTouchHandler {
             // we store back to this snap fraction.  Otherwise, we'll reset the snap
             // fraction and snap to the closest edge.
             if (resize) {
-                animateToExpandedState(callback);
+                // PIP is too small to show the menu actions and thus needs to be resized to a
+                // size that can fit them all. Resize to the default size.
+                animateToNormalSize(callback);
             }
         } else if (menuState == MENU_STATE_NONE && mMenuState == MENU_STATE_FULL) {
             // Try and restore the PiP to the closest edge, using the saved snap fraction
@@ -717,22 +725,13 @@ public class PipTouchHandler {
                 callback);
     }
 
-    private void animateToMinimizedState() {
-        animateToUnexpandedState(new Rect(0, 0, mPipBoundsState.getMinSize().x,
-                mPipBoundsState.getMinSize().y));
-    }
-
-    private void animateToExpandedState(Runnable callback) {
+    private void animateToNormalSize(Runnable callback) {
         mPipResizeGestureHandler.setUserResizeBounds(mPipBoundsState.getBounds());
-        final Rect currentBounds = mPipBoundsState.getBounds();
-        final Rect expandedBounds = mPipBoundsState.getExpandedBounds();
-        Rect finalExpandedBounds = new Rect(expandedBounds.width() > expandedBounds.width()
-                        && expandedBounds.height() > expandedBounds.height()
-                        ? currentBounds : expandedBounds);
+        final Rect normalBounds = new Rect(mPipBoundsState.getNormalBounds());
         Rect restoredMovementBounds = new Rect();
-        mPipBoundsAlgorithm.getMovementBounds(finalExpandedBounds,
+        mPipBoundsAlgorithm.getMovementBounds(normalBounds,
                 mInsetBounds, restoredMovementBounds, mIsImeShowing ? mImeHeight : 0);
-        mSavedSnapFraction = mMotionHelper.animateToExpandedState(finalExpandedBounds,
+        mSavedSnapFraction = mMotionHelper.animateToExpandedState(normalBounds,
                 mPipBoundsState.getMovementBounds(), restoredMovementBounds, callback);
     }
 
@@ -802,6 +801,7 @@ public class PipTouchHandler {
             mMovementWithinDismiss = touchState.getDownTouchPosition().y
                     >= mPipBoundsState.getMovementBounds().bottom;
             mMotionHelper.setSpringingToTouch(false);
+            mPipDismissTargetHandler.setTaskLeash(mPipTaskOrganizer.getSurfaceControl());
 
             // If the menu is still visible then just poke the menu
             // so that it will timeout after the user stops touching it
@@ -850,6 +850,7 @@ public class PipTouchHandler {
         @Override
         public boolean onUp(PipTouchState touchState) {
             mPipDismissTargetHandler.hideDismissTargetMaybe();
+            mPipDismissTargetHandler.setTaskLeash(null);
 
             if (!touchState.isUserInteracting()) {
                 return false;

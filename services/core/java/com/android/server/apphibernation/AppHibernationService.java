@@ -97,7 +97,9 @@ public final class AppHibernationService extends SystemService {
             PackageManager.MATCH_DIRECT_BOOT_AWARE
                     | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
                     | PackageManager.MATCH_UNINSTALLED_PACKAGES
-                    | PackageManager.MATCH_DISABLED_COMPONENTS;
+                    | PackageManager.MATCH_DISABLED_COMPONENTS
+                    | PackageManager.MATCH_DISABLED_UNTIL_USED_COMPONENTS
+                    | PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS;
 
     /**
      * Lock for accessing any in-memory hibernation state
@@ -220,9 +222,9 @@ public final class AppHibernationService extends SystemService {
             final Map<String, UserLevelState> packageStates = mUserStates.get(userId);
             final UserLevelState pkgState = packageStates.get(packageName);
             if (pkgState == null) {
-                throw new IllegalArgumentException(
-                        String.format("Package %s is not installed for user %s",
-                                packageName, userId));
+                Slog.e(TAG, String.format("Package %s is not installed for user %s",
+                        packageName, userId));
+                return false;
             }
             return pkgState.hibernated;
         }
@@ -275,9 +277,9 @@ public final class AppHibernationService extends SystemService {
             final Map<String, UserLevelState> packageStates = mUserStates.get(userId);
             final UserLevelState pkgState = packageStates.get(packageName);
             if (pkgState == null) {
-                throw new IllegalArgumentException(
-                        String.format("Package %s is not installed for user %s",
-                                packageName, userId));
+                Slog.e(TAG, String.format("Package %s is not installed for user %s",
+                        packageName, userId));
+                return;
             }
 
             if (pkgState.hibernated == isHibernating) {
@@ -320,8 +322,8 @@ public final class AppHibernationService extends SystemService {
         synchronized (mLock) {
             GlobalLevelState state = mGlobalHibernationStates.get(packageName);
             if (state == null) {
-                throw new IllegalArgumentException(
-                        String.format("Package %s is not installed for any user", packageName));
+                Slog.e(TAG, String.format("Package %s is not installed for any user", packageName));
+                return;
             }
             if (state.hibernated != isHibernating) {
                 if (isHibernating) {

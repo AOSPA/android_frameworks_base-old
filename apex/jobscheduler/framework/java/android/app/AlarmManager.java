@@ -152,6 +152,8 @@ public class AlarmManager {
      * this broadcast will be sent. Applications can reschedule all the necessary alarms when
      * receiving it.
      *
+     * <p>This broadcast will <em>not</em> be sent when the user revokes the permission.
+     *
      * <p><em>Note:</em>
      * Applications are still required to check {@link #canScheduleExactAlarms()}
      * before using the above APIs after receiving this broadcast,
@@ -530,9 +532,10 @@ public class AlarmManager {
      * modest timeliness requirements for its alarms.
      *
      * <p>
-     * Note: Starting with API {@link Build.VERSION_CODES#S}, the system will ensure that the window
-     * specified is at least a few minutes, as smaller windows are considered practically exact
-     * and should use the other APIs provided for exact alarms.
+     * Note: Starting with API {@link Build.VERSION_CODES#S}, apps should not pass in a window of
+     * less than 10 minutes. The system will try its best to accommodate smaller windows if the
+     * alarm is supposed to fire in the near future, but there are no guarantees and the app should
+     * expect any window smaller than 10 minutes to get elongated to 10 minutes.
      *
      * <p>
      * This method can also be used to achieve strict ordering guarantees among
@@ -586,9 +589,10 @@ public class AlarmManager {
      * if {@code null} is passed as the {@code targetHandler} parameter.
      *
      * <p>
-     * Note: Starting with API {@link Build.VERSION_CODES#S}, the system will ensure that the window
-     * specified is at least a few minutes, as smaller windows are considered practically exact
-     * and should use the other APIs provided for exact alarms.
+     * Note: Starting with API {@link Build.VERSION_CODES#S}, apps should not pass in a window of
+     * less than 10 minutes. The system will try its best to accommodate smaller windows if the
+     * alarm is supposed to fire in the near future, but there are no guarantees and the app should
+     * expect any window smaller than 10 minutes to get elongated to 10 minutes.
      *
      * @see #setWindow(int, long, long, PendingIntent)
      */
@@ -658,10 +662,19 @@ public class AlarmManager {
      * scheduled as exact.  Applications are strongly discouraged from using exact
      * alarms unnecessarily as they reduce the OS's ability to minimize battery use.
      *
-     * <p>
-     * Starting with {@link Build.VERSION_CODES#S}, apps require the
+     * <p class="note"><strong>Note:</strong>
+     * Starting with {@link Build.VERSION_CODES#S}, apps targeting SDK level 31 or higher
+     * need to request the
      * {@link Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM} permission to use this
-     * API.
+     * API, unless the app is exempt from battery restrictions.
+     * The user and the system can revoke this permission via the special app access screen in
+     * Settings.
+     *
+     * <p class="note"><strong>Note:</strong>
+     * Exact alarms should only be used for user-facing features.
+     * For more details, see <a
+     * href="{@docRoot}about/versions/12/behavior-changes-12#exact-alarm-permission">
+     * Exact alarm permission</a>.
      *
      * @param type type of alarm.
      * @param triggerAtMillis time in milliseconds that the alarm should go
@@ -681,6 +694,7 @@ public class AlarmManager {
      * @see #ELAPSED_REALTIME_WAKEUP
      * @see #RTC
      * @see #RTC_WAKEUP
+     * @see Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM
      */
     @RequiresPermission(value = Manifest.permission.SCHEDULE_EXACT_ALARM, conditional = true)
     public void setExact(@AlarmType int type, long triggerAtMillis, PendingIntent operation) {
@@ -697,10 +711,21 @@ public class AlarmManager {
      * invoked via the specified target Handler, or on the application's main looper
      * if {@code null} is passed as the {@code targetHandler} parameter.
      *
-     * <p>
-     * Starting with {@link Build.VERSION_CODES#S}, apps require the
+     * <p class="note"><strong>Note:</strong>
+     * Starting with {@link Build.VERSION_CODES#S}, apps targeting SDK level 31 or higher
+     * need to request the
      * {@link Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM} permission to use this
-     * API.
+     * API, unless the app is exempt from battery restrictions.
+     * The user and the system can revoke this permission via the special app access screen in
+     * Settings.
+     *
+     * <p class="note"><strong>Note:</strong>
+     * Exact alarms should only be used for user-facing features.
+     * For more details, see <a
+     * href="{@docRoot}about/versions/12/behavior-changes-12#exact-alarm-permission">
+     * Exact alarm permission</a>.
+     *
+     * @see Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM
      */
     @RequiresPermission(value = Manifest.permission.SCHEDULE_EXACT_ALARM, conditional = true)
     public void setExact(@AlarmType int type, long triggerAtMillis, String tag,
@@ -741,9 +766,21 @@ public class AlarmManager {
      * This method is like {@link #setExact(int, long, PendingIntent)}, but implies
      * {@link #RTC_WAKEUP}.
      *
-     * <p>
-     * Starting from API {@link Build.VERSION_CODES#S}, using this method requires the
-     * {@link Manifest.permission#SCHEDULE_EXACT_ALARM} permission. Alarms scheduled via this API
+     * <p class="note"><strong>Note:</strong>
+     * Starting with {@link Build.VERSION_CODES#S}, apps targeting SDK level 31 or higher
+     * need to request the
+     * {@link Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM} permission to use this
+     * API.
+     * The user and the system can revoke this permission via the special app access screen in
+     * Settings.
+     *
+     * <p class="note"><strong>Note:</strong>
+     * Exact alarms should only be used for user-facing features.
+     * For more details, see <a
+     * href="{@docRoot}about/versions/12/behavior-changes-12#exact-alarm-permission">
+     * Exact alarm permission</a>.
+     *
+     * <p>Alarms scheduled via this API
      * will be allowed to start a foreground service even if the app is in the background.
      *
      * @param info
@@ -760,6 +797,7 @@ public class AlarmManager {
      * @see android.content.Context#sendBroadcast
      * @see android.content.Context#registerReceiver
      * @see android.content.Intent#filterEquals
+     * @see Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM
      */
     @RequiresPermission(Manifest.permission.SCHEDULE_EXACT_ALARM)
     public void setAlarmClock(AlarmClockInfo info, PendingIntent operation) {
@@ -1086,11 +1124,22 @@ public class AlarmManager {
      * device is idle it may take even more liberties with scheduling in order to optimize
      * for battery life.</p>
      *
-     * <p>
-     * Starting from API {@link Build.VERSION_CODES#S}, using this method requires the
-     * {@link Manifest.permission#SCHEDULE_EXACT_ALARM} permission, unless the app is exempt from
-     * battery restrictions. Alarms scheduled via this API will be allowed to start a foreground
-     * service even if the app is in the background.
+     * <p class="note"><strong>Note:</strong>
+     * Starting with {@link Build.VERSION_CODES#S}, apps targeting SDK level 31 or higher
+     * need to request the
+     * {@link Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM} permission to use this
+     * API, unless the app is exempt from battery restrictions.
+     * The user and the system can revoke this permission via the special app access screen in
+     * Settings.
+     *
+     * <p class="note"><strong>Note:</strong>
+     * Exact alarms should only be used for user-facing features.
+     * For more details, see <a
+     * href="{@docRoot}about/versions/12/behavior-changes-12#exact-alarm-permission">
+     * Exact alarm permission</a>.
+     *
+     * <p>Alarms scheduled via this API
+     * will be allowed to start a foreground service even if the app is in the background.
      *
      * @param type type of alarm.
      * @param triggerAtMillis time in milliseconds that the alarm should go
@@ -1110,6 +1159,7 @@ public class AlarmManager {
      * @see #ELAPSED_REALTIME_WAKEUP
      * @see #RTC
      * @see #RTC_WAKEUP
+     * @see Manifest.permission#SCHEDULE_EXACT_ALARM SCHEDULE_EXACT_ALARM
      */
     @RequiresPermission(value = Manifest.permission.SCHEDULE_EXACT_ALARM, conditional = true)
     public void setExactAndAllowWhileIdle(@AlarmType int type, long triggerAtMillis,
@@ -1235,14 +1285,20 @@ public class AlarmManager {
     }
 
     /**
-     * Called to check if the caller has the permission
-     * {@link Manifest.permission#SCHEDULE_EXACT_ALARM}.
-     *
-     * Apps can start {@link android.provider.Settings#ACTION_REQUEST_SCHEDULE_EXACT_ALARM} to
+     * Called to check if the caller can schedule exact alarms.
+     * <p>
+     * Apps targeting {@link Build.VERSION_CODES#S} or higher can schedule exact alarms if they
+     * have the {@link Manifest.permission#SCHEDULE_EXACT_ALARM} permission. These apps can also
+     * start {@link android.provider.Settings#ACTION_REQUEST_SCHEDULE_EXACT_ALARM} to
      * request this from the user.
+     * <p>
+     * Apps targeting lower sdk versions, can always schedule exact alarms.
      *
-     * @return {@code true} if the caller has the permission, {@code false} otherwise.
+     * @return {@code true} if the caller can schedule exact alarms.
      * @see android.provider.Settings#ACTION_REQUEST_SCHEDULE_EXACT_ALARM
+     * @see #setExact(int, long, PendingIntent)
+     * @see #setExactAndAllowWhileIdle(int, long, PendingIntent)
+     * @see #setAlarmClock(AlarmClockInfo, PendingIntent)
      */
     public boolean canScheduleExactAlarms() {
         return hasScheduleExactAlarm(mContext.getOpPackageName(), mContext.getUserId());

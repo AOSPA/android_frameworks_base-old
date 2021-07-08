@@ -89,6 +89,11 @@ struct Constants {
 
     // Max interval after system invoked the DL when readlog collection can be enabled.
     static constexpr auto readLogsMaxInterval = 2h;
+
+    // How long should we wait till dataLoader reports destroyed.
+    static constexpr auto destroyTimeout = 60s;
+
+    static constexpr auto anyStatus = INT_MIN;
 };
 
 static const Constants& constants() {
@@ -1174,7 +1179,8 @@ int IncrementalService::makeFile(StorageId storage, std::string_view path, int m
         return -EINVAL;
     }
     if (auto err = mIncFs->makeFile(ifs->control, normPath, mode, id, params); err) {
-        LOG(ERROR) << "Internal error: storageId " << storage << " failed to makeFile: " << err;
+        LOG(ERROR) << "Internal error: storageId " << storage << " failed to makeFile [" << normPath
+                   << "]: " << err;
         return err;
     }
     if (params.size > 0) {
@@ -2494,6 +2500,9 @@ void IncrementalService::getMetrics(StorageId storageId, android::os::Persistabl
         const auto& kMetricsLastReadErrorNo =
                 os::incremental::BnIncrementalService::METRICS_LAST_READ_ERROR_NUMBER();
         result->putInt(String16(kMetricsLastReadErrorNo.c_str()), lastReadError->errorNo);
+        const auto& kMetricsLastReadUid =
+                os::incremental::BnIncrementalService::METRICS_LAST_READ_ERROR_UID();
+        result->putInt(String16(kMetricsLastReadUid.c_str()), lastReadError->uid);
     }
     std::unique_lock l(ifs->lock);
     if (!ifs->dataLoaderStub) {
@@ -2550,7 +2559,7 @@ void IncrementalService::DataLoaderStub::cleanupResources() {
         mControl = {};
         mHealthControl = {};
         mHealthListener = {};
-        mStatusCondition.wait_until(lock, now + 60s, [this] {
+        mStatusCondition.wait_until(lock, now + Constants::destroyTimeout, [this] {
             return mCurrentStatus == IDataLoaderStatusListener::DATA_LOADER_DESTROYED;
         });
         mStatusListener = {};
@@ -2750,8 +2759,16 @@ bool IncrementalService::DataLoaderStub::fsmStep() {
     switch (targetStatus) {
         case IDataLoaderStatusListener::DATA_LOADER_DESTROYED: {
             switch (currentStatus) {
+                case IDataLoaderStatusListener::DATA_LOADER_UNAVAILABLE:
+                case IDataLoaderStatusListener::DATA_LOADER_UNRECOVERABLE:
+                    destroy();
+                    // DataLoader is broken, just assume it's destroyed.
+                    compareAndSetCurrentStatus(currentStatus,
+                                               IDataLoaderStatusListener::DATA_LOADER_DESTROYED);
+                    return true;
                 case IDataLoaderStatusListener::DATA_LOADER_BINDING:
-                    setCurrentStatus(IDataLoaderStatusListener::DATA_LOADER_DESTROYED);
+                    compareAndSetCurrentStatus(currentStatus,
+                                               IDataLoaderStatusListener::DATA_LOADER_DESTROYED);
                     return true;
                 default:
                     return destroy();
@@ -2772,7 +2789,11 @@ bool IncrementalService::DataLoaderStub::fsmStep() {
                 case IDataLoaderStatusListener::DATA_LOADER_UNRECOVERABLE:
                     // Before binding need to make sure we are unbound.
                     // Otherwise we'll get stuck binding.
-                    return destroy();
+                    destroy();
+                    // DataLoader is broken, just assume it's destroyed.
+                    compareAndSetCurrentStatus(currentStatus,
+                                               IDataLoaderStatusListener::DATA_LOADER_DESTROYED);
+                    return true;
                 case IDataLoaderStatusListener::DATA_LOADER_DESTROYED:
                 case IDataLoaderStatusListener::DATA_LOADER_BINDING:
                     return bind();
@@ -2811,11 +2832,19 @@ binder::Status IncrementalService::DataLoaderStub::onStatusChanged(MountId mount
 }
 
 void IncrementalService::DataLoaderStub::setCurrentStatus(int newStatus) {
+    compareAndSetCurrentStatus(Constants::anyStatus, newStatus);
+}
+
+void IncrementalService::DataLoaderStub::compareAndSetCurrentStatus(int expectedStatus,
+                                                                    int newStatus) {
     int oldStatus, oldTargetStatus, newTargetStatus;
     DataLoaderStatusListener listener;
     {
         std::unique_lock lock(mMutex);
         if (mCurrentStatus == newStatus) {
+            return;
+        }
+        if (expectedStatus != Constants::anyStatus && expectedStatus != mCurrentStatus) {
             return;
         }
 

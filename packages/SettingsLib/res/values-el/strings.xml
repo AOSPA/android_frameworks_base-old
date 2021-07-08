@@ -252,7 +252,7 @@
     <string name="wifi_display_certification" msgid="1805579519992520381">"Πιστοποίηση ασύρματης οθόνης"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Ενεργοποίηση λεπτομερ. καταγραφής Wi-Fi"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Περιορισμός σάρωσης Wi-Fi"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Ρύθμ. τυχαίας σειράς MAC με βελτ. Wi‑Fi"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Μη σταθερή τυχαία σειρά MAC σε Wi‑Fi"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"Πάντα ενεργά δεδομένα κινητής τηλεφωνίας"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"Σύνδεση επιτάχυνσης υλικού"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Εμφάνιση συσκευών Bluetooth χωρίς ονόματα"</string>
@@ -353,6 +353,7 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"Εμφάνιση ορίων κλιπ, περιθωρίων, κλπ."</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"Επιβολή κατ. διάταξης RTL"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"Επιβολή διάταξης οθόν. RTL για όλες τις τοπ. ρυθμ."</string>
+    <string name="window_blurs" msgid="6831008984828425106">"Θάμπωμα σε επίπεδο παραθ."</string>
     <string name="force_msaa" msgid="4081288296137775550">"Αναγκαστικά 4x MSAA"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"Ενεργοποίηση 4x MSAA σε εφαρμογές OpenGL ES 2.0"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"Εντοπισμός σφαλμάτων σε λειτουργίες μη ορθογώνιας περιοχής"</string>
@@ -453,14 +454,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"Απομένουν <xliff:g id="TIME">%1$s</xliff:g> για πλήρη φόρτιση"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - Απομένουν <xliff:g id="TIME">%2$s</xliff:g> για πλήρη φόρτιση"</string>
-    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - Βελτιστοποίηση για τη διατήρηση της καλής κατάστασης της μπαταρίας"</string>
+    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - Προσωρινός περιορισμός φόρτισης"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"Άγνωστο"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"Φόρτιση"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"Ταχεία φόρτιση"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"Αργή φόρτιση"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"Ασύρματη φόρτιση"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"Δεν φορτίζει"</string>
-    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"Συνδέθηκε, δεν είναι δυνατή η φόρτιση αυτήν τη στιγμή"</string>
+    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"Συνδεδεμένη, δεν φορτίζει"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"Φορτισμένη"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"Ελέγχονται από το διαχειριστή"</string>
     <string name="disabled" msgid="8017887509554714950">"Απενεργοποιημένο"</string>
@@ -506,9 +507,8 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"Ξυπνητήρια και ειδοποιήσεις"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"Να επιτρέπεται ο ορισμός ξυπνητ. και υπενθυμίσεων"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"Ξυπνητήρια και υπενθυμίσεις"</string>
-    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"Να επιτρέπεται σε αυτήν την εφαρμογή να ορίζει ξυπνητήρια και να προγραμματίζει άλλες ενέργειες. Αυτή η εφαρμογή ενδέχεται να χρησιμοποιείται όταν δεν χρησιμοποιείτε το τηλέφωνό σας, κάτι που μπορεί να οδηγήσει σε μεγαλύτερη κατανάλωση μπαταρίας. Εάν αυτή η άδεια είναι απενεργοποιημένη, η εφαρμογή ενδέχεται να μην λειτουργεί φυσιολογικά και τα ξυπνητήρια της δεν θα λειτουργούν σύμφωνα με τον προγραμματισμό τους."</string>
-    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"Να επιτρέπεται σε αυτήν την εφαρμογή να ορίζει ξυπνητήρια και να προγραμματίζει άλλες ενέργειες. Αυτή η εφαρμογή ενδέχεται να χρησιμοποιείται όταν δεν χρησιμοποιείτε το tablet, κάτι που μπορεί να οδηγήσει σε μεγαλύτερη κατανάλωση μπαταρίας. Εάν αυτή η άδεια είναι απενεργοποιημένη, η εφαρμογή ενδέχεται να μην λειτουργεί φυσιολογικά και τα ξυπνητήρια της δεν θα λειτουργούν σύμφωνα με τον προγραμματισμό τους."</string>
-    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"Να επιτρέπεται σε αυτήν την εφαρμογή να ορίζει ξυπνητήρια και να προγραμματίζει άλλες ενέργειες. Αυτή η εφαρμογή ενδέχεται να χρησιμοποιείται όταν δεν χρησιμοποιείτε τη συσκευή σας, κάτι που μπορεί να οδηγήσει σε μεγαλύτερη κατανάλωση μπαταρίας. Εάν αυτή η άδεια είναι απενεργοποιημένη, η εφαρμογή ενδέχεται να μην λειτουργεί φυσιολογικά και τα ξυπνητήρια της δεν θα λειτουργούν σύμφωνα με τον προγραμματισμό τους."</string>
+    <!-- no translation found for alarms_and_reminders_footer_title (6302587438389079695) -->
+    <skip />
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"χρονοδιάγραμμα, ξυπνητήρι, υπενθύμιση, ρολόι"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"Ενεργοποίηση"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"Ενεργοποίηση λειτουργίας \"Μην ενοχλείτε\""</string>

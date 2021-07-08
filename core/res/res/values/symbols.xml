@@ -276,6 +276,7 @@
   <java-symbol type="bool" name="config_avoidGfxAccel" />
   <java-symbol type="bool" name="config_bluetooth_address_validation" />
   <java-symbol type="bool" name="config_flipToScreenOffEnabled" />
+  <java-symbol type="integer" name="config_flipToScreenOffMaxLatencyMicros" />
   <java-symbol type="bool" name="config_bluetooth_sco_off_call" />
   <java-symbol type="bool" name="config_bluetooth_le_peripheral_mode_supported" />
   <java-symbol type="bool" name="config_bluetooth_hfp_inband_ringing_support" />
@@ -692,6 +693,8 @@
   <java-symbol type="string" name="cfTemplateRegisteredTime" />
   <java-symbol type="string" name="chooseActivity" />
   <java-symbol type="string" name="checked" />
+  <java-symbol type="array" name="config_companionDevicePackages" />
+  <java-symbol type="array" name="config_companionDeviceCerts" />
   <java-symbol type="string" name="config_default_dns_server" />
   <java-symbol type="string" name="config_ethernet_iface_regex" />
   <java-symbol type="string" name="not_checked" />
@@ -1912,6 +1915,7 @@
   <java-symbol type="array" name="radioAttributes" />
   <java-symbol type="array" name="config_oemUsbModeOverride" />
   <java-symbol type="array" name="config_locationProviderPackageNames" />
+  <java-symbol type="array" name="config_locationDriverAssistancePackageNames" />
   <java-symbol type="array" name="config_locationExtraPackageNames" />
   <java-symbol type="array" name="config_testLocationProviders" />
   <java-symbol type="array" name="config_defaultNotificationVibePattern" />
@@ -2024,6 +2028,8 @@
   <java-symbol type="integer" name="config_notificationServiceArchiveSize" />
   <java-symbol type="integer" name="config_previousVibrationsDumpLimit" />
   <java-symbol type="integer" name="config_defaultVibrationAmplitude" />
+  <java-symbol type="integer" name="config_vibrationWaveformRampStepDuration" />
+  <java-symbol type="integer" name="config_vibrationWaveformRampDownDuration" />
   <java-symbol type="integer" name="config_radioScanningTimeout" />
   <java-symbol type="integer" name="config_screenBrightnessSettingMinimum" />
   <java-symbol type="integer" name="config_screenBrightnessSettingMaximum" />
@@ -2980,7 +2986,6 @@
   <java-symbol type="string" name="importance_from_person" />
 
   <java-symbol type="layout" name="work_widget_mask_view" />
-  <java-symbol type="id" name="work_widget_mask_frame" />
   <java-symbol type="id" name="work_widget_app_icon" />
   <java-symbol type="id" name="work_widget_badge_icon" />
 
@@ -3182,9 +3187,12 @@
   <java-symbol type="bool" name="config_supportPreRebootSecurityLogs" />
 
   <java-symbol type="id" name="notification_action_list_margin_target" />
+  <java-symbol type="dimen" name="notification_actions_padding_start"/>
   <java-symbol type="dimen" name="notification_action_disabled_alpha" />
   <java-symbol type="id" name="tag_margin_end_when_icon_visible" />
   <java-symbol type="id" name="tag_margin_end_when_icon_gone" />
+  <java-symbol type="id" name="tag_uses_right_icon_drawable" />
+  <java-symbol type="id" name="tag_keep_when_showing_left_icon" />
 
   <!-- Override Wake Key Behavior When Screen is Off -->
   <java-symbol type="bool" name="config_wakeOnDpadKeyPress" />
@@ -3648,6 +3656,7 @@
   <java-symbol type="array" name="config_allowedSecureInstantAppSettings" />
 
   <java-symbol type="bool" name="config_handleVolumeKeysInWindowManager" />
+  <java-symbol type="bool" name="config_handleVolumeAliasesUsingVolumeGroups" />
   <java-symbol type="dimen" name="config_inCallNotificationVolume" />
   <java-symbol type="string" name="config_inCallNotificationSound" />
   <java-symbol type="integer" name="config_autoGroupAtCount" />
@@ -4283,15 +4292,19 @@
 
   <java-symbol type="bool" name="config_voice_data_sms_auto_fallback" />
 
-  <java-symbol type="bool" name="config_enableOneHandedKeyguard" />
+  <java-symbol type="bool" name="config_enableDynamicKeyguardPositioning" />
 
   <java-symbol type="attr" name="colorAccentPrimary" />
   <java-symbol type="attr" name="colorAccentSecondary" />
   <java-symbol type="attr" name="colorAccentTertiary" />
+  <java-symbol type="attr" name="colorAccentPrimaryVariant" />
+  <java-symbol type="attr" name="colorAccentSecondaryVariant" />
+  <java-symbol type="attr" name="colorAccentTertiaryVariant" />
   <java-symbol type="attr" name="colorSurface" format="color" />
   <java-symbol type="attr" name="colorSurfaceHighlight" format="color" />
   <java-symbol type="attr" name="colorSurfaceVariant" format="color" />
   <java-symbol type="attr" name="colorSurfaceHeader" format="color" />
+  <java-symbol type="attr" name="textColorOnAccent" format="color" />
 
   <!-- CEC Configuration -->
   <java-symbol type="bool" name="config_cecHdmiCecEnabled_userConfigurable" />
@@ -4405,6 +4418,14 @@
 
   <java-symbol type="bool" name="config_supportsMicToggle" />
   <java-symbol type="bool" name="config_supportsCamToggle" />
+
+  <java-symbol type="dimen" name="starting_surface_icon_size" />
+  <java-symbol type="dimen" name="starting_surface_default_icon_size" />
+
+  <java-symbol type="bool" name="config_assistLongPressHomeEnabledDefault" />
+  <java-symbol type="bool" name="config_assistTouchGestureEnabledDefault" />
+
+  <java-symbol type="dimen" name="config_wallpaperDimAmount" />
 
   <java-symbol type="string" name="config_emergency_apn" />
 </resources>

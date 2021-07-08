@@ -46,6 +46,7 @@ import android.window.TaskOrganizer;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.wm.shell.common.ScreenshotUtils;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
 import com.android.wm.shell.startingsurface.StartingWindowController;
@@ -55,6 +56,7 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.function.Consumer;
 
 /**
  * Unified task organizer for all components in the shell.
@@ -323,6 +325,13 @@ public class ShellTaskOrganizer extends TaskOrganizer {
     }
 
     @Override
+    public void onAppSplashScreenViewRemoved(int taskId) {
+        if (mStartingWindow != null) {
+            mStartingWindow.onAppSplashScreenViewRemoved(taskId);
+        }
+    }
+
+    @Override
     public void onTaskAppeared(RunningTaskInfo taskInfo, SurfaceControl leash) {
         synchronized (mLock) {
             onTaskAppeared(new TaskAppearedInfo(taskInfo, leash));
@@ -341,6 +350,19 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         notifyLocusVisibilityIfNeeded(info.getTaskInfo());
         notifySizeCompatUI(info.getTaskInfo(), listener);
     }
+
+    /**
+     * Take a screenshot of a task.
+     */
+    public void screenshotTask(RunningTaskInfo taskInfo, Rect crop,
+            Consumer<SurfaceControl.ScreenshotHardwareBuffer> consumer) {
+        final TaskAppearedInfo info = mTasks.get(taskInfo.taskId);
+        if (info == null) {
+            return;
+        }
+        ScreenshotUtils.captureLayer(info.getLeash(), crop, consumer);
+    }
+
 
     @Override
     public void onTaskInfoChanged(RunningTaskInfo taskInfo) {
@@ -396,6 +418,19 @@ public class ShellTaskOrganizer extends TaskOrganizer {
         synchronized (mLock) {
             final TaskAppearedInfo info = mTasks.get(taskId);
             return info != null ? info.getTaskInfo() : null;
+        }
+    }
+
+    /** Helper to set int metadata on the Surface corresponding to the task id. */
+    public void setSurfaceMetadata(int taskId, int key, int value) {
+        synchronized (mLock) {
+            final TaskAppearedInfo info = mTasks.get(taskId);
+            if (info == null || info.getLeash() == null) {
+                return;
+            }
+            SurfaceControl.Transaction t = new SurfaceControl.Transaction();
+            t.setMetadata(info.getLeash(), key, value);
+            t.apply();
         }
     }
 

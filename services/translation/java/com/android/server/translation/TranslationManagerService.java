@@ -48,6 +48,7 @@ import android.view.translation.UiTranslationSpec;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.os.IResultReceiver;
+import com.android.internal.util.DumpUtils;
 import com.android.server.infra.AbstractMasterSystemService;
 import com.android.server.infra.FrameworkResourcesServiceNameResolver;
 
@@ -289,8 +290,15 @@ public final class TranslationManagerService
         */
         @Override
         public void dump(FileDescriptor fd, PrintWriter pw, String[] args) {
+            if (!DumpUtils.checkDumpPermission(getContext(), TAG, pw)) return;
+
             synchronized (mLock) {
                 dumpLocked("", pw);
+                final int userId = UserHandle.getCallingUserId();
+                final TranslationManagerServiceImpl service = getServiceForUserLocked(userId);
+                if (service != null) {
+                    service.dumpLocked("  ", fd, pw);
+                }
             }
         }
 

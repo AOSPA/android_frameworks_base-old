@@ -125,7 +125,9 @@ public abstract class TranslationService extends Service {
 
     /**
      * Interface definition for a callback to be invoked when the translation is compleled.
+     * @removed use a {@link Consumer} instead.
      */
+    @Deprecated
     public interface OnTranslationResultCallback {
         /**
          * Notifies the Android System that a translation request
@@ -147,7 +149,7 @@ public abstract class TranslationService extends Service {
 
         /**
          * TODO: implement javadoc
-         * @deprecated use {@link #onTranslationSuccess} with an error response instead.
+         * @removed use {@link #onTranslationSuccess} with an error response instead.
          */
         @Deprecated
         void onError();
@@ -162,12 +164,12 @@ public abstract class TranslationService extends Service {
                 public void onTranslationRequest(TranslationRequest request, int sessionId,
                         ICancellationSignal transport, ITranslationCallback callback)
                         throws RemoteException {
-                    final OnTranslationResultCallback translationResultCallback =
+                    final Consumer<TranslationResponse> consumer =
                             new OnTranslationResultCallbackWrapper(callback);
                     mHandler.sendMessage(obtainMessage(TranslationService::onTranslationRequest,
                             TranslationService.this, request, sessionId,
                             CancellationSignal.fromTransport(transport),
-                            translationResultCallback));
+                            consumer));
                 }
 
                 @Override
@@ -228,22 +230,20 @@ public abstract class TranslationService extends Service {
      */
     // TODO(b/176464808): the session id won't be unique cross client/server process. Need to find
     // solution to make it's safe.
-    // TODO: make abstract once aiai is implemented.
-    public void onCreateTranslationSession(@NonNull TranslationContext translationContext,
-            int sessionId, @NonNull Consumer<Boolean> callback) {
-        onCreateTranslationSession(translationContext, sessionId);
-        callback.accept(true);
-    }
+    public abstract void onCreateTranslationSession(@NonNull TranslationContext translationContext,
+            int sessionId, @NonNull Consumer<Boolean> callback);
 
     /**
      * TODO: fill in javadoc.
      *
-     * @deprecated use {@link #onCreateTranslationSession(TranslationContext, int, Consumer)}
+     * @removed use {@link #onCreateTranslationSession(TranslationContext, int, Consumer)}
      * instead.
      */
     @Deprecated
-    public abstract void onCreateTranslationSession(@NonNull TranslationContext translationContext,
-            int sessionId);
+    public void onCreateTranslationSession(@NonNull TranslationContext translationContext,
+            int sessionId) {
+        // no-op
+    }
 
     /**
      * TODO: fill in javadoc.
@@ -259,14 +259,34 @@ public abstract class TranslationService extends Service {
      * @param sessionId
      * @param callback
      * @param cancellationSignal
+     * @removed use
+     * {@link #onTranslationRequest(TranslationRequest, int, CancellationSignal, Consumer)} instead.
+     */
+    @Deprecated
+    public void onTranslationRequest(@NonNull TranslationRequest request, int sessionId,
+            @Nullable CancellationSignal cancellationSignal,
+            @NonNull OnTranslationResultCallback callback) {
+        // no-op
+    }
+
+    /**
+     * Called to the service with a {@link TranslationRequest} to be translated.
+     *
+     * <p>The service must call {@code callback.accept()} with the {@link TranslationResponse}. If
+     * {@link TranslationRequest#FLAG_PARTIAL_RESPONSES} was set, the service may call
+     * {@code callback.accept()} multiple times with partial responses.</p>
+     *
+     * @param request
+     * @param sessionId
+     * @param callback
+     * @param cancellationSignal
      */
     public abstract void onTranslationRequest(@NonNull TranslationRequest request, int sessionId,
             @Nullable CancellationSignal cancellationSignal,
-            @NonNull OnTranslationResultCallback callback);
+            @NonNull Consumer<TranslationResponse> callback);
 
     /**
      * TODO: fill in javadoc
-     * TODO: make this abstract again once aiai is ready.
      *
      * <p>Must call {@code callback.accept} to pass back the set of translation capabilities.</p>
      *

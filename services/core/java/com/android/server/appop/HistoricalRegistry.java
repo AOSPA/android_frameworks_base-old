@@ -212,6 +212,7 @@ final class HistoricalRegistry {
     }
 
     void systemReady(@NonNull ContentResolver resolver) {
+        mDiscreteRegistry.systemReady();
         final Uri uri = Settings.Global.getUriFor(Settings.Global.APPOP_HISTORY_PARAMETERS);
         resolver.registerContentObserver(uri, false, new ContentObserver(
                 FgThread.getHandler()) {
@@ -249,7 +250,6 @@ final class HistoricalRegistry {
                 }
             }
         }
-        mDiscreteRegistry.systemReady();
     }
 
     private boolean isPersistenceInitializedMLocked() {
@@ -487,11 +487,12 @@ final class HistoricalRegistry {
 
     void incrementOpAccessedCount(int op, int uid, @NonNull String packageName,
             @Nullable String attributionTag, @UidState int uidState, @OpFlags int flags,
-            long accessTime) {
+            long accessTime, @AppOpsManager.AttributionFlags int attributionFlags,
+            int attributionChainId) {
         synchronized (mInMemoryLock) {
             if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
                 if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
+                    Slog.v(LOG_TAG, "Interaction before persistence initialized");
                     return;
                 }
                 getUpdatedPendingHistoricalOpsMLocked(
@@ -499,7 +500,7 @@ final class HistoricalRegistry {
                         attributionTag, uidState, flags, 1);
 
                 mDiscreteRegistry.recordDiscreteAccess(uid, packageName, op, attributionTag,
-                        flags, uidState, accessTime, -1);
+                        flags, uidState, accessTime, -1, attributionFlags, attributionChainId);
             }
         }
     }
@@ -509,7 +510,7 @@ final class HistoricalRegistry {
         synchronized (mInMemoryLock) {
             if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
                 if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
+                    Slog.v(LOG_TAG, "Interaction before persistence initialized");
                     return;
                 }
                 getUpdatedPendingHistoricalOpsMLocked(
@@ -521,18 +522,20 @@ final class HistoricalRegistry {
 
     void increaseOpAccessDuration(int op, int uid, @NonNull String packageName,
             @Nullable String attributionTag, @UidState int uidState, @OpFlags int flags,
-            long eventStartTime, long increment) {
+            long eventStartTime, long increment,
+            @AppOpsManager.AttributionFlags int attributionFlags, int attributionChainId) {
         synchronized (mInMemoryLock) {
             if (mMode == AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
                 if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
+                    Slog.v(LOG_TAG, "Interaction before persistence initialized");
                     return;
                 }
                 getUpdatedPendingHistoricalOpsMLocked(
                         System.currentTimeMillis()).increaseAccessDuration(op, uid, packageName,
                         attributionTag, uidState, flags, increment);
                 mDiscreteRegistry.recordDiscreteAccess(uid, packageName, op, attributionTag,
-                        flags, uidState, eventStartTime, increment);
+                        flags, uidState, eventStartTime, increment, attributionFlags,
+                        attributionChainId);
             }
         }
     }
@@ -594,6 +597,9 @@ final class HistoricalRegistry {
                 mPersistence.persistHistoricalOpsDLocked(history);
             }
         }
+    }
+
+    void offsetDiscreteHistory(long offsetMillis) {
         mDiscreteRegistry.offsetHistory(offsetMillis);
     }
 
@@ -601,7 +607,7 @@ final class HistoricalRegistry {
         final List<HistoricalOps> pendingWrites;
         synchronized (mInMemoryLock) {
             if (!isPersistenceInitializedMLocked()) {
-                Slog.e(LOG_TAG, "Interaction before persistence initialized");
+                Slog.d(LOG_TAG, "Interaction before persistence initialized");
                 return;
             }
             // The history files start from mBaseSnapshotInterval - take this into account.
@@ -620,7 +626,7 @@ final class HistoricalRegistry {
 
     void resetHistoryParameters() {
         if (!isPersistenceInitializedMLocked()) {
-            Slog.e(LOG_TAG, "Interaction before persistence initialized");
+            Slog.d(LOG_TAG, "Interaction before persistence initialized");
             return;
         }
         setHistoryParameters(DEFAULT_MODE, DEFAULT_SNAPSHOT_INTERVAL_MILLIS,
@@ -632,7 +638,7 @@ final class HistoricalRegistry {
         synchronized (mOnDiskLock) {
             synchronized (mInMemoryLock) {
                 if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
+                    Slog.d(LOG_TAG, "Interaction before persistence initialized");
                     return;
                 }
                 if (mMode != AppOpsManager.HISTORICAL_MODE_ENABLED_ACTIVE) {
@@ -665,7 +671,7 @@ final class HistoricalRegistry {
         synchronized (mOnDiskLock) {
             synchronized (mInMemoryLock) {
                 if (!isPersistenceInitializedMLocked()) {
-                    Slog.e(LOG_TAG, "Interaction before persistence initialized");
+                    Slog.d(LOG_TAG, "Interaction before persistence initialized");
                     return;
                 }
                 clearHistoryOnDiskDLocked();

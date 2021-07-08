@@ -3612,27 +3612,26 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
     private void scrollIfNeeded(int x, int y, MotionEvent vtev) {
         int rawDeltaY = y - mMotionY;
         int scrollOffsetCorrection = 0;
-        int scrollConsumedCorrection = 0;
         if (mLastY == Integer.MIN_VALUE) {
             rawDeltaY -= mMotionCorrection;
         }
-        if (dispatchNestedPreScroll(0, mLastY != Integer.MIN_VALUE ? mLastY - y : -rawDeltaY,
-                mScrollConsumed, mScrollOffset)) {
+
+        int incrementalDeltaY = mLastY != Integer.MIN_VALUE ? y - mLastY : rawDeltaY;
+
+        // First allow releasing existing overscroll effect:
+        incrementalDeltaY = releaseGlow(incrementalDeltaY, x);
+
+        if (dispatchNestedPreScroll(0, -incrementalDeltaY, mScrollConsumed, mScrollOffset)) {
             rawDeltaY += mScrollConsumed[1];
             scrollOffsetCorrection = -mScrollOffset[1];
-            scrollConsumedCorrection = mScrollConsumed[1];
+            incrementalDeltaY += mScrollConsumed[1];
             if (vtev != null) {
                 vtev.offsetLocation(0, mScrollOffset[1]);
                 mNestedYOffset += mScrollOffset[1];
             }
         }
         final int deltaY = rawDeltaY;
-        int incrementalDeltaY =
-                mLastY != Integer.MIN_VALUE ? y - mLastY + scrollConsumedCorrection : deltaY;
         int lastYCorrection = 0;
-
-        // First allow releasing existing overscroll effect:
-        incrementalDeltaY = releaseGlow(incrementalDeltaY, x);
 
         if (mTouchMode == TOUCH_MODE_SCROLL) {
             if (PROFILE_SCROLLING) {
@@ -4640,7 +4639,7 @@ public abstract class AbsListView extends AdapterView<ListAdapter> implements Te
                 int motionPosition = findMotionRow(y);
                 if (isGlowActive()) {
                     // Pressed during edge effect, so this is considered the same as a fling catch.
-                    mTouchMode = TOUCH_MODE_FLING;
+                    touchMode = mTouchMode = TOUCH_MODE_FLING;
                 } else if (touchMode != TOUCH_MODE_FLING && motionPosition >= 0) {
                     // User clicked on an actual view (and was not stopping a fling).
                     // Remember where the motion event started

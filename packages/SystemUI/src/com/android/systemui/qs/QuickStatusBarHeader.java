@@ -68,7 +68,9 @@ public class QuickStatusBarHeader extends FrameLayout {
     private Space mDatePrivacySeparator;
     private View mClockIconsSeparator;
     private boolean mShowClockIconsSeparator;
-    private ViewGroup mRightLayout;
+    private View mRightLayout;
+    private View mDateContainer;
+    private View mPrivacyContainer;
 
     private BatteryMeterView mBatteryRemainingIcon;
     private StatusIconContainer mIconContainer;
@@ -129,6 +131,8 @@ public class QuickStatusBarHeader extends FrameLayout {
         mSecurityHeaderView = findViewById(R.id.header_text_container);
         mClockIconsSeparator = findViewById(R.id.separator);
         mRightLayout = findViewById(R.id.rightLayout);
+        mDateContainer = findViewById(R.id.date_container);
+        mPrivacyContainer = findViewById(R.id.privacy_container);
 
         mClockView = findViewById(R.id.clock);
         mDatePrivacySeparator = findViewById(R.id.space);
@@ -179,12 +183,25 @@ public class QuickStatusBarHeader extends FrameLayout {
     protected void onConfigurationChanged(Configuration newConfig) {
         super.onConfigurationChanged(newConfig);
         updateResources();
+        setDatePrivacyContainersWidth(newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE);
     }
 
     @Override
     public void onRtlPropertiesChanged(int layoutDirection) {
         super.onRtlPropertiesChanged(layoutDirection);
         updateResources();
+    }
+
+    private void setDatePrivacyContainersWidth(boolean landscape) {
+        LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) mDateContainer.getLayoutParams();
+        lp.width = landscape ? WRAP_CONTENT : 0;
+        lp.weight = landscape ? 0f : 1f;
+        mDateContainer.setLayoutParams(lp);
+
+        lp = (LinearLayout.LayoutParams) mPrivacyContainer.getLayoutParams();
+        lp.width = landscape ? WRAP_CONTENT : 0;
+        lp.weight = landscape ? 0f : 1f;
+        mPrivacyContainer.setLayoutParams(lp);
     }
 
     void updateResources() {
@@ -225,6 +242,12 @@ public class QuickStatusBarHeader extends FrameLayout {
             mBatteryRemainingIcon.updateColors(mTextColorPrimary, textColorSecondary,
                     mTextColorPrimary);
         }
+
+        MarginLayoutParams qqsLP = (MarginLayoutParams) mHeaderQsPanel.getLayoutParams();
+        qqsLP.topMargin = mContext.getResources()
+                .getDimensionPixelSize(R.dimen.qqs_layout_margin_top);
+        mHeaderQsPanel.setLayoutParams(qqsLP);
+
         updateHeadersPadding();
         updateAnimators();
     }
@@ -243,10 +266,9 @@ public class QuickStatusBarHeader extends FrameLayout {
 
     private void updateAlphaAnimator() {
         TouchAnimator.Builder builder = new TouchAnimator.Builder()
-                // The following two views have to be hidden manually, so as not to hide the
-                // Privacy chip in QQS
-                .addFloat(mDateView, "alpha", 0, 1)
                 .addFloat(mSecurityHeaderView, "alpha", 0, 1)
+                // These views appear on expanding down
+                .addFloat(mClockView, "alpha", 0, 1)
                 .addFloat(mQSCarriers, "alpha", 0, 1)
                 .setListener(new TouchAnimator.ListenerAdapter() {
                     @Override
@@ -377,12 +399,14 @@ public class QuickStatusBarHeader extends FrameLayout {
                 mClockIconsSeparatorLayoutParams.width = 0;
                 setSeparatorVisibility(false);
                 mShowClockIconsSeparator = false;
+                mBatteryRemainingIcon.setPercentShowMode(BatteryMeterView.MODE_ESTIMATE);
             } else {
                 datePrivacySeparatorLayoutParams.width = topCutout.width();
                 mDatePrivacySeparator.setVisibility(View.VISIBLE);
                 mClockIconsSeparatorLayoutParams.width = topCutout.width();
                 mShowClockIconsSeparator = true;
                 setSeparatorVisibility(mKeyguardExpansionFraction == 0f);
+                mBatteryRemainingIcon.setPercentShowMode(BatteryMeterView.MODE_ON);
             }
         }
         mDatePrivacySeparator.setLayoutParams(datePrivacySeparatorLayoutParams);

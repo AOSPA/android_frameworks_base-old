@@ -178,7 +178,8 @@ public class KeyguardServiceDelegate {
                 // This is used to hide the scrim once keyguard displays.
                 if (mKeyguardState.interactiveState == INTERACTIVE_STATE_AWAKE
                         || mKeyguardState.interactiveState == INTERACTIVE_STATE_WAKING) {
-                    mKeyguardService.onStartedWakingUp(PowerManager.WAKE_REASON_UNKNOWN);
+                    mKeyguardService.onStartedWakingUp(PowerManager.WAKE_REASON_UNKNOWN,
+                            false /* cameraGestureTriggered */);
                 }
                 if (mKeyguardState.interactiveState == INTERACTIVE_STATE_AWAKE) {
                     mKeyguardService.onFinishedWakingUp();
@@ -263,7 +264,8 @@ public class KeyguardServiceDelegate {
      */
     @Deprecated
     public void setOccluded(boolean isOccluded, boolean animate) {
-        if (!WindowManagerService.sEnableRemoteKeyguardAnimation && mKeyguardService != null) {
+        if (!WindowManagerService.sEnableRemoteKeyguardOccludeAnimation
+                && mKeyguardService != null) {
             if (DEBUG) Log.v(TAG, "setOccluded(" + isOccluded + ") animate=" + animate);
             mKeyguardService.setOccluded(isOccluded, animate);
         }
@@ -297,10 +299,11 @@ public class KeyguardServiceDelegate {
         mKeyguardState.dreaming = false;
     }
 
-    public void onStartedWakingUp(@PowerManager.WakeReason int pmWakeReason) {
+    public void onStartedWakingUp(
+            @PowerManager.WakeReason int pmWakeReason, boolean cameraGestureTriggered) {
         if (mKeyguardService != null) {
             if (DEBUG) Log.v(TAG, "onStartedWakingUp()");
-            mKeyguardService.onStartedWakingUp(pmWakeReason);
+            mKeyguardService.onStartedWakingUp(pmWakeReason, cameraGestureTriggered);
         }
         mKeyguardState.interactiveState = INTERACTIVE_STATE_WAKING;
     }
@@ -403,7 +406,8 @@ public class KeyguardServiceDelegate {
     }
 
     public void startKeyguardExitAnimation(long startTime, long fadeoutDuration) {
-        if (!WindowManagerService.sEnableRemoteKeyguardAnimation && mKeyguardService != null) {
+        if (!WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation
+                && mKeyguardService != null) {
             mKeyguardService.startKeyguardExitAnimation(startTime, fadeoutDuration);
         }
     }

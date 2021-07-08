@@ -95,7 +95,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     private boolean mLastKeyguardAndExpanded;
     /**
      * The last received state from the controller. This should not be used directly to check if
-     * we're on keyguard but use {@link #isKeyguardShowing()} instead since that is more accurate
+     * we're on keyguard but use {@link #isKeyguardState()} instead since that is more accurate
      * during state transitions which often call into us.
      */
     private int mState;
@@ -112,6 +112,17 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
      * otherwise.
      */
     private boolean mTranslateWhileExpanding;
+    private boolean mPulseExpanding;
+
+    /**
+     * Are we currently transitioning from lockscreen to the full shade?
+     */
+    private boolean mTransitioningToFullShade;
+
+    /**
+     * Whether the next Quick settings
+     */
+    private boolean mAnimateNextQsUpdate;
 
     @Inject
     public QSFragment(RemoteInputQuickSettingsDisabler remoteInputQsDisabler,
@@ -265,6 +276,11 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
         }
     }
 
+    @Override
+    public boolean isFullyCollapsed() {
+        return mLastQSExpansion == 0.0f || mLastQSExpansion == -1;
+    }
+
     private void setEditLocation(View view) {
         View edit = view.findViewById(android.R.id.edit);
         int[] loc = edit.getLocationOnScreen();
@@ -310,7 +326,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                 || mHeaderAnimating;
         mQSPanelController.setExpanded(mQsExpanded);
         mQSDetail.setExpanded(mQsExpanded);
-        boolean keyguardShowing = isKeyguardShowing();
+        boolean keyguardShowing = isKeyguardState();
         mHeader.setVisibility((mQsExpanded || !keyguardShowing || mHeaderAnimating
                 || mShowCollapsedOnKeyguard)
                 ? View.VISIBLE
@@ -328,21 +344,29 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
                 !mQsDisabled && expandVisually ? View.VISIBLE : View.INVISIBLE);
     }
 
-    private boolean isKeyguardShowing() {
+    private boolean isKeyguardState() {
         // We want the freshest state here since otherwise we'll have some weirdness if earlier
         // listeners trigger updates
         return mStatusBarStateController.getState() == StatusBarState.KEYGUARD;
     }
 
     @Override
-    public void setShowCollapsedOnKeyguard(boolean showCollapsedOnKeyguard) {
-        if (showCollapsedOnKeyguard != mShowCollapsedOnKeyguard) {
-            mShowCollapsedOnKeyguard = showCollapsedOnKeyguard;
+    public void setPulseExpanding(boolean pulseExpanding) {
+        if (pulseExpanding != mPulseExpanding) {
+            mPulseExpanding = pulseExpanding;
+            updateShowCollapsedOnKeyguard();
+        }
+    }
+
+    private void updateShowCollapsedOnKeyguard() {
+        boolean showCollapsed = mPulseExpanding || mTransitioningToFullShade;
+        if (showCollapsed != mShowCollapsedOnKeyguard) {
+            mShowCollapsedOnKeyguard = showCollapsed;
             updateQsState();
             if (mQSAnimator != null) {
-                mQSAnimator.setShowCollapsedOnKeyguard(showCollapsedOnKeyguard);
+                mQSAnimator.setShowCollapsedOnKeyguard(showCollapsed);
             }
-            if (!showCollapsedOnKeyguard && isKeyguardShowing()) {
+            if (!showCollapsed && isKeyguardState()) {
                 setQsExpansion(mLastQSExpansion, 0);
             }
         }
@@ -411,18 +435,29 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     }
 
     @Override
-    public void setQsExpansion(float expansion, float headerTranslation) {
-        if (DEBUG) Log.d(TAG, "setQSExpansion " + expansion + " " + headerTranslation);
+    public void setTransitionToFullShadeAmount(float pxAmount, boolean animated) {
+        boolean isTransitioningToFullShade = pxAmount > 0;
+        if (isTransitioningToFullShade != mTransitioningToFullShade) {
+            mTransitioningToFullShade = isTransitioningToFullShade;
+            updateShowCollapsedOnKeyguard();
+            setQsExpansion(mLastQSExpansion, mLastHeaderTranslation);
+        }
+    }
 
+    @Override
+    public void setQsExpansion(float expansion, float proposedTranslation) {
+        if (DEBUG) Log.d(TAG, "setQSExpansion " + expansion + " " + proposedTranslation);
+        float headerTranslation = mTransitioningToFullShade ? 0 : proposedTranslation;
         if (mQSAnimator != null) {
             final boolean showQSOnLockscreen = expansion > 0;
             final boolean showQSUnlocked = headerTranslation == 0 || !mTranslateWhileExpanding;
-            mQSAnimator.startAlphaAnimation(showQSOnLockscreen || showQSUnlocked);
+            mQSAnimator.startAlphaAnimation(showQSOnLockscreen || showQSUnlocked
+                    || mTransitioningToFullShade);
         }
         mContainer.setExpansion(expansion);
         final float translationScaleY = (mTranslateWhileExpanding
                 ? 1 : QSAnimator.SHORT_PARALLAX_AMOUNT) * (expansion - 1);
-        boolean onKeyguardAndExpanded = isKeyguardShowing() && !mShowCollapsedOnKeyguard;
+        boolean onKeyguardAndExpanded = isKeyguardState() && !mShowCollapsedOnKeyguard;
         if (!mHeaderAnimating && !headerWillBeAnimating()) {
             getView().setTranslationY(
                     onKeyguardAndExpanded
@@ -496,7 +531,6 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
             // The Media can be scrolled off screen by default, let's offset it
             float expandedMediaPosition = absoluteBottomPosition - mQSPanelScrollView.getScrollY()
                     + mQSPanelScrollView.getScrollRange();
-            // The expanded media host should never move below the laid out position
             pinToBottom(expandedMediaPosition, mQsMediaHost, true /* expanded */);
             // The expanded media host should never move above the laid out position
             pinToBottom(absoluteBottomPosition, mQqsMediaHost, false /* expanded */);
@@ -505,7 +539,9 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     private void pinToBottom(float absoluteBottomPosition, MediaHost mediaHost, boolean expanded) {
         View hostView = mediaHost.getHostView();
-        if (mLastQSExpansion > 0) {
+        // On keyguard we cross-fade to expanded, so no need to pin it.
+        // If the collapsed qs isn't visible, we also just keep it at the laid out position.
+        if (mLastQSExpansion > 0 && !isKeyguardState() && mQqsMediaHost.getVisible()) {
             float targetPosition = absoluteBottomPosition - getTotalBottomMargin(hostView)
                     - hostView.getHeight();
             float currentPosition = mediaHost.getCurrentBounds().top
@@ -538,19 +574,7 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
 
     private boolean headerWillBeAnimating() {
         return mState == StatusBarState.KEYGUARD && mShowCollapsedOnKeyguard
-                && !isKeyguardShowing();
-    }
-
-    @Override
-    public void animateHeaderSlidingIn(long delay) {
-        if (DEBUG) Log.d(TAG, "animateHeaderSlidingIn");
-        // If the QS is already expanded we don't need to slide in the header as it's already
-        // visible.
-        if (!mQsExpanded && getView().getTranslationY() != 0) {
-            mHeaderAnimating = true;
-            mDelay = delay;
-            getView().getViewTreeObserver().addOnPreDrawListener(mStartHeaderSlidingIn);
-        }
+                && !isKeyguardState();
     }
 
     @Override
@@ -592,10 +616,10 @@ public class QSFragment extends LifecycleFragment implements QS, CommandQueue.Ca
     public void notifyCustomizeChanged() {
         // The customize state changed, so our height changed.
         mContainer.updateExpansion();
-        mQSPanelScrollView.setVisibility(!mQSCustomizerController.isCustomizing() ? View.VISIBLE
-                : View.INVISIBLE);
-        mFooter.setVisibility(
-                !mQSCustomizerController.isCustomizing() ? View.VISIBLE : View.INVISIBLE);
+        boolean customizing = isCustomizing();
+        mQSPanelScrollView.setVisibility(!customizing ? View.VISIBLE : View.INVISIBLE);
+        mFooter.setVisibility(!customizing ? View.VISIBLE : View.INVISIBLE);
+        mHeader.setVisibility(!customizing ? View.VISIBLE : View.INVISIBLE);
         // Let the panel know the position changed and it needs to update where notifications
         // and whatnot are.
         mPanelView.onQsHeightChanged();

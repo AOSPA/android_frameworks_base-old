@@ -46,7 +46,6 @@ import android.graphics.Bitmap;
 import android.graphics.drawable.Icon;
 import android.os.Handler;
 import android.service.quickaccesswallet.GetWalletCardsError;
-import android.service.quickaccesswallet.GetWalletCardsRequest;
 import android.service.quickaccesswallet.GetWalletCardsResponse;
 import android.service.quickaccesswallet.QuickAccessWalletClient;
 import android.service.quickaccesswallet.QuickAccessWalletService;
@@ -70,11 +69,9 @@ import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.QSTileHost;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.settings.SecureSettings;
-
-import com.google.common.util.concurrent.MoreExecutors;
+import com.android.systemui.wallet.controller.QuickAccessWalletController;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -92,6 +89,7 @@ import java.util.Collections;
 public class QuickAccessWalletTileTest extends SysuiTestCase {
 
     private static final String CARD_ID = "card_id";
+    private static final String LABEL = "QAW";
     private static final Icon CARD_IMAGE =
             Icon.createWithBitmap(Bitmap.createBitmap(70, 50, Bitmap.Config.ARGB_8888));
 
@@ -118,11 +116,9 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
     @Mock
     private SecureSettings mSecureSettings;
     @Mock
-    private FeatureFlags mFeatureFlags;
+    private QuickAccessWalletController mController;
     @Captor
     ArgumentCaptor<Intent> mIntentCaptor;
-    @Captor
-    ArgumentCaptor<GetWalletCardsRequest> mRequestCaptor;
     @Captor
     ArgumentCaptor<QuickAccessWalletClient.OnWalletCardsRetrievedCallback> mCallbackCaptor;
 
@@ -140,9 +136,11 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
         doNothing().when(mSpiedContext).startActivity(any(Intent.class));
         when(mHost.getContext()).thenReturn(mSpiedContext);
         when(mHost.getUiEventLogger()).thenReturn(mUiEventLogger);
-        when(mFeatureFlags.isQuickAccessWalletEnabled()).thenReturn(true);
+        when(mQuickAccessWalletClient.getServiceLabel()).thenReturn(LABEL);
         when(mQuickAccessWalletClient.isWalletFeatureAvailable()).thenReturn(true);
         when(mQuickAccessWalletClient.isWalletServiceAvailable()).thenReturn(true);
+        when(mQuickAccessWalletClient.isWalletFeatureAvailableWhenDeviceLocked()).thenReturn(true);
+        when(mController.getWalletClient()).thenReturn(mQuickAccessWalletClient);
 
         mTile = new QuickAccessWalletTile(
                 mHost,
@@ -153,12 +151,13 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
                 mStatusBarStateController,
                 mActivityStarter,
                 mQSLogger,
-                mQuickAccessWalletClient,
                 mKeyguardStateController,
                 mPackageManager,
                 mSecureSettings,
-                MoreExecutors.directExecutor(),
-                mFeatureFlags);
+                mController);
+
+        mTile.initialize();
+        mTestableLooper.processAllMessages();
     }
 
     @Test
@@ -167,9 +166,12 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
     }
 
     @Test
-    public void testIsAvailable_featureFlagIsOff() {
-        when(mFeatureFlags.isQuickAccessWalletEnabled()).thenReturn(false);
-        assertFalse(mTile.isAvailable());
+    public void testWalletServiceUnavailable_recreateWalletClient() {
+        when(mQuickAccessWalletClient.isWalletServiceAvailable()).thenReturn(false);
+
+        mTile.handleSetListening(true);
+
+        verify(mController, times(1)).reCreateWalletClient();
     }
 
     @Test
@@ -248,13 +250,19 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
 
         mTile.handleUpdateState(state, null);
 
-        assertEquals(mContext.getString(R.string.wallet_title), state.label.toString());
+        assertEquals(LABEL, state.label.toString());
         assertTrue(state.label.toString().contentEquals(state.contentDescription));
         assertEquals(icon, state.icon);
     }
 
     @Test
-    public void testGetTileLabel() {
+    public void testGetTileLabel_serviceLabelExists() {
+        assertEquals(LABEL, mTile.getTileLabel().toString());
+    }
+
+    @Test
+    public void testGetTileLabel_serviceLabelDoesNotExist() {
+        when(mQuickAccessWalletClient.getServiceLabel()).thenReturn(null);
         assertEquals(mContext.getString(R.string.wallet_title), mTile.getTileLabel().toString());
     }
 
@@ -322,17 +330,8 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
     public void testHandleSetListening_queryCards() {
         mTile.handleSetListening(true);
 
-        verify(mQuickAccessWalletClient)
-                .getWalletCards(any(), mRequestCaptor.capture(), mCallbackCaptor.capture());
+        verify(mController).queryWalletCards(mCallbackCaptor.capture());
 
-        GetWalletCardsRequest request = mRequestCaptor.getValue();
-        assertEquals(
-                mContext.getResources().getDimensionPixelSize(R.dimen.wallet_tile_card_view_width),
-                request.getCardWidthPx());
-        assertEquals(
-                mContext.getResources().getDimensionPixelSize(R.dimen.wallet_tile_card_view_height),
-                request.getCardHeightPx());
-        assertEquals(1, request.getMaxCards());
         assertThat(mCallbackCaptor.getValue()).isInstanceOf(
                 QuickAccessWalletClient.OnWalletCardsRetrievedCallback.class);
     }
@@ -343,37 +342,6 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
         setUpWalletCard(/* hasCard= */ true);
 
         assertNotNull(mTile.getState().sideViewCustomDrawable);
-    }
-
-    @Test
-    public void testState_queryCards_hasCards_then_noCards() {
-        when(mKeyguardStateController.isUnlocked()).thenReturn(true);
-        GetWalletCardsResponse responseWithCards =
-                new GetWalletCardsResponse(
-                        Collections.singletonList(createWalletCard(mContext)), 0);
-        GetWalletCardsResponse responseWithoutCards =
-                new GetWalletCardsResponse(Collections.EMPTY_LIST, 0);
-
-        mTile.handleSetListening(true);
-
-        verify(mQuickAccessWalletClient).getWalletCards(any(), any(), mCallbackCaptor.capture());
-
-        // query wallet cards, has cards
-        mCallbackCaptor.getValue().onWalletCardsRetrieved(responseWithCards);
-        mTestableLooper.processAllMessages();
-
-        assertNotNull(mTile.getState().sideViewCustomDrawable);
-
-        mTile.handleSetListening(true);
-
-        verify(mQuickAccessWalletClient, times(2))
-                .getWalletCards(any(), any(), mCallbackCaptor.capture());
-
-        // query wallet cards, has no cards
-        mCallbackCaptor.getValue().onWalletCardsRetrieved(responseWithoutCards);
-        mTestableLooper.processAllMessages();
-
-        assertNull(mTile.getState().sideViewCustomDrawable);
     }
 
     @Test
@@ -390,7 +358,7 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
 
         mTile.handleSetListening(true);
 
-        verify(mQuickAccessWalletClient).getWalletCards(any(), any(), mCallbackCaptor.capture());
+        verify(mController).queryWalletCards(mCallbackCaptor.capture());
 
         mCallbackCaptor.getValue().onWalletCardRetrievalError(error);
         mTestableLooper.processAllMessages();
@@ -414,7 +382,7 @@ public class QuickAccessWalletTileTest extends SysuiTestCase {
 
         mTile.handleSetListening(true);
 
-        verify(mQuickAccessWalletClient).getWalletCards(any(), any(), mCallbackCaptor.capture());
+        verify(mController).queryWalletCards(mCallbackCaptor.capture());
 
         mCallbackCaptor.getValue().onWalletCardsRetrieved(response);
         mTestableLooper.processAllMessages();

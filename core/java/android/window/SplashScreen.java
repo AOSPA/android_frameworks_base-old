@@ -16,6 +16,7 @@
 
 package android.window;
 
+import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.StyleRes;
 import android.annotation.SuppressLint;
@@ -41,6 +42,24 @@ import java.util.ArrayList;
  * <code>Activity.getSplashScreen()</code> to get the SplashScreen.</p>
  */
 public interface SplashScreen {
+    /**
+     * Force splash screen to be empty.
+     * @hide
+     */
+    int SPLASH_SCREEN_STYLE_EMPTY = 0;
+    /**
+     * Force splash screen to show icon.
+     * @hide
+     */
+    int SPLASH_SCREEN_STYLE_ICON = 1;
+
+    /** @hide */
+    @IntDef(prefix = { "SPLASH_SCREEN_STYLE_" }, value = {
+            SPLASH_SCREEN_STYLE_EMPTY,
+            SPLASH_SCREEN_STYLE_ICON
+    })
+    @interface SplashScreenStyle {}
+
     /**
      * <p>Specifies whether an {@link Activity} wants to handle the splash screen animation on its
      * own. Normally the splash screen will show on screen before the content of the activity has
@@ -220,7 +239,13 @@ public interface SplashScreen {
             }
         }
 
-        public void dispatchOnExitAnimation(IBinder token, SplashScreenView view) {
+        public void handOverSplashScreenView(@NonNull IBinder token,
+                @NonNull SplashScreenView splashScreenView) {
+            transferSurface(splashScreenView);
+            dispatchOnExitAnimation(token, splashScreenView);
+        }
+
+        private void dispatchOnExitAnimation(IBinder token, SplashScreenView view) {
             synchronized (mGlobalLock) {
                 final SplashScreenImpl impl = findImpl(token);
                 if (impl == null) {
@@ -239,6 +264,10 @@ public interface SplashScreen {
                 final SplashScreenImpl impl = findImpl(token);
                 return impl != null && impl.mExitAnimationListener != null;
             }
+        }
+
+        private void transferSurface(@NonNull SplashScreenView splashScreenView) {
+            splashScreenView.transferSurface();
         }
     }
 }

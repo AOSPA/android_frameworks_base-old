@@ -11,6 +11,7 @@ import android.text.TextUtils
 import android.text.format.DateFormat
 import android.view.View
 import androidx.annotation.VisibleForTesting
+import com.android.internal.jank.InteractionJankMonitor
 import com.android.internal.logging.MetricsLogger
 import com.android.systemui.R
 import com.android.systemui.animation.ActivityLaunchAnimator
@@ -24,7 +25,6 @@ import com.android.systemui.qs.QSHost
 import com.android.systemui.qs.logging.QSLogger
 import com.android.systemui.qs.tileimpl.QSTileImpl
 import com.android.systemui.settings.UserTracker
-import com.android.systemui.statusbar.FeatureFlags
 import com.android.systemui.statusbar.policy.NextAlarmController
 import java.util.Locale
 import javax.inject.Inject
@@ -38,7 +38,6 @@ class AlarmTile @Inject constructor(
     statusBarStateController: StatusBarStateController,
     activityStarter: ActivityStarter,
     qsLogger: QSLogger,
-    private val featureFlags: FeatureFlags,
     private val userTracker: UserTracker,
     nextAlarmController: NextAlarmController
 ) : QSTileImpl<QSTile.State>(
@@ -65,10 +64,6 @@ class AlarmTile @Inject constructor(
         nextAlarmController.observe(this, callback)
     }
 
-    override fun isAvailable(): Boolean {
-        return featureFlags.isAlarmTileAvailable
-    }
-
     override fun newTileState(): QSTile.State {
         return QSTile.State().apply {
             handlesLongClick = false
@@ -76,7 +71,10 @@ class AlarmTile @Inject constructor(
     }
 
     override fun handleClick(view: View?) {
-        val animationController = view?.let { ActivityLaunchAnimator.Controller.fromView(it) }
+        val animationController = view?.let {
+            ActivityLaunchAnimator.Controller.fromView(
+                    it, InteractionJankMonitor.CUJ_SHADE_APP_LAUNCH_FROM_QS_TILE)
+        }
         val pendingIntent = lastAlarmInfo?.showIntent
         if (pendingIntent != null) {
             mActivityStarter.postStartActivityDismissingKeyguard(pendingIntent, animationController)

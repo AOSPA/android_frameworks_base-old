@@ -2574,17 +2574,40 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                     }
                     mHandler.removeMessages(MESSAGE_USER_SWITCHED);
 
-                    /* disable and enable BT when detect a user switch */
-                    if (mBluetooth != null && isEnabled()) {
-                        restartForReason(BluetoothProtoEnums.ENABLE_DISABLE_REASON_USER_SWITCH);
-                    } else if (mBinding || mBluetooth != null) {
-                        Message userMsg = mHandler.obtainMessage(MESSAGE_USER_SWITCHED);
-                        userMsg.arg2 = 1 + msg.arg2;
-                        // if user is switched when service is binding retry after a delay
-                        mHandler.sendMessageDelayed(userMsg, USER_SWITCHED_TIME_MS);
-                        if (DBG) {
-                            Slog.d(TAG, "Retry MESSAGE_USER_SWITCHED " + userMsg.arg2);
+                    try {
+                        mBluetoothLock.writeLock().lock();
+                        int state = getState();
+
+                        if (mBluetooth != null && ((state == BluetoothAdapter.STATE_ON) ||
+                                (state == BluetoothAdapter.STATE_BLE_ON && isBleAppPresent()))) {
+
+                            /* disable and enable BT when detect a user switch */
+                            if (state == BluetoothAdapter.STATE_ON) {
+                                restartForReason(
+                                        BluetoothProtoEnums.ENABLE_DISABLE_REASON_USER_SWITCH);
+                            } else {
+                                if (DBG) {
+                                    Slog.d(TAG, "Turn off from BLE state");
+                                }
+                                clearBleApps();
+                                addActiveLog(BluetoothProtoEnums.ENABLE_DISABLE_REASON_USER_SWITCH,
+                                          mContext.getPackageName(), false);
+                                mEnable = false;
+                                mBluetooth.onBrEdrDown(mContext.getAttributionSource());
+                            }
+                        } else if (mBinding || mBluetooth != null) {
+                            Message userMsg = mHandler.obtainMessage(MESSAGE_USER_SWITCHED);
+                            userMsg.arg2 = 1 + msg.arg2;
+                            // if user is switched when service is binding retry after a delay
+                            mHandler.sendMessageDelayed(userMsg, USER_SWITCHED_TIME_MS);
+                            if (DBG) {
+                                Slog.d(TAG, "Retry MESSAGE_USER_SWITCHED " + userMsg.arg2);
+                            }
                         }
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "MESSAGE_USER_SWITCHED: Remote exception", e);
+                    } finally {
+                        mBluetoothLock.writeLock().unlock();
                     }
                     break;
                 }

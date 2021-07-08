@@ -40,6 +40,8 @@ import android.text.TextUtils;
 import android.util.Log;
 import android.util.Slog;
 
+import com.android.internal.R;
+
 import java.lang.annotation.Documented;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
@@ -238,11 +240,43 @@ public class SpeechRecognizer {
      * @param context with which {@code SpeechRecognizer} will be created
      * @return {@code true} if recognition is available, {@code false} otherwise
      */
-    public static boolean isRecognitionAvailable(final Context context) {
+    public static boolean isRecognitionAvailable(@NonNull final Context context) {
         // TODO(b/176578753): make sure this works well with system speech recognizers.
         final List<ResolveInfo> list = context.getPackageManager().queryIntentServices(
                 new Intent(RecognitionService.SERVICE_INTERFACE), 0);
         return list != null && list.size() != 0;
+    }
+
+    /**
+     * Checks whether an on-device speech recognition service is available on the system. If this
+     * method returns {@code false},
+     * {@link SpeechRecognizer#createOnDeviceSpeechRecognizer(Context)} will
+     * fail.
+     *
+     * @param context with which on-device {@code SpeechRecognizer} will be created
+     * @return {@code true} if on-device recognition is available, {@code false} otherwise
+     */
+    public static boolean isOnDeviceRecognitionAvailable(@NonNull final Context context) {
+        ComponentName componentName =
+                ComponentName.unflattenFromString(
+                        context.getString(R.string.config_defaultOnDeviceSpeechRecognitionService));
+        if (componentName == null) {
+            return false;
+        }
+
+        List<ResolveInfo> resolveInfos =
+                context.getPackageManager().queryIntentServices(
+                        new Intent(RecognitionService.SERVICE_INTERFACE), 0);
+        if (resolveInfos == null) {
+            return false;
+        }
+
+        for (ResolveInfo ri : resolveInfos) {
+            if (ri.serviceInfo != null && componentName.equals(ri.serviceInfo.getComponentName())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -275,11 +309,16 @@ public class SpeechRecognizer {
      * {@link #setRecognitionListener(RecognitionListener)} should be called before dispatching any
      * command to the created {@code SpeechRecognizer}, otherwise no notifications will be
      * received.
-     *
      * Use this version of the method to specify a specific service to direct this
-     * {@link SpeechRecognizer} to. Normally you would not use this; use
-     * {@link #createSpeechRecognizer(Context)} instead to use the system default recognition
-     * service.
+     * {@link SpeechRecognizer} to.
+     *
+     * <p><strong>Important</strong>: before calling this method, please check via
+     * {@link android.content.pm.PackageManager#queryIntentServices(Intent, int)} that {@code
+     * serviceComponent} actually exists and provides
+     * {@link RecognitionService#SERVICE_INTERFACE}. Normally you would not use this; call
+     * {@link #createSpeechRecognizer(Context)} to use the system default recognition
+     * service instead or {@link #createOnDeviceSpeechRecognizer(Context)} to use on-device
+     * recognition.</p>
      *
      * <p>For apps targeting Android 11 (API level 30) interaction with a speech recognition
      * service requires <queries> element to be added to the manifest file:
@@ -315,6 +354,8 @@ public class SpeechRecognizer {
      * notifications will be received.
      *
      * @param context in which to create {@code SpeechRecognizer}
+     * @throws UnsupportedOperationException iff {@link #isOnDeviceRecognitionAvailable(Context)}
+     * is false
      * @return a new on-device {@code SpeechRecognizer}.
      */
     @NonNull
@@ -324,6 +365,9 @@ public class SpeechRecognizer {
             throw new IllegalArgumentException("Context cannot be null");
         }
         checkIsCalledFromMainThread();
+        if (!isOnDeviceRecognitionAvailable(context)) {
+            throw new UnsupportedOperationException("On-device recognition is not available");
+        }
         return new SpeechRecognizer(context, /* onDevice */ true);
     }
 

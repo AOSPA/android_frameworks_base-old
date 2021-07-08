@@ -188,6 +188,10 @@ public class DisplayRotation {
     @Surface.Rotation
     private int mUserRotation = Surface.ROTATION_0;
 
+    private static final int CAMERA_ROTATION_DISABLED = 0;
+    private static final int CAMERA_ROTATION_ENABLED = 1;
+    private int mCameraRotationMode = CAMERA_ROTATION_DISABLED;
+
     /**
      * Flag that indicates this is a display that may run better when fixed to user rotation.
      */
@@ -1526,6 +1530,14 @@ public class DisplayRotation {
             if (shouldUpdateOrientationListener) {
                 updateOrientationListenerLw(); // Enable or disable the orientation listener.
             }
+
+            final int cameraRotationMode = Settings.Secure.getIntForUser(resolver,
+                    Settings.Secure.CAMERA_AUTOROTATE, 0,
+                    UserHandle.USER_CURRENT);
+            if (mCameraRotationMode != cameraRotationMode) {
+                mCameraRotationMode = cameraRotationMode;
+                shouldUpdateRotation = true;
+            }
         }
 
         return shouldUpdateRotation;
@@ -1555,6 +1567,7 @@ public class DisplayRotation {
         pw.print(prefix + "  mUserRotationMode="
                 + WindowManagerPolicy.userRotationModeToString(mUserRotationMode));
         pw.print(" mUserRotation=" + Surface.rotationToString(mUserRotation));
+        pw.print(" mCameraRotationMode=" + mCameraRotationMode);
         pw.println(" mAllowAllRotations=" + allowAllRotationsToString(mAllowAllRotations));
 
         pw.print(prefix + "  mDemoHdmiRotation=" + Surface.rotationToString(mDemoHdmiRotation));
@@ -1603,6 +1616,18 @@ public class DisplayRotation {
             }
         }
 
+        @Override
+        public boolean isKeyguardLocked() {
+            return mService.isKeyguardLocked();
+        }
+
+        @Override
+        public boolean isRotationResolverEnabled() {
+            return mUserRotationMode == WindowManagerPolicy.USER_ROTATION_FREE
+                    && mCameraRotationMode == CAMERA_ROTATION_ENABLED
+                    && !mService.mPowerManager.isPowerSaveMode();
+        }
+
 
         @Override
         public void onProposedRotationChanged(int rotation) {
@@ -1646,6 +1671,10 @@ public class DisplayRotation {
             resolver.registerContentObserver(Settings.System.getUriFor(
                     Settings.System.USER_ROTATION), false, this,
                     UserHandle.USER_ALL);
+            resolver.registerContentObserver(
+                    Settings.Secure.getUriFor(Settings.Secure.CAMERA_AUTOROTATE), false, this,
+                    UserHandle.USER_ALL);
+
             updateSettings();
         }
 

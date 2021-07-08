@@ -153,8 +153,8 @@
     <string name="user_guest" msgid="6939192779649870792">"ゲスト"</string>
     <string name="unknown" msgid="3544487229740637809">"不明"</string>
     <string name="running_process_item_user_label" msgid="3988506293099805796">"ユーザー: <xliff:g id="USER_NAME">%1$s</xliff:g>"</string>
-    <string name="launch_defaults_some" msgid="3631650616557252926">"一部デフォルトで設定"</string>
-    <string name="launch_defaults_none" msgid="8049374306261262709">"デフォルトの設定なし"</string>
+    <string name="launch_defaults_some" msgid="3631650616557252926">"一部のリンクをデフォルトで開くよう設定済みです"</string>
+    <string name="launch_defaults_none" msgid="8049374306261262709">"デフォルトで開く対応リンクはありません"</string>
     <string name="tts_settings" msgid="8130616705989351312">"テキスト読み上げの設定"</string>
     <string name="tts_settings_title" msgid="7602210956640483039">"テキスト読み上げの設定"</string>
     <string name="tts_default_rate_title" msgid="3964187817364304022">"音声の速度"</string>
@@ -245,14 +245,14 @@
     <string name="oem_unlock_enable_summary" msgid="5857388174390953829">"ブートローダーによるロック解除を許可する"</string>
     <string name="confirm_enable_oem_unlock_title" msgid="8249318129774367535">"OEM ロック解除の許可"</string>
     <string name="confirm_enable_oem_unlock_text" msgid="854131050791011970">"警告: この設定をONにしている場合、このデバイスではデバイス保護機能を利用できません。"</string>
-    <string name="mock_location_app" msgid="6269380172542248304">"仮の現在地情報アプリを選択"</string>
-    <string name="mock_location_app_not_set" msgid="6972032787262831155">"仮の現在地情報アプリが設定されていません"</string>
-    <string name="mock_location_app_set" msgid="4706722469342913843">"仮の現在地情報アプリ: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
+    <string name="mock_location_app" msgid="6269380172542248304">"現在地情報の強制変更アプリを選択"</string>
+    <string name="mock_location_app_not_set" msgid="6972032787262831155">"現在地情報の強制変更アプリが設定されていません"</string>
+    <string name="mock_location_app_set" msgid="4706722469342913843">"現在地情報の強制変更アプリ: <xliff:g id="APP_NAME">%1$s</xliff:g>"</string>
     <string name="debug_networking_category" msgid="6829757985772659599">"ネットワーク"</string>
     <string name="wifi_display_certification" msgid="1805579519992520381">"ワイヤレス ディスプレイ認証"</string>
     <string name="wifi_verbose_logging" msgid="1785910450009679371">"Wi-Fi 詳細ログの有効化"</string>
     <string name="wifi_scan_throttling" msgid="2985624788509913617">"Wi‑Fi スキャン スロットリング"</string>
-    <string name="wifi_enhanced_mac_randomization" msgid="5437378364995776979">"Wi-Fi-enhanced MAC ランダム化"</string>
+    <string name="wifi_enhanced_mac_randomization" msgid="882650208573834301">"Wi-Fi 非永続的 MAC ランダム化"</string>
     <string name="mobile_data_always_on" msgid="8275958101875563572">"モバイルデータを常に ON にする"</string>
     <string name="tethering_hardware_offload" msgid="4116053719006939161">"テザリング時のハードウェア アクセラレーション"</string>
     <string name="bluetooth_show_devices_without_names" msgid="923584526471885819">"Bluetooth デバイスを名前なしで表示"</string>
@@ -353,6 +353,7 @@
     <string name="debug_layout_summary" msgid="8825829038287321978">"クリップの境界線、マージンなどを表示"</string>
     <string name="force_rtl_layout_all_locales" msgid="8690762598501599796">"RTLレイアウト方向を使用"</string>
     <string name="force_rtl_layout_all_locales_summary" msgid="6663016859517239880">"すべての言語/地域で画面レイアウト方向をRTLに設定"</string>
+    <string name="window_blurs" msgid="6831008984828425106">"ウィンドウ レベルでのぼかしを許可"</string>
     <string name="force_msaa" msgid="4081288296137775550">"4x MSAA を適用"</string>
     <string name="force_msaa_summary" msgid="9070437493586769500">"OpenGL ES 2.0 アプリで 4x MSAA を有効にする"</string>
     <string name="show_non_rect_clip" msgid="7499758654867881817">"非矩形クリップ操作をデバッグ"</string>
@@ -453,14 +454,14 @@
     <string name="power_charging" msgid="6727132649743436802">"<xliff:g id="LEVEL">%1$s</xliff:g> - <xliff:g id="STATE">%2$s</xliff:g>"</string>
     <string name="power_remaining_charging_duration_only" msgid="8085099012811384899">"完了まであと <xliff:g id="TIME">%1$s</xliff:g>"</string>
     <string name="power_charging_duration" msgid="6127154952524919719">"<xliff:g id="LEVEL">%1$s</xliff:g> - 完了まであと <xliff:g id="TIME">%2$s</xliff:g>"</string>
-    <string name="power_charging_limited" msgid="1956874810658999681">"<xliff:g id="LEVEL">%1$s</xliff:g> - 電池の状態を最適化"</string>
+    <string name="power_charging_limited" msgid="7956120998372505295">"<xliff:g id="LEVEL">%1$s</xliff:g> - 充電は一時的に制限されています"</string>
     <string name="battery_info_status_unknown" msgid="268625384868401114">"不明"</string>
     <string name="battery_info_status_charging" msgid="4279958015430387405">"充電中"</string>
     <string name="battery_info_status_charging_fast" msgid="8027559755902954885">"急速充電中"</string>
     <string name="battery_info_status_charging_slow" msgid="3190803837168962319">"低速充電中"</string>
     <string name="battery_info_status_charging_wireless" msgid="8924722966861282197">"ワイヤレス充電中"</string>
     <string name="battery_info_status_discharging" msgid="6962689305413556485">"充電していません"</string>
-    <string name="battery_info_status_not_charging" msgid="8330015078868707899">"接続されていますが、現在、充電できません"</string>
+    <string name="battery_info_status_not_charging" msgid="3371084153747234837">"接続済み、充電していません"</string>
     <string name="battery_info_status_full" msgid="1339002294876531312">"充電が完了しました"</string>
     <string name="disabled_by_admin_summary_text" msgid="5343911767402923057">"管理者により管理されています"</string>
     <string name="disabled" msgid="8017887509554714950">"無効"</string>
@@ -506,9 +507,7 @@
     <string name="alarms_and_reminders_label" msgid="6918395649731424294">"アラームとリマインダー"</string>
     <string name="alarms_and_reminders_switch_title" msgid="4939393911531826222">"アラームとリマインダーの設定を許可する"</string>
     <string name="alarms_and_reminders_title" msgid="8819933264635406032">"アラームとリマインダー"</string>
-    <string name="alarms_and_reminders_footer_title" product="default" msgid="1122213569699233612">"このアプリに、アラームの設定やその他のアクションのスケジュールを許可します。このアプリは、スマートフォンを使用していないときも使用される可能性があるため、バッテリーの使用量が増えることがあります。この権限が OFF の場合、このアプリは正常に機能しない可能性があり、アラームはスケジュールどおりに動作しません。"</string>
-    <string name="alarms_and_reminders_footer_title" product="tablet" msgid="4596201244991057839">"このアプリに、アラームの設定やその他のアクションのスケジュールを許可します。このアプリは、タブレットを使用していないときも使用される可能性があるため、バッテリーの使用量が増えることがあります。この権限が OFF の場合、このアプリは正常に機能しない可能性があり、アラームはスケジュールどおりに動作しません。"</string>
-    <string name="alarms_and_reminders_footer_title" product="device" msgid="349578867821273761">"このアプリに、アラームの設定やその他のアクションのスケジュールを許可します。このアプリは、デバイスを使用していないときも使用される可能性があるため、バッテリーの使用量が増えることがあります。この権限が OFF の場合、このアプリは正常に機能しない可能性があり、アラームはスケジュールどおりに動作しません。"</string>
+    <string name="alarms_and_reminders_footer_title" msgid="6302587438389079695">"アラームの設定や時間の制約があるアクションのスケジュールを、このアプリに許可します。これによりアプリがバックグラウンドで実行できるようになるため、バッテリーの使用量が増えることがあります。\n\nこの権限が OFF の場合、このアプリで設定された既存のアラームと時間ベースのイベントは機能しなくなります。"</string>
     <string name="keywords_alarms_and_reminders" msgid="6633360095891110611">"スケジュール, アラーム, リマインダー, 時計"</string>
     <string name="zen_mode_enable_dialog_turn_on" msgid="6418297231575050426">"ON にする"</string>
     <string name="zen_mode_settings_turn_on_dialog_title" msgid="2760567063190790696">"サイレント モードを ON にする"</string>

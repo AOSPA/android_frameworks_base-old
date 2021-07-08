@@ -130,6 +130,7 @@ cc_library_shared {
                 "android_graphics_BLASTBufferQueue.cpp",
                 "android_view_SurfaceSession.cpp",
                 "android_view_TextureView.cpp",
+                "android_view_TunnelModeEnabledListener.cpp",
                 "android_view_VelocityTracker.cpp",
                 "android_view_VerifiedKeyEvent.cpp",
                 "android_view_VerifiedMotionEvent.cpp",
@@ -223,7 +224,6 @@ cc_library_shared {
                 "fd_utils.cpp",
                 "android_hardware_input_InputWindowHandle.cpp",
                 "android_hardware_input_InputApplicationHandle.cpp",
-                "permission_utils.cpp",
             ],
 
             static_libs: [
@@ -234,6 +234,7 @@ cc_library_shared {
                 "libseccomp_policy",
                 "libgrallocusage",
                 "libscrypt_static",
+                "libstatssocket_lazy",
             ],
 
             shared_libs: [
@@ -242,7 +243,6 @@ cc_library_shared {
                 "audioflinger-aidl-cpp",
                 "av-types-aidl-cpp",
                 "android.hardware.camera.device@3.2",
-                "media_permission-aidl-cpp",
                 "libandroidicu",
                 "libbpf_android",
                 "libnetdbpf",
@@ -259,6 +259,7 @@ cc_library_shared {
                 "libgraphicsenv",
                 "libgui",
                 "libmediandk",
+                "libpermission",
                 "libsensor",
                 "libinput",
                 "libcamera_client",
@@ -297,11 +298,8 @@ cc_library_shared {
                 "libnativewindow",
                 "libdl",
                 "libdl_android",
-                "libstatslog",
-                "libstatssocket",
                 "libtimeinstate",
                 "server_configurable_flags",
-                "libstatspull",
             ],
             export_shared_lib_headers: [
                 // our headers include libnativewindow's public headers

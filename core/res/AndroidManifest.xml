@@ -621,8 +621,6 @@
 
     <protected-broadcast android:name="android.intent.action.DYNAMIC_SENSOR_CHANGED" />
 
-    <protected-broadcast android:name="android.intent.action.ACTION_RADIO_OFF" />
-
     <protected-broadcast android:name="android.accounts.LOGIN_ACCOUNTS_CHANGED" />
     <protected-broadcast android:name="android.accounts.action.ACCOUNT_REMOVED" />
     <protected-broadcast android:name="android.accounts.action.VISIBLE_ACCOUNTS_CHANGED" />
@@ -728,8 +726,8 @@
     <!-- Added in S -->
     <protected-broadcast android:name="android.scheduling.action.REBOOT_READY" />
     <protected-broadcast android:name="android.app.action.DEVICE_POLICY_CONSTANTS_CHANGED" />
-
     <protected-broadcast android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+    <protected-broadcast android:name="android.app.action.ACTION_SHOW_NEW_USER_DISCLAIMER" />
 
     <!-- ====================================================================== -->
     <!--                          RUNTIME PERMISSIONS                           -->
@@ -1443,13 +1441,13 @@
 
     <!-- @SystemApi Required in addition to android.permission.CAMERA to be able to access
            system only camera devices.
-           <p>Protection level: system|signature
+           <p>Protection level: system|signature|role
            @hide -->
     <permission android:name="android.permission.SYSTEM_CAMERA"
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_systemCamera"
         android:description="@string/permdesc_systemCamera"
-        android:protectionLevel="system|signature" />
+        android:protectionLevel="system|signature|role" />
 
     <!-- @SystemApi Allows receiving the camera service notifications when a camera is opened
             (by a certain application package) or closed.
@@ -1665,16 +1663,16 @@
     <eat-comment />
 
     <!-- Allows an application to modify and remove existing voicemails in the system.
-        <p>Protection level: signature|privileged
+        <p>Protection level: signature|privileged|role
     -->
     <permission android:name="com.android.voicemail.permission.WRITE_VOICEMAIL"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- Allows an application to read voicemails in the system.
-         <p>Protection level: signature|privileged
+         <p>Protection level: signature|privileged|role
     -->
     <permission android:name="com.android.voicemail.permission.READ_VOICEMAIL"
-        android:protectionLevel="signature|privileged" />
+        android:protectionLevel="signature|privileged|role" />
 
     <!-- ======================================= -->
     <!-- Permissions for accessing location info -->
@@ -2930,13 +2928,26 @@
     <permission android:name="android.permission.SET_DISPLAY_OFFSET"
         android:protectionLevel="signature|privileged" />
 
-    <!-- Allows a companion app to run in the background.
+    <!-- Allows a companion app to run in the background. This permission implies
+         {@link android.Manifest.permission#REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND},
+         and allows to start a foreground service from the background.
+         If an app does not have to run in the background, but only needs to start a foreground
+         service from the background, consider using
+         {@link android.Manifest.permission#REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND},
+         which is less powerful.
          <p>Protection level: normal
     -->
     <permission android:name="android.permission.REQUEST_COMPANION_RUN_IN_BACKGROUND"
                 android:label="@string/permlab_runInBackground"
                 android:description="@string/permdesc_runInBackground"
                 android:protectionLevel="normal" />
+
+    <!-- Allows a companion app to start a foreground service from the background.
+         {@see android.Manifest.permission#REQUEST_COMPANION_RUN_IN_BACKGROUND}
+         <p>Protection level: normal
+         -->
+    <permission android:name="android.permission.REQUEST_COMPANION_START_FOREGROUND_SERVICES_FROM_BACKGROUND"
+        android:protectionLevel="normal"/>
 
     <!-- Allows a companion app to use data in the background.
          <p>Protection level: normal
@@ -4080,8 +4091,13 @@
     <permission android:name="android.permission.SCHEDULE_PRIORITIZED_ALARM"
                 android:protectionLevel="signature|privileged"/>
 
-    <!-- Allows an app to use exact alarm scheduling APIs to perform timing
-         sensitive background work.
+    <!-- Allows applications to use exact alarm APIs.
+         <p>Exact alarms should only be used for user-facing features.
+         For more details, see <a
+         href="{@docRoot}about/versions/12/behavior-changes-12#exact-alarm-permission">
+         Exact alarm permission</a>.
+         Applications targeting API level 30 or below do not need this permission to use
+         exact alarm APIs.
      -->
     <permission android:name="android.permission.SCHEDULE_EXACT_ALARM"
         android:protectionLevel="normal|appop"/>
@@ -4265,11 +4281,6 @@
         @hide -->
     <permission android:name="android.permission.GET_RUNTIME_PERMISSIONS"
                 android:protectionLevel="signature" />
-
-    <!-- @SystemApi Allows the system to read the mapping between permission and permission group.
-        @hide -->
-    <permission android:name="android.permission.GET_RUNTIME_PERMISSION_GROUP_MAPPING"
-                android:protectionLevel="signature|privileged" />
 
     <!-- @SystemApi Allows the system to restore runtime permission state. This might grant
     permissions, hence this is a more scoped, less powerful variant of GRANT_RUNTIME_PERMISSIONS.
@@ -5690,6 +5701,8 @@
     <!-- Allows query of any normal app on the device, regardless of manifest declarations.
         <p>Protection level: normal -->
     <permission android:name="android.permission.QUERY_ALL_PACKAGES"
+                android:label="@string/permlab_queryAllPackages"
+                android:description="@string/permdesc_queryAllPackages"
                 android:protectionLevel="normal" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
 
@@ -5805,6 +5818,21 @@
     <permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"
                 android:protectionLevel="normal" />
     <uses-permission android:name="android.permission.UPDATE_PACKAGES_WITHOUT_USER_ACTION"/>
+
+    <!-- Allows an application to take screenshots of layers that normally would be blacked out when
+         a screenshot is taken. Specifically, layers that have the flag
+         {@link android.view.SurfaceControl#SECURE} will be screenshot if the caller requests to
+         capture secure layers. Normally those layers will be rendered black.
+         <p>Not for use by third-party applications.
+         @hide
+    -->
+    <permission android:name="android.permission.CAPTURE_BLACKOUT_CONTENT"
+        android:protectionLevel="signature" />
+
+      <!-- @SystemApi Allows an application to query over global data in AppSearch.
+           @hide -->
+    <permission android:name="android.permission.READ_GLOBAL_APP_SEARCH_DATA"
+                android:protectionLevel="internal|role" />
 
     <!-- Attribution for Geofencing service. -->
     <attribution android:tag="GeofencingService" android:label="@string/geofencing_service"/>

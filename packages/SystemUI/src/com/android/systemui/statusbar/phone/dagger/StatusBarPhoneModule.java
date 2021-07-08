@@ -51,6 +51,7 @@ import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.KeyguardIndicationController;
+import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
@@ -93,6 +94,7 @@ import com.android.systemui.statusbar.phone.StatusBarLocationPublisher;
 import com.android.systemui.statusbar.phone.StatusBarNotificationActivityStarter;
 import com.android.systemui.statusbar.phone.StatusBarSignalPolicy;
 import com.android.systemui.statusbar.phone.StatusBarTouchableRegionManager;
+import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
@@ -213,8 +215,10 @@ public interface StatusBarPhoneModule {
             OngoingCallController ongoingCallController,
             SystemStatusAnimationScheduler animationScheduler,
             StatusBarLocationPublisher locationPublisher,
+            LockscreenShadeTransitionController transitionController,
             FeatureFlags featureFlags,
-            KeyguardUnlockAnimationController keyguardUnlockAnimationController) {
+            KeyguardUnlockAnimationController keyguardUnlockAnimationController,
+            UnlockedScreenOffAnimationController unlockedScreenOffAnimationController) {
         return new StatusBar(
                 context,
                 notificationsController,
@@ -299,7 +303,9 @@ public interface StatusBarPhoneModule {
                 ongoingCallController,
                 animationScheduler,
                 locationPublisher,
+                transitionController,
                 featureFlags,
-                keyguardUnlockAnimationController);
+                keyguardUnlockAnimationController,
+                unlockedScreenOffAnimationController);
     }
 }

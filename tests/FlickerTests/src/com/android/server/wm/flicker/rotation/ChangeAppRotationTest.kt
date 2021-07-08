@@ -23,6 +23,7 @@ import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.SimpleAppHelper
 import org.junit.FixMethodOrder
@@ -39,6 +40,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@Group3
 class ChangeAppRotationTest(
     testSpec: FlickerTestParameter
 ) : RotationTransition(testSpec) {
@@ -53,19 +55,13 @@ class ChangeAppRotationTest(
             }
         }
 
-    @FlakyTest(bugId = 151179149)
+    @FlakyTest(bugId = 190185577)
     @Test
     override fun focusDoesNotChange() {
         super.focusDoesNotChange()
     }
 
     @Postsubmit
-    @Test
-    override fun noUncoveredRegions() {
-        super.noUncoveredRegions()
-    }
-
-    @FlakyTest
     @Test
     fun screenshotLayerBecomesInvisible() {
         testSpec.assertLayers {
@@ -79,14 +75,8 @@ class ChangeAppRotationTest(
 
     @Postsubmit
     @Test
-    override fun appLayerRotates_EndingPos() {
-        super.appLayerRotates_EndingPos()
-    }
-
-    @Postsubmit
-    @Test
-    override fun appLayerRotates_StartingPos() {
-        super.appLayerRotates_StartingPos()
+    override fun statusBarLayerRotatesScales() {
+        super.statusBarLayerRotatesScales()
     }
 
     @Presubmit
@@ -95,16 +85,10 @@ class ChangeAppRotationTest(
         super.navBarWindowIsAlwaysVisible()
     }
 
-    @Postsubmit
+    @FlakyTest
     @Test
     override fun statusBarLayerIsAlwaysVisible() {
         super.statusBarLayerIsAlwaysVisible()
-    }
-
-    @Postsubmit
-    @Test
-    override fun statusBarWindowIsAlwaysVisible() {
-        super.statusBarWindowIsAlwaysVisible()
     }
 
     companion object {

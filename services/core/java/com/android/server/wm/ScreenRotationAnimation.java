@@ -259,7 +259,16 @@ class ScreenRotationAnimation {
 
         ProtoLog.i(WM_SHOW_SURFACE_ALLOC,
                 "  FREEZE %s: CREATE", mScreenshotLayer);
-        setRotation(t, realOriginalRotation);
+        if (originalRotation == realOriginalRotation) {
+            setRotation(t, realOriginalRotation);
+        } else {
+            // If the given original rotation is different from real original display rotation,
+            // this is playing non-zero degree rotation animation without display rotation change,
+            // so the snapshot doesn't need to be transformed.
+            mCurRotation = realOriginalRotation;
+            mSnapshotInitialMatrix.reset();
+            setRotationTransform(t, mSnapshotInitialMatrix);
+        }
         t.apply();
     }
 
@@ -369,7 +378,7 @@ class ScreenRotationAnimation {
                     mRotateExitAnimation = AnimationUtils.loadAnimation(mContext,
                             R.anim.screen_rotate_0_exit);
                     mRotateEnterAnimation = AnimationUtils.loadAnimation(mContext,
-                            R.anim.screen_rotate_0_enter);
+                            R.anim.rotation_animation_enter);
                     break;
                 case Surface.ROTATION_90:
                     mRotateExitAnimation = AnimationUtils.loadAnimation(mContext,

@@ -28,6 +28,7 @@ import android.view.View;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEventLogger;
 import com.android.internal.logging.nano.MetricsProto;
@@ -73,7 +74,7 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
     private final PageIndicator mPageIndicator;
     private final View mPowerMenuLite;
     private final boolean mShowPMLiteButton;
-    private GlobalActionsDialogLite mGlobalActionsDialog;
+    private final GlobalActionsDialogLite mGlobalActionsDialog;
     private final UiEventLogger mUiEventLogger;
 
     private final UserInfoController.OnUserInfoChangedListener mOnUserInfoChangedListener =
@@ -272,7 +273,8 @@ public class QSFooterViewController extends ViewController<QSFooterView> impleme
     private void startSettingsActivity() {
         ActivityLaunchAnimator.Controller animationController =
                 mSettingsButtonContainer != null ? ActivityLaunchAnimator.Controller.fromView(
-                        mSettingsButtonContainer) : null;
+                        mSettingsButtonContainer,
+                        InteractionJankMonitor.CUJ_SHADE_APP_LAUNCH_FROM_SETTINGS_BUTTON) : null;
         mActivityStarter.startActivity(new Intent(android.provider.Settings.ACTION_SETTINGS),
                 true /* dismissShade */, animationController);
     }

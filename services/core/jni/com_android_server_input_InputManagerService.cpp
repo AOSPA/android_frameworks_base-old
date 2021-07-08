@@ -160,9 +160,10 @@ static struct {
 static struct {
     jclass clazz;
     jmethodID constructor;
-    jfieldID lightTypeSingle;
+    jfieldID lightTypeInput;
     jfieldID lightTypePlayerId;
-    jfieldID lightTypeRgb;
+    jfieldID lightCapabilityBrightness;
+    jfieldID lightCapabilityRgb;
 } gLightClassInfo;
 
 static struct {
@@ -999,6 +1000,7 @@ void NativeInputManager::displayRemoved(JNIEnv* env, int32_t displayId) {
     // Set an empty list to remove all handles from the specific display.
     std::vector<sp<InputWindowHandle>> windowHandles;
     mInputManager->getDispatcher()->setInputWindows({{displayId, windowHandles}});
+    mInputManager->getDispatcher()->setFocusedApplication(displayId, nullptr);
 }
 
 void NativeInputManager::setFocusedApplication(JNIEnv* env, int32_t displayId,
@@ -1985,35 +1987,40 @@ static jobject nativeGetLights(JNIEnv* env, jclass clazz, jlong ptr, jint device
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
     jobject jLights = env->NewObject(gArrayListClassInfo.clazz, gArrayListClassInfo.constructor);
 
-    std::vector<int> lightIds = im->getInputManager()->getReader()->getLightIds(deviceId);
+    std::vector<InputDeviceLightInfo> lights =
+            im->getInputManager()->getReader()->getLights(deviceId);
 
-    for (size_t i = 0; i < lightIds.size(); i++) {
-        const InputDeviceLightInfo* lightInfo =
-                im->getInputManager()->getReader()->getLightInfo(deviceId, lightIds[i]);
-        if (lightInfo == nullptr) {
-            ALOGW("Failed to get input device %d light info for id %d", deviceId, lightIds[i]);
-            continue;
-        }
+    for (size_t i = 0; i < lights.size(); i++) {
+        const InputDeviceLightInfo& lightInfo = lights[i];
 
-        jint jTypeId = 0;
-        if (lightInfo->type == InputDeviceLightType::SINGLE) {
-            jTypeId =
-                    env->GetStaticIntField(gLightClassInfo.clazz, gLightClassInfo.lightTypeSingle);
-        } else if (lightInfo->type == InputDeviceLightType::PLAYER_ID) {
+        jint jTypeId =
+                env->GetStaticIntField(gLightClassInfo.clazz, gLightClassInfo.lightTypeInput);
+        jint jCapability = 0;
+
+        if (lightInfo.type == InputDeviceLightType::MONO) {
+            jCapability = env->GetStaticIntField(gLightClassInfo.clazz,
+                                                 gLightClassInfo.lightCapabilityBrightness);
+        } else if (lightInfo.type == InputDeviceLightType::RGB ||
+                   lightInfo.type == InputDeviceLightType::MULTI_COLOR) {
+            jCapability =
+                env->GetStaticIntField(gLightClassInfo.clazz,
+                                                 gLightClassInfo.lightCapabilityBrightness) |
+                env->GetStaticIntField(gLightClassInfo.clazz,
+                                                 gLightClassInfo.lightCapabilityRgb);
+        } else if (lightInfo.type == InputDeviceLightType::PLAYER_ID) {
             jTypeId = env->GetStaticIntField(gLightClassInfo.clazz,
-                                             gLightClassInfo.lightTypePlayerId);
-        } else if (lightInfo->type == InputDeviceLightType::RGB ||
-                   lightInfo->type == InputDeviceLightType::MULTI_COLOR) {
-            jTypeId = env->GetStaticIntField(gLightClassInfo.clazz, gLightClassInfo.lightTypeRgb);
+                                                 gLightClassInfo.lightTypePlayerId);
         } else {
-            ALOGW("Unknown light type %d", lightInfo->type);
+            ALOGW("Unknown light type %d", lightInfo.type);
             continue;
         }
-        ScopedLocalRef<jobject>
-                lightObj(env,
-                         env->NewObject(gLightClassInfo.clazz, gLightClassInfo.constructor,
-                                        (jint)lightInfo->id, (jint)lightInfo->ordinal, jTypeId,
-                                        env->NewStringUTF(lightInfo->name.c_str())));
+        ScopedLocalRef<jobject> lightObj(env,
+                                         env->NewObject(gLightClassInfo.clazz,
+                                                        gLightClassInfo.constructor,
+                                                        static_cast<jint>(lightInfo.id),
+                                                        env->NewStringUTF(lightInfo.name.c_str()),
+                                                        static_cast<jint>(lightInfo.ordinal),
+                                                        jTypeId, jCapability));
         // Add light object to list
         env->CallBooleanMethod(jLights, gArrayListClassInfo.add, lightObj.get());
     }
@@ -2207,39 +2214,28 @@ static jobject createInputSensorInfo(JNIEnv* env, jstring name, jstring vendor, 
 
 static jobjectArray nativeGetSensorList(JNIEnv* env, jclass /* clazz */, jlong ptr, jint deviceId) {
     NativeInputManager* im = reinterpret_cast<NativeInputManager*>(ptr);
-    std::vector<InputDeviceInfo> devices = im->getInputManager()->getReader()->getInputDevices();
-    // Find the input device by deviceId
-    auto it = std::find_if(devices.begin(), devices.end(),
-                           [deviceId](InputDeviceInfo& info) { return info.getId() == deviceId; });
+    std::vector<InputDeviceSensorInfo> sensors =
+            im->getInputManager()->getReader()->getSensors(deviceId);
 
-    if (it == devices.end()) {
-        // Return an array of size 0
-        return env->NewObjectArray(0, gInputSensorInfo.clazz, nullptr);
-    }
+    jobjectArray arr = env->NewObjectArray(sensors.size(), gInputSensorInfo.clazz, nullptr);
+    for (int i = 0; i < sensors.size(); i++) {
+        const InputDeviceSensorInfo& sensorInfo = sensors[i];
 
-    std::vector<InputDeviceSensorType> types = it->getSensorTypes();
-    jobjectArray arr = env->NewObjectArray(types.size(), gInputSensorInfo.clazz, nullptr);
-    for (int i = 0; i < types.size(); i++) {
-        const InputDeviceSensorInfo* sensorInfo = it->getSensorInfo(types[i]);
-        if (sensorInfo == nullptr) {
-            ALOGW("Failed to get input device %d sensor info for type %s", deviceId,
-                  NamedEnum::string(types[i]).c_str());
-            continue;
-        }
-
-        jobject info =
-                createInputSensorInfo(env, env->NewStringUTF(sensorInfo->name.c_str()),
-                                      env->NewStringUTF(sensorInfo->vendor.c_str()),
-                                      (jint)sensorInfo->version, 0 /* handle */,
-                                      (jint)sensorInfo->type, (jfloat)sensorInfo->maxRange,
-                                      (jfloat)sensorInfo->resolution, (jfloat)sensorInfo->power,
-                                      (jfloat)sensorInfo->minDelay,
-                                      (jint)sensorInfo->fifoReservedEventCount,
-                                      (jint)sensorInfo->fifoMaxEventCount,
-                                      env->NewStringUTF(sensorInfo->stringType.c_str()),
-                                      env->NewStringUTF("") /* requiredPermission */,
-                                      (jint)sensorInfo->maxDelay, (jint)sensorInfo->flags,
-                                      (jint)sensorInfo->id);
+        jobject info = createInputSensorInfo(env, env->NewStringUTF(sensorInfo.name.c_str()),
+                                             env->NewStringUTF(sensorInfo.vendor.c_str()),
+                                             static_cast<jint>(sensorInfo.version), 0 /* handle */,
+                                             static_cast<jint>(sensorInfo.type),
+                                             static_cast<jfloat>(sensorInfo.maxRange),
+                                             static_cast<jfloat>(sensorInfo.resolution),
+                                             static_cast<jfloat>(sensorInfo.power),
+                                             static_cast<jfloat>(sensorInfo.minDelay),
+                                             static_cast<jint>(sensorInfo.fifoReservedEventCount),
+                                             static_cast<jint>(sensorInfo.fifoMaxEventCount),
+                                             env->NewStringUTF(sensorInfo.stringType.c_str()),
+                                             env->NewStringUTF("") /* requiredPermission */,
+                                             static_cast<jint>(sensorInfo.maxDelay),
+                                             static_cast<jint>(sensorInfo.flags),
+                                             static_cast<jint>(sensorInfo.id));
         env->SetObjectArrayElement(arr, i, info);
         env->DeleteLocalRef(info);
     }
@@ -2539,15 +2535,17 @@ int register_android_server_InputManager(JNIEnv* env) {
     FIND_CLASS(gLightClassInfo.clazz, "android/hardware/lights/Light");
     gLightClassInfo.clazz = jclass(env->NewGlobalRef(gLightClassInfo.clazz));
     GET_METHOD_ID(gLightClassInfo.constructor, gLightClassInfo.clazz, "<init>",
-                  "(IIILjava/lang/String;)V");
+                  "(ILjava/lang/String;III)V");
 
     gLightClassInfo.clazz = jclass(env->NewGlobalRef(gLightClassInfo.clazz));
-    gLightClassInfo.lightTypeSingle =
-            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT_SINGLE", "I");
+    gLightClassInfo.lightTypeInput =
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT", "I");
     gLightClassInfo.lightTypePlayerId =
-            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT_PLAYER_ID", "I");
-    gLightClassInfo.lightTypeRgb =
-            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_INPUT_RGB", "I");
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_TYPE_PLAYER_ID", "I");
+    gLightClassInfo.lightCapabilityBrightness =
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_CAPABILITY_BRIGHTNESS", "I");
+    gLightClassInfo.lightCapabilityRgb =
+            env->GetStaticFieldID(gLightClassInfo.clazz, "LIGHT_CAPABILITY_RGB", "I");
 
     // ArrayList
     FIND_CLASS(gArrayListClassInfo.clazz, "java/util/ArrayList");

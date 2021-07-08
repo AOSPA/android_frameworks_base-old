@@ -18,11 +18,11 @@ package com.android.wm.shell.flicker.legacysplitscreen
 
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
-import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.annotation.Group1
 import com.android.server.wm.flicker.appWindowBecomesVisible
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.launchSplitScreen
@@ -49,6 +49,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
+@Group1
 class EnterSplitScreenLaunchToSide(
     testSpec: FlickerTestParameter
 ) : LegacySplitScreenTransition(testSpec) {
@@ -66,13 +67,13 @@ class EnterSplitScreenLaunchToSide(
             secondaryApp.defaultWindowName, WindowManagerStateHelper.SPLASH_SCREEN_NAME,
             WindowManagerStateHelper.SNAPSHOT_WINDOW_NAME)
 
-    @FlakyTest(bugId = 169271943)
+    @Presubmit
     @Test
     fun dockedStackPrimaryBoundsIsVisible() =
         testSpec.dockedStackPrimaryBoundsIsVisible(testSpec.config.startRotation,
             splitScreenApp.defaultWindowName)
 
-    @FlakyTest(bugId = 169271943)
+    @Presubmit
     @Test
     fun dockedStackSecondaryBoundsIsVisible() =
         testSpec.dockedStackSecondaryBoundsIsVisible(testSpec.config.startRotation,
@@ -80,7 +81,6 @@ class EnterSplitScreenLaunchToSide(
 
     @Presubmit
     @Test
-    // b/169271943
     fun dockedStackDividerBecomesVisible() = testSpec.dockedStackDividerBecomesVisible()
 
     @Presubmit

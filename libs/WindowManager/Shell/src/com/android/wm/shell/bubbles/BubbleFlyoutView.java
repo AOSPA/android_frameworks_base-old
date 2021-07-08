@@ -65,11 +65,13 @@ public class BubbleFlyoutView extends FrameLayout {
     private static final long FLYOUT_FADE_OUT_DURATION = 150L;
     private static final long FLYOUT_FADE_IN_DURATION = 250L;
 
+    // Whether the flyout view should show a pointer to the bubble.
+    private static final boolean SHOW_POINTER = false;
+
     private final int mFlyoutPadding;
     private final int mFlyoutSpaceFromBubble;
     private final int mPointerSize;
     private int mBubbleSize;
-    private int mBubbleBitmapSize;
 
     private final int mFlyoutElevation;
     private final int mBubbleElevation;
@@ -166,14 +168,16 @@ public class BubbleFlyoutView extends FrameLayout {
         final Resources res = getResources();
         mFlyoutPadding = res.getDimensionPixelSize(R.dimen.bubble_flyout_padding_x);
         mFlyoutSpaceFromBubble = res.getDimensionPixelSize(R.dimen.bubble_flyout_space_from_bubble);
-        mPointerSize = res.getDimensionPixelSize(R.dimen.bubble_flyout_pointer_size);
+        mPointerSize = SHOW_POINTER
+                ? res.getDimensionPixelSize(R.dimen.bubble_flyout_pointer_size)
+                : 0;
 
         mBubbleElevation = res.getDimensionPixelSize(R.dimen.bubble_elevation);
         mFlyoutElevation = res.getDimensionPixelSize(R.dimen.bubble_flyout_elevation);
 
         final TypedArray ta = mContext.obtainStyledAttributes(
                 new int[] {
-                        android.R.attr.colorBackgroundFloating,
+                        com.android.internal.R.attr.colorSurface,
                         android.R.attr.dialogCornerRadius});
         mFloatingBackgroundColor = ta.getColor(0, Color.WHITE);
         mCornerRadius = ta.getDimensionPixelSize(1, 0);
@@ -182,7 +186,7 @@ public class BubbleFlyoutView extends FrameLayout {
         // Add padding for the pointer on either side, onDraw will draw it in this space.
         setPadding(mPointerSize, 0, mPointerSize, 0);
         setWillNotDraw(false);
-        setClipChildren(false);
+        setClipChildren(!SHOW_POINTER);
         setTranslationZ(mFlyoutElevation);
         setOutlineProvider(new ViewOutlineProvider() {
             @Override
@@ -216,19 +220,19 @@ public class BubbleFlyoutView extends FrameLayout {
         super.onDraw(canvas);
     }
 
-    void updateFontSize(float fontScale) {
+    void updateFontSize() {
         final float fontSize = mContext.getResources()
                 .getDimensionPixelSize(com.android.internal.R.dimen.text_size_body_2_material);
-        final float newFontSize = fontSize * fontScale;
-        mMessageText.setTextSize(TypedValue.COMPLEX_UNIT_PX, newFontSize);
-        mSenderText.setTextSize(TypedValue.COMPLEX_UNIT_PX, newFontSize);
+        mMessageText.setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSize);
+        mSenderText.setTextSize(TypedValue.COMPLEX_UNIT_PX, fontSize);
     }
 
     /*
      * Fade animation for consecutive flyouts.
      */
     void animateUpdate(Bubble.FlyoutMessage flyoutMessage, float parentWidth, PointF stackPos,
-            boolean hideDot) {
+            boolean hideDot, Runnable onHide) {
+        mOnHide = onHide;
         final Runnable afterFadeOut = () -> {
             updateFlyoutMessage(flyoutMessage, parentWidth);
             // Wait for TextViews to layout with updated height.
@@ -333,10 +337,9 @@ public class BubbleFlyoutView extends FrameLayout {
             boolean hideDot,
             BubblePositioner positioner)  {
 
-        mBubbleBitmapSize = positioner.getBubbleBitmapSize();
         mBubbleSize = positioner.getBubbleSize();
 
-        mOriginalDotSize = SIZE_PERCENTAGE * mBubbleBitmapSize;
+        mOriginalDotSize = SIZE_PERCENTAGE * mBubbleSize;
         mNewDotRadius = (DOT_SCALE * mOriginalDotSize) / 2f;
         mNewDotSize = mNewDotRadius * 2f;
 
@@ -462,6 +465,7 @@ public class BubbleFlyoutView extends FrameLayout {
     /** Renders the 'pointer' triangle that points from the flyout to the bubble stack. */
     private void renderPointerTriangle(
             Canvas canvas, float currentFlyoutWidth, float currentFlyoutHeight) {
+        if (!SHOW_POINTER) return;
         canvas.save();
 
         // Translation to apply for the 'retraction' effect as the flyout collapses.
@@ -489,13 +493,12 @@ public class BubbleFlyoutView extends FrameLayout {
         // current position.
         relevantTriangle.getOutline(mTriangleOutline);
         mTriangleOutline.offset((int) arrowTranslationX, (int) arrowTranslationY);
-
         canvas.restore();
     }
 
     /** Builds an outline that includes the transformed flyout background and triangle. */
     private void getOutline(Outline outline) {
-        if (!mTriangleOutline.isEmpty()) {
+        if (!mTriangleOutline.isEmpty() || !SHOW_POINTER) {
             // Draw the rect into the outline as a path so we can merge the triangle path into it.
             final Path rectPath = new Path();
             final float interpolatedRadius = getInterpolatedRadius();
@@ -504,7 +507,7 @@ public class BubbleFlyoutView extends FrameLayout {
             outline.setPath(rectPath);
 
             // Get rid of the triangle path once it has disappeared behind the flyout.
-            if (mPercentStillFlyout > 0.5f) {
+            if (SHOW_POINTER && mPercentStillFlyout > 0.5f) {
                 outline.mPath.addPath(mTriangleOutline.mPath);
             }
 

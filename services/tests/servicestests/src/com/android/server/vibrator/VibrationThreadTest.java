@@ -31,6 +31,7 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.Context;
 import android.hardware.vibrator.Braking;
 import android.hardware.vibrator.IVibrator;
 import android.hardware.vibrator.IVibratorManager;
@@ -85,21 +86,30 @@ public class VibrationThreadTest {
     private static final String PACKAGE_NAME = "package";
     private static final VibrationAttributes ATTRS = new VibrationAttributes.Builder().build();
 
-    @Rule public MockitoRule mMockitoRule = MockitoJUnit.rule();
+    @Rule
+    public MockitoRule mMockitoRule = MockitoJUnit.rule();
 
-    @Mock private VibrationThread.VibrationCallbacks mThreadCallbacks;
-    @Mock private VibratorController.OnVibrationCompleteListener mControllerCallbacks;
-    @Mock private IBinder mVibrationToken;
-    @Mock private IBatteryStats mIBatteryStatsMock;
+    @Mock
+    private VibrationThread.VibrationCallbacks mThreadCallbacks;
+    @Mock
+    private VibratorController.OnVibrationCompleteListener mControllerCallbacks;
+    @Mock
+    private IBinder mVibrationToken;
+    @Mock
+    private IBatteryStats mIBatteryStatsMock;
 
     private final Map<Integer, FakeVibratorControllerProvider> mVibratorProviders = new HashMap<>();
+    private DeviceVibrationEffectAdapter mEffectAdapter;
     private PowerManager.WakeLock mWakeLock;
     private TestLooper mTestLooper;
 
     @Before
     public void setUp() throws Exception {
         mTestLooper = new TestLooper();
-        mWakeLock = InstrumentationRegistry.getContext().getSystemService(
+
+        Context context = InstrumentationRegistry.getContext();
+        mEffectAdapter = new DeviceVibrationEffectAdapter(context);
+        mWakeLock = context.getSystemService(
                 PowerManager.class).newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, "*vibrator*");
 
         mockVibrators(VIBRATOR_ID);
@@ -253,7 +263,7 @@ public class VibrationThreadTest {
         Thread cancellingThread = new Thread(() -> vibrationThread.cancel());
         cancellingThread.start();
 
-        waitForCompletion(vibrationThread, 20);
+        waitForCompletion(vibrationThread, /* timeout= */ 50);
         waitForCompletion(cancellingThread);
 
         verify(mThreadCallbacks).onVibrationEnded(eq(vibrationId), eq(Vibration.Status.CANCELLED));
@@ -278,7 +288,7 @@ public class VibrationThreadTest {
         Thread cancellingThread = new Thread(() -> vibrationThread.cancel());
         cancellingThread.start();
 
-        waitForCompletion(vibrationThread, 20);
+        waitForCompletion(vibrationThread, /* timeout= */ 50);
         waitForCompletion(cancellingThread);
 
         verify(mThreadCallbacks).onVibrationEnded(eq(vibrationId), eq(Vibration.Status.CANCELLED));
@@ -844,6 +854,39 @@ public class VibrationThreadTest {
                 delay < maxDelay);
     }
 
+    @LargeTest
+    @Test
+    public void vibrate_cancelSlowVibrator_cancelIsNotBlockedByVibrationThread() throws Exception {
+        FakeVibratorControllerProvider fakeVibrator = mVibratorProviders.get(VIBRATOR_ID);
+        fakeVibrator.setSupportedEffects(VibrationEffect.EFFECT_CLICK);
+
+        long latency = 5_000; // 5s
+        fakeVibrator.setLatency(latency);
+
+        long vibrationId = 1;
+        VibrationEffect effect = VibrationEffect.get(VibrationEffect.EFFECT_CLICK);
+        VibrationThread vibrationThread = startThreadAndDispatcher(vibrationId, effect);
+
+        assertTrue(waitUntil(
+                t -> !fakeVibrator.getEffectSegments().isEmpty(),
+                vibrationThread, TEST_TIMEOUT_MILLIS));
+        assertTrue(vibrationThread.isAlive());
+
+        // Run cancel in a separate thread so if VibrationThread.cancel blocks then this test should
+        // fail at waitForCompletion(cancellingThread).
+        Thread cancellingThread = new Thread(() -> vibrationThread.cancel());
+        cancellingThread.start();
+
+        // Cancelling the vibration should be fast and return right away, even if the thread is
+        // stuck at the slow call to the vibrator.
+        waitForCompletion(cancellingThread, /* timeout= */ 50);
+
+        // After the vibrator call ends the vibration is cancelled and the vibrator is turned off.
+        waitForCompletion(vibrationThread, /* timeout= */ latency + TEST_TIMEOUT_MILLIS);
+        verify(mThreadCallbacks).onVibrationEnded(eq(vibrationId), eq(Vibration.Status.CANCELLED));
+        assertFalse(vibrationThread.getVibrators().get(VIBRATOR_ID).isVibrating());
+    }
+
     @Test
     public void vibrate_multiplePredefinedCancel_cancelsVibrationImmediately() throws Exception {
         mockVibrators(1, 2);
@@ -870,7 +913,7 @@ public class VibrationThreadTest {
         Thread cancellingThread = new Thread(() -> vibrationThread.cancel());
         cancellingThread.start();
 
-        waitForCompletion(vibrationThread, 20);
+        waitForCompletion(vibrationThread, /* timeout= */ 50);
         waitForCompletion(cancellingThread);
 
         verify(mThreadCallbacks).onVibrationEnded(eq(vibrationId), eq(Vibration.Status.CANCELLED));
@@ -902,7 +945,7 @@ public class VibrationThreadTest {
         Thread cancellingThread = new Thread(() -> vibrationThread.cancel());
         cancellingThread.start();
 
-        waitForCompletion(vibrationThread, 20);
+        waitForCompletion(vibrationThread, /* timeout= */ 50);
         waitForCompletion(cancellingThread);
 
         verify(mThreadCallbacks).onVibrationEnded(eq(vibrationId), eq(Vibration.Status.CANCELLED));
@@ -947,8 +990,8 @@ public class VibrationThreadTest {
     }
 
     private VibrationThread startThreadAndDispatcher(Vibration vib) {
-        VibrationThread thread = new VibrationThread(vib, createVibratorControllers(), mWakeLock,
-                mIBatteryStatsMock, mThreadCallbacks);
+        VibrationThread thread = new VibrationThread(vib, mEffectAdapter,
+                createVibratorControllers(), mWakeLock, mIBatteryStatsMock, mThreadCallbacks);
         doAnswer(answer -> {
             thread.vibratorComplete(answer.getArgument(0));
             return null;

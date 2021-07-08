@@ -34,6 +34,8 @@ import android.app.StatusBarManager.WindowType;
 import android.app.StatusBarManager.WindowVisibleState;
 import android.content.ComponentName;
 import android.content.Context;
+import android.hardware.biometrics.BiometricAuthenticator.Modality;
+import android.hardware.biometrics.BiometricManager.BiometricMultiSensorMode;
 import android.hardware.biometrics.IBiometricSysuiReceiver;
 import android.hardware.biometrics.PromptInfo;
 import android.hardware.display.DisplayManager;
@@ -289,16 +291,19 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                 IBiometricSysuiReceiver receiver,
                 int[] sensorIds, boolean credentialAllowed,
                 boolean requireConfirmation, int userId, String opPackageName,
-                long operationId) {
+                long operationId, @BiometricMultiSensorMode int multiSensorConfig) {
         }
 
+        /** @see IStatusBar#onBiometricAuthenticated() */
         default void onBiometricAuthenticated() {
         }
 
-        default void onBiometricHelp(String message) {
+        /** @see IStatusBar#onBiometricHelp(String) */
+        default void onBiometricHelp(@Modality int modality, String message) {
         }
 
-        default void onBiometricError(int modality, int error, int vendorCode) {
+        /** @see IStatusBar#onBiometricError(int, int, int) */
+        default void onBiometricError(@Modality int modality, int error, int vendorCode) {
         }
 
         default void hideAuthenticationDialog() {
@@ -838,17 +843,19 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     @Override
     public void showAuthenticationDialog(PromptInfo promptInfo, IBiometricSysuiReceiver receiver,
             int[] sensorIds, boolean credentialAllowed, boolean requireConfirmation,
-            int userId, String opPackageName, long operationId) {
+            int userId, String opPackageName, long operationId,
+            @BiometricMultiSensorMode int multiSensorConfig) {
         synchronized (mLock) {
             SomeArgs args = SomeArgs.obtain();
             args.arg1 = promptInfo;
             args.arg2 = receiver;
-            args.arg3 = sensorIds; //
-            args.arg4 = credentialAllowed; //
+            args.arg3 = sensorIds;
+            args.arg4 = credentialAllowed;
             args.arg5 = requireConfirmation;
             args.argi1 = userId;
             args.arg6 = opPackageName;
             args.arg7 = operationId;
+            args.argi2 = multiSensorConfig;
             mHandler.obtainMessage(MSG_BIOMETRIC_SHOW, args)
                     .sendToTarget();
         }
@@ -888,9 +895,12 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
     }
 
     @Override
-    public void onBiometricHelp(String message) {
+    public void onBiometricHelp(@Modality int modality, String message) {
         synchronized (mLock) {
-            mHandler.obtainMessage(MSG_BIOMETRIC_HELP, message).sendToTarget();
+            SomeArgs args = SomeArgs.obtain();
+            args.argi1 = modality;
+            args.arg1 = message;
+            mHandler.obtainMessage(MSG_BIOMETRIC_HELP, args).sendToTarget();
         }
     }
 
@@ -1303,7 +1313,8 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                                 (boolean) someArgs.arg5 /* requireConfirmation */,
                                 someArgs.argi1 /* userId */,
                                 (String) someArgs.arg6 /* opPackageName */,
-                                (long) someArgs.arg7 /* operationId */);
+                                (long) someArgs.arg7 /* operationId */,
+                                someArgs.argi2 /* multiSensorConfig */);
                     }
                     someArgs.recycle();
                     break;
@@ -1314,11 +1325,16 @@ public class CommandQueue extends IStatusBar.Stub implements CallbackController<
                     }
                     break;
                 }
-                case MSG_BIOMETRIC_HELP:
+                case MSG_BIOMETRIC_HELP: {
+                    SomeArgs someArgs = (SomeArgs) msg.obj;
                     for (int i = 0; i < mCallbacks.size(); i++) {
-                        mCallbacks.get(i).onBiometricHelp((String) msg.obj);
+                        mCallbacks.get(i).onBiometricHelp(
+                                someArgs.argi1 /* modality */,
+                                (String) someArgs.arg1 /* message */);
                     }
+                    someArgs.recycle();
                     break;
+                }
                 case MSG_BIOMETRIC_ERROR: {
                     SomeArgs someArgs = (SomeArgs) msg.obj;
                     for (int i = 0; i < mCallbacks.size(); i++) {

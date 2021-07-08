@@ -69,7 +69,7 @@ public class TunerServiceImpl extends TunerService {
             QSTileHost.TILES_SETTING,
             Settings.Secure.DOZE_ALWAYS_ON,
             Settings.Secure.MEDIA_CONTROLS_RESUME,
-            Secure.MEDIA_CONTROLS_RESUME_BLOCKED
+            Settings.Secure.MEDIA_CONTROLS_RECOMMENDATION
     };
 
     private final Observer mObserver = new Observer();

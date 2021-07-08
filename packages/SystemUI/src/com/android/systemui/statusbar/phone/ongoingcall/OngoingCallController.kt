@@ -23,8 +23,9 @@ import android.app.Notification
 import android.app.Notification.CallStyle.CALL_TYPE_ONGOING
 import android.content.Intent
 import android.util.Log
-import android.view.ViewGroup
+import android.view.View
 import android.widget.Chronometer
+import com.android.internal.jank.InteractionJankMonitor
 import com.android.systemui.R
 import com.android.systemui.animation.ActivityLaunchAnimator
 import com.android.systemui.dagger.SysUISingleton
@@ -53,11 +54,11 @@ class OngoingCallController @Inject constructor(
     private val logger: OngoingCallLogger
 ) : CallbackController<OngoingCallListener> {
 
-    /** Null if there's no ongoing call. */
-    private var ongoingCallInfo: OngoingCallInfo? = null
+    /** Non-null if there's an active call notification. */
+    private var callNotificationInfo: CallNotificationInfo? = null
     /** True if the application managing the call is visible to the user. */
     private var isCallAppVisible: Boolean = true
-    private var chipView: ViewGroup? = null
+    private var chipView: View? = null
     private var uidObserver: IUidObserver.Stub? = null
 
     private val mListeners: MutableList<OngoingCallListener> = mutableListOf()
@@ -76,22 +77,35 @@ class OngoingCallController @Inject constructor(
         }
 
         override fun onEntryUpdated(entry: NotificationEntry) {
-            if (isOngoingCallNotification(entry)) {
-                ongoingCallInfo = OngoingCallInfo(
-                    entry.sbn.notification.`when`,
-                    entry.sbn.notification.contentIntent.intent,
-                    entry.sbn.uid)
-                updateChip()
+            // We have a new call notification or our existing call notification has been updated.
+            // TODO(b/183229367): This likely won't work if you take a call from one app then
+            //  switch to a call from another app.
+            if (callNotificationInfo == null && isCallNotification(entry) ||
+                    (entry.sbn.key == callNotificationInfo?.key)) {
+                val newOngoingCallInfo = CallNotificationInfo(
+                        entry.sbn.key,
+                        entry.sbn.notification.`when`,
+                        entry.sbn.notification.contentIntent.intent,
+                        entry.sbn.uid,
+                        entry.sbn.notification.extras.getInt(
+                                Notification.EXTRA_CALL_TYPE, -1) == CALL_TYPE_ONGOING
+                )
+                if (newOngoingCallInfo == callNotificationInfo) {
+                    return
+                }
+
+                callNotificationInfo = newOngoingCallInfo
+                if (newOngoingCallInfo.isOngoing) {
+                    updateChip()
+                } else {
+                    removeChip()
+                }
             }
         }
 
         override fun onEntryRemoved(entry: NotificationEntry, reason: Int) {
-            if (isOngoingCallNotification(entry)) {
-                ongoingCallInfo = null
-                mListeners.forEach { l -> l.onOngoingCallStateChanged(animate = true) }
-                if (uidObserver != null) {
-                    iActivityManager.unregisterUidObserver(uidObserver)
-                }
+            if (entry.sbn.key == callNotificationInfo?.key) {
+                removeChip()
             }
         }
     }
@@ -107,7 +121,7 @@ class OngoingCallController @Inject constructor(
      *
      * Should only be called from [CollapsedStatusBarFragment].
      */
-    fun setChipView(chipView: ViewGroup) {
+    fun setChipView(chipView: View) {
         this.chipView = chipView
         if (hasOngoingCall()) {
             updateChip()
@@ -128,7 +142,7 @@ class OngoingCallController @Inject constructor(
      * Returns true if there's an active ongoing call that should be displayed in a status bar chip.
      */
     fun hasOngoingCall(): Boolean {
-        return ongoingCallInfo != null &&
+        return callNotificationInfo?.isOngoing == true &&
                 // When the user is in the phone app, don't show the chip.
                 !isCallAppVisible
     }
@@ -148,14 +162,16 @@ class OngoingCallController @Inject constructor(
     }
 
     private fun updateChip() {
-        val currentOngoingCallInfo = ongoingCallInfo ?: return
+        val currentCallNotificationInfo = callNotificationInfo ?: return
 
         val currentChipView = chipView
         val timeView =
-                currentChipView?.findViewById<Chronometer>(R.id.ongoing_call_chip_time)
+            currentChipView?.findViewById<Chronometer>(R.id.ongoing_call_chip_time)
+        val backgroundView =
+            currentChipView?.findViewById<View>(R.id.ongoing_call_chip_background)
 
-        if (currentChipView != null && timeView != null) {
-            timeView.base = currentOngoingCallInfo.callStartTime -
+        if (currentChipView != null && timeView != null && backgroundView != null) {
+            timeView.base = currentCallNotificationInfo.callStartTime -
                     System.currentTimeMillis() +
                     systemClock.elapsedRealtime()
             timeView.start()
@@ -163,17 +179,20 @@ class OngoingCallController @Inject constructor(
             currentChipView.setOnClickListener {
                 logger.logChipClicked()
                 activityStarter.postStartActivityDismissingKeyguard(
-                        currentOngoingCallInfo.intent, 0,
-                        ActivityLaunchAnimator.Controller.fromView(it))
+                        currentCallNotificationInfo.intent, 0,
+                        ActivityLaunchAnimator.Controller.fromView(
+                                backgroundView,
+                                InteractionJankMonitor.CUJ_STATUS_BAR_APP_LAUNCH_FROM_CALL_CHIP)
+                )
             }
 
-            setUpUidObserver(currentOngoingCallInfo)
+            setUpUidObserver(currentCallNotificationInfo)
 
             mListeners.forEach { l -> l.onOngoingCallStateChanged(animate = true) }
         } else {
-            // If we failed to update the chip, don't store the ongoing call info. Then
-            // [hasOngoingCall] will return false and we fall back to typical notification handling.
-            ongoingCallInfo = null
+            // If we failed to update the chip, don't store the call info. Then [hasOngoingCall]
+            // will return false and we fall back to typical notification handling.
+            callNotificationInfo = null
 
             if (DEBUG) {
                 Log.w(TAG, "Ongoing call chip view could not be found; " +
@@ -185,14 +204,14 @@ class OngoingCallController @Inject constructor(
     /**
      * Sets up an [IUidObserver] to monitor the status of the application managing the ongoing call.
      */
-    private fun setUpUidObserver(currentOngoingCallInfo: OngoingCallInfo) {
+    private fun setUpUidObserver(currentCallNotificationInfo: CallNotificationInfo) {
         isCallAppVisible = isProcessVisibleToUser(
-                iActivityManager.getUidProcessState(currentOngoingCallInfo.uid, null))
+                iActivityManager.getUidProcessState(currentCallNotificationInfo.uid, null))
 
         uidObserver = object : IUidObserver.Stub() {
             override fun onUidStateChanged(
                     uid: Int, procState: Int, procStateSeq: Long, capability: Int) {
-                if (uid == currentOngoingCallInfo.uid) {
+                if (uid == currentCallNotificationInfo.uid) {
                     val oldIsCallAppVisible = isCallAppVisible
                     isCallAppVisible = isProcessVisibleToUser(procState)
                     if (oldIsCallAppVisible != isCallAppVisible) {
@@ -224,18 +243,26 @@ class OngoingCallController @Inject constructor(
         return procState <= ActivityManager.PROCESS_STATE_TOP
     }
 
-    private class OngoingCallInfo(
+    private fun removeChip() {
+        callNotificationInfo = null
+        mListeners.forEach { l -> l.onOngoingCallStateChanged(animate = true) }
+        if (uidObserver != null) {
+            iActivityManager.unregisterUidObserver(uidObserver)
+        }
+    }
+
+    private data class CallNotificationInfo(
+        val key: String,
         val callStartTime: Long,
         val intent: Intent,
-        val uid: Int
+        val uid: Int,
+        /** True if the call is currently ongoing (as opposed to incoming, screening, etc.). */
+        val isOngoing: Boolean
     )
 }
 
-private fun isOngoingCallNotification(entry: NotificationEntry): Boolean {
-    val extras = entry.sbn.notification.extras
-    val callStyleTemplateName = Notification.CallStyle::class.java.name
-    return extras.getString(Notification.EXTRA_TEMPLATE) == callStyleTemplateName &&
-            extras.getInt(Notification.EXTRA_CALL_TYPE, -1) == CALL_TYPE_ONGOING
+private fun isCallNotification(entry: NotificationEntry): Boolean {
+    return entry.sbn.notification.isStyle(Notification.CallStyle::class.java)
 }
 
 private const val TAG = "OngoingCallController"

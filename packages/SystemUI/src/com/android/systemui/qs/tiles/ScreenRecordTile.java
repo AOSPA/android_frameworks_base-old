@@ -103,6 +103,8 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
         state.state = (isRecording || isStarting) ? Tile.STATE_ACTIVE : Tile.STATE_INACTIVE;
         state.label = mContext.getString(R.string.quick_settings_screen_record_label);
         state.icon = ResourceIcon.get(R.drawable.ic_screenrecord);
+        // Show expand icon when clicking will open a dialog
+        state.forceExpandIcon = state.state == Tile.STATE_INACTIVE;
 
         if (isRecording) {
             state.secondaryLabel = mContext.getString(R.string.quick_settings_screen_record_stop);
@@ -142,7 +144,7 @@ public class ScreenRecordTile extends QSTileImpl<QSTile.BooleanState>
             mHost.getUserContext().startActivity(intent);
             return false;
         };
-        mKeyguardDismissUtil.executeWhenUnlocked(dismissAction, false);
+        mKeyguardDismissUtil.executeWhenUnlocked(dismissAction, false, false);
     }
 
     private void cancelCountdown() {

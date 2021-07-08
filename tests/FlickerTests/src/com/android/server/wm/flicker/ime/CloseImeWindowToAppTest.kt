@@ -25,6 +25,7 @@ import com.android.server.wm.flicker.FlickerBuilderProvider
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
+import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
 import com.android.server.wm.flicker.helpers.ImeAppHelper
 import com.android.server.wm.flicker.navBarLayerIsAlwaysVisible
@@ -50,7 +51,7 @@ import org.junit.runners.Parameterized
 @RunWith(Parameterized::class)
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
-@FlakyTest(bugId = 185400889)
+@Group2
 class CloseImeWindowToAppTest(private val testSpec: FlickerTestParameter) {
     private val instrumentation: Instrumentation = InstrumentationRegistry.getInstrumentation()
     private val testApp = ImeAppHelper(instrumentation)
@@ -77,11 +78,11 @@ class CloseImeWindowToAppTest(private val testSpec: FlickerTestParameter) {
         }
     }
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun navBarWindowIsAlwaysVisible() = testSpec.navBarWindowIsAlwaysVisible()
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun statusBarWindowIsAlwaysVisible() = testSpec.statusBarWindowIsAlwaysVisible()
 
@@ -107,7 +108,7 @@ class CloseImeWindowToAppTest(private val testSpec: FlickerTestParameter) {
     @Test
     fun statusBarLayerIsAlwaysVisible() = testSpec.navBarLayerIsAlwaysVisible()
 
-    @FlakyTest
+    @Presubmit
     @Test
     fun noUncoveredRegions() = testSpec.noUncoveredRegions(testSpec.config.startRotation)
 
@@ -128,18 +129,10 @@ class CloseImeWindowToAppTest(private val testSpec: FlickerTestParameter) {
     @Presubmit
     @Test
     fun statusBarLayerRotatesScales() {
-        Assume.assumeFalse(testSpec.isRotated)
         testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation)
     }
 
-    @FlakyTest
-    @Test
-    fun statusBarLayerRotatesScales_Flaky() {
-        Assume.assumeTrue(testSpec.isRotated)
-        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation)
-    }
-
-    @FlakyTest
+    @Presubmit
     @Test
     fun visibleLayersShownMoreThanOneConsecutiveEntry() {
         testSpec.assertLayers {

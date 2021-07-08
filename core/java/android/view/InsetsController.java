@@ -690,6 +690,7 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         mState.setDisplayFrame(newState.getDisplayFrame());
         mState.setDisplayCutout(newState.getDisplayCutout());
         mState.setRoundedCorners(newState.getRoundedCorners());
+        mState.setPrivacyIndicatorBounds(newState.getPrivacyIndicatorBounds());
         @InsetsType int disabledUserAnimationTypes = 0;
         @InsetsType int[] cancelledUserAnimationTypes = {0};
         for (@InternalInsetsType int type = 0; type < InsetsState.SIZE; type++) {
@@ -828,7 +829,13 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
 
                 requestedStateStale = requestedVisibilityChanged || imeRequestedVisible;
             }
+        }
 
+        if (mTmpControlArray.size() > 0) {
+            // Update surface positions for animations.
+            for (int i = mRunningAnimations.size() - 1; i >= 0; i--) {
+                mRunningAnimations.get(i).runner.updateSurfacePosition(mTmpControlArray);
+            }
         }
         mTmpControlArray.clear();
 
@@ -1052,10 +1059,11 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
         final InsetsAnimationControlRunner runner = useInsetsAnimationThread
                 ? new InsetsAnimationThreadControlRunner(controls,
                         frame, mState, listener, typesReady, this, durationMs, interpolator,
-                        animationType, mHost.getTranslator(), mHost.getHandler())
+                        animationType, layoutInsetsDuringAnimation, mHost.getTranslator(),
+                        mHost.getHandler())
                 : new InsetsAnimationControlImpl(controls,
                         frame, mState, listener, typesReady, this, durationMs, interpolator,
-                        animationType, mHost.getTranslator());
+                        animationType, layoutInsetsDuringAnimation, mHost.getTranslator());
         if ((typesReady & WindowInsets.Type.ime()) != 0) {
             ImeTracing.getInstance().triggerClientDump("InsetsAnimationControlImpl",
                     mHost.getInputMethodManager(), null /* icProto */);
@@ -1224,9 +1232,11 @@ public class InsetsController implements WindowInsetsController, InsetsAnimation
     }
 
     void notifyControlRevoked(InsetsSourceConsumer consumer) {
+        final @InsetsType int types = toPublicType(consumer.getType());
         for (int i = mRunningAnimations.size() - 1; i >= 0; i--) {
             InsetsAnimationControlRunner control = mRunningAnimations.get(i).runner;
-            if ((control.getTypes() & toPublicType(consumer.getType())) != 0) {
+            control.notifyControlRevoked(types);
+            if (control.getControllingTypes() == 0) {
                 cancelAnimation(control, true /* invokeCallback */);
             }
         }

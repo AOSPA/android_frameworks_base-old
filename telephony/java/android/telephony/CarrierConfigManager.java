@@ -33,11 +33,13 @@ import android.os.PersistableBundle;
 import android.os.RemoteException;
 import android.service.carrier.CarrierService;
 import android.telecom.TelecomManager;
+import android.telephony.data.DataCallResponse;
 import android.telephony.gba.TlsParams;
 import android.telephony.gba.UaSecurityProtocolIdentifier;
 import android.telephony.ims.ImsReasonInfo;
 import android.telephony.ims.ImsRegistrationAttributes;
 import android.telephony.ims.ImsSsData;
+import android.telephony.ims.RcsUceAdapter;
 import android.telephony.ims.feature.MmTelFeature;
 import android.telephony.ims.feature.RcsFeature;
 
@@ -1076,6 +1078,21 @@ public class CarrierConfigManager {
      */
     public static final String KEY_CARRIER_DATA_CALL_APN_RETRY_AFTER_DISCONNECT_LONG =
             "carrier_data_call_apn_retry_after_disconnect_long";
+
+    /**
+     * The maximum times for telephony to retry data setup on the same APN requested by
+     * network through the data setup response retry timer
+     * {@link DataCallResponse#getRetryDurationMillis()}. This is to prevent that network keeps
+     * asking device to retry data setup forever and causes power consumption issue. For infinite
+     * retring same APN, configure this as 2147483647 (i.e. {@link Integer#MAX_VALUE}).
+     *
+     * Note if network does not suggest any retry timer, frameworks uses the retry configuration
+     * from {@link #KEY_CARRIER_DATA_CALL_RETRY_CONFIG_STRINGS}, and the maximum retry times could
+     * be configured there.
+     * @hide
+     */
+    public static final String KEY_CARRIER_DATA_CALL_RETRY_NETWORK_REQUESTED_MAX_COUNT_INT =
+            "carrier_data_call_retry_network_requested_max_count_int";
 
     /**
      * Data call setup permanent failure causes by the carrier
@@ -2722,13 +2739,31 @@ public class CarrierConfigManager {
 
     /**
      * List of EARFCN (E-UTRA Absolute Radio Frequency Channel Number,
-     * Reference: 3GPP TS 36.104 5.4.3) inclusive ranges on which lte_rsrp_boost_int
-     * will be applied. Format of the String array is expected to be {"erafcn1_start-earfcn1_end",
+     * Reference: 3GPP TS 36.104 5.4.3) inclusive ranges on which lte_earfcns_rsrp_boost_int
+     * will be applied. Format of the String array is expected to be {"earfcn1_start-earfcn1_end",
      * "earfcn2_start-earfcn2_end" ... }
      * @hide
      */
     public static final String KEY_BOOSTED_LTE_EARFCNS_STRING_ARRAY =
             "boosted_lte_earfcns_string_array";
+
+    /**
+     * Offset to be reduced from rsrp threshold while calculating signal strength level.
+     * @hide
+     */
+    public static final String KEY_NRARFCNS_RSRP_BOOST_INT_ARRAY = "nrarfcns_rsrp_boost_int_array";
+
+    /**
+     * List of NR ARFCN (5G Absolute Radio Frequency Channel Number,
+     * Reference: 3GPP TS 36.108) inclusive ranges on which corresponding
+     * nrarfcns_rsrp_boost_int_array will be applied. The size of this array and
+     * nrarfcns_rsrp_boost_int_array must be the same.
+     * Format of the String array is expected to be {"nrarfcn1_start-nrarfcn1_end",
+     * "nrarfcn2_start-nrarfcn2_end" ... }
+     * @hide
+     */
+    public static final String KEY_BOOSTED_NRARFCNS_STRING_ARRAY =
+            "boosted_nrarfcns_string_array";
 
     /**
      * Determine whether to use only RSRP for the number of LTE signal bars.
@@ -3724,6 +3759,13 @@ public class CarrierConfigManager {
             "emergency_number_prefix_string_array";
 
     /**
+     * Indicates whether carrier treats "*67" or "*82" as a temporary mode CLIR.
+     * @hide
+     */
+    public static final String KEY_CARRIER_SUPPORTS_CALLER_ID_VERTICAL_SERVICE_CODES_BOOL =
+            "carrier_supports_caller_id_vertical_service_codes_bool";
+
+    /**
      * Smart forwarding config. Smart forwarding is a feature to configure call forwarding to a
      * different SIM in the device when one SIM is not reachable. The config here specifies a smart
      * forwarding component that will launch UI for changing the configuration. An empty string
@@ -4302,6 +4344,9 @@ public class CarrierConfigManager {
          * If this flag is disabled, the capabilities cache will not be refreshed internally at all
          * and will only be updated if the cached capabilities are stale when an application
          * requests them.
+         *
+         * @see RcsUceAdapter#isUceSettingEnabled() more information about this feature and how
+         * it is enabled by the user.
          */
         public static final String KEY_RCS_BULK_CAPABILITY_EXCHANGE_BOOL =
                 KEY_PREFIX + "rcs_bulk_capability_exchange_bool";
@@ -4378,7 +4423,7 @@ public class CarrierConfigManager {
                     "+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.deferred\"",
                     "+g.gsma.rcs.cpm.pager-large",
                     "+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.session\"",
-                    "+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.session\"",
+                    "+g.3gpp.icsi-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.oma.cpm.filetransfer\"",
                     "+g.3gpp.iari-ref=\"urn%3Aurn-7%3A3gpp-application.ims.iari.rcs.fthttp\"",
                     "+g.3gpp.iari-ref=\"urn%3Aurn-7%3A3gpp-application.ims.iari.rcs.ftsms\"",
                     "+g.3gpp.iari-ref=\"urn%3Aurn-7%3A3gpp-service.ims.icsi.gsma.callcomposer\"",
@@ -5204,6 +5249,7 @@ public class CarrierConfigManager {
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_DEFAULT_LONG, 20000);
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_DELAY_FASTER_LONG, 3000);
         sDefaults.putLong(KEY_CARRIER_DATA_CALL_APN_RETRY_AFTER_DISCONNECT_LONG, 10000);
+        sDefaults.putInt(KEY_CARRIER_DATA_CALL_RETRY_NETWORK_REQUESTED_MAX_COUNT_INT, 3);
         sDefaults.putString(KEY_CARRIER_ERI_FILE_NAME_STRING, "eri.xml");
         sDefaults.putInt(KEY_DURATION_BLOCKING_DISABLED_AFTER_EMERGENCY_INT, 7200);
         sDefaults.putStringArray(KEY_CARRIER_METERED_APN_TYPES_STRINGS,
@@ -5414,6 +5460,8 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_SUPPORT_IMS_CALL_FORWARDING_WHILE_ROAMING_BOOL, true);
         sDefaults.putInt(KEY_LTE_EARFCNS_RSRP_BOOST_INT, 0);
         sDefaults.putStringArray(KEY_BOOSTED_LTE_EARFCNS_STRING_ARRAY, null);
+        sDefaults.putIntArray(KEY_NRARFCNS_RSRP_BOOST_INT_ARRAY, null);
+        sDefaults.putStringArray(KEY_BOOSTED_NRARFCNS_STRING_ARRAY, null);
         sDefaults.putBoolean(KEY_USE_ONLY_RSRP_FOR_LTE_SIGNAL_BAR_BOOL, false);
         sDefaults.putBoolean(KEY_DISABLE_VOICE_BARRING_NOTIFICATION_BOOL, false);
         sDefaults.putInt(IMSI_KEY_AVAILABILITY_INT, 0);
@@ -5579,6 +5627,7 @@ public class CarrierConfigManager {
                         1 /* Roaming Indicator Off */
                 });
         sDefaults.putStringArray(KEY_EMERGENCY_NUMBER_PREFIX_STRING_ARRAY, new String[0]);
+        sDefaults.putBoolean(KEY_CARRIER_SUPPORTS_CALLER_ID_VERTICAL_SERVICE_CODES_BOOL, false);
         sDefaults.putBoolean(KEY_USE_USIM_BOOL, false);
         sDefaults.putBoolean(KEY_SHOW_WFC_LOCATION_PRIVACY_POLICY_BOOL, false);
         sDefaults.putBoolean(KEY_AUTO_CANCEL_CS_REJECT_NOTIFICATION, true);
@@ -5636,7 +5685,7 @@ public class CarrierConfigManager {
         sDefaults.putBoolean(KEY_STORE_SIM_PIN_FOR_UNATTENDED_REBOOT_BOOL, true);
         sDefaults.putBoolean(KEY_HIDE_ENABLE_2G, false);
         sDefaults.putStringArray(KEY_ALLOWED_INITIAL_ATTACH_APN_TYPES_STRING_ARRAY,
-                new String[]{"ia", "default", "ims", "mms", "dun", "emergency"});
+                new String[]{"ia", "default", "mms", "dun"});
         sDefaults.putBoolean(KEY_CARRIER_PROVISIONS_WIFI_MERGED_NETWORKS_BOOL, false);
         sDefaults.putBoolean(KEY_USE_IP_FOR_CALLING_INDICATOR_BOOL, false);
         sDefaults.putBoolean(KEY_DISPLAY_CALL_STRENGTH_INDICATOR_BOOL, true);

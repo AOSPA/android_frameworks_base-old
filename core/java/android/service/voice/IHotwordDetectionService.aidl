@@ -19,6 +19,7 @@ package android.service.voice;
 import android.content.ContentCaptureOptions;
 import android.hardware.soundtrigger.SoundTrigger;
 import android.media.AudioFormat;
+import android.os.IBinder;
 import android.os.IRemoteCallback;
 import android.os.ParcelFileDescriptor;
 import android.os.PersistableBundle;
@@ -50,7 +51,11 @@ oneway interface IHotwordDetectionService {
         in SharedMemory sharedMemory,
         in IRemoteCallback callback);
 
+    void updateAudioFlinger(in IBinder audioFlinger);
+
     void updateContentCaptureManager(
         in IContentCaptureManager contentCaptureManager,
         in ContentCaptureOptions options);
+
+    void stopDetection();
 }

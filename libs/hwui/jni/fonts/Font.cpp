@@ -35,6 +35,7 @@
 #include <minikin/FontFamily.h>
 #include <minikin/FontFileParser.h>
 #include <minikin/LocaleList.h>
+#include <minikin/SystemFonts.h>
 #include <ui/FatVector.h>
 
 #include <memory>
@@ -191,7 +192,7 @@ static jfloat Font_getFontMetrics(JNIEnv* env, jobject, jlong fontHandle, jlong 
 // Critical Native
 static jlong Font_getMinikinFontPtr(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr) {
     FontWrapper* font = reinterpret_cast<FontWrapper*>(fontPtr);
-    return reinterpret_cast<jlong>(font->font->typeface().get());
+    return reinterpret_cast<jlong>(font->font.get());
 }
 
 // Critical Native
@@ -223,12 +224,21 @@ static jlong Font_getReleaseNativeFontFunc(CRITICAL_JNI_PARAMS) {
 // Fast Native
 static jstring Font_getFontPath(JNIEnv* env, jobject, jlong fontPtr) {
     FontWrapper* font = reinterpret_cast<FontWrapper*>(fontPtr);
-    const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
-    const std::string& path = minikinFont->GetFontPath();
-    if (path.empty()) {
-        return nullptr;
+    minikin::BufferReader reader = font->font->typefaceMetadataReader();
+    if (reader.data() != nullptr) {
+        std::string path = std::string(reader.readString());
+        if (path.empty()) {
+            return nullptr;
+        }
+        return env->NewStringUTF(path.c_str());
+    } else {
+        const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
+        const std::string& path = minikinFont->GetFontPath();
+        if (path.empty()) {
+            return nullptr;
+        }
+        return env->NewStringUTF(path.c_str());
     }
-    return env->NewStringUTF(path.c_str());
 }
 
 // Fast Native
@@ -256,22 +266,43 @@ static jint Font_getPackedStyle(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr) {
 // Critical Native
 static jint Font_getIndex(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr) {
     FontWrapper* font = reinterpret_cast<FontWrapper*>(fontPtr);
-    const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
-    return minikinFont->GetFontIndex();
+    minikin::BufferReader reader = font->font->typefaceMetadataReader();
+    if (reader.data() != nullptr) {
+        reader.skipString();  // fontPath
+        return reader.read<int>();
+    } else {
+        const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
+        return minikinFont->GetFontIndex();
+    }
 }
 
 // Critical Native
 static jint Font_getAxisCount(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr) {
     FontWrapper* font = reinterpret_cast<FontWrapper*>(fontPtr);
-    const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
-    return minikinFont->GetAxes().size();
+    minikin::BufferReader reader = font->font->typefaceMetadataReader();
+    if (reader.data() != nullptr) {
+        reader.skipString();  // fontPath
+        reader.skip<int>();   // fontIndex
+        return reader.readArray<minikin::FontVariation>().second;
+    } else {
+        const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
+        return minikinFont->GetAxes().size();
+    }
 }
 
 // Critical Native
 static jlong Font_getAxisInfo(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr, jint index) {
     FontWrapper* font = reinterpret_cast<FontWrapper*>(fontPtr);
-    const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
-    minikin::FontVariation var = minikinFont->GetAxes().at(index);
+    minikin::BufferReader reader = font->font->typefaceMetadataReader();
+    minikin::FontVariation var;
+    if (reader.data() != nullptr) {
+        reader.skipString();  // fontPath
+        reader.skip<int>();   // fontIndex
+        var = reader.readArray<minikin::FontVariation>().first[index];
+    } else {
+        const std::shared_ptr<minikin::MinikinFont>& minikinFont = font->font->typeface();
+        var = minikinFont->GetAxes().at(index);
+    }
     uint32_t floatBinary = *reinterpret_cast<const uint32_t*>(&var.value);
     return (static_cast<uint64_t>(var.axisTag) << 32) | static_cast<uint64_t>(floatBinary);
 }
@@ -280,6 +311,22 @@ static jlong Font_getAxisInfo(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr, jint inde
 static jint Font_getSourceId(CRITICAL_JNI_PARAMS_COMMA jlong fontPtr) {
     FontWrapper* font = reinterpret_cast<FontWrapper*>(fontPtr);
     return font->font->typeface()->GetSourceId();
+}
+
+static jlongArray Font_getAvailableFontSet(JNIEnv* env, jobject) {
+    std::vector<jlong> refArray;
+    minikin::SystemFonts::getFontSet(
+            [&refArray](const std::vector<std::shared_ptr<minikin::Font>>& fontSet) {
+                refArray.reserve(fontSet.size());
+                for (const auto& font : fontSet) {
+                    std::shared_ptr<minikin::Font> fontRef = font;
+                    refArray.push_back(
+                            reinterpret_cast<jlong>(new FontWrapper(std::move(fontRef))));
+                }
+            });
+    jlongArray r = env->NewLongArray(refArray.size());
+    env->SetLongArrayRegion(r, 0, refArray.size(), refArray.data());
+    return r;
 }
 
 // Fast Native
@@ -373,6 +420,9 @@ static const JNINativeMethod gFontMethods[] = {
         {"nGetAxisCount", "(J)I", (void*)Font_getAxisCount},
         {"nGetAxisInfo", "(JI)J", (void*)Font_getAxisInfo},
         {"nGetSourceId", "(J)I", (void*)Font_getSourceId},
+
+        // System font accessors
+        {"nGetAvailableFontSet", "()[J", (void*)Font_getAvailableFontSet},
 };
 
 static const JNINativeMethod gFontFileUtilMethods[] = {
