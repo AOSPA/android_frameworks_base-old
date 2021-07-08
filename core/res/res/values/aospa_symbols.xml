@@ -76,4 +76,7 @@
     <!-- Fingerprint from stock ROM -->
     <java-symbol type="string" name="stock_fingerprint" />
 
+    <!-- For dynamic default font styles -->
+    <java-symbol type="string" name="config_bodyFontFamily" />
+
 </resources>
