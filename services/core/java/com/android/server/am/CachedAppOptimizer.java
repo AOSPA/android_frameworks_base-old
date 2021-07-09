@@ -207,8 +207,6 @@ public final class CachedAppOptimizer {
                                 updateMinOomAdjThrottle();
                             } else if (KEY_COMPACT_THROTTLE_MAX_OOM_ADJ.equals(name)) {
                                 updateMaxOomAdjThrottle();
-                            } else if (KEY_FREEZER_DEBOUNCE_TIMEOUT.equals(name)) {
-                                updateFreezerDebounceTimeout();
                             }
                         }
                     }
@@ -350,7 +348,6 @@ public final class CachedAppOptimizer {
             updateUseFreezer();
             updateMinOomAdjThrottle();
             updateMaxOomAdjThrottle();
-            updateFreezerDebounceTimeout();
         }
         setAppCompactProperties();
     }
@@ -754,6 +751,7 @@ public final class CachedAppOptimizer {
                 || DeviceConfig.getBoolean(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER_NATIVE_BOOT,
                     KEY_USE_FREEZER, DEFAULT_USE_FREEZER)) {
             mUseFreezer = isFreezerSupported();
+            updateFreezerDebounceTimeout();
         }
 
         final boolean useFreezer = mUseFreezer;
@@ -933,7 +931,8 @@ public final class CachedAppOptimizer {
 
     @GuardedBy("mPhenotypeFlagLock")
     private void updateFreezerDebounceTimeout() {
-        mFreezerDebounceTimeout = DeviceConfig.getLong(DeviceConfig.NAMESPACE_ACTIVITY_MANAGER,
+        mFreezerDebounceTimeout = DeviceConfig.getLong(
+                DeviceConfig.NAMESPACE_ACTIVITY_MANAGER_NATIVE_BOOT,
                 KEY_FREEZER_DEBOUNCE_TIMEOUT, DEFAULT_FREEZER_DEBOUNCE_TIMEOUT);
 
         if (mFreezerDebounceTimeout < 0) {
