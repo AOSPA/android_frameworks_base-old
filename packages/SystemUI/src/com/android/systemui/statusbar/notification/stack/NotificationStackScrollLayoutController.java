@@ -1071,10 +1071,6 @@ public class NotificationStackScrollLayoutController {
         mView.setAlpha(alpha);
     }
 
-    public float getCurrentOverScrollAmount(boolean top) {
-        return mView.getCurrentOverScrollAmount(top);
-    }
-
     public float calculateAppearFraction(float height) {
         return mView.calculateAppearFraction(height);
     }
@@ -1534,6 +1530,11 @@ public class NotificationStackScrollLayoutController {
         public void setNotificationActivityStarter(
                 NotificationActivityStarter notificationActivityStarter) {
             mView.setNotificationActivityStarter(notificationActivityStarter);
+        }
+
+        @Override
+        public int getTopClippingStartLocation() {
+            return mView.getTopClippingStartLocation();
         }
 
         @Override

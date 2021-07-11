@@ -14317,7 +14317,7 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
     }
 
     @Override
-    public boolean isAffiliatedUser() {
+    public boolean isCallingUserAffiliated() {
         if (!mHasFeature) {
             return false;
         }
@@ -14325,6 +14325,17 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         synchronized (getLockObject()) {
             return isUserAffiliatedWithDeviceLocked(mInjector.userHandleGetCallingUserId());
         }
+    }
+
+    @Override
+    public boolean isAffiliatedUser(@UserIdInt int userId) {
+        if (!mHasFeature) {
+            return false;
+        }
+        final CallerIdentity caller = getCallerIdentity();
+        Preconditions.checkCallAuthorization(hasCrossUsersPermission(caller, userId));
+
+        return isUserAffiliatedWithDeviceLocked(userId);
     }
 
     private boolean isUserAffiliatedWithDeviceLocked(@UserIdInt int userId) {
@@ -17554,10 +17565,15 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
 
     @Override
     public boolean isUsbDataSignalingEnabled(String packageName) {
+        final CallerIdentity caller = getCallerIdentity(packageName);
         synchronized (getLockObject()) {
-            final ActiveAdmin admin = getProfileOwnerOrDeviceOwnerLocked(
-                    getCallerIdentity(packageName));
-            return admin.mUsbDataSignalingEnabled;
+            // If the caller is an admin, return the policy set by itself. Otherwise
+            // return the device-wide policy.
+            if (isDeviceOwner(caller) || isProfileOwnerOfOrganizationOwnedDevice(caller)) {
+                return getProfileOwnerOrDeviceOwnerLocked(caller).mUsbDataSignalingEnabled;
+            } else {
+                return isUsbDataSignalingEnabledInternalLocked();
+            }
         }
     }
 
@@ -17567,10 +17583,14 @@ public class DevicePolicyManagerService extends BaseIDevicePolicyManager {
         Preconditions.checkCallAuthorization(isSystemUid(caller));
 
         synchronized (getLockObject()) {
-            final ActiveAdmin admin = getDeviceOwnerOrProfileOwnerOfOrganizationOwnedDeviceLocked(
-                    UserHandle.USER_SYSTEM);
-            return admin == null || admin.mUsbDataSignalingEnabled;
+            return isUsbDataSignalingEnabledInternalLocked();
         }
+    }
+
+    private boolean isUsbDataSignalingEnabledInternalLocked() {
+        final ActiveAdmin admin = getDeviceOwnerOrProfileOwnerOfOrganizationOwnedDeviceLocked(
+                UserHandle.USER_SYSTEM);
+        return admin == null || admin.mUsbDataSignalingEnabled;
     }
 
     @Override

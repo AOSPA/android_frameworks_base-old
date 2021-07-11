@@ -659,6 +659,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private boolean mLastContainsDismissKeyguardWindow;
     private boolean mLastContainsTurnScreenOnWindow;
 
+    /** Whether the IME is showing when transitioning away from this activity. */
+    boolean mLastImeShown;
+
     /**
      * A flag to determine if this AR is in the process of closing or entering PIP. This is needed
      * to help AR know that the app is in the process of closing but hasn't yet started closing on
@@ -686,8 +689,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     private boolean mInSizeCompatModeForBounds = false;
 
     // Whether the aspect ratio restrictions applied to the activity bounds in applyAspectRatio().
-    // TODO(b/182268157): Aspect ratio can also be applie in resolveFixedOrientationConfiguration
-    // but that isn't reflected in this boolean.
     private boolean mIsAspectRatioApplied = false;
 
     // Bounds populated in resolveFixedOrientationConfiguration when this activity is letterboxed
@@ -1233,6 +1234,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     TopResumedActivityChangeItem.obtain(onTop));
         } catch (RemoteException e) {
             // If process died, whatever.
+            Slog.w(TAG, "Failed to send top-resumed=" + onTop + " to " + this, e);
             return false;
         }
         return true;
@@ -4621,7 +4623,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             if (visible) {
                 displayContent.mOpeningApps.add(this);
                 mEnteringAnimation = true;
-            } else {
+            } else if (mVisible) {
                 displayContent.mClosingApps.add(this);
                 mEnteringAnimation = false;
             }
@@ -4747,6 +4749,15 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // animation. Otherwise, we'll update client visibility in onAnimationFinished.
         if (visible || !isAnimating(PARENTS, ANIMATION_TYPE_APP_TRANSITION)) {
             setClientVisible(visible);
+        }
+
+        if (!visible) {
+            final InsetsControlTarget imeInputTarget = mDisplayContent.getImeTarget(
+                    DisplayContent.IME_TARGET_INPUT);
+            mLastImeShown = imeInputTarget != null && imeInputTarget.getWindow() != null
+                    && imeInputTarget.getWindow().mActivityRecord == this
+                    && mDisplayContent.mInputMethodWindow != null
+                    && mDisplayContent.mInputMethodWindow.isVisible();
         }
 
         final DisplayContent displayContent = getDisplayContent();
@@ -5877,9 +5888,23 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
     }
 
     void onStartingWindowDrawn() {
+        boolean wasTaskVisible = false;
         if (task != null) {
             mSplashScreenStyleEmpty = true;
+            wasTaskVisible = task.getHasBeenVisible();
             task.setHasBeenVisible(true);
+        }
+
+        // The transition may not be executed if the starting process hasn't attached. But if the
+        // starting window is drawn, the transition can start earlier. Exclude finishing and bubble
+        // because it may be a trampoline.
+        if (!wasTaskVisible && mStartingData != null && !finishing && !mLaunchedFromBubble
+                && !mDisplayContent.mAppTransition.isReady()
+                && !mDisplayContent.mAppTransition.isRunning()) {
+            // The pending transition state will be cleared after the transition is started, so
+            // save the state for launching the client later (used by LaunchActivityItem).
+            mStartingData.mIsTransitionForward = mDisplayContent.isNextTransitionForward();
+            mDisplayContent.executeAppTransition();
         }
     }
 
@@ -6602,6 +6627,11 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                 && (dc.mOpeningApps.contains(this)
                 || dc.mClosingApps.contains(this)
                 || dc.mChangingContainers.contains(this));
+    }
+
+    boolean isTransitionForward() {
+        return (mStartingData != null && mStartingData.mIsTransitionForward)
+                || mDisplayContent.isNextTransitionForward();
     }
 
     private int getAnimationLayer() {
@@ -7358,41 +7388,48 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         }
 
         final Rect parentBounds = newParentConfig.windowConfiguration.getBounds();
-        final int parentWidth = parentBounds.width();
-        final int parentHeight = parentBounds.height();
-        float aspect = Math.max(parentWidth, parentHeight)
-                / (float) Math.min(parentWidth, parentHeight);
+        final Rect parentAppBounds = newParentConfig.windowConfiguration.getAppBounds();
+        final Rect containingBounds = new Rect();
+        final Rect containingAppBounds = new Rect();
+        // Need to shrink the containing bounds into a square because the parent orientation does
+        // not match the activity requested orientation.
+        if (forcedOrientation == ORIENTATION_LANDSCAPE) {
+            // Shrink height to match width. Position height within app bounds.
+            final int bottom = Math.min(parentAppBounds.top + parentBounds.width(),
+                    parentAppBounds.bottom);
+            containingBounds.set(parentBounds.left, parentAppBounds.top, parentBounds.right,
+                    bottom);
+            containingAppBounds.set(parentAppBounds.left, parentAppBounds.top,
+                    parentAppBounds.right, bottom);
+        } else {
+            // Shrink width to match height. Position width within app bounds.
+            final int right = Math.min(parentAppBounds.left + parentBounds.height(),
+                    parentAppBounds.right);
+            containingBounds.set(parentAppBounds.left, parentBounds.top, right,
+                    parentBounds.bottom);
+            containingAppBounds.set(parentAppBounds.left, parentAppBounds.top, right,
+                    parentAppBounds.bottom);
+        }
+
+        Rect mTmpFullBounds = new Rect(resolvedBounds);
+        resolvedBounds.set(containingBounds);
 
         // Override from config_fixedOrientationLetterboxAspectRatio or via ADB with
         // set-fixed-orientation-letterbox-aspect-ratio.
         final float letterboxAspectRatioOverride =
                 mWmService.mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio();
-        aspect = letterboxAspectRatioOverride > MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO
-                ? letterboxAspectRatioOverride : aspect;
+        final float desiredAspectRatio =
+                letterboxAspectRatioOverride > MIN_FIXED_ORIENTATION_LETTERBOX_ASPECT_RATIO
+                        ? letterboxAspectRatioOverride : computeAspectRatio(parentBounds);
+        // Apply aspect ratio to resolved bounds
+        mIsAspectRatioApplied = applyAspectRatio(resolvedBounds, containingAppBounds,
+                containingBounds, desiredAspectRatio, true);
 
-        // Adjust the fixed orientation letterbox bounds to fit the app request aspect ratio in
-        // order to use the extra available space.
-        final float maxAspectRatio = info.getMaxAspectRatio();
-        final float minAspectRatio = info.getMinAspectRatio();
-        if (aspect > maxAspectRatio && maxAspectRatio != 0) {
-            aspect = maxAspectRatio;
-        } else if (aspect < minAspectRatio) {
-            aspect = minAspectRatio;
-        }
-
-        // Store the current bounds to be able to revert to size compat mode values below if needed.
-        Rect mTmpFullBounds = new Rect(resolvedBounds);
+        // Vertically center if orientation is landscape. Bounds will later be horizontally centered
+        // in {@link updateResolvedBoundsHorizontalPosition()} regardless of orientation.
         if (forcedOrientation == ORIENTATION_LANDSCAPE) {
-            final int height = (int) Math.rint(parentWidth / aspect);
-            final int top = parentBounds.centerY() - height / 2;
-            resolvedBounds.set(parentBounds.left, top, parentBounds.right, top + height);
-        } else {
-            final int width = (int) Math.rint(parentHeight / aspect);
-            final Rect parentAppBounds = newParentConfig.windowConfiguration.getAppBounds();
-            final int left = width <= parentAppBounds.width()
-                    // Avoid overlapping with the horizontal decor area when possible.
-                    ? parentAppBounds.left : parentBounds.centerX() - width / 2;
-            resolvedBounds.set(left, parentBounds.top, left + width, parentBounds.bottom);
+            final int offsetY = parentBounds.centerY() - resolvedBounds.centerY();
+            resolvedBounds.offset(0, offsetY);
         }
 
         if (mCompatDisplayInsets != null) {
@@ -7434,8 +7471,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // then they should be aligned later in #updateResolvedBoundsHorizontalPosition().
         if (!mTmpBounds.isEmpty()) {
             resolvedBounds.set(mTmpBounds);
-            // Exclude the horizontal decor area.
-            resolvedBounds.left = parentAppBounds.left;
         }
         if (!resolvedBounds.isEmpty() && !resolvedBounds.equals(parentBounds)) {
             // Compute the configuration based on the resolved bounds. If aspect ratio doesn't
@@ -7495,13 +7530,6 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         if (!mCompatDisplayInsets.mIsFloating) {
             mIsAspectRatioApplied =
                     applyAspectRatio(resolvedBounds, containingAppBounds, containingBounds);
-        }
-        // If the bounds are restricted by fixed aspect ratio, the resolved bounds should be put in
-        // the container app bounds. Otherwise the entire container bounds are available.
-        final boolean fillContainer = resolvedBounds.equals(containingBounds);
-        if (!fillContainer) {
-            // The horizontal position should not cover insets.
-            resolvedBounds.left = containingAppBounds.left;
         }
 
         // Use resolvedBounds to compute other override configurations such as appBounds. The bounds
@@ -7569,6 +7597,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Align to top of parent (bounds) - this is a UX choice and exclude the horizontal decor
         // if needed. Horizontal position is adjusted in updateResolvedBoundsHorizontalPosition.
         // Above coordinates are in "@" space, now place "*" and "#" to screen space.
+        final boolean fillContainer = resolvedBounds.equals(containingBounds);
         final int screenPosX = fillContainer ? containerBounds.left : containerAppBounds.left;
         final int screenPosY = containerBounds.top;
         if (screenPosX != 0 || screenPosY != 0) {
@@ -7805,6 +7834,12 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         return true;
     }
 
+    private boolean applyAspectRatio(Rect outBounds, Rect containingAppBounds,
+            Rect containingBounds) {
+        return applyAspectRatio(outBounds, containingAppBounds, containingBounds,
+                0 /* desiredAspectRatio */, false /* fixedOrientationLetterboxed */);
+    }
+
     /**
      * Applies aspect ratio restrictions to outBounds. If no restrictions, then no change is
      * made to outBounds.
@@ -7813,17 +7848,19 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
      */
     // TODO(b/36505427): Consider moving this method and similar ones to ConfigurationContainer.
     private boolean applyAspectRatio(Rect outBounds, Rect containingAppBounds,
-            Rect containingBounds) {
+            Rect containingBounds, float desiredAspectRatio, boolean fixedOrientationLetterboxed) {
         final float maxAspectRatio = info.getMaxAspectRatio();
         final Task rootTask = getRootTask();
         final float minAspectRatio = info.getMinAspectRatio();
 
         if (task == null || rootTask == null
-                || (inMultiWindowMode() && !shouldCreateCompatDisplayInsets())
-                || (maxAspectRatio == 0 && minAspectRatio == 0)
+                || (inMultiWindowMode() && !shouldCreateCompatDisplayInsets()
+                    && !fixedOrientationLetterboxed)
+                || (maxAspectRatio < 1 && minAspectRatio < 1 && desiredAspectRatio < 1)
                 || isInVrUiMode(getConfiguration())) {
-            // We don't enforce aspect ratio if the activity task is in multiwindow unless it
-            // is in size-compat mode. We also don't set it if we are in VR mode.
+            // We don't enforce aspect ratio if the activity task is in multiwindow unless it is in
+            // size-compat mode or is letterboxed from fixed orientation. We also don't set it if we
+            // are in VR mode.
             return false;
         }
 
@@ -7831,20 +7868,30 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         final int containingAppHeight = containingAppBounds.height();
         final float containingRatio = computeAspectRatio(containingAppBounds);
 
+        if (desiredAspectRatio < 1) {
+            desiredAspectRatio = containingRatio;
+        }
+
+        if (maxAspectRatio >= 1 && desiredAspectRatio > maxAspectRatio) {
+            desiredAspectRatio = maxAspectRatio;
+        } else if (minAspectRatio >= 1 && desiredAspectRatio < minAspectRatio) {
+            desiredAspectRatio = minAspectRatio;
+        }
+
         int activityWidth = containingAppWidth;
         int activityHeight = containingAppHeight;
 
-        if (containingRatio > maxAspectRatio && maxAspectRatio != 0) {
+        if (containingRatio > desiredAspectRatio) {
             if (containingAppWidth < containingAppHeight) {
                 // Width is the shorter side, so we use that to figure-out what the max. height
                 // should be given the aspect ratio.
-                activityHeight = (int) ((activityWidth * maxAspectRatio) + 0.5f);
+                activityHeight = (int) ((activityWidth * desiredAspectRatio) + 0.5f);
             } else {
                 // Height is the shorter side, so we use that to figure-out what the max. width
                 // should be given the aspect ratio.
-                activityWidth = (int) ((activityHeight * maxAspectRatio) + 0.5f);
+                activityWidth = (int) ((activityHeight * desiredAspectRatio) + 0.5f);
             }
-        } else if (containingRatio < minAspectRatio) {
+        } else if (containingRatio < desiredAspectRatio) {
             boolean adjustWidth;
             switch (getRequestedConfigurationOrientation()) {
                 case ORIENTATION_LANDSCAPE:
@@ -7872,9 +7919,9 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     break;
             }
             if (adjustWidth) {
-                activityWidth = (int) ((activityHeight / minAspectRatio) + 0.5f);
+                activityWidth = (int) ((activityHeight / desiredAspectRatio) + 0.5f);
             } else {
-                activityHeight = (int) ((activityWidth / minAspectRatio) + 0.5f);
+                activityHeight = (int) ((activityWidth / desiredAspectRatio) + 0.5f);
             }
         }
 
@@ -7897,6 +7944,13 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
             bottom += containingBounds.bottom - containingAppBounds.bottom;
         }
         outBounds.set(containingBounds.left, containingBounds.top, right, bottom);
+
+        // If the bounds are restricted by fixed aspect ratio, then out bounds should be put in the
+        // container app bounds. Otherwise the entire container bounds are available.
+        if (!outBounds.equals(containingBounds)) {
+            // The horizontal position should not cover insets.
+            outBounds.left = containingAppBounds.left;
+        }
 
         return true;
     }
@@ -8205,8 +8259,7 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
                     preserveWindow);
             final ActivityLifecycleItem lifecycleItem;
             if (andResume) {
-                lifecycleItem = ResumeActivityItem.obtain(
-                        mDisplayContent.isNextTransitionForward());
+                lifecycleItem = ResumeActivityItem.obtain(isTransitionForward());
             } else {
                 lifecycleItem = PauseActivityItem.obtain();
             }
