@@ -8759,6 +8759,7 @@ public final class Settings {
          */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
         @TestApi
+        @Readable
         public static final String NFC_PAYMENT_DEFAULT_COMPONENT = "nfc_payment_default_component";
 
         /**
@@ -11016,7 +11017,7 @@ public final class Settings {
          */
         @Readable
         public static final String SHOW_MEDIA_ON_QUICK_SETTINGS =
-                "qs_media_player";
+                "qs_media_controls";
 
         /**
          * The interval in milliseconds at which location requests will be throttled when they are

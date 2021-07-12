@@ -16,7 +16,11 @@
 
 package com.android.internal.view;
 
-import android.animation.ValueAnimator;
+import static com.android.internal.view.ScrollCaptureViewSupport.computeScrollAmount;
+import static com.android.internal.view.ScrollCaptureViewSupport.findScrollingReferenceView;
+import static com.android.internal.view.ScrollCaptureViewSupport.transformFromContainerToRequest;
+import static com.android.internal.view.ScrollCaptureViewSupport.transformFromRequestToContainer;
+
 import android.annotation.NonNull;
 import android.graphics.Rect;
 import android.util.Log;
@@ -38,17 +42,10 @@ import android.view.ViewParent;
  * @see ScrollCaptureViewSupport
  */
 public class RecyclerViewCaptureHelper implements ScrollCaptureViewHelper<ViewGroup> {
-
-    // Experiment
-    private static final boolean DISABLE_ANIMATORS = false;
-    // Experiment
-    private static final boolean STOP_RENDER_THREAD = false;
-
     private static final String TAG = "RVCaptureHelper";
     private int mScrollDelta;
     private boolean mScrollBarWasEnabled;
     private int mOverScrollMode;
-    private float mDurationScale;
 
     @Override
     public void onPrepareForStart(@NonNull ViewGroup view, Rect scrollBounds) {
@@ -59,13 +56,6 @@ public class RecyclerViewCaptureHelper implements ScrollCaptureViewHelper<ViewGr
 
         mScrollBarWasEnabled = view.isVerticalScrollBarEnabled();
         view.setVerticalScrollBarEnabled(false);
-        if (DISABLE_ANIMATORS) {
-            mDurationScale = ValueAnimator.getDurationScale();
-            ValueAnimator.setDurationScale(0);
-        }
-        if (STOP_RENDER_THREAD) {
-            view.getThreadedRenderer().stop();
-        }
     }
 
     @Override
@@ -193,18 +183,11 @@ public class RecyclerViewCaptureHelper implements ScrollCaptureViewHelper<ViewGr
         return selected;
     }
 
-
     @Override
     public void onPrepareForEnd(@NonNull ViewGroup view) {
         // Restore original position and state
         view.scrollBy(0, -mScrollDelta);
         view.setOverScrollMode(mOverScrollMode);
         view.setVerticalScrollBarEnabled(mScrollBarWasEnabled);
-        if (DISABLE_ANIMATORS) {
-            ValueAnimator.setDurationScale(mDurationScale);
-        }
-        if (STOP_RENDER_THREAD) {
-            view.getThreadedRenderer().start();
-        }
     }
 }
