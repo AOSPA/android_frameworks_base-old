@@ -39,7 +39,6 @@ import android.app.appsearch.SetSchemaResponse;
 import android.app.appsearch.StorageInfo;
 import android.app.appsearch.exceptions.AppSearchException;
 import android.app.appsearch.util.LogUtil;
-import android.content.Context;
 import android.os.Bundle;
 import android.os.SystemClock;
 import android.util.ArrayMap;
@@ -59,7 +58,7 @@ import com.android.server.appsearch.external.localstorage.stats.InitializeStats;
 import com.android.server.appsearch.external.localstorage.stats.PutDocumentStats;
 import com.android.server.appsearch.external.localstorage.stats.RemoveStats;
 import com.android.server.appsearch.external.localstorage.stats.SearchStats;
-import com.android.server.appsearch.visibilitystore.VisibilityStore;
+import com.android.server.appsearch.external.localstorage.visibilitystore.VisibilityStore;
 
 import com.google.android.icing.IcingSearchEngine;
 import com.google.android.icing.proto.DeleteByQueryResultProto;
@@ -157,9 +156,6 @@ public final class AppSearchImpl implements Closeable {
     @VisibleForTesting
     final IcingSearchEngine mIcingSearchEngineLocked;
 
-    @GuardedBy("mReadWriteLock")
-    private final VisibilityStore mVisibilityStoreLocked;
-
     // This map contains schema types and SchemaTypeConfigProtos for all package-database
     // prefixes. It maps each package-database prefix to an inner-map. The inner-map maps each
     // prefixed schema type to its respective SchemaTypeConfigProto.
@@ -195,56 +191,27 @@ public final class AppSearchImpl implements Closeable {
      * <p>Instead, logger instance needs to be passed to each individual method, like create, query
      * and putDocument.
      *
-     * @param logger collects stats for initialization if provided.
+     * @param initStatsBuilder collects stats for initialization if provided.
      */
     @NonNull
     public static AppSearchImpl create(
             @NonNull File icingDir,
-            @NonNull Context userContext,
-            @Nullable AppSearchLogger logger,
+            @Nullable InitializeStats.Builder initStatsBuilder,
             @NonNull OptimizeStrategy optimizeStrategy)
             throws AppSearchException {
-        Objects.requireNonNull(icingDir);
-        Objects.requireNonNull(userContext);
-        Objects.requireNonNull(optimizeStrategy);
-
-        long totalLatencyStartMillis = SystemClock.elapsedRealtime();
-        InitializeStats.Builder initStatsBuilder = null;
-        if (logger != null) {
-            initStatsBuilder = new InitializeStats.Builder();
-        }
-
-        AppSearchImpl appSearchImpl =
-                new AppSearchImpl(
-                        icingDir, userContext, initStatsBuilder, optimizeStrategy);
-
-        long prepareVisibilityStoreLatencyStartMillis = SystemClock.elapsedRealtime();
-        appSearchImpl.initializeVisibilityStore();
-        long prepareVisibilityStoreLatencyEndMillis = SystemClock.elapsedRealtime();
-
-        if (logger != null) {
-            initStatsBuilder
-                    .setTotalLatencyMillis(
-                            (int) (SystemClock.elapsedRealtime() - totalLatencyStartMillis))
-                    .setPrepareVisibilityStoreLatencyMillis(
-                            (int)
-                                    (prepareVisibilityStoreLatencyEndMillis
-                                            - prepareVisibilityStoreLatencyStartMillis));
-            logger.logStats(initStatsBuilder.build());
-        }
-
-        return appSearchImpl;
+        return new AppSearchImpl(icingDir, initStatsBuilder, optimizeStrategy);
     }
 
     /** @param initStatsBuilder collects stats for initialization if provided. */
     private AppSearchImpl(
             @NonNull File icingDir,
-            @NonNull Context userContext,
             @Nullable InitializeStats.Builder initStatsBuilder,
             @NonNull OptimizeStrategy optimizeStrategy)
             throws AppSearchException {
-        mReadWriteLock.writeLock().lock();
+        Objects.requireNonNull(icingDir);
+        mOptimizeStrategy = Objects.requireNonNull(optimizeStrategy);
 
+        mReadWriteLock.writeLock().lock();
         try {
             // We synchronize here because we don't want to call IcingSearchEngine.initialize() more
             // than once. It's unnecessary and can be a costly operation.
@@ -257,9 +224,6 @@ public final class AppSearchImpl implements Closeable {
             mLogUtil.piiTrace(
                     "Constructing IcingSearchEngine, response",
                     Objects.hashCode(mIcingSearchEngineLocked));
-
-            mVisibilityStoreLocked = new VisibilityStore(this, userContext);
-            mOptimizeStrategy = optimizeStrategy;
 
             // The core initialization procedure. If any part of this fails, we bail into
             // resetLocked(), deleting all data (but hopefully allowing AppSearchImpl to come up).
@@ -342,23 +306,6 @@ public final class AppSearchImpl implements Closeable {
         }
     }
 
-    /**
-     * Initialize the visibility store in AppSearchImpl.
-     *
-     * @throws AppSearchException on IcingSearchEngine error.
-     */
-    void initializeVisibilityStore() throws AppSearchException {
-        mReadWriteLock.writeLock().lock();
-        try {
-            throwIfClosedLocked();
-            mLogUtil.piiTrace("Initializing VisibilityStore, request");
-            mVisibilityStoreLocked.initialize();
-            mLogUtil.piiTrace("Initializing VisibilityStore, response");
-        } finally {
-            mReadWriteLock.writeLock().unlock();
-        }
-    }
-
     @GuardedBy("mReadWriteLock")
     private void throwIfClosedLocked() {
         if (mClosedLocked) {
@@ -399,9 +346,11 @@ public final class AppSearchImpl implements Closeable {
      * @param packageName The package name that owns the schemas.
      * @param databaseName The name of the database where this schema lives.
      * @param schemas Schemas to set for this app.
-     * @param schemasNotPlatformSurfaceable Schema types that should not be surfaced on platform
+     * @param visibilityStore If set, {@code schemasNotDisplayedBySystem} and {@code
+     *     schemasVisibleToPackages} will be saved here if the schema is successfully applied.
+     * @param schemasNotDisplayedBySystem Schema types that should not be surfaced on platform
      *     surfaces.
-     * @param schemasPackageAccessible Schema types that are visible to the specified packages.
+     * @param schemasVisibleToPackages Schema types that are visible to the specified packages.
      * @param forceOverride Whether to force-apply the schema even if it is incompatible. Documents
      *     which do not comply with the new schema will be deleted.
      * @param version The overall version number of the request.
@@ -416,8 +365,9 @@ public final class AppSearchImpl implements Closeable {
             @NonNull String packageName,
             @NonNull String databaseName,
             @NonNull List<AppSearchSchema> schemas,
-            @NonNull List<String> schemasNotPlatformSurfaceable,
-            @NonNull Map<String, List<PackageIdentifier>> schemasPackageAccessible,
+            @Nullable VisibilityStore visibilityStore,
+            @NonNull List<String> schemasNotDisplayedBySystem,
+            @NonNull Map<String, List<PackageIdentifier>> schemasVisibleToPackages,
             boolean forceOverride,
             int version)
             throws AppSearchException {
@@ -479,25 +429,27 @@ public final class AppSearchImpl implements Closeable {
                 removeFromMap(mSchemaMapLocked, prefix, schemaType);
             }
 
-            Set<String> prefixedSchemasNotPlatformSurfaceable =
-                    new ArraySet<>(schemasNotPlatformSurfaceable.size());
-            for (int i = 0; i < schemasNotPlatformSurfaceable.size(); i++) {
-                prefixedSchemasNotPlatformSurfaceable.add(
-                        prefix + schemasNotPlatformSurfaceable.get(i));
-            }
+            if (visibilityStore != null) {
+                Set<String> prefixedSchemasNotDisplayedBySystem =
+                        new ArraySet<>(schemasNotDisplayedBySystem.size());
+                for (int i = 0; i < schemasNotDisplayedBySystem.size(); i++) {
+                    prefixedSchemasNotDisplayedBySystem.add(
+                            prefix + schemasNotDisplayedBySystem.get(i));
+                }
 
-            Map<String, List<PackageIdentifier>> prefixedSchemasPackageAccessible =
-                    new ArrayMap<>(schemasPackageAccessible.size());
-            for (Map.Entry<String, List<PackageIdentifier>> entry :
-                    schemasPackageAccessible.entrySet()) {
-                prefixedSchemasPackageAccessible.put(prefix + entry.getKey(), entry.getValue());
-            }
+                Map<String, List<PackageIdentifier>> prefixedSchemasVisibleToPackages =
+                        new ArrayMap<>(schemasVisibleToPackages.size());
+                for (Map.Entry<String, List<PackageIdentifier>> entry :
+                        schemasVisibleToPackages.entrySet()) {
+                    prefixedSchemasVisibleToPackages.put(prefix + entry.getKey(), entry.getValue());
+                }
 
-            mVisibilityStoreLocked.setVisibility(
-                    packageName,
-                    databaseName,
-                    prefixedSchemasNotPlatformSurfaceable,
-                    prefixedSchemasPackageAccessible);
+                visibilityStore.setVisibility(
+                        packageName,
+                        databaseName,
+                        prefixedSchemasNotDisplayedBySystem,
+                        prefixedSchemasVisibleToPackages);
+            }
 
             return SetSchemaResponseToProtoConverter.toSetSchemaResponse(
                     setSchemaResultProto, prefix);
@@ -785,6 +737,9 @@ public final class AppSearchImpl implements Closeable {
             if (!filterPackageNames.isEmpty() && !filterPackageNames.contains(packageName)) {
                 // Client wanted to query over some packages that weren't its own. This isn't
                 // allowed through local query so we can return early with no results.
+                if (logger != null) {
+                    sStatsBuilder.setStatusCode(AppSearchResult.RESULT_SECURITY_ERROR);
+                }
                 return new SearchResultPage(Bundle.EMPTY);
             }
 
@@ -816,8 +771,12 @@ public final class AppSearchImpl implements Closeable {
      * @param queryExpression Query String to search.
      * @param searchSpec Spec for setting filters, raw query etc.
      * @param callerPackageName Package name of the caller, should belong to the {@code
-     *     userContext}.
+     *     callerUserHandle}.
+     * @param visibilityStore Optional visibility store to obtain system and package visibility
+     *     settings from
      * @param callerUid UID of the client making the globalQuery call.
+     * @param callerHasSystemAccess Whether the caller has been positively identified as having
+     *     access to schemas marked system surfaceable.
      * @param logger logger to collect globalQuery stats
      * @return The results of performing this search. It may contain an empty list of results if no
      *     documents matched the query.
@@ -828,7 +787,9 @@ public final class AppSearchImpl implements Closeable {
             @NonNull String queryExpression,
             @NonNull SearchSpec searchSpec,
             @NonNull String callerPackageName,
+            @Nullable VisibilityStore visibilityStore,
             int callerUid,
+            boolean callerHasSystemAccess,
             @Nullable AppSearchLogger logger)
             throws AppSearchException {
         long totalLatencyStartMillis = SystemClock.elapsedRealtime();
@@ -885,15 +846,18 @@ public final class AppSearchImpl implements Closeable {
                 if (packageName.equals(callerPackageName)) {
                     // Callers can always retrieve their own data
                     allow = true;
+                } else if (visibilityStore == null) {
+                    // If there's no visibility store, there's no extra access
+                    allow = false;
                 } else {
                     String databaseName = getDatabaseName(prefixedSchema);
                     allow =
-                            mVisibilityStoreLocked.isSchemaSearchableByCaller(
+                            visibilityStore.isSchemaSearchableByCaller(
                                     packageName,
                                     databaseName,
                                     prefixedSchema,
-                                    callerPackageName,
-                                    callerUid);
+                                    callerUid,
+                                    callerHasSystemAccess);
                 }
 
                 if (!allow) {
@@ -1488,9 +1452,6 @@ public final class AppSearchImpl implements Closeable {
     /**
      * Clears documents and schema across all packages and databaseNames.
      *
-     * <p>This method also clear all data in {@link VisibilityStore}, an {@link
-     * #initializeVisibilityStore()} must be called after this.
-     *
      * <p>This method belongs to mutate group.
      *
      * @throws AppSearchException on IcingSearchEngine error.
@@ -1507,16 +1468,12 @@ public final class AppSearchImpl implements Closeable {
         mOptimizeIntervalCountLocked = 0;
         mSchemaMapLocked.clear();
         mNamespaceMapLocked.clear();
-
         if (initStatsBuilder != null) {
             initStatsBuilder
                     .setHasReset(true)
                     .setResetStatusCode(statusProtoToResultCode(resetResultProto.getStatus()));
         }
 
-        // Must be called after everything else since VisibilityStore may repopulate
-        // IcingSearchEngine with an initial schema.
-        mVisibilityStoreLocked.handleReset();
         checkSuccess(resetResultProto.getStatus());
     }
 
@@ -2073,13 +2030,6 @@ public final class AppSearchImpl implements Closeable {
         GetOptimizeInfoResultProto result = mIcingSearchEngineLocked.getOptimizeInfo();
         mLogUtil.piiTrace("getOptimizeInfo, response", result.getStatus(), result);
         return result;
-    }
-
-    @GuardedBy("mReadWriteLock")
-    @NonNull
-    @VisibleForTesting
-    VisibilityStore getVisibilityStoreLocked() {
-        return mVisibilityStoreLocked;
     }
 
     /**

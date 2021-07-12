@@ -263,7 +263,13 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
     @Override
     void onDestroy() {
         mHandler.removeMessages(MSG_FLUSH);
-        mHandler.post(() -> destroySession());
+        mHandler.post(() -> {
+            try {
+                flush(FLUSH_REASON_SESSION_FINISHED);
+            } finally {
+                destroySession();
+            }
+        });
     }
 
     /**
@@ -362,7 +368,10 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
                     final CharSequence lastText = lastEvent.getText();
                     final boolean bothNonEmpty = !TextUtils.isEmpty(lastText)
                             && !TextUtils.isEmpty(text);
-                    boolean equalContent = TextUtils.equals(lastText, text);
+                    boolean equalContent =
+                            TextUtils.equals(lastText, text)
+                            && lastEvent.hasSameComposingSpan(event)
+                            && lastEvent.hasSameSelectionSpan(event);
                     if (equalContent) {
                         addEvent = false;
                     } else if (bothNonEmpty) {
@@ -571,9 +580,11 @@ public final class MainContentCaptureSession extends ContentCaptureSession {
     private ParceledListSlice<ContentCaptureEvent> clearEvents() {
         // NOTE: we must save a reference to the current mEvents and then set it to to null,
         // otherwise clearing it would clear it in the receiving side if the service is also local.
-        final List<ContentCaptureEvent> events = mEvents == null
-                ? Collections.EMPTY_LIST
-                : new ArrayList<>(mEvents);
+        if (mEvents == null) {
+            return new ParceledListSlice<>(Collections.EMPTY_LIST);
+        }
+
+        final List<ContentCaptureEvent> events = new ArrayList<>(mEvents);
         mEvents.clear();
         return new ParceledListSlice<>(events);
     }

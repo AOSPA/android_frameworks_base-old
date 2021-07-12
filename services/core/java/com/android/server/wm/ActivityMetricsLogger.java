@@ -212,8 +212,8 @@ class ActivityMetricsLogger {
          * observer to identify which callbacks belong to a launch event.
          */
         final long mTransitionStartTimeNs;
-        /** The device uptime in seconds when this transition info is created. */
-        final int mCurrentTransitionDeviceUptime;
+        /** The device uptime in millis when this transition info is created. */
+        final long mTransitionDeviceUptimeMs;
         /** The type can be cold (new process), warm (new activity), or hot (bring to front). */
         final int mTransitionType;
         /** Whether the process was already running when the transition started. */
@@ -283,8 +283,7 @@ class ActivityMetricsLogger {
             mTransitionType = transitionType;
             mProcessRunning = processRunning;
             mProcessSwitch = processSwitch;
-            mCurrentTransitionDeviceUptime =
-                    (int) TimeUnit.MILLISECONDS.toSeconds(launchingState.mCurrentUpTimeMs);
+            mTransitionDeviceUptimeMs = launchingState.mCurrentUpTimeMs;
             setLatestLaunchedActivity(r);
             launchingState.mAssociatedTransitionInfo = this;
             if (options != null) {
@@ -916,7 +915,7 @@ class ActivityMetricsLogger {
         final TransitionInfoSnapshot infoSnapshot = new TransitionInfoSnapshot(info);
         if (info.isInterestingToLoggerAndObserver()) {
             mLoggerHandler.post(() -> logAppTransition(
-                    info.mCurrentTransitionDeviceUptime, info.mCurrentTransitionDelayMs,
+                    info.mTransitionDeviceUptimeMs, info.mCurrentTransitionDelayMs,
                     infoSnapshot, isHibernating));
         }
         mLoggerHandler.post(() -> logAppDisplayed(infoSnapshot));
@@ -928,7 +927,7 @@ class ActivityMetricsLogger {
     }
 
     // This gets called on another thread without holding the activity manager lock.
-    private void logAppTransition(int currentTransitionDeviceUptime, int currentTransitionDelayMs,
+    private void logAppTransition(long transitionDeviceUptimeMs, int currentTransitionDelayMs,
             TransitionInfoSnapshot info, boolean isHibernating) {
         final LogMaker builder = new LogMaker(APP_TRANSITION);
         builder.setPackageName(info.packageName);
@@ -945,7 +944,7 @@ class ActivityMetricsLogger {
         }
         builder.addTaggedData(APP_TRANSITION_IS_EPHEMERAL, isInstantApp ? 1 : 0);
         builder.addTaggedData(APP_TRANSITION_DEVICE_UPTIME_SECONDS,
-                currentTransitionDeviceUptime);
+                TimeUnit.MILLISECONDS.toSeconds(transitionDeviceUptimeMs));
         builder.addTaggedData(APP_TRANSITION_DELAY_MS, currentTransitionDelayMs);
         builder.setSubtype(info.reason);
         if (info.startingWindowDelayMs != INVALID_DELAY) {
@@ -980,7 +979,7 @@ class ActivityMetricsLogger {
                 info.launchedActivityName,
                 info.launchedActivityLaunchedFromPackage,
                 isInstantApp,
-                currentTransitionDeviceUptime * 1000,
+                transitionDeviceUptimeMs,
                 info.reason,
                 currentTransitionDelayMs,
                 info.startingWindowDelayMs,

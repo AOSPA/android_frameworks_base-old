@@ -1706,6 +1706,10 @@
          config_enableFusedLocationOverlay is false. -->
     <string name="config_fusedLocationProviderPackageName" translatable="false">com.android.location.fused</string>
 
+    <!-- Default value for the ADAS GNSS Location Enabled setting if this setting has never been
+         set before. -->
+    <bool name="config_defaultAdasGnssLocationEnabled" translatable="false">false</bool>
+
     <string-array name="config_locationExtraPackageNames" translatable="false"></string-array>
 
     <!-- The package name of the default network recommendation app.
@@ -3356,6 +3360,10 @@
     <!-- The default vibration strength, must be between 1 and 255 inclusive. -->
     <integer name="config_defaultVibrationAmplitude">255</integer>
 
+    <!-- The max vibration strength allowed in audio haptic channels, must be positive or zero if
+         limit is unknown. -->
+    <item name="config_hapticChannelMaxVibrationAmplitude" format="float" type="dimen">0</item>
+
     <!-- If the device should still vibrate even in low power mode, for certain priority vibrations
      (e.g. accessibility, alarms). This is mainly for Wear devices that don't have speakers. -->
     <bool name="config_allowPriorityVibrationsInLowPowerMode">false</bool>
@@ -3534,6 +3542,12 @@
 
     <!-- If true, all guest users created on the device will be ephemeral. -->
     <bool name="config_guestUserEphemeral">false</bool>
+
+    <!-- Whether device should always have a guest user available. If true, guest user will be
+         created on boot, and a new guest user will be created in the background anytime the current
+         guest user is removed. Instead of showing "Add guest" and "Remove guest", the UI will show
+         "Guest" and "Reset guest". -->
+    <bool name="config_guestUserAutoCreated">false</bool>
 
     <!-- Enforce strong auth on boot. Setting this to false represents a security risk and should
          not be ordinarily done. The only case in which this might be permissible is in a car head
@@ -4540,6 +4554,9 @@
       -->
     </integer-array>
 
+    <!-- How long it takes for the HW to start illuminating after the illumination is requested. -->
+    <integer name="config_udfps_illumination_transition_ms">50</integer>
+
     <!-- Indicates whether device has a power button fingerprint sensor. -->
     <bool name="config_is_powerbutton_fps" translatable="false" >false</bool>
 
@@ -5012,6 +5029,10 @@
     <bool name="config_assistLongPressHomeEnabledDefault">true</bool>
     <!-- Default value for Settings.ASSIST_TOUCH_GESTURE_ENABLED -->
     <bool name="config_assistTouchGestureEnabledDefault">true</bool>
+
+    <!-- The maximum byte size of the information contained in the bundle of
+    HotwordDetectedResult. -->
+    <integer translatable="false" name="config_hotwordDetectedResultMaxBundleSize">0</integer>
 
     <!-- The amount of dimming to apply to wallpapers with mid range luminance. 0 displays
          the wallpaper at full brightness. 1 displays the wallpaper as fully black. -->

@@ -120,6 +120,7 @@ import com.android.systemui.statusbar.phone.NotificationPanelViewController;
 import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
+import com.android.systemui.statusbar.policy.UserSwitcherController;
 import com.android.systemui.util.DeviceConfigProxy;
 
 import java.io.FileDescriptor;
@@ -257,6 +258,9 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
 
     /** TrustManager for letting it know when we change visibility */
     private final TrustManager mTrustManager;
+
+    /** UserSwitcherController for creating guest user on boot complete */
+    private final UserSwitcherController mUserSwitcherController;
 
     /**
      * Used to keep the device awake while to ensure the keyguard finishes opening before
@@ -831,6 +835,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
             KeyguardUpdateMonitor keyguardUpdateMonitor, DumpManager dumpManager,
             @UiBackground Executor uiBgExecutor, PowerManager powerManager,
             TrustManager trustManager,
+            UserSwitcherController userSwitcherController,
             DeviceConfigProxy deviceConfig,
             NavigationModeController navigationModeController,
             KeyguardDisplayManager keyguardDisplayManager,
@@ -851,6 +856,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         mUpdateMonitor = keyguardUpdateMonitor;
         mPM = powerManager;
         mTrustManager = trustManager;
+        mUserSwitcherController = userSwitcherController;
         mKeyguardDisplayManager = keyguardDisplayManager;
         dumpManager.registerDumpable(getClass().getName(), this);
         mDeviceConfig = deviceConfig;
@@ -2588,6 +2594,11 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
     @Override
     public void onBootCompleted() {
         synchronized (this) {
+            if (mContext.getResources().getBoolean(
+                    com.android.internal.R.bool.config_guestUserAutoCreated)) {
+                // TODO(b/191067027): Move post-boot guest creation to system_server
+                mUserSwitcherController.guaranteeGuestPresent();
+            }
             mBootCompleted = true;
             adjustStatusBarLocked(false, true);
             if (mBootSendUserPresent) {
