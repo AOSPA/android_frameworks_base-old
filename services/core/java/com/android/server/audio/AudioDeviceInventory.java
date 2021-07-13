@@ -1047,7 +1047,13 @@ public class AudioDeviceInventory {
             AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
                     "APM failed to make available A2DP device addr=" + address
                             + " error=" + res).printLog(TAG));
-            return;
+            // If error is audioserver died,add device to the list,so that during restart AS will
+            // restore by triggering onRestoreDevices to add A2DP device to APM by calling
+            // setDeviceConnection
+            if (res != AudioSystem.AUDIO_STATUS_SERVER_DIED) {
+                return;
+            }
+
         } else {
             AudioService.sDeviceLogger.log(new AudioEventLogger.StringEvent(
                     "A2DP device addr=" + address + " now available").printLog(TAG));
