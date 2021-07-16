@@ -32,7 +32,6 @@ import android.net.wifi.WifiNetworkScoreCache;
 import android.os.Handler;
 import android.os.Looper;
 import android.provider.Settings;
-import android.util.FeatureFlagUtils;
 
 import com.android.settingslib.R;
 import com.android.settingslib.Utils;
@@ -158,7 +157,7 @@ public class WifiStatusTracker {
     private Network mDefaultNetwork = null;
     private NetworkCapabilities mDefaultNetworkCapabilities = null;
     private final Runnable mCallback;
-    private final boolean mProviderModel;
+    private final boolean mSupportMergedUi;
 
     private WifiInfo mWifiInfo;
     public boolean enabled;
@@ -185,8 +184,7 @@ public class WifiStatusTracker {
         mNetworkScoreManager = networkScoreManager;
         mConnectivityManager = connectivityManager;
         mCallback = callback;
-        mProviderModel = FeatureFlagUtils.isEnabled(
-                mContext, FeatureFlagUtils.SETTINGS_PROVIDER_MODEL);
+        mSupportMergedUi = false;
     }
 
     public void setListening(boolean listening) {
@@ -228,7 +226,7 @@ public class WifiStatusTracker {
                 } else {
                     ssid = getValidSsid(mWifiInfo);
                 }
-                if (mProviderModel) {
+                if (mSupportMergedUi) {
                     isCarrierMerged = mWifiInfo.isCarrierMerged();
                     subId = mWifiInfo.getSubscriptionId();
                 }
@@ -265,7 +263,7 @@ public class WifiStatusTracker {
             wifiStandard = mWifiInfo.getWifiStandard();
             vhtMax8SpatialStreamsSupport = mWifiInfo.isVhtMax8SpatialStreamsSupported();
             he8ssCapableAp = mWifiInfo.isHe8ssCapableAp();
-            if (mProviderModel) {
+            if (mSupportMergedUi) {
                 isCarrierMerged = mWifiInfo.isCarrierMerged();
                 subId = mWifiInfo.getSubscriptionId();
             }

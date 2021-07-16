@@ -400,9 +400,6 @@ public final class DisplayManagerService extends SystemService {
     // Receives notifications about changes to Settings.
     private SettingsObserver mSettingsObserver;
 
-    // Received notifications of the device-state action (such as "fold", "unfold")
-    private DeviceStateManager mDeviceStateManager;
-
     private final boolean mAllowNonNativeRefreshRateOverride;
 
     private final BrightnessSynchronizer mBrightnessSynchronizer;
@@ -1245,13 +1242,6 @@ public final class DisplayManagerService extends SystemService {
         adapter.registerLocked();
     }
 
-    @VisibleForTesting
-    void handleLogicalDisplayAdded(LogicalDisplay display) {
-        synchronized (mSyncRoot) {
-            handleLogicalDisplayAddedLocked(display);
-        }
-    }
-
     private void handleLogicalDisplayAddedLocked(LogicalDisplay display) {
         final DisplayDevice device = display.getPrimaryDisplayDeviceLocked();
         final int displayId = display.getDisplayIdLocked();
@@ -1515,8 +1505,9 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void setDisplayPropertiesInternal(int displayId, boolean hasContent,
-            float requestedRefreshRate, int requestedModeId, float requestedMaxRefreshRate,
-            boolean preferMinimalPostProcessing, boolean inTraversal) {
+            float requestedRefreshRate, int requestedModeId, float requestedMinRefreshRate,
+            float requestedMaxRefreshRate, boolean preferMinimalPostProcessing,
+            boolean inTraversal) {
         synchronized (mSyncRoot) {
             final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
             if (display == null) {
@@ -1537,11 +1528,17 @@ public final class DisplayManagerService extends SystemService {
             if (requestedModeId == 0 && requestedRefreshRate != 0) {
                 // Scan supported modes returned by display.getInfo() to find a mode with the same
                 // size as the default display mode but with the specified refresh rate instead.
-                requestedModeId = display.getDisplayInfoLocked().findDefaultModeByRefreshRate(
-                        requestedRefreshRate).getModeId();
+                Display.Mode mode = display.getDisplayInfoLocked().findDefaultModeByRefreshRate(
+                        requestedRefreshRate);
+                if (mode != null) {
+                    requestedModeId = mode.getModeId();
+                } else {
+                    Slog.e(TAG, "Couldn't find a mode for the requestedRefreshRate: "
+                            + requestedRefreshRate + " on Display: " + displayId);
+                }
             }
             mDisplayModeDirector.getAppRequestObserver().setAppRequest(
-                    displayId, requestedModeId, requestedMaxRefreshRate);
+                    displayId, requestedModeId, requestedMinRefreshRate, requestedMaxRefreshRate);
 
             if (display.getDisplayInfoLocked().minimalPostProcessingSupported) {
                 boolean mppRequest = mMinimalPostProcessingAllowed && preferMinimalPostProcessing;
@@ -2120,7 +2117,7 @@ public final class DisplayManagerService extends SystemService {
         }
 
         final BrightnessSetting brightnessSetting = new BrightnessSetting(mPersistentDataStore,
-                display, mContext);
+                display, mSyncRoot);
         final DisplayPowerController displayPowerController = new DisplayPowerController(
                 mContext, mDisplayPowerCallbacks, mPowerHandler, mSensorManager,
                 mDisplayBlanker, display, mBrightnessTracker, brightnessSetting,
@@ -3222,11 +3219,12 @@ public final class DisplayManagerService extends SystemService {
 
         @Override
         public void setDisplayProperties(int displayId, boolean hasContent,
-                float requestedRefreshRate, int requestedMode, float requestedMaxRefreshRate,
-                boolean requestedMinimalPostProcessing, boolean inTraversal) {
+                float requestedRefreshRate, int requestedMode, float requestedMinRefreshRate,
+                float requestedMaxRefreshRate, boolean requestedMinimalPostProcessing,
+                boolean inTraversal) {
             setDisplayPropertiesInternal(displayId, hasContent, requestedRefreshRate,
-                    requestedMode, requestedMaxRefreshRate, requestedMinimalPostProcessing,
-                    inTraversal);
+                    requestedMode, requestedMinRefreshRate, requestedMaxRefreshRate,
+                    requestedMinimalPostProcessing, inTraversal);
         }
 
         @Override
