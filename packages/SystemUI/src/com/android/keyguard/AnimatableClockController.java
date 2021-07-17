@@ -94,7 +94,9 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
         @Override
         public void onBatteryLevelChanged(int level, boolean pluggedIn, boolean charging) {
             if (mKeyguardShowing && !mIsCharging && charging) {
-                mView.animateCharge(mIsDozing);
+                mView.animateCharge(() -> {
+                    return mStatusBarStateController.isDozing();
+                });
             }
             mIsCharging = charging;
         }
@@ -210,6 +212,7 @@ public class AnimatableClockController extends ViewController<AnimatableClockVie
             } else {
                 mView.setLineSpacingScale(mDefaultLineSpacing);
             }
+            mView.refreshFormat();
         }
     }
 

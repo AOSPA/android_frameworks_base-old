@@ -37,6 +37,7 @@ import androidx.annotation.Nullable;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.keyguard.dagger.KeyguardBouncerScope;
+import com.android.systemui.statusbar.phone.ShadeController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener;
 import com.android.systemui.util.EmergencyDialerConstants;
@@ -54,6 +55,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
     private final TelephonyManager mTelephonyManager;
     private final PowerManager mPowerManager;
     private final ActivityTaskManager mActivityTaskManager;
+    private ShadeController mShadeController;
     private final TelecomManager mTelecomManager;
     private final MetricsLogger mMetricsLogger;
 
@@ -94,6 +96,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
             ConfigurationController configurationController,
             KeyguardUpdateMonitor keyguardUpdateMonitor, TelephonyManager telephonyManager,
             PowerManager powerManager, ActivityTaskManager activityTaskManager,
+            ShadeController shadeController,
             @Nullable TelecomManager telecomManager, MetricsLogger metricsLogger) {
         super(view);
         mConfigurationController = configurationController;
@@ -101,6 +104,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         mTelephonyManager = telephonyManager;
         mPowerManager = powerManager;
         mActivityTaskManager = activityTaskManager;
+        mShadeController = shadeController;
         mTelecomManager = telecomManager;
         mMetricsLogger = metricsLogger;
     }
@@ -145,6 +149,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
             mPowerManager.userActivity(SystemClock.uptimeMillis(), true);
         }
         mActivityTaskManager.stopSystemLockTaskMode();
+        mShadeController.collapsePanel(false);
         if (mTelecomManager != null && mTelecomManager.isInCall()) {
             mTelecomManager.showInCallScreen(false);
             if (mEmergencyButtonCallback != null) {
@@ -214,6 +219,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         private final TelephonyManager mTelephonyManager;
         private final PowerManager mPowerManager;
         private final ActivityTaskManager mActivityTaskManager;
+        private ShadeController mShadeController;
         @Nullable
         private final TelecomManager mTelecomManager;
         private final MetricsLogger mMetricsLogger;
@@ -222,6 +228,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         public Factory(ConfigurationController configurationController,
                 KeyguardUpdateMonitor keyguardUpdateMonitor, TelephonyManager telephonyManager,
                 PowerManager powerManager, ActivityTaskManager activityTaskManager,
+                ShadeController shadeController,
                 @Nullable TelecomManager telecomManager, MetricsLogger metricsLogger) {
 
             mConfigurationController = configurationController;
@@ -229,6 +236,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
             mTelephonyManager = telephonyManager;
             mPowerManager = powerManager;
             mActivityTaskManager = activityTaskManager;
+            mShadeController = shadeController;
             mTelecomManager = telecomManager;
             mMetricsLogger = metricsLogger;
         }
@@ -237,6 +245,7 @@ public class EmergencyButtonController extends ViewController<EmergencyButton> {
         public EmergencyButtonController create(EmergencyButton view) {
             return new EmergencyButtonController(view, mConfigurationController,
                     mKeyguardUpdateMonitor, mTelephonyManager, mPowerManager, mActivityTaskManager,
+                    mShadeController,
                     mTelecomManager, mMetricsLogger);
         }
     }

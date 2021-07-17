@@ -101,9 +101,11 @@ import com.android.systemui.statusbar.KeyguardAffordanceView;
 import com.android.systemui.statusbar.KeyguardIndicationController;
 import com.android.systemui.statusbar.LockscreenShadeTransitionController;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
+import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
 import com.android.systemui.statusbar.NotificationShelfController;
 import com.android.systemui.statusbar.PulseExpansionHandler;
+import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.VibratorHelper;
@@ -292,6 +294,10 @@ public class NotificationPanelViewTest extends SysuiTestCase {
     private QuickAccessWalletController mQuickAccessWalletController;
     @Mock
     private EmergencyButtonController.Factory mEmergencyButtonControllerFactory;
+    @Mock
+    private NotificationRemoteInputManager mNotificationRemoteInputManager;
+    @Mock
+    private RemoteInputController mRemoteInputController;
 
     private SysuiStatusBarStateController mStatusBarStateController;
     private NotificationPanelViewController mNotificationPanelViewController;
@@ -387,6 +393,8 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 .thenReturn(mKeyguardStatusView);
         when(mLayoutInflater.inflate(eq(R.layout.keyguard_bottom_area), any(), anyBoolean()))
                 .thenReturn(mKeyguardBottomArea);
+        when(mNotificationRemoteInputManager.getController()).thenReturn(mRemoteInputController);
+        when(mRemoteInputController.isRemoteInputActive()).thenReturn(false);
 
         reset(mView);
 
@@ -431,7 +439,8 @@ public class NotificationPanelViewTest extends SysuiTestCase {
                 new FakeExecutor(new FakeSystemClock()),
                 mSecureSettings,
                 mUnlockedScreenOffAnimationController,
-                mEmergencyButtonControllerFactory);
+                mEmergencyButtonControllerFactory,
+                mNotificationRemoteInputManager);
         mNotificationPanelViewController.initDependencies(
                 mStatusBar,
                 mNotificationShelfController);
