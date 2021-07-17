@@ -18,6 +18,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "6f326146_ac2badcd",
+        "filename": "packages/SystemUI/src/com/android/systemui/util/Utils.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 36,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2021-07-17T07:09:12Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "b4d7a83c_9d27e1f6",
+      "revId": "7e0ba7fb90239c597bb3bd442d9cee1a8ce39bfe",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "51c92c6d_94f1f909",
@@ -31,6 +49,24 @@
       "writtenOn": "2021-07-03T05:43:19Z",
       "side": 1,
       "message": "remove",
+      "revId": "7e0ba7fb90239c597bb3bd442d9cee1a8ce39bfe",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "435a6906_d7b88237",
+        "filename": "packages/SystemUI/src/com/android/systemui/util/Utils.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 150,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2021-07-17T07:09:12Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "51c92c6d_94f1f909",
       "revId": "7e0ba7fb90239c597bb3bd442d9cee1a8ce39bfe",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
@@ -52,6 +88,24 @@
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     },
     {
+      "unresolved": false,
+      "key": {
+        "uuid": "46d48542_38ed8961",
+        "filename": "packages/SystemUI/src/com/android/systemui/util/Utils.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 163,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2021-07-17T07:09:12Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "4e9a32dd_deea8361",
+      "revId": "7e0ba7fb90239c597bb3bd442d9cee1a8ce39bfe",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
       "unresolved": true,
       "key": {
         "uuid": "56c4f7e7_362fa711",
@@ -65,6 +119,24 @@
       "writtenOn": "2021-07-03T05:43:19Z",
       "side": 1,
       "message": "inline this variable",
+      "revId": "7e0ba7fb90239c597bb3bd442d9cee1a8ce39bfe",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    },
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "a8693dc9_4862f65a",
+        "filename": "packages/SystemUI/src/com/android/systemui/util/Utils.java",
+        "patchSetId": 2
+      },
+      "lineNbr": 171,
+      "author": {
+        "id": 1000312
+      },
+      "writtenOn": "2021-07-17T07:09:12Z",
+      "side": 1,
+      "message": "Done",
+      "parentUuid": "56c4f7e7_362fa711",
       "revId": "7e0ba7fb90239c597bb3bd442d9cee1a8ce39bfe",
       "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
     }
