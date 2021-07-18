@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "51981054_6f3e5510",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 1000668
+      },
+      "writtenOn": "2021-07-18T08:20:04Z",
+      "side": 1,
+      "message": "Fixes duplicate charging status",
+      "revId": "50160f871a02d04ea704d4d475e7c4a4a72ab262",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
