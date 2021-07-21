@@ -472,6 +472,35 @@ public class TelephonyManager {
     }
 
     /**
+     * The allowed values for multi sim voice capability
+     *
+     * @hide
+     */
+    public interface MultiSimVoiceCapability {
+        /** default */
+        static final int UNKNOWN = 0;
+        /** Concurrent calls on both subscriptions are not possbile. */
+        static final int DSDS = 1;
+        /** Concurrent calls on both subscriptions are not possible but user will have option to
+         * accept MT call on one subscription when there is an ongoing call on another subscription.
+         */
+        static final int PSEUDO_DSDA = 2;
+        /** Concurrent calls on both subscriptions are possible */
+        static final int DSDA = 3;
+    }
+
+    /**
+     * Returns true if concurrent calls on both subscriptions are possible (ex: DSDA).
+     * Returns false for other cases.
+     */
+    /** {@hide} */
+    public static boolean isConcurrentCallsPossible() {
+        int mSimVoiceConfig = TelephonyProperties.multi_sim_voice_capability().orElse(
+                MultiSimVoiceCapability.UNKNOWN);
+        return mSimVoiceConfig == MultiSimVoiceCapability.DSDA;
+    }
+
+    /**
      * Returns the number of phones available.
      * Returns 0 if none of voice, sms, data is not supported
      * Returns 1 for Single standby mode (Single SIM functionality).
