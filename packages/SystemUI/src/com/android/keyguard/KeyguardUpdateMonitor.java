@@ -286,7 +286,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     @VisibleForTesting
     protected boolean mTelephonyCapable;
 
-    private final boolean mAcquiredHapticEnabled;
+    private final boolean mAcquiredHapticEnabled = false;
     @Nullable private final Vibrator mVibrator;
 
     // Device provisioning state
@@ -1414,11 +1414,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
     @VisibleForTesting
     public void playAcquiredHaptic() {
         if (mAcquiredHapticEnabled && mVibrator != null) {
-            String effect = Settings.Global.getString(
-                    mContext.getContentResolver(),
-                    "udfps_acquired_type");
-            mVibrator.vibrate(UdfpsController.getVibration(effect,
-                    UdfpsController.EFFECT_TICK),
+            mVibrator.vibrate(UdfpsController.EFFECT_CLICK,
                     UdfpsController.VIBRATION_SONIFICATION_ATTRIBUTES);
         }
     }
@@ -1732,8 +1728,6 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         mLockPatternUtils = lockPatternUtils;
         mAuthController = authController;
         dumpManager.registerDumpable(getClass().getName(), this);
-        mAcquiredHapticEnabled = Settings.Global.getInt(mContext.getContentResolver(),
-            "udfps_acquired", 0) == 1;
         mVibrator = vibrator;
 
         mHandler = new Handler(mainLooper) {

@@ -5129,6 +5129,10 @@ public final class ActivityRecord extends WindowToken implements WindowManagerSe
         // Reset the last saved PiP snap fraction on app stop.
         mDisplayContent.mPinnedTaskController.onActivityHidden(mActivityComponent);
         mDisplayContent.mUnknownAppVisibilityController.appRemovedOrHidden(this);
+        if (isClientVisible()) {
+            // Though this is usually unlikely to happen, still make sure the client is invisible.
+            setClientVisible(false);
+        }
         destroySurfaces();
         // Remove any starting window that was added for this app if they are still around.
         removeStartingWindow();

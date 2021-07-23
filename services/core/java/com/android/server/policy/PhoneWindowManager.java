@@ -920,7 +920,9 @@ public class PhoneWindowManager implements WindowManagerPolicy {
             }
         } else {
             // handled by single key or another power key policy.
-            mSingleKeyGestureDetector.reset();
+            if (!mSingleKeyGestureDetector.isKeyIntercepted(KEYCODE_POWER)) {
+                mSingleKeyGestureDetector.reset();
+            }
         }
 
         finishPowerKeyPress();
@@ -934,7 +936,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private void powerPress(long eventTime, int count, boolean beganFromNonInteractive) {
-        mCameraGestureTriggered = false;
         if (mDefaultDisplayPolicy.isScreenOnEarly() && !mDefaultDisplayPolicy.isScreenOnFully()) {
             Slog.i(TAG, "Suppressed redundant power key press while "
                     + "already in the process of turning the screen on.");
@@ -1084,24 +1085,18 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     }
 
     private int getMaxMultiPressPowerCount() {
-        // GestureLauncherService could handle power multi tap gesture.
-        if (mGestureLauncherService != null
-                && mGestureLauncherService.isEmergencyGestureEnabled()) {
-            return 5; // EMERGENCY_GESTURE_POWER_TAP_COUNT_THRESHOLD
-        }
-
+        // The actual max power button press count is 5
+        // (EMERGENCY_GESTURE_POWER_TAP_COUNT_THRESHOLD), which is coming from
+        // GestureLauncherService.
+        // To speed up the handling of single-press of power button inside SingleKeyGestureDetector,
+        // however, we limit the max count to the number of button presses actually handled by the
+        // SingleKeyGestureDetector.
         if (mTriplePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
             return 3;
         }
         if (mDoublePressOnPowerBehavior != MULTI_PRESS_POWER_NOTHING) {
             return 2;
         }
-
-        if (mGestureLauncherService != null
-                && mGestureLauncherService.isCameraDoubleTapPowerEnabled()) {
-            return 2; // CAMERA_POWER_TAP_COUNT_THRESHOLD
-        }
-
         return 1;
     }
 
@@ -1988,7 +1983,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         void onPress(long downTime) {
             powerPress(downTime, 1 /*count*/,
                     mSingleKeyGestureDetector.beganFromNonInteractive());
-            finishPowerKeyPress();
         }
 
         @Override
@@ -2011,7 +2005,6 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         @Override
         void onMultiPress(long downTime, int count) {
             powerPress(downTime, count, mSingleKeyGestureDetector.beganFromNonInteractive());
-            finishPowerKeyPress();
         }
     }
 
@@ -3867,17 +3860,17 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         if (mGestureLauncherService == null) {
             return false;
         }
-
+        mCameraGestureTriggered = false;
         final MutableBoolean outLaunched = new MutableBoolean(false);
-        final boolean gesturedServiceIntercepted = mGestureLauncherService.interceptPowerKeyDown(
-                event, interactive, outLaunched);
-        if (outLaunched.value) {
-            mCameraGestureTriggered = true;
+        mGestureLauncherService.interceptPowerKeyDown(event, interactive, outLaunched);
+        if (!outLaunched.value) {
+            return false;
         }
-        if (outLaunched.value && mRequestedOrSleepingDefaultDisplay) {
+        mCameraGestureTriggered = true;
+        if (mRequestedOrSleepingDefaultDisplay) {
             mCameraGestureTriggeredDuringGoingToSleep = true;
         }
-        return gesturedServiceIntercepted;
+        return true;
     }
 
     /**
@@ -4250,7 +4243,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
         mDefaultDisplayRotation.updateOrientationListener();
 
         if (mKeyguardDelegate != null) {
-            mKeyguardDelegate.onFinishedGoingToSleep(pmSleepReason, mCameraGestureTriggered);
+            mKeyguardDelegate.onFinishedGoingToSleep(pmSleepReason,
+                    mCameraGestureTriggeredDuringGoingToSleep);
         }
         if (mDisplayFoldController != null) {
             mDisplayFoldController.finishedGoingToSleep();
@@ -4446,6 +4440,8 @@ public class PhoneWindowManager implements WindowManagerPolicy {
     // Called on the DisplayManager's DisplayPowerController thread.
     @Override
     public void screenTurnedOn(int displayId) {
+        if (DEBUG_WAKEUP) Slog.i(TAG, "Display " + displayId + " turned on...");
+
         if (displayId != DEFAULT_DISPLAY) {
             return;
         }
