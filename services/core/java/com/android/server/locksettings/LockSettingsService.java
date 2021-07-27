@@ -2224,6 +2224,7 @@ public class LockSettingsService extends ILockSettings.Stub {
     @Override
     public VerifyCredentialResponse verifyGatekeeperPasswordHandle(long gatekeeperPasswordHandle,
             long challenge, int userId) {
+
         checkPasswordReadPermission();
 
         final VerifyCredentialResponse response;
@@ -2235,6 +2236,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
         synchronized (mSpManager) {
             if (gatekeeperPassword == null) {
+                Slog.d(TAG, "No gatekeeper password for handle");
                 response = VerifyCredentialResponse.ERROR;
             } else {
                 response = mSpManager.verifyChallengeInternal(getGateKeeperService(),
@@ -2533,6 +2535,7 @@ public class LockSettingsService extends ILockSettings.Stub {
 
     private void removeUser(int userId, boolean unknownUser) {
         Slog.i(TAG, "RemoveUser: " + userId);
+        removeBiometricsForUser(userId);
         mSpManager.removeUser(userId);
         mStrongAuth.removeUser(userId);
 
