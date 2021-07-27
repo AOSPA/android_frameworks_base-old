@@ -1013,6 +1013,8 @@ public class MobileSignalController extends SignalController<MobileState, Mobile
                     } else {
                         iconKey = toIconKey(getVoiceNetworkType());
                     }
+                }else {
+                    iconKey = toIconKey(TelephonyManager.NETWORK_TYPE_UNKNOWN);
                 }
                 mCurrentState.iconGroup = mNetworkToIconLookup.getOrDefault(iconKey,
                         mDefaultIcons);
