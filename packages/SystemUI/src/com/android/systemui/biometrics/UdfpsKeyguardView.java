@@ -43,6 +43,7 @@ import com.android.systemui.statusbar.StatusBarState;
 import com.airbnb.lottie.LottieAnimationView;
 import com.airbnb.lottie.LottieProperty;
 import com.airbnb.lottie.model.KeyPath;
+
 /**
  * View corresponding with udfps_keyguard_view.xml
  */
@@ -114,12 +115,10 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
 
     @Override
     void onIlluminationStarting() {
-        setVisibility(View.INVISIBLE);
     }
 
     @Override
     void onIlluminationStopped() {
-        setVisibility(View.VISIBLE);
     }
 
     @Override
@@ -140,9 +139,12 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
         mAodFp.setTranslationX(mBurnInOffsetX);
         mAodFp.setTranslationY(mBurnInOffsetY);
         mAodFp.setProgress(mBurnInProgress);
+        mAodFp.setAlpha(255 * mInterpolatedDarkAmount);
 
         mLockScreenFp.setTranslationX(mBurnInOffsetX);
         mLockScreenFp.setTranslationY(mBurnInOffsetY);
+        mLockScreenFp.setProgress(1f - mInterpolatedDarkAmount);
+        mLockScreenFp.setAlpha((1f - mInterpolatedDarkAmount) * 255);
     }
 
     void requestUdfps(boolean request, int color) {
@@ -209,14 +211,6 @@ public class UdfpsKeyguardView extends UdfpsAnimationView {
         mHintAnimator.cancel();
         mInterpolatedDarkAmount = eased;
         updateBurnInOffsets();
-        mLockScreenFp.setProgress(1f - mInterpolatedDarkAmount);
-        mAodFp.setAlpha(mInterpolatedDarkAmount);
-
-        if (linear == 1f) {
-            mLockScreenFp.setVisibility(View.INVISIBLE);
-        } else {
-            mLockScreenFp.setVisibility(View.VISIBLE);
-        }
     }
 
     void animateHint() {

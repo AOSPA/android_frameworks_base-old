@@ -75,6 +75,7 @@ import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.EmergencyCarrierArea;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
+import com.android.settingslib.Utils;
 import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -463,6 +464,10 @@ public class KeyguardBottomAreaView extends FrameLayout implements View.OnClickL
             if (tileIcon != null) {
                 mWalletButton.setImageDrawable(tileIcon);
             }
+            mWalletButton.getDrawable().setTint(
+                    Utils.getColorAttr(
+                            mContext,
+                            com.android.internal.R.attr.textColorPrimary).getDefaultColor());
             mWalletButton.setVisibility(VISIBLE);
             mWalletButton.setOnClickListener(this::onWalletClick);
             mIndicationArea.setPadding(mIndicationPadding, 0, mIndicationPadding, 0);
