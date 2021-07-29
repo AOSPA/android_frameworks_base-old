@@ -1058,8 +1058,10 @@ class ActivityMetricsLogger {
         TimeUtils.formatDuration(info.windowsDrawnDelayMs, sb);
 
         if (mPerfBoost != null) {
-            mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName,
-                info.processRecord.getPid(), BoostFramework.Draw.EVENT_TYPE_V1);
+            if (info.processRecord != null) {
+                mPerfBoost.perfHint(BoostFramework.VENDOR_HINT_FIRST_DRAW, info.packageName,
+                    info.processRecord.getPid(), BoostFramework.Draw.EVENT_TYPE_V1);
+            }
         }
 
         if (mUxPerf != null) {
