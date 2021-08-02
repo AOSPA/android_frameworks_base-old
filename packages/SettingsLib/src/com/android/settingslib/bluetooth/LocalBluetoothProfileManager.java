@@ -687,8 +687,8 @@ public class LocalBluetoothProfileManager {
             mMapProfile.setEnabled(device, true);
         }
 
-        if ((mPbapProfile != null) &&
-            (mPbapProfile.getConnectionStatus(device) == BluetoothProfile.STATE_CONNECTED)) {
+        if ((mPbapProfile != null)
+                && BluetoothUuid.containsAnyUuid(uuids, PbapServerProfile.PBAB_CLIENT_UUIDS) ) {
             profiles.add(mPbapProfile);
             removedProfiles.remove(mPbapProfile);
             mPbapProfile.setEnabled(device, true);
