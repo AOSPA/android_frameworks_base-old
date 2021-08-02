@@ -1091,9 +1091,7 @@ public final class CachedAppOptimizer {
         }
 
         if (!opt.isFrozen()) {
-            if (DEBUG_FREEZER) {
-                Slog.d(TAG_AM, "sync unfroze " + pid + " " + app.processName);
-            }
+            Slog.d(TAG_AM, "sync unfroze " + pid + " " + app.processName);
 
             mFreezeHandler.sendMessage(
                     mFreezeHandler.obtainMessage(REPORT_UNFREEZE_MSG,
@@ -1485,9 +1483,7 @@ public final class CachedAppOptimizer {
                 return;
             }
 
-            if (DEBUG_FREEZER) {
-                Slog.d(TAG_AM, "froze " + pid + " " + name);
-            }
+            Slog.d(TAG_AM, "froze " + pid + " " + name);
 
             EventLog.writeEvent(EventLogTags.AM_FREEZE, pid, name);
 
