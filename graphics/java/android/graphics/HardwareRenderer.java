@@ -762,6 +762,16 @@ public class HardwareRenderer {
         nSetASurfaceTransactionCallback(mNativeProxy, callback);
     }
 
+    private PrepareSurfaceControlForWebviewCallback mAPrepareSurfaceControlForWebviewCallback;
+
+    /** @hide */
+    public void setPrepareSurfaceControlForWebviewCallback(
+            PrepareSurfaceControlForWebviewCallback callback) {
+        // ensure callback is kept alive on the java side since weak ref is used in native code
+        mAPrepareSurfaceControlForWebviewCallback = callback;
+        nSetPrepareSurfaceControlForWebviewCallback(mNativeProxy, callback);
+    }
+
     /** @hide */
     public void setFrameCallback(FrameDrawingCallback callback) {
         nSetFrameCallback(mNativeProxy, callback);
@@ -876,6 +886,19 @@ public class HardwareRenderer {
         session.close();
     }
 
+   /**
+     * Interface used to receive callbacks when Webview requests a surface control.
+     *
+     * @hide
+     */
+    public interface PrepareSurfaceControlForWebviewCallback {
+        /**
+         * Invoked when Webview calls to get a surface control.
+         *
+         */
+        void prepare();
+    }
+
     /**
      * Interface used to receive callbacks when a transaction needs to be merged.
      *
@@ -889,7 +912,7 @@ public class HardwareRenderer {
          * @param aSurfaceControlNativeObj ASurfaceControl native object handle
          * @param frame The id of the frame being drawn.
          */
-        void onMergeTransaction(long aSurfaceTranactionNativeObj,
+        boolean onMergeTransaction(long aSurfaceTranactionNativeObj,
                                 long aSurfaceControlNativeObj, long frame);
     }
 
@@ -1281,6 +1304,11 @@ public class HardwareRenderer {
      */
     public static native void preload();
 
+    /**
+     * @hide
+     */
+    public static native boolean isWebViewOverlaysEnabled();
+
     /** @hide */
     protected static native void setupShadersDiskCache(String cacheFile, String skiaCacheFile);
 
@@ -1373,6 +1401,9 @@ public class HardwareRenderer {
 
     private static native void nSetASurfaceTransactionCallback(long nativeProxy,
             ASurfaceTransactionCallback callback);
+
+    private static native void nSetPrepareSurfaceControlForWebviewCallback(long nativeProxy,
+            PrepareSurfaceControlForWebviewCallback callback);
 
     private static native void nSetFrameCallback(long nativeProxy, FrameDrawingCallback callback);
 

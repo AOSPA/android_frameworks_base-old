@@ -27,7 +27,6 @@ import android.net.NetworkScoreManager;
 import android.net.wifi.WifiManager;
 import android.text.Html;
 import android.text.TextUtils;
-import android.util.FeatureFlagUtils;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.settingslib.AccessibilityContentDescriptions;
@@ -38,6 +37,7 @@ import com.android.settingslib.graph.SignalDrawable;
 import com.android.settingslib.mobile.TelephonyIcons;
 import com.android.settingslib.wifi.WifiStatusTracker;
 import com.android.systemui.R;
+import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
@@ -53,17 +53,22 @@ public class WifiSignalController extends
     private final IconGroup mUnmergedWifiIconGroup = WifiIcons.UNMERGED_WIFI;
     private final MobileIconGroup mCarrierMergedWifiIconGroup = TelephonyIcons.CARRIER_MERGED_WIFI;
     private final WifiManager mWifiManager;
-    private final boolean mProviderModel;
+    private final boolean mProviderModelSetting;
 
     private final IconGroup mDefaultWifiIconGroup;
     private final IconGroup mWifi4IconGroup;
     private final IconGroup mWifi5IconGroup;
     private final IconGroup mWifi6IconGroup;
 
-    public WifiSignalController(Context context, boolean hasMobileDataFeature,
-            CallbackHandler callbackHandler, NetworkControllerImpl networkController,
-            WifiManager wifiManager, ConnectivityManager connectivityManager,
-            NetworkScoreManager networkScoreManager) {
+    public WifiSignalController(
+            Context context,
+            boolean hasMobileDataFeature,
+            CallbackHandler callbackHandler,
+            NetworkControllerImpl networkController,
+            WifiManager wifiManager,
+            ConnectivityManager connectivityManager,
+            NetworkScoreManager networkScoreManager,
+            FeatureFlags featureFlags) {
         super("WifiSignalController", context, NetworkCapabilities.TRANSPORT_WIFI,
                 callbackHandler, networkController);
         mWifiManager = wifiManager;
@@ -125,8 +130,8 @@ public class WifiSignalController extends
                 );
 
         mCurrentState.iconGroup = mLastState.iconGroup = mDefaultWifiIconGroup;
-        mProviderModel = FeatureFlagUtils.isEnabled(
-                mContext, FeatureFlagUtils.SETTINGS_PROVIDER_MODEL);
+        mProviderModelSetting = featureFlags.isProviderModelSettingEnabled();
+
     }
 
     @Override
@@ -163,18 +168,11 @@ public class WifiSignalController extends
         if (mCurrentState.inetCondition == 0) {
             contentDescription += ("," + mContext.getString(R.string.data_connection_no_internet));
         }
-        if (mProviderModel) {
-            // WiFi icon will only be shown in the statusbar in 2 scenarios
-            // 1. WiFi is the default network, and it is validated
-            // 2. WiFi is the default network, it is not validated and there is no other
-            // non-Carrier WiFi networks available.
-            boolean maybeShowIcons = (mCurrentState.inetCondition == 1)
-                    || (mCurrentState.inetCondition == 0
-                            && !mNetworkController.isNonCarrierWifiNetworkAvailable());
+        if (mProviderModelSetting) {
             IconState statusIcon = new IconState(
-                    wifiVisible && maybeShowIcons, getCurrentIconId(), contentDescription);
+                    wifiVisible, getCurrentIconId(), contentDescription);
             IconState qsIcon = null;
-            if ((mCurrentState.isDefault && maybeShowIcons) || (!mNetworkController.isRadioOn()
+            if (mCurrentState.isDefault || (!mNetworkController.isRadioOn()
                     && !mNetworkController.isEthernetDefault())) {
                 qsIcon = new IconState(mCurrentState.connected,
                         mWifiTracker.isCaptivePortal ? R.drawable.ic_qs_wifi_disconnected
@@ -213,15 +211,8 @@ public class WifiSignalController extends
         if (mCurrentState.inetCondition == 0) {
             dataContentDescription = mContext.getString(R.string.data_connection_no_internet);
         }
-        // Mobile icon will only be shown in the statusbar in 2 scenarios
-        // 1. Mobile is the default network, and it is validated
-        // 2. Mobile is the default network, it is not validated and there is no other
-        // non-Carrier WiFi networks available.
-        boolean maybeShowIcons = (mCurrentState.inetCondition == 1)
-                || (mCurrentState.inetCondition == 0
-                        && !mNetworkController.isNonCarrierWifiNetworkAvailable());
         boolean sbVisible = mCurrentState.enabled && mCurrentState.connected
-                && maybeShowIcons && mCurrentState.isDefault;
+                && mCurrentState.isDefault;
         IconState statusIcon =
                 new IconState(sbVisible, getCurrentIconIdForCarrierWifi(), contentDescription);
         int typeIcon = sbVisible ? icons.dataType : 0;

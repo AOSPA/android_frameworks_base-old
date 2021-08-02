@@ -1071,10 +1071,6 @@ public class NotificationStackScrollLayoutController {
         mView.setAlpha(alpha);
     }
 
-    public float getCurrentOverScrollAmount(boolean top) {
-        return mView.getCurrentOverScrollAmount(top);
-    }
-
     public float calculateAppearFraction(float height) {
         return mView.calculateAppearFraction(height);
     }
@@ -1463,6 +1459,13 @@ public class NotificationStackScrollLayoutController {
     }
 
     /**
+     * Request an animation whenever the toppadding changes next
+     */
+    public void animateNextTopPaddingChange() {
+        mView.animateNextTopPaddingChange();
+    }
+
+    /**
      * Enum for UiEvent logged from this class
      */
     enum NotificationPanelEvent implements UiEventLogger.UiEventEnum {
@@ -1534,6 +1537,11 @@ public class NotificationStackScrollLayoutController {
         public void setNotificationActivityStarter(
                 NotificationActivityStarter notificationActivityStarter) {
             mView.setNotificationActivityStarter(notificationActivityStarter);
+        }
+
+        @Override
+        public int getTopClippingStartLocation() {
+            return mView.getTopClippingStartLocation();
         }
 
         @Override

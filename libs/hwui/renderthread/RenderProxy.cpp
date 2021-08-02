@@ -314,9 +314,15 @@ void RenderProxy::setPictureCapturedCallback(
 }
 
 void RenderProxy::setASurfaceTransactionCallback(
-        const std::function<void(int64_t, int64_t, int64_t)>& callback) {
+        const std::function<bool(int64_t, int64_t, int64_t)>& callback) {
     mRenderThread.queue().post(
             [this, cb = callback]() { mContext->setASurfaceTransactionCallback(cb); });
+}
+
+void RenderProxy::setPrepareSurfaceControlForWebviewCallback(
+        const std::function<void()>& callback) {
+    mRenderThread.queue().post(
+            [this, cb = callback]() { mContext->setPrepareSurfaceControlForWebviewCallback(cb); });
 }
 
 void RenderProxy::setFrameCallback(std::function<void(int64_t)>&& callback) {

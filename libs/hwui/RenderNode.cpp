@@ -18,6 +18,7 @@
 
 #include "DamageAccumulator.h"
 #include "Debug.h"
+#include "Properties.h"
 #include "TreeInfo.h"
 #include "VectorDrawable.h"
 #include "private/hwui/WebViewFunctor.h"
@@ -455,8 +456,7 @@ void RenderNode::destroyLayers() {
     if (hasLayer()) {
         this->setLayerSurface(nullptr);
     }
-    mSnapshotResult.snapshot = nullptr;
-    mTargetImageFilter = nullptr;
+
     if (mDisplayList) {
         mDisplayList.updateChildren([](RenderNode* child) { child->destroyLayers(); });
     }
@@ -474,6 +474,9 @@ void RenderNode::decParentRefCount(TreeObserver& observer, TreeInfo* info) {
 }
 
 void RenderNode::onRemovedFromTree(TreeInfo* info) {
+    if (Properties::enableWebViewOverlays && mDisplayList) {
+        mDisplayList.onRemovedFromTree();
+    }
     destroyHardwareResources(info);
 }
 

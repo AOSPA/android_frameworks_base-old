@@ -32,8 +32,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.UserHandle;
 import android.text.TextUtils;
-import android.transition.Transition;
-import android.transition.TransitionListenerAdapter;
 import android.util.Log;
 import android.view.ScrollCaptureResponse;
 import android.view.View;
@@ -74,7 +72,7 @@ public class LongScreenshotActivity extends Activity {
     private final Executor mUiExecutor;
     private final Executor mBackgroundExecutor;
     private final ImageExporter mImageExporter;
-    private final LongScreenshotHolder mLongScreenshotHolder;
+    private final LongScreenshotData mLongScreenshotHolder;
 
     private ImageView mPreview;
     private ImageView mTransitionView;
@@ -82,6 +80,7 @@ public class LongScreenshotActivity extends Activity {
     private View mSave;
     private View mEdit;
     private View mShare;
+    private View mDelete;
     private CropView mCropView;
     private MagnifierView mMagnifierView;
     private ScrollCaptureResponse mScrollCaptureResponse;
@@ -103,7 +102,7 @@ public class LongScreenshotActivity extends Activity {
     @Inject
     public LongScreenshotActivity(UiEventLogger uiEventLogger, ImageExporter imageExporter,
             @Main Executor mainExecutor, @Background Executor bgExecutor,
-            LongScreenshotHolder longScreenshotHolder) {
+            LongScreenshotData longScreenshotHolder) {
         mUiEventLogger = uiEventLogger;
         mUiExecutor = mainExecutor;
         mBackgroundExecutor = bgExecutor;
@@ -116,13 +115,13 @@ public class LongScreenshotActivity extends Activity {
     public void onCreate(Bundle savedInstanceState) {
         Log.d(TAG, "onCreate(savedInstanceState = " + savedInstanceState + ")");
         super.onCreate(savedInstanceState);
-        postponeEnterTransition();
         setContentView(R.layout.long_screenshot);
 
         mPreview = requireViewById(R.id.preview);
         mSave = requireViewById(R.id.save);
         mEdit = requireViewById(R.id.edit);
         mShare = requireViewById(R.id.share);
+        mDelete = requireViewById(R.id.delete);
         mCropView = requireViewById(R.id.crop_view);
         mMagnifierView = requireViewById(R.id.magnifier);
         mCropView.setCropInteractionListener(mMagnifierView);
@@ -132,6 +131,13 @@ public class LongScreenshotActivity extends Activity {
         mSave.setOnClickListener(this::onClicked);
         mEdit.setOnClickListener(this::onClicked);
         mShare.setOnClickListener(this::onClicked);
+
+        // Only show the delete button if we have something to delete (should typically be the case)
+        if (getIntent().getData() != null) {
+            mDelete.setOnClickListener(this::onClicked);
+        } else {
+            mDelete.setVisibility(View.GONE);
+        }
 
         mPreview.addOnLayoutChangeListener(
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) ->
@@ -203,39 +209,34 @@ public class LongScreenshotActivity extends Activity {
                         / (float) mLongScreenshot.getHeight());
 
         mEnterTransitionView.setImageDrawable(drawable);
-
         mEnterTransitionView.getViewTreeObserver().addOnPreDrawListener(
                 new ViewTreeObserver.OnPreDrawListener() {
                     @Override
                     public boolean onPreDraw() {
                         mEnterTransitionView.getViewTreeObserver().removeOnPreDrawListener(this);
                         updateImageDimensions();
-                        startPostponedEnterTransition();
-                        if (isActivityTransitionRunning()) {
-                            getWindow().getSharedElementEnterTransition().addListener(
-                                    new TransitionListenerAdapter() {
-                                        @Override
-                                        public void onTransitionEnd(Transition transition) {
-                                            super.onTransitionEnd(transition);
-                                            mPreview.animate().alpha(1f);
-                                            mCropView.setBoundaryPosition(
-                                                    CropView.CropBoundary.TOP, topFraction);
-                                            mCropView.setBoundaryPosition(
-                                                    CropView.CropBoundary.BOTTOM, bottomFraction);
-                                            mCropView.animateEntrance();
-                                            mCropView.setVisibility(View.VISIBLE);
-                                            setButtonsEnabled(true);
-                                            mEnterTransitionView.setVisibility(View.GONE);
-                                        }
+                        mEnterTransitionView.post(() -> {
+                            Rect dest = new Rect();
+                            mEnterTransitionView.getBoundsOnScreen(dest);
+                            mLongScreenshotHolder.takeTransitionDestinationCallback()
+                                    .setTransitionDestination(dest, () -> {
+                                        mPreview.animate().alpha(1f);
+                                        mCropView.setBoundaryPosition(
+                                                CropView.CropBoundary.TOP, topFraction);
+                                        mCropView.setBoundaryPosition(
+                                                CropView.CropBoundary.BOTTOM, bottomFraction);
+                                        mCropView.animateEntrance();
+                                        mCropView.setVisibility(View.VISIBLE);
+                                        setButtonsEnabled(true);
                                     });
-                        }
+                        });
                         return true;
                     }
                 });
 
         // Immediately export to temp image file for saved state
-        mCacheSaveFuture = mImageExporter.exportAsTempFile(mBackgroundExecutor,
-                mLongScreenshot.toBitmap());
+        mCacheSaveFuture = mImageExporter.exportToRawFile(mBackgroundExecutor,
+                mLongScreenshot.toBitmap(), new File(getCacheDir(), "long_screenshot_cache.png"));
         mCacheSaveFuture.addListener(() -> {
             try {
                 // Get the temp file path to persist, used in onSavedInstanceState
@@ -327,6 +328,7 @@ public class LongScreenshotActivity extends Activity {
         mSave.setEnabled(enabled);
         mEdit.setEnabled(enabled);
         mShare.setEnabled(enabled);
+        mDelete.setEnabled(enabled);
     }
 
     private void doEdit(Uri uri) {
@@ -340,11 +342,18 @@ public class LongScreenshotActivity extends Activity {
                 | Intent.FLAG_GRANT_WRITE_URI_PERMISSION);
 
         mTransitionView.setImageBitmap(mOutputBitmap);
-        mTransitionView.setVisibility(View.VISIBLE);
         mTransitionView.setTransitionName(
                 ChooserActivity.FIRST_IMAGE_PREVIEW_TRANSITION_NAME);
         // TODO: listen for transition completing instead of finishing onStop
         mTransitionStarted = true;
+        int[] locationOnScreen = new int[2];
+        mTransitionView.getLocationOnScreen(locationOnScreen);
+        int[] locationInWindow = new int[2];
+        mTransitionView.getLocationInWindow(locationInWindow);
+        int deltaX = locationOnScreen[0] - locationInWindow[0];
+        int deltaY = locationOnScreen[1] - locationInWindow[1];
+        mTransitionView.setX(mTransitionView.getX() - deltaX);
+        mTransitionView.setY(mTransitionView.getY() - deltaY);
         startActivity(intent,
                 ActivityOptions.makeSceneTransitionAnimation(this, mTransitionView,
                         ChooserActivity.FIRST_IMAGE_PREVIEW_TRANSITION_NAME).toBundle());
@@ -374,6 +383,11 @@ public class LongScreenshotActivity extends Activity {
         } else if (id == R.id.share) {
             mUiEventLogger.log(ScreenshotEvent.SCREENSHOT_LONG_SCREENSHOT_SHARE);
             startExport(PendingAction.SHARE);
+        } else if (id == R.id.delete) {
+            mBackgroundExecutor.execute(() -> {
+                getContentResolver().delete(getIntent().getData(), null);
+                finishAndRemoveTask();
+            });
         }
     }
 

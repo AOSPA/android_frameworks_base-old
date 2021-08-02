@@ -50,6 +50,7 @@ import android.content.res.TypedArray;
 import android.database.ContentObserver;
 import android.graphics.ColorSpace;
 import android.graphics.Point;
+import android.hardware.Sensor;
 import android.hardware.SensorManager;
 import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.AmbientBrightnessDayStats;
@@ -62,6 +63,8 @@ import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayManagerInternal.DisplayGroupListener;
 import android.hardware.display.DisplayManagerInternal.DisplayTransactionListener;
+import android.hardware.display.DisplayManagerInternal.RefreshRateLimitation;
+import android.hardware.display.DisplayManagerInternal.RefreshRateRange;
 import android.hardware.display.DisplayViewport;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
@@ -120,6 +123,8 @@ import com.android.server.DisplayThread;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
 import com.android.server.UiThread;
+import com.android.server.display.DisplayDeviceConfig.SensorData;
+import com.android.server.display.utils.SensorUtils;
 import com.android.server.wm.SurfaceAnimationThread;
 import com.android.server.wm.WindowManagerInternal;
 
@@ -127,6 +132,7 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicLong;
@@ -393,9 +399,6 @@ public final class DisplayManagerService extends SystemService {
 
     // Receives notifications about changes to Settings.
     private SettingsObserver mSettingsObserver;
-
-    // Received notifications of the device-state action (such as "fold", "unfold")
-    private DeviceStateManager mDeviceStateManager;
 
     private final boolean mAllowNonNativeRefreshRateOverride;
 
@@ -1239,13 +1242,6 @@ public final class DisplayManagerService extends SystemService {
         adapter.registerLocked();
     }
 
-    @VisibleForTesting
-    void handleLogicalDisplayAdded(LogicalDisplay display) {
-        synchronized (mSyncRoot) {
-            handleLogicalDisplayAddedLocked(display);
-        }
-    }
-
     private void handleLogicalDisplayAddedLocked(LogicalDisplay display) {
         final DisplayDevice device = display.getPrimaryDisplayDeviceLocked();
         final int displayId = display.getDisplayIdLocked();
@@ -1509,8 +1505,9 @@ public final class DisplayManagerService extends SystemService {
     }
 
     private void setDisplayPropertiesInternal(int displayId, boolean hasContent,
-            float requestedRefreshRate, int requestedModeId, float requestedMaxRefreshRate,
-            boolean preferMinimalPostProcessing, boolean inTraversal) {
+            float requestedRefreshRate, int requestedModeId, float requestedMinRefreshRate,
+            float requestedMaxRefreshRate, boolean preferMinimalPostProcessing,
+            boolean inTraversal) {
         synchronized (mSyncRoot) {
             final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
             if (display == null) {
@@ -1531,11 +1528,17 @@ public final class DisplayManagerService extends SystemService {
             if (requestedModeId == 0 && requestedRefreshRate != 0) {
                 // Scan supported modes returned by display.getInfo() to find a mode with the same
                 // size as the default display mode but with the specified refresh rate instead.
-                requestedModeId = display.getDisplayInfoLocked().findDefaultModeByRefreshRate(
-                        requestedRefreshRate).getModeId();
+                Display.Mode mode = display.getDisplayInfoLocked().findDefaultModeByRefreshRate(
+                        requestedRefreshRate);
+                if (mode != null) {
+                    requestedModeId = mode.getModeId();
+                } else {
+                    Slog.e(TAG, "Couldn't find a mode for the requestedRefreshRate: "
+                            + requestedRefreshRate + " on Display: " + displayId);
+                }
             }
             mDisplayModeDirector.getAppRequestObserver().setAppRequest(
-                    displayId, requestedModeId, requestedMaxRefreshRate);
+                    displayId, requestedModeId, requestedMinRefreshRate, requestedMaxRefreshRate);
 
             if (display.getDisplayInfoLocked().minimalPostProcessingSupported) {
                 boolean mppRequest = mMinimalPostProcessingAllowed && preferMinimalPostProcessing;
@@ -2114,7 +2117,7 @@ public final class DisplayManagerService extends SystemService {
         }
 
         final BrightnessSetting brightnessSetting = new BrightnessSetting(mPersistentDataStore,
-                display, mContext);
+                display, mSyncRoot);
         final DisplayPowerController displayPowerController = new DisplayPowerController(
                 mContext, mDisplayPowerCallbacks, mPowerHandler, mSensorManager,
                 mDisplayBlanker, display, mBrightnessTracker, brightnessSetting,
@@ -2125,6 +2128,11 @@ public final class DisplayManagerService extends SystemService {
     private void handleBrightnessChange(LogicalDisplay display) {
         sendDisplayEventLocked(display.getDisplayIdLocked(),
                 DisplayManagerGlobal.EVENT_DISPLAY_BRIGHTNESS_CHANGED);
+    }
+
+    private DisplayDevice getDeviceForDisplayLocked(int displayId) {
+        final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
+        return display == null ? null : display.getPrimaryDisplayDeviceLocked();
     }
 
     private final class DisplayManagerHandler extends Handler {
@@ -3211,11 +3219,12 @@ public final class DisplayManagerService extends SystemService {
 
         @Override
         public void setDisplayProperties(int displayId, boolean hasContent,
-                float requestedRefreshRate, int requestedMode, float requestedMaxRefreshRate,
-                boolean requestedMinimalPostProcessing, boolean inTraversal) {
+                float requestedRefreshRate, int requestedMode, float requestedMinRefreshRate,
+                float requestedMaxRefreshRate, boolean requestedMinimalPostProcessing,
+                boolean inTraversal) {
             setDisplayPropertiesInternal(displayId, hasContent, requestedRefreshRate,
-                    requestedMode, requestedMaxRefreshRate, requestedMinimalPostProcessing,
-                    inTraversal);
+                    requestedMode, requestedMinRefreshRate, requestedMaxRefreshRate,
+                    requestedMinimalPostProcessing, inTraversal);
         }
 
         @Override
@@ -3276,6 +3285,53 @@ public final class DisplayManagerService extends SystemService {
         @Override
         public int getRefreshRateSwitchingType() {
             return getRefreshRateSwitchingTypeInternal();
+        }
+
+        @Override
+        public RefreshRateRange getRefreshRateForDisplayAndSensor(int displayId, String sensorName,
+                String sensorType) {
+            final SensorManager sensorManager;
+            synchronized (mSyncRoot) {
+                sensorManager = mSensorManager;
+            }
+            if (sensorManager == null) {
+                return null;
+            }
+
+            // Verify that the specified sensor exists.
+            final Sensor sensor = SensorUtils.findSensor(sensorManager, sensorType, sensorName,
+                    SensorUtils.NO_FALLBACK);
+            if (sensor == null) {
+                return null;
+            }
+
+            synchronized (mSyncRoot) {
+                final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
+                final DisplayDevice device = display.getPrimaryDisplayDeviceLocked();
+                if (device == null) {
+                    return null;
+                }
+                final DisplayDeviceConfig config = device.getDisplayDeviceConfig();
+                SensorData sensorData = config.getProximitySensor();
+                if (sensorData.matches(sensorName, sensorType)) {
+                    return new RefreshRateRange(sensorData.minRefreshRate,
+                            sensorData.maxRefreshRate);
+                }
+            }
+            return null;
+        }
+
+        @Override
+        public List<RefreshRateLimitation> getRefreshRateLimitations(int displayId) {
+            final DisplayDeviceConfig config;
+            synchronized (mSyncRoot) {
+                final DisplayDevice device = getDeviceForDisplayLocked(displayId);
+                if (device == null) {
+                    return null;
+                }
+                config = device.getDisplayDeviceConfig();
+            }
+            return config.getRefreshRateLimitations();
         }
     }
 

@@ -22,6 +22,7 @@ import static android.view.View.VISIBLE;
 import static org.junit.Assert.assertEquals;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -43,6 +44,7 @@ import android.testing.TestableLooper;
 
 import androidx.test.filters.SmallTest;
 
+import com.android.internal.logging.UiEventLogger;
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.ActivityStarter;
@@ -67,7 +69,6 @@ import java.util.Collections;
 @SmallTest
 public class WalletScreenControllerTest extends SysuiTestCase {
 
-    private static final int MAX_CARDS = 10;
     private static final int CARD_CAROUSEL_WIDTH = 10;
     private static final String CARD_ID_1 = "card_id_1";
     private static final String CARD_ID_2 = "card_id_2";
@@ -92,6 +93,8 @@ public class WalletScreenControllerTest extends SysuiTestCase {
     KeyguardUpdateMonitor mKeyguardUpdateMonitor;
     @Mock
     KeyguardStateController mKeyguardStateController;
+    @Mock
+    UiEventLogger mUiEventLogger;
     @Captor
     ArgumentCaptor<Intent> mIntentCaptor;
     @Captor
@@ -124,7 +127,8 @@ public class WalletScreenControllerTest extends SysuiTestCase {
                 mUserTracker,
                 mFalsingManager,
                 mKeyguardUpdateMonitor,
-                mKeyguardStateController);
+                mKeyguardStateController,
+                mUiEventLogger);
     }
 
     @Test
@@ -158,7 +162,7 @@ public class WalletScreenControllerTest extends SysuiTestCase {
         when(mKeyguardStateController.isUnlocked()).thenReturn(false);
         GetWalletCardsResponse response =
                 new GetWalletCardsResponse(
-                        Collections.singletonList(createWalletCard(mContext)), 0);
+                        Collections.singletonList(createLockedWalletCard(mContext)), 0);
 
         mController.queryWalletCards();
         mTestableLooper.processAllMessages();
@@ -172,6 +176,8 @@ public class WalletScreenControllerTest extends SysuiTestCase {
 
         callback.onWalletCardsRetrieved(response);
         mTestableLooper.processAllMessages();
+
+        verify(mUiEventLogger).log(WalletUiEvent.QAW_IMPRESSION);
 
         assertEquals(VISIBLE, mWalletView.getCardCarouselContainer().getVisibility());
         assertEquals(VISIBLE, mWalletView.getActionButton().getVisibility());
@@ -199,6 +205,8 @@ public class WalletScreenControllerTest extends SysuiTestCase {
         assertEquals(VISIBLE, mWalletView.getCardCarouselContainer().getVisibility());
         assertEquals("Hold to reader", mWalletView.getCardLabel().getText().toString());
         assertEquals(GONE, mWalletView.getErrorView().getVisibility());
+
+        verify(mUiEventLogger, times(1)).log(WalletUiEvent.QAW_IMPRESSION);
     }
 
     @Test
@@ -353,6 +361,14 @@ public class WalletScreenControllerTest extends SysuiTestCase {
     }
 
     @Test
+    public void logOnCardChanged() {
+        mController.onCardSelected(createCardViewInfo(createWalletCard(mContext)));
+        mController.onCardSelected(createCardViewInfo(createNonActiveWalletCard(mContext)));
+
+        verify(mUiEventLogger, times(1)).log(WalletUiEvent.QAW_CHANGE_CARD);
+    }
+
+    @Test
     public void onCardClicked_startIntent() {
         WalletCardViewInfo walletCardViewInfo = createCardViewInfo(createWalletCard(mContext));
 
@@ -362,6 +378,20 @@ public class WalletScreenControllerTest extends SysuiTestCase {
 
         assertEquals(mWalletIntent.getAction(), mIntentCaptor.getValue().getAction());
         assertEquals(mWalletIntent.getComponent(), mIntentCaptor.getValue().getComponent());
+
+        verify(mUiEventLogger, times(1)).log(WalletUiEvent.QAW_CLICK_CARD);
+    }
+
+    @Test
+    public void onCardClicked_deviceLocked_logUnlockEvent() {
+        when(mKeyguardStateController.isUnlocked()).thenReturn(false);
+        WalletCardViewInfo walletCardViewInfo = createCardViewInfo(createWalletCard(mContext));
+
+        mController.onCardClicked(walletCardViewInfo);
+
+        verify(mUiEventLogger, times(1))
+                .log(WalletUiEvent.QAW_UNLOCK_FROM_CARD_CLICK);
+        verify(mUiEventLogger, times(1)).log(WalletUiEvent.QAW_CLICK_CARD);
     }
 
     @Test
@@ -403,6 +433,15 @@ public class WalletScreenControllerTest extends SysuiTestCase {
         return new WalletCard.Builder(CARD_ID_2, createIcon(), "•••• 5678", pendingIntent)
                 .setCardIcon(createIcon())
                 .setCardLabel("Not set up\nVerify now")
+                .build();
+    }
+
+    private WalletCard createLockedWalletCard(Context context) {
+        PendingIntent pendingIntent =
+                PendingIntent.getActivity(context, 0, mWalletIntent, PendingIntent.FLAG_IMMUTABLE);
+        return new WalletCard.Builder(CARD_ID_2, createIcon(), "•••• 5679", pendingIntent)
+                .setCardIcon(createIcon())
+                .setCardLabel("Locked\nUnlock to pay")
                 .build();
     }
 

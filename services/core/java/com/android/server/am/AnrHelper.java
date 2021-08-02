@@ -21,9 +21,12 @@ import static com.android.server.am.ActivityManagerDebugConfig.TAG_WITH_CLASS_NA
 
 import android.content.pm.ApplicationInfo;
 import android.os.SystemClock;
+import android.os.Message;
+import android.os.Handler;
 import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.server.FgThread;
 import com.android.server.wm.WindowProcessController;
 
 import java.util.ArrayList;
@@ -71,11 +74,27 @@ class AnrHelper {
     }
 
     void appNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
-            ApplicationInfo aInfo, String parentShortComponentName,
-            WindowProcessController parentProcess, boolean aboveSystem, String annotation) {
+         ApplicationInfo aInfo, String parentShortComponentName,
+         WindowProcessController parentProcess, boolean aboveSystem, String annotation) {
+         appNotResponding(new AnrRecord(anrProcess, activityShortComponentName, aInfo,
+                   parentShortComponentName, parentProcess, aboveSystem, annotation));
+    }
+
+    void deferAppNotResponding(ProcessRecord anrProcess, String activityShortComponentName,
+        ApplicationInfo aInfo, String parentShortComponentName,
+        WindowProcessController parentProcess, boolean aboveSystem,
+        String annotation, long delayInMillis) {
+        AnrRecord anrRecord = new AnrRecord(anrProcess, activityShortComponentName, aInfo,
+                parentShortComponentName, parentProcess, aboveSystem, annotation);
+        Message msg = Message.obtain();
+        msg.what = APP_NOT_RESPONDING_DEFER_MSG;
+        msg.obj = anrRecord;
+        mFgHandler.sendMessageDelayed(msg, delayInMillis);
+    }
+
+    private void appNotResponding(AnrRecord anrRecord) {
         synchronized (mAnrRecords) {
-            mAnrRecords.add(new AnrRecord(anrProcess, activityShortComponentName, aInfo,
-                    parentShortComponentName, parentProcess, aboveSystem, annotation));
+            mAnrRecords.add(anrRecord);
         }
         startAnrConsumerIfNeeded();
     }
@@ -165,4 +184,18 @@ class AnrHelper {
                     onlyDumpSelf);
         }
     }
+
+    static final int APP_NOT_RESPONDING_DEFER_MSG = 4;
+    static final int APP_NOT_RESPONDING_DEFER_TIMEOUT_MILLIS = 10 * 1000;
+    private Handler mFgHandler = new Handler(FgThread.getHandler().getLooper()) {
+        @Override
+        public void handleMessage(Message msg) {
+           switch (msg.what) {
+              case APP_NOT_RESPONDING_DEFER_MSG:
+                   AnrRecord record = (AnrRecord)msg.obj;
+                   appNotResponding((AnrRecord)msg.obj);
+                   break;
+            }
+        }
+    };
 }

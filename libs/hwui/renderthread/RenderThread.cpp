@@ -98,10 +98,18 @@ ASurfaceControlFunctions::ASurfaceControlFunctions() {
     LOG_ALWAYS_FATAL_IF(transactionApplyFunc == nullptr,
                         "Failed to find required symbol ASurfaceTransaction_apply!");
 
+    transactionReparentFunc = (AST_reparent)dlsym(handle_, "ASurfaceTransaction_reparent");
+    LOG_ALWAYS_FATAL_IF(transactionReparentFunc == nullptr,
+                        "Failed to find required symbol transactionReparentFunc!");
+
     transactionSetVisibilityFunc =
             (AST_setVisibility)dlsym(handle_, "ASurfaceTransaction_setVisibility");
     LOG_ALWAYS_FATAL_IF(transactionSetVisibilityFunc == nullptr,
                         "Failed to find required symbol ASurfaceTransaction_setVisibility!");
+
+    transactionSetZOrderFunc = (AST_setZOrder)dlsym(handle_, "ASurfaceTransaction_setZOrder");
+    LOG_ALWAYS_FATAL_IF(transactionSetZOrderFunc == nullptr,
+                        "Failed to find required symbol ASurfaceTransaction_setZOrder!");
 }
 
 void RenderThread::frameCallback(int64_t frameTimeNanos, void* data) {

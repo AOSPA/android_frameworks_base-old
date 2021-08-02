@@ -519,6 +519,12 @@ class SoundTriggerModule implements IHwBinder.DeathRecipient {
                 hidlConfig.base.header.captureDevice = mSession.mDeviceHandle;
                 hidlConfig.base.header.captureHandle = mSession.mIoHandle;
                 mHalService.startRecognition(mHandle, hidlConfig, this, 0);
+                try {
+                    hidlConfig.base.data.close();
+                } catch (Exception e) {
+                     // will be handled during finalize()
+                     Log.e(TAG, "Failed to close hidl memory", e);
+                }
                 setState(ModelState.ACTIVE);
             }
 

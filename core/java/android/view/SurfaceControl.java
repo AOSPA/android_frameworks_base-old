@@ -233,6 +233,8 @@ public final class SurfaceControl implements Parcelable {
     private static native void nativeRemoveJankDataListener(long nativeListener);
     private static native long nativeCreateJankDataListenerWrapper(OnJankDataListener listener);
     private static native int nativeGetGPUContextPriority();
+    private static native void nativeSetTransformHint(long nativeObject, int transformHint);
+    private static native int nativeGetTransformHint(long nativeObject);
 
     @Nullable
     @GuardedBy("mLock")
@@ -347,6 +349,8 @@ public final class SurfaceControl implements Parcelable {
     private int mWidth;
     @GuardedBy("mLock")
     private int mHeight;
+
+    private int mTransformHint;
 
     private WeakReference<View> mLocalOwnerView;
 
@@ -2607,16 +2611,6 @@ public final class SurfaceControl implements Parcelable {
                 = sRegistry.registerNativeAllocation(this, mNativeObject);
         }
 
-        /**
-         * Create a transaction object that wraps a native peer.
-         * @hide
-         */
-        Transaction(long nativeObject) {
-            mNativeObject = nativeObject;
-            mFreeNativeResources =
-                sRegistry.registerNativeAllocation(this, mNativeObject);
-        }
-
         private Transaction(Parcel in) {
             readFromParcel(in);
         }
@@ -3604,5 +3598,26 @@ public final class SurfaceControl implements Parcelable {
         mWidth = w;
         mHeight = h;
         nativeUpdateDefaultBufferSize(mNativeObject, w, h);
+    }
+
+    /**
+     * @hide
+     */
+    public int getTransformHint() {
+        checkNotReleased();
+        return nativeGetTransformHint(mNativeObject);
+    }
+
+    /**
+     * Update the transform hint of current SurfaceControl. Only affect if type is
+     * {@link #FX_SURFACE_BLAST}
+     *
+     * The transform hint is used to prevent allocating a buffer of different size when a
+     * layer is rotated. The producer can choose to consume the hint and allocate the buffer
+     * with the same size.
+     * @hide
+     */
+    public void setTransformHint(@Surface.Rotation int transformHint) {
+        nativeSetTransformHint(mNativeObject, transformHint);
     }
 }

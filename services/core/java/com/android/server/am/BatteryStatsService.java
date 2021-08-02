@@ -16,6 +16,7 @@
 
 package com.android.server.am;
 
+import static android.content.pm.PackageManager.PERMISSION_DENIED;
 import static android.net.NetworkCapabilities.NET_CAPABILITY_NOT_SUSPENDED;
 import static android.os.BatteryStats.POWER_DATA_UNAVAILABLE;
 
@@ -395,6 +396,16 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         dataConnectionStats.startMonitoring();
 
         registerStatsCallbacks();
+    }
+
+    /**
+     * Notifies BatteryStatsService that the system server is ready.
+     */
+    public void onSystemReady() {
+        mStats.onSystemReady();
+        if (BATTERY_USAGE_STORE_ENABLED) {
+            mBatteryUsageStatsStore.onSystemReady();
+        }
     }
 
     private final class LocalService extends BatteryStatsInternal {
@@ -783,6 +794,10 @@ public final class BatteryStatsService extends IBatteryStats.Stub
                     bus = getBatteryUsageStats(List.of(powerProfileQuery)).get(0);
                     break;
                 case FrameworkStatsLog.BATTERY_USAGE_STATS_BEFORE_RESET:
+                    if (!BATTERY_USAGE_STORE_ENABLED) {
+                        return StatsManager.PULL_SKIP;
+                    }
+
                     final long sessionStart = mBatteryUsageStatsStore
                             .getLastBatteryUsageStatsBeforeResetAtomPullTimestamp();
                     final long sessionEnd = mStats.getStartClockTime();
@@ -2524,6 +2539,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
      * @hide
      */
     public CellularBatteryStats getCellularBatteryStats() {
+        if (mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.UPDATE_DEVICE_STATS) == PERMISSION_DENIED) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.BATTERY_STATS, null);
+        }
+
         // Wait for the completion of pending works if there is any
         awaitCompletion();
         synchronized (mStats) {
@@ -2536,6 +2557,12 @@ public final class BatteryStatsService extends IBatteryStats.Stub
      * @hide
      */
     public WifiBatteryStats getWifiBatteryStats() {
+        if (mContext.checkCallingOrSelfPermission(
+                android.Manifest.permission.UPDATE_DEVICE_STATS) == PERMISSION_DENIED) {
+            mContext.enforceCallingOrSelfPermission(
+                    android.Manifest.permission.BATTERY_STATS, null);
+        }
+
         // Wait for the completion of pending works if there is any
         awaitCompletion();
         synchronized (mStats) {
@@ -2548,6 +2575,8 @@ public final class BatteryStatsService extends IBatteryStats.Stub
      * @hide
      */
     public GpsBatteryStats getGpsBatteryStats() {
+        mContext.enforceCallingOrSelfPermission(android.Manifest.permission.BATTERY_STATS, null);
+
         // Wait for the completion of pending works if there is any
         awaitCompletion();
         synchronized (mStats) {

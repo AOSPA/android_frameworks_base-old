@@ -16,6 +16,8 @@
 
 package com.android.server.compat;
 
+import static android.content.pm.PackageManager.MATCH_ANY_USER;
+
 import android.annotation.Nullable;
 import android.app.compat.ChangeIdStateCache;
 import android.app.compat.PackageOverride;
@@ -257,8 +259,8 @@ final class CompatConfig {
                 addChange(c);
             }
             c.addPackageOverride(packageName, overrides, allowedState, versionCode);
-            invalidateCache();
         }
+        invalidateCache();
         return alreadyKnown;
     }
 
@@ -379,9 +381,9 @@ final class CompatConfig {
                 CompatChange change = mChanges.valueAt(i);
                 removeOverrideUnsafe(change, packageName, versionCode);
             }
-            saveOverrides();
-            invalidateCache();
         }
+        saveOverrides();
+        invalidateCache();
     }
 
     /**
@@ -603,6 +605,10 @@ final class CompatConfig {
 
         try (InputStream in = new BufferedInputStream(new FileInputStream(overridesFile))) {
             Overrides overrides = com.android.server.compat.overrides.XmlParser.read(in);
+            if (overrides == null) {
+                Slog.w(TAG, "Parsing " + overridesFile.getPath() + " failed");
+                return;
+            }
             for (ChangeOverrides changeOverrides : overrides.getChangeOverrides()) {
                 long changeId = changeOverrides.getChangeId();
                 CompatChange compatChange = mChanges.get(changeId);
@@ -626,7 +632,18 @@ final class CompatConfig {
         if (mOverridesFile == null) {
             return;
         }
+        Overrides overrides = new Overrides();
         synchronized (mChanges) {
+            List<ChangeOverrides> changeOverridesList = overrides.getChangeOverrides();
+            for (int idx = 0; idx < mChanges.size(); ++idx) {
+                CompatChange c = mChanges.valueAt(idx);
+                ChangeOverrides changeOverrides = c.saveOverrides();
+                if (changeOverrides != null) {
+                    changeOverridesList.add(changeOverrides);
+                }
+            }
+        }
+        synchronized (mOverridesFile) {
             // Create the file if it doesn't already exist
             try {
                 mOverridesFile.createNewFile();
@@ -636,15 +653,6 @@ final class CompatConfig {
             }
             try (PrintWriter out = new PrintWriter(mOverridesFile)) {
                 XmlWriter writer = new XmlWriter(out);
-                Overrides overrides = new Overrides();
-                List<ChangeOverrides> changeOverridesList = overrides.getChangeOverrides();
-                for (int idx = 0; idx < mChanges.size(); ++idx) {
-                    CompatChange c = mChanges.valueAt(idx);
-                    ChangeOverrides changeOverrides = c.saveOverrides();
-                    if (changeOverrides != null) {
-                        changeOverridesList.add(changeOverrides);
-                    }
-                }
                 XmlWriter.write(writer, overrides);
             } catch (IOException e) {
                 Slog.e(TAG, e.toString());
@@ -687,7 +695,7 @@ final class CompatConfig {
     private Long getVersionCodeOrNull(String packageName) {
         try {
             ApplicationInfo applicationInfo = mContext.getPackageManager().getApplicationInfo(
-                    packageName, 0);
+                    packageName, MATCH_ANY_USER);
             return applicationInfo.longVersionCode;
         } catch (PackageManager.NameNotFoundException e) {
             return null;

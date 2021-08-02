@@ -218,6 +218,7 @@ class ScreenRotationAnimation {
             String name = "RotationLayer";
             mScreenshotLayer = displayContent.makeOverlay()
                     .setName(name)
+                    .setOpaque(true)
                     .setSecure(isSecure)
                     .setCallsite("ScreenRotationAnimation")
                     .setBLASTLayer()

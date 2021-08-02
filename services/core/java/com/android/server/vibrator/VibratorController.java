@@ -30,18 +30,23 @@ import android.util.Slog;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.util.Preconditions;
 
 import libcore.util.NativeAllocationRegistry;
 
 /** Controls a single vibrator. */
 final class VibratorController {
     private static final String TAG = "VibratorController";
+    // TODO(b/167947076): load suggested range from config
+    private static final int SUGGESTED_FREQUENCY_SAFE_RANGE = 200;
 
     private final Object mLock = new Object();
     private final NativeWrapper mNativeWrapper;
-    private final VibratorInfo mVibratorInfo;
+    private final VibratorInfo.Builder mVibratorInfoBuilder;
 
+    @GuardedBy("mLock")
+    private VibratorInfo mVibratorInfo;
+    @GuardedBy("mLock")
+    private boolean mVibratorInfoLoaded;
     @GuardedBy("mLock")
     private final RemoteCallbackList<IVibratorStateListener> mVibratorStateListeners =
             new RemoteCallbackList<>();
@@ -49,6 +54,8 @@ final class VibratorController {
     private boolean mIsVibrating;
     @GuardedBy("mLock")
     private boolean mIsUnderExternalControl;
+    @GuardedBy("mLock")
+    private float mCurrentAmplitude;
 
     /** Listener for vibration completion callbacks from native. */
     public interface OnVibrationCompleteListener {
@@ -66,10 +73,10 @@ final class VibratorController {
             NativeWrapper nativeWrapper) {
         mNativeWrapper = nativeWrapper;
         mNativeWrapper.init(vibratorId, listener);
-        // TODO(b/167947076): load suggested range from config
-        mVibratorInfo = mNativeWrapper.getInfo(/* suggestedFrequencyRange= */ 200);
-        Preconditions.checkNotNull(mVibratorInfo, "Failed to retrieve data for vibrator %d",
-                vibratorId);
+        mVibratorInfoBuilder = new VibratorInfo.Builder(vibratorId);
+        mVibratorInfoLoaded = mNativeWrapper.getInfo(SUGGESTED_FREQUENCY_SAFE_RANGE,
+                mVibratorInfoBuilder);
+        mVibratorInfo = mVibratorInfoBuilder.build();
     }
 
     /** Register state listener for this vibrator. */
@@ -103,7 +110,15 @@ final class VibratorController {
 
     /** Return the {@link VibratorInfo} representing the vibrator controlled by this instance. */
     public VibratorInfo getVibratorInfo() {
-        return mVibratorInfo;
+        synchronized (mLock) {
+            if (!mVibratorInfoLoaded) {
+                // Try to load the vibrator metadata that has failed in the last attempt.
+                mVibratorInfoLoaded = mNativeWrapper.getInfo(SUGGESTED_FREQUENCY_SAFE_RANGE,
+                        mVibratorInfoBuilder);
+                mVibratorInfo = mVibratorInfoBuilder.build();
+            }
+            return mVibratorInfo;
+        }
     }
 
     /**
@@ -115,6 +130,23 @@ final class VibratorController {
     public boolean isVibrating() {
         synchronized (mLock) {
             return mIsVibrating;
+        }
+    }
+
+    /**
+     * Returns the current amplitude the device is vibrating.
+     *
+     * <p>This value is set to 1 by the method {@link #on(long, long)}, and can be updated via
+     * {@link #setAmplitude(float)} if called while the device is vibrating.
+     *
+     * <p>If the device is vibrating via any other {@link #on} method then the current amplitude is
+     * unknown and this will return -1.
+     *
+     * <p>If {@link #isVibrating()} is false then this will be zero.
+     */
+    public float getCurrentAmplitude() {
+        synchronized (mLock) {
+            return mCurrentAmplitude;
         }
     }
 
@@ -179,6 +211,9 @@ final class VibratorController {
             if (mVibratorInfo.hasCapability(IVibrator.CAP_AMPLITUDE_CONTROL)) {
                 mNativeWrapper.setAmplitude(amplitude);
             }
+            if (mIsVibrating) {
+                mCurrentAmplitude = amplitude;
+            }
         }
     }
 
@@ -195,6 +230,7 @@ final class VibratorController {
         synchronized (mLock) {
             long duration = mNativeWrapper.on(milliseconds, vibrationId);
             if (duration > 0) {
+                mCurrentAmplitude = -1;
                 notifyVibratorOnLocked();
             }
             return duration;
@@ -215,6 +251,7 @@ final class VibratorController {
             long duration = mNativeWrapper.perform(prebaked.getEffectId(),
                     prebaked.getEffectStrength(), vibrationId);
             if (duration > 0) {
+                mCurrentAmplitude = -1;
                 notifyVibratorOnLocked();
             }
             return duration;
@@ -237,6 +274,7 @@ final class VibratorController {
         synchronized (mLock) {
             long duration = mNativeWrapper.compose(primitives, vibrationId);
             if (duration > 0) {
+                mCurrentAmplitude = -1;
                 notifyVibratorOnLocked();
             }
             return duration;
@@ -259,6 +297,7 @@ final class VibratorController {
             int braking = mVibratorInfo.getDefaultBraking();
             long duration = mNativeWrapper.composePwle(primitives, braking, vibrationId);
             if (duration > 0) {
+                mCurrentAmplitude = -1;
                 notifyVibratorOnLocked();
             }
             return duration;
@@ -269,19 +308,23 @@ final class VibratorController {
     public void off() {
         synchronized (mLock) {
             mNativeWrapper.off();
+            mCurrentAmplitude = 0;
             notifyVibratorOffLocked();
         }
     }
 
     @Override
     public String toString() {
-        return "VibratorController{"
-                + "mVibratorInfo=" + mVibratorInfo
-                + ", mIsVibrating=" + mIsVibrating
-                + ", mIsUnderExternalControl=" + mIsUnderExternalControl
-                + ", mVibratorStateListeners count="
-                + mVibratorStateListeners.getRegisteredCallbackCount()
-                + '}';
+        synchronized (mLock) {
+            return "VibratorController{"
+                    + "mVibratorInfo=" + mVibratorInfo
+                    + ", mIsVibrating=" + mIsVibrating
+                    + ", mCurrentAmplitude=" + mCurrentAmplitude
+                    + ", mIsUnderExternalControl=" + mIsUnderExternalControl
+                    + ", mVibratorStateListeners count="
+                    + mVibratorStateListeners.getRegisteredCallbackCount()
+                    + '}';
+        }
     }
 
     @GuardedBy("mLock")
@@ -361,7 +404,8 @@ final class VibratorController {
 
         private static native void alwaysOnDisable(long nativePtr, long id);
 
-        private static native VibratorInfo getInfo(long nativePtr, float suggestedFrequencyRange);
+        private static native boolean getInfo(long nativePtr, float suggestedFrequencyRange,
+                VibratorInfo.Builder infoBuilder);
 
         private long mNativePtr = 0;
 
@@ -428,9 +472,11 @@ final class VibratorController {
             alwaysOnDisable(mNativePtr, id);
         }
 
-        /** Return device vibrator metadata. */
-        public VibratorInfo getInfo(float suggestedFrequencyRange) {
-            return getInfo(mNativePtr, suggestedFrequencyRange);
+        /**
+         * Loads device vibrator metadata and returns true if all metadata was loaded successfully.
+         */
+        public boolean getInfo(float suggestedFrequencyRange, VibratorInfo.Builder infoBuilder) {
+            return getInfo(mNativePtr, suggestedFrequencyRange, infoBuilder);
         }
     }
 }
