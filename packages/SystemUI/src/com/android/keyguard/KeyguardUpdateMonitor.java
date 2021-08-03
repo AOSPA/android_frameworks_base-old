@@ -508,6 +508,9 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
 
         for (int i = 0; i < changedSubscriptions.size(); i++) {
             SimData data = mSimDatas.get(changedSubscriptions.get(i).getSimSlotIndex());
+            if (data == null) {
+                continue;
+            }
             for (int j = 0; j < mCallbacks.size(); j++) {
                 KeyguardUpdateMonitorCallback cb = mCallbacks.get(j).get();
                 if (cb != null) {
