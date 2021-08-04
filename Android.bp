@@ -318,6 +318,7 @@ java_defaults {
         ],
         include_dirs: [
             "frameworks/av/aidl",
+            "frameworks/native/libs/permission/aidl",
             "packages/modules/Connectivity/framework/aidl-export",
         ],
     },
@@ -559,6 +560,7 @@ stubs_defaults {
         ],
         include_dirs: [
             "frameworks/av/aidl",
+            "frameworks/native/libs/permission/aidl",
             "packages/modules/Connectivity/framework/aidl-export",
         ],
     },
