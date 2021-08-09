@@ -43,6 +43,7 @@ import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.ProcLocksReader;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.ServiceThread;
 
@@ -324,6 +325,7 @@ public final class CachedAppOptimizer {
     private int mPersistentCompactionCount;
     private int mBfgsCompactionCount;
     private final ProcessDependencies mProcessDependencies;
+    private final ProcLocksReader mProcLocksReader;
     public static BoostFramework mPerf = new BoostFramework();
 
     public CachedAppOptimizer(ActivityManagerService am) {
@@ -341,6 +343,7 @@ public final class CachedAppOptimizer {
         mProcessDependencies = processDependencies;
         mTestCallback = callback;
         mSettingsObserver = new SettingsContentObserver();
+        mProcLocksReader = new ProcLocksReader();
     }
 
     /**
@@ -1411,7 +1414,7 @@ public final class CachedAppOptimizer {
 
             try {
                 // pre-check for locks to avoid unnecessary freeze/unfreeze operations
-                if (Process.hasFileLocks(pid)) {
+                if (mProcLocksReader.hasFileLocks(pid)) {
                     if (DEBUG_FREEZER) {
                         Slog.d(TAG_AM, name + " (" + pid + ") holds file locks, not freezing");
                     }
@@ -1498,7 +1501,7 @@ public final class CachedAppOptimizer {
 
             try {
                 // post-check to prevent races
-                if (Process.hasFileLocks(pid)) {
+                if (mProcLocksReader.hasFileLocks(pid)) {
                     if (DEBUG_FREEZER) {
                         Slog.d(TAG_AM, name + " (" + pid + ") holds file locks, reverting freeze");
                     }
