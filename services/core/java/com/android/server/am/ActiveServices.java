@@ -3732,7 +3732,7 @@ public final class ActiveServices {
                         = !((r.serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0);
                 if(top_rc != null) {
                     if(top_rc.launching && !r.shortInstanceName.contains(top_rc.packageName)
-                            && !isPersistent) {
+                            && !isPersistent && r.isForeground == false) {
                         shouldDelay = true;
                     }
                 }
