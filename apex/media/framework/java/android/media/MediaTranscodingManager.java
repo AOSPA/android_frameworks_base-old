@@ -53,7 +53,7 @@ import java.util.concurrent.Executors;
 /**
  Android 12 introduces Compatible media transcoding feature.  See
  <a href="https://developer.android.com/about/versions/12/features#compatible_media_transcoding">
- Compatible media transcoding</a>. MediaTranscodeManager provides an interface to the system's media
+ Compatible media transcoding</a>. MediaTranscodingManager provides an interface to the system's media
  transcoding service and can be used to transcode media files, e.g. transcoding a video from HEVC to
  AVC.
 
@@ -68,7 +68,7 @@ import java.util.concurrent.Executors;
  <p>
  To transcode a media file, first create a {@link TranscodingRequest} through its builder class
  {@link VideoTranscodingRequest.Builder}. Transcode requests are then enqueue to the manager through
- {@link MediaTranscodeManager#enqueueRequest(
+ {@link MediaTranscodingManager#enqueueRequest(
          TranscodingRequest, Executor, OnTranscodingFinishedListener)}
  TranscodeRequest are processed based on client process's priority and request priority. When a
  transcode operation is completed the caller is notified via its
@@ -86,8 +86,8 @@ import java.util.concurrent.Executors;
  */
 @MinSdk(Build.VERSION_CODES.S)
 @SystemApi
-public final class MediaTranscodeManager {
-    private static final String TAG = "MediaTranscodeManager";
+public final class MediaTranscodingManager {
+    private static final String TAG = "MediaTranscodingManager";
 
     /** Maximum number of retry to connect to the service. */
     private static final int CONNECT_SERVICE_RETRY_COUNT = 100;
@@ -125,7 +125,7 @@ public final class MediaTranscodeManager {
     private final Object mLock = new Object();
     @GuardedBy("mLock")
     @NonNull private ITranscodingClient mTranscodingClient = null;
-    private static MediaTranscodeManager sMediaTranscodeManager;
+    private static MediaTranscodingManager sMediaTranscodingManager;
 
     private void handleTranscodingFinished(int sessionId, TranscodingResultParcel result) {
         synchronized (mPendingTranscodingSessions) {
@@ -301,7 +301,7 @@ public final class MediaTranscodeManager {
                 }
 
                 try {
-                    // Do not set hasRetried for retry initiated by MediaTranscodeManager.
+                    // Do not set hasRetried for retry initiated by MediaTranscodingManager.
                     session.retryInternal(false /*setHasRetried*/);
                 } catch (Exception re) {
                     // TODO(hkuang): Return correct error code to the client.
@@ -418,7 +418,7 @@ public final class MediaTranscodeManager {
     /**
      * @hide
      */
-    public MediaTranscodeManager(@NonNull Context context) {
+    public MediaTranscodingManager(@NonNull Context context) {
         mContext = context;
         mContentResolver = mContext.getContentResolver();
         mPackageName = mContext.getPackageName();
@@ -1342,7 +1342,7 @@ public final class MediaTranscodeManager {
                     @IntRange(from = 0, to = 100) int progress);
         }
 
-        private final MediaTranscodeManager mManager;
+        private final MediaTranscodingManager mManager;
         private Executor mListenerExecutor;
         private OnTranscodingFinishedListener mListener;
         private int mSessionId = -1;
@@ -1368,7 +1368,7 @@ public final class MediaTranscodeManager {
         private final TranscodingRequest mRequest;
 
         private TranscodingSession(
-                @NonNull MediaTranscodeManager manager,
+                @NonNull MediaTranscodingManager manager,
                 @NonNull TranscodingRequest request,
                 @NonNull TranscodingSessionParcel parcel,
                 @NonNull @CallbackExecutor Executor executor,
@@ -1669,10 +1669,10 @@ public final class MediaTranscodeManager {
 
     /**
      * Enqueues a TranscodingRequest for execution.
-     * <p> Upon successfully accepting the request, MediaTranscodeManager will return a
+     * <p> Upon successfully accepting the request, MediaTranscodingManager will return a
      * {@link TranscodingSession} to the client. Client should use {@link TranscodingSession} to
      * track the progress and get the result.
-     * <p> MediaTranscodeManager will return null if fails to accept the request due to service
+     * <p> MediaTranscodingManager will return null if fails to accept the request due to service
      * rebooting. Client could retry again after receiving null.
      *
      * @param transcodingRequest The TranscodingRequest to enqueue.
