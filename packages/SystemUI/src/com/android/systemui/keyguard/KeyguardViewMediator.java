@@ -2633,7 +2633,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
             if (mContext.getResources().getBoolean(
                     com.android.internal.R.bool.config_guestUserAutoCreated)) {
                 // TODO(b/191067027): Move post-boot guest creation to system_server
-                mUserSwitcherController.guaranteeGuestPresent();
+                mUserSwitcherController.schedulePostBootGuestCreation();
             }
             mBootCompleted = true;
             adjustStatusBarLocked(false, true);
@@ -2789,7 +2789,10 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
 
         // Don't hide the keyguard due to a doze change if there's a lock pending, because we're
         // just going to show it again.
-        if (mShowing || !mPendingLock) {
+        // If the device is not capable of controlling the screen off animation, SysUI needs to
+        // update lock screen state in ATMS here, otherwise ATMS tries to resume activities when
+        // enabling doze state.
+        if (mShowing || !mPendingLock || !mDozeParameters.canControlUnlockedScreenOff()) {
             setShowingLocked(mShowing);
         }
     }
