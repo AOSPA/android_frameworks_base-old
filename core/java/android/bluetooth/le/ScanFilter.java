@@ -190,6 +190,15 @@ public final class ScanFilter implements Parcelable {
                 dest.writeByteArray(mManufacturerDataMask);
             }
         }
+
+        // IRK
+        if (mDeviceAddress != null) {
+            dest.writeInt(mAddressType);
+            dest.writeInt(mIrk == null ? 0 : 1);
+            if (mIrk != null) {
+                dest.writeByteArray(mIrk);
+            }
+        }
         dest.writeInt(mOrgId);
         dest.writeInt(mOrgId < 0 ? 0 : 1);
         if(mOrgId >= 0) {
@@ -221,8 +230,10 @@ public final class ScanFilter implements Parcelable {
             if (in.readInt() == 1) {
                 builder.setDeviceName(in.readString());
             }
+            String address = null;
+            // If we have a non-null address
             if (in.readInt() == 1) {
-                builder.setDeviceAddress(in.readString());
+                address = in.readString();
             }
             if (in.readInt() == 1) {
                 ParcelUuid uuid = in.readParcelable(ParcelUuid.class.getClassLoader());
@@ -276,6 +287,18 @@ public final class ScanFilter implements Parcelable {
                     in.readByteArray(manufacturerDataMask);
                     builder.setManufacturerData(manufacturerId, manufacturerData,
                             manufacturerDataMask);
+                }
+            }
+
+            // IRK
+            if (address != null) {
+                final int addressType = in.readInt();
+                if (in.readInt() == 1) {
+                    final byte[] irk = new byte[16];
+                    in.readByteArray(irk);
+                    builder.setDeviceAddress(address, addressType, irk);
+                } else {
+                    builder.setDeviceAddress(address, addressType);
                 }
             }
 

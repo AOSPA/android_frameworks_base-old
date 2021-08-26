@@ -97,7 +97,8 @@ public class StartingSurfaceDrawerTests {
             // listen for addView
             mAddWindowForTask = taskId;
             mViewThemeResId = view.getContext().getThemeResId();
-            return true;
+            // Do not wait for background color
+            return false;
         }
 
         @Override
@@ -213,6 +214,7 @@ public class StartingSurfaceDrawerTests {
         final ActivityManager.RunningTaskInfo taskInfo = new ActivityManager.RunningTaskInfo();
         taskInfo.topActivityInfo = info;
         taskInfo.taskId = taskId;
+        windowInfo.targetActivityInfo = info;
         windowInfo.taskInfo = taskInfo;
         return windowInfo;
     }

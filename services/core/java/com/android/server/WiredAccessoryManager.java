@@ -574,6 +574,9 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                 }
 
                 if (devPath.equals(uei.getDevPath())) {
+                    if (state == 1 && mDpCount > 0) {
+                        uei.setStreamIndex(mDpCount);
+                    }
                     updateLocked(name, uei.getDevAddress(),
                                  uei.computeNewHeadsetState(mHeadsetState,
                                                             state));
@@ -608,7 +611,6 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                         assert(idx2 != -1);
                         int dev = Integer.parseInt(mDevName.substring(idx+1, idx2));
                         int cable = Integer.parseInt(mDevName.substring(idx2+1));
-                        mDevAddress = "controller=" + cable + ";stream=" + dev;
                         if (LOG) {
                             Slog.v(TAG, "UEvent dev address " + mDevAddress);
                         }
@@ -624,7 +626,7 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                 while (true) {
                     String devPath = String.format(Locale.US,
                           "/sys/devices/platform/soc/%s/extcon/extcon%d/name",
-                                                   NAME_DP_AUDIO, index);
+                                                   NAME_DP_AUDIO, dev_index);
                     if (LOG) {
                         Slog.v(TAG, "checkDevIndex " + devPath);
                     }
@@ -691,6 +693,14 @@ final class WiredAccessoryManager implements WiredAccessoryCallbacks {
                         break;
                     }
                 }
+            }
+
+            public void setStreamIndex(int streamIndex) {
+                int index1 = mDevAddress.indexOf("=");
+                int index2 = mDevAddress.indexOf("=", index1 + 1);
+
+                String allExceptStreamIdx = mDevAddress.substring(0, index2 + 1);
+                mDevAddress = allExceptStreamIdx + String.valueOf(streamIndex);
             }
 
             public String getDevName() {

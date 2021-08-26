@@ -1421,6 +1421,7 @@ package android.media {
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int abandonAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String);
     method @Nullable public static android.media.AudioDeviceInfo getDeviceInfoFromType(int);
     method @IntRange(from=0) @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public long getFadeOutDurationOnFocusLossMillis(@NonNull android.media.AudioAttributes);
+    method @NonNull public java.util.List<java.lang.Integer> getReportedSurroundFormats();
     method @NonNull public java.util.Map<java.lang.Integer,java.lang.Boolean> getSurroundFormats();
     method public boolean hasRegisteredDynamicPolicy();
     method @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_AUDIO_ROUTING, android.Manifest.permission.QUERY_AUDIO_STATE}) public boolean isFullVolumeDevice();
@@ -2068,7 +2069,7 @@ package android.permission {
   public final class PermissionManager {
     method @NonNull @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS) public java.util.List<android.permission.PermGroupUsage> getIndicatorAppOpUsageData();
     method @NonNull @RequiresPermission(android.Manifest.permission.GET_APP_OPS_STATS) public java.util.List<android.permission.PermGroupUsage> getIndicatorAppOpUsageData(boolean);
-    method public void registerAttributionSource(@NonNull android.content.AttributionSource);
+    method @NonNull public android.content.AttributionSource registerAttributionSource(@NonNull android.content.AttributionSource);
   }
 
 }
@@ -2166,7 +2167,6 @@ package android.provider {
     field @Deprecated public static final String ENABLED_NOTIFICATION_POLICY_ACCESS_PACKAGES = "enabled_notification_policy_access_packages";
     field public static final String ENABLED_VR_LISTENERS = "enabled_vr_listeners";
     field public static final String IMMERSIVE_MODE_CONFIRMATIONS = "immersive_mode_confirmations";
-    field public static final String NFC_PAYMENT_DEFAULT_COMPONENT = "nfc_payment_default_component";
     field public static final String NOTIFICATION_BADGING = "notification_badging";
     field public static final String NOTIFICATION_BUBBLES = "notification_bubbles";
     field public static final String POWER_MENU_LOCKED_SHOW_CONTENT = "power_menu_locked_show_content";
@@ -3176,7 +3176,6 @@ package android.window {
 
   public final class SplashScreenView extends android.widget.FrameLayout {
     method @Nullable public android.view.View getBrandingView();
-    method @ColorInt public int getIconBackgroundColor();
   }
 
   public final class StartingWindowInfo implements android.os.Parcelable {

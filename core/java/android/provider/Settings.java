@@ -8758,8 +8758,6 @@ public final class Settings {
          * @hide
          */
         @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-        @TestApi
-        @Readable
         public static final String NFC_PAYMENT_DEFAULT_COMPONENT = "nfc_payment_default_component";
 
         /**
@@ -9671,13 +9669,6 @@ public final class Settings {
          */
         @Readable
         public static final String QS_AUTO_ADDED_TILES = "qs_auto_tiles";
-
-        /**
-         * Whether the Lockdown button should be shown in the power menu.
-         * @hide
-         */
-        @Readable
-        public static final String LOCKDOWN_IN_POWER_MENU = "lockdown_in_power_menu";
 
         /**
          * Backup manager behavioral parameters.

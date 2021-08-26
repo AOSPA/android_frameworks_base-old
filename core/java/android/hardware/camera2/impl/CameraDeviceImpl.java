@@ -708,6 +708,16 @@ public class CameraDeviceImpl extends CameraDevice
                 mCurrentSession.replaceSessionClose();
             }
 
+            if (mCurrentExtensionSession != null) {
+                mCurrentExtensionSession.release(false /*skipCloseNotification*/);
+                mCurrentExtensionSession = null;
+            }
+
+            if (mCurrentAdvancedExtensionSession != null) {
+                mCurrentAdvancedExtensionSession.release(false /*skipCloseNotification*/);
+                mCurrentAdvancedExtensionSession = null;
+            }
+
             // TODO: dont block for this
             boolean configureSuccess = true;
             CameraAccessException pendingException = null;
@@ -1354,12 +1364,12 @@ public class CameraDeviceImpl extends CameraDevice
             }
 
             if (mCurrentExtensionSession != null) {
-                mCurrentExtensionSession.release();
+                mCurrentExtensionSession.release(true /*skipCloseNotification*/);
                 mCurrentExtensionSession = null;
             }
 
             if (mCurrentAdvancedExtensionSession != null) {
-                mCurrentAdvancedExtensionSession.release();
+                mCurrentAdvancedExtensionSession.release(true /*skipCloseNotification*/);
                 mCurrentAdvancedExtensionSession = null;
             }
 
