@@ -69,11 +69,13 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
             @NonNull ClientMonitorCallbackConverter listener, int targetUserId, long operationId,
             boolean restricted, String owner, int cookie, boolean requireConfirmation, int sensorId,
             boolean isStrongBiometric, int statsClient, @NonNull UsageStats usageStats,
-            @NonNull LockoutCache lockoutCache, boolean allowBackgroundAuthentication) {
+            @NonNull LockoutCache lockoutCache, boolean allowBackgroundAuthentication,
+            boolean isKeyguardBypassEnabled) {
         super(context, lazyDaemon, token, listener, targetUserId, operationId, restricted,
                 owner, cookie, requireConfirmation, sensorId, isStrongBiometric,
                 BiometricsProtoEnums.MODALITY_FACE, statsClient, null /* taskStackListener */,
-                lockoutCache, allowBackgroundAuthentication, true /* shouldVibrate */);
+                lockoutCache, allowBackgroundAuthentication, true /* shouldVibrate */,
+                isKeyguardBypassEnabled);
         mUsageStats = usageStats;
         mLockoutCache = lockoutCache;
         mNotificationManager = context.getSystemService(NotificationManager.class);
@@ -98,7 +100,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     @NonNull
     @Override
     protected Callback wrapCallbackForStart(@NonNull Callback callback) {
-        return new CompositeCallback(createALSCallback(), callback);
+        return new CompositeCallback(createALSCallback(true /* startWithClient */), callback);
     }
 
     @Override
@@ -125,7 +127,8 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
         }
     }
 
-    private boolean wasUserDetected() {
+    @Override
+    public boolean wasUserDetected() {
         // Do not provide haptic feedback if the user was not detected, and an error (usually
         // ERROR_TIMEOUT) is received.
         return mLastAcquire != FaceManager.FACE_ACQUIRED_NOT_DETECTED
@@ -158,7 +161,7 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
     }
 
     @Override
-    public void onError(int error, int vendorCode) {
+    public void onError(@BiometricConstants.Errors int error, int vendorCode) {
         mUsageStats.addEvent(new UsageStats.AuthenticationEvent(
                 getStartTimeMs(),
                 System.currentTimeMillis() - getStartTimeMs() /* latency */,
@@ -167,25 +170,8 @@ class FaceAuthenticationClient extends AuthenticationClient<ISession> implements
                 vendorCode,
                 getTargetUserId()));
 
-        switch (error) {
-            case BiometricConstants.BIOMETRIC_ERROR_TIMEOUT:
-                if (!wasUserDetected() && !isBiometricPrompt()) {
-                    // No vibration if user was not detected on keyguard
-                    break;
-                }
-            case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT:
-            case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT:
-                if (mAuthAttempted) {
-                    // Only vibrate if auth was attempted. If the user was already locked out prior
-                    // to starting authentication, do not vibrate.
-                    vibrateError();
-                }
-                break;
-            case BiometricConstants.BIOMETRIC_ERROR_RE_ENROLL:
-                BiometricNotificationUtils.showReEnrollmentNotification(getContext());
-                break;
-            default:
-                break;
+        if (error == BiometricConstants.BIOMETRIC_ERROR_RE_ENROLL) {
+            BiometricNotificationUtils.showReEnrollmentNotification(getContext());
         }
 
         super.onError(error, vendorCode);

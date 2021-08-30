@@ -193,6 +193,7 @@ import android.app.usage.UsageEvents.Event;
 import android.app.usage.UsageStatsManager;
 import android.app.usage.UsageStatsManagerInternal;
 import android.appwidget.AppWidgetManager;
+import android.appwidget.AppWidgetManagerInternal;
 import android.content.AttributionSource;
 import android.content.AutofillOptions;
 import android.content.BroadcastReceiver;
@@ -3360,13 +3361,19 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         final int max = SystemProperties.getInt("tombstoned.max_anr_count", 64);
         final long now = System.currentTimeMillis();
-        Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
-        for (int i = 0; i < files.length; ++i) {
-            if (i > max || (now - files[i].lastModified()) > DAY_IN_MILLIS) {
-                if (!files[i].delete()) {
-                    Slog.w(TAG, "Unable to prune stale trace file: " + files[i]);
+        try {
+            Arrays.sort(files, Comparator.comparingLong(File::lastModified).reversed());
+            for (int i = 0; i < files.length; ++i) {
+                if (i > max || (now - files[i].lastModified()) > DAY_IN_MILLIS) {
+                    if (!files[i].delete()) {
+                        Slog.w(TAG, "Unable to prune stale trace file: " + files[i]);
+                    }
                 }
             }
+        } catch (IllegalArgumentException e) {
+            // The modification times changed while we were sorting. Bail...
+            // https://issuetracker.google.com/169836837
+            Slog.w(TAG, "tombstone modification times changed while sorting; not pruning", e);
         }
     }
 
@@ -16672,13 +16679,21 @@ public class ActivityManagerService extends IActivityManager.Stub
         enforceCallingPermission(android.Manifest.permission.CHANGE_CONFIGURATION,
                 "scheduleApplicationInfoChanged()");
 
-        synchronized (mProcLock) {
-            final long origId = Binder.clearCallingIdentity();
-            try {
-                updateApplicationInfoLOSP(packageNames, userId);
-            } finally {
-                Binder.restoreCallingIdentity(origId);
+        final long origId = Binder.clearCallingIdentity();
+        try {
+            final boolean updateFrameworkRes = packageNames.contains("android");
+            synchronized (mProcLock) {
+                updateApplicationInfoLOSP(packageNames, updateFrameworkRes, userId);
             }
+
+            AppWidgetManagerInternal widgets = LocalServices.getService(
+                    AppWidgetManagerInternal.class);
+            if (widgets != null) {
+                widgets.applyResourceOverlaysToWidgets(new HashSet<>(packageNames), userId,
+                        updateFrameworkRes);
+            }
+        } finally {
+            Binder.restoreCallingIdentity(origId);
         }
     }
 
@@ -16695,11 +16710,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     }
 
     @GuardedBy(anyOf = {"this", "mProcLock"})
-    private void updateApplicationInfoLOSP(@NonNull List<String> packagesToUpdate, int userId) {
-        final boolean updateFrameworkRes = packagesToUpdate.contains("android");
+    private void updateApplicationInfoLOSP(@NonNull List<String> packagesToUpdate,
+            boolean updateFrameworkRes, int userId) {
         if (updateFrameworkRes) {
             ParsingPackageUtils.readConfigUseRoundIcon(null);
         }
+
         mProcessList.updateApplicationInfoLOSP(packagesToUpdate, userId, updateFrameworkRes);
 
         if (updateFrameworkRes) {

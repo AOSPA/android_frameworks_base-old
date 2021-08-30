@@ -1447,7 +1447,7 @@ class Task extends WindowContainer<WindowContainer> {
                     && (newParent == null || !newParent.inPinnedWindowingMode())) {
                 // Notify if a task from the root pinned task is being removed
                 // (or moved depending on the mode).
-                mRootWindowContainer.notifyActivityPipModeChanged(null);
+                mRootWindowContainer.notifyActivityPipModeChanged(this, null);
             }
         }
 
@@ -4177,7 +4177,9 @@ class Task extends WindowContainer<WindowContainer> {
     StartingWindowInfo getStartingWindowInfo(ActivityRecord activity) {
         final StartingWindowInfo info = new StartingWindowInfo();
         info.taskInfo = getTaskInfo();
-
+        info.targetActivityInfo = info.taskInfo.topActivityInfo != null
+                && activity.info != info.taskInfo.topActivityInfo
+                ? activity.info : null;
         info.isKeyguardOccluded =
             mAtmService.mKeyguardController.isDisplayOccluded(DEFAULT_DISPLAY);
 
@@ -5404,7 +5406,7 @@ class Task extends WindowContainer<WindowContainer> {
                     : WINDOWING_MODE_FULLSCREEN;
         }
         if (currentMode == WINDOWING_MODE_PINNED) {
-            mRootWindowContainer.notifyActivityPipModeChanged(null);
+            mRootWindowContainer.notifyActivityPipModeChanged(this, null);
         }
         if (likelyResolvedMode == WINDOWING_MODE_PINNED) {
             // In the case that we've disabled affecting the SysUI flags as a part of seamlessly
@@ -7676,7 +7678,10 @@ class Task extends WindowContainer<WindowContainer> {
         mLastRecentsAnimationOverlay = overlay;
     }
 
-    void clearLastRecentsAnimationTransaction() {
+    void clearLastRecentsAnimationTransaction(boolean forceRemoveOverlay) {
+        if (forceRemoveOverlay && mLastRecentsAnimationOverlay != null) {
+            getPendingTransaction().remove(mLastRecentsAnimationOverlay);
+        }
         mLastRecentsAnimationTransaction = null;
         mLastRecentsAnimationOverlay = null;
         // reset also the crop and transform introduced by mLastRecentsAnimationTransaction

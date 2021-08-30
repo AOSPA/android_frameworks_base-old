@@ -102,6 +102,7 @@ import android.app.usage.UsageEvents;
 import android.appwidget.AppWidgetManagerInternal;
 import android.compat.annotation.ChangeId;
 import android.compat.annotation.EnabledSince;
+import android.compat.annotation.Overridable;
 import android.content.ComponentName;
 import android.content.ComponentName.WithComponentName;
 import android.content.Context;
@@ -321,6 +322,7 @@ public final class ActiveServices {
      */
     @ChangeId
     @EnabledSince(targetSdkVersion = android.os.Build.VERSION_CODES.S)
+    @Overridable
     static final long FGS_BG_START_RESTRICTION_CHANGE_ID = 170668199L;
 
     /**
@@ -840,10 +842,12 @@ public final class ActiveServices {
 
         if (fgRequired) {
             // We are now effectively running a foreground service.
-            ServiceState stracker = r.getTracker();
-            if (stracker != null) {
-                stracker.setForeground(true, mAm.mProcessStats.getMemFactorLocked(),
-                        r.lastActivity);
+            synchronized (mAm.mProcessStats.mLock) {
+                final ServiceState stracker = r.getTracker();
+                if (stracker != null) {
+                    stracker.setForeground(true, mAm.mProcessStats.getMemFactorLocked(),
+                            r.lastActivity);
+                }
             }
             mAm.mAppOpsService.startOperation(AppOpsManager.getToken(mAm.mAppOpsService),
                     AppOpsManager.OP_START_FOREGROUND, r.appInfo.uid, r.packageName, null,
@@ -1115,9 +1119,11 @@ public final class ActiveServices {
 
     ComponentName startServiceInnerLocked(ServiceMap smap, Intent service, ServiceRecord r,
             boolean callerFg, boolean addToStarting) throws TransactionTooLargeException {
-        ServiceState stracker = r.getTracker();
-        if (stracker != null) {
-            stracker.setStarted(true, mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
+        synchronized (mAm.mProcessStats.mLock) {
+            final ServiceState stracker = r.getTracker();
+            if (stracker != null) {
+                stracker.setStarted(true, mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
+            }
         }
         r.callStart = false;
 
@@ -1177,8 +1183,10 @@ public final class ActiveServices {
         mAm.mBatteryStatsService.noteServiceStopRunning(uid, packageName, serviceName);
         service.startRequested = false;
         if (service.tracker != null) {
-            service.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
-                    SystemClock.uptimeMillis());
+            synchronized (mAm.mProcessStats.mLock) {
+                service.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
+                        SystemClock.uptimeMillis());
+            }
         }
         service.callStart = false;
 
@@ -1353,8 +1361,10 @@ public final class ActiveServices {
             mAm.mBatteryStatsService.noteServiceStopRunning(uid, packageName, serviceName);
             r.startRequested = false;
             if (r.tracker != null) {
-                r.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
-                        SystemClock.uptimeMillis());
+                synchronized (mAm.mProcessStats.mLock) {
+                    r.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
+                }
             }
             r.callStart = false;
             final long origId = Binder.clearCallingIdentity();
@@ -1910,10 +1920,12 @@ public final class ActiveServices {
                         r.mStartForegroundCount++;
                         r.mFgsEnterTime = SystemClock.uptimeMillis();
                         if (!stopProcStatsOp) {
-                            ServiceState stracker = r.getTracker();
-                            if (stracker != null) {
-                                stracker.setForeground(true,
-                                        mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
+                            synchronized (mAm.mProcessStats.mLock) {
+                                final ServiceState stracker = r.getTracker();
+                                if (stracker != null) {
+                                    stracker.setForeground(true,
+                                            mAm.mProcessStats.getMemFactorLocked(), r.lastActivity);
+                                }
                             }
                         } else {
                             stopProcStatsOp = false;
@@ -1948,10 +1960,12 @@ public final class ActiveServices {
                 if (stopProcStatsOp) {
                     // We got through to this point with it actively being started foreground,
                     // and never decided we wanted to keep it like that, so drop it.
-                    ServiceState stracker = r.getTracker();
-                    if (stracker != null) {
-                        stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(),
-                                SystemClock.uptimeMillis());
+                    synchronized (mAm.mProcessStats.mLock) {
+                        final ServiceState stracker = r.getTracker();
+                        if (stracker != null) {
+                            stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(),
+                                    SystemClock.uptimeMillis());
+                        }
                     }
                 }
                 if (alreadyStartedOp) {
@@ -1993,10 +2007,12 @@ public final class ActiveServices {
 
                 r.isForeground = false;
                 r.mFgsExitTime = SystemClock.uptimeMillis();
-                ServiceState stracker = r.getTracker();
-                if (stracker != null) {
-                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(),
-                            SystemClock.uptimeMillis());
+                synchronized (mAm.mProcessStats.mLock) {
+                    final ServiceState stracker = r.getTracker();
+                    if (stracker != null) {
+                        stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(),
+                                SystemClock.uptimeMillis());
+                    }
                 }
                 mAm.mAppOpsService.finishOperation(
                         AppOpsManager.getToken(mAm.mAppOpsService),
@@ -2771,10 +2787,12 @@ public final class ActiveServices {
                 s.lastActivity = SystemClock.uptimeMillis();
                 if (!s.hasAutoCreateConnections()) {
                     // This is the first binding, let the tracker know.
-                    ServiceState stracker = s.getTracker();
-                    if (stracker != null) {
-                        stracker.setBound(true, mAm.mProcessStats.getMemFactorLocked(),
-                                s.lastActivity);
+                    synchronized (mAm.mProcessStats.mLock) {
+                        final ServiceState stracker = s.getTracker();
+                        if (stracker != null) {
+                            stracker.setBound(true, mAm.mProcessStats.getMemFactorLocked(),
+                                    s.lastActivity);
+                        }
                     }
                 }
             }
@@ -3458,9 +3476,11 @@ public final class ActiveServices {
         ProcessServiceRecord psr;
         if (r.executeNesting == 0) {
             r.executeFg = fg;
-            ServiceState stracker = r.getTracker();
-            if (stracker != null) {
-                stracker.setExecuting(true, mAm.mProcessStats.getMemFactorLocked(), now);
+            synchronized (mAm.mProcessStats.mLock) {
+                final ServiceState stracker = r.getTracker();
+                if (stracker != null) {
+                    stracker.setExecuting(true, mAm.mProcessStats.getMemFactorLocked(), now);
+                }
             }
             if (r.app != null) {
                 psr = r.app.mServices;
@@ -3678,7 +3698,9 @@ public final class ActiveServices {
         if (!mRestartingServices.contains(r)) {
             r.createdFromFg = false;
             mRestartingServices.add(r);
-            r.makeRestarting(mAm.mProcessStats.getMemFactorLocked(), now);
+            synchronized (mAm.mProcessStats.mLock) {
+                r.makeRestarting(mAm.mProcessStats.getMemFactorLocked(), now);
+            }
         }
 
         cancelForegroundNotificationLocked(r);
@@ -3732,7 +3754,7 @@ public final class ActiveServices {
                         = !((r.serviceInfo.applicationInfo.flags&ApplicationInfo.FLAG_PERSISTENT) == 0);
                 if(top_rc != null) {
                     if(top_rc.launching && !r.shortInstanceName.contains(top_rc.packageName)
-                            && !isPersistent) {
+                            && !isPersistent && r.isForeground == false) {
                         shouldDelay = true;
                     }
                 }
@@ -3788,8 +3810,10 @@ public final class ActiveServices {
                 }
             }
             if (!stillTracking) {
-                r.restartTracker.setRestarting(false, mAm.mProcessStats.getMemFactorLocked(),
-                        SystemClock.uptimeMillis());
+                synchronized (mAm.mProcessStats.mLock) {
+                    r.restartTracker.setRestarting(false, mAm.mProcessStats.getMemFactorLocked(),
+                            SystemClock.uptimeMillis());
+                }
                 r.restartTracker = null;
             }
         }
@@ -4348,9 +4372,11 @@ public final class ActiveServices {
                     + r);
             r.fgRequired = false;
             r.fgWaiting = false;
-            ServiceState stracker = r.getTracker();
-            if (stracker != null) {
-                stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(), now);
+            synchronized (mAm.mProcessStats.mLock) {
+                ServiceState stracker = r.getTracker();
+                if (stracker != null) {
+                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(), now);
+                }
             }
             mAm.mAppOpsService.finishOperation(AppOpsManager.getToken(mAm.mAppOpsService),
                     AppOpsManager.OP_START_FOREGROUND, r.appInfo.uid, r.packageName, null);
@@ -4407,9 +4433,11 @@ public final class ActiveServices {
         cancelForegroundNotificationLocked(r);
         if (r.isForeground) {
             decActiveForegroundAppLocked(smap, r);
-            ServiceState stracker = r.getTracker();
-            if (stracker != null) {
-                stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(), now);
+            synchronized (mAm.mProcessStats.mLock) {
+                ServiceState stracker = r.getTracker();
+                if (stracker != null) {
+                    stracker.setForeground(false, mAm.mProcessStats.getMemFactorLocked(), now);
+                }
             }
             mAm.mAppOpsService.finishOperation(
                     AppOpsManager.getToken(mAm.mAppOpsService),
@@ -4477,13 +4505,15 @@ public final class ActiveServices {
            ((ServiceRestarter)r.restarter).setService(null);
         }
 
-        int memFactor = mAm.mProcessStats.getMemFactorLocked();
-        if (r.tracker != null) {
-            r.tracker.setStarted(false, memFactor, now);
-            r.tracker.setBound(false, memFactor, now);
-            if (r.executeNesting == 0) {
-                r.tracker.clearCurrentOwner(r, false);
-                r.tracker = null;
+        synchronized (mAm.mProcessStats.mLock) {
+            final int memFactor = mAm.mProcessStats.getMemFactorLocked();
+            if (r.tracker != null) {
+                r.tracker.setStarted(false, memFactor, now);
+                r.tracker.setBound(false, memFactor, now);
+                if (r.executeNesting == 0) {
+                    r.tracker.clearCurrentOwner(r, false);
+                    r.tracker = null;
+                }
             }
         }
 
@@ -4614,8 +4644,10 @@ public final class ActiveServices {
                 boolean hasAutoCreate = s.hasAutoCreateConnections();
                 if (!hasAutoCreate) {
                     if (s.tracker != null) {
-                        s.tracker.setBound(false, mAm.mProcessStats.getMemFactorLocked(),
-                                SystemClock.uptimeMillis());
+                        synchronized (mAm.mProcessStats.mLock) {
+                            s.tracker.setBound(false, mAm.mProcessStats.getMemFactorLocked(),
+                                    SystemClock.uptimeMillis());
+                        }
                     }
                 }
                 bringDownServiceIfNeededLocked(s, true, hasAutoCreate, enqueueOomAdj);
@@ -4707,12 +4739,14 @@ public final class ActiveServices {
 
     private void serviceProcessGoneLocked(ServiceRecord r, boolean enqueueOomAdj) {
         if (r.tracker != null) {
-            int memFactor = mAm.mProcessStats.getMemFactorLocked();
-            long now = SystemClock.uptimeMillis();
-            r.tracker.setExecuting(false, memFactor, now);
-            r.tracker.setForeground(false, memFactor, now);
-            r.tracker.setBound(false, memFactor, now);
-            r.tracker.setStarted(false, memFactor, now);
+            synchronized (mAm.mProcessStats.mLock) {
+                final int memFactor = mAm.mProcessStats.getMemFactorLocked();
+                final long now = SystemClock.uptimeMillis();
+                r.tracker.setExecuting(false, memFactor, now);
+                r.tracker.setForeground(false, memFactor, now);
+                r.tracker.setBound(false, memFactor, now);
+                r.tracker.setStarted(false, memFactor, now);
+            }
         }
         serviceDoneExecutingLocked(r, true, true, enqueueOomAdj);
     }
@@ -4759,13 +4793,15 @@ public final class ActiveServices {
             }
             r.executeFg = false;
             if (r.tracker != null) {
-                final int memFactor = mAm.mProcessStats.getMemFactorLocked();
-                final long now = SystemClock.uptimeMillis();
-                r.tracker.setExecuting(false, memFactor, now);
-                r.tracker.setForeground(false, memFactor, now);
-                if (finishing) {
-                    r.tracker.clearCurrentOwner(r, false);
-                    r.tracker = null;
+                synchronized (mAm.mProcessStats.mLock) {
+                    final int memFactor = mAm.mProcessStats.getMemFactorLocked();
+                    final long now = SystemClock.uptimeMillis();
+                    r.tracker.setExecuting(false, memFactor, now);
+                    r.tracker.setForeground(false, memFactor, now);
+                    if (finishing) {
+                        r.tracker.clearCurrentOwner(r, false);
+                        r.tracker = null;
+                    }
                 }
             }
             if (finishing) {
@@ -5159,8 +5195,10 @@ public final class ActiveServices {
                     // down it.
                     sr.startRequested = false;
                     if (sr.tracker != null) {
-                        sr.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
-                                SystemClock.uptimeMillis());
+                        synchronized (mAm.mProcessStats.mLock) {
+                            sr.tracker.setStarted(false, mAm.mProcessStats.getMemFactorLocked(),
+                                    SystemClock.uptimeMillis());
+                        }
                     }
                 }
             }
@@ -6461,10 +6499,17 @@ public final class ActiveServices {
             final String msg = "Background started FGS: "
                     + ((r.mAllowStartForeground != REASON_DENIED) ? "Allowed " : "Disallowed ")
                     + r.mInfoAllowStartForeground;
-            Slog.wtfQuiet(TAG, msg);
             if (r.mAllowStartForeground != REASON_DENIED) {
+                if (ActivityManagerUtils.shouldSamplePackageForAtom(r.packageName,
+                        mAm.mConstants.mFgsStartAllowedLogSampleRate)) {
+                    Slog.wtfQuiet(TAG, msg);
+                }
                 Slog.i(TAG, msg);
             } else {
+                if (ActivityManagerUtils.shouldSamplePackageForAtom(r.packageName,
+                        mAm.mConstants.mFgsStartDeniedLogSampleRate)) {
+                    Slog.wtfQuiet(TAG, msg);
+                }
                 Slog.w(TAG, msg);
             }
             r.mLoggedInfoAllowStartForeground = true;

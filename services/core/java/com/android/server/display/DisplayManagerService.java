@@ -714,8 +714,10 @@ public final class DisplayManagerService extends SystemService {
             final BrightnessPair brightnessPair =
                     index < 0 ? null : mDisplayBrightnesses.valueAt(index);
             if (index < 0 || (mDisplayStates.valueAt(index) == state
-                    && brightnessPair.brightness == brightnessState
-                    && brightnessPair.sdrBrightness == sdrBrightnessState)) {
+                    && BrightnessSynchronizer.floatEquals(
+                            brightnessPair.brightness, brightnessState)
+                    && BrightnessSynchronizer.floatEquals(
+                            brightnessPair.sdrBrightness, sdrBrightnessState))) {
                 return; // Display no longer exists or no change.
             }
 
@@ -3305,6 +3307,9 @@ public final class DisplayManagerService extends SystemService {
 
             synchronized (mSyncRoot) {
                 final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
+                if (display == null) {
+                    return null;
+                }
                 final DisplayDevice device = display.getPrimaryDisplayDeviceLocked();
                 if (device == null) {
                     return null;

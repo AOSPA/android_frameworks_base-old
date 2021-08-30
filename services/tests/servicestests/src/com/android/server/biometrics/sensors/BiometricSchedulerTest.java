@@ -360,7 +360,8 @@ public class BiometricSchedulerTest {
                     false /* restricted */, TAG, 1 /* cookie */, false /* requireConfirmation */,
                     TEST_SENSOR_ID, true /* isStrongBiometric */, 0 /* statsModality */,
                     0 /* statsClient */, null /* taskStackListener */, mock(LockoutTracker.class),
-                    false /* isKeyguard */, true /* shouldVibrate */);
+                    false /* isKeyguard */, true /* shouldVibrate */,
+                    false /* isKeyguardBypassEnabled */);
         }
 
         @Override
@@ -376,6 +377,11 @@ public class BiometricSchedulerTest {
         @Override
         protected void handleLifecycleAfterAuth(boolean authenticated) {
 
+        }
+
+        @Override
+        public boolean wasUserDetected() {
+            return false;
         }
     }
 
@@ -388,7 +394,8 @@ public class BiometricSchedulerTest {
                     false /* restricted */, TAG, 1 /* cookie */, false /* requireConfirmation */,
                     TEST_SENSOR_ID, true /* isStrongBiometric */, 0 /* statsModality */,
                     0 /* statsClient */, null /* taskStackListener */, mock(LockoutTracker.class),
-                    false /* isKeyguard */, true /* shouldVibrate */);
+                    false /* isKeyguard */, true /* shouldVibrate */,
+                    false /* isKeyguardBypassEnabled */);
         }
 
         @Override
@@ -404,6 +411,11 @@ public class BiometricSchedulerTest {
         @Override
         protected void handleLifecycleAfterAuth(boolean authenticated) {
 
+        }
+
+        @Override
+        public boolean wasUserDetected() {
+            return false;
         }
     }
 

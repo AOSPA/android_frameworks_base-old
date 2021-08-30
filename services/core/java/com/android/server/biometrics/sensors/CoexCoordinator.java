@@ -22,11 +22,11 @@ import static com.android.server.biometrics.sensors.BiometricScheduler.sensorTyp
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.hardware.biometrics.BiometricConstants;
 import android.os.Handler;
 import android.os.Looper;
 import android.util.Slog;
 
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.server.biometrics.sensors.BiometricScheduler.SensorType;
 import com.android.server.biometrics.sensors.fingerprint.Udfps;
@@ -46,6 +46,8 @@ public class CoexCoordinator {
     private static final String TAG = "BiometricCoexCoordinator";
     public static final String SETTING_ENABLE_NAME =
             "com.android.server.biometrics.sensors.CoexCoordinator.enable";
+    public static final String FACE_HAPTIC_DISABLE =
+            "com.android.server.biometrics.sensors.CoexCoordinator.disable_face_haptics";
     private static final boolean DEBUG = true;
 
     // Successful authentications should be used within this amount of time.
@@ -53,7 +55,7 @@ public class CoexCoordinator {
 
     /**
      * Callback interface notifying the owner of "results" from the CoexCoordinator's business
-     * logic.
+     * logic for accept and reject.
      */
     interface Callback {
         /**
@@ -72,6 +74,22 @@ public class CoexCoordinator {
          * from scheduler if auth was successful).
          */
         void handleLifecycleAfterAuth();
+
+        /**
+         * Requests the owner to notify the caller that authentication was canceled.
+         */
+        void sendAuthenticationCanceled();
+    }
+
+    /**
+     * Callback interface notifying the owner of "results" from the CoexCoordinator's business
+     * logic for errors.
+     */
+    interface ErrorCallback {
+        /**
+         * Requests the owner to initiate a vibration for this event.
+         */
+        void sendHapticFeedback();
     }
 
     private static CoexCoordinator sInstance;
@@ -145,6 +163,10 @@ public class CoexCoordinator {
         mAdvancedLogicEnabled = enabled;
     }
 
+    public void setFaceHapticDisabledWhenNonBypass(boolean disabled) {
+        mFaceHapticDisabledWhenNonBypass = disabled;
+    }
+
     @VisibleForTesting
     void reset() {
         mClientMap.clear();
@@ -154,6 +176,7 @@ public class CoexCoordinator {
     private final Map<Integer, AuthenticationClient<?>> mClientMap;
     @VisibleForTesting final LinkedList<SuccessfulAuth> mSuccessfulAuths;
     private boolean mAdvancedLogicEnabled;
+    private boolean mFaceHapticDisabledWhenNonBypass;
     private final Handler mHandler;
 
     private CoexCoordinator() {
@@ -192,6 +215,9 @@ public class CoexCoordinator {
         mClientMap.remove(sensorType);
     }
 
+    /**
+     * Notify the coordinator that authentication succeeded (accepted)
+     */
     public void onAuthenticationSucceeded(long currentTimeMillis,
             @NonNull AuthenticationClient<?> client,
             @NonNull Callback callback) {
@@ -226,7 +252,11 @@ public class CoexCoordinator {
                         mSuccessfulAuths.add(new SuccessfulAuth(mHandler, mSuccessfulAuths,
                                 currentTimeMillis, SENSOR_TYPE_FACE, client, callback));
                     } else {
-                        callback.sendHapticFeedback();
+                        if (mFaceHapticDisabledWhenNonBypass && !face.isKeyguardBypassEnabled()) {
+                            Slog.w(TAG, "Skipping face success haptic");
+                        } else {
+                            callback.sendHapticFeedback();
+                        }
                         callback.sendAuthenticationResult(true /* addAuthTokenIfStrong */);
                         callback.handleLifecycleAfterAuth();
                     }
@@ -242,6 +272,11 @@ public class CoexCoordinator {
                     callback.sendHapticFeedback();
                     callback.sendAuthenticationResult(true /* addAuthTokenIfStrong */);
                     callback.handleLifecycleAfterAuth();
+                } else {
+                    // Capacitive fingerprint sensor (or other)
+                    callback.sendHapticFeedback();
+                    callback.sendAuthenticationResult(true /* addAuthTokenIfStrong */);
+                    callback.handleLifecycleAfterAuth();
                 }
             }
         } else {
@@ -253,6 +288,9 @@ public class CoexCoordinator {
         }
     }
 
+    /**
+     * Notify the coordinator that a rejection has occurred.
+     */
     public void onAuthenticationRejected(long currentTimeMillis,
             @NonNull AuthenticationClient<?> client,
             @LockoutTracker.LockoutMode int lockoutMode,
@@ -274,10 +312,21 @@ public class CoexCoordinator {
                         // BiometricScheduler do not get stuck.
                         Slog.d(TAG, "Face rejected in multi-sensor auth, udfps: " + udfps);
                         callback.handleLifecycleAfterAuth();
-                    } else {
-                        // UDFPS is not actively authenticating (finger not touching, already
-                        // rejected, etc).
+                    } else if (isUdfpsAuthAttempted(udfps)) {
+                        // If UDFPS is STATE_STARTED_PAUSED (e.g. finger rejected but can still
+                        // auth after pointer goes down, it means UDFPS encountered a rejection. In
+                        // this case, we need to play the final reject haptic since face auth is
+                        // also done now.
                         callback.sendHapticFeedback();
+                        callback.handleLifecycleAfterAuth();
+                    }
+                    else {
+                        // UDFPS auth has never been attempted.
+                        if (mFaceHapticDisabledWhenNonBypass && !face.isKeyguardBypassEnabled()) {
+                            Slog.w(TAG, "Skipping face reject haptic");
+                        } else {
+                            callback.sendHapticFeedback();
+                        }
                         callback.handleLifecycleAfterAuth();
                     }
                 } else if (isCurrentUdfps(client)) {
@@ -326,11 +375,63 @@ public class CoexCoordinator {
         }
     }
 
+    /**
+     * Notify the coordinator that an error has occurred.
+     */
+    public void onAuthenticationError(@NonNull AuthenticationClient<?> client,
+            @BiometricConstants.Errors int error, @NonNull ErrorCallback callback) {
+        // Figure out non-coex state
+        final boolean shouldUsuallyVibrate;
+        if (isCurrentFaceAuth(client)) {
+            final boolean notDetectedOnKeyguard = client.isKeyguard() && !client.wasUserDetected();
+            final boolean authAttempted = client.wasAuthAttempted();
+
+            switch (error) {
+                case BiometricConstants.BIOMETRIC_ERROR_TIMEOUT:
+                case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT:
+                case BiometricConstants.BIOMETRIC_ERROR_LOCKOUT_PERMANENT:
+                    shouldUsuallyVibrate = authAttempted && !notDetectedOnKeyguard;
+                    break;
+                default:
+                    shouldUsuallyVibrate = false;
+                    break;
+            }
+        } else {
+            shouldUsuallyVibrate = false;
+        }
+
+        // Figure out coex state
+        final boolean keyguardAdvancedLogic = mAdvancedLogicEnabled && client.isKeyguard();
+        final boolean hapticSuppressedByCoex;
+
+        if (keyguardAdvancedLogic) {
+            if (isSingleAuthOnly(client)) {
+                hapticSuppressedByCoex = false;
+            } else {
+                hapticSuppressedByCoex = isCurrentFaceAuth(client)
+                        && !client.isKeyguardBypassEnabled();
+            }
+        } else {
+            hapticSuppressedByCoex = false;
+        }
+
+        // Combine and send feedback if appropriate
+        Slog.d(TAG, "shouldUsuallyVibrate: " + shouldUsuallyVibrate
+                + ", hapticSuppressedByCoex: " + hapticSuppressedByCoex);
+        if (shouldUsuallyVibrate && !hapticSuppressedByCoex) {
+            callback.sendHapticFeedback();
+        }
+    }
+
     @Nullable
     private SuccessfulAuth popSuccessfulFaceAuthIfExists(long currentTimeMillis) {
         for (SuccessfulAuth auth : mSuccessfulAuths) {
             if (currentTimeMillis - auth.mAuthTimestamp >= SUCCESSFUL_AUTH_VALID_DURATION_MS) {
-                Slog.d(TAG, "Removing stale auth: " + auth);
+                // TODO(b/193089985): This removes the auth but does not notify the client with
+                //  an appropriate lifecycle event (such as ERROR_CANCELED), and violates the
+                //  API contract. However, this might be OK for now since the validity duration
+                //  is way longer than the time it takes to auth with fingerprint.
+                Slog.e(TAG, "Removing stale auth: " + auth);
                 mSuccessfulAuths.remove(auth);
             } else if (auth.mSensorType == SENSOR_TYPE_FACE) {
                 mSuccessfulAuths.remove(auth);
@@ -341,9 +442,13 @@ public class CoexCoordinator {
     }
 
     private void removeAndFinishAllFaceFromQueue() {
+        // Note that these auth are all successful, but have never notified the client (e.g.
+        // keyguard). To comply with the authentication lifecycle, we must notify the client that
+        // auth is "done". The safest thing to do is to send ERROR_CANCELED.
         for (SuccessfulAuth auth : mSuccessfulAuths) {
             if (auth.mSensorType == SENSOR_TYPE_FACE) {
-                Slog.d(TAG, "Removing from queue and finishing: " + auth);
+                Slog.d(TAG, "Removing from queue, canceling, and finishing: " + auth);
+                auth.mCallback.sendAuthenticationCanceled();
                 auth.mCallback.handleLifecycleAfterAuth();
                 mSuccessfulAuths.remove(auth);
             }
@@ -366,6 +471,13 @@ public class CoexCoordinator {
     private static boolean isUdfpsActivelyAuthing(@Nullable AuthenticationClient<?> client) {
         if (client instanceof Udfps) {
             return client.getState() == AuthenticationClient.STATE_STARTED;
+        }
+        return false;
+    }
+
+    private static boolean isUdfpsAuthAttempted(@Nullable AuthenticationClient<?> client) {
+        if (client instanceof Udfps) {
+            return client.getState() == AuthenticationClient.STATE_STARTED_PAUSED_ATTEMPTED;
         }
         return false;
     }
@@ -396,6 +508,7 @@ public class CoexCoordinator {
     public String toString() {
         StringBuilder sb = new StringBuilder();
         sb.append("Enabled: ").append(mAdvancedLogicEnabled);
+        sb.append(", Face Haptic Disabled: ").append(mFaceHapticDisabledWhenNonBypass);
         sb.append(", Queue size: " ).append(mSuccessfulAuths.size());
         for (SuccessfulAuth auth : mSuccessfulAuths) {
             sb.append(", Auth: ").append(auth.toString());

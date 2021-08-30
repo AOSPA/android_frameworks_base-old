@@ -43,6 +43,7 @@ import android.util.BoostFramework;
 
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.os.ProcLocksReader;
 import com.android.internal.util.FrameworkStatsLog;
 import com.android.server.ServiceThread;
 
@@ -102,8 +103,8 @@ public final class CachedAppOptimizer {
     private static final int COMPACT_ACTION_ANON_FLAG = 2;
 
     // Defaults for phenotype flags.
-    @VisibleForTesting static Boolean DEFAULT_USE_COMPACTION = false;
-    @VisibleForTesting static final Boolean DEFAULT_USE_FREEZER = false;
+    @VisibleForTesting static final Boolean DEFAULT_USE_COMPACTION = false;
+    @VisibleForTesting static final Boolean DEFAULT_USE_FREEZER = true;
     @VisibleForTesting static final int DEFAULT_COMPACT_ACTION_1 = COMPACT_ACTION_FILE;
     @VisibleForTesting static final int DEFAULT_COMPACT_ACTION_2 = COMPACT_ACTION_FULL;
     @VisibleForTesting static final long DEFAULT_COMPACT_THROTTLE_1 = 5_000;
@@ -279,7 +280,7 @@ public final class CachedAppOptimizer {
             DEFAULT_COMPACT_THROTTLE_MAX_OOM_ADJ;
     @GuardedBy("mPhenotypeFlagLock")
     private volatile boolean mUseCompaction = DEFAULT_USE_COMPACTION;
-    private volatile boolean mUseFreezer = DEFAULT_USE_FREEZER;
+    private volatile boolean mUseFreezer = false; // set to DEFAULT in init()
     @GuardedBy("this")
     private int mFreezerDisableCount = 1; // Freezer is initially disabled, until enabled
     public volatile int  mCompactionPriority = Process.THREAD_GROUP_BACKGROUND;
@@ -324,6 +325,7 @@ public final class CachedAppOptimizer {
     private int mPersistentCompactionCount;
     private int mBfgsCompactionCount;
     private final ProcessDependencies mProcessDependencies;
+    private final ProcLocksReader mProcLocksReader;
     public static BoostFramework mPerf = new BoostFramework();
 
     public CachedAppOptimizer(ActivityManagerService am) {
@@ -341,6 +343,7 @@ public final class CachedAppOptimizer {
         mProcessDependencies = processDependencies;
         mTestCallback = callback;
         mSettingsObserver = new SettingsContentObserver();
+        mProcLocksReader = new ProcLocksReader();
     }
 
     /**
@@ -773,6 +776,8 @@ public final class CachedAppOptimizer {
                     KEY_USE_FREEZER, DEFAULT_USE_FREEZER)) {
             mUseFreezer = isFreezerSupported();
             updateFreezerDebounceTimeout();
+        } else {
+            mUseFreezer = false;
         }
 
         final boolean useFreezer = mUseFreezer;
@@ -1411,7 +1416,7 @@ public final class CachedAppOptimizer {
 
             try {
                 // pre-check for locks to avoid unnecessary freeze/unfreeze operations
-                if (Process.hasFileLocks(pid)) {
+                if (mProcLocksReader.hasFileLocks(pid)) {
                     if (DEBUG_FREEZER) {
                         Slog.d(TAG_AM, name + " (" + pid + ") holds file locks, not freezing");
                     }
@@ -1498,7 +1503,7 @@ public final class CachedAppOptimizer {
 
             try {
                 // post-check to prevent races
-                if (Process.hasFileLocks(pid)) {
+                if (mProcLocksReader.hasFileLocks(pid)) {
                     if (DEBUG_FREEZER) {
                         Slog.d(TAG_AM, name + " (" + pid + ") holds file locks, reverting freeze");
                     }
