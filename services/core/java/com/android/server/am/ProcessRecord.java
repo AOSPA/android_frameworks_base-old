@@ -1054,11 +1054,10 @@ class ProcessRecord implements WindowProcessListener {
             if (ux_perf != null && !mService.mForceStopKill && !mErrorState.isNotResponding()
                 && !mErrorState.isCrashing()) {
                 ux_perf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, this.processName, 0);
+                ux_perf.perfHint(BoostFramework.VENDOR_HINT_KILL, this.processName, getPid(), 0);
             } else {
                 mService.mForceStopKill = false;
             }
-            if (ux_perf != null)
-                ux_perf.perfHint(BoostFramework.VENDOR_HINT_KILL, this.processName, getPid(), 0);//sending Kill notification to PreKill iresspective of Kill reason.
             Trace.traceEnd(Trace.TRACE_TAG_ACTIVITY_MANAGER);
         }
     }
