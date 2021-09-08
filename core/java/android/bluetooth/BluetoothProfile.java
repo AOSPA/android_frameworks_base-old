@@ -215,7 +215,8 @@ public interface BluetoothProfile {
      * DUN
      * @hide
      */
-    public static final int DUN = 23;
+    // Temporary fix for b/198947204
+    public static final int DUN = 30;
 
     /**
      * Group Operation Profile (Client Role)
@@ -259,7 +260,8 @@ public interface BluetoothProfile {
      * @hide
      */
     @SystemApi
-    public static final int VOLUME_CONTROL = 30;
+    // Temporary fix for b/198947204
+    public static final int VOLUME_CONTROL = 23;
 
    /**
      * MCP_SERVER
