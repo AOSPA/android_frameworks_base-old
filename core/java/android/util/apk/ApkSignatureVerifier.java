@@ -359,38 +359,25 @@ public class ApkSignatureVerifier {
      */
     private static ParseResult<SigningDetailsWithDigests> verifyV1Signature(ParseInput input,
             String apkPath, boolean verifyFull) {
-        int objectNumber = verifyFull ? NUMBER_OF_CORES : 1;
-        StrictJarFile[] jarFile = new StrictJarFile[objectNumber];
-        final ArrayMap<String, StrictJarFile> strictJarFiles = new ArrayMap<String, StrictJarFile>();
+        StrictJarFile jarFile = null;
+
         try {
             final Certificate[][] lastCerts;
             final Signature[] lastSigs;
 
             Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "strictJarFileCtor");
 
-            if (sPerfBoost == null) {
-                sPerfBoost = new BoostFramework();
-            }
-            if (sPerfBoost != null && !sIsPerfLockAcquired && verifyFull) {
-                //Use big enough number here to hold the perflock for entire PackageInstall session
-                sPerfBoost.perfHint(BoostFramework.VENDOR_HINT_PACKAGE_INSTALL_BOOST,
-                        null, Integer.MAX_VALUE, -1);
-                Slog.d(TAG, "Perflock acquired for PackageInstall ");
-                sIsPerfLockAcquired = true;
-            }
             // we still pass verify = true to ctor to collect certs, even though we're not checking
             // the whole jar.
-            for (int i = 0; i < objectNumber; i++) {
-                jarFile[i] = new StrictJarFile(
-                        apkPath,
-                        true, // collect certs
-                        verifyFull); // whether to reject APK with stripped v2 signatures (b/27887819)
-            }
+            jarFile = new StrictJarFile(
+                    apkPath,
+                    true, // collect certs
+                    verifyFull); // whether to reject APK with stripped v2 signatures (b/27887819)
             final List<ZipEntry> toVerify = new ArrayList<>();
 
             // Gather certs from AndroidManifest.xml, which every APK must have, as an optimization
             // to not need to verify the whole APK when verifyFUll == false.
-            final ZipEntry manifestEntry = jarFile[0].findEntry(
+            final ZipEntry manifestEntry = jarFile.findEntry(
                     ParsingPackageUtils.ANDROID_MANIFEST_FILENAME);
             if (manifestEntry == null) {
                 return input.error(INSTALL_PARSE_FAILED_BAD_MANIFEST,
@@ -411,7 +398,7 @@ public class ApkSignatureVerifier {
 
             // fully verify all contents, except for AndroidManifest.xml  and the META-INF/ files.
             if (verifyFull) {
-                final Iterator<ZipEntry> i = jarFile[0].iterator();
+                final Iterator<ZipEntry> i = jarFile.iterator();
                 while (i.hasNext()) {
                     final ZipEntry entry = i.next();
                     if (entry.isDirectory()) continue;
@@ -422,99 +409,30 @@ public class ApkSignatureVerifier {
 
                     toVerify.add(entry);
                 }
-                class VerificationData {
-                    public Exception exception;
-                    public int exceptionFlag;
-                    public boolean wait;
-                    public int index;
-                    public Object objWaitAll;
-                    public boolean shutDown;
-                }
-                VerificationData vData = new VerificationData();
-                vData.objWaitAll = new Object();
-                final ThreadPoolExecutor verificationExecutor = new ThreadPoolExecutor(
-                        NUMBER_OF_CORES,
-                        NUMBER_OF_CORES,
-                        1,/*keep alive time*/
-                        TimeUnit.SECONDS,
-                        new LinkedBlockingQueue<Runnable>());
-                for (ZipEntry entry : toVerify) {
-                    Runnable verifyTask = new Runnable(){
-                        public void run() {
-                            try {
-                                if (vData.exceptionFlag != 0 ) {
-                                    Slog.w(TAG, "VerifyV1 exit with exception " + vData.exceptionFlag);
-                                    return;
-                                }
-                                String tid = Long.toString(Thread.currentThread().getId());
-                                StrictJarFile tempJarFile;
-                                synchronized (strictJarFiles) {
-                                    tempJarFile = strictJarFiles.get(tid);
-                                    if (tempJarFile == null) {
-                                        if (vData.index >= NUMBER_OF_CORES) {
-                                            vData.index = 0;
-                                        }
-                                        tempJarFile = jarFile[vData.index++];
-                                        strictJarFiles.put(tid, tempJarFile);
-                                    }
-                                }
-                                final Certificate[][] entryCerts;
-                                final ParseResult<Certificate[][]> ret =
-                                        loadCertificates(input, jarFile, entry);
-                                if (ret.isError()) {
-                                    return input.error(ret);
-                                }
-                                entryCerts = ret.getResult();
-                                if (ArrayUtils.isEmpty(entryCerts)) {
-                                    return input.error(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
-                                            "Package " + apkPath + " has no certificates at entry "
-                                            + entry.getName());
-                                }
 
-                                // make sure all entries use the same signing certs
-                                final Signature[] entrySigs = convertToSignatures(entryCerts);
-                                if (!Signature.areExactMatch(lastSigs, entrySigs)) {
-                                    return input.error(
-                                            INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
-                                            "Package " + apkPath + " has mismatched certificates at entry "
-                                            + entry.getName());
-                                }
-                            } catch (GeneralSecurityException e) {
-                                synchronized (vData.objWaitAll) {
-                                    vData.exceptionFlag = INSTALL_PARSE_FAILED_CERTIFICATE_ENCODING;
-                                    vData.exception = e;
-                                }
-                            } catch (PackageParserException e) {
-                                synchronized (vData.objWaitAll) {
-                                    vData.exceptionFlag = INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION;
-                                    vData.exception = e;
-                                }
-                            }
-                        }};
-                    synchronized (vData.objWaitAll) {
-                        if (vData.exceptionFlag == 0) {
-                            verificationExecutor.execute(verifyTask);
-                        }
+                for (ZipEntry entry : toVerify) {
+                    final Certificate[][] entryCerts;
+                    final ParseResult<Certificate[][]> ret =
+                            loadCertificates(input, jarFile, entry);
+                    if (ret.isError()) {
+                        return input.error(ret);
+                    }
+                    entryCerts = ret.getResult();
+                    if (ArrayUtils.isEmpty(entryCerts)) {
+                        return input.error(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
+                                "Package " + apkPath + " has no certificates at entry "
+                                        + entry.getName());
+                    }
+
+                    // make sure all entries use the same signing certs
+                    final Signature[] entrySigs = convertToSignatures(entryCerts);
+                    if (!Signature.areExactMatch(lastSigs, entrySigs)) {
+                        return input.error(
+                                INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
+                                "Package " + apkPath + " has mismatched certificates at entry "
+                                        + entry.getName());
                     }
                 }
-                vData.wait = true;
-                verificationExecutor.shutdown();
-                while (vData.wait) {
-                    try {
-                        if (vData.exceptionFlag != 0 && !vData.shutDown) {
-                            Slog.w(TAG, "verifyV1 Exception " + vData.exceptionFlag);
-                            verificationExecutor.shutdownNow();
-                            vData.shutDown = true;
-                        }
-                        vData.wait = !verificationExecutor.awaitTermination(50,
-                                TimeUnit.MILLISECONDS);
-                    } catch (InterruptedException e) {
-                        Slog.w(TAG,"VerifyV1 interrupted while awaiting all threads done...");
-                    }
-                }
-                if (vData.exceptionFlag != 0)
-                    throw new PackageParserException(vData.exceptionFlag,
-                            "Failed to collect certificates from " + apkPath, vData.exception);
             }
             return input.success(new SigningDetailsWithDigests(
                     new SigningDetails(lastSigs, SignatureSchemeVersion.JAR), null));
@@ -525,16 +443,8 @@ public class ApkSignatureVerifier {
             return input.error(INSTALL_PARSE_FAILED_NO_CERTIFICATES,
                     "Failed to collect certificates from " + apkPath, e);
         } finally {
-            if (sIsPerfLockAcquired && sPerfBoost != null) {
-                sPerfBoost.perfLockRelease();
-                sIsPerfLockAcquired = false;
-                Slog.d(TAG, "Perflock released for PackageInstall ");
-            }
-            strictJarFiles.clear();
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
-            for (int i = 0; i < objectNumber ; i++) {
-                closeQuietly(jarFile[i]);
-            }
+            closeQuietly(jarFile);
         }
     }
 
