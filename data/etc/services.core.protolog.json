@@ -1501,6 +1501,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
     },
+    "-417514857": {
+      "message": "Key dispatch not paused for screen off",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
+    },
     "-415865166": {
       "message": "findFocusedWindow: Found new focus @ %s",
       "level": "VERBOSE",
@@ -1638,6 +1644,12 @@
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "-279436615": {
+      "message": "Moving to PAUSING: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
     },
     "-262984451": {
       "message": "Relaunch failed %s",
@@ -2773,6 +2785,12 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
     },
+    "1001509841": {
+      "message": "Auto-PIP allowed, entering PIP mode directly: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
+    },
     "1001904964": {
       "message": "***** BOOT TIMEOUT: forcing display enabled",
       "level": "WARN",
@@ -3463,6 +3481,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "1847414670": {
+      "message": "Activity not running or entered PiP, resuming next.",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
+    },
     "1853793312": {
       "message": "Notify removed startingWindow %s",
       "level": "VERBOSE",
@@ -3498,6 +3522,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+    },
+    "1894239744": {
+      "message": "Enqueueing pending pause: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/Task.java"
     },
     "1903353011": {
       "message": "notifyAppStopped: %s",
