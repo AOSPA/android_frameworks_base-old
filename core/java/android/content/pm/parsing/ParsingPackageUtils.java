@@ -1610,7 +1610,7 @@ public class ParsingPackageUtils {
             @Nullable String minCode, @IntRange(from = 1) int platformSdkVersion,
             @NonNull String[] platformSdkCodenames, @NonNull ParseInput input) {
         // If it's a release SDK, make sure we meet the minimum SDK requirement.
-        if (minCode == null || true) {
+        if (minCode == null) {
             if (minVers <= platformSdkVersion) {
                 return input.success(minVers);
             }
@@ -1648,7 +1648,7 @@ public class ParsingPackageUtils {
             @Nullable String targetCode, @NonNull String[] platformSdkCodenames,
             @NonNull ParseInput input) {
         // If it's a release SDK, return the version number unmodified.
-        if (targetCode == null || true) {
+        if (targetCode == null) {
             return input.success(targetVers);
         }
 
