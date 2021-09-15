@@ -2562,8 +2562,7 @@ public class PackageParser {
             @Nullable String targetCode, @NonNull String[] platformSdkCodenames,
             @NonNull String[] outError) {
         // If it's a release SDK, return the version number unmodified.
-        // TODO(b/191812941): Revert this change that allows any SDK version.
-        if (targetCode == null || true) {
+        if (targetCode == null) {
             return targetVers;
         }
 
@@ -2627,7 +2626,7 @@ public class PackageParser {
             @Nullable String minCode, @IntRange(from = 1) int platformSdkVersion,
             @NonNull String[] platformSdkCodenames, @NonNull String[] outError) {
         // If it's a release SDK, make sure we meet the minimum SDK requirement.
-        if (minCode == null || true) {
+        if (minCode == null) {
             if (minVers <= platformSdkVersion) {
                 return minVers;
             }
