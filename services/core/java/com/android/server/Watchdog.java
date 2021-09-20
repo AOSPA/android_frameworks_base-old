@@ -107,6 +107,7 @@ public class Watchdog {
         "/system/bin/keystore2",
         "/system/bin/mediadrmserver",
         "/system/bin/mediaserver",
+        "/system/bin/mediaserver64",
         "/system/bin/netd",
         "/system/bin/sdcard",
         "/system/bin/surfaceflinger",
