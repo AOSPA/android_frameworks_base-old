@@ -271,7 +271,7 @@ public class CompatibilityInfo implements Parcelable {
                         / (float) DisplayMetrics.DENSITY_DEFAULT;
                 applicationInvertedScale = 1.0f / applicationScale;
                 compatFlags |= SCALING_REQUIRED;
-            } else if(density != 0) {
+            } else if((density != 0) || (overrideScale != 1.0f)) {
                 applicationScale = overrideScale;
                 applicationInvertedScale = 1.0f / overrideScale;
                 applicationDensity = (int) ((DisplayMetrics.DENSITY_DEVICE_STABLE
