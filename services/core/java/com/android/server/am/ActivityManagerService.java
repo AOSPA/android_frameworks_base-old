@@ -3182,7 +3182,7 @@ public class ActivityManagerService extends IActivityManager.Stub
 
             if (mUxPerf != null && !mForceStopKill && !app.mErrorState.isNotResponding() && !app.mErrorState.isCrashing()) {
                 mUxPerf.perfUXEngine_events(BoostFramework.UXE_EVENT_KILL, 0, app.processName, 0);
-                mUxPerf.perfHint(BoostFramework.VENDOR_HINT_KILL, app.processName, pid, 0);
+                mUxPerf.perfEvent(BoostFramework.VENDOR_HINT_KILL, app.processName, 2, 0, pid);
             }
 
             EventLogTags.writeAmProcDied(app.userId, pid, app.processName, setAdj, setProcState);
