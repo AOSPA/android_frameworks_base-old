@@ -1643,8 +1643,11 @@ public final class BluetoothDevice implements Parcelable, Attributable {
             return false;
         }
         BluetoothAdapter adapter = BluetoothAdapter.getDefaultAdapter();
-        if (adapter != null && (transport == TRANSPORT_LE && !adapter.isLeEnabled())
-                || (transport == TRANSPORT_BREDR && !isBluetoothEnabled())) {
+        if (adapter != null &&
+                (((transport == TRANSPORT_LE || transport == TRANSPORT_AUTO)
+                    && !adapter.isLeEnabled())
+                || ((transport == TRANSPORT_BREDR || transport == TRANSPORT_AUTO)
+                    && !isBluetoothEnabled()))) {
             Log.w(TAG, "creatBond() initiated in improper adapter state : " + adapter.getState()
                     + " transport = " + transport);
             return false;
