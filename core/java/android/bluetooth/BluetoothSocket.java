@@ -816,6 +816,9 @@ public final class BluetoothSocket implements Closeable {
      *               0 otherwise
      * @hide
      */
+    @UnsupportedAppUsage
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int setSocketOpt(int optionName, byte [] optionVal, int optionLen) throws IOException {
         int ret = 0;
         if (mSocketState == SocketState.CLOSED) throw new IOException("socket closed");
@@ -843,6 +846,9 @@ public final class BluetoothSocket implements Closeable {
      *               length of returned socket option otherwise
      * @hide
      */
+    @UnsupportedAppUsage
+    @RequiresBluetoothConnectPermission
+    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
     public int getSocketOpt(int optionName, byte [] optionVal) throws IOException {
         int ret = 0;
         if (mSocketState == SocketState.CLOSED) throw new IOException("socket closed");
