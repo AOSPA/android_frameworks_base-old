@@ -2332,6 +2332,13 @@ public final class BluetoothAdapter {
     }
 
     /**
+     * @hide
+     */
+    public void btCmdGetFunctionCallmap(boolean isdump) {
+        Log.d(TAG, "btCmdGetFunctionCallmap: " + isdump);
+    }
+
+    /**
      * Return true if Hearing Aid Profile is supported.
      *
      * @return true if phone supports Hearing Aid Profile

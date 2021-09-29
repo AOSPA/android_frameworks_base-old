@@ -1088,7 +1088,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
             if (isBluetoothPersistedStateOnBluetooth() ||
                  mEnableExternal) {
                 // This triggers transition to STATE_ON
-                mBluetooth.updateQuietModeStatus(mQuietEnable);
+                mBluetooth.updateQuietModeStatus(mQuietEnable,
+                        mContext.getAttributionSource());
                 mBluetooth.onLeServiceUp(mContext.getAttributionSource());
                 persistBluetoothSetting(BLUETOOTH_ON_BLUETOOTH);
             }
@@ -2058,7 +2059,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                                     mEnableExternal) {
                                     Slog.w(TAG, "BLE_ON State:Enable from Settings or" +
                                                 "BT on persisted, going to ON");
-                                    mBluetooth.updateQuietModeStatus(mQuietEnable);
+                                    mBluetooth.updateQuietModeStatus(mQuietEnable,
+                                            mContext.getAttributionSource());
                                     mBluetooth.onLeServiceUp(mContext.getAttributionSource());
 
                                     // waive WRITE_SECURE_SETTINGS permission check
@@ -2181,7 +2183,8 @@ class BluetoothManagerService extends IBluetoothManager.Stub {
                            try {
                                 mBluetoothLock.readLock().lock();
                                 if (mBluetooth != null) {
-                                    mBluetooth.updateQuietModeStatus(mQuietEnable);
+                                    mBluetooth.updateQuietModeStatus(mQuietEnable,
+                                            mContext.getAttributionSource());
                                     mBluetooth.onLeServiceUp(mContext.getAttributionSource());
                                 }
                            } catch (RemoteException e) {
