@@ -47,6 +47,7 @@ import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dock.DockManager;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.fragments.FragmentService;
 import com.android.systemui.keyguard.ScreenLifecycle;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
@@ -65,15 +66,14 @@ import com.android.systemui.power.EnhancedEstimates;
 import com.android.systemui.power.PowerUI;
 import com.android.systemui.privacy.PrivacyItemController;
 import com.android.systemui.qs.ReduceBrightColorsController;
+import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
 import com.android.systemui.recents.OverviewProxyService;
-import com.android.systemui.recents.Recents;
 import com.android.systemui.screenrecord.RecordingController;
 import com.android.systemui.shared.plugins.PluginManager;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.PackageManagerWrapper;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationMediaManager;
@@ -99,7 +99,6 @@ import com.android.systemui.statusbar.phone.LockscreenGestureLogger;
 import com.android.systemui.statusbar.phone.ManagedProfileController;
 import com.android.systemui.statusbar.phone.NotificationGroupAlertTransferHelper;
 import com.android.systemui.statusbar.phone.ShadeController;
-import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarContentInsetsProvider;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarWindowController;
@@ -350,8 +349,6 @@ public class Dependency {
     @Inject Lazy<DozeParameters> mDozeParameters;
     @Inject Lazy<IWallpaperManager> mWallpaperManager;
     @Inject Lazy<CommandQueue> mCommandQueue;
-    @Inject Lazy<Recents> mRecents;
-    @Inject Lazy<StatusBar> mStatusBar;
     @Inject Lazy<RecordingController> mRecordingController;
     @Inject Lazy<ProtoTracer> mProtoTracer;
     @Inject Lazy<MediaOutputDialogFactory> mMediaOutputDialogFactory;
@@ -362,8 +359,9 @@ public class Dependency {
     @Inject Lazy<PrivacyDotViewController> mPrivacyDotViewControllerLazy;
     @Inject Lazy<EdgeBackGestureHandler.Factory> mEdgeBackGestureHandlerFactoryLazy;
     @Inject Lazy<UiEventLogger> mUiEventLogger;
-    @Inject Lazy<FeatureFlags> mFeatureFlagsLazy;
     @Inject Lazy<StatusBarContentInsetsProvider> mContentInsetsProviderLazy;
+    @Inject Lazy<InternetDialogFactory> mInternetDialogFactory;
+    @Inject Lazy<FeatureFlags> mFeatureFlagsLazy;
 
     @Inject
     public Dependency() {
@@ -555,8 +553,6 @@ public class Dependency {
         mProviders.put(DozeParameters.class, mDozeParameters::get);
         mProviders.put(IWallpaperManager.class, mWallpaperManager::get);
         mProviders.put(CommandQueue.class, mCommandQueue::get);
-        mProviders.put(Recents.class, mRecents::get);
-        mProviders.put(StatusBar.class, mStatusBar::get);
         mProviders.put(ProtoTracer.class, mProtoTracer::get);
         mProviders.put(DeviceConfigProxy.class, mDeviceConfigProxy::get);
         mProviders.put(TelephonyListenerManager.class, mTelephonyListenerManager::get);
@@ -576,6 +572,7 @@ public class Dependency {
         mProviders.put(SystemStatusAnimationScheduler.class,
                 mSystemStatusAnimationSchedulerLazy::get);
         mProviders.put(PrivacyDotViewController.class, mPrivacyDotViewControllerLazy::get);
+        mProviders.put(InternetDialogFactory.class, mInternetDialogFactory::get);
         mProviders.put(EdgeBackGestureHandler.Factory.class,
                 mEdgeBackGestureHandlerFactoryLazy::get);
         mProviders.put(UiEventLogger.class, mUiEventLogger::get);

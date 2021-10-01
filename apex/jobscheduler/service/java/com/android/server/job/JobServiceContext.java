@@ -42,7 +42,6 @@ import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteException;
 import android.os.UserHandle;
-import android.os.WorkSource;
 import android.util.EventLog;
 import android.util.IndentingPrintWriter;
 import android.util.Slog;
@@ -109,6 +108,7 @@ public final class JobServiceContext implements ServiceConnection {
     private final Object mLock;
     private final IBatteryStats mBatteryStats;
     private final JobPackageTracker mJobPackageTracker;
+    private final PowerManager mPowerManager;
     private PowerManager.WakeLock mWakeLock;
 
     // Execution state.
@@ -215,6 +215,7 @@ public final class JobServiceContext implements ServiceConnection {
         mCallbackHandler = new JobServiceHandler(looper);
         mJobConcurrencyManager = concurrencyManager;
         mCompletedListener = service;
+        mPowerManager = mContext.getSystemService(PowerManager.class);
         mAvailable = true;
         mVerb = VERB_FINISHED;
         mPreferredUid = NO_PREFERRED_UID;
@@ -281,6 +282,12 @@ public final class JobServiceContext implements ServiceConnection {
             // it was inflated from disk with not-yet-coherent delay/deadline bounds.
             job.clearPersistedUtcTimes();
 
+            mWakeLock = mPowerManager.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK, job.getTag());
+            mWakeLock.setWorkSource(
+                    mService.deriveWorkSource(job.getSourceUid(), job.getSourcePackageName()));
+            mWakeLock.setReferenceCounted(false);
+            mWakeLock.acquire();
+
             mVerb = VERB_BINDING;
             scheduleOpTimeOutLocked();
             final Intent intent = new Intent().setComponent(job.getServiceComponent());
@@ -316,6 +323,7 @@ public final class JobServiceContext implements ServiceConnection {
                 mRunningCallback = null;
                 mParams = null;
                 mExecutionStartTimeElapsed = 0L;
+                mWakeLock.release();
                 mVerb = VERB_FINISHED;
                 removeOpTimeOutLocked();
                 return false;
@@ -511,39 +519,7 @@ public final class JobServiceContext implements ServiceConnection {
                 return;
             }
             this.service = IJobService.Stub.asInterface(service);
-            final PowerManager pm =
-                    (PowerManager) mContext.getSystemService(Context.POWER_SERVICE);
-            PowerManager.WakeLock wl = pm.newWakeLock(PowerManager.PARTIAL_WAKE_LOCK,
-                    runningJob.getTag());
-            wl.setWorkSource(deriveWorkSource(runningJob));
-            wl.setReferenceCounted(false);
-            wl.acquire();
-
-            // We use a new wakelock instance per job.  In rare cases there is a race between
-            // teardown following job completion/cancellation and new job service spin-up
-            // such that if we simply assign mWakeLock to be the new instance, we orphan
-            // the currently-live lock instead of cleanly replacing it.  Watch for this and
-            // explicitly fast-forward the release if we're in that situation.
-            if (mWakeLock != null) {
-                Slog.w(TAG, "Bound new job " + runningJob + " but live wakelock " + mWakeLock
-                        + " tag=" + mWakeLock.getTag());
-                mWakeLock.release();
-            }
-            mWakeLock = wl;
             doServiceBoundLocked();
-        }
-    }
-
-    private WorkSource deriveWorkSource(JobStatus runningJob) {
-        final int jobUid = runningJob.getSourceUid();
-        if (WorkSource.isChainedBatteryAttributionEnabled(mContext)) {
-            WorkSource workSource = new WorkSource();
-            workSource.createWorkChain()
-                    .addNode(jobUid, null)
-                    .addNode(android.os.Process.SYSTEM_UID, "JobScheduler");
-            return workSource;
-        } else {
-            return new WorkSource(jobUid);
         }
     }
 
@@ -552,6 +528,42 @@ public final class JobServiceContext implements ServiceConnection {
     public void onServiceDisconnected(ComponentName name) {
         synchronized (mLock) {
             closeAndCleanupJobLocked(true /* needsReschedule */, "unexpectedly disconnected");
+        }
+    }
+
+    @Override
+    public void onBindingDied(ComponentName name) {
+        synchronized (mLock) {
+            if (mRunningJob == null) {
+                Slog.e(TAG, "Binding died for " + name.getPackageName()
+                        + " but no running job on this context");
+            } else if (mRunningJob.getServiceComponent().equals(name)) {
+                Slog.e(TAG, "Binding died for "
+                        + mRunningJob.getSourceUserId() + ":" + name.getPackageName());
+            } else {
+                Slog.e(TAG, "Binding died for " + name.getPackageName()
+                        + " but context is running a different job");
+            }
+            closeAndCleanupJobLocked(true /* needsReschedule */, "binding died");
+        }
+    }
+
+    @Override
+    public void onNullBinding(ComponentName name) {
+        synchronized (mLock) {
+            if (mRunningJob == null) {
+                Slog.wtf(TAG, "Got null binding for " + name.getPackageName()
+                        + " but no running job on this context");
+            } else if (mRunningJob.getServiceComponent().equals(name)) {
+                Slog.wtf(TAG, "Got null binding for "
+                        + mRunningJob.getSourceUserId() + ":" + name.getPackageName());
+            } else {
+                Slog.wtf(TAG, "Got null binding for " + name.getPackageName()
+                        + " but context is running a different job");
+            }
+            // Don't reschedule the job since returning a null binding is an explicit choice by the
+            // app which breaks things.
+            closeAndCleanupJobLocked(false /* needsReschedule */, "null binding");
         }
     }
 

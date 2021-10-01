@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"چیک نہیں کیا گیا"</string>
     <string name="selected" msgid="6614607926197755875">"منتخب کردہ"</string>
     <string name="not_selected" msgid="410652016565864475">"غیر منتخب کردہ"</string>
+    <string name="in_progress" msgid="2149208189184319441">"جاری ہے"</string>
     <string name="whichApplication" msgid="5432266899591255759">"اس کا استعمال کرکے کارروائی مکمل کریں"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"‏%1$s کا استعمال کر کے کارروائی مکمل کریں"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"کارروائی مکمل کریں"</string>

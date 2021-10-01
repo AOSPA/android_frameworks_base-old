@@ -152,6 +152,11 @@ public class ConnectivityControllerTest {
                 .setEstimatedNetworkBytes(DataUnit.MEBIBYTES.toBytes(1),
                         DataUnit.MEBIBYTES.toBytes(1))
                 .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
+        final JobInfo.Builder jobWithMinChunk = createJob()
+                .setEstimatedNetworkBytes(DataUnit.MEBIBYTES.toBytes(1),
+                        DataUnit.MEBIBYTES.toBytes(1))
+                .setMinimumNetworkChunkBytes(DataUnit.KIBIBYTES.toBytes(100))
+                .setRequiredNetworkType(JobInfo.NETWORK_TYPE_ANY);
 
         final ArgumentCaptor<BroadcastReceiver> chargingCaptor =
                 ArgumentCaptor.forClass(BroadcastReceiver.class);
@@ -170,16 +175,49 @@ public class ConnectivityControllerTest {
         assertFalse(controller.isSatisfied(createJobStatus(job), net,
                 createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1)
                         .setLinkDownstreamBandwidthKbps(1).build(), mConstants));
+        assertFalse(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1)
+                        .setLinkDownstreamBandwidthKbps(1).build(), mConstants));
         // Slow downstream
         assertFalse(controller.isSatisfied(createJobStatus(job), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1024)
+                        .setLinkDownstreamBandwidthKbps(1).build(), mConstants));
+        assertFalse(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
                 createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1024)
                         .setLinkDownstreamBandwidthKbps(1).build(), mConstants));
         // Slow upstream
         assertFalse(controller.isSatisfied(createJobStatus(job), net,
                 createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1)
                         .setLinkDownstreamBandwidthKbps(1024).build(), mConstants));
+        assertFalse(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1)
+                        .setLinkDownstreamBandwidthKbps(1024).build(), mConstants));
+        // Medium network is fine for min chunk
+        assertFalse(controller.isSatisfied(createJobStatus(job), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(5)
+                        .setLinkDownstreamBandwidthKbps(5).build(), mConstants));
+        assertTrue(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(5)
+                        .setLinkDownstreamBandwidthKbps(5).build(), mConstants));
+        // Medium downstream
+        assertFalse(controller.isSatisfied(createJobStatus(job), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1024)
+                        .setLinkDownstreamBandwidthKbps(5).build(), mConstants));
+        assertTrue(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1024)
+                        .setLinkDownstreamBandwidthKbps(5).build(), mConstants));
+        // Medium upstream
+        assertFalse(controller.isSatisfied(createJobStatus(job), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(5)
+                        .setLinkDownstreamBandwidthKbps(1024).build(), mConstants));
+        assertTrue(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(5)
+                        .setLinkDownstreamBandwidthKbps(1024).build(), mConstants));
         // Fast network looks great
         assertTrue(controller.isSatisfied(createJobStatus(job), net,
+                createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1024)
+                        .setLinkDownstreamBandwidthKbps(1024).build(), mConstants));
+        assertTrue(controller.isSatisfied(createJobStatus(jobWithMinChunk), net,
                 createCapabilitiesBuilder().setLinkUpstreamBandwidthKbps(1024)
                         .setLinkDownstreamBandwidthKbps(1024).build(), mConstants));
         // Slow network still good given time
@@ -241,7 +279,6 @@ public class ConnectivityControllerTest {
         final ConnectivityController controller = new ConnectivityController(mService);
         when(mService.getMaxJobExecutionTimeMs(any())).thenReturn(10 * 60_000L);
 
-
         // Suspended networks aren't usable.
         assertFalse(controller.isSatisfied(createJobStatus(job), net,
                 createCapabilitiesBuilder().removeCapability(NET_CAPABILITY_NOT_SUSPENDED)
@@ -299,7 +336,16 @@ public class ConnectivityControllerTest {
         final JobStatus earlyPrefetch = createJobStatus(job, now - 1000, now + 2000);
         final JobStatus latePrefetch = createJobStatus(job, now - 2000, now + 1000);
 
+        job.setEstimatedNetworkBytes(JobInfo.NETWORK_BYTES_UNKNOWN, DataUnit.MEBIBYTES.toBytes(1));
+        final JobStatus latePrefetchUnknownDown = createJobStatus(job, now - 2000, now + 1000);
+        job.setEstimatedNetworkBytes(DataUnit.MEBIBYTES.toBytes(1), JobInfo.NETWORK_BYTES_UNKNOWN);
+        final JobStatus latePrefetchUnknownUp = createJobStatus(job, now - 2000, now + 1000);
+
         final ConnectivityController controller = new ConnectivityController(mService);
+
+        when(mNetPolicyManagerInternal.getSubscriptionOpportunisticQuota(
+                any(), eq(NetworkPolicyManagerInternal.QUOTA_TYPE_JOBS)))
+                .thenReturn(0L);
 
         // Unmetered network is whenever
         {
@@ -312,9 +358,11 @@ public class ConnectivityControllerTest {
             assertTrue(controller.isSatisfied(late, net, caps, mConstants));
             assertTrue(controller.isSatisfied(earlyPrefetch, net, caps, mConstants));
             assertTrue(controller.isSatisfied(latePrefetch, net, caps, mConstants));
+            assertTrue(controller.isSatisfied(latePrefetchUnknownDown, net, caps, mConstants));
+            assertTrue(controller.isSatisfied(latePrefetchUnknownUp, net, caps, mConstants));
         }
 
-        // Metered network is only when prefetching and late
+        // Metered network is only when prefetching, late, and in opportunistic quota
         {
             final Network net = mock(Network.class);
             final NetworkCapabilities caps = createCapabilitiesBuilder()
@@ -323,7 +371,17 @@ public class ConnectivityControllerTest {
             assertFalse(controller.isSatisfied(early, net, caps, mConstants));
             assertFalse(controller.isSatisfied(late, net, caps, mConstants));
             assertFalse(controller.isSatisfied(earlyPrefetch, net, caps, mConstants));
+            assertFalse(controller.isSatisfied(latePrefetch, net, caps, mConstants));
+            assertFalse(controller.isSatisfied(latePrefetchUnknownDown, net, caps, mConstants));
+            assertFalse(controller.isSatisfied(latePrefetchUnknownUp, net, caps, mConstants));
+
+            when(mNetPolicyManagerInternal.getSubscriptionOpportunisticQuota(
+                    any(), eq(NetworkPolicyManagerInternal.QUOTA_TYPE_JOBS)))
+                    .thenReturn(9876543210L);
             assertTrue(controller.isSatisfied(latePrefetch, net, caps, mConstants));
+            // Only relax restrictions when we at least know the estimated download bytes.
+            assertFalse(controller.isSatisfied(latePrefetchUnknownDown, net, caps, mConstants));
+            assertTrue(controller.isSatisfied(latePrefetchUnknownUp, net, caps, mConstants));
         }
     }
 

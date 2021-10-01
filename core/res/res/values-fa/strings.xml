@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"بدون علامت"</string>
     <string name="selected" msgid="6614607926197755875">"انتخاب شده"</string>
     <string name="not_selected" msgid="410652016565864475">"انتخاب نشده"</string>
+    <string name="in_progress" msgid="2149208189184319441">"درحال انجام"</string>
     <string name="whichApplication" msgid="5432266899591255759">"تکمیل کنش بااستفاده از"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"‏تکمیل کنش بااستفاده از %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"تکمیل عملکرد"</string>

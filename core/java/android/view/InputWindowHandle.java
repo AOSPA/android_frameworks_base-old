@@ -16,12 +16,10 @@
 
 package android.view;
 
-import static android.view.Display.INVALID_DISPLAY;
-
 import android.annotation.Nullable;
 import android.graphics.Region;
+import android.gui.TouchOcclusionMode;
 import android.os.IBinder;
-import android.os.TouchOcclusionMode;
 
 import java.lang.ref.WeakReference;
 
@@ -100,10 +98,6 @@ public final class InputWindowHandle {
 
     // Display this input is on.
     public int displayId;
-
-    // If this value is set to a valid display ID, it indicates this window is a portal which
-    // transports the touch of this window to the display indicated by portalToDisplayId.
-    public int portalToDisplayId = INVALID_DISPLAY;
 
     /**
      * Crops the touchable region to the bounds of the surface provided.

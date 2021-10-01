@@ -17,21 +17,34 @@
 package com.android.server.wm;
 
 import static android.view.WindowManager.TRANSIT_CLOSE;
+import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER;
+import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
+import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.os.IBinder;
+import android.os.IRemoteCallback;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Slog;
+import android.util.proto.ProtoOutputStream;
 import android.view.WindowManager;
 import android.window.IRemoteTransition;
 import android.window.ITransitionPlayer;
+import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
 
 import com.android.internal.protolog.ProtoLogGroup;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.server.LocalServices;
+import com.android.server.statusbar.StatusBarManagerInternal;
 
 import java.util.ArrayList;
 
@@ -41,14 +54,24 @@ import java.util.ArrayList;
 class TransitionController {
     private static final String TAG = "TransitionController";
 
+    // State constants to line-up with legacy app-transition proto expectations.
+    private static final int LEGACY_STATE_IDLE = 0;
+    private static final int LEGACY_STATE_READY = 1;
+    private static final int LEGACY_STATE_RUNNING = 2;
+
     private ITransitionPlayer mTransitionPlayer;
     final ActivityTaskManagerService mAtm;
+
+    private final ArrayList<WindowManagerInternal.AppTransitionListener> mLegacyListeners =
+            new ArrayList<>();
 
     /**
      * Currently playing transitions (in the order they were started). When finished, records are
      * removed from this list.
      */
     private final ArrayList<Transition> mPlayingTransitions = new ArrayList<>();
+
+    final Lock mRunningLock = new Lock();
 
     private final IBinder.DeathRecipient mTransitionPlayerDeath = () -> {
         // clean-up/finish any playing transitions.
@@ -57,13 +80,18 @@ class TransitionController {
         }
         mPlayingTransitions.clear();
         mTransitionPlayer = null;
+        mRunningLock.doNotifyLocked();
     };
 
     /** The transition currently being constructed (collecting participants). */
     private Transition mCollectingTransition = null;
 
+    // TODO(b/188595497): remove when not needed.
+    final StatusBarManagerInternal mStatusBar;
+
     TransitionController(ActivityTaskManagerService atm) {
         mAtm = atm;
+        mStatusBar = LocalServices.getService(StatusBarManagerInternal.class);
     }
 
     /** @see #createTransition(int, int) */
@@ -76,7 +104,7 @@ class TransitionController {
      * Creates a transition. It can immediately collect participants.
      */
     @NonNull
-    Transition createTransition(@WindowManager.TransitionType int type,
+    private Transition createTransition(@WindowManager.TransitionType int type,
             @WindowManager.TransitionFlags int flags) {
         if (mTransitionPlayer == null) {
             throw new IllegalStateException("Shell Transitions not enabled");
@@ -87,6 +115,7 @@ class TransitionController {
         mCollectingTransition = new Transition(type, flags, this, mAtm.mWindowManager.mSyncEngine);
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Creating Transition: %s",
                 mCollectingTransition);
+        dispatchLegacyAppTransitionPending();
         return mCollectingTransition;
     }
 
@@ -154,13 +183,9 @@ class TransitionController {
         return false;
     }
 
-    /**
-     * @see #requestTransitionIfNeeded(int, int, WindowContainer, IRemoteTransition)
-     */
-    @Nullable
-    Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
-            @Nullable WindowContainer trigger) {
-        return requestTransitionIfNeeded(type, 0 /* flags */, trigger);
+    @WindowManager.TransitionType
+    int getCollectingTransitionType() {
+        return mCollectingTransition != null ? mCollectingTransition.mType : TRANSIT_NONE;
     }
 
     /**
@@ -168,8 +193,19 @@ class TransitionController {
      */
     @Nullable
     Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
-            @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger) {
-        return requestTransitionIfNeeded(type, flags, trigger, null /* remote */);
+            @NonNull WindowContainer trigger) {
+        return requestTransitionIfNeeded(type, 0 /* flags */, trigger, trigger /* readyGroupRef */);
+    }
+
+    /**
+     * @see #requestTransitionIfNeeded(int, int, WindowContainer, IRemoteTransition)
+     */
+    @Nullable
+    Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
+            @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger,
+            @NonNull WindowContainer readyGroupRef) {
+        return requestTransitionIfNeeded(type, flags, trigger, readyGroupRef,
+                null /* remoteTransition */);
     }
 
     private static boolean isExistenceType(@WindowManager.TransitionType int type) {
@@ -180,19 +216,20 @@ class TransitionController {
      * If a transition isn't requested yet, creates one and asks the TransitionPlayer (Shell) to
      * start it. Collection can start immediately.
      * @param trigger if non-null, this is the first container that will be collected
+     * @param readyGroupRef Used to identify which ready-group this request is for.
      * @return the created transition if created or null otherwise.
      */
     @Nullable
     Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
             @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger,
-            @Nullable IRemoteTransition remoteTransition) {
+            @NonNull WindowContainer readyGroupRef, @Nullable IRemoteTransition remoteTransition) {
         if (mTransitionPlayer == null) {
             return null;
         }
         Transition newTransition = null;
         if (isCollecting()) {
             // Make the collecting transition wait until this request is ready.
-            mCollectingTransition.setReady(false);
+            mCollectingTransition.setReady(readyGroupRef, false);
         } else {
             newTransition = requestStartTransition(createTransition(type, flags),
                     trigger != null ? trigger.asTask() : null, remoteTransition);
@@ -240,15 +277,22 @@ class TransitionController {
         mCollectingTransition.collectExistenceChange(wc);
     }
 
-    /** @see Transition#setReady */
-    void setReady(boolean ready) {
+    /** @see Transition#setOverrideAnimation */
+    void setOverrideAnimation(TransitionInfo.AnimationOptions options,
+            @Nullable IRemoteCallback startCallback, @Nullable IRemoteCallback finishCallback) {
         if (mCollectingTransition == null) return;
-        mCollectingTransition.setReady(ready);
+        mCollectingTransition.setOverrideAnimation(options, startCallback, finishCallback);
     }
 
     /** @see Transition#setReady */
-    void setReady() {
-        setReady(true);
+    void setReady(WindowContainer wc, boolean ready) {
+        if (mCollectingTransition == null) return;
+        mCollectingTransition.setReady(wc, ready);
+    }
+
+    /** @see Transition#setReady */
+    void setReady(WindowContainer wc) {
+        setReady(wc, true);
     }
 
     /** @see Transition#finishTransition */
@@ -261,6 +305,7 @@ class TransitionController {
         ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Finish Transition: %s", record);
         mPlayingTransitions.remove(record);
         record.finishTransition();
+        mRunningLock.doNotifyLocked();
     }
 
     void moveToPlaying(Transition transition) {
@@ -279,4 +324,109 @@ class TransitionController {
         mCollectingTransition = null;
     }
 
+    /**
+     * Explicitly mark the collectingTransition as being part of recents gesture. Used for legacy
+     * behaviors.
+     * TODO(b/188669821): Remove once legacy recents behavior is moved to shell.
+     */
+    void setIsLegacyRecents() {
+        if (mCollectingTransition == null) return;
+        mCollectingTransition.addFlag(TRANSIT_FLAG_IS_RECENTS);
+    }
+
+    void legacyDetachNavigationBarFromApp(@NonNull IBinder token) {
+        final Transition transition = Transition.fromBinder(token);
+        if (transition == null || !mPlayingTransitions.contains(transition)) {
+            Slog.e(TAG, "Transition isn't playing: " + token);
+            return;
+        }
+        transition.legacyRestoreNavigationBarFromApp();
+    }
+
+    void registerLegacyListener(WindowManagerInternal.AppTransitionListener listener) {
+        mLegacyListeners.add(listener);
+    }
+
+    void dispatchLegacyAppTransitionPending() {
+        for (int i = 0; i < mLegacyListeners.size(); ++i) {
+            mLegacyListeners.get(i).onAppTransitionPendingLocked();
+        }
+    }
+
+    void dispatchLegacyAppTransitionStarting(TransitionInfo info) {
+        final boolean keyguardGoingAway = info.getType() == TRANSIT_KEYGUARD_GOING_AWAY
+                || (info.getFlags() & (TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE
+                        | TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION
+                        | TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER
+                        | TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION)) != 0;
+        for (int i = 0; i < mLegacyListeners.size(); ++i) {
+            mLegacyListeners.get(i).onAppTransitionStartingLocked(keyguardGoingAway,
+                    0 /* durationHint */, SystemClock.uptimeMillis(),
+                    AnimationAdapter.STATUS_BAR_TRANSITION_DURATION);
+        }
+    }
+
+    void dispatchLegacyAppTransitionFinished(ActivityRecord ar) {
+        for (int i = 0; i < mLegacyListeners.size(); ++i) {
+            mLegacyListeners.get(i).onAppTransitionFinishedLocked(ar.token);
+        }
+    }
+
+    void dispatchLegacyAppTransitionCancelled() {
+        for (int i = 0; i < mLegacyListeners.size(); ++i) {
+            mLegacyListeners.get(i).onAppTransitionCancelledLocked(
+                    false /* keyguardGoingAway */);
+        }
+    }
+
+    void dumpDebugLegacy(ProtoOutputStream proto, long fieldId) {
+        final long token = proto.start(fieldId);
+        int state = LEGACY_STATE_IDLE;
+        if (!mPlayingTransitions.isEmpty()) {
+            state = LEGACY_STATE_RUNNING;
+        } else if (mCollectingTransition != null && mCollectingTransition.getLegacyIsReady()) {
+            state = LEGACY_STATE_READY;
+        }
+        proto.write(AppTransitionProto.APP_TRANSITION_STATE, state);
+        proto.end(token);
+    }
+
+    class Lock {
+        private int mTransitionWaiters = 0;
+        void runWhenIdle(long timeout, Runnable r) {
+            synchronized (mAtm.mGlobalLock) {
+                if (!inTransition()) {
+                    r.run();
+                    return;
+                }
+                mTransitionWaiters += 1;
+            }
+            final long startTime = SystemClock.uptimeMillis();
+            final long endTime = startTime + timeout;
+            while (true) {
+                synchronized (mAtm.mGlobalLock) {
+                    if (!inTransition() || SystemClock.uptimeMillis() > endTime) {
+                        mTransitionWaiters -= 1;
+                        r.run();
+                        return;
+                    }
+                }
+                synchronized (this) {
+                    try {
+                        this.wait(timeout);
+                    } catch (InterruptedException e) {
+                        return;
+                    }
+                }
+            }
+        }
+
+        void doNotifyLocked() {
+            synchronized (this) {
+                if (mTransitionWaiters > 0) {
+                    this.notifyAll();
+                }
+            }
+        }
+    }
 }

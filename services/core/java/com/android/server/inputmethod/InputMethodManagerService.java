@@ -44,7 +44,6 @@ import static android.server.inputmethod.InputMethodManagerServiceProto.SHOW_FOR
 import static android.server.inputmethod.InputMethodManagerServiceProto.SHOW_IME_WITH_HARD_KEYBOARD;
 import static android.server.inputmethod.InputMethodManagerServiceProto.SHOW_REQUESTED;
 import static android.server.inputmethod.InputMethodManagerServiceProto.SYSTEM_READY;
-import static android.util.imetracing.ImeTracing.IME_TRACING_FROM_IMMS;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.DISPLAY_IME_POLICY_HIDE;
@@ -59,10 +58,10 @@ import android.annotation.BinderThread;
 import android.annotation.ColorInt;
 import android.annotation.DrawableRes;
 import android.annotation.IntDef;
-import android.annotation.MainThread;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.RequiresPermission;
+import android.annotation.UiThread;
 import android.annotation.UserIdInt;
 import android.app.ActivityManager;
 import android.app.ActivityManagerInternal;
@@ -124,7 +123,6 @@ import android.util.Pair;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
 import android.util.Slog;
-import android.util.imetracing.ImeTracing;
 import android.util.proto.ProtoOutputStream;
 import android.view.IWindowManager;
 import android.view.InputChannel;
@@ -156,10 +154,12 @@ import com.android.internal.compat.IPlatformCompat;
 import com.android.internal.content.PackageMonitor;
 import com.android.internal.inputmethod.CallbackUtils;
 import com.android.internal.inputmethod.IBooleanResultCallback;
-import com.android.internal.inputmethod.IIInputContentUriTokenResultCallback;
 import com.android.internal.inputmethod.IInputContentUriToken;
+import com.android.internal.inputmethod.IInputContentUriTokenResultCallback;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.IVoidResultCallback;
+import com.android.internal.inputmethod.ImeTracing;
+import com.android.internal.inputmethod.InputBindResult;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.inputmethod.StartInputFlags;
@@ -180,9 +180,9 @@ import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.IInputMethodSession;
 import com.android.internal.view.IInputSessionCallback;
 import com.android.internal.view.InlineSuggestionsRequestInfo;
-import com.android.internal.view.InputBindResult;
 import com.android.server.EventLogTags;
 import com.android.server.LocalServices;
+import com.android.server.ServiceThread;
 import com.android.server.SystemService;
 import com.android.server.inputmethod.InputMethodManagerInternal.InputMethodListListener;
 import com.android.server.inputmethod.InputMethodSubtypeSwitchingController.ImeSubtypeListItem;
@@ -263,6 +263,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
 
     private static final int NOT_A_SUBTYPE_ID = InputMethodUtils.NOT_A_SUBTYPE_ID;
     private static final String TAG_TRY_SUPPRESSING_IME_SWITCHER = "TrySuppressingImeSwitcher";
+    private static final String HANDLER_THREAD_NAME = "android.imms";
 
     /**
      * Binding flags for establishing connection to the {@link InputMethodService}.
@@ -1593,7 +1594,12 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mIPackageManager = AppGlobals.getPackageManager();
         mContext = context;
         mRes = context.getResources();
-        mHandler = new Handler(this);
+        // TODO(b/196206770): Disallow I/O on this thread. Currently it's needed for loading
+        // additional subtypes in switchUserOnHandlerLocked().
+        final ServiceThread thread = new ServiceThread(
+                HANDLER_THREAD_NAME, Process.THREAD_PRIORITY_FOREGROUND, true /* allowIo */);
+        thread.start();
+        mHandler = Handler.createAsync(thread.getLooper(), this);
         // Note: SettingsObserver doesn't register observers in its constructor.
         mSettingsObserver = new SettingsObserver(mHandler);
         mIWindowManager = IWindowManager.Stub.asInterface(
@@ -1602,7 +1608,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mInputManagerInternal = LocalServices.getService(InputManagerInternal.class);
         mImeDisplayValidator = displayId -> mWindowManagerInternal.getDisplayImePolicy(displayId);
-        mCaller = new HandlerCaller(context, null, new HandlerCaller.Callback() {
+        mCaller = new HandlerCaller(context, thread.getLooper(), new HandlerCaller.Callback() {
             @Override
             public void executeMessage(Message msg) {
                 handleMessage(msg);
@@ -2528,9 +2534,8 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 }
                 if (DEBUG) Slog.v(TAG, "Initiating attach with token: " + mCurToken);
                 // Dispatch display id for InputMethodService to update context display.
-                executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOOO(
-                        MSG_INITIALIZE_IME, mCurTokenDisplayId, mCurMethod, mCurToken,
-                        mMethodMap.get(mCurMethodId).getConfigChanges()));
+                executeOrSendMessage(mCurMethod, mCaller.obtainMessageIOO(MSG_INITIALIZE_IME,
+                        mMethodMap.get(mCurMethodId).getConfigChanges(), mCurMethod, mCurToken));
                 scheduleNotifyImeUidToAudioService(mCurMethodUid);
                 if (mCurClient != null) {
                     clearClientSessionLocked(mCurClient);
@@ -3928,7 +3933,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
     @BinderThread
     @Override
     public void startProtoDump(byte[] protoDump, int source, String where) {
-        if (protoDump == null && source != IME_TRACING_FROM_IMMS) {
+        if (protoDump == null && source != ImeTracing.IME_TRACING_FROM_IMMS) {
             // Dump not triggered from IMMS, but no proto information provided.
             return;
         }
@@ -3955,7 +3960,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 proto.write(InputMethodServiceTraceProto.INPUT_METHOD_SERVICE, protoDump);
                 proto.end(service_token);
                 break;
-            case IME_TRACING_FROM_IMMS:
+            case ImeTracing.IME_TRACING_FROM_IMMS:
                 final long managerservice_token =
                         proto.start(InputMethodManagerServiceTraceFileProto.ENTRY);
                 proto.write(InputMethodManagerServiceTraceProto.ELAPSED_REALTIME_NANOS,
@@ -4161,7 +4166,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
     }
 
-    void setEnabledSessionInMainThread(SessionState session) {
+    void setEnabledSessionInHandlerThread(SessionState session) {
         if (mEnabledSession != session) {
             if (mEnabledSession != null && mEnabledSession.session != null) {
                 try {
@@ -4181,7 +4186,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         }
     }
 
-    @MainThread
+    @UiThread
     @Override
     public boolean handleMessage(Message msg) {
         SomeArgs args;
@@ -4292,12 +4297,11 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 try {
                     if (DEBUG) {
                         Slog.v(TAG, "Sending attach of token: " + args.arg2 + " for display: "
-                                + msg.arg1);
+                                + mCurTokenDisplayId);
                     }
                     final IBinder token = (IBinder) args.arg2;
-                    ((IInputMethod) args.arg1).initializeInternal(token, msg.arg1,
-                            new InputMethodPrivilegedOperationsImpl(this, token),
-                            (int) args.arg3);
+                    ((IInputMethod) args.arg1).initializeInternal(token,
+                            new InputMethodPrivilegedOperationsImpl(this, token), msg.arg1);
                 } catch (RemoteException e) {
                 }
                 args.recycle();
@@ -4359,7 +4363,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
                 final IInputContext inputContext = (IInputContext) args.arg3;
                 final EditorInfo editorInfo = (EditorInfo) args.arg4;
                 try {
-                    setEnabledSessionInMainThread(session);
+                    setEnabledSessionInHandlerThread(session);
                     session.method.startInput(startInputToken, inputContext, missingMethods,
                             editorInfo, restarting);
                 } catch (RemoteException e) {
@@ -5840,7 +5844,7 @@ public class InputMethodManagerService extends IInputMethodManager.Stub
         @BinderThread
         @Override
         public void createInputContentUriToken(Uri contentUri, String packageName,
-                IIInputContentUriTokenResultCallback resultCallback) {
+                IInputContentUriTokenResultCallback resultCallback) {
             CallbackUtils.onResult(resultCallback,
                     () -> mImms.createInputContentUriToken(mToken, contentUri, packageName));
         }

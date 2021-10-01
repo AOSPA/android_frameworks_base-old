@@ -1262,6 +1262,7 @@
     <string name="not_checked" msgid="7972320087569023342">"لم يتم وضع علامة"</string>
     <string name="selected" msgid="6614607926197755875">"محدّد"</string>
     <string name="not_selected" msgid="410652016565864475">"غير محدّد"</string>
+    <string name="in_progress" msgid="2149208189184319441">"قيد التقدّم"</string>
     <string name="whichApplication" msgid="5432266899591255759">"إكمال الإجراء باستخدام"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"‏إكمال الإجراء باستخدام %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"إكمال الإجراء"</string>

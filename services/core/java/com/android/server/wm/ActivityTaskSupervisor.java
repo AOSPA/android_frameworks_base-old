@@ -49,6 +49,10 @@ import static android.view.WindowManager.TRANSIT_TO_FRONT;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_TASKS;
+import static com.android.server.wm.ActivityRecord.State.DESTROYED;
+import static com.android.server.wm.ActivityRecord.State.PAUSED;
+import static com.android.server.wm.ActivityRecord.State.PAUSING;
+import static com.android.server.wm.ActivityRecord.State.RESTARTING_PROCESS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_ALL;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_CLEANUP;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_IDLE;
@@ -73,9 +77,6 @@ import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_R
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_APP_TRANSITION;
 import static com.android.server.wm.SurfaceAnimator.ANIMATION_TYPE_RECENTS;
-import static com.android.server.wm.Task.ActivityState.DESTROYED;
-import static com.android.server.wm.Task.ActivityState.PAUSED;
-import static com.android.server.wm.Task.ActivityState.PAUSING;
 import static com.android.server.wm.Task.FLAG_FORCE_HIDDEN_FOR_PINNED_TASK;
 import static com.android.server.wm.Task.REPARENT_KEEP_ROOT_TASK_AT_FRONT;
 import static com.android.server.wm.Task.TAG_CLEANUP;
@@ -143,7 +144,6 @@ import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.content.ReferrerIntent;
-import com.android.internal.os.TransferPipe;
 import com.android.internal.protolog.common.ProtoLog;
 import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.function.pooled.PooledConsumer;
@@ -154,7 +154,6 @@ import com.android.server.am.UserState;
 import com.android.server.wm.ActivityMetricsLogger.LaunchingState;
 
 import java.io.FileDescriptor;
-import java.io.IOException;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.List;
@@ -368,6 +367,12 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
      * recursively. And only update keyguard states once the nested updates are done.
      */
     private int mVisibilityTransactionDepth;
+
+    /**
+     * Whether to the visibility updates that started from {@code RootWindowContainer} should be
+     * deferred.
+     */
+    private boolean mDeferRootVisibilityUpdate;
 
     private ActivityMetricsLogger mActivityMetricsLogger;
 
@@ -889,6 +894,10 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         proc.getThread(), r.appToken);
 
                 final boolean isTransitionForward = r.isTransitionForward();
+                IBinder fragmentToken = null;
+                if (r.getTaskFragment().getTaskFragmentOrganizerPid() == r.getPid()) {
+                    fragmentToken = r.getTaskFragment().getFragmentToken();
+                }
                 clientTransaction.addCallback(LaunchActivityItem.obtain(new Intent(r.intent),
                         System.identityHashCode(r), r.info,
                         // TODO: Have this take the merged configuration instead of separate global
@@ -900,7 +909,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                         r.takeOptions(), isTransitionForward,
                         proc.createProfilerInfoIfNeeded(), r.assistToken, activityClientController,
                         r.createFixedRotationAdjustmentsIfNeeded(), r.shareableActivityToken,
-                        r.getLaunchedFromBubble()));
+                        r.getLaunchedFromBubble(), fragmentToken));
 
                 // Set desired final state.
                 final ActivityLifecycleItem lifecycleItem;
@@ -1438,7 +1447,8 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             }
 
             mService.getTransitionController().requestTransitionIfNeeded(TRANSIT_TO_FRONT,
-                    0 /* flags */, task, options != null ? options.getRemoteTransition() : null);
+                    0 /* flags */, task, task /* readyGroupRef */,
+                    options != null ? options.getRemoteTransition() : null);
             reason = reason + " findTaskToMoveToFront";
             boolean reparented = false;
             if (task.isResizeable() && canUseActivityOptionsLaunchBounds(options)) {
@@ -1612,7 +1622,13 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
             return;
         }
         if (task.isVisible()) {
-            mService.getTransitionController().requestTransitionIfNeeded(TRANSIT_CLOSE, task);
+            if (mService.getTransitionController().isCollecting()) {
+                // We don't want the finishing to change the transition ready state since there will
+                // not be corresponding setReady for finishing.
+                mService.getTransitionController().collectExistenceChange(task);
+            } else {
+                mService.getTransitionController().requestTransitionIfNeeded(TRANSIT_CLOSE, task);
+            }
         } else {
             // Removing a non-visible task doesn't require a transition, but if there is one
             // collecting, this should be a member just in case.
@@ -2096,76 +2112,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     static boolean dumpHistoryList(FileDescriptor fd, PrintWriter pw, List<ActivityRecord> list,
             String prefix, String label, boolean complete, boolean brief, boolean client,
             String dumpPackage, boolean needNL, Runnable header, Task lastTask) {
-        String innerPrefix = null;
-        String[] args = null;
         boolean printed = false;
-        for (int i=list.size()-1; i>=0; i--) {
+        for (int i = list.size() - 1; i >= 0; i--) {
             final ActivityRecord r = list.get(i);
-            if (dumpPackage != null && !dumpPackage.equals(r.packageName)) {
-                continue;
-            }
-            if (innerPrefix == null) {
-                innerPrefix = prefix + "      ";
-                args = new String[0];
-            }
-            printed = true;
-            final boolean full = !brief && (complete || !r.isInHistory());
-            if (needNL) {
-                pw.println("");
-                needNL = false;
-            }
-            if (header != null) {
-                header.run();
-                header = null;
-            }
-            if (lastTask != r.getTask()) {
-                lastTask = r.getTask();
-                pw.print(prefix);
-                pw.print(full ? "* " : "  ");
-                pw.println(lastTask);
-                if (full) {
-                    lastTask.dump(pw, prefix + "  ");
-                } else if (complete) {
-                    // Complete + brief == give a summary.  Isn't that obvious?!?
-                    if (lastTask.intent != null) {
-                        pw.print(prefix); pw.print("  ");
-                                pw.println(lastTask.intent.toInsecureString());
-                    }
-                }
-            }
-            pw.print(prefix); pw.print(full ? "  * " : "    "); pw.print(label);
-            pw.print(" #"); pw.print(i); pw.print(": ");
-            pw.println(r);
-            if (full) {
-                r.dump(pw, innerPrefix, true /* dumpAll */);
-            } else if (complete) {
-                // Complete + brief == give a summary.  Isn't that obvious?!?
-                pw.print(innerPrefix); pw.println(r.intent.toInsecureString());
-                if (r.app != null) {
-                    pw.print(innerPrefix); pw.println(r.app);
-                }
-            }
-            if (client && r.attachedToProcess()) {
-                // flush anything that is already in the PrintWriter since the thread is going
-                // to write to the file descriptor directly
-                pw.flush();
-                try {
-                    TransferPipe tp = new TransferPipe();
-                    try {
-                        r.app.getThread().dumpActivity(
-                                tp.getWriteFd(), r.appToken, innerPrefix, args);
-                        // Short timeout, since blocking here can deadlock with the application.
-                        tp.go(fd, 2000);
-                    } finally {
-                        tp.kill();
-                    }
-                } catch (IOException e) {
-                    pw.println(innerPrefix + "Failure while dumping the activity: " + e);
-                } catch (RemoteException e) {
-                    pw.println(innerPrefix + "Got a RemoteException while dumping the activity");
-                }
-                needNL = true;
-            }
+            ActivityRecord.dumpActivity(fd, pw, i, r, prefix, label, complete, brief,
+                    client, dumpPackage, needNL, header, lastTask);
+            lastTask = r.getTask();
+            header = null;
+            needNL = client && r.attachedToProcess();
         }
         return printed;
     }
@@ -2192,7 +2146,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
     void updateTopResumedActivityIfNeeded() {
         final ActivityRecord prevTopActivity = mTopResumedActivity;
         final Task topRootTask = mRootWindowContainer.getTopDisplayFocusedRootTask();
-        if (topRootTask == null || topRootTask.getResumedActivity() == prevTopActivity) {
+        if (topRootTask == null || topRootTask.getTopResumedActivity() == prevTopActivity) {
             if (mService.isSleepingLocked()) {
                 // There won't be a next resumed activity. The top process should still be updated
                 // according to the current top focused activity.
@@ -2214,7 +2168,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         }
 
         // Update the current top activity.
-        mTopResumedActivity = topRootTask.getResumedActivity();
+        mTopResumedActivity = topRootTask.getTopResumedActivity();
         scheduleTopResumedActivityStateIfNeeded();
 
         mService.updateTopApp(mTopResumedActivity);
@@ -2454,6 +2408,14 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
         return mVisibilityTransactionDepth > 0;
     }
 
+    void setDeferRootVisibilityUpdate(boolean deferUpdate) {
+        mDeferRootVisibilityUpdate = deferUpdate;
+    }
+
+    boolean isRootVisibilityUpdateDeferred() {
+        return mDeferRootVisibilityUpdate;
+    }
+
     /**
      * Called when the state or visibility of an attached activity is changed.
      *
@@ -2521,8 +2483,7 @@ public class ActivityTaskSupervisor implements RecentTasks.Callbacks {
                     String processName = null;
                     int uid = 0;
                     synchronized (mService.mGlobalLock) {
-                        if (r.attachedToProcess()
-                                && r.isState(Task.ActivityState.RESTARTING_PROCESS)) {
+                        if (r.attachedToProcess() && r.isState(RESTARTING_PROCESS)) {
                             processName = r.app.mName;
                             uid = r.app.mUid;
                         }

@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"जाँच गरिएको छैन"</string>
     <string name="selected" msgid="6614607926197755875">"चयन गरियो"</string>
     <string name="not_selected" msgid="410652016565864475">"चयन गरिएन"</string>
+    <string name="in_progress" msgid="2149208189184319441">"जारी छ"</string>
     <string name="whichApplication" msgid="5432266899591255759">"प्रयोग गरेर कारबाही पुरा गर्नुहोस्"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"निम्न एपको प्रयोग गरी कारबाही पुरा गर्नुहोस्: %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"पूर्ण कारबाही"</string>

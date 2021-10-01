@@ -19,7 +19,6 @@ package com.android.wm.shell.pip;
 import static android.app.WindowConfiguration.WINDOWING_MODE_UNDEFINED;
 
 import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_REMOVE_STACK;
-import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
 
 import android.app.PictureInPictureParams;
 import android.app.TaskInfo;
@@ -29,6 +28,7 @@ import android.graphics.Rect;
 import android.os.Handler;
 import android.os.Looper;
 import android.view.SurfaceControl;
+import android.window.WindowContainerTransaction;
 
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.transition.Transitions;
@@ -46,6 +46,7 @@ public abstract class PipTransitionController implements Transitions.TransitionH
     protected final PipBoundsState mPipBoundsState;
     protected final ShellTaskOrganizer mShellTaskOrganizer;
     protected final PipMenuController mPipMenuController;
+    protected final Transitions mTransitions;
     private final Handler mMainHandler;
     private final List<PipTransitionCallback> mPipTransitionCallbacks = new ArrayList<>();
 
@@ -55,12 +56,6 @@ public abstract class PipTransitionController implements Transitions.TransitionH
                 public void onPipAnimationStart(TaskInfo taskInfo,
                         PipAnimationController.PipTransitionAnimator animator) {
                     final int direction = animator.getTransitionDirection();
-                    if (direction == TRANSITION_DIRECTION_TO_PIP) {
-                        // TODO (b//169221267): Add jank listener for transactions without buffer
-                        //  updates.
-                        //InteractionJankMonitor.getInstance().begin(
-                        //        InteractionJankMonitor.CUJ_LAUNCHER_APP_CLOSE_TO_PIP, 2000);
-                    }
                     sendOnPipTransitionStarted(direction);
                 }
 
@@ -74,12 +69,6 @@ public abstract class PipTransitionController implements Transitions.TransitionH
                     }
                     onFinishResize(taskInfo, animator.getDestinationBounds(), direction, tx);
                     sendOnPipTransitionFinished(direction);
-                    if (direction == TRANSITION_DIRECTION_TO_PIP) {
-                        // TODO (b//169221267): Add jank listener for transactions without buffer
-                        //  updates.
-                        //InteractionJankMonitor.getInstance().end(
-                        //        InteractionJankMonitor.CUJ_LAUNCHER_APP_CLOSE_TO_PIP);
-                    }
                 }
 
                 @Override
@@ -98,6 +87,22 @@ public abstract class PipTransitionController implements Transitions.TransitionH
             SurfaceControl.Transaction tx) {
     }
 
+    /**
+     * Called to inform the transition that the animation should start with the assumption that
+     * PiP is not animating from its original bounds, but rather a continuation of another
+     * animation. For example, gesture navigation would first fade out the PiP activity, and the
+     * transition should be responsible to animate in (such as fade in) the PiP.
+     */
+    public void setIsFullAnimation(boolean isFullAnimation) {
+    }
+
+    /**
+     * Called when the Shell wants to starts a transition/animation.
+     */
+    public void startTransition(Rect destinationBounds, WindowContainerTransaction out) {
+        // Default implementation does nothing.
+    }
+
     public PipTransitionController(PipBoundsState pipBoundsState,
             PipMenuController pipMenuController, PipBoundsAlgorithm pipBoundsAlgorithm,
             PipAnimationController pipAnimationController, Transitions transitions,
@@ -107,6 +112,7 @@ public abstract class PipTransitionController implements Transitions.TransitionH
         mShellTaskOrganizer = shellTaskOrganizer;
         mPipBoundsAlgorithm = pipBoundsAlgorithm;
         mPipAnimationController = pipAnimationController;
+        mTransitions = transitions;
         mMainHandler = new Handler(Looper.getMainLooper());
         if (Transitions.ENABLE_SHELL_TRANSITIONS) {
             transitions.addHandler(this);

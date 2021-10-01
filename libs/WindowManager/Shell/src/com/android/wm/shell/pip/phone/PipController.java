@@ -21,7 +21,15 @@ import static android.app.WindowConfiguration.WINDOWING_MODE_PINNED;
 import static android.content.pm.PackageManager.FEATURE_PICTURE_IN_PICTURE;
 import static android.view.WindowManager.INPUT_CONSUMER_PIP;
 
+import static com.android.internal.jank.InteractionJankMonitor.CUJ_PIP_TRANSITION;
 import static com.android.wm.shell.common.ExecutorUtils.executeRemoteCallWithTaskPermission;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_EXPAND_OR_UNEXPAND;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_LEAVE_PIP;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_REMOVE_STACK;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_SNAP_AFTER_RESIZE;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_TO_PIP;
+import static com.android.wm.shell.pip.PipAnimationController.TRANSITION_DIRECTION_USER_RESIZE;
 import static com.android.wm.shell.pip.PipAnimationController.isOutPipDirection;
 
 import android.app.ActivityManager;
@@ -52,6 +60,7 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
 import com.android.internal.annotations.VisibleForTesting;
+import com.android.internal.jank.InteractionJankMonitor;
 import com.android.wm.shell.R;
 import com.android.wm.shell.WindowManagerShellWrapper;
 import com.android.wm.shell.common.DisplayChangeController;
@@ -67,6 +76,7 @@ import com.android.wm.shell.pip.IPip;
 import com.android.wm.shell.pip.IPipAnimationListener;
 import com.android.wm.shell.pip.PinnedStackListenerForwarder;
 import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.pip.PipAnimationController;
 import com.android.wm.shell.pip.PipBoundsAlgorithm;
 import com.android.wm.shell.pip.PipBoundsState;
 import com.android.wm.shell.pip.PipMediaController;
@@ -528,6 +538,8 @@ public class PipController implements PipTransitionController.PipTransitionCallb
 
     private void setPinnedStackAnimationType(int animationType) {
         mPipTaskOrganizer.setOneShotAnimationType(animationType);
+        mPipTransitionController.setIsFullAnimation(
+                animationType == PipAnimationController.ANIM_TYPE_BOUNDS);
     }
 
     private void setPinnedStackAnimationListener(IPipAnimationListener callback) {
@@ -564,8 +576,37 @@ public class PipController implements PipTransitionController.PipTransitionCallb
         mPipTaskOrganizer.stopSwipePipToHome(componentName, destinationBounds, overlay);
     }
 
+    private String getTransitionTag(int direction) {
+        switch (direction) {
+            case TRANSITION_DIRECTION_TO_PIP:
+                return "TRANSITION_TO_PIP";
+            case TRANSITION_DIRECTION_LEAVE_PIP:
+                return "TRANSITION_LEAVE_PIP";
+            case TRANSITION_DIRECTION_LEAVE_PIP_TO_SPLIT_SCREEN:
+                return "TRANSITION_LEAVE_PIP_TO_SPLIT_SCREEN";
+            case TRANSITION_DIRECTION_REMOVE_STACK:
+                return "TRANSITION_REMOVE_STACK";
+            case TRANSITION_DIRECTION_SNAP_AFTER_RESIZE:
+                return "TRANSITION_SNAP_AFTER_RESIZE";
+            case TRANSITION_DIRECTION_USER_RESIZE:
+                return "TRANSITION_USER_RESIZE";
+            case TRANSITION_DIRECTION_EXPAND_OR_UNEXPAND:
+                return "TRANSITION_EXPAND_OR_UNEXPAND";
+            default:
+                return "TRANSITION_LEAVE_UNKNOWN";
+        }
+    }
+
     @Override
     public void onPipTransitionStarted(int direction, Rect pipBounds) {
+        // Begin InteractionJankMonitor with PIP transition CUJs
+        final InteractionJankMonitor.Configuration.Builder builder =
+                InteractionJankMonitor.Configuration.Builder.withSurface(
+                        CUJ_PIP_TRANSITION, mContext, mPipTaskOrganizer.getSurfaceControl())
+                .setTag(getTransitionTag(direction))
+                .setTimeout(2000);
+        InteractionJankMonitor.getInstance().begin(builder);
+
         if (isOutPipDirection(direction)) {
             // Exiting PIP, save the reentry state to restore to when re-entering.
             saveReentryState(pipBounds);
@@ -604,6 +645,9 @@ public class PipController implements PipTransitionController.PipTransitionCallb
     }
 
     private void onPipTransitionFinishedOrCanceled(int direction) {
+        // End InteractionJankMonitor with PIP transition by CUJs
+        InteractionJankMonitor.getInstance().end(CUJ_PIP_TRANSITION);
+
         // Re-enable touches after the animation completes
         mTouchHandler.setTouchEnabled(true);
         mTouchHandler.onPinnedStackAnimationEnded(direction);

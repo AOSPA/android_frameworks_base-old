@@ -208,7 +208,6 @@ public interface BluetoothProfile {
     /**
      * LE Audio Device
      *
-     * @hide
      */
     int LE_AUDIO = 22;
 
@@ -216,7 +215,8 @@ public interface BluetoothProfile {
      * DUN
      * @hide
      */
-    public static final int DUN = 23;
+    // Temporary fix for b/198947204
+    public static final int DUN = 30;
 
     /**
      * Group Operation Profile (Client Role)
@@ -255,10 +255,19 @@ public interface BluetoothProfile {
     public static final int CC_SERVER = 29;
 
    /**
+     * Volume Control profile
+     *
+     * @hide
+     */
+    @SystemApi
+    // Temporary fix for b/198947204
+    public static final int VOLUME_CONTROL = 23;
+
+   /**
      * MCP_SERVER
      * @hide
      */
-    public static final int MCP_SERVER = 30;
+    public static final int MCP_SERVER = 31;
 
     /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
@@ -266,7 +275,7 @@ public interface BluetoothProfile {
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 30;
+    int MAX_PROFILE_ID = 31;
 
     /**
      * Default priority for devices that we try to auto-connect to and

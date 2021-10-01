@@ -31,13 +31,14 @@ import static android.window.DisplayAreaOrganizer.FEATURE_VENDOR_FIRST;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+import static com.android.server.wm.ActivityRecord.State.FINISHING;
+import static com.android.server.wm.ActivityRecord.State.PAUSED;
+import static com.android.server.wm.ActivityRecord.State.PAUSING;
+import static com.android.server.wm.ActivityRecord.State.RESUMED;
+import static com.android.server.wm.ActivityRecord.State.STOPPED;
+import static com.android.server.wm.ActivityRecord.State.STOPPING;
 import static com.android.server.wm.ActivityTaskSupervisor.ON_TOP;
 import static com.android.server.wm.RootWindowContainer.MATCH_ATTACHED_TASK_OR_RECENT_TASKS_AND_RESTORE;
-import static com.android.server.wm.Task.ActivityState.FINISHING;
-import static com.android.server.wm.Task.ActivityState.PAUSED;
-import static com.android.server.wm.Task.ActivityState.PAUSING;
-import static com.android.server.wm.Task.ActivityState.STOPPED;
-import static com.android.server.wm.Task.ActivityState.STOPPING;
 import static com.android.server.wm.WindowContainer.POSITION_BOTTOM;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -365,7 +366,7 @@ public class RootWindowContainerTests extends WindowTestsBase {
         TaskDisplayArea defaultTaskDisplayArea = display.getDefaultTaskDisplayArea();
         doReturn(isFocusedTask ? task : null).when(defaultTaskDisplayArea).getFocusedRootTask();
         mRootWindowContainer.applySleepTokens(true);
-        verify(task, times(expectWakeFromSleep ? 1 : 0)).awakeFromSleepingLocked();
+        verify(task, times(expectWakeFromSleep ? 1 : 0)).awakeFromSleeping();
         verify(task, times(expectResumeTopActivity ? 1 : 0)).resumeTopActivityUncheckedLocked(
                 null /* target */, null /* targetOptions */);
     }
@@ -386,7 +387,7 @@ public class RootWindowContainerTests extends WindowTestsBase {
         // landscape and the portrait lockscreen is shown.
         activity.setLastReportedConfiguration(
                 new MergedConfiguration(mAtm.getGlobalConfiguration(), rotatedConfig));
-        activity.setState(Task.ActivityState.STOPPED, "sleep");
+        activity.setState(STOPPED, "sleep");
 
         display.setIsSleeping(true);
         doReturn(false).when(display).shouldSleep();
@@ -557,8 +558,8 @@ public class RootWindowContainerTests extends WindowTestsBase {
         doReturn(rootTask).when(mRootWindowContainer).getTopDisplayFocusedRootTask();
 
         // Use the task as target to resume.
-        mRootWindowContainer.resumeFocusedTasksTopActivities(
-                rootTask, activity, null /* targetOptions */);
+        mRootWindowContainer.resumeFocusedTasksTopActivities(rootTask, activity,
+                null /* targetOptions */);
 
         // Verify the target task should resume its activity.
         verify(rootTask, times(1)).resumeTopActivityUncheckedLocked(
@@ -626,7 +627,7 @@ public class RootWindowContainerTests extends WindowTestsBase {
                 ACTIVITY_TYPE_STANDARD, false /* onTop */));
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setTask(rootTask).setOnTop(true).build();
-        activity.setState(Task.ActivityState.RESUMED, "test");
+        activity.setState(RESUMED, "test");
 
         // Assume the task is at the topmost position
         assertTrue(rootTask.isTopRootTaskInDisplayArea());
@@ -646,7 +647,7 @@ public class RootWindowContainerTests extends WindowTestsBase {
                 ACTIVITY_TYPE_STANDARD, false /* onTop */));
         final ActivityRecord activity = new ActivityBuilder(mAtm)
                 .setTask(rootTask).setOnTop(true).build();
-        activity.setState(Task.ActivityState.RESUMED, "test");
+        activity.setState(RESUMED, "test");
         taskDisplayArea.positionChildAt(POSITION_BOTTOM, rootTask, false /*includingParents*/);
 
         // Assume the task is at the topmost position
@@ -774,7 +775,7 @@ public class RootWindowContainerTests extends WindowTestsBase {
     }
 
     /**
-     * Tests that when starting {@link #ResolverActivity} for home, it should use the standard
+     * Tests that when starting {@link ResolverActivity} for home, it should use the standard
      * activity type (in a new root task) so the order of back stack won't be broken.
      */
     @Test

@@ -773,46 +773,51 @@ public class DeviceConfigTest {
 
         try {
             // Ensure the device starts in a known state.
-            DeviceConfig.setSyncDisabled(Settings.Config.SYNC_DISABLED_MODE_NONE);
+            DeviceConfig.setSyncDisabledMode(Settings.Config.SYNC_DISABLED_MODE_NONE);
 
             // Assert starting state.
-            assertThat(DeviceConfig.isSyncDisabled()).isFalse();
+            assertThat(DeviceConfig.getSyncDisabledMode())
+                    .isEqualTo(Settings.Config.SYNC_DISABLED_MODE_NONE);
             assertThat(DeviceConfig.setProperties(properties1)).isTrue();
             assertThat(DeviceConfig.getProperties(NAMESPACE, KEY).getString(KEY, DEFAULT_VALUE))
                     .isEqualTo(VALUE);
 
             // Test disabled (persistent). Persistence is not actually tested, that would require
             // a host test.
-            DeviceConfig.setSyncDisabled(Settings.Config.SYNC_DISABLED_MODE_PERSISTENT);
-            assertThat(DeviceConfig.isSyncDisabled()).isTrue();
+            DeviceConfig.setSyncDisabledMode(Settings.Config.SYNC_DISABLED_MODE_PERSISTENT);
+            assertThat(DeviceConfig.getSyncDisabledMode())
+                    .isEqualTo(Settings.Config.SYNC_DISABLED_MODE_PERSISTENT);
             assertThat(DeviceConfig.setProperties(properties2)).isFalse();
             assertThat(DeviceConfig.getProperties(NAMESPACE, KEY).getString(KEY, DEFAULT_VALUE))
                     .isEqualTo(VALUE);
 
             // Return to not disabled.
-            DeviceConfig.setSyncDisabled(Settings.Config.SYNC_DISABLED_MODE_NONE);
-            assertThat(DeviceConfig.isSyncDisabled()).isFalse();
+            DeviceConfig.setSyncDisabledMode(Settings.Config.SYNC_DISABLED_MODE_NONE);
+            assertThat(DeviceConfig.getSyncDisabledMode())
+                    .isEqualTo(Settings.Config.SYNC_DISABLED_MODE_NONE);
             assertThat(DeviceConfig.setProperties(properties2)).isTrue();
             assertThat(DeviceConfig.getProperties(NAMESPACE, KEY).getString(KEY, DEFAULT_VALUE))
                     .isEqualTo(VALUE2);
 
             // Test disabled (persistent). Absence of persistence is not actually tested, that would
             // require a host test.
-            DeviceConfig.setSyncDisabled(Settings.Config.SYNC_DISABLED_MODE_UNTIL_REBOOT);
-            assertThat(DeviceConfig.isSyncDisabled()).isTrue();
+            DeviceConfig.setSyncDisabledMode(Settings.Config.SYNC_DISABLED_MODE_UNTIL_REBOOT);
+            assertThat(DeviceConfig.getSyncDisabledMode())
+                    .isEqualTo(Settings.Config.SYNC_DISABLED_MODE_UNTIL_REBOOT);
             assertThat(DeviceConfig.setProperties(properties1)).isFalse();
             assertThat(DeviceConfig.getProperties(NAMESPACE, KEY).getString(KEY, DEFAULT_VALUE))
                     .isEqualTo(VALUE2);
 
             // Return to not disabled.
-            DeviceConfig.setSyncDisabled(Settings.Config.SYNC_DISABLED_MODE_NONE);
-            assertThat(DeviceConfig.isSyncDisabled()).isFalse();
+            DeviceConfig.setSyncDisabledMode(Settings.Config.SYNC_DISABLED_MODE_NONE);
+            assertThat(DeviceConfig.getSyncDisabledMode())
+                    .isEqualTo(Settings.Config.SYNC_DISABLED_MODE_NONE);
             assertThat(DeviceConfig.setProperties(properties1)).isTrue();
             assertThat(DeviceConfig.getProperties(NAMESPACE, KEY).getString(KEY, DEFAULT_VALUE))
                     .isEqualTo(VALUE);
         } finally {
             // Try to return to the default sync disabled state in case of failure.
-            DeviceConfig.setSyncDisabled(Settings.Config.SYNC_DISABLED_MODE_NONE);
+            DeviceConfig.setSyncDisabledMode(Settings.Config.SYNC_DISABLED_MODE_NONE);
 
             // NAMESPACE will be cleared by cleanUp()
         }
@@ -827,4 +832,80 @@ public class DeviceConfigTest {
         return compositeName.equals(result.getString(Settings.NameValueTable.VALUE));
     }
 
+    @Test
+    public void deleteProperty_nullNamespace() {
+        try {
+            DeviceConfig.deleteProperty(null, KEY);
+            Assert.fail("Null namespace should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void deleteProperty_nullName() {
+        try {
+            DeviceConfig.deleteProperty(NAMESPACE, null);
+            Assert.fail("Null name should have resulted in an NPE.");
+        } catch (NullPointerException e) {
+            // expected
+        }
+    }
+
+    @Test
+    public void deletePropertyString() {
+        final String value = "new_value";
+        final String default_value = "default";
+        DeviceConfig.setProperty(NAMESPACE, KEY, value, false);
+        DeviceConfig.deleteProperty(NAMESPACE, KEY);
+        final String result = DeviceConfig.getString(NAMESPACE, KEY, default_value);
+        assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void deletePropertyBoolean() {
+        final boolean value = true;
+        final boolean default_value = false;
+        DeviceConfig.setProperty(NAMESPACE, KEY, String.valueOf(value), false);
+        DeviceConfig.deleteProperty(NAMESPACE, KEY);
+        final boolean result = DeviceConfig.getBoolean(NAMESPACE, KEY, default_value);
+        assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void deletePropertyInt() {
+        final int value = 123;
+        final int default_value = 999;
+        DeviceConfig.setProperty(NAMESPACE, KEY, String.valueOf(value), false);
+        DeviceConfig.deleteProperty(NAMESPACE, KEY);
+        final int result = DeviceConfig.getInt(NAMESPACE, KEY, default_value);
+        assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void deletePropertyLong() {
+        final long value = 456789;
+        final long default_value = 123456;
+        DeviceConfig.setProperty(NAMESPACE, KEY, String.valueOf(value), false);
+        DeviceConfig.deleteProperty(NAMESPACE, KEY);
+        final long result = DeviceConfig.getLong(NAMESPACE, KEY, default_value);
+        assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void deletePropertyFloat() {
+        final float value = 456.789f;
+        final float default_value = 123.456f;
+        DeviceConfig.setProperty(NAMESPACE, KEY, String.valueOf(value), false);
+        DeviceConfig.deleteProperty(NAMESPACE, KEY);
+        final float result = DeviceConfig.getFloat(NAMESPACE, KEY, default_value);
+        assertThat(result).isEqualTo(default_value);
+    }
+
+    @Test
+    public void deleteProperty_empty() {
+        assertThat(DeviceConfig.deleteProperty(NAMESPACE, KEY)).isTrue();
+        final String result = DeviceConfig.getString(NAMESPACE, KEY, null);
+        assertThat(result).isNull();
+    }
 }

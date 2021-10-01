@@ -21,6 +21,9 @@ java_defaults {
             // "-XepPatchLocation:/tmp/refaster/",
         ],
     },
+    lint: {
+        extra_check_modules: ["AndroidFrameworkLintChecker"],
+    },
 }
 
 filegroup {
@@ -65,7 +68,6 @@ filegroup {
         ":services.texttospeech-sources",
         ":services.usage-sources",
         ":services.usb-sources",
-        ":services.uwb-sources",
         ":services.voiceinteraction-sources",
         ":services.wifi-sources",
     ],
@@ -119,7 +121,6 @@ java_library {
         "services.texttospeech",
         "services.usage",
         "services.usb",
-        "services.uwb",
         "services.voiceinteraction",
         "services.wifi",
         "service-blobstore",
@@ -130,6 +131,7 @@ java_library {
     libs: [
         "android.hidl.manager-V1.0-java",
         "framework-tethering.stubs.module_lib",
+        "service-art.stubs.system_server",
     ],
 
     // Uncomment to enable output of certain warnings (deprecated, unchecked)

@@ -17,19 +17,26 @@
 package com.android.systemui.statusbar.phone.dagger;
 
 import android.annotation.Nullable;
+import android.view.View;
 
 import com.android.keyguard.LockIconView;
 import com.android.systemui.R;
+import com.android.systemui.battery.BatteryMeterView;
 import com.android.systemui.biometrics.AuthRippleView;
 import com.android.systemui.statusbar.phone.NotificationPanelView;
 import com.android.systemui.statusbar.phone.NotificationShadeWindowView;
 import com.android.systemui.statusbar.phone.TapAgainView;
+
+import javax.inject.Named;
 
 import dagger.Module;
 import dagger.Provides;
 
 @Module
 public abstract class StatusBarViewModule {
+
+    public static final String SPLIT_SHADE_HEADER = "split_shade_header";
+
     /** */
     @Provides
     @StatusBarComponent.StatusBarScope
@@ -53,6 +60,22 @@ public abstract class StatusBarViewModule {
     public static AuthRippleView getAuthRippleView(
             NotificationShadeWindowView notificationShadeWindowView) {
         return notificationShadeWindowView.findViewById(R.id.auth_ripple);
+    }
+
+    /** */
+    @Provides
+    @Named(SPLIT_SHADE_HEADER)
+    @StatusBarComponent.StatusBarScope
+    public static View getSlitShadeStatusBarView(
+            NotificationShadeWindowView notificationShadeWindowView) {
+        return notificationShadeWindowView.findViewById(R.id.split_shade_status_bar);
+    }
+
+    /** */
+    @Provides
+    @StatusBarComponent.StatusBarScope
+    static BatteryMeterView getBatteryMeterView(@Named(SPLIT_SHADE_HEADER) View view) {
+        return view.findViewById(R.id.batteryRemainingIcon);
     }
 
     /** */

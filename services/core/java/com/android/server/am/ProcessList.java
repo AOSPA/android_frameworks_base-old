@@ -4726,6 +4726,8 @@ public final class ProcessList {
                         if (ai != null) {
                             if (ai.packageName.equals(app.info.packageName)) {
                                 app.info = ai;
+                                mService.mOomAdjuster.mPlatformCompatCache
+                                        .onApplicationInfoChanged(ai);
                             }
                             app.getThread().scheduleApplicationInfoChanged(ai);
                             targetProcesses.add(app.getWindowProcessController());

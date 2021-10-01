@@ -28,17 +28,17 @@ import android.content.IIntentSender;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.IntentSender;
-import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageInstaller.SessionInfo;
 import android.content.pm.PackageInstaller.SessionInfo.StagedSessionErrorCode;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManagerInternal;
-import android.content.pm.PackageParser.PackageParserException;
-import android.content.pm.PackageParser.SigningDetails;
-import android.content.pm.PackageParser.SigningDetails.SignatureSchemeVersion;
+import android.content.pm.SigningDetails;
+import android.content.pm.SigningDetails.SignatureSchemeVersion;
 import android.content.pm.parsing.PackageInfoWithoutStateUtils;
+import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
 import android.content.rollback.RollbackInfo;
 import android.content.rollback.RollbackManager;
 import android.os.Bundle;
@@ -82,6 +82,7 @@ import java.io.FileWriter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.LinkedBlockingQueue;
 import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
@@ -114,6 +115,8 @@ public class StagingManager {
     @GuardedBy("mSuccessfulStagedSessionIds")
     private final List<Integer> mSuccessfulStagedSessionIds = new ArrayList<>();
 
+    private final CompletableFuture<Void> mBootCompleted = new CompletableFuture<>();
+
     interface StagedSession {
         boolean isMultiPackage();
         boolean isApexSession();
@@ -138,25 +141,28 @@ public class StagingManager {
         boolean hasParentSessionId();
         long getCommittedMillis();
         void abandon();
-        boolean notifyStartPreRebootVerification();
         void notifyEndPreRebootVerification();
         void verifySession();
     }
 
-    StagingManager(Context context, Supplier<PackageParser2> packageParserSupplier) {
-        this(context, packageParserSupplier, ApexManager.getInstance());
+    StagingManager(Context context, Supplier<PackageParser2> packageParserSupplier, Looper looper) {
+        this(context, packageParserSupplier, ApexManager.getInstance(), looper);
     }
 
     @VisibleForTesting
     StagingManager(Context context, Supplier<PackageParser2> packageParserSupplier,
             ApexManager apexManager) {
+        this(context, packageParserSupplier, apexManager, BackgroundThread.get().getLooper());
+    }
+
+    StagingManager(Context context, Supplier<PackageParser2> packageParserSupplier,
+            ApexManager apexManager, Looper looper) {
         mContext = context;
         mPackageParserSupplier = packageParserSupplier;
 
         mApexManager = apexManager;
         mPowerManager = (PowerManager) context.getSystemService(Context.POWER_SERVICE);
-        mPreRebootVerificationHandler = new PreRebootVerificationHandler(
-                BackgroundThread.get().getLooper());
+        mPreRebootVerificationHandler = new PreRebootVerificationHandler(looper);
 
         if (mFailureReasonFile.exists()) {
             try (BufferedReader reader = new BufferedReader(new FileReader(mFailureReasonFile))) {
@@ -211,13 +217,15 @@ public class StagingManager {
         int minSignatureScheme = ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
                 newApexPkg.applicationInfo.targetSdkVersion);
 
-        final SigningDetails newSigningDetails;
-        try {
-            newSigningDetails = ApkSignatureVerifier.verify(apexPath, minSignatureScheme);
-        } catch (PackageParserException e) {
+        final ParseTypeImpl input = ParseTypeImpl.forDefaultParsing();
+        final ParseResult<SigningDetails> newResult = ApkSignatureVerifier.verify(
+                input.reset(), apexPath, minSignatureScheme);
+        if (newResult.isError()) {
             throw new PackageManagerException(SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
-                    "Failed to parse APEX package " + apexPath + " : " + e, e);
+                    "Failed to parse APEX package " + apexPath + " : "
+                            + newResult.getException(), newResult.getException());
         }
+        final SigningDetails newSigningDetails = newResult.getResult();
 
         // Get signing details of the existing package
         final PackageInfo existingApexPkg = mApexManager.getPackageInfo(packageName,
@@ -228,15 +236,15 @@ public class StagingManager {
             throw new IllegalStateException("Unknown apex package " + packageName);
         }
 
-        final SigningDetails existingSigningDetails;
-        try {
-            existingSigningDetails = ApkSignatureVerifier.verify(
-                existingApexPkg.applicationInfo.sourceDir, SignatureSchemeVersion.JAR);
-        } catch (PackageParserException e) {
+        final ParseResult<SigningDetails> existingResult = ApkSignatureVerifier.verify(
+                input.reset(), existingApexPkg.applicationInfo.sourceDir,
+                SignatureSchemeVersion.JAR);
+        if (existingResult.isError()) {
             throw new PackageManagerException(SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
                     "Failed to parse APEX package " + existingApexPkg.applicationInfo.sourceDir
-                            + " : " + e, e);
+                            + " : " + existingResult.getException(), existingResult.getException());
         }
+        final SigningDetails existingSigningDetails = existingResult.getResult();
 
         // Verify signing details for upgrade
         if (newSigningDetails.checkCapability(existingSigningDetails,
@@ -292,19 +300,10 @@ public class StagingManager {
                             SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
                             "Unable to generate package info: " + apexInfo.modulePath);
                 }
-            } catch (PackageParserException e) {
+            } catch (PackageManagerException e) {
                 throw new PackageManagerException(SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
                         "Failed to parse APEX package " + apexInfo.modulePath + " : " + e, e);
             }
-            final PackageInfo activePackage = mApexManager.getPackageInfo(packageInfo.packageName,
-                    ApexManager.MATCH_ACTIVE_PACKAGE);
-            if (activePackage == null) {
-                Slog.w(TAG, "Attempting to install new APEX package " + packageInfo.packageName);
-                throw new PackageManagerException(SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
-                        "It is forbidden to install new APEX packages.");
-            }
-            checkRequiredVersionCode(session, activePackage);
-            checkDowngrade(session, activePackage, packageInfo);
             result.add(packageInfo);
             apexPackageNames.add(packageInfo.packageName);
         }
@@ -325,40 +324,6 @@ public class StagingManager {
         }
         throw new PackageManagerException(
                 "Could not find rollback id for commit session: " + sessionId);
-    }
-
-    private void checkRequiredVersionCode(final StagedSession session,
-            final PackageInfo activePackage) throws PackageManagerException {
-        if (session.sessionParams().requiredInstalledVersionCode
-                == PackageManager.VERSION_CODE_HIGHEST) {
-            return;
-        }
-        final long activeVersion = activePackage.applicationInfo.longVersionCode;
-        if (activeVersion != session.sessionParams().requiredInstalledVersionCode) {
-            throw new PackageManagerException(
-                    SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
-                    "Installed version of APEX package " + activePackage.packageName
-                            + " does not match required. Active version: " + activeVersion
-                            + " required: " + session.sessionParams().requiredInstalledVersionCode);
-        }
-    }
-
-    private void checkDowngrade(final StagedSession session,
-            final PackageInfo activePackage, final PackageInfo newPackage)
-            throws PackageManagerException {
-        final long activeVersion = activePackage.applicationInfo.longVersionCode;
-        final long newVersionCode = newPackage.applicationInfo.longVersionCode;
-        final boolean isAppDebuggable = (activePackage.applicationInfo.flags
-                & ApplicationInfo.FLAG_DEBUGGABLE) != 0;
-        final boolean allowsDowngrade = PackageManagerServiceUtils.isDowngradePermitted(
-                session.sessionParams().installFlags, isAppDebuggable);
-        if (activeVersion > newVersionCode && !allowsDowngrade) {
-            throw new PackageManagerException(
-                    SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
-                    "Downgrade of APEX package " + newPackage.packageName
-                            + " is not allowed. Active version: " + activeVersion
-                            + " attempted: " + newVersionCode);
-        }
     }
 
     // Reverts apex sessions and user data (if checkpoint is supported). Also reboots the device.
@@ -690,6 +655,7 @@ public class StagingManager {
      * </ul>
      * @throws PackageManagerException if session fails the check
      */
+    // TODO(b/192625695): Rename this method which checks rollbacks in addition to overlapping
     @VisibleForTesting
     void checkNonOverlappingWithStagedSessions(@NonNull StagedSession session)
             throws PackageManagerException {
@@ -723,13 +689,6 @@ public class StagingManager {
                     continue;
                 }
 
-                if (stagedSession.getCommittedMillis() > session.getCommittedMillis()) {
-                    // Ignore sessions that are committed after the provided session. When there are
-                    // overlaps between sessions, we will fail the one committed later instead of
-                    // the earlier one.
-                    continue;
-                }
-
                 // From here on, stagedSession is a parent active staged session
 
                 // Check if session is one of the active sessions
@@ -754,15 +713,28 @@ public class StagingManager {
                             "Session was failed by rollback session: " + session.sessionId());
                     Slog.i(TAG, "Session " + root.sessionId() + " is marked failed due to "
                             + "rollback session: " + session.sessionId());
+                } else if (!isRollback && isRollback(stagedSession)) {
+                    throw new PackageManagerException(
+                            SessionInfo.STAGED_SESSION_CONFLICT,
+                            "Session was failed by rollback session: " + stagedSession.sessionId());
                 } else if (stagedSession.sessionContains(
                         s -> s.getPackageName().equals(packageName))) {
-                    // New session cannot have same package name as one of the active sessions
-                    throw new PackageManagerException(
-                            SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
-                            "Package: " + session.getPackageName() + " in session: "
-                                    + session.sessionId()
-                                    + " has been staged already by session: "
-                                    + stagedSession.sessionId(), null);
+                    // Fail the session committed later when there are overlapping packages
+                    if (stagedSession.getCommittedMillis() < session.getCommittedMillis()) {
+                        throw new PackageManagerException(
+                                SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
+                                "Package: " + session.getPackageName() + " in session: "
+                                        + session.sessionId()
+                                        + " has been staged already by session: "
+                                        + stagedSession.sessionId(), null);
+                    } else {
+                        stagedSession.setSessionFailed(
+                                SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
+                                "Package: " + packageName + " in session: "
+                                        + stagedSession.sessionId()
+                                        + " has been staged already by session: "
+                                        + session.sessionId());
+                    }
                 }
 
                 // Staging multiple root sessions is not allowed if device doesn't support
@@ -890,7 +862,8 @@ public class StagingManager {
             } else if (!session.isSessionReady()) {
                 // The framework got restarted before the pre-reboot verification could complete,
                 // restart the verification.
-                mPreRebootVerificationHandler.startPreRebootVerification(session);
+                Slog.i(TAG, "Restart verification for session=" + session.sessionId());
+                mBootCompleted.thenRun(() -> session.verifySession());
                 StagedSession session2 = sessions.set(j - 1, session);
                 sessions.set(i, session2);
                 j--;
@@ -1079,7 +1052,7 @@ public class StagingManager {
 
     @VisibleForTesting
     void onBootCompletedBroadcastReceived() {
-        mPreRebootVerificationHandler.readyToStart();
+        mBootCompleted.complete(null);
         BackgroundThread.getExecutor().execute(() -> logFailedApexSessionsIfNecessary());
     }
 
@@ -1120,24 +1093,7 @@ public class StagingManager {
         return session;
     }
 
-    // TODO(b/136257624): Temporary API to let PMS communicate with StagingManager. When all
-    //  verification logic is extracted out of StagingManager into PMS, we can remove
-    //  this.
-    void notifyVerificationComplete(StagedSession session) {
-        mPreRebootVerificationHandler.onPreRebootVerificationComplete(session);
-    }
-
-    // TODO(b/136257624): Temporary API to let PMS communicate with StagingManager. When all
-    //  verification logic is extracted out of StagingManager into PMS, we can remove
-    //  this.
-    void notifyPreRebootVerification_Apk_Complete(@NonNull StagedSession session) {
-        mPreRebootVerificationHandler.notifyPreRebootVerification_Apk_Complete(session);
-    }
-
     private final class PreRebootVerificationHandler extends Handler {
-        // Hold sessions before handler gets ready to do the verification.
-        private List<StagedSession> mPendingSessions;
-        private boolean mIsReady;
 
         PreRebootVerificationHandler(Looper looper) {
             super(looper);
@@ -1151,7 +1107,6 @@ public class StagingManager {
          * <p><ul>
          *     <li>MSG_PRE_REBOOT_VERIFICATION_START</li>
          *     <li>MSG_PRE_REBOOT_VERIFICATION_APEX</li>
-         *     <li>MSG_PRE_REBOOT_VERIFICATION_APK</li>
          *     <li>MSG_PRE_REBOOT_VERIFICATION_END</li>
          * </ul></p>
          *
@@ -1159,8 +1114,7 @@ public class StagingManager {
          */
         private static final int MSG_PRE_REBOOT_VERIFICATION_START = 1;
         private static final int MSG_PRE_REBOOT_VERIFICATION_APEX = 2;
-        private static final int MSG_PRE_REBOOT_VERIFICATION_APK = 3;
-        private static final int MSG_PRE_REBOOT_VERIFICATION_END = 4;
+        private static final int MSG_PRE_REBOOT_VERIFICATION_END = 3;
 
         @Override
         public void handleMessage(Message msg) {
@@ -1180,9 +1134,6 @@ public class StagingManager {
                     case MSG_PRE_REBOOT_VERIFICATION_APEX:
                         handlePreRebootVerification_Apex(session, rollbackId);
                         break;
-                    case MSG_PRE_REBOOT_VERIFICATION_APK:
-                        handlePreRebootVerification_Apk(session);
-                        break;
                     case MSG_PRE_REBOOT_VERIFICATION_END:
                         handlePreRebootVerification_End(session);
                         break;
@@ -1195,35 +1146,15 @@ public class StagingManager {
             }
         }
 
-        // Notify the handler that system is ready, and reschedule the pre-reboot verifications.
-        private synchronized void readyToStart() {
-            mIsReady = true;
-            if (mPendingSessions != null) {
-                for (int i = 0; i < mPendingSessions.size(); i++) {
-                    StagedSession session = mPendingSessions.get(i);
-                    startPreRebootVerification(session);
-                }
-                mPendingSessions = null;
-            }
-        }
-
         // Method for starting the pre-reboot verification
         private synchronized void startPreRebootVerification(
                 @NonNull StagedSession session) {
-            if (!mIsReady) {
-                if (mPendingSessions == null) {
-                    mPendingSessions = new ArrayList<>();
-                }
-                mPendingSessions.add(session);
-                return;
-            }
-
-            if (session.notifyStartPreRebootVerification()) {
+            mBootCompleted.thenRun(() -> {
                 int sessionId = session.sessionId();
                 Slog.d(TAG, "Starting preRebootVerification for session " + sessionId);
                 obtainMessage(MSG_PRE_REBOOT_VERIFICATION_START, sessionId, -1, session)
                         .sendToTarget();
-            }
+            });
         }
 
         private void onPreRebootVerificationFailure(StagedSession session,
@@ -1251,12 +1182,6 @@ public class StagingManager {
         }
 
         private void notifyPreRebootVerification_Apex_Complete(
-                @NonNull StagedSession session) {
-            obtainMessage(MSG_PRE_REBOOT_VERIFICATION_APK, session.sessionId(), -1, session)
-                    .sendToTarget();
-        }
-
-        private void notifyPreRebootVerification_Apk_Complete(
                 @NonNull StagedSession session) {
             obtainMessage(MSG_PRE_REBOOT_VERIFICATION_END, session.sessionId(), -1, session)
                     .sendToTarget();
@@ -1342,19 +1267,6 @@ public class StagingManager {
             }
 
             notifyPreRebootVerification_Apex_Complete(session);
-        }
-
-        /**
-         * Pre-reboot verification state for apk files. Session is sent to
-         * {@link PackageManagerService} for verification and it notifies back the result via
-         * {@link #notifyPreRebootVerification_Apk_Complete}
-         */
-        private void handlePreRebootVerification_Apk(@NonNull StagedSession session) {
-            if (!session.containsApkSession()) {
-                notifyPreRebootVerification_Apk_Complete(session);
-                return;
-            }
-            session.verifySession();
         }
 
         /**

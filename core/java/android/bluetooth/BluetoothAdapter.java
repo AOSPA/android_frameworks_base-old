@@ -3198,6 +3198,9 @@ public final class BluetoothAdapter {
         } else if (profile == BluetoothProfile.LE_AUDIO) {
             BluetoothLeAudio leAudio = new BluetoothLeAudio(context, listener, this);
             return true;
+        } else if (profile == BluetoothProfile.VOLUME_CONTROL) {
+            BluetoothVolumeControl vcs = new BluetoothVolumeControl(context, listener, this);
+            return true;
         } else {
             return false;
         }
@@ -3308,6 +3311,10 @@ public final class BluetoothAdapter {
             case BluetoothProfile.VCP:
                 BluetoothVcp vcp = (BluetoothVcp) proxy;
                 vcp.close();
+                break;
+            case BluetoothProfile.VOLUME_CONTROL:
+                BluetoothVolumeControl vcs = (BluetoothVolumeControl) proxy;
+                vcs.close();
                 break;
         }
     }

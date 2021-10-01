@@ -23,8 +23,9 @@ import android.content.Intent;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.InstantAppInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageParser;
+import android.content.pm.PackageManagerInternal;
 import android.content.pm.PermissionInfo;
+import android.content.pm.SigningDetails;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
@@ -123,6 +124,7 @@ class InstantAppRegistry implements Watchable, Snappable {
     private final PackageManagerService mService;
     private final PermissionManagerServiceInternal mPermissionManager;
     private final CookiePersistence mCookiePersistence;
+    private final PackageManagerInternal mPmInternal;
 
     /** State for uninstalled instant apps */
     @Watched
@@ -191,9 +193,11 @@ class InstantAppRegistry implements Watchable, Snappable {
     }
 
     public InstantAppRegistry(PackageManagerService service,
-            PermissionManagerServiceInternal permissionManager) {
+            PermissionManagerServiceInternal permissionManager,
+            PackageManagerInternal pmInternal) {
         mService = service;
         mPermissionManager = permissionManager;
+        mPmInternal = pmInternal;
         mCookiePersistence = new CookiePersistence(BackgroundThread.getHandler().getLooper());
 
         mUninstalledInstantApps = new WatchedSparseArray<List<UninstalledInstantAppState>>();
@@ -214,6 +218,7 @@ class InstantAppRegistry implements Watchable, Snappable {
     private InstantAppRegistry(InstantAppRegistry r) {
         mService = r.mService;
         mPermissionManager = r.mPermissionManager;
+        mPmInternal = r.mPmInternal;
         mCookiePersistence = null;
 
         mUninstalledInstantApps = new WatchedSparseArray<List<UninstalledInstantAppState>>(
@@ -366,7 +371,7 @@ class InstantAppRegistry implements Watchable, Snappable {
 
     @GuardedBy("mService.mLock")
     public void onPackageInstalledLPw(@NonNull AndroidPackage pkg, @NonNull int[] userIds) {
-        PackageSetting ps = mService.getPackageSetting(pkg.getPackageName());
+        PackageSetting ps = mPmInternal.getPackageSetting(pkg.getPackageName());
         if (ps == null) {
             return;
         }
@@ -412,14 +417,14 @@ class InstantAppRegistry implements Watchable, Snappable {
             // into account but also allow the value from the old computation to avoid
             // data loss.
             if (pkg.getSigningDetails().checkCapability(currentCookieSha256,
-                    PackageParser.SigningDetails.CertCapabilities.INSTALLED_DATA)) {
+                    SigningDetails.CertCapabilities.INSTALLED_DATA)) {
                 return;
             }
 
             // For backwards compatibility we accept match based on any signature, since we may have
             // recorded only the first for multiply-signed packages
-            final String[] signaturesSha256Digests =
-                    PackageUtils.computeSignaturesSha256Digests(pkg.getSigningDetails().signatures);
+            final String[] signaturesSha256Digests = PackageUtils.computeSignaturesSha256Digests(
+                    pkg.getSigningDetails().getSignatures());
             for (String s : signaturesSha256Digests) {
                 if (s.equals(currentCookieSha256)) {
                     return;
@@ -784,7 +789,7 @@ class InstantAppRegistry implements Watchable, Snappable {
             final int packageCount = mService.mPackages.size();
             for (int i = 0; i < packageCount; i++) {
                 final AndroidPackage pkg = mService.mPackages.valueAt(i);
-                final PackageSetting ps = mService.getPackageSetting(pkg.getPackageName());
+                final PackageSetting ps = mPmInternal.getPackageSetting(pkg.getPackageName());
                 if (ps == null) {
                     continue;
                 }
@@ -824,13 +829,13 @@ class InstantAppRegistry implements Watchable, Snappable {
                     } else if (rhsPkg == null) {
                         return 1;
                     } else {
-                        final PackageSetting lhsPs = mService.getPackageSetting(
+                        final PackageSetting lhsPs = mPmInternal.getPackageSetting(
                                 lhsPkg.getPackageName());
                         if (lhsPs == null) {
                             return 0;
                         }
 
-                        final PackageSetting rhsPs = mService.getPackageSetting(
+                        final PackageSetting rhsPs = mPmInternal.getPackageSetting(
                                 rhsPkg.getPackageName());
                         if (rhsPs == null) {
                             return 0;
@@ -918,7 +923,7 @@ class InstantAppRegistry implements Watchable, Snappable {
         final int packageCount = mService.mPackages.size();
         for (int i = 0; i < packageCount; i++) {
             final AndroidPackage pkg = mService.mPackages.valueAt(i);
-            final PackageSetting ps = mService.getPackageSetting(pkg.getPackageName());
+            final PackageSetting ps = mPmInternal.getPackageSetting(pkg.getPackageName());
             if (ps == null || !ps.getInstantApp(userId)) {
                 continue;
             }
@@ -940,7 +945,7 @@ class InstantAppRegistry implements Watchable, Snappable {
     InstantAppInfo createInstantAppInfoForPackage(
             @NonNull AndroidPackage pkg, @UserIdInt int userId,
             boolean addApplicationInfo) {
-        PackageSetting ps = mService.getPackageSetting(pkg.getPackageName());
+        PackageSetting ps = mPmInternal.getPackageSetting(pkg.getPackageName());
         if (ps == null) {
             return null;
         }
@@ -1305,8 +1310,8 @@ class InstantAppRegistry implements Watchable, Snappable {
             // We prefer the modern computation procedure where all certs are taken
             // into account and delete the file derived via the legacy hash computation.
             File newCookieFile = computeInstantCookieFile(pkg.getPackageName(),
-                    PackageUtils.computeSignaturesSha256Digest(pkg.getSigningDetails().signatures),
-                    userId);
+                    PackageUtils.computeSignaturesSha256Digest(
+                            pkg.getSigningDetails().getSignatures()), userId);
             if (!pkg.getSigningDetails().hasSignatures()) {
                 Slog.wtf(LOG_TAG, "Parsed Instant App contains no valid signatures!");
             }

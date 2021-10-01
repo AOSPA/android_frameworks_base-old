@@ -16,7 +16,10 @@
 
 package com.android.wm.shell.splitscreen;
 
+import android.annotation.CallSuper;
 import android.app.ActivityManager;
+import android.content.Context;
+import android.graphics.Color;
 import android.graphics.Rect;
 import android.view.SurfaceSession;
 import android.window.WindowContainerToken;
@@ -28,15 +31,19 @@ import com.android.wm.shell.common.SyncTransactionQueue;
 /**
  * Side stage for split-screen mode. Only tasks that are explicitly pinned to this stage show up
  * here. All other task are launch in the {@link MainStage}.
+ *
  * @see StageCoordinator
  */
 class SideStage extends StageTaskListener {
     private static final String TAG = SideStage.class.getSimpleName();
+    private final Context mContext;
+    private OutlineManager mOutlineManager;
 
-    SideStage(ShellTaskOrganizer taskOrganizer, int displayId,
+    SideStage(Context context, ShellTaskOrganizer taskOrganizer, int displayId,
             StageListenerCallbacks callbacks, SyncTransactionQueue syncQueue,
             SurfaceSession surfaceSession) {
         super(taskOrganizer, displayId, callbacks, syncQueue, surfaceSession);
+        mContext = context;
     }
 
     void addTask(ActivityManager.RunningTaskInfo task, Rect rootBounds,
@@ -44,7 +51,7 @@ class SideStage extends StageTaskListener {
         final WindowContainerToken rootToken = mRootTaskInfo.token;
         wct.setBounds(rootToken, rootBounds)
                 .reparent(task.token, rootToken, true /* onTop*/)
-                // Moving the root task to top after the child tasks were repareted , or the root
+                // Moving the root task to top after the child tasks were reparented , or the root
                 // task cannot be visible and focused.
                 .reorder(rootToken, true /* onTop */);
     }
@@ -68,5 +75,35 @@ class SideStage extends StageTaskListener {
         if (task == null) return false;
         wct.reparent(task.token, newParent, false /* onTop */);
         return true;
+    }
+
+    void enableOutline(boolean enable) {
+        if (enable) {
+            if (mOutlineManager == null && mRootTaskInfo != null) {
+                mOutlineManager = new OutlineManager(mContext, mRootTaskInfo.configuration);
+                mSyncQueue.runInSync(t -> mOutlineManager.inflate(t, mRootLeash, Color.YELLOW));
+                updateOutlineBounds();
+            }
+        } else {
+            if (mOutlineManager != null) {
+                mOutlineManager.release();
+                mOutlineManager = null;
+            }
+        }
+    }
+
+    private void updateOutlineBounds() {
+        if (mOutlineManager == null || mRootTaskInfo == null || !mRootTaskInfo.isVisible) return;
+        mOutlineManager.drawOutlineBounds(
+                mRootTaskInfo.configuration.windowConfiguration.getBounds());
+    }
+
+    @Override
+    @CallSuper
+    public void onTaskInfoChanged(ActivityManager.RunningTaskInfo taskInfo) {
+        super.onTaskInfoChanged(taskInfo);
+        if (mRootTaskInfo != null && mRootTaskInfo.taskId == taskInfo.taskId) {
+            updateOutlineBounds();
+        }
     }
 }

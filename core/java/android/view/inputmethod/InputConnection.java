@@ -843,9 +843,14 @@ public interface InputConnection {
     /**
      * Called back when the connected IME switches between fullscreen and normal modes.
      *
-     * <p>Note: On {@link android.os.Build.VERSION_CODES#O} and later devices, input methods are no
-     * longer allowed to directly call this method at any time. To signal this event in the target
-     * application, input methods should always call
+     * <p><p><strong>Editor authors:</strong> There is a bug on
+     * {@link android.os.Build.VERSION_CODES#O} and later devices that this method is called back
+     * on the main thread even when {@link #getHandler()} is overridden.  This bug is fixed in
+     * {@link android.os.Build.VERSION_CODES#TIRAMISU}.</p>
+     *
+     * <p><p><strong>IME authors:</strong> On {@link android.os.Build.VERSION_CODES#O} and later
+     * devices, input methods are no longer allowed to directly call this method at any time.
+     * To signal this event in the target application, input methods should always call
      * {@link InputMethodService#updateFullscreenMode()} instead. This approach should work on API
      * {@link android.os.Build.VERSION_CODES#N_MR1} and prior devices.</p>
      *
@@ -927,14 +932,20 @@ public interface InputConnection {
     boolean requestCursorUpdates(int cursorUpdateMode);
 
     /**
-     * Called by the {@link InputMethodManager} to enable application developers to specify a
-     * dedicated {@link Handler} on which incoming IPC method calls from input methods will be
-     * dispatched.
+     * Called by the system to enable application developers to specify a dedicated thread on which
+     * {@link InputConnection} methods are called back.
      *
-     * <p>Note: This does nothing when called from input methods.</p>
+     * <p><strong>Editor authors</strong>: although you can return your custom subclasses of
+     * {@link Handler}, the system only uses {@link android.os.Looper} returned from
+     * {@link Handler#getLooper()}.  You cannot intercept or cancel {@link InputConnection}
+     * callbacks by implementing this method.</p>
+     *
+     * <p><strong>IME authors</strong>: This method is not intended to be called from the IME.  You
+     * will always receive {@code null}.</p>
      *
      * @return {@code null} to use the default {@link Handler}.
      */
+    @Nullable
     Handler getHandler();
 
     /**

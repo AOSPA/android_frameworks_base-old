@@ -67,6 +67,7 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.anyBoolean;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doNothing;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.doReturn;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.mock;
+import static com.android.dx.mockito.inline.extended.ExtendedMockito.mockitoSession;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.never;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.reset;
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.same;
@@ -107,9 +108,12 @@ import android.app.WindowConfiguration;
 import android.app.servertransaction.FixedRotationAdjustmentsItem;
 import android.content.res.Configuration;
 import android.graphics.Insets;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.metrics.LogMaker;
+import android.os.Binder;
+import android.os.IBinder;
 import android.os.RemoteException;
 import android.os.SystemClock;
 import android.platform.test.annotations.Presubmit;
@@ -122,6 +126,7 @@ import android.view.IDisplayWindowRotationController;
 import android.view.ISystemGestureExclusionListener;
 import android.view.IWindowManager;
 import android.view.InsetsState;
+import android.view.InsetsVisibilities;
 import android.view.MotionEvent;
 import android.view.Surface;
 import android.view.SurfaceControl;
@@ -141,6 +146,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mockito;
+import org.mockito.MockitoSession;
+import org.mockito.quality.Strictness;
 
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -592,7 +599,9 @@ public class DisplayContentTests extends WindowTestsBase {
         dc.setImeLayeringTarget(ws);
 
         // Adjust bounds so that matchesRootDisplayAreaBounds() returns false.
-        ws.mActivityRecord.getConfiguration().windowConfiguration.setBounds(new Rect(1, 1, 1, 1));
+        final Rect bounds = new Rect(dc.getBounds());
+        bounds.scale(0.5f);
+        ws.mActivityRecord.setBounds(bounds);
         assertFalse("matchesRootDisplayAreaBounds() should return false",
                 ws.matchesDisplayAreaBounds());
 
@@ -868,19 +877,6 @@ public class DisplayContentTests extends WindowTestsBase {
         assertFalse(dc.mShouldOverrideDisplayConfiguration);
         verify(mWm.mDisplayManagerInternal, times(1))
                 .setDisplayInfoOverrideFromWindowManager(dc.getDisplayId(), null);
-    }
-
-    @UseTestDisplay
-    @Test
-    public void testClearLastFocusWhenReparentingFocusedWindow() {
-        final DisplayContent defaultDisplay = mWm.getDefaultDisplayContentLocked();
-        final WindowState window = createWindow(null /* parent */, TYPE_BASE_APPLICATION,
-                defaultDisplay, "window");
-        defaultDisplay.mLastFocus = window;
-        mDisplayContent.mCurrentFocus = window;
-        mDisplayContent.reParentWindowToken(window.mToken);
-
-        assertNull(defaultDisplay.mLastFocus);
     }
 
     @Test
@@ -1217,10 +1213,10 @@ public class DisplayContentTests extends WindowTestsBase {
         win.getAttrs().layoutInDisplayCutoutMode = LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
         win.getAttrs().privateFlags |= PRIVATE_FLAG_NO_MOVE_ANIMATION;
         win.getAttrs().insetsFlags.behavior = BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE;
-        final InsetsState requestedState = new InsetsState();
-        requestedState.getSource(ITYPE_NAVIGATION_BAR).setVisible(false);
-        requestedState.getSource(ITYPE_STATUS_BAR).setVisible(false);
-        win.updateRequestedVisibility(requestedState);
+        final InsetsVisibilities requestedVisibilities = new InsetsVisibilities();
+        requestedVisibilities.setVisibility(ITYPE_NAVIGATION_BAR, false);
+        requestedVisibilities.setVisibility(ITYPE_STATUS_BAR, false);
+        win.setRequestedVisibilities(requestedVisibilities);
         win.mActivityRecord.mTargetSdk = P;
 
         performLayout(dc);
@@ -1530,7 +1526,7 @@ public class DisplayContentTests extends WindowTestsBase {
         unblockDisplayRotation(mDisplayContent);
         final ActivityRecord app = new ActivityBuilder(mAtm).setCreateTask(true).build();
         app.setVisible(false);
-        app.setState(Task.ActivityState.RESUMED, "test");
+        app.setState(ActivityRecord.State.RESUMED, "test");
         mDisplayContent.prepareAppTransition(WindowManager.TRANSIT_OPEN);
         mDisplayContent.mOpeningApps.add(app);
         final int newOrientation = getRotatedOrientation(mDisplayContent);
@@ -2228,6 +2224,113 @@ public class DisplayContentTests extends WindowTestsBase {
                 ANIMATION_TYPE_APP_TRANSITION);
         mDisplayContent.setImeLayeringTarget(nextImeAppTarget);
         assertNotEquals(imeMenuDialog, mDisplayContent.findFocusedWindow());
+    }
+
+    @Test
+    public void testVirtualDisplayContent() {
+        MockitoSession mockSession = mockitoSession()
+                .initMocks(this)
+                .spyStatic(SurfaceControl.class)
+                .strictness(Strictness.LENIENT)
+                .startMocking();
+
+        // GIVEN MediaProjection has already initialized the WindowToken of the DisplayArea to
+        // mirror.
+        final IBinder tokenToMirror = setUpDefaultTaskDisplayAreaWindowToken();
+
+        // GIVEN SurfaceControl can successfully mirror the provided surface.
+        Point surfaceSize = new Point(
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().width(),
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().height());
+        surfaceControlMirrors(surfaceSize);
+
+        // WHEN creating the DisplayContent for a new virtual display.
+        final DisplayContent virtualDisplay = new TestDisplayContent.Builder(mAtm,
+                mDisplayInfo).build();
+
+        // THEN mirroring is initiated for the default display's DisplayArea.
+        assertThat(virtualDisplay.mTokenToMirror).isEqualTo(tokenToMirror);
+
+        mockSession.finishMocking();
+    }
+
+    @Test
+    public void testVirtualDisplayContent_capturedAreaResized() {
+        MockitoSession mockSession = mockitoSession()
+                .initMocks(this)
+                .spyStatic(SurfaceControl.class)
+                .strictness(Strictness.LENIENT)
+                .startMocking();
+
+        // GIVEN MediaProjection has already initialized the WindowToken of the DisplayArea to
+        // mirror.
+        final IBinder tokenToMirror = setUpDefaultTaskDisplayAreaWindowToken();
+
+        // GIVEN SurfaceControl can successfully mirror the provided surface.
+        Point surfaceSize = new Point(
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().width(),
+                mDefaultDisplay.getDefaultTaskDisplayArea().getBounds().height());
+        SurfaceControl mirroredSurface = surfaceControlMirrors(surfaceSize);
+
+        // WHEN creating the DisplayContent for a new virtual display.
+        final DisplayContent virtualDisplay = new TestDisplayContent.Builder(mAtm,
+                mDisplayInfo).build();
+
+        // THEN mirroring is initiated for the default display's DisplayArea.
+        assertThat(virtualDisplay.mTokenToMirror).isEqualTo(tokenToMirror);
+
+        float xScale = 0.7f;
+        float yScale = 2f;
+        Rect displayAreaBounds = new Rect(0, 0, Math.round(surfaceSize.x * xScale),
+                Math.round(surfaceSize.y * yScale));
+        virtualDisplay.updateMirroredSurface(mTransaction, displayAreaBounds);
+
+        // THEN content in the captured DisplayArea is scaled to fit the surface size.
+        verify(mTransaction, atLeastOnce()).setMatrix(mirroredSurface, 1.0f / yScale, 0, 0,
+                1.0f / yScale);
+        // THEN captured content is positioned in the centre of the output surface.
+        float scaledWidth = displayAreaBounds.width() / xScale;
+        float xInset = (surfaceSize.x - scaledWidth) / 2;
+        verify(mTransaction, atLeastOnce()).setPosition(mirroredSurface, xInset, 0);
+
+        mockSession.finishMocking();
+    }
+
+    private class TestToken extends Binder {
+    }
+
+    /**
+     * Creates a WindowToken associated with the default task DisplayArea, in order for that
+     * DisplayArea to be mirrored.
+     */
+    private IBinder setUpDefaultTaskDisplayAreaWindowToken() {
+        // GIVEN MediaProjection has already initialized the WindowToken of the DisplayArea to
+        // mirror.
+        final IBinder tokenToMirror = new TestToken();
+        doReturn(tokenToMirror).when(mWm.mDisplayManagerInternal).getWindowTokenClientToMirror(
+                anyInt());
+
+        // GIVEN the default task display area is represented by the WindowToken.
+        spyOn(mWm.mWindowContextListenerController);
+        doReturn(mDefaultDisplay.getDefaultTaskDisplayArea()).when(
+                mWm.mWindowContextListenerController).getContainer(any());
+        return tokenToMirror;
+    }
+
+    /**
+     * SurfaceControl successfully creates a mirrored surface of the given size.
+     */
+    private SurfaceControl surfaceControlMirrors(Point surfaceSize) {
+        // Do not set the parent, since the mirrored surface is the root of a new surface hierarchy.
+        SurfaceControl mirroredSurface = new SurfaceControl.Builder()
+                .setName("mirroredSurface")
+                .setBufferSize(surfaceSize.x, surfaceSize.y)
+                .setCallsite("mirrorSurface")
+                .build();
+        doReturn(mirroredSurface).when(() -> SurfaceControl.mirrorSurface(any()));
+        doReturn(surfaceSize).when(mWm.mDisplayManagerInternal).getDisplaySurfaceDefaultSize(
+                anyInt());
+        return mirroredSurface;
     }
 
     private void removeRootTaskTests(Runnable runnable) {

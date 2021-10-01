@@ -34,13 +34,12 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
-import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_STATES;
+import static com.android.server.wm.ActivityRecord.State.DESTROYED;
+import static com.android.server.wm.ActivityRecord.State.RESUMED;
+import static com.android.server.wm.ActivityRecord.State.STOPPED;
 import static com.android.server.wm.ActivityTaskManagerService.TAG_ROOT_TASK;
 import static com.android.server.wm.DisplayContent.alwaysCreateRootTask;
-import static com.android.server.wm.Task.ActivityState.DESTROYED;
-import static com.android.server.wm.Task.ActivityState.RESUMED;
-import static com.android.server.wm.Task.ActivityState.STOPPED;
-import static com.android.server.wm.Task.TASK_VISIBILITY_VISIBLE;
+import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE;
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
@@ -471,7 +470,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         // Update the top resumed activity because the preferred top focusable task may be changed.
         mAtmService.mTaskSupervisor.updateTopResumedActivityIfNeeded();
 
-        final ActivityRecord r = child.getResumedActivity();
+        final ActivityRecord r = child.getTopResumedActivity();
         if (r != null && r == mRootWindowContainer.getTopResumedActivity()) {
             mAtmService.setResumedActivityUncheckLocked(r, "positionChildAt");
         }
@@ -783,10 +782,12 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             }
             return SCREEN_ORIENTATION_UNSPECIFIED;
         } else {
-            // Apps and their containers are not allowed to specify an orientation of full screen
-            // tasks created by organizer. The organizer handles the orientation instead.
-            final Task task = getTopRootTaskInWindowingMode(WINDOWING_MODE_FULLSCREEN);
-            if (task != null && task.isVisible() && task.mCreatedByOrganizer) {
+            // Apps and their containers are not allowed to specify an orientation of non floating
+            // visible tasks created by organizer. The organizer handles the orientation instead.
+            final Task nonFloatingTopTask =
+                    getRootTask(t -> !t.getWindowConfiguration().tasksAreFloating());
+            if (nonFloatingTopTask != null && nonFloatingTopTask.mCreatedByOrganizer
+                    && nonFloatingTopTask.isVisible()) {
                 return SCREEN_ORIENTATION_UNSPECIFIED;
             }
         }
@@ -1233,7 +1234,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                                 + adjacentFlagRootTask);
             }
 
-            if (adjacentFlagRootTask.mAdjacentTask == null) {
+            if (adjacentFlagRootTask.getAdjacentTaskFragment() == null) {
                 throw new UnsupportedOperationException(
                         "Can't set non-adjacent root as launch adjacent flag root tr="
                                 + adjacentFlagRootTask);
@@ -1271,8 +1272,8 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             // If the adjacent launch is coming from the same root, launch to adjacent root instead.
             if (sourceTask != null
                     && sourceTask.getRootTask().mTaskId == mLaunchAdjacentFlagRootTask.mTaskId
-                    && mLaunchAdjacentFlagRootTask.mAdjacentTask != null) {
-                return mLaunchAdjacentFlagRootTask.mAdjacentTask;
+                    && mLaunchAdjacentFlagRootTask.getAdjacentTaskFragment() != null) {
+                return mLaunchAdjacentFlagRootTask.getAdjacentTaskFragment().asTask();
             } else {
                 return mLaunchAdjacentFlagRootTask;
             }
@@ -1282,8 +1283,10 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             if (mLaunchRootTasks.get(i).contains(windowingMode, activityType)) {
                 final Task launchRootTask = mLaunchRootTasks.get(i).task;
                 // Return the focusable root task for improving the UX with staged split screen.
-                final Task adjacentRootTask = launchRootTask != null
-                        ? launchRootTask.mAdjacentTask : null;
+                final TaskFragment adjacentTaskFragment = launchRootTask != null
+                        ? launchRootTask.getAdjacentTaskFragment() : null;
+                final Task adjacentRootTask =
+                        adjacentTaskFragment != null ? adjacentTaskFragment.asTask() : null;
                 if (adjacentRootTask != null && adjacentRootTask.isFocusedRootTaskOnDisplay()) {
                     return adjacentRootTask;
                 } else {
@@ -1375,11 +1378,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
         // TODO(b/111541062): Move this into Task#getResumedActivity()
         // Check if the focused root task has the resumed activity
-        ActivityRecord resumedActivity = focusedRootTask.getResumedActivity();
+        ActivityRecord resumedActivity = focusedRootTask.getTopResumedActivity();
         if (resumedActivity == null || resumedActivity.app == null) {
             // If there is no registered resumed activity in the root task or it is not running -
             // try to use previously resumed one.
-            resumedActivity = focusedRootTask.getPausingActivity();
+            resumedActivity = focusedRootTask.getTopPausingActivity();
             if (resumedActivity == null || resumedActivity.app == null) {
                 // If previously resumed activity doesn't work either - find the topmost running
                 // activity that can be focused.
@@ -1406,7 +1409,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         // Clear last paused activity if focused root task changed while sleeping, so that the
         // top activity of current focused task can be resumed.
         if (mDisplayContent.isSleeping()) {
-            currentFocusedTask.mLastPausedActivity = null;
+            currentFocusedTask.clearLastPausedActivity();
         }
 
         mLastFocusedRootTask = prevFocusedTask;
@@ -1427,7 +1430,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                 continue;
             }
 
-            final ActivityRecord r = mChildren.get(i).asTask().getResumedActivity();
+            final ActivityRecord r = mChildren.get(i).asTask().getTopResumedActivity();
             if (r != null && !r.isState(RESUMED)) {
                 return false;
             }
@@ -1453,18 +1456,30 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
      */
     boolean pauseBackTasks(ActivityRecord resuming) {
         final int[] someActivityPaused = {0};
-        forAllLeafTasks((task) -> {
-            final ActivityRecord resumedActivity = task.getResumedActivity();
-            if (resumedActivity != null
-                    && (task.getVisibility(resuming) != TASK_VISIBILITY_VISIBLE
-                    || !task.isTopActivityFocusable())) {
-                ProtoLog.d(WM_DEBUG_STATES, "pauseBackTasks: task=%s "
-                        + "mResumedActivity=%s", task, resumedActivity);
-                if (task.startPausingLocked(false /* uiSleeping*/,
-                        resuming, "pauseBackTasks")) {
-                    someActivityPaused[0]++;
+        forAllLeafTasks(leafTask -> {
+            // Check if the direct child resumed activity in the leaf task needed to be paused if
+            // the leaf task is not a leaf task fragment.
+            if (!leafTask.isLeafTaskFragment()) {
+                final ActivityRecord top = topRunningActivity();
+                final ActivityRecord resumedActivity = leafTask.getResumedActivity();
+                if (resumedActivity != null && top.getTaskFragment() != leafTask) {
+                    // Pausing the resumed activity because it is occluded by other task fragment.
+                    if (leafTask.startPausing(false /* uiSleeping*/, resuming, "pauseBackTasks")) {
+                        someActivityPaused[0]++;
+                    }
                 }
             }
+
+            leafTask.forAllLeafTaskFragments((taskFrag) -> {
+                final ActivityRecord resumedActivity = taskFrag.getResumedActivity();
+                if (resumedActivity != null
+                        && (taskFrag.getVisibility(resuming) != TASK_FRAGMENT_VISIBILITY_VISIBLE
+                        || !taskFrag.isTopActivityFocusable())) {
+                    if (taskFrag.startPausing(false /* uiSleeping*/, resuming, "pauseBackTasks")) {
+                        someActivityPaused[0]++;
+                    }
+                }
+            }, true /* traverseTopToBottom */);
         }, true /* traverseTopToBottom */);
         return someActivityPaused[0] > 0;
     }
@@ -2091,7 +2106,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
             if (destroyContentOnRemoval
                     || !task.isActivityTypeStandardOrUndefined()
                     || task.mCreatedByOrganizer) {
-                task.finishAllActivitiesImmediately();
+                task.remove(false /* withTransition */, "removeTaskDisplayArea");
             } else {
                 // Reparent task to corresponding launch root or display area.
                 final WindowContainer launchRoot =

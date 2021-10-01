@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"ບໍ່ໄດ້ໝາຍຖືກ"</string>
     <string name="selected" msgid="6614607926197755875">"ເລືອກແລ້ວ"</string>
     <string name="not_selected" msgid="410652016565864475">"ບໍ່ໄດ້ເລືອກແລ້ວ"</string>
+    <string name="in_progress" msgid="2149208189184319441">"ກຳລັງດຳເນີນການ"</string>
     <string name="whichApplication" msgid="5432266899591255759">"ດຳເນີນການໂດຍໃຊ້"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"ສຳ​ເລັດ​​​ການ​ດຳ​ເນີນ​ການ​ໂດຍ​ໃຊ້ %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"ສຳເລັດຄຳສັ່ງ"</string>

@@ -95,6 +95,7 @@ java_library_static {
         "platform_service_defaults",
     ],
     srcs: [
+        ":android.hardware.biometrics.face-V1-java-source",
         ":statslog-art-java-gen",
         ":services.core-sources",
         ":services.core.protologsrc",
@@ -110,6 +111,7 @@ java_library_static {
         ":display-device-config",
         ":display-layout-config",
         ":device-state-config",
+        ":guiconstants_aidl",
         "java/com/android/server/EventLogTags.logtags",
         "java/com/android/server/am/EventLogTags.logtags",
         "java/com/android/server/wm/EventLogTags.logtags",
@@ -118,6 +120,7 @@ java_library_static {
 
     libs: [
         "services.net",
+        "android.hardware.common-V2-java",
         "android.hardware.light-V2.0-java",
         "android.hardware.gnss-V1-java",
         "android.hardware.power-V1-java",
@@ -147,7 +150,6 @@ java_library_static {
         "android.hardware.light-V1-java",
         "android.hardware.tv.cec-V1.1-java",
         "android.hardware.weaver-V1.0-java",
-        "android.hardware.biometrics.face-V1-java",
         "android.hardware.biometrics.face-V1.0-java",
         "android.hardware.biometrics.fingerprint-V2.3-java",
         "android.hardware.biometrics.fingerprint-V1-java",
@@ -155,7 +157,7 @@ java_library_static {
         "android.hardware.configstore-V1.0-java",
         "android.hardware.contexthub-V1.0-java",
         "android.hardware.rebootescrow-V1-java",
-        "android.hardware.soundtrigger-V2.3-java",
+        "android.hardware.soundtrigger-V2.4-java",
         "android.hardware.power.stats-V1-java",
         "android.hidl.manager-V1.2-java",
         "capture_state_listener-aidl-java",

@@ -1202,6 +1202,7 @@
     <string name="not_checked" msgid="7972320087569023342">"nav atzīmēts"</string>
     <string name="selected" msgid="6614607926197755875">"atlasīts"</string>
     <string name="not_selected" msgid="410652016565864475">"nav atlasīts"</string>
+    <string name="in_progress" msgid="2149208189184319441">"notiek apstrāde"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Izvēlieties lietotni"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Pabeigt darbību, izmantojot %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Pabeigt darbību"</string>

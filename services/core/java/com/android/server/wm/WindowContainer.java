@@ -851,7 +851,8 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     boolean isAttached() {
-        return getDisplayArea() != null;
+        WindowContainer parent = getParent();
+        return parent != null && parent.isAttached();
     }
 
     void setWaitingForDrawnIfResizingChanged() {
@@ -1671,6 +1672,15 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         return false;
     }
 
+    boolean forAllLeafTaskFragments(Function<TaskFragment, Boolean> callback) {
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            if (mChildren.get(i).forAllLeafTaskFragments(callback)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     /**
      * For all root tasks at or below this container call the callback.
      *
@@ -1726,6 +1736,28 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         }
     }
 
+    /**
+     * For all task fragments at or below this container call the callback.
+     *
+     * @param callback Callback to be called for every task.
+     */
+    void forAllTaskFragments(Consumer<TaskFragment> callback) {
+        forAllTaskFragments(callback, true /*traverseTopToBottom*/);
+    }
+
+    void forAllTaskFragments(Consumer<TaskFragment> callback, boolean traverseTopToBottom) {
+        final int count = mChildren.size();
+        if (traverseTopToBottom) {
+            for (int i = count - 1; i >= 0; --i) {
+                mChildren.get(i).forAllTaskFragments(callback, traverseTopToBottom);
+            }
+        } else {
+            for (int i = 0; i < count; i++) {
+                mChildren.get(i).forAllTaskFragments(callback, traverseTopToBottom);
+            }
+        }
+    }
+
     void forAllLeafTasks(Consumer<Task> callback, boolean traverseTopToBottom) {
         final int count = mChildren.size();
         if (traverseTopToBottom) {
@@ -1735,6 +1767,19 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
         } else {
             for (int i = 0; i < count; i++) {
                 mChildren.get(i).forAllLeafTasks(callback, traverseTopToBottom);
+            }
+        }
+    }
+
+    void forAllLeafTaskFragments(Consumer<TaskFragment> callback, boolean traverseTopToBottom) {
+        final int count = mChildren.size();
+        if (traverseTopToBottom) {
+            for (int i = count - 1; i >= 0; --i) {
+                mChildren.get(i).forAllLeafTaskFragments(callback, traverseTopToBottom);
+            }
+        } else {
+            for (int i = 0; i < count; i++) {
+                mChildren.get(i).forAllLeafTaskFragments(callback, traverseTopToBottom);
             }
         }
     }
@@ -3075,6 +3120,11 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /** Cheap way of doing cast and instanceof. */
+    TaskFragment asTaskFragment() {
+        return null;
+    }
+
+    /** Cheap way of doing cast and instanceof. */
     WindowToken asWindowToken() {
         return null;
     }
@@ -3282,6 +3332,20 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     }
 
     /**
+     * Special helper to check that all windows are synced (vs just top one). This is only
+     * used to differentiate between starting-window vs full-drawn in activity-metrics reporting.
+     */
+    boolean allSyncFinished() {
+        if (!isVisibleRequested()) return true;
+        if (mSyncState != SYNC_STATE_READY) return false;
+        for (int i = mChildren.size() - 1; i >= 0; --i) {
+            final WindowContainer child = mChildren.get(i);
+            if (!child.allSyncFinished()) return false;
+        }
+        return true;
+    }
+
+    /**
      * Called during reparent to handle sync state when the hierarchy changes.
      * If this is in a sync group and gets reparented out, it will cancel syncing.
      * If this is not in a sync group and gets parented into one, it will prepare itself.
@@ -3333,6 +3397,29 @@ class WindowContainer<E extends WindowContainer> extends ConfigurationContainer<
     void unregisterWindowContainerListener(WindowContainerListener listener) {
         mListeners.remove(listener);
         unregisterConfigurationChangeListener(listener);
+    }
+
+    /**
+     * Forces the receiver container to always use the configuration of the supplier container as
+     * its requested override configuration. It allows to propagate configuration without changing
+     * the relationship between child and parent.
+     */
+    static void overrideConfigurationPropagation(WindowContainer<?> receiver,
+            WindowContainer<?> supplier) {
+        final ConfigurationContainerListener listener = new ConfigurationContainerListener() {
+            @Override
+            public void onMergedOverrideConfigurationChanged(Configuration mergedOverrideConfig) {
+                receiver.onRequestedOverrideConfigurationChanged(supplier.getConfiguration());
+            }
+        };
+        supplier.registerConfigurationChangeListener(listener);
+        receiver.registerWindowContainerListener(new WindowContainerListener() {
+            @Override
+            public void onRemoved() {
+                receiver.unregisterWindowContainerListener(this);
+                supplier.unregisterConfigurationChangeListener(listener);
+            }
+        });
     }
 
     /**

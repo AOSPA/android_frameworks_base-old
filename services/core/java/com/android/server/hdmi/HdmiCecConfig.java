@@ -317,12 +317,25 @@ public class HdmiCecConfig {
                 R.bool.config_cecHdmiCecVersion20_allowed,
                 R.bool.config_cecHdmiCecVersion20_default);
 
+        Setting routingControlControl = registerSetting(
+                HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL,
+                R.bool.config_cecRoutingControl_userConfigurable);
+        routingControlControl.registerValue(HdmiControlManager.ROUTING_CONTROL_ENABLED,
+                R.bool.config_cecRoutingControlEnabled_allowed,
+                R.bool.config_cecRoutingControlEnabled_default);
+        routingControlControl.registerValue(HdmiControlManager.ROUTING_CONTROL_DISABLED,
+                R.bool.config_cecRoutingControlDisabled_allowed,
+                R.bool.config_cecRoutingControlDisabled_default);
+
         Setting powerControlMode = registerSetting(
                 HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE,
                 R.bool.config_cecPowerControlMode_userConfigurable);
         powerControlMode.registerValue(HdmiControlManager.POWER_CONTROL_MODE_TV,
                 R.bool.config_cecPowerControlModeTv_allowed,
                 R.bool.config_cecPowerControlModeTv_default);
+        powerControlMode.registerValue(HdmiControlManager.POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM,
+                R.bool.config_cecPowerControlModeTvAndAudioSystem_allowed,
+                R.bool.config_cecPowerControlModeTvAndAudioSystem_default);
         powerControlMode.registerValue(HdmiControlManager.POWER_CONTROL_MODE_BROADCAST,
                 R.bool.config_cecPowerControlModeBroadcast_allowed,
                 R.bool.config_cecPowerControlModeBroadcast_default);
@@ -341,6 +354,16 @@ public class HdmiCecConfig {
                 HdmiControlManager.POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST_STANDBY_NOW,
                 R.bool.config_cecPowerStateChangeOnActiveSourceLostStandbyNow_allowed,
                 R.bool.config_cecPowerStateChangeOnActiveSourceLostStandbyNow_default);
+
+        Setting systemAudioControl = registerSetting(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
+                R.bool.config_cecSystemAudioControl_userConfigurable);
+        systemAudioControl.registerValue(HdmiControlManager.SYSTEM_AUDIO_CONTROL_ENABLED,
+                R.bool.config_cecSystemAudioControlEnabled_allowed,
+                R.bool.config_cecSystemAudioControlEnabled_default);
+        systemAudioControl.registerValue(HdmiControlManager.SYSTEM_AUDIO_CONTROL_DISABLED,
+                R.bool.config_cecSystemAudioControlDisabled_allowed,
+                R.bool.config_cecSystemAudioControlDisabled_default);
 
         Setting systemAudioModeMuting = registerSetting(
                 HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
@@ -498,12 +521,16 @@ public class HdmiCecConfig {
                 return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION:
                 return STORAGE_SHARED_PREFS;
+            case HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL:
+                return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE:
                 return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE:
                 return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST:
                 return STORAGE_SHARED_PREFS;
+            case HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL:
+                return STORAGE_GLOBAL_SETTINGS;
             case HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING:
                 return STORAGE_SHARED_PREFS;
             case HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY:
@@ -535,12 +562,16 @@ public class HdmiCecConfig {
                 return Global.HDMI_CONTROL_ENABLED;
             case HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION:
                 return setting.getName();
+            case HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL:
+                return Global.HDMI_CEC_SWITCH_ENABLED;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE:
                 return Global.HDMI_CONTROL_SEND_STANDBY_ON_SLEEP;
             case HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE:
                 return Global.HDMI_CONTROL_VOLUME_CONTROL_ENABLED;
             case HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST:
                 return setting.getName();
+            case HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL:
+                return Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED;
             case HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING:
                 return setting.getName();
             case HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY:

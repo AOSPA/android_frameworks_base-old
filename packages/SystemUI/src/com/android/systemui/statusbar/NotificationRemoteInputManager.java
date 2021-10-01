@@ -45,6 +45,7 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.view.ViewParent;
 import android.widget.RemoteViews;
+import android.widget.RemoteViews.InteractionHandler;
 import android.widget.TextView;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -69,7 +70,9 @@ import java.io.FileDescriptor;
 import java.io.PrintWriter;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Stream;
 
@@ -118,7 +121,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     private final Handler mMainHandler;
     private final ActionClickLogger mLogger;
 
-    private final Lazy<StatusBar> mStatusBarLazy;
+    private final Lazy<Optional<StatusBar>> mStatusBarOptionalLazy;
 
     protected final Context mContext;
     private final UserManager mUserManager;
@@ -134,14 +137,16 @@ public class NotificationRemoteInputManager implements Dumpable {
     protected Callback mCallback;
     protected final ArrayList<NotificationLifetimeExtender> mLifetimeExtenders = new ArrayList<>();
 
-    private final RemoteViews.InteractionHandler
-            mInteractionHandler = new RemoteViews.InteractionHandler() {
+    private final List<RemoteInputController.Callback> mControllerCallbacks = new ArrayList<>();
+
+    private final InteractionHandler mInteractionHandler = new InteractionHandler() {
 
         @Override
         public boolean onInteraction(
                 View view, PendingIntent pendingIntent, RemoteViews.RemoteResponse response) {
-            mStatusBarLazy.get().wakeUpIfDozing(SystemClock.uptimeMillis(), view,
-                    "NOTIFICATION_CLICK");
+            mStatusBarOptionalLazy.get().ifPresent(
+                    statusBar -> statusBar.wakeUpIfDozing(
+                            SystemClock.uptimeMillis(), view, "NOTIFICATION_CLICK"));
 
             final NotificationEntry entry = getNotificationForParent(view.getParent());
             mLogger.logInitialClick(entry, pendingIntent);
@@ -280,7 +285,7 @@ public class NotificationRemoteInputManager implements Dumpable {
             NotificationLockscreenUserManager lockscreenUserManager,
             SmartReplyController smartReplyController,
             NotificationEntryManager notificationEntryManager,
-            Lazy<StatusBar> statusBarLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             StatusBarStateController statusBarStateController,
             @Main Handler mainHandler,
             RemoteInputUriController remoteInputUriController,
@@ -290,7 +295,7 @@ public class NotificationRemoteInputManager implements Dumpable {
         mLockscreenUserManager = lockscreenUserManager;
         mSmartReplyController = smartReplyController;
         mEntryManager = notificationEntryManager;
-        mStatusBarLazy = statusBarLazy;
+        mStatusBarOptionalLazy = statusBarOptionalLazy;
         mMainHandler = mainHandler;
         mLogger = logger;
         mBarService = IStatusBarService.Stub.asInterface(
@@ -330,6 +335,11 @@ public class NotificationRemoteInputManager implements Dumpable {
     public void setUpWithCallback(Callback callback, RemoteInputController.Delegate delegate) {
         mCallback = callback;
         mRemoteInputController = new RemoteInputController(delegate, mRemoteInputUriController);
+        // Register all stored callbacks from before the Controller was initialized.
+        for (RemoteInputController.Callback cb : mControllerCallbacks) {
+            mRemoteInputController.addCallback(cb);
+        }
+        mControllerCallbacks.clear();
         mRemoteInputController.addCallback(new RemoteInputController.Callback() {
             @Override
             public void onRemoteInputSent(NotificationEntry entry) {
@@ -373,6 +383,22 @@ public class NotificationRemoteInputManager implements Dumpable {
                             null /* mimeType */, null /* uri */);
             mEntryManager.updateNotification(newSbn, null /* ranking */);
         });
+    }
+
+    public void addControllerCallback(RemoteInputController.Callback callback) {
+        if (mRemoteInputController != null) {
+            mRemoteInputController.addCallback(callback);
+        } else {
+            mControllerCallbacks.add(callback);
+        }
+    }
+
+    public void removeControllerCallback(RemoteInputController.Callback callback) {
+        if (mRemoteInputController != null) {
+            mRemoteInputController.removeCallback(callback);
+        } else {
+            mControllerCallbacks.remove(callback);
+        }
     }
 
     /**
@@ -561,17 +587,12 @@ public class NotificationRemoteInputManager implements Dumpable {
         return mLifetimeExtenders;
     }
 
-    @Nullable
-    public RemoteInputController getController() {
-        return mRemoteInputController;
-    }
-
     @VisibleForTesting
     void onPerformRemoveNotification(NotificationEntry entry, final String key) {
         if (mKeysKeptForRemoteInputHistory.contains(key)) {
             mKeysKeptForRemoteInputHistory.remove(key);
         }
-        if (mRemoteInputController.isRemoteInputActive(entry)) {
+        if (isRemoteInputActive(entry)) {
             entry.mRemoteEditImeVisible = false;
             mRemoteInputController.removeRemoteInput(entry, null);
         }
@@ -580,7 +601,9 @@ public class NotificationRemoteInputManager implements Dumpable {
     public void onPanelCollapsed() {
         for (int i = 0; i < mEntriesKeptForRemoteInputActive.size(); i++) {
             NotificationEntry entry = mEntriesKeptForRemoteInputActive.valueAt(i);
-            mRemoteInputController.removeRemoteInput(entry, null);
+            if (mRemoteInputController != null) {
+                mRemoteInputController.removeRemoteInput(entry, null);
+            }
             if (mNotificationLifetimeFinishedCallback != null) {
                 mNotificationLifetimeFinishedCallback.onSafeToRemove(entry.getKey());
             }
@@ -596,8 +619,7 @@ public class NotificationRemoteInputManager implements Dumpable {
         if (!FORCE_REMOTE_INPUT_HISTORY) {
             return false;
         }
-        return (mRemoteInputController.isSpinning(entry.getKey())
-                || entry.hasJustSentRemoteInput());
+        return isSpinning(entry.getKey()) || entry.hasJustSentRemoteInput();
     }
 
     /**
@@ -630,8 +652,8 @@ public class NotificationRemoteInputManager implements Dumpable {
     public void checkRemoteInputOutside(MotionEvent event) {
         if (event.getAction() == MotionEvent.ACTION_OUTSIDE // touch outside the source bar
                 && event.getX() == 0 && event.getY() == 0  // a touch outside both bars
-                && mRemoteInputController.isRemoteInputActive()) {
-            mRemoteInputController.closeRemoteInputs();
+                && isRemoteInputActive()) {
+            closeRemoteInputs();
         }
     }
 
@@ -711,6 +733,24 @@ public class NotificationRemoteInputManager implements Dumpable {
     @VisibleForTesting
     public Set<NotificationEntry> getEntriesKeptForRemoteInputActive() {
         return mEntriesKeptForRemoteInputActive;
+    }
+
+    public boolean isRemoteInputActive() {
+        return mRemoteInputController != null && mRemoteInputController.isRemoteInputActive();
+    }
+
+    public boolean isRemoteInputActive(NotificationEntry entry) {
+        return mRemoteInputController != null && mRemoteInputController.isRemoteInputActive(entry);
+    }
+
+    public boolean isSpinning(String entryKey) {
+        return mRemoteInputController != null && mRemoteInputController.isSpinning(entryKey);
+    }
+
+    public void closeRemoteInputs() {
+        if (mRemoteInputController != null) {
+            mRemoteInputController.closeRemoteInputs();
+        }
     }
 
     /**
@@ -820,7 +860,7 @@ public class NotificationRemoteInputManager implements Dumpable {
     protected class RemoteInputActiveExtender extends RemoteInputExtender {
         @Override
         public boolean shouldExtendLifetime(@NonNull NotificationEntry entry) {
-            return mRemoteInputController.isRemoteInputActive(entry);
+            return isRemoteInputActive(entry);
         }
 
         @Override

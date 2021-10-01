@@ -17,10 +17,11 @@
 package com.android.server.pm;
 
 import android.compat.annotation.ChangeId;
+import android.compat.annotation.Disabled;
 import android.compat.annotation.EnabledAfter;
 import android.content.pm.ApplicationInfo;
-import android.content.pm.PackageParser.SigningDetails;
 import android.content.pm.Signature;
+import android.content.pm.SigningDetails;
 import android.os.Environment;
 import android.util.Slog;
 import android.util.Xml;
@@ -79,20 +80,20 @@ public final class SELinuxMMAC {
 
     /**
      * Allows opt-in to the latest targetSdkVersion enforced changes without changing target SDK.
-     * Turning this change off for an app targeting the latest SDK is a no-op.
+     * Turning this change on for an app targeting the latest SDK or higher is a no-op.
      *
      * <p>Has no effect for apps using shared user id.
      *
      * TODO(b/143539591): Update description with relevant SELINUX changes this opts in to.
      */
-    @EnabledAfter(targetSdkVersion = android.os.Build.VERSION_CODES.R)
+    @Disabled
     @ChangeId
     static final long SELINUX_LATEST_CHANGES = 143539591L;
 
     /**
      * This change gates apps access to untrusted_app_R-targetSDK SELinux domain. Allows opt-in
      * to R targetSdkVersion enforced changes without changing target SDK. Turning this change
-     * off for an app targeting S is a no-op.
+     * off for an app targeting {@code >= android.os.Build.VERSION_CODES.R} is a no-op.
      *
      * <p>Has no effect for apps using shared user id.
      *
@@ -364,7 +365,8 @@ public final class SELinuxMMAC {
         }
         final ApplicationInfo appInfo = pkg.toAppInfoWithoutState();
         if (compatibility.isChangeEnabledInternal(SELINUX_LATEST_CHANGES, appInfo)) {
-            return android.os.Build.VERSION_CODES.S;
+            return Math.max(
+                    android.os.Build.VERSION_CODES.CUR_DEVELOPMENT, pkg.getTargetSdkVersion());
         } else if (compatibility.isChangeEnabledInternal(SELINUX_R_CHANGES, appInfo)) {
             return Math.max(android.os.Build.VERSION_CODES.R, pkg.getTargetSdkVersion());
         }
@@ -569,7 +571,7 @@ final class Policy {
      * In all cases, a return value of null should be interpreted as the apk failing
      * to match this Policy instance; i.e. failing this policy stanza.
      * </p>
-     * @param pkg the apk to check given as a PackageParser.Package object
+     * @param pkg the apk to check given as a AndroidPackage object
      * @return A string representing the seinfo matched during policy lookup.
      *         A value of null can also be returned if no match occured.
      */
@@ -577,7 +579,7 @@ final class Policy {
         // Check for exact signature matches across all certs.
         Signature[] certs = mCerts.toArray(new Signature[0]);
         if (pkg.getSigningDetails() != SigningDetails.UNKNOWN
-                && !Signature.areExactMatch(certs, pkg.getSigningDetails().signatures)) {
+                && !Signature.areExactMatch(certs, pkg.getSigningDetails().getSignatures())) {
 
             // certs aren't exact match, but the package may have rotated from the known system cert
             if (certs.length > 1 || !pkg.getSigningDetails().hasCertificate(certs[0])) {

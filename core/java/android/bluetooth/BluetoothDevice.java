@@ -1242,6 +1242,8 @@ public final class BluetoothDevice implements Parcelable, Attributable {
     /** Address is either resolvable, non-resolvable or static. */
     public static final int ADDRESS_TYPE_RANDOM = 1;
 
+    private static final String NULL_MAC_ADDRESS = "00:00:00:00:00:00";
+
     /**
      * Lazy initialization. Guaranteed final after first object constructed, or
      * getService() called.
@@ -1647,6 +1649,10 @@ public final class BluetoothDevice implements Parcelable, Attributable {
                 || (transport == TRANSPORT_BREDR && !isBluetoothEnabled())) {
             Log.w(TAG, "creatBond() initiated in improper adapter state : " + adapter.getState()
                     + " transport = " + transport);
+            return false;
+        }
+        if (NULL_MAC_ADDRESS.equals(mAddress)) {
+            Log.e(TAG, "Unable to create bond, invalid address " + mAddress);
             return false;
         }
         try {

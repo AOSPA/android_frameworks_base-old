@@ -56,6 +56,7 @@ import android.graphics.Bitmap;
 import android.net.PrivateDnsConnectivityChecker;
 import android.net.ProxyInfo;
 import android.net.Uri;
+import android.nfc.NfcAdapter;
 import android.os.Build;
 import android.os.Bundle;
 import android.os.ParcelFileDescriptor;
@@ -332,8 +333,12 @@ public class DevicePolicyManager {
      * {@link android.Manifest.permission#DISPATCH_PROVISIONING_MESSAGE} to be launched.
      * Only one {@link ComponentName} in the entire system should be enabled, and the rest of the
      * components are not started by this intent.
+     *
+     * @deprecated Starting from Android T, the system no longer launches an intent with this action
+     * when user provisioning completes.
      * @hide
      */
+    @Deprecated
     @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
     @SystemApi
     public static final String ACTION_STATE_USER_SETUP_COMPLETE =
@@ -1216,7 +1221,8 @@ public class DevicePolicyManager {
             PROVISIONING_TRIGGER_CLOUD_ENROLLMENT,
             PROVISIONING_TRIGGER_QR_CODE,
             PROVISIONING_TRIGGER_PERSISTENT_DEVICE_OWNER,
-            PROVISIONING_TRIGGER_MANAGED_ACCOUNT
+            PROVISIONING_TRIGGER_MANAGED_ACCOUNT,
+            PROVISIONING_TRIGGER_NFC
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ProvisioningTrigger {}
@@ -1254,6 +1260,7 @@ public class DevicePolicyManager {
      * @see #PROVISIONING_TRIGGER_CLOUD_ENROLLMENT
      * @see #PROVISIONING_TRIGGER_QR_CODE
      * @see #PROVISIONING_TRIGGER_MANAGED_ACCOUNT
+     * @see #PROVISIONING_TRIGGER_NFC
      * @hide
      */
     @SystemApi
@@ -1265,6 +1272,7 @@ public class DevicePolicyManager {
      * @see #PROVISIONING_TRIGGER_QR_CODE
      * @see #PROVISIONING_TRIGGER_MANAGED_ACCOUNT
      * @see #PROVISIONING_TRIGGER_UNSPECIFIED
+     * @see #PROVISIONING_TRIGGER_NFC
      * @hide
      */
     @SystemApi
@@ -1276,6 +1284,7 @@ public class DevicePolicyManager {
      * @see #PROVISIONING_TRIGGER_CLOUD_ENROLLMENT
      * @see #PROVISIONING_TRIGGER_MANAGED_ACCOUNT
      * @see #PROVISIONING_TRIGGER_UNSPECIFIED
+     * @see #PROVISIONING_TRIGGER_NFC
      * @hide
      */
     @SystemApi
@@ -1295,6 +1304,7 @@ public class DevicePolicyManager {
      * @see #PROVISIONING_TRIGGER_CLOUD_ENROLLMENT
      * @see #PROVISIONING_TRIGGER_QR_CODE
      * @see #PROVISIONING_TRIGGER_UNSPECIFIED
+     * @see #PROVISIONING_TRIGGER_NFC
      * @hide
      */
     @SystemApi
@@ -1308,10 +1318,23 @@ public class DevicePolicyManager {
      * @see #PROVISIONING_TRIGGER_CLOUD_ENROLLMENT
      * @see #PROVISIONING_TRIGGER_QR_CODE
      * @see #PROVISIONING_TRIGGER_UNSPECIFIED
+     * @see #PROVISIONING_TRIGGER_NFC
      * @hide
      */
     @SystemApi
     public static final int PROVISIONING_TRIGGER_MANAGED_ACCOUNT = 4;
+
+    /**
+     * A value for {@link #EXTRA_PROVISIONING_TRIGGER} indicating that the provisioning is
+     * triggered by tapping an NFC tag.
+     * @see #PROVISIONING_TRIGGER_CLOUD_ENROLLMENT
+     * @see #PROVISIONING_TRIGGER_QR_CODE
+     * @see #PROVISIONING_TRIGGER_UNSPECIFIED
+     * @see #PROVISIONING_TRIGGER_MANAGED_ACCOUNT
+     * @hide
+     */
+    @SystemApi
+    public static final int PROVISIONING_TRIGGER_NFC = 5;
 
     /**
      * Flag for {@link #EXTRA_PROVISIONING_SUPPORTED_MODES} indicating that provisioning is
@@ -5690,8 +5713,10 @@ public class DevicePolicyManager {
 
     /**
      * Disable text entry into notifications on secure keyguard screens (e.g. PIN/Pattern/Password).
-     * This flag has no effect starting from version {@link android.os.Build.VERSION_CODES#N}
+     * @deprecated This flag was added in version {@link android.os.Build.VERSION_CODES#N}, but it
+     * never had any effect.
      */
+    @Deprecated
     public static final int KEYGUARD_DISABLE_REMOTE_INPUT = 1 << 6;
 
     /**
@@ -10571,11 +10596,16 @@ public class DevicePolicyManager {
      * behavior of this API is changed such that passing {@code null} as the {@code admin} parameter
      * will return if any admin has blocked the uninstallation. Before L MR1, passing {@code null}
      * will cause a NullPointerException to be raised.
+     * <p>
+     * <strong>Note:</strong> If your app targets Android 11 (API level 30) or higher,
+     * this method returns a filtered result. Learn more about how to
+     * <a href="/training/basics/intents/package-visibility">manage package visibility</a>.
      *
      * @param admin The name of the admin component whose blocking policy will be checked, or
      *            {@code null} to check whether any admin has blocked the uninstallation.
      * @param packageName package to check.
-     * @return true if uninstallation is blocked.
+     * @return true if uninstallation is blocked and the given package is visible to you, false
+     *         otherwise if uninstallation isn't blocked or the given package isn't visible to you.
      * @throws SecurityException if {@code admin} is not a device or profile owner.
      */
     public boolean isUninstallBlocked(@Nullable ComponentName admin, String packageName) {
@@ -14016,5 +14046,34 @@ public class DevicePolicyManager {
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
+    }
+
+    /**
+     * Creates a {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE} intent
+     * from the provided {@code nfcIntent}.
+     *
+     * <p>Prerequisites to create the provisioning intent:
+     *
+     * <ul>
+     * <li>{@code nfcIntent}'s action is {@link NfcAdapter#ACTION_NDEF_DISCOVERED}</li>
+     * <li>{@code nfcIntent}'s NFC properties contain either
+     * {@link #EXTRA_PROVISIONING_DEVICE_ADMIN_PACKAGE_NAME} or
+     * {@link #EXTRA_PROVISIONING_DEVICE_ADMIN_COMPONENT_NAME} </li>
+     * </ul>
+     *
+     * This method returns {@code null} if the prerequisites are not met or if an error occurs
+     * when reading the NFC properties.
+     *
+     * @param nfcIntent the nfc intent generated from scanning a NFC tag
+     * @return a {@link #ACTION_PROVISION_MANAGED_DEVICE_FROM_TRUSTED_SOURCE} intent with
+     * intent extras as read by {@code nfcIntent}'s NFC properties or {@code null} if the
+     * prerequisites are not met or if an error occurs when reading the NFC properties.
+     *
+     * @hide
+     */
+    @Nullable
+    @SystemApi
+    public Intent createProvisioningIntentFromNfcIntent(@NonNull Intent nfcIntent) {
+        return ProvisioningIntentHelper.createProvisioningIntentFromNfcIntent(nfcIntent);
     }
 }

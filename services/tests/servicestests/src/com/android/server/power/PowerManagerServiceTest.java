@@ -215,7 +215,7 @@ public class PowerManagerServiceTest {
             @Override
             Notifier createNotifier(Looper looper, Context context, IBatteryStats batteryStats,
                     SuspendBlocker suspendBlocker, WindowManagerPolicy policy,
-                    FaceDownDetector faceDownDetector) {
+                    FaceDownDetector faceDownDetector, ScreenUndimDetector screenUndimDetector) {
                 return mNotifierMock;
             }
 
@@ -738,6 +738,33 @@ public class PowerManagerServiceTest {
         mService.getLocalServiceInstance()
                 .setDozeOverrideFromDreamManager(Display.STATE_ON, PowerManager.BRIGHTNESS_DEFAULT);
         assertTrue(isAcquired[0]);
+    }
+
+    @Test
+    public void testSuspendBlockerHeldDuringBoot() throws Exception {
+        final String suspendBlockerName = "PowerManagerService.Booting";
+
+        final boolean[] isAcquired = new boolean[1];
+        doAnswer(inv -> {
+            isAcquired[0] = false;
+            return null;
+        }).when(mNativeWrapperMock).nativeReleaseSuspendBlocker(eq(suspendBlockerName));
+
+        doAnswer(inv -> {
+            isAcquired[0] = true;
+            return null;
+        }).when(mNativeWrapperMock).nativeAcquireSuspendBlocker(eq(suspendBlockerName));
+
+        // Need to create the service after we stub the mocks for this test because some of the
+        // mocks are used during the constructor.
+        createService();
+        assertTrue(isAcquired[0]);
+
+        mService.systemReady(null);
+        assertTrue(isAcquired[0]);
+
+        mService.onBootPhase(SystemService.PHASE_BOOT_COMPLETED);
+        assertFalse(isAcquired[0]);
     }
 
     @Test

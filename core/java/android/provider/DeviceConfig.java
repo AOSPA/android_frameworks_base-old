@@ -258,6 +258,14 @@ public final class DeviceConfig {
     public static final String NAMESPACE_JOB_SCHEDULER = "jobscheduler";
 
     /**
+     * Namespace for all lmkd related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_LMKD_NATIVE = "lmkd_native";
+
+    /**
      * Namespace for all location related features.
      *
      * @hide
@@ -432,6 +440,25 @@ public final class DeviceConfig {
     public static final String NAMESPACE_STORAGE_NATIVE_BOOT = "storage_native_boot";
 
     /**
+     * Namespace for all SurfaceFlinger features that are used at the native level.
+     * These features are applied on boot or after reboot.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_SURFACE_FLINGER_NATIVE_BOOT =
+            "surface_flinger_native_boot";
+
+    /**
+     * Namespace for swcodec native related features.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String NAMESPACE_SWCODEC_NATIVE = "swcodec_native";
+
+
+    /**
      * Namespace for System UI related features.
      *
      * @hide
@@ -596,6 +623,14 @@ public final class DeviceConfig {
      */
     @TestApi
     public static final String NAMESPACE_CONSTRAIN_DISPLAY_APIS = "constrain_display_apis";
+
+    /**
+     * Namespace for App Compat Overrides related features.
+     *
+     * @hide
+     */
+    @TestApi
+    public static final String NAMESPACE_APP_COMPAT_OVERRIDES = "app_compat_overrides";
 
     private static final Object sLock = new Object();
     @GuardedBy("sLock")
@@ -767,7 +802,7 @@ public final class DeviceConfig {
     }
 
     /**
-     * Create a new property with the the provided name and value in the provided namespace, or
+     * Create a new property with the provided name and value in the provided namespace, or
      * update the value of such a property if it already exists. The same name can exist in multiple
      * namespaces and might have different values in any or all namespaces.
      * <p>
@@ -817,6 +852,22 @@ public final class DeviceConfig {
     }
 
     /**
+     * Delete a property with the provided name and value in the provided namespace
+     *
+     * @param namespace   The namespace containing the property to delete.
+     * @param name        The name of the property to delete.
+     * @return True if the property was deleted or it did not exist in the first place.
+     * False if the storage implementation throws errors.
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(WRITE_DEVICE_CONFIG)
+    public static boolean deleteProperty(@NonNull String namespace, @NonNull String name) {
+        ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
+        return Settings.Config.deleteString(contentResolver, namespace, name);
+    }
+
+    /**
      * Reset properties to their default values by removing the underlying values.
      * <p>
      * The method accepts an optional namespace parameter. If provided, only properties set within
@@ -851,32 +902,31 @@ public final class DeviceConfig {
     /**
      * Disables or re-enables bulk modifications ({@link #setProperties(Properties)}) to device
      * config values. This is intended for use during tests to prevent a sync operation clearing
-     * config values, which could influence the outcome of the tests, i.e. by changing behavior.
+     * config values which could influence the outcome of the tests, i.e. by changing behavior.
      *
      * @param syncDisabledMode the mode to use, see {@link Settings.Config#SYNC_DISABLED_MODE_NONE},
      *     {@link Settings.Config#SYNC_DISABLED_MODE_PERSISTENT} and {@link
      *     Settings.Config#SYNC_DISABLED_MODE_UNTIL_REBOOT}
      *
-     * @see #isSyncDisabled()
+     * @see #getSyncDisabledMode()
      * @hide
      */
     @RequiresPermission(WRITE_DEVICE_CONFIG)
-    public static void setSyncDisabled(@SyncDisabledMode int syncDisabledMode) {
+    public static void setSyncDisabledMode(@SyncDisabledMode int syncDisabledMode) {
         ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
-        Settings.Config.setSyncDisabled(contentResolver, syncDisabledMode);
+        Settings.Config.setSyncDisabledMode(contentResolver, syncDisabledMode);
     }
 
     /**
-     * Returns the current state of sync disabling, {@code true} when disabled, {@code false}
-     * otherwise.
+     * Returns the current mode of sync disabling.
      *
-     * @see #setSyncDisabled(int)
+     * @see #setSyncDisabledMode(int)
      * @hide
      */
     @RequiresPermission(WRITE_DEVICE_CONFIG)
-    public static boolean isSyncDisabled() {
+    public static @SyncDisabledMode int getSyncDisabledMode() {
         ContentResolver contentResolver = ActivityThread.currentApplication().getContentResolver();
-        return Settings.Config.isSyncDisabled(contentResolver);
+        return Settings.Config.getSyncDisabledMode(contentResolver);
     }
 
     /**

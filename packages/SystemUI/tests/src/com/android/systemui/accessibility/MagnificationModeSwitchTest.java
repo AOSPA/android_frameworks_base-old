@@ -70,7 +70,6 @@ import android.view.accessibility.AccessibilityManager;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.widget.ImageView;
 
-import androidx.test.filters.FlakyTest;
 import androidx.test.filters.SmallTest;
 
 import com.android.internal.graphics.SfVsyncFrameCallbackProvider;
@@ -90,7 +89,6 @@ import org.mockito.MockitoAnnotations;
 import java.util.List;
 
 @SmallTest
-@FlakyTest(bugId = 188890599)
 @RunWith(AndroidTestingRunner.class)
 @TestableLooper.RunWithLooper(setAsMainLooper = true)
 public class MagnificationModeSwitchTest extends SysuiTestCase {
@@ -505,6 +503,30 @@ public class MagnificationModeSwitchTest extends SysuiTestCase {
         assertEquals(
                 "The Y position does not keep the same height ratio after the rotation changed.",
                 expectedY, mWindowManager.getLayoutParamsFromAttachedView().y);
+    }
+
+    @Test
+    public void onScreenSizeChanged_buttonIsShowingOnTheRightSide_expectedPosition() {
+        final Rect windowBounds = mWindowManager.getCurrentWindowMetrics().getBounds();
+        mMagnificationModeSwitch.showButton(ACCESSIBILITY_MAGNIFICATION_MODE_FULLSCREEN);
+        final Rect oldDraggableBounds = new Rect(mMagnificationModeSwitch.mDraggableWindowBounds);
+        final float windowHeightFraction =
+                (float) (mWindowManager.getLayoutParamsFromAttachedView().y
+                        - oldDraggableBounds.top) / oldDraggableBounds.height();
+
+        // The window bounds and the draggable bounds are changed due to the screen size change.
+        final Rect tmpRect = new Rect(windowBounds);
+        tmpRect.scale(2);
+        final Rect newWindowBounds = new Rect(tmpRect);
+        mWindowManager.setWindowBounds(newWindowBounds);
+        mMagnificationModeSwitch.onConfigurationChanged(ActivityInfo.CONFIG_SCREEN_SIZE);
+
+        final int expectedX = mMagnificationModeSwitch.mDraggableWindowBounds.right;
+        final int expectedY = (int) (windowHeightFraction
+                * mMagnificationModeSwitch.mDraggableWindowBounds.height())
+                + mMagnificationModeSwitch.mDraggableWindowBounds.top;
+        assertEquals(expectedX, mWindowManager.getLayoutParamsFromAttachedView().x);
+        assertEquals(expectedY, mWindowManager.getLayoutParamsFromAttachedView().y);
     }
 
     private void assertModeUnchanged(int expectedMode) {

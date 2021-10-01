@@ -38,4 +38,10 @@
     <!-- Max number of columns for quick controls area -->
     <integer name="controls_max_columns">4</integer>
 
+    <!-- How many lines to show in the security footer -->
+    <integer name="qs_security_footer_maxLines">1</integer>
+
+    <!-- Determines whether to allow the nav bar handle to be forced to be opaque. -->
+    <bool name="allow_force_nav_bar_handle_opaque">false</bool>
+
 </resources>

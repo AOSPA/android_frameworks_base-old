@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"未勾選"</string>
     <string name="selected" msgid="6614607926197755875">"已選取"</string>
     <string name="not_selected" msgid="410652016565864475">"未選取"</string>
+    <string name="in_progress" msgid="2149208189184319441">"處理中"</string>
     <string name="whichApplication" msgid="5432266899591255759">"選擇要使用的應用程式"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"完成操作需使用 %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"完成操作"</string>

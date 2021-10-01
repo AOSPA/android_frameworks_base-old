@@ -102,6 +102,14 @@ package android.hardware.usb {
 
 }
 
+package android.location {
+
+  public class LocationManager {
+    method @RequiresPermission(allOf={android.Manifest.permission.LOCATION_HARDWARE, android.Manifest.permission.ACCESS_FINE_LOCATION}) public boolean injectLocation(@NonNull android.location.Location);
+  }
+
+}
+
 package android.media {
 
   public class AudioManager {
@@ -264,6 +272,10 @@ package android.os {
 
   public class Process {
     field public static final int VPN_UID = 1016; // 0x3f8
+  }
+
+  public final class SharedMemory implements java.io.Closeable android.os.Parcelable {
+    method @NonNull public static android.os.SharedMemory create(@NonNull android.os.ParcelFileDescriptor);
   }
 
   public class StatsServiceManager {

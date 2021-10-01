@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"ምልክት አልተደረገበትም"</string>
     <string name="selected" msgid="6614607926197755875">"ተመርጧል"</string>
     <string name="not_selected" msgid="410652016565864475">"አልተመረጠም"</string>
+    <string name="in_progress" msgid="2149208189184319441">"በሂደት ላይ"</string>
     <string name="whichApplication" msgid="5432266899591255759">"... በመጠቀም ድርጊቱን አጠናቅ"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"%1$sን ተጠቅመው እርምጃ ያጠናቅቁ"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"እርምጃውን አጠናቅቅ"</string>

@@ -96,7 +96,7 @@ public class BatteryStatsCpuTimesTest {
     @Mock
     PowerProfile mPowerProfile;
 
-    private MockClocks mClocks;
+    private MockClock mClocks;
     private MockBatteryStatsImpl mBatteryStatsImpl;
     private KernelCpuSpeedReader[] mKernelCpuSpeedReaders;
 
@@ -104,7 +104,7 @@ public class BatteryStatsCpuTimesTest {
     public void setUp() {
         MockitoAnnotations.initMocks(this);
 
-        mClocks = new MockClocks();
+        mClocks = new MockClock();
         mBatteryStatsImpl = new MockBatteryStatsImpl(mClocks)
                 .setKernelCpuUidUserSysTimeReader(mCpuUidUserSysTimeReader)
                 .setKernelCpuUidFreqTimeReader(mCpuUidFreqTimeReader)
@@ -1263,21 +1263,21 @@ public class BatteryStatsCpuTimesTest {
                 mBatteryStatsImpl.new UidToRemove(1, mClocks.elapsedRealtime()));
         mBatteryStatsImpl.getPendingRemovedUids().add(
                 mBatteryStatsImpl.new UidToRemove(5, 10, mClocks.elapsedRealtime()));
-        mBatteryStatsImpl.clearPendingRemovedUids();
+        mBatteryStatsImpl.clearPendingRemovedUidsLocked();
         assertEquals(2, mBatteryStatsImpl.getPendingRemovedUids().size());
 
         mClocks.realtime = mClocks.uptime = 100_000;
-        mBatteryStatsImpl.clearPendingRemovedUids();
+        mBatteryStatsImpl.clearPendingRemovedUidsLocked();
         assertEquals(2, mBatteryStatsImpl.getPendingRemovedUids().size());
 
         mClocks.realtime = mClocks.uptime = 200_000;
         mBatteryStatsImpl.getPendingRemovedUids().add(
                 mBatteryStatsImpl.new UidToRemove(100, mClocks.elapsedRealtime()));
-        mBatteryStatsImpl.clearPendingRemovedUids();
+        mBatteryStatsImpl.clearPendingRemovedUidsLocked();
         assertEquals(3, mBatteryStatsImpl.getPendingRemovedUids().size());
 
         mClocks.realtime = mClocks.uptime = 400_000;
-        mBatteryStatsImpl.clearPendingRemovedUids();
+        mBatteryStatsImpl.clearPendingRemovedUidsLocked();
         assertEquals(1, mBatteryStatsImpl.getPendingRemovedUids().size());
         verify(mCpuUidActiveTimeReader).removeUid(1);
         verify(mCpuUidActiveTimeReader).removeUidsInRange(5, 10);
@@ -1289,7 +1289,7 @@ public class BatteryStatsCpuTimesTest {
         verify(mCpuUidUserSysTimeReader).removeUidsInRange(5, 10);
 
         mClocks.realtime = mClocks.uptime = 800_000;
-        mBatteryStatsImpl.clearPendingRemovedUids();
+        mBatteryStatsImpl.clearPendingRemovedUidsLocked();
         assertEquals(0, mBatteryStatsImpl.getPendingRemovedUids().size());
         verify(mCpuUidActiveTimeReader).removeUid(100);
         verify(mCpuUidClusterTimeReader).removeUid(100);

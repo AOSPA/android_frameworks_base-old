@@ -187,6 +187,7 @@ class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.SplitLayou
                     .setPosition(mTaskLeash2, mTaskInfo2.positionInParent.x,
                             mTaskInfo2.positionInParent.y)
                     .setPosition(dividerLeash, dividerBounds.left, dividerBounds.top)
+                    .show(dividerLeash)
                     .show(mRootTaskLeash)
                     .show(mTaskLeash1)
                     .show(mTaskLeash2);
@@ -212,9 +213,12 @@ class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.SplitLayou
             }
             mRootTaskInfo = taskInfo;
 
-            if (mSplitLayout != null
-                    && mSplitLayout.updateConfiguration(mRootTaskInfo.configuration)) {
-                onBoundsChanged(mSplitLayout);
+            if (mSplitLayout != null) {
+                if (mSplitLayout.updateConfiguration(mRootTaskInfo.configuration)) {
+                    onLayoutChanged(mSplitLayout);
+                }
+                // updateConfiguration re-inits the dividerbar, so show it now
+                mSyncQueue.runInSync(t -> t.show(mSplitLayout.getDividerLeash()));
             }
         } else if (taskInfo.taskId == getTaskId1()) {
             mTaskInfo1 = taskInfo;
@@ -295,17 +299,24 @@ class AppPair implements ShellTaskOrganizer.TaskListener, SplitLayout.SplitLayou
     }
 
     @Override
-    public void onBoundsChanging(SplitLayout layout) {
+    public void onLayoutChanging(SplitLayout layout) {
         mSyncQueue.runInSync(t ->
                 layout.applySurfaceChanges(t, mTaskLeash1, mTaskLeash2, mDimLayer1, mDimLayer2));
     }
 
     @Override
-    public void onBoundsChanged(SplitLayout layout) {
+    public void onLayoutChanged(SplitLayout layout) {
         final WindowContainerTransaction wct = new WindowContainerTransaction();
         layout.applyTaskChanges(wct, mTaskInfo1, mTaskInfo2);
         mSyncQueue.queue(wct);
         mSyncQueue.runInSync(t ->
                 layout.applySurfaceChanges(t, mTaskLeash1, mTaskLeash2, mDimLayer1, mDimLayer2));
+    }
+
+    @Override
+    public void onLayoutShifted(int offsetX, int offsetY, SplitLayout layout) {
+        final WindowContainerTransaction wct = new WindowContainerTransaction();
+        layout.applyLayoutShifted(wct, offsetX, offsetY, mTaskInfo1, mTaskInfo2);
+        mController.getTaskOrganizer().applyTransaction(wct);
     }
 }

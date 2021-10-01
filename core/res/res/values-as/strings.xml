@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"টিক চিহ্ন দিয়া হোৱা নাই"</string>
     <string name="selected" msgid="6614607926197755875">"বাছনি কৰা"</string>
     <string name="not_selected" msgid="410652016565864475">"বাছনি কৰা হোৱা নাই"</string>
+    <string name="in_progress" msgid="2149208189184319441">"চলি আছে"</string>
     <string name="whichApplication" msgid="5432266899591255759">"এয়া ব্যৱহাৰ কৰি কার্য সম্পূর্ণ কৰক"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"%1$s ব্যৱহাৰ কৰি কাৰ্যটো সম্পূৰ্ণ কৰক"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"কাৰ্য সম্পূৰ্ণ কৰক"</string>

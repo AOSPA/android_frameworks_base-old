@@ -46,17 +46,10 @@ import java.util.Set;
 public final class ServiceConfigAccessor {
 
     @StringDef(prefix = "PROVIDER_MODE_",
-            value = { PROVIDER_MODE_SIMULATED, PROVIDER_MODE_DISABLED, PROVIDER_MODE_ENABLED})
+            value = { PROVIDER_MODE_DISABLED, PROVIDER_MODE_ENABLED})
     @Retention(RetentionPolicy.SOURCE)
-    @Target(ElementType.TYPE_USE)
+    @Target({ ElementType.TYPE_USE, ElementType.TYPE_PARAMETER })
     @interface ProviderMode {}
-
-    /**
-     * The "simulated" provider mode.
-     * For use with {@link #getPrimaryLocationTimeZoneProviderMode()} and {@link
-     * #getSecondaryLocationTimeZoneProviderMode()}.
-     */
-    public static final @ProviderMode String PROVIDER_MODE_SIMULATED = "simulated";
 
     /**
      * The "disabled" provider mode. For use with {@link #getPrimaryLocationTimeZoneProviderMode()}
@@ -86,11 +79,9 @@ public final class ServiceConfigAccessor {
                     ServerFlags.KEY_LOCATION_TIME_ZONE_DETECTION_UNCERTAINTY_DELAY_MILLIS
             }));
 
-    // TODO(b/179488561): Put this back to 5 minutes when primary provider is fully implemented
-    private static final Duration DEFAULT_PROVIDER_INITIALIZATION_TIMEOUT = Duration.ofMinutes(1);
-    // TODO(b/179488561): Put this back to 1 minute when primary provider is fully implemented
+    private static final Duration DEFAULT_PROVIDER_INITIALIZATION_TIMEOUT = Duration.ofMinutes(5);
     private static final Duration DEFAULT_PROVIDER_INITIALIZATION_TIMEOUT_FUZZ =
-            Duration.ofSeconds(20);
+            Duration.ofMinutes(1);
     private static final Duration DEFAULT_PROVIDER_UNCERTAINTY_DELAY = Duration.ofMinutes(5);
 
     private static final Object SLOCK = new Object();
@@ -111,6 +102,47 @@ public final class ServiceConfigAccessor {
     private final boolean mGeoDetectionFeatureSupportedInConfig;
 
     @NonNull private final ServerFlags mServerFlags;
+
+    /**
+     * The mode to use for the primary location time zone provider in a test. Setting this
+     * disables some permission checks.
+     * This state is volatile: it is never written to storage / never survives a reboot. This is to
+     * avoid a test provider accidentally being left configured on a device.
+     * See also {@link #resetVolatileTestConfig()}.
+     */
+    @Nullable
+    private String mTestPrimaryLocationTimeZoneProviderMode;
+
+    /**
+     * The package name to use for the primary location time zone provider in a test.
+     * This state is volatile: it is never written to storage / never survives a reboot. This is to
+     * avoid a test provider accidentally being left configured on a device.
+     * See also {@link #resetVolatileTestConfig()}.
+     */
+    @Nullable
+    private String mTestPrimaryLocationTimeZoneProviderPackageName;
+
+    /**
+     * See {@link #mTestPrimaryLocationTimeZoneProviderMode}; this is the equivalent for the
+     * secondary provider.
+     */
+    @Nullable
+    private String mTestSecondaryLocationTimeZoneProviderMode;
+
+    /**
+     * See {@link #mTestPrimaryLocationTimeZoneProviderPackageName}; this is the equivalent for the
+     * secondary provider.
+     */
+    @Nullable
+    private String mTestSecondaryLocationTimeZoneProviderPackageName;
+
+    /**
+     * Whether to record state changes for tests.
+     * This state is volatile: it is never written to storage / never survives a reboot. This is to
+     * avoid a test state accidentally being left configured on a device.
+     * See also {@link #resetVolatileTestConfig()}.
+     */
+    private boolean mRecordProviderStateChanges;
 
     private ServiceConfigAccessor(@NonNull Context context) {
         mContext = Objects.requireNonNull(context);
@@ -202,23 +234,98 @@ public final class ServiceConfigAccessor {
                 defaultEnabled);
     }
 
+    /** Returns the package name of the app hosting the primary location time zone provider. */
     @NonNull
     public String getPrimaryLocationTimeZoneProviderPackageName() {
+        if (mTestPrimaryLocationTimeZoneProviderMode != null) {
+            // In test mode: use the test setting value.
+            return mTestPrimaryLocationTimeZoneProviderPackageName;
+        }
         return mContext.getResources().getString(
                 R.string.config_primaryLocationTimeZoneProviderPackageName);
     }
 
+    /**
+     * Sets the package name of the app hosting the primary location time zone provider for tests.
+     * Setting a {@code null} value means the provider is to be disabled.
+     * The values are reset with {@link #resetVolatileTestConfig()}.
+     */
+    public void setTestPrimaryLocationTimeZoneProviderPackageName(
+            @Nullable String testPrimaryLocationTimeZoneProviderPackageName) {
+        mTestPrimaryLocationTimeZoneProviderPackageName =
+                testPrimaryLocationTimeZoneProviderPackageName;
+        mTestPrimaryLocationTimeZoneProviderMode =
+                mTestPrimaryLocationTimeZoneProviderPackageName == null
+                        ? PROVIDER_MODE_DISABLED : PROVIDER_MODE_ENABLED;
+    }
+
+    /**
+     * Returns {@code true} if the usual permission checks are to be bypassed for the primary
+     * provider. Returns {@code true} only if {@link
+     * #setTestPrimaryLocationTimeZoneProviderPackageName} has been called.
+     */
+    public boolean isTestPrimaryLocationTimeZoneProvider() {
+        return mTestPrimaryLocationTimeZoneProviderMode != null;
+    }
+
+    /** Returns the package name of the app hosting the secondary location time zone provider. */
     @NonNull
     public String getSecondaryLocationTimeZoneProviderPackageName() {
+        if (mTestSecondaryLocationTimeZoneProviderMode != null) {
+            // In test mode: use the test setting value.
+            return mTestSecondaryLocationTimeZoneProviderPackageName;
+        }
         return mContext.getResources().getString(
                 R.string.config_secondaryLocationTimeZoneProviderPackageName);
     }
 
     /**
-     * Returns {@code true} if the primary location time zone provider can be used.
+     * Sets the package name of the app hosting the secondary location time zone provider for tests.
+     * Setting a {@code null} value means the provider is to be disabled.
+     * The values are reset with {@link #resetVolatileTestConfig()}.
+     */
+    public void setTestSecondaryLocationTimeZoneProviderPackageName(
+            @Nullable String testSecondaryLocationTimeZoneProviderPackageName) {
+        mTestSecondaryLocationTimeZoneProviderPackageName =
+                testSecondaryLocationTimeZoneProviderPackageName;
+        mTestSecondaryLocationTimeZoneProviderMode =
+                mTestSecondaryLocationTimeZoneProviderPackageName == null
+                        ? PROVIDER_MODE_DISABLED : PROVIDER_MODE_ENABLED;
+    }
+
+    /**
+     * Returns {@code true} if the usual permission checks are to be bypassed for the secondary
+     * provider. Returns {@code true} only if {@link
+     * #setTestSecondaryLocationTimeZoneProviderPackageName} has been called.
+     */
+    public boolean isTestSecondaryLocationTimeZoneProvider() {
+        return mTestSecondaryLocationTimeZoneProviderMode != null;
+    }
+
+    /**
+     * Enables/disables the state recording mode for tests. The value is reset with {@link
+     * #resetVolatileTestConfig()}.
+     */
+    public void setRecordProviderStateChanges(boolean enabled) {
+        mRecordProviderStateChanges = enabled;
+    }
+
+    /**
+     * Returns {@code true} if providers are expected to record their state changes for tests.
+     */
+    public boolean getRecordProviderStateChanges() {
+        return mRecordProviderStateChanges;
+    }
+
+    /**
+     * Returns the mode for the primary location time zone provider.
      */
     @NonNull
     public @ProviderMode String getPrimaryLocationTimeZoneProviderMode() {
+        if (mTestPrimaryLocationTimeZoneProviderMode != null) {
+            // In test mode: use the test setting value.
+            return mTestPrimaryLocationTimeZoneProviderMode;
+        }
         return mServerFlags.getOptionalString(
                 ServerFlags.KEY_PRIMARY_LOCATION_TIME_ZONE_PROVIDER_MODE_OVERRIDE)
                 .orElse(getPrimaryLocationTimeZoneProviderModeFromConfig());
@@ -232,9 +339,13 @@ public final class ServiceConfigAccessor {
     }
 
     /**
-     * Returns the mode for the secondary location time zone provider can be used.
+     * Returns the mode for the secondary location time zone provider.
      */
     public @ProviderMode String getSecondaryLocationTimeZoneProviderMode() {
+        if (mTestSecondaryLocationTimeZoneProviderMode != null) {
+            // In test mode: use the test setting value.
+            return mTestSecondaryLocationTimeZoneProviderMode;
+        }
         return mServerFlags.getOptionalString(
                 ServerFlags.KEY_SECONDARY_LOCATION_TIME_ZONE_PROVIDER_MODE_OVERRIDE)
                 .orElse(getSecondaryLocationTimeZoneProviderModeFromConfig());
@@ -298,6 +409,15 @@ public final class ServiceConfigAccessor {
         return mServerFlags.getDurationFromMillis(
                 ServerFlags.KEY_LOCATION_TIME_ZONE_DETECTION_UNCERTAINTY_DELAY_MILLIS,
                 DEFAULT_PROVIDER_UNCERTAINTY_DELAY);
+    }
+
+    /** Clears all in-memory test config. */
+    public void resetVolatileTestConfig() {
+        mTestPrimaryLocationTimeZoneProviderPackageName = null;
+        mTestPrimaryLocationTimeZoneProviderMode = null;
+        mTestSecondaryLocationTimeZoneProviderPackageName = null;
+        mTestSecondaryLocationTimeZoneProviderMode = null;
+        mRecordProviderStateChanges = false;
     }
 
     private boolean getConfigBoolean(int providerEnabledConfigId) {

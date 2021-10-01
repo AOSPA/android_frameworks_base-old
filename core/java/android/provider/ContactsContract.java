@@ -8595,11 +8595,26 @@ public final class ContactsContract {
          * Type: INTEGER
          */
         public static final String UNGROUPED_WITH_PHONES = "summ_phones";
+
+        /**
+         * Flag indicating if the account is the default account for new contacts. At most one
+         * account has this flag set at a time. It can only be set to 1 on a row with null data set.
+         * <p>
+         * Type: INTEGER (boolean)
+         * @hide
+         */
+        String IS_DEFAULT = "x_is_default";
     }
 
     /**
      * <p>
      * Contacts-specific settings for various {@link Account}'s.
+     * </p>
+     * <p>
+     * A settings entry for an account is created automatically when a raw contact or group
+     * is inserted that references it. Settings entries cannot be deleted as long as raw
+     * contacts or groups continue to reference it; in order to delete a settings entry all
+     * raw contacts and groups referencing the account must be deleted first.
      * </p>
      * <h2>Columns</h2>
      * <table class="jd-sumtable">
@@ -8682,6 +8697,13 @@ public final class ContactsContract {
          * The MIME-type of {@link #CONTENT_URI} providing a single setting.
          */
         public static final String CONTENT_ITEM_TYPE = "vnd.android.cursor.item/setting";
+
+        /**
+         * Action used to launch the UI to set the default account for new contacts.
+         */
+        @SdkConstant(SdkConstantType.ACTIVITY_INTENT_ACTION)
+        public static final String ACTION_SET_DEFAULT_ACCOUNT =
+                "android.provider.action.SET_DEFAULT_ACCOUNT";
     }
 
     /**

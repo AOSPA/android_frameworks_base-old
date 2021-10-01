@@ -53,15 +53,14 @@ import com.android.systemui.ActivityIntentHelper;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.animation.ActivityLaunchAnimator;
 import com.android.systemui.assist.AssistManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationPresenter;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
-import com.android.systemui.statusbar.RemoteInputController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.NotificationActivityStarter;
 import com.android.systemui.statusbar.notification.NotificationEntryManager;
@@ -111,8 +110,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Mock
     private NotificationRemoteInputManager mRemoteInputManager;
     @Mock
-    private RemoteInputController mRemoteInputController;
-    @Mock
     private StatusBar mStatusBar;
     @Mock
     private KeyguardStateController mKeyguardStateController;
@@ -153,8 +150,6 @@ public class StatusBarNotificationActivityStarterTest extends SysuiTestCase {
     @Before
     public void setUp() throws Exception {
         MockitoAnnotations.initMocks(this);
-        when(mRemoteInputManager.getController()).thenReturn(mRemoteInputController);
-
         when(mContentIntent.isActivity()).thenReturn(true);
         when(mContentIntent.getCreatorUserHandle()).thenReturn(UserHandle.of(1));
         when(mContentIntent.getIntent()).thenReturn(mContentIntentInner);

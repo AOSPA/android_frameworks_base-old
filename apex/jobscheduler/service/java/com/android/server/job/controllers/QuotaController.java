@@ -634,11 +634,12 @@ public final class QuotaController extends StateController {
         jobs.add(jobStatus);
         jobStatus.setTrackingController(JobStatus.TRACKING_QUOTA);
         final boolean isWithinQuota = isWithinQuotaLocked(jobStatus);
-        setConstraintSatisfied(jobStatus, nowElapsed, isWithinQuota);
+        final boolean isWithinEJQuota =
+                jobStatus.isRequestedExpeditedJob() && isWithinEJQuotaLocked(jobStatus);
+        setConstraintSatisfied(jobStatus, nowElapsed, isWithinQuota || isWithinEJQuota);
         final boolean outOfEJQuota;
         if (jobStatus.isRequestedExpeditedJob()) {
-            final boolean isWithinEJQuota = isWithinEJQuotaLocked(jobStatus);
-            setExpeditedConstraintSatisfied(jobStatus, nowElapsed, isWithinEJQuota);
+            setExpeditedQuotaApproved(jobStatus, nowElapsed, isWithinEJQuota);
             outOfEJQuota = !isWithinEJQuota;
         } else {
             outOfEJQuota = false;
@@ -1458,7 +1459,8 @@ public final class QuotaController extends StateController {
             final ShrinkableDebits quota = getEJDebitsLocked(userId, packageName);
             if (transactQuotaLocked(userId, packageName, nowElapsed, quota, credit)
                     && maybeUpdateConstraintForPkgLocked(nowElapsed, userId, packageName)) {
-                mStateChangedListener.onControllerStateChanged();
+                mStateChangedListener
+                        .onControllerStateChanged(mTrackedJobs.get(userId, packageName));
             }
         }
     }
@@ -1578,17 +1580,19 @@ public final class QuotaController extends StateController {
     }
 
     private void maybeUpdateAllConstraintsLocked() {
-        boolean changed = false;
+        final ArraySet<JobStatus> changedJobs = new ArraySet<>();
         final long nowElapsed = sElapsedRealtimeClock.millis();
         for (int u = 0; u < mTrackedJobs.numMaps(); ++u) {
             final int userId = mTrackedJobs.keyAt(u);
             for (int p = 0; p < mTrackedJobs.numElementsForKey(userId); ++p) {
                 final String packageName = mTrackedJobs.keyAt(u, p);
-                changed |= maybeUpdateConstraintForPkgLocked(nowElapsed, userId, packageName);
+                if (maybeUpdateConstraintForPkgLocked(nowElapsed, userId, packageName)) {
+                    changedJobs.addAll(mTrackedJobs.valueAt(u, p));
+                }
             }
         }
-        if (changed) {
-            mStateChangedListener.onControllerStateChanged();
+        if (changedJobs.size() > 0) {
+            mStateChangedListener.onControllerStateChanged(changedJobs);
         }
     }
 
@@ -1611,6 +1615,8 @@ public final class QuotaController extends StateController {
         boolean changed = false;
         for (int i = jobs.size() - 1; i >= 0; --i) {
             final JobStatus js = jobs.valueAt(i);
+            final boolean isWithinEJQuota =
+                    js.isRequestedExpeditedJob() && isWithinEJQuotaLocked(js);
             if (isTopStartedJobLocked(js)) {
                 // Job was started while the app was in the TOP state so we should allow it to
                 // finish.
@@ -1620,15 +1626,15 @@ public final class QuotaController extends StateController {
                 // An app in the ACTIVE bucket may be out of quota while the job could be in quota
                 // for some reason. Therefore, avoid setting the real value here and check each job
                 // individually.
-                changed |= setConstraintSatisfied(js, nowElapsed, realInQuota);
+                changed |= setConstraintSatisfied(js, nowElapsed, isWithinEJQuota || realInQuota);
             } else {
                 // This job is somehow exempted. Need to determine its own quota status.
-                changed |= setConstraintSatisfied(js, nowElapsed, isWithinQuotaLocked(js));
+                changed |= setConstraintSatisfied(js, nowElapsed,
+                        isWithinEJQuota || isWithinQuotaLocked(js));
             }
 
             if (js.isRequestedExpeditedJob()) {
-                boolean isWithinEJQuota = isWithinEJQuotaLocked(js);
-                changed |= setExpeditedConstraintSatisfied(js, nowElapsed, isWithinEJQuota);
+                changed |= setExpeditedQuotaApproved(js, nowElapsed, isWithinEJQuota);
                 outOfEJQuota |= !isWithinEJQuota;
             }
         }
@@ -1646,31 +1652,34 @@ public final class QuotaController extends StateController {
     private class UidConstraintUpdater implements Consumer<JobStatus> {
         private final SparseArrayMap<String, Integer> mToScheduleStartAlarms =
                 new SparseArrayMap<>();
-        public boolean wasJobChanged;
+        public final ArraySet<JobStatus> changedJobs = new ArraySet<>();
         long mUpdateTimeElapsed = 0;
 
         void prepare() {
             mUpdateTimeElapsed = sElapsedRealtimeClock.millis();
+            changedJobs.clear();
         }
 
         @Override
         public void accept(JobStatus jobStatus) {
-            wasJobChanged |= setConstraintSatisfied(
-                    jobStatus, mUpdateTimeElapsed, isWithinQuotaLocked(jobStatus));
-            final boolean outOfEJQuota;
+            final boolean isWithinEJQuota;
             if (jobStatus.isRequestedExpeditedJob()) {
-                final boolean isWithinEJQuota = isWithinEJQuotaLocked(jobStatus);
-                wasJobChanged |= setExpeditedConstraintSatisfied(
-                        jobStatus, mUpdateTimeElapsed, isWithinEJQuota);
-                outOfEJQuota = !isWithinEJQuota;
+                isWithinEJQuota = isWithinEJQuotaLocked(jobStatus);
             } else {
-                outOfEJQuota = false;
+                isWithinEJQuota = false;
+            }
+            if (setConstraintSatisfied(jobStatus, mUpdateTimeElapsed,
+                    isWithinEJQuota || isWithinQuotaLocked(jobStatus))) {
+                changedJobs.add(jobStatus);
+            }
+            if (setExpeditedQuotaApproved(jobStatus, mUpdateTimeElapsed, isWithinEJQuota)) {
+                changedJobs.add(jobStatus);
             }
 
             final int userId = jobStatus.getSourceUserId();
             final String packageName = jobStatus.getSourcePackageName();
             final int realStandbyBucket = jobStatus.getStandbyBucket();
-            if (isWithinQuotaLocked(userId, packageName, realStandbyBucket) && !outOfEJQuota) {
+            if (isWithinQuotaLocked(userId, packageName, realStandbyBucket) && isWithinEJQuota) {
                 // TODO(141645789): we probably shouldn't cancel the alarm until we've verified
                 // that all jobs for the userId-package are within quota.
                 mInQuotaAlarmListener.removeAlarmLocked(userId, packageName);
@@ -1691,21 +1700,21 @@ public final class QuotaController extends StateController {
         }
 
         void reset() {
-            wasJobChanged = false;
             mToScheduleStartAlarms.clear();
         }
     }
 
     private final UidConstraintUpdater mUpdateUidConstraints = new UidConstraintUpdater();
 
-    private boolean maybeUpdateConstraintForUidLocked(final int uid) {
+    @GuardedBy("mLock")
+    @NonNull
+    private ArraySet<JobStatus> maybeUpdateConstraintForUidLocked(final int uid) {
         mUpdateUidConstraints.prepare();
         mService.getJobStore().forEachJobForSourceUid(uid, mUpdateUidConstraints);
 
         mUpdateUidConstraints.postProcess();
-        boolean changed = mUpdateUidConstraints.wasJobChanged;
         mUpdateUidConstraints.reset();
-        return changed;
+        return mUpdateUidConstraints.changedJobs;
     }
 
     /**
@@ -1819,9 +1828,9 @@ public final class QuotaController extends StateController {
      * If the satisfaction changes, this will tell connectivity & background jobs controller to
      * also re-evaluate their state.
      */
-    private boolean setExpeditedConstraintSatisfied(@NonNull JobStatus jobStatus, long nowElapsed,
+    private boolean setExpeditedQuotaApproved(@NonNull JobStatus jobStatus, long nowElapsed,
             boolean isWithinQuota) {
-        if (jobStatus.setExpeditedJobQuotaConstraintSatisfied(nowElapsed, isWithinQuota)) {
+        if (jobStatus.setExpeditedJobQuotaApproved(nowElapsed, isWithinQuota)) {
             mBackgroundJobsController.evaluateStateLocked(jobStatus);
             mConnectivityController.evaluateStateLocked(jobStatus);
             if (isWithinQuota && jobStatus.isReady()) {
@@ -2320,7 +2329,8 @@ public final class QuotaController extends StateController {
                                 nowElapsed, debits, pendingReward)
                                 && maybeUpdateConstraintForPkgLocked(nowElapsed,
                                 mPkg.userId, mPkg.packageName)) {
-                            mStateChangedListener.onControllerStateChanged();
+                            mStateChangedListener.onControllerStateChanged(
+                                    mTrackedJobs.get(mPkg.userId, mPkg.packageName));
                         }
                     }
                     break;
@@ -2425,7 +2435,8 @@ public final class QuotaController extends StateController {
             }
             if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
                     userId, packageName)) {
-                mStateChangedListener.onControllerStateChanged();
+                mStateChangedListener
+                        .onControllerStateChanged(mTrackedJobs.get(userId, packageName));
             }
         }
         if (restrictedChanges.size() > 0) {
@@ -2459,8 +2470,9 @@ public final class QuotaController extends StateController {
                             t.onStateChangedLocked(nowElapsed, true);
                         }
                     }
-                    if (maybeUpdateConstraintForUidLocked(uid)) {
-                        mStateChangedListener.onControllerStateChanged();
+                    final ArraySet<JobStatus> changedJobs = maybeUpdateConstraintForUidLocked(uid);
+                    if (changedJobs.size() > 0) {
+                        mStateChangedListener.onControllerStateChanged(changedJobs);
                     }
                 }
             }
@@ -2558,7 +2570,8 @@ public final class QuotaController extends StateController {
                             if (DEBUG) Slog.d(TAG, pkg + " has reached its quota.");
                             if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
                                     pkg.userId, pkg.packageName)) {
-                                mStateChangedListener.onControllerStateChanged();
+                                mStateChangedListener.onControllerStateChanged(
+                                        mTrackedJobs.get(pkg.userId, pkg.packageName));
                             }
                         } else {
                             // This could potentially happen if an old session phases out while a
@@ -2586,7 +2599,8 @@ public final class QuotaController extends StateController {
                             if (DEBUG) Slog.d(TAG, pkg + " has reached its EJ quota.");
                             if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
                                     pkg.userId, pkg.packageName)) {
-                                mStateChangedListener.onControllerStateChanged();
+                                mStateChangedListener.onControllerStateChanged(
+                                        mTrackedJobs.get(pkg.userId, pkg.packageName));
                             }
                         } else {
                             // This could potentially happen if an old session phases out while a
@@ -2618,7 +2632,8 @@ public final class QuotaController extends StateController {
                         }
                         if (maybeUpdateConstraintForPkgLocked(sElapsedRealtimeClock.millis(),
                                 userId, packageName)) {
-                            mStateChangedListener.onControllerStateChanged();
+                            mStateChangedListener.onControllerStateChanged(
+                                    mTrackedJobs.get(userId, packageName));
                         }
                         break;
                     }
@@ -2680,8 +2695,10 @@ public final class QuotaController extends StateController {
                                     }
                                 }
                             }
-                            if (maybeUpdateConstraintForUidLocked(uid)) {
-                                mStateChangedListener.onControllerStateChanged();
+                            final ArraySet<JobStatus> changedJobs =
+                                    maybeUpdateConstraintForUidLocked(uid);
+                            if (changedJobs.size() > 0) {
+                                mStateChangedListener.onControllerStateChanged(changedJobs);
                             }
                         }
                         break;
@@ -2760,8 +2777,10 @@ public final class QuotaController extends StateController {
                                         t.onStateChangedLocked(nowElapsed, false);
                                     }
                                 }
-                                if (maybeUpdateConstraintForUidLocked(uid)) {
-                                    mStateChangedListener.onControllerStateChanged();
+                                final ArraySet<JobStatus> changedJobs =
+                                        maybeUpdateConstraintForUidLocked(uid);
+                                if (changedJobs.size() > 0) {
+                                    mStateChangedListener.onControllerStateChanged(changedJobs);
                                 }
                             }
                         }
@@ -4312,7 +4331,7 @@ public final class QuotaController extends StateController {
                         js.isRequestedExpeditedJob());
                 proto.write(
                         StateControllerProto.QuotaController.TrackedJob.IS_WITHIN_FG_JOB_QUOTA,
-                        js.isConstraintSatisfied(JobStatus.CONSTRAINT_WITHIN_EXPEDITED_QUOTA));
+                        js.isExpeditedQuotaApproved());
                 proto.end(jsToken);
             }
         });

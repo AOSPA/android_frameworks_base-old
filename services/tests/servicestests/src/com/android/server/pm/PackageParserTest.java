@@ -15,6 +15,10 @@
  */
 package com.android.server.pm;
 
+import static android.content.pm.permission.CompatibilityPermissionInfo.COMPAT_PERMS;
+
+import static com.google.common.truth.Truth.assertWithMessage;
+
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -25,6 +29,7 @@ import static org.junit.Assert.fail;
 
 import static java.lang.Boolean.TRUE;
 import static java.nio.file.StandardCopyOption.REPLACE_EXISTING;
+import static java.util.stream.Collectors.toList;
 
 import android.annotation.NonNull;
 import android.content.Context;
@@ -35,10 +40,10 @@ import android.content.pm.FeatureGroupInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.Property;
-import android.content.pm.PackageParser;
 import android.content.pm.PackageUserState;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
+import android.content.pm.SigningDetails;
 import android.content.pm.parsing.ParsingPackage;
 import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedComponent;
@@ -83,6 +88,7 @@ import java.lang.reflect.Field;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashSet;
 import java.util.Iterator;
@@ -106,6 +112,7 @@ public class PackageParserTest {
     private static final String TEST_APP2_APK = "PackageParserTestApp2.apk";
     private static final String TEST_APP3_APK = "PackageParserTestApp3.apk";
     private static final String TEST_APP4_APK = "PackageParserTestApp4.apk";
+    private static final String TEST_APP5_APK = "PackageParserTestApp5.apk";
     private static final String PACKAGE_NAME = "com.android.servicestests.apps.packageparserapp";
 
     @Before
@@ -506,6 +513,59 @@ public class PackageParserTest {
         }
     }
 
+    @Test
+    public void testParseModernPackageHasNoCompatPermissions() throws Exception {
+        final File testFile = extractFile(TEST_APP1_APK);
+        try {
+            final ParsedPackage pkg = new TestPackageParser2()
+                    .parsePackage(testFile, 0 /*flags*/, false /*useCaches*/);
+            final List<String> compatPermissions =
+                    Arrays.stream(COMPAT_PERMS).map(ParsedUsesPermission::getName)
+                            .collect(toList());
+            assertWithMessage(
+                    "Compatibility permissions shouldn't be added into uses permissions.")
+                    .that(pkg.getUsesPermissions().stream().map(ParsedUsesPermission::getName)
+                            .collect(toList()))
+                    .containsNoneIn(compatPermissions);
+            assertWithMessage(
+                    "Compatibility permissions shouldn't be added into requested permissions.")
+                    .that(pkg.getRequestedPermissions()).containsNoneIn(compatPermissions);
+            assertWithMessage(
+                    "Compatibility permissions shouldn't be added into implicit permissions.")
+                    .that(pkg.getImplicitPermissions()).containsNoneIn(compatPermissions);
+        } finally {
+            testFile.delete();
+        }
+    }
+
+    @Test
+    public void testParseLegacyPackageHasCompatPermissions() throws Exception {
+        final File testFile = extractFile(TEST_APP5_APK);
+        try {
+            final ParsedPackage pkg = new TestPackageParser2()
+                    .parsePackage(testFile, 0 /*flags*/, false /*useCaches*/);
+            assertWithMessage(
+                    "Compatibility permissions should be added into uses permissions.")
+                    .that(Arrays.stream(COMPAT_PERMS).map(ParsedUsesPermission::getName)
+                            .allMatch(pkg.getUsesPermissions().stream()
+                                    .map(ParsedUsesPermission::getName)
+                            .collect(toList())::contains))
+                    .isTrue();
+            assertWithMessage(
+                    "Compatibility permissions should be added into requested permissions.")
+                    .that(Arrays.stream(COMPAT_PERMS).map(ParsedUsesPermission::getName)
+                            .allMatch(pkg.getRequestedPermissions()::contains))
+                    .isTrue();
+            assertWithMessage(
+                    "Compatibility permissions should be added into implicit permissions.")
+                    .that(Arrays.stream(COMPAT_PERMS).map(ParsedUsesPermission::getName)
+                            .allMatch(pkg.getImplicitPermissions()::contains))
+                    .isTrue();
+        } finally {
+            testFile.delete();
+        }
+    }
+
     /**
      * A trivial subclass of package parser that only caches the package name, and throws away
      * all other information.
@@ -645,7 +705,8 @@ public class PackageParserTest {
         assertBundleApproximateEquals(a.getMetaData(), b.getMetaData());
         assertEquals(a.getVersionName(), b.getVersionName());
         assertEquals(a.getSharedUserId(), b.getSharedUserId());
-        assertArrayEquals(a.getSigningDetails().signatures, b.getSigningDetails().signatures);
+        assertArrayEquals(a.getSigningDetails().getSignatures(),
+                b.getSigningDetails().getSignatures());
         assertEquals(a.getRestrictedAccountType(), b.getRestrictedAccountType());
         assertEquals(a.getRequiredAccountType(), b.getRequiredAccountType());
         assertEquals(a.getOverlayTarget(), b.getOverlayTarget());
@@ -653,7 +714,7 @@ public class PackageParserTest {
         assertEquals(a.getOverlayCategory(), b.getOverlayCategory());
         assertEquals(a.getOverlayPriority(), b.getOverlayPriority());
         assertEquals(a.isOverlayIsStatic(), b.isOverlayIsStatic());
-        assertEquals(a.getSigningDetails().publicKeys, b.getSigningDetails().publicKeys);
+        assertEquals(a.getSigningDetails().getPublicKeys(), b.getSigningDetails().getPublicKeys());
         assertEquals(a.getUpgradeKeySets(), b.getUpgradeKeySets());
         assertEquals(a.getKeySetMapping(), b.getKeySetMapping());
         assertArrayEquals(a.getRestrictUpdateHash(), b.getRestrictUpdateHash());
@@ -873,9 +934,9 @@ public class PackageParserTest {
                 .setVersionName("foo17")
                 .setSharedUserId("foo18")
                 .setSigningDetails(
-                        new PackageParser.SigningDetails(
+                        new SigningDetails(
                                 new Signature[]{new Signature(new byte[16])},
-                                2,
+                                SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V2,
                                 new ArraySet<>(),
                                 null)
                 )
@@ -888,7 +949,7 @@ public class PackageParserTest {
                 .addConfigPreference(new ConfigurationInfo())
                 .addReqFeature(new FeatureInfo())
                 .addFeatureGroup(new FeatureGroupInfo())
-                .setCompileSdkVersionCodename("foo23")
+                .setCompileSdkVersionCodeName("foo23")
                 .setCompileSdkVersion(100)
                 .setOverlayCategory("foo24")
                 .setOverlayIsStatic(true)
@@ -896,8 +957,8 @@ public class PackageParserTest {
                 .setVisibleToInstantApps(true)
                 .setSplitHasCode(0, true)
                 .hideAsParsed())
-                .setBaseCodePath("foo5")
-                .setCodePath("foo4")
+                .setBaseApkPath("foo5")
+                .setPath("foo4")
                 .setVersionCode(100)
                 .setRestrictUpdateHash(new byte[16])
                 .setVersionCodeMajor(100)

@@ -241,8 +241,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                 mHandler.updateState(state);
             } else if ("GETPROTOCOL".equals(accessory)) {
                 if (DEBUG) Slog.d(TAG, "got accessory get protocol");
-                long elapsedRealtime = SystemClock.elapsedRealtime();
-                mHandler.setAccessoryUEventTime(elapsedRealtime);
+                mHandler.setAccessoryUEventTime(SystemClock.elapsedRealtime());
                 resetAccessoryHandshakeTimeoutHandler();
             } else if ("SENDSTRING".equals(accessory)) {
                 if (DEBUG) Slog.d(TAG, "got accessory send string");
@@ -468,6 +467,8 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         }
     }
 
+    //TODO It is not clear that this method serves any purpose (at least on Pixel devices)
+    // consider removing
     private static void initRndisAddress() {
         // configure RNDIS ethernet address based on our serial number using the same algorithm
         // we had been previously using in kernel board files
@@ -487,7 +488,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         try {
             FileUtils.stringToFile(RNDIS_ETH_ADDR_PATH, addrString);
         } catch (IOException e) {
-            Slog.e(TAG, "failed to write to " + RNDIS_ETH_ADDR_PATH);
+            Slog.i(TAG, "failed to write to " + RNDIS_ETH_ADDR_PATH);
         }
     }
 
@@ -763,9 +764,6 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
         }
 
         private void broadcastUsbAccessoryHandshake() {
-            long elapsedRealtime = SystemClock.elapsedRealtime();
-            long accessoryHandShakeEnd = elapsedRealtime;
-
             // send a sticky broadcast containing USB accessory handshake information
             Intent intent = new Intent(UsbManager.ACTION_USB_ACCESSORY_HANDSHAKE)
                     .putExtra(UsbManager.EXTRA_ACCESSORY_UEVENT_TIME,
@@ -775,7 +773,7 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     .putExtra(UsbManager.EXTRA_ACCESSORY_START,
                             mStartAccessory)
                     .putExtra(UsbManager.EXTRA_ACCESSORY_HANDSHAKE_END,
-                            accessoryHandShakeEnd);
+                            SystemClock.elapsedRealtime());
 
             if (DEBUG) {
                 Slog.d(TAG, "broadcasting " + intent + " extras: " + intent.getExtras());
@@ -783,7 +781,6 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
 
             sendStickyBroadcast(intent);
             resetUsbAccessoryHandshakeDebuggingInfo();
-            accessoryHandShakeEnd = 0L;
         }
 
         protected void updateUsbStateBroadcastIfNeeded(long functions) {
@@ -1942,14 +1939,14 @@ public class UsbDeviceManager implements ActivityTaskManagerInternal.ScreenObser
                     }
                     break;
                 case MSG_GET_CURRENT_USB_FUNCTIONS:
-                    Slog.e(TAG, "prcessing MSG_GET_CURRENT_USB_FUNCTIONS");
+                    Slog.i(TAG, "processing MSG_GET_CURRENT_USB_FUNCTIONS");
                     mCurrentUsbFunctionsReceived = true;
 
                     if (mCurrentUsbFunctionsRequested) {
-                        Slog.e(TAG, "updating mCurrentFunctions");
+                        Slog.i(TAG, "updating mCurrentFunctions");
                         // Mask out adb, since it is stored in mAdbEnabled
                         mCurrentFunctions = ((Long) msg.obj) & ~UsbManager.FUNCTION_ADB;
-                        Slog.e(TAG,
+                        Slog.i(TAG,
                                 "mCurrentFunctions:" + mCurrentFunctions + "applied:" + msg.arg1);
                         mCurrentFunctionsApplied = msg.arg1 == 1;
                     }

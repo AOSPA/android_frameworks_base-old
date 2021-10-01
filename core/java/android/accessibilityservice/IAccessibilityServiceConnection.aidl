@@ -39,6 +39,8 @@ interface IAccessibilityServiceConnection {
 
     void setServiceInfo(in AccessibilityServiceInfo info);
 
+    void setAttributionTag(in String attributionTag);
+
     String[] findAccessibilityNodeInfoByAccessibilityId(int accessibilityWindowId,
         long accessibilityNodeId, int interactionId,
         IAccessibilityInteractionConnectionCallback callback, int flags, long threadId,
@@ -118,6 +120,6 @@ interface IAccessibilityServiceConnection {
 
     void setFocusAppearance(int strokeWidth, int color);
 
-    oneway void logTrace(long timestamp, String where, String callingParams, int processId,
-        long threadId, int callingUid, in Bundle serializedCallingStackInBundle);
+    oneway void logTrace(long timestamp, String where, long loggingTypes, String callingParams,
+        int processId, long threadId, int callingUid, in Bundle serializedCallingStackInBundle);
 }

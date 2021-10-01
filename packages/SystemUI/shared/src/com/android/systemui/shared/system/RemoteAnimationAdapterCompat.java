@@ -69,7 +69,8 @@ public class RemoteAnimationAdapterCompat {
         return mRemoteTransition;
     }
 
-    private static IRemoteAnimationRunner.Stub wrapRemoteAnimationRunner(
+    /** Wraps a RemoteAnimationRunnerCompat in an IRemoteAnimationRunner. */
+    public static IRemoteAnimationRunner.Stub wrapRemoteAnimationRunner(
             final RemoteAnimationRunnerCompat remoteAnimationAdapter) {
         return new IRemoteAnimationRunner.Stub() {
             @Override
@@ -260,7 +261,7 @@ public class RemoteAnimationAdapterCompat {
                                 t.remove(leashMap.valueAt(i));
                             }
                             t.apply();
-                            finishCallback.onTransitionFinished(null /* wct */);
+                            finishCallback.onTransitionFinished(null /* wct */, null /* sct */);
                         } catch (RemoteException e) {
                             Log.e("ActivityOptionsCompat", "Failed to call app controlled animation"
                                     + " finished callback", e);

@@ -33,6 +33,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.Mockito.when;
 
@@ -96,11 +97,6 @@ public class JobSchedulerServiceTest {
         TestJobSchedulerService(Context context) {
             super(context);
             mAppStateTracker = mock(AppStateTrackerImpl.class);
-        }
-
-        @Override
-        public boolean isChainedAttributionEnabled() {
-            return false;
         }
     }
 
@@ -710,7 +706,7 @@ public class JobSchedulerServiceTest {
         spyOn(mService);
         doNothing().when(mService).evaluateControllerStatesLocked(any());
         doNothing().when(mService).noteJobsPending(any());
-        doReturn(true).when(mService).isReadyToBeExecutedLocked(any());
+        doReturn(true).when(mService).isReadyToBeExecutedLocked(any(), anyBoolean());
         advanceElapsedClock(24 * HOUR_IN_MILLIS);
 
         JobSchedulerService.MaybeReadyJobQueueFunctor maybeQueueFunctor =

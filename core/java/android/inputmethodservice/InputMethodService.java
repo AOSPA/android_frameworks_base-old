@@ -55,7 +55,6 @@ import static android.view.WindowManager.LayoutParams.FLAG_DRAWS_SYSTEM_BAR_BACK
 
 import static java.lang.annotation.RetentionPolicy.SOURCE;
 
-import android.annotation.AnyThread;
 import android.annotation.CallSuper;
 import android.annotation.DrawableRes;
 import android.annotation.IntDef;
@@ -94,7 +93,6 @@ import android.text.method.MovementMethod;
 import android.util.Log;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
-import android.util.imetracing.ImeTracing;
 import android.util.proto.ProtoOutputStream;
 import android.view.Gravity;
 import android.view.KeyCharacterMap;
@@ -133,6 +131,7 @@ import android.window.WindowMetricsHelper;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.inputmethod.IInputContentUriToken;
 import com.android.internal.inputmethod.IInputMethodPrivilegedOperations;
+import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperations;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
 import com.android.internal.view.IInlineSuggestionsRequestCallback;
@@ -589,7 +588,7 @@ public class InputMethodService extends AbstractInputMethodService {
          */
         @MainThread
         @Override
-        public final void initializeInternal(@NonNull IBinder token, int displayId,
+        public final void initializeInternal(@NonNull IBinder token,
                 IInputMethodPrivilegedOperations privilegedOperations, int configChanges) {
             if (InputMethodPrivilegedOperationsRegistry.isRegistered(token)) {
                 Log.w(TAG, "The token has already registered, ignore this initialization.");
@@ -599,7 +598,6 @@ public class InputMethodService extends AbstractInputMethodService {
             mConfigTracker.onInitialize(configChanges);
             mPrivOps.set(privilegedOperations);
             InputMethodPrivilegedOperationsRegistry.put(token, mPrivOps);
-            updateInputMethodDisplay(displayId);
             attachToken(token);
             Trace.traceEnd(TRACE_TAG_WINDOW_MANAGER);
         }
@@ -629,25 +627,9 @@ public class InputMethodService extends AbstractInputMethodService {
                 throw new IllegalStateException(
                         "attachToken() must be called at most once. token=" + token);
             }
+            attachToWindowToken(token);
             mToken = token;
             mWindow.setToken(token);
-        }
-
-        /**
-         * {@inheritDoc}
-         * @hide
-         */
-        @MainThread
-        @Override
-        public void updateInputMethodDisplay(int displayId) {
-            if (getDisplayId() == displayId) {
-                return;
-            }
-            // Update display for adding IME window to the right display.
-            // TODO(b/111364446) Need to address context lifecycle issue if need to re-create
-            // for update resources & configuration correctly when show soft input
-            // in non-default display.
-            updateDisplay(displayId);
         }
 
         /**
@@ -757,7 +739,7 @@ public class InputMethodService extends AbstractInputMethodService {
                 return;
             }
             ImeTracing.getInstance().triggerServiceDump(
-                    "InputMethodService.InputMethodImpl#hideSoftInput", InputMethodService.this,
+                    "InputMethodService.InputMethodImpl#hideSoftInput", mDumper,
                     null /* icProto */);
             final boolean wasVisible = isInputViewShown();
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMS.hideSoftInput");
@@ -814,7 +796,7 @@ public class InputMethodService extends AbstractInputMethodService {
             }
             Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMS.showSoftInput");
             ImeTracing.getInstance().triggerServiceDump(
-                    "InputMethodService.InputMethodImpl#showSoftInput", InputMethodService.this,
+                    "InputMethodService.InputMethodImpl#showSoftInput", mDumper,
                     null /* icProto */);
             final boolean wasVisible = isInputViewShown();
             if (dispatchOnShowInputRequested(flags, false)) {
@@ -2239,7 +2221,7 @@ public class InputMethodService extends AbstractInputMethodService {
             return;
         }
 
-        ImeTracing.getInstance().triggerServiceDump("InputMethodService#showWindow", this,
+        ImeTracing.getInstance().triggerServiceDump("InputMethodService#showWindow", mDumper,
                 null /* icProto */);
         Trace.traceBegin(TRACE_TAG_WINDOW_MANAGER, "IMS.showWindow");
         mDecorViewWasVisible = mDecorViewVisible;
@@ -2318,7 +2300,7 @@ public class InputMethodService extends AbstractInputMethodService {
      */
     private void applyVisibilityInInsetsConsumerIfNecessary(boolean setVisible) {
         ImeTracing.getInstance().triggerServiceDump(
-                "InputMethodService#applyVisibilityInInsetsConsumerIfNecessary", this,
+                "InputMethodService#applyVisibilityInInsetsConsumerIfNecessary", mDumper,
                 null /* icProto */);
         if (setVisible) {
             cancelImeSurfaceRemoval();
@@ -2347,7 +2329,7 @@ public class InputMethodService extends AbstractInputMethodService {
 
     public void hideWindow() {
         if (DEBUG) Log.v(TAG, "CALL: hideWindow");
-        ImeTracing.getInstance().triggerServiceDump("InputMethodService#hideWindow", this,
+        ImeTracing.getInstance().triggerServiceDump("InputMethodService#hideWindow", mDumper,
                 null /* icProto */);
         mWindowVisible = false;
         finishViews(false /* finishingInput */);
@@ -2420,7 +2402,7 @@ public class InputMethodService extends AbstractInputMethodService {
     
     void doFinishInput() {
         if (DEBUG) Log.v(TAG, "CALL: doFinishInput");
-        ImeTracing.getInstance().triggerServiceDump("InputMethodService#doFinishInput", this,
+        ImeTracing.getInstance().triggerServiceDump("InputMethodService#doFinishInput", mDumper,
                 null /* icProto */);
         finishViews(true /* finishingInput */);
         if (mInputStarted) {
@@ -2437,7 +2419,7 @@ public class InputMethodService extends AbstractInputMethodService {
         if (!restarting && mInputStarted) {
             doFinishInput();
         }
-        ImeTracing.getInstance().triggerServiceDump("InputMethodService#doStartInput", this,
+        ImeTracing.getInstance().triggerServiceDump("InputMethodService#doStartInput", mDumper,
                 null /* icProto */);
         mInputStarted = true;
         mStartedInputConnection = ic;
@@ -2597,7 +2579,7 @@ public class InputMethodService extends AbstractInputMethodService {
      * @param flags Provides additional operating flags.
      */
     public void requestHideSelf(int flags) {
-        ImeTracing.getInstance().triggerServiceDump("InputMethodService#requestHideSelf", this,
+        ImeTracing.getInstance().triggerServiceDump("InputMethodService#requestHideSelf", mDumper,
                 null /* icProto */);
         mPrivOps.hideMySoftInput(flags);
     }
@@ -2611,7 +2593,7 @@ public class InputMethodService extends AbstractInputMethodService {
      * @param flags Provides additional operating flags.
      */
     public final void requestShowSelf(int flags) {
-        ImeTracing.getInstance().triggerServiceDump("InputMethodService#requestShowSelf", this,
+        ImeTracing.getInstance().triggerServiceDump("InputMethodService#requestShowSelf", mDumper,
                 null /* icProto */);
         mPrivOps.showMySoftInput(flags);
     }
@@ -3298,67 +3280,91 @@ public class InputMethodService extends AbstractInputMethodService {
     }
 
     /**
-     * Allow the receiver of {@link InputContentInfo} to obtain a temporary read-only access
-     * permission to the content.
+     * Used to inject custom {@link InputMethodServiceInternal}.
      *
-     * @param inputContentInfo Content to be temporarily exposed from the input method to the
-     * application.
-     * This cannot be {@code null}.
-     * @param inputConnection {@link InputConnection} with which
-     * {@link InputConnection#commitContent(InputContentInfo, int, Bundle)} will be called.
-     * @hide
+     * @return the {@link InputMethodServiceInternal} to be used.
      */
+    @NonNull
     @Override
-    public final void exposeContent(@NonNull InputContentInfo inputContentInfo,
-            @NonNull InputConnection inputConnection) {
-        if (inputConnection == null) {
-            return;
-        }
-        if (getCurrentInputConnection() != inputConnection) {
-            return;
-        }
-        exposeContentInternal(inputContentInfo, getCurrentInputEditorInfo());
-    }
-
-    /**
-     * {@inheritDoc}
-     * @hide
-     */
-    @AnyThread
-    @Override
-    public final void notifyUserActionIfNecessary() {
-        synchronized (mLock) {
-            if (mNotifyUserActionSent) {
-                return;
+    final InputMethodServiceInternal createInputMethodServiceInternal() {
+        return new InputMethodServiceInternal() {
+            /**
+             * {@inheritDoc}
+             */
+            @NonNull
+            @Override
+            public Context getContext() {
+                return InputMethodService.this;
             }
-            mPrivOps.notifyUserActionAsync();
-            mNotifyUserActionSent = true;
-        }
-    }
 
-    /**
-     * Allow the receiver of {@link InputContentInfo} to obtain a temporary read-only access
-     * permission to the content.
-     *
-     * <p>See {@link android.inputmethodservice.InputMethodService#exposeContent(InputContentInfo,
-     * InputConnection)} for details.</p>
-     *
-     * @param inputContentInfo Content to be temporarily exposed from the input method to the
-     * application.
-     * This cannot be {@code null}.
-     * @param editorInfo The editor that receives {@link InputContentInfo}.
-     */
-    private void exposeContentInternal(@NonNull InputContentInfo inputContentInfo,
-            @NonNull EditorInfo editorInfo) {
-        final Uri contentUri = inputContentInfo.getContentUri();
-        final IInputContentUriToken uriToken =
-                mPrivOps.createInputContentUriToken(contentUri, editorInfo.packageName);
-        if (uriToken == null) {
-            Log.e(TAG, "createInputContentAccessToken failed. contentUri=" + contentUri.toString()
-                    + " packageName=" + editorInfo.packageName);
-            return;
-        }
-        inputContentInfo.setUriToken(uriToken);
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public void exposeContent(@NonNull InputContentInfo inputContentInfo,
+                    @NonNull InputConnection inputConnection) {
+                if (inputConnection == null) {
+                    return;
+                }
+                if (getCurrentInputConnection() != inputConnection) {
+                    return;
+                }
+                exposeContentInternal(inputContentInfo, getCurrentInputEditorInfo());
+            }
+
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public void notifyUserActionIfNecessary() {
+                synchronized (mLock) {
+                    if (mNotifyUserActionSent) {
+                        return;
+                    }
+                    mPrivOps.notifyUserActionAsync();
+                    mNotifyUserActionSent = true;
+                }
+            }
+
+            /**
+             * Allow the receiver of {@link InputContentInfo} to obtain a temporary read-only access
+             * permission to the content.
+             *
+             * <p>See {@link #exposeContent(InputContentInfo, InputConnection)} for details.</p>
+             *
+             * @param inputContentInfo Content to be temporarily exposed from the input method to
+             *                         the application.  This cannot be {@code null}.
+             * @param editorInfo The editor that receives {@link InputContentInfo}.
+             */
+            private void exposeContentInternal(@NonNull InputContentInfo inputContentInfo,
+                    @NonNull EditorInfo editorInfo) {
+                final Uri contentUri = inputContentInfo.getContentUri();
+                final IInputContentUriToken uriToken =
+                        mPrivOps.createInputContentUriToken(contentUri, editorInfo.packageName);
+                if (uriToken == null) {
+                    Log.e(TAG, "createInputContentAccessToken failed. contentUri="
+                            + contentUri.toString() + " packageName=" + editorInfo.packageName);
+                    return;
+                }
+                inputContentInfo.setUriToken(uriToken);
+            }
+
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public void dump(FileDescriptor fd, PrintWriter fout, String[]args) {
+                InputMethodService.this.dump(fd, fout, args);
+            }
+
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public void triggerServiceDump(String where, @Nullable byte[] icProto) {
+                ImeTracing.getInstance().triggerServiceDump(where, mDumper, icProto);
+            }
+        };
     }
 
     private int mapToImeWindowStatus() {
@@ -3428,42 +3434,44 @@ public class InputMethodService extends AbstractInputMethodService {
         p.println(" mSettingsObserver=" + mSettingsObserver);
     }
 
-    /**
-     * @hide
-     */
-    @Override
-    public final void dumpProtoInternal(ProtoOutputStream proto, ProtoOutputStream icProto) {
-        final long token = proto.start(InputMethodServiceTraceProto.INPUT_METHOD_SERVICE);
-        mWindow.dumpDebug(proto, SOFT_INPUT_WINDOW);
-        proto.write(VIEWS_CREATED, mViewsCreated);
-        proto.write(DECOR_VIEW_VISIBLE, mDecorViewVisible);
-        proto.write(DECOR_VIEW_WAS_VISIBLE, mDecorViewWasVisible);
-        proto.write(WINDOW_VISIBLE, mWindowVisible);
-        proto.write(IN_SHOW_WINDOW, mInShowWindow);
-        proto.write(CONFIGURATION, getResources().getConfiguration().toString());
-        proto.write(TOKEN, Objects.toString(mToken));
-        proto.write(INPUT_BINDING, Objects.toString(mInputBinding));
-        proto.write(INPUT_STARTED, mInputStarted);
-        proto.write(INPUT_VIEW_STARTED, mInputViewStarted);
-        proto.write(CANDIDATES_VIEW_STARTED, mCandidatesViewStarted);
-        if (mInputEditorInfo != null) {
-            mInputEditorInfo.dumpDebug(proto, INPUT_EDITOR_INFO);
+    private final ImeTracing.ServiceDumper mDumper = new ImeTracing.ServiceDumper() {
+        /**
+         * {@inheritDoc}
+         */
+        @Override
+        public void dumpToProto(ProtoOutputStream proto, @Nullable byte[] icProto) {
+            final long token = proto.start(InputMethodServiceTraceProto.INPUT_METHOD_SERVICE);
+            mWindow.dumpDebug(proto, SOFT_INPUT_WINDOW);
+            proto.write(VIEWS_CREATED, mViewsCreated);
+            proto.write(DECOR_VIEW_VISIBLE, mDecorViewVisible);
+            proto.write(DECOR_VIEW_WAS_VISIBLE, mDecorViewWasVisible);
+            proto.write(WINDOW_VISIBLE, mWindowVisible);
+            proto.write(IN_SHOW_WINDOW, mInShowWindow);
+            proto.write(CONFIGURATION, getResources().getConfiguration().toString());
+            proto.write(TOKEN, Objects.toString(mToken));
+            proto.write(INPUT_BINDING, Objects.toString(mInputBinding));
+            proto.write(INPUT_STARTED, mInputStarted);
+            proto.write(INPUT_VIEW_STARTED, mInputViewStarted);
+            proto.write(CANDIDATES_VIEW_STARTED, mCandidatesViewStarted);
+            if (mInputEditorInfo != null) {
+                mInputEditorInfo.dumpDebug(proto, INPUT_EDITOR_INFO);
+            }
+            proto.write(SHOW_INPUT_REQUESTED, mShowInputRequested);
+            proto.write(LAST_SHOW_INPUT_REQUESTED, mLastShowInputRequested);
+            proto.write(SHOW_INPUT_FLAGS, mShowInputFlags);
+            proto.write(CANDIDATES_VISIBILITY, mCandidatesVisibility);
+            proto.write(FULLSCREEN_APPLIED, mFullscreenApplied);
+            proto.write(IS_FULLSCREEN, mIsFullscreen);
+            proto.write(EXTRACT_VIEW_HIDDEN, mExtractViewHidden);
+            proto.write(EXTRACTED_TOKEN, mExtractedToken);
+            proto.write(IS_INPUT_VIEW_SHOWN, mIsInputViewShown);
+            proto.write(STATUS_ICON, mStatusIcon);
+            mTmpInsets.dumpDebug(proto, LAST_COMPUTED_INSETS);
+            proto.write(SETTINGS_OBSERVER, Objects.toString(mSettingsObserver));
+            if (icProto != null) {
+                proto.write(INPUT_CONNECTION_CALL, icProto);
+            }
+            proto.end(token);
         }
-        proto.write(SHOW_INPUT_REQUESTED, mShowInputRequested);
-        proto.write(LAST_SHOW_INPUT_REQUESTED, mLastShowInputRequested);
-        proto.write(SHOW_INPUT_FLAGS, mShowInputFlags);
-        proto.write(CANDIDATES_VISIBILITY, mCandidatesVisibility);
-        proto.write(FULLSCREEN_APPLIED, mFullscreenApplied);
-        proto.write(IS_FULLSCREEN, mIsFullscreen);
-        proto.write(EXTRACT_VIEW_HIDDEN, mExtractViewHidden);
-        proto.write(EXTRACTED_TOKEN, mExtractedToken);
-        proto.write(IS_INPUT_VIEW_SHOWN, mIsInputViewShown);
-        proto.write(STATUS_ICON, mStatusIcon);
-        mTmpInsets.dumpDebug(proto, LAST_COMPUTED_INSETS);
-        proto.write(SETTINGS_OBSERVER, Objects.toString(mSettingsObserver));
-        if (icProto != null) {
-            proto.write(INPUT_CONNECTION_CALL, icProto.getBytes());
-        }
-        proto.end(token);
-    }
+    };
 }

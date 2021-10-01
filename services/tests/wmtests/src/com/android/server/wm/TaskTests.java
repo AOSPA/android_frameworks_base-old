@@ -126,8 +126,15 @@ public class TaskTests extends WindowTestsBase {
         final Task task = createTaskInRootTask(rootTask, 0 /* userId */);
         final ActivityRecord activity = createActivityRecord(mDisplayContent, task);
 
-        task.removeIfPossible();
-        // Assert that the container was removed.
+        task.remove(false /* withTransition */, "testRemoveContainer");
+        // There is still an activity to be destroyed, so the task is not removed immediately.
+        assertNotNull(task.getParent());
+        assertTrue(rootTask.hasChild());
+        assertTrue(task.hasChild());
+        assertTrue(activity.finishing);
+
+        activity.destroyed("testRemoveContainer");
+        // Assert that the container was removed after the activity is destroyed.
         assertNull(task.getParent());
         assertEquals(0, task.getChildCount());
         assertNull(activity.getParent());
@@ -1257,7 +1264,8 @@ public class TaskTests extends WindowTestsBase {
         LaunchParamsPersister persister = mAtm.mTaskSupervisor.mLaunchParamsPersister;
         spyOn(persister);
 
-        final Task task = getTestTask();
+        final Task task = new TaskBuilder(mSupervisor).setCreateActivity(true)
+                .setCreateParentTask(true).build().getRootTask();
         task.setHasBeenVisible(false);
         task.getDisplayContent().setDisplayWindowingMode(WINDOWING_MODE_FREEFORM);
         task.getRootTask().setWindowingMode(WINDOWING_MODE_FULLSCREEN);

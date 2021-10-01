@@ -104,6 +104,7 @@ import com.android.internal.util.FrameworkStatsLog;
 import com.android.internal.widget.ILockSettings;
 import com.android.server.am.ActivityManagerService;
 import com.android.server.appbinding.AppBindingService;
+import com.android.server.art.ArtManagerLocal;
 import com.android.server.attention.AttentionManagerService;
 import com.android.server.audio.AudioService;
 import com.android.server.biometrics.AuthService;
@@ -131,8 +132,6 @@ import com.android.server.hdmi.HdmiControlService;
 import com.android.server.incident.IncidentCompanionService;
 import com.android.server.input.InputManagerService;
 import com.android.server.inputmethod.InputMethodManagerService;
-import com.android.server.inputmethod.InputMethodSystemProperty;
-import com.android.server.inputmethod.MultiClientInputMethodManagerService;
 import com.android.server.integrity.AppIntegrityManagerService;
 import com.android.server.lights.LightsService;
 import com.android.server.location.LocationManagerService;
@@ -291,6 +290,8 @@ public final class SystemServer implements Dumpable {
             "com.android.server.job.JobSchedulerService";
     private static final String LOCK_SETTINGS_SERVICE_CLASS =
             "com.android.server.locksettings.LockSettingsService$Lifecycle";
+    private static final String RESOURCE_ECONOMY_SERVICE_CLASS =
+            "com.android.server.tare.InternalResourceService";
     private static final String STORAGE_MANAGER_SERVICE_CLASS =
             "com.android.server.StorageManagerService$Lifecycle";
     private static final String STORAGE_STATS_SERVICE_CLASS =
@@ -381,10 +382,14 @@ public final class SystemServer implements Dumpable {
             "com.android.server.connectivity.IpConnectivityMetrics";
     private static final String MEDIA_COMMUNICATION_SERVICE_CLASS =
             "com.android.server.media.MediaCommunicationService";
+    private static final String APP_COMPAT_OVERRIDES_SERVICE_CLASS =
+            "com.android.server.compat.overrides.AppCompatOverridesService$Lifecycle";
 
     private static final String ROLE_SERVICE_CLASS = "com.android.role.RoleService";
     private static final String GAME_MANAGER_SERVICE_CLASS =
             "com.android.server.app.GameManagerService$Lifecycle";
+    private static final String UWB_APEX_SERVICE_JAR_PATH =
+            "/apex/com.android.uwb/javalib/service-uwb.jar";
     private static final String UWB_SERVICE_CLASS = "com.android.server.uwb.UwbService";
 
     private static final String TETHERING_CONNECTOR_CLASS = "android.net.ITetheringConnector";
@@ -1471,6 +1476,12 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
             }
 
+            // TODO(aml-jobscheduler): Think about how to do it properly.
+            t.traceBegin("StartResourceEconomy");
+            mSystemServiceManager.startService(RESOURCE_ECONOMY_SERVICE_CLASS);
+            t.traceEnd();
+
+            // TODO(aml-jobscheduler): Think about how to do it properly.
             t.traceBegin("StartAlarmManagerService");
             mSystemServiceManager.startService(ALARM_MANAGER_SERVICE_CLASS);
             t.traceEnd();
@@ -1593,6 +1604,9 @@ public final class SystemServer implements Dumpable {
             // all listeners have the chance to react with special handling.
             Settings.Global.putInt(context.getContentResolver(),
                     Settings.Global.AIRPLANE_MODE_ON, 1);
+        } else if (context.getResources().getBoolean(R.bool.config_autoResetAirplaneMode)) {
+            Settings.Global.putInt(context.getContentResolver(),
+                    Settings.Global.AIRPLANE_MODE_ON, 0);
         }
 
         StatusBarManagerService statusBar = null;
@@ -1604,12 +1618,7 @@ public final class SystemServer implements Dumpable {
         // Bring up services needed for UI.
         if (mFactoryTestMode != FactoryTest.FACTORY_TEST_LOW_LEVEL) {
             t.traceBegin("StartInputMethodManagerLifecycle");
-            if (InputMethodSystemProperty.MULTI_CLIENT_IME_ENABLED) {
-                mSystemServiceManager.startService(
-                        MultiClientInputMethodManagerService.Lifecycle.class);
-            } else {
-                mSystemServiceManager.startService(InputMethodManagerService.Lifecycle.class);
-            }
+            mSystemServiceManager.startService(InputMethodManagerService.Lifecycle.class);
             t.traceEnd();
 
             t.traceBegin("StartAccessibilityManagerService");
@@ -2107,11 +2116,14 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(DockObserver.class);
             t.traceEnd();
 
+            // TODO(b/191495635): re-enable thermal observer after fixing b/191375904.
+            /*
             if (isWatch) {
                 t.traceBegin("StartThermalObserver");
                 mSystemServiceManager.startService(THERMAL_OBSERVER_CLASS);
                 t.traceEnd();
             }
+            */
 
             t.traceBegin("StartWiredAccessoryManager");
             try {
@@ -2465,7 +2477,9 @@ public final class SystemServer implements Dumpable {
             t.traceEnd();
         }
 
-        if (isWatch) {
+        // TODO(b/191495635): Re-enable these services after fixing b/191375904.
+       /*
+       if (isWatch) {
             // Must be started before services that depend it, e.g. WearConnectivityService
             t.traceBegin("StartWearPowerService");
             mSystemServiceManager.startService(WEAR_POWER_SERVICE_CLASS);
@@ -2493,6 +2507,7 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(WEAR_GLOBAL_ACTIONS_SERVICE_CLASS);
             t.traceEnd();
         }
+        */
 
         if (!mPackageManager.hasSystemFeature(PackageManager.FEATURE_SLICES_DISABLED)) {
             t.traceBegin("StartSliceManagerService");
@@ -2688,9 +2703,13 @@ public final class SystemServer implements Dumpable {
         mSystemServiceManager.startService(GAME_MANAGER_SERVICE_CLASS);
         t.traceEnd();
 
+        t.traceBegin("ArtManagerLocal");
+        LocalManagerRegistry.addManager(ArtManagerLocal.class, new ArtManagerLocal());
+        t.traceEnd();
+
         if (context.getPackageManager().hasSystemFeature(PackageManager.FEATURE_UWB)) {
             t.traceBegin("UwbService");
-            mSystemServiceManager.startService(UWB_SERVICE_CLASS);
+            mSystemServiceManager.startServiceFromJar(UWB_SERVICE_CLASS, UWB_APEX_SERVICE_JAR_PATH);
             t.traceEnd();
         }
 
@@ -2704,6 +2723,10 @@ public final class SystemServer implements Dumpable {
 
         t.traceBegin("StartMediaCommunicationService");
         mSystemServiceManager.startService(MEDIA_COMMUNICATION_SERVICE_CLASS);
+        t.traceEnd();
+
+        t.traceBegin("AppCompatOverridesService");
+        mSystemServiceManager.startService(APP_COMPAT_OVERRIDES_SERVICE_CLASS);
         t.traceEnd();
 
         ConcurrentUtils.waitForFutureNoInterrupt(mBlobStoreServiceStart,

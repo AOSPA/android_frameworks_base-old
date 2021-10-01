@@ -55,7 +55,10 @@ import android.content.ComponentName;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.pm.overlay.OverlayPaths;
+import android.content.pm.parsing.ParsingPackageUtils;
 import android.content.pm.split.SplitAssetLoader;
+import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
 import android.content.res.ApkAssets;
 import android.content.res.AssetManager;
 import android.content.res.Configuration;
@@ -884,7 +887,11 @@ public class PackageParser {
         if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
             if (p.mSigningDetails != SigningDetails.UNKNOWN) {
                 // only return a valid SigningInfo if there is signing information to report
-                pi.signingInfo = new SigningInfo(p.mSigningDetails);
+                pi.signingInfo = new SigningInfo(
+                        new android.content.pm.SigningDetails(p.mSigningDetails.signatures,
+                                p.mSigningDetails.signatureSchemeVersion,
+                                p.mSigningDetails.publicKeys,
+                                p.mSigningDetails.pastSigningCertificates));
             } else {
                 pi.signingInfo = null;
             }
@@ -1399,24 +1406,34 @@ public class PackageParser {
             // must use v2 signing scheme
             minSignatureScheme = SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V2;
         }
-        SigningDetails verified;
+        final ParseTypeImpl input = ParseTypeImpl.forDefaultParsing();
+        final ParseResult<android.content.pm.SigningDetails> result;
         if (skipVerify) {
             // systemDir APKs are already trusted, save time by not verifying; since the signature
             // is not verified and some system apps can have their V2+ signatures stripped allow
             // pulling the certs from the jar signature.
-            verified = ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
-                        apkPath, SigningDetails.SignatureSchemeVersion.JAR);
+            result = ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
+                    input, apkPath, SigningDetails.SignatureSchemeVersion.JAR);
         } else {
-            verified = ApkSignatureVerifier.verify(apkPath, minSignatureScheme);
+            result = ApkSignatureVerifier.verify(input, apkPath, minSignatureScheme);
+        }
+        if (result.isError()) {
+            throw new PackageParserException(result.getErrorCode(), result.getErrorMessage(),
+                    result.getException());
         }
 
         // Verify that entries are signed consistently with the first pkg
         // we encountered. Note that for splits, certificates may have
         // already been populated during an earlier parse of a base APK.
+        final android.content.pm.SigningDetails verified = result.getResult();
         if (pkg.mSigningDetails == SigningDetails.UNKNOWN) {
-            pkg.mSigningDetails = verified;
+            pkg.mSigningDetails = new SigningDetails(verified.getSignatures(),
+                    verified.getSignatureSchemeVersion(),
+                    verified.getPublicKeys(),
+                    verified.getPastSigningCertificates());
         } else {
-            if (!Signature.areExactMatch(pkg.mSigningDetails.signatures, verified.signatures)) {
+            if (!Signature.areExactMatch(pkg.mSigningDetails.signatures,
+                    verified.getSignatures())) {
                 throw new PackageParserException(
                         INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
                         apkPath + " has mismatched certificates");
@@ -7410,7 +7427,7 @@ public class PackageParser {
             mCompileSdkVersionCodename = dest.readString();
             mUpgradeKeySets = (ArraySet<String>) dest.readArraySet(boot);
 
-            mKeySetMapping = readKeySetMapping(dest);
+            mKeySetMapping = ParsingPackageUtils.readKeySetMapping(dest);
 
             cpuAbiOverride = dest.readString();
             use32bitAbi = (dest.readInt() == 1);
@@ -7536,71 +7553,11 @@ public class PackageParser {
             dest.writeInt(mCompileSdkVersion);
             dest.writeString(mCompileSdkVersionCodename);
             dest.writeArraySet(mUpgradeKeySets);
-            writeKeySetMapping(dest, mKeySetMapping);
+            ParsingPackageUtils.writeKeySetMapping(dest, mKeySetMapping);
             dest.writeString(cpuAbiOverride);
             dest.writeInt(use32bitAbi ? 1 : 0);
             dest.writeByteArray(restrictUpdateHash);
             dest.writeInt(visibleToInstantApps ? 1 : 0);
-        }
-
-        /**
-         * Writes the keyset mapping to the provided package. {@code null} mappings are permitted.
-         */
-        private static void writeKeySetMapping(
-                Parcel dest, ArrayMap<String, ArraySet<PublicKey>> keySetMapping) {
-            if (keySetMapping == null) {
-                dest.writeInt(-1);
-                return;
-            }
-
-            final int N = keySetMapping.size();
-            dest.writeInt(N);
-
-            for (int i = 0; i < N; i++) {
-                dest.writeString(keySetMapping.keyAt(i));
-                ArraySet<PublicKey> keys = keySetMapping.valueAt(i);
-                if (keys == null) {
-                    dest.writeInt(-1);
-                    continue;
-                }
-
-                final int M = keys.size();
-                dest.writeInt(M);
-                for (int j = 0; j < M; j++) {
-                    dest.writeSerializable(keys.valueAt(j));
-                }
-            }
-        }
-
-        /**
-         * Reads a keyset mapping from the given parcel at the given data position. May return
-         * {@code null} if the serialized mapping was {@code null}.
-         */
-        private static ArrayMap<String, ArraySet<PublicKey>> readKeySetMapping(Parcel in) {
-            final int N = in.readInt();
-            if (N == -1) {
-                return null;
-            }
-
-            ArrayMap<String, ArraySet<PublicKey>> keySetMapping = new ArrayMap<>();
-            for (int i = 0; i < N; ++i) {
-                String key = in.readString();
-                final int M = in.readInt();
-                if (M == -1) {
-                    keySetMapping.put(key, null);
-                    continue;
-                }
-
-                ArraySet<PublicKey> keys = new ArraySet<>(M);
-                for (int j = 0; j < M; ++j) {
-                    PublicKey pk = (PublicKey) in.readSerializable();
-                    keys.add(pk);
-                }
-
-                keySetMapping.put(key, keys);
-            }
-
-            return keySetMapping;
         }
 
         public static final Parcelable.Creator CREATOR = new Parcelable.Creator<Package>() {
@@ -8684,6 +8641,22 @@ public class PackageParser {
     // change the original one using new Package/ApkLite. The propose is that we don't want to
     // have two branches of methods in SplitAsset related classes so we can keep real classes
     // clean and move all the legacy code to one place.
+
+    /**
+     * Simple interface for loading base Assets and Splits. Used by PackageParser when parsing
+     * split APKs.
+     *
+     * @hide
+     * @deprecated Do not use. New changes should use
+     * {@link android.content.pm.split.SplitAssetLoader} instead.
+     */
+    @Deprecated
+    private interface SplitAssetLoader extends AutoCloseable {
+        AssetManager getBaseAssetManager() throws PackageParserException;
+        AssetManager getSplitAssetManager(int splitIdx) throws PackageParserException;
+
+        ApkAssets getBaseApkAssets();
+    }
 
     /**
      * A helper class that implements the dependency tree traversal for splits. Callbacks

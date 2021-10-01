@@ -16,6 +16,7 @@
 
 package android.content.pm.parsing.component;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.IntentFilter;
 import android.os.Parcel;
@@ -31,6 +32,26 @@ public final class ParsedIntentInfo extends IntentFilter {
 
     public static final Parceler PARCELER = new Parceler();
 
+    public ParsedIntentInfo setHasDefault(boolean hasDefault) {
+        this.hasDefault = hasDefault;
+        return this;
+    }
+
+    public ParsedIntentInfo setIcon(int icon) {
+        this.icon = icon;
+        return this;
+    }
+
+    public ParsedIntentInfo setLabelRes(int labelRes) {
+        this.labelRes = labelRes;
+        return this;
+    }
+
+    public ParsedIntentInfo setNonLocalizedLabel(CharSequence nonLocalizedLabel) {
+        this.nonLocalizedLabel = nonLocalizedLabel;
+        return this;
+    }
+
     public static class Parceler implements Parcelling<ParsedIntentInfo> {
 
         @Override
@@ -38,6 +59,7 @@ public final class ParsedIntentInfo extends IntentFilter {
             item.writeIntentInfoToParcel(dest, parcelFlags);
         }
 
+        @NonNull
         @Override
         public ParsedIntentInfo unparcel(Parcel source) {
             return new ParsedIntentInfo(source);
@@ -135,11 +157,11 @@ public final class ParsedIntentInfo extends IntentFilter {
         }
     }
 
-    boolean hasDefault;
-    int labelRes;
+    private boolean hasDefault;
+    private int labelRes;
     @Nullable
-    CharSequence nonLocalizedLabel;
-    int icon;
+    private CharSequence nonLocalizedLabel;
+    private int icon;
 
     public ParsedIntentInfo() {
     }

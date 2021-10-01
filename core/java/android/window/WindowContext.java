@@ -26,7 +26,6 @@ import android.content.Context;
 import android.content.ContextWrapper;
 import android.content.res.Configuration;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.view.WindowManager;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -57,8 +56,14 @@ public class WindowContext extends ContextWrapper {
      *
      * @param base Base {@link Context} for this new instance.
      * @param type Window type to be used with this context.
-     * @param options A bundle used to pass window-related options.
-     *
+     * @param options A bundle used to pass window-related options. For example, on device with
+     *                multiple DisplayAreaGroups, one may specify the RootDisplayArea for the window
+     *                using {@link DisplayAreaOrganizer#KEY_ROOT_DISPLAY_AREA_ID} in the options.
+     *                Example usage:
+     *                Bundle options = new Bundle();
+     *                options.put(KEY_ROOT_DISPLAY_AREA_ID, displayAreaInfo.rootDisplayAreaId);
+     *                Context windowContext = context.createWindowContext(display, type, options);
+     * @see DisplayAreaInfo#rootDisplayAreaId
      * @hide
      */
     public WindowContext(@NonNull Context base, int type, @Nullable Bundle options) {
@@ -67,7 +72,7 @@ public class WindowContext extends ContextWrapper {
         mType = type;
         mOptions = options;
         mWindowManager = createWindowContextWindowManager(this);
-        IBinder token = getWindowContextToken();
+        WindowTokenClient token = (WindowTokenClient) getWindowContextToken();
         mController = new WindowContextController(token);
 
         Reference.reachabilityFence(this);

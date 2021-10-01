@@ -18,6 +18,7 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
+import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
 import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
@@ -66,19 +67,19 @@ import static com.android.dx.mockito.inline.extended.ExtendedMockito.verify;
 import static com.android.server.wm.ActivityRecord.FINISH_RESULT_CANCELLED;
 import static com.android.server.wm.ActivityRecord.FINISH_RESULT_REMOVED;
 import static com.android.server.wm.ActivityRecord.FINISH_RESULT_REQUESTED;
-import static com.android.server.wm.Task.ActivityState.DESTROYED;
-import static com.android.server.wm.Task.ActivityState.DESTROYING;
-import static com.android.server.wm.Task.ActivityState.FINISHING;
-import static com.android.server.wm.Task.ActivityState.INITIALIZING;
-import static com.android.server.wm.Task.ActivityState.PAUSED;
-import static com.android.server.wm.Task.ActivityState.PAUSING;
-import static com.android.server.wm.Task.ActivityState.RESUMED;
-import static com.android.server.wm.Task.ActivityState.STARTED;
-import static com.android.server.wm.Task.ActivityState.STOPPED;
-import static com.android.server.wm.Task.ActivityState.STOPPING;
-import static com.android.server.wm.Task.TASK_VISIBILITY_INVISIBLE;
-import static com.android.server.wm.Task.TASK_VISIBILITY_VISIBLE;
-import static com.android.server.wm.Task.TASK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
+import static com.android.server.wm.ActivityRecord.State.DESTROYED;
+import static com.android.server.wm.ActivityRecord.State.DESTROYING;
+import static com.android.server.wm.ActivityRecord.State.FINISHING;
+import static com.android.server.wm.ActivityRecord.State.INITIALIZING;
+import static com.android.server.wm.ActivityRecord.State.PAUSED;
+import static com.android.server.wm.ActivityRecord.State.PAUSING;
+import static com.android.server.wm.ActivityRecord.State.RESUMED;
+import static com.android.server.wm.ActivityRecord.State.STARTED;
+import static com.android.server.wm.ActivityRecord.State.STOPPED;
+import static com.android.server.wm.ActivityRecord.State.STOPPING;
+import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_INVISIBLE;
+import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE;
+import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowStateAnimator.ROOT_TASK_CLIP_AFTER_ANIM;
 import static com.android.server.wm.WindowStateAnimator.ROOT_TASK_CLIP_BEFORE_ANIM;
@@ -136,7 +137,7 @@ import android.window.TaskSnapshot;
 import androidx.test.filters.MediumTest;
 
 import com.android.internal.R;
-import com.android.server.wm.Task.ActivityState;
+import com.android.server.wm.ActivityRecord.State;
 
 import org.junit.Assert;
 import org.junit.Before;
@@ -145,6 +146,8 @@ import org.junit.runner.RunWith;
 import org.mockito.invocation.InvocationOnMock;
 
 import java.util.ArrayList;
+import java.util.function.BiConsumer;
+import java.util.function.Consumer;
 
 
 /**
@@ -171,25 +174,25 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void testStackCleanupOnClearingTask() {
+    public void testTaskFragmentCleanupOnClearingTask() {
         final ActivityRecord activity = createActivityWith2LevelTask();
         final Task task = activity.getTask();
-        final Task rootTask = activity.getRootTask();
+        final TaskFragment taskFragment = activity.getTaskFragment();
         activity.onParentChanged(null /*newParent*/, task);
-        verify(rootTask, times(1)).cleanUpActivityReferences(any());
+        verify(taskFragment).cleanUpActivityReferences(any());
     }
 
     @Test
-    public void testStackCleanupOnActivityRemoval() {
+    public void testTaskFragmentCleanupOnActivityRemoval() {
         final ActivityRecord activity = createActivityWith2LevelTask();
         final Task task = activity.getTask();
-        final Task rootTask = activity.getRootTask();
+        final TaskFragment taskFragment = activity.getTaskFragment();
         task.removeChild(activity);
-        verify(rootTask, times(1)).cleanUpActivityReferences(any());
+        verify(taskFragment).cleanUpActivityReferences(any());
     }
 
     @Test
-    public void testStackCleanupOnTaskRemoval() {
+    public void testRootTaskCleanupOnTaskRemoval() {
         final ActivityRecord activity = createActivityWith2LevelTask();
         final Task task = activity.getTask();
         final Task rootTask = activity.getRootTask();
@@ -344,7 +347,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testSetsRelaunchReason_NotDragResizing() {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.RESUMED, "Testing");
+        activity.setState(RESUMED, "Testing");
 
         task.onRequestedOverrideConfigurationChanged(task.getConfiguration());
         activity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
@@ -369,7 +372,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testSetsRelaunchReason_DragResizing() {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.RESUMED, "Testing");
+        activity.setState(RESUMED, "Testing");
 
         task.onRequestedOverrideConfigurationChanged(task.getConfiguration());
         activity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
@@ -396,7 +399,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testRelaunchClearTopWaitingTranslucent() {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.RESUMED, "Testing");
+        activity.setState(RESUMED, "Testing");
 
         task.onRequestedOverrideConfigurationChanged(task.getConfiguration());
         activity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
@@ -417,7 +420,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testSetsRelaunchReason_NonResizeConfigChanges() {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.RESUMED, "Testing");
+        activity.setState(RESUMED, "Testing");
 
         task.onRequestedOverrideConfigurationChanged(task.getConfiguration());
         activity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
@@ -465,7 +468,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .setCreateTask(true)
                 .setConfigChanges(CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT)
                 .build();
-        activity.setState(Task.ActivityState.RESUMED, "Testing");
+        activity.setState(RESUMED, "Testing");
 
         activity.setLastReportedConfiguration(new MergedConfiguration(new Configuration(),
                 activity.getConfiguration()));
@@ -628,7 +631,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     @Test
     public void testShouldMakeActive_deferredResume() {
         final ActivityRecord activity = createActivityWithTask();
-        activity.setState(Task.ActivityState.STOPPED, "Testing");
+        activity.setState(STOPPED, "Testing");
 
         mSupervisor.beginDeferResume();
         assertEquals(false, activity.shouldMakeActive(null /* activeActivity */));
@@ -644,7 +647,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         ActivityRecord finishingActivity = new ActivityBuilder(mAtm).setTask(task).build();
         finishingActivity.finishing = true;
         ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(task).build();
-        activity.setState(Task.ActivityState.STOPPED, "Testing");
+        activity.setState(STOPPED, "Testing");
 
         assertEquals(false, activity.shouldMakeActive(null /* activeActivity */));
     }
@@ -653,15 +656,16 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testShouldResume_stackVisibility() {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.STOPPED, "Testing");
+        activity.setState(STOPPED, "Testing");
 
-        doReturn(TASK_VISIBILITY_VISIBLE).when(task).getVisibility(null);
+        doReturn(TASK_FRAGMENT_VISIBILITY_VISIBLE).when(task).getVisibility(null);
         assertEquals(true, activity.shouldResumeActivity(null /* activeActivity */));
 
-        doReturn(TASK_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT).when(task).getVisibility(null);
+        doReturn(TASK_FRAGMENT_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT)
+                .when(task).getVisibility(null);
         assertEquals(false, activity.shouldResumeActivity(null /* activeActivity */));
 
-        doReturn(TASK_VISIBILITY_INVISIBLE).when(task).getVisibility(null);
+        doReturn(TASK_FRAGMENT_VISIBILITY_INVISIBLE).when(task).getVisibility(null);
         assertEquals(false, activity.shouldResumeActivity(null /* activeActivity */));
     }
 
@@ -669,13 +673,13 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testShouldResumeOrPauseWithResults() {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.STOPPED, "Testing");
+        activity.setState(STOPPED, "Testing");
 
         ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(task).build();
         activity.addResultLocked(topActivity, "resultWho", 0, 0, new Intent());
         topActivity.finishing = true;
 
-        doReturn(TASK_VISIBILITY_VISIBLE).when(task).getVisibility(null);
+        doReturn(TASK_FRAGMENT_VISIBILITY_VISIBLE).when(task).getVisibility(null);
         assertEquals(true, activity.shouldResumeActivity(null /* activeActivity */));
         assertEquals(false, activity.shouldPauseActivity(null /*activeActivity */));
     }
@@ -688,7 +692,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .setConfigChanges(CONFIG_ORIENTATION | CONFIG_SCREEN_LAYOUT)
                 .build();
         final Task task = activity.getTask();
-        activity.setState(Task.ActivityState.STOPPED, "Testing");
+        activity.setState(STOPPED, "Testing");
 
         final Task stack = new TaskBuilder(mSupervisor).setCreateActivity(true).build();
         try {
@@ -731,7 +735,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         final ActivityRecord activity = createActivityWithTask();
         ActivityRecord topActivity = new ActivityBuilder(mAtm).setTask(activity.getTask()).build();
         topActivity.setOccludesParent(false);
-        activity.setState(Task.ActivityState.STOPPED, "Testing");
+        activity.setState(STOPPED, "Testing");
         activity.setVisibility(true);
         activity.makeActiveIfNeeded(null /* activeActivity */);
         assertEquals(STARTED, activity.getState());
@@ -1015,8 +1019,8 @@ public class ActivityRecordTests extends WindowTestsBase {
     @Test
     public void testFinishActivityIfPossible_nonResumedFinishCompletesImmediately() {
         final ActivityRecord activity = createActivityWithTask();
-        final ActivityState[] states = {INITIALIZING, STARTED, PAUSED, STOPPING, STOPPED};
-        for (ActivityState state : states) {
+        final State[] states = {INITIALIZING, STARTED, PAUSED, STOPPING, STOPPED};
+        for (State state : states) {
             activity.finishing = false;
             activity.setState(state, "test");
             reset(activity);
@@ -1151,7 +1155,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     /**
      * Verify that finish request won't change the state of next top activity if the current
      * finishing activity doesn't need to be destroyed immediately. The case is usually like
-     * from {@link ActivityStack#completePauseLocked(boolean, ActivityRecord)} to
+     * from {@link Task#completePause(boolean, ActivityRecord)} to
      * {@link ActivityRecord#completeFinishing(String)}, so the complete-pause should take the
      * responsibility to resume the next activity with updating the state.
      */
@@ -1397,7 +1401,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     private void testCompleteFinishing_ensureActivitiesVisible(boolean diffTask,
-            ActivityState secondActivityState) {
+            State secondActivityState) {
         final ActivityRecord activity = createActivityWithTask();
         final Task task = activity.getTask();
         final ActivityRecord firstActivity = new ActivityBuilder(mAtm).setTask(task).build();
@@ -1449,7 +1453,8 @@ public class ActivityRecordTests extends WindowTestsBase {
     @Test
     public void testDestroyIfPossible() {
         final ActivityRecord activity = createActivityWithTask();
-        doReturn(false).when(mRootWindowContainer).resumeFocusedTasksTopActivities();
+        doReturn(false).when(mRootWindowContainer)
+                .resumeFocusedTasksTopActivities();
         activity.destroyIfPossible("test");
 
         assertEquals(DESTROYING, activity.getState());
@@ -1471,7 +1476,8 @@ public class ActivityRecordTests extends WindowTestsBase {
             homeStack.removeChild(t, "test");
         }, true /* traverseTopToBottom */);
         activity.finishing = true;
-        doReturn(false).when(mRootWindowContainer).resumeFocusedTasksTopActivities();
+        doReturn(false).when(mRootWindowContainer)
+                .resumeFocusedTasksTopActivities();
 
         // Try to destroy the last activity above the home stack.
         activity.destroyIfPossible("test");
@@ -1598,16 +1604,23 @@ public class ActivityRecordTests extends WindowTestsBase {
     }
 
     @Test
-    public void testRemoveImmediately() throws RemoteException {
-        final ActivityRecord activity = createActivityWithTask();
-        final WindowProcessController wpc = activity.app;
-        activity.getTask().removeImmediately("test");
-
-        verify(mAtm.getLifecycleManager()).scheduleTransaction(any(), eq(activity.appToken),
-                isA(DestroyActivityItem.class));
-        assertNull(activity.app);
-        assertEquals(DESTROYED, activity.getState());
-        assertFalse(wpc.hasActivities());
+    public void testRemoveImmediately() {
+        final Consumer<Consumer<ActivityRecord>> test = setup -> {
+            final ActivityRecord activity = createActivityWithTask();
+            final WindowProcessController wpc = activity.app;
+            setup.accept(activity);
+            activity.getTask().removeImmediately("test");
+            try {
+                verify(mAtm.getLifecycleManager()).scheduleTransaction(any(), eq(activity.appToken),
+                        isA(DestroyActivityItem.class));
+            } catch (RemoteException ignored) {
+            }
+            assertNull(activity.app);
+            assertEquals(DESTROYED, activity.getState());
+            assertFalse(wpc.hasActivities());
+        };
+        test.accept(activity -> activity.setState(RESUMED, "test"));
+        test.accept(activity -> activity.finishing = true);
     }
 
     @Test
@@ -1851,7 +1864,7 @@ public class ActivityRecordTests extends WindowTestsBase {
             doReturn(WindowManagerGlobal.ADD_STARTING_NOT_NEEDED).when(session).addToDisplay(
                     any() /* window */,  any() /* attrs */,
                     anyInt() /* viewVisibility */, anyInt() /* displayId */,
-                    any() /* requestedVisibility */, any() /* outInputChannel */,
+                    any() /* requestedVisibilities */, any() /* outInputChannel */,
                     any() /* outInsetsState */, any() /* outActiveControls */);
             mAtm.mWindowManager.mStartingSurfaceController
                     .createTaskSnapshotSurface(activity, snapshot);
@@ -1907,8 +1920,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertTrue(wpc.registeredForActivityConfigChanges());
 
         // Create a new task with custom config to reparent the activity to.
-        final Task newTask =
-                new TaskBuilder(mSupervisor).setParentTask(initialTask.getRootTask()).build();
+        final Task newTask = new TaskBuilder(mSupervisor).build();
         final Configuration newConfig = newTask.getConfiguration();
         newConfig.densityDpi += 100;
         newTask.onRequestedOverrideConfigurationChanged(newConfig);
@@ -1940,8 +1952,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 .diff(wpc.getRequestedOverrideConfiguration()));
 
         // Create a new task with custom config to reparent the second activity to.
-        final Task newTask =
-                new TaskBuilder(mSupervisor).setParentTask(initialTask.getRootTask()).build();
+        final Task newTask = new TaskBuilder(mSupervisor).build();
         final Configuration newConfig = newTask.getConfiguration();
         newConfig.densityDpi += 100;
         newTask.onRequestedOverrideConfigurationChanged(newConfig);
@@ -2151,7 +2162,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(activity.supportsPictureInPicture());
     }
 
-    private void verifyProcessInfoUpdate(ActivityRecord activity, ActivityState state,
+    private void verifyProcessInfoUpdate(ActivityRecord activity, State state,
             boolean shouldUpdate, boolean activityChange) {
         reset(activity.app);
         activity.setState(state, "test");
@@ -2505,7 +2516,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 false, false);
         waitUntilHandlersIdle();
         activity2.addStartingWindow(mPackageName,
-                android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity1.appToken.asBinder(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity1,
                 true, true, false, true, false, false);
         waitUntilHandlersIdle();
         assertNoStartingWindow(activity1);
@@ -2522,7 +2533,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                     // Surprise, ...! Transfer window in the middle of the creation flow.
                     activity2.addStartingWindow(mPackageName,
                             android.R.style.Theme, null, "Test", 0, 0, 0, 0,
-                            activity1.appToken.asBinder(), true, true, false,
+                            activity1, true, true, false,
                             true, false, false);
                 });
         activity1.addStartingWindow(mPackageName,
@@ -2543,7 +2554,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 false, false);
         waitUntilHandlersIdle();
         activity2.addStartingWindow(mPackageName,
-                android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity1.appToken.asBinder(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity1,
                 true, true, false, true, false, false);
         waitUntilHandlersIdle();
         assertNoStartingWindow(activity1);
@@ -2589,17 +2600,17 @@ public class ActivityRecordTests extends WindowTestsBase {
                 false /* activityCreate */, false /* suggestEmpty */);
         waitUntilHandlersIdle();
         assertHasStartingWindow(activity);
-        activity.mStartingWindowState = ActivityRecord.STARTING_WINDOW_SHOWN;
 
         doCallRealMethod().when(task).startActivityLocked(
                 any(), any(), anyBoolean(), anyBoolean(), any(), any());
         // In normal case, resumeFocusedTasksTopActivities() should be called after
         // startActivityLocked(). So skip resumeFocusedTasksTopActivities() in ActivityBuilder.
-        doReturn(false).when(mRootWindowContainer).resumeFocusedTasksTopActivities();
+        doReturn(false).when(mRootWindowContainer)
+                .resumeFocusedTasksTopActivities();
         // Make mVisibleSetFromTransferredStartingWindow true.
         final ActivityRecord middle = new ActivityBuilder(mAtm).setTask(task).build();
         task.startActivityLocked(middle, null /* focusedTopActivity */,
-                false /* newTask */, false /* keepCurTransition */, null /* options */,
+                false /* newTask */, false /* isTaskSwitch */, null /* options */,
                 null /* sourceRecord */);
         middle.makeFinishingLocked();
 
@@ -2612,7 +2623,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         top.setVisible(false);
         // The finishing middle should be able to transfer starting window to top.
         task.startActivityLocked(top, null /* focusedTopActivity */,
-                false /* newTask */, false /* keepCurTransition */, null /* options */,
+                false /* newTask */, false /* isTaskSwitch */, null /* options */,
                 null /* sourceRecord */);
 
         assertNull(middle.mStartingWindow);
@@ -2649,7 +2660,7 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Make sure the fixed rotation transform linked to activity2 when adding starting window
         // on activity2.
         topActivity.addStartingWindow(mPackageName,
-                android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity.appToken.asBinder(),
+                android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity,
                 false, false, false, true, false, false);
         waitUntilHandlersIdle();
         assertTrue(topActivity.hasFixedRotationTransform());
@@ -2678,6 +2689,52 @@ public class ActivityRecordTests extends WindowTestsBase {
         // Assert that the bottom window now has the starting window.
         assertNoStartingWindow(activityTop);
         assertHasStartingWindow(activityBottom);
+    }
+
+    @Test
+    public void testStartingWindowInTaskFragment() {
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        final WindowState startingWindow = createWindowState(
+                new WindowManager.LayoutParams(TYPE_APPLICATION_STARTING), activity1);
+        activity1.addWindow(startingWindow);
+        activity1.attachStartingWindow(startingWindow);
+        activity1.mStartingData = mock(StartingData.class);
+        final Task task = activity1.getTask();
+        final Rect taskBounds = task.getBounds();
+        final int width = taskBounds.width();
+        final int height = taskBounds.height();
+        final BiConsumer<TaskFragment, Rect> fragmentSetup = (fragment, bounds) -> {
+            final Configuration config = fragment.getRequestedOverrideConfiguration();
+            config.windowConfiguration.setWindowingMode(WINDOWING_MODE_MULTI_WINDOW);
+            config.windowConfiguration.setBounds(bounds);
+            fragment.onRequestedOverrideConfigurationChanged(config);
+        };
+
+        final TaskFragment taskFragment1 = new TaskFragment(
+                mAtm, null /* fragmentToken */, false /* createdByOrganizer */);
+        fragmentSetup.accept(taskFragment1, new Rect(0, 0, width / 2, height));
+        task.addChild(taskFragment1, POSITION_TOP);
+
+        final TaskFragment taskFragment2 = new TaskFragment(
+                mAtm, null /* fragmentToken */, false /* createdByOrganizer */);
+        fragmentSetup.accept(taskFragment2, new Rect(width / 2, 0, width, height));
+        task.addChild(taskFragment2, POSITION_TOP);
+        final ActivityRecord activity2 = new ActivityBuilder(mAtm).build();
+        activity2.mVisibleRequested = true;
+        taskFragment2.addChild(activity2);
+        activity1.reparent(taskFragment1, POSITION_TOP);
+
+        assertEquals(task, activity1.mStartingData.mAssociatedTask);
+        assertEquals(taskFragment1.getBounds(), activity1.getBounds());
+        // The activity was resized by task fragment, but starting window must still cover the task.
+        assertEquals(taskBounds, activity1.mStartingWindow.getBounds());
+
+        // The starting window is only removed when all embedded activities are drawn.
+        final WindowState activityWindow = mock(WindowState.class);
+        activity1.onFirstWindowDrawn(activityWindow);
+        assertNotNull(activity1.mStartingWindow);
+        activity2.onFirstWindowDrawn(activityWindow);
+        assertNull(activity1.mStartingWindow);
     }
 
     @Test
@@ -2735,6 +2792,40 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         activity.removeChild(startingWindow);
         assertFalse("Starting window should not be present", activity.hasStartingWindow());
+    }
+
+    @Test
+    public void testCloseToSquareFixedOrientationPortrait() {
+        // create a square display
+        final DisplayContent squareDisplay = new TestDisplayContent.Builder(mAtm, 2000, 2000)
+                .setSystemDecorations(true).build();
+        final Task task = new TaskBuilder(mSupervisor).setDisplay(squareDisplay).build();
+
+        // create a fixed portrait activity
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task)
+                .setScreenOrientation(SCREEN_ORIENTATION_PORTRAIT).build();
+
+        // check that both the configuration and app bounds are portrait
+        assertEquals(ORIENTATION_PORTRAIT, activity.getConfiguration().orientation);
+        assertTrue(activity.getConfiguration().windowConfiguration.getAppBounds().width()
+                <= activity.getConfiguration().windowConfiguration.getAppBounds().height());
+    }
+
+    @Test
+    public void testCloseToSquareFixedOrientationLandscape() {
+        // create a square display
+        final DisplayContent squareDisplay = new TestDisplayContent.Builder(mAtm, 2000, 2000)
+                .setSystemDecorations(true).build();
+        final Task task = new TaskBuilder(mSupervisor).setDisplay(squareDisplay).build();
+
+        // create a fixed landscape activity
+        final ActivityRecord activity = new ActivityBuilder(mAtm).setTask(task)
+                .setScreenOrientation(SCREEN_ORIENTATION_LANDSCAPE).build();
+
+        // check that both the configuration and app bounds are landscape
+        assertEquals(ORIENTATION_LANDSCAPE, activity.getConfiguration().orientation);
+        assertTrue(activity.getConfiguration().windowConfiguration.getAppBounds().width()
+                > activity.getConfiguration().windowConfiguration.getAppBounds().height());
     }
 
     @Test

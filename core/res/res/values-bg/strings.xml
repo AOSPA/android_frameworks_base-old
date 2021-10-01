@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"без отметка"</string>
     <string name="selected" msgid="6614607926197755875">"избрано"</string>
     <string name="not_selected" msgid="410652016565864475">"не е избрано"</string>
+    <string name="in_progress" msgid="2149208189184319441">"в ход"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Изпълняване на действието чрез"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Завършване на действието посредством %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Изпълняване на действието"</string>

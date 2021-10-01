@@ -17,10 +17,10 @@
 package com.android.server.pm;
 
 import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
+import static android.content.pm.parsing.ParsingPackageUtils.parsePublicKey;
 
 import static com.android.server.pm.PackageManagerService.SCAN_INITIAL;
 
-import android.content.pm.PackageParser;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Base64;
@@ -193,7 +193,7 @@ public class KeySetManagerService {
             throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
                     "Passed invalid package to keyset validation.");
         }
-        ArraySet<PublicKey> signingKeys = pkg.getSigningDetails().publicKeys;
+        ArraySet<PublicKey> signingKeys = pkg.getSigningDetails().getPublicKeys();
         if (signingKeys == null || !(signingKeys.size() > 0) || signingKeys.contains(null)) {
             throw new PackageManagerException(INSTALL_FAILED_INVALID_APK,
                     "Package has invalid signing-key-set.");
@@ -226,7 +226,7 @@ public class KeySetManagerService {
         PackageSetting ps = mPackages.get(pkg.getPackageName());
         Objects.requireNonNull(ps, "pkg: " + pkg.getPackageName()
                     + "does not have a corresponding entry in mPackages.");
-        addSigningKeySetToPackageLPw(ps, pkg.getSigningDetails().publicKeys);
+        addSigningKeySetToPackageLPw(ps, pkg.getSigningDetails().getPublicKeys());
         if (pkg.getKeySetMapping() != null) {
             addDefinedKeySetsToPackageLPw(ps, pkg.getKeySetMapping());
             if (pkg.getUpgradeKeySets() != null) {
@@ -371,7 +371,7 @@ public class KeySetManagerService {
         for (int i = 0; i < upgradeKeySets.length; i++) {
             Set<PublicKey> upgradeSet = getPublicKeysFromKeySetLPr(upgradeKeySets[i]);
             if (upgradeSet != null
-                    && pkg.getSigningDetails().publicKeys.containsAll(upgradeSet)) {
+                    && pkg.getSigningDetails().getPublicKeys().containsAll(upgradeSet)) {
                 return true;
             }
         }
@@ -801,7 +801,7 @@ public class KeySetManagerService {
         long identifier = parser.getAttributeLong(null, "identifier");
         int refCount = 0;
         byte[] publicKey = parser.getAttributeBytesBase64(null, "value", null);
-        PublicKey pub = PackageParser.parsePublicKey(publicKey);
+        PublicKey pub = parsePublicKey(publicKey);
         if (pub != null) {
             PublicKeyHandle pkh = new PublicKeyHandle(identifier, refCount, pub);
             mPublicKeys.put(identifier, pkh);

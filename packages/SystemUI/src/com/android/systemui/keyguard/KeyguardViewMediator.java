@@ -2354,8 +2354,8 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
     }
 
     private Configuration.Builder createInteractionJankMonitorConf(String tag) {
-        return new Configuration.Builder(CUJ_LOCKSCREEN_UNLOCK_ANIMATION)
-                .setView(mKeyguardViewControllerLazy.get().getViewRootImpl().getView())
+        return Configuration.Builder.withView(CUJ_LOCKSCREEN_UNLOCK_ANIMATION,
+                mKeyguardViewControllerLazy.get().getViewRootImpl().getView())
                 .setTag(tag);
     }
 
@@ -2399,7 +2399,7 @@ public class KeyguardViewMediator extends SystemUI implements Dumpable,
         final boolean wasShowing = mShowing;
         onKeyguardExitFinished();
 
-        if (mKeyguardStateController.isDismissingFromSwipe() || !wasShowing) {
+        if (mKeyguardStateController.isDismissingFromSwipe() || wasShowing) {
             mKeyguardUnlockAnimationControllerLazy.get().hideKeyguardViewAfterRemoteAnimation();
         }
 

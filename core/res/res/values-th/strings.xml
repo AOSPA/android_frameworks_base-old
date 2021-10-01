@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"ยังไม่เลือก"</string>
     <string name="selected" msgid="6614607926197755875">"เลือกไว้"</string>
     <string name="not_selected" msgid="410652016565864475">"ไม่ได้เลือกไว้"</string>
+    <string name="in_progress" msgid="2149208189184319441">"กำลังดำเนินการ"</string>
     <string name="whichApplication" msgid="5432266899591255759">"ทำงานให้เสร็จโดยใช้"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"ดำเนินการให้เสร็จสมบูรณ์โดยใช้ %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"ทำงานให้เสร็จสิ้น"</string>

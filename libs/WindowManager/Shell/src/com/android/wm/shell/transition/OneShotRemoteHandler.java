@@ -57,7 +57,8 @@ public class OneShotRemoteHandler implements Transitions.TransitionHandler {
 
     @Override
     public boolean startAnimation(@NonNull IBinder transition, @NonNull TransitionInfo info,
-            @NonNull SurfaceControl.Transaction t,
+            @NonNull SurfaceControl.Transaction startTransaction,
+            @NonNull SurfaceControl.Transaction finishTransaction,
             @NonNull Transitions.TransitionFinishCallback finishCallback) {
         if (mTransition != transition) return false;
         ProtoLog.v(ShellProtoLogGroup.WM_SHELL_TRANSITIONS, "Using registered One-shot remote"
@@ -70,19 +71,24 @@ public class OneShotRemoteHandler implements Transitions.TransitionHandler {
         };
         IRemoteTransitionFinishedCallback cb = new IRemoteTransitionFinishedCallback.Stub() {
             @Override
-            public void onTransitionFinished(WindowContainerTransaction wct) {
+            public void onTransitionFinished(WindowContainerTransaction wct,
+                    SurfaceControl.Transaction sct) {
                 if (mRemote.asBinder() != null) {
                     mRemote.asBinder().unlinkToDeath(remoteDied, 0 /* flags */);
                 }
-                mMainExecutor.execute(
-                        () -> finishCallback.onTransitionFinished(wct, null /* wctCB */));
+                mMainExecutor.execute(() -> {
+                    if (sct != null) {
+                        finishTransaction.merge(sct);
+                    }
+                    finishCallback.onTransitionFinished(wct, null /* wctCB */);
+                });
             }
         };
         try {
             if (mRemote.asBinder() != null) {
                 mRemote.asBinder().linkToDeath(remoteDied, 0 /* flags */);
             }
-            mRemote.startAnimation(transition, info, t, cb);
+            mRemote.startAnimation(transition, info, startTransaction, cb);
         } catch (RemoteException e) {
             Log.e(Transitions.TAG, "Error running remote transition.", e);
             if (mRemote.asBinder() != null) {
@@ -102,7 +108,8 @@ public class OneShotRemoteHandler implements Transitions.TransitionHandler {
 
         IRemoteTransitionFinishedCallback cb = new IRemoteTransitionFinishedCallback.Stub() {
             @Override
-            public void onTransitionFinished(WindowContainerTransaction wct) {
+            public void onTransitionFinished(WindowContainerTransaction wct,
+                    SurfaceControl.Transaction sct) {
                 mMainExecutor.execute(
                         () -> finishCallback.onTransitionFinished(wct, null /* wctCB */));
             }

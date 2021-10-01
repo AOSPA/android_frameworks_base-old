@@ -618,6 +618,53 @@ public class HdmiControlService extends SystemService {
                         initializeCec(INITIATED_BY_ENABLE_CEC);
                     }
                 }, mServiceThreadExecutor);
+        mHdmiCecConfig.registerChangeListener(HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL,
+                new HdmiCecConfig.SettingChangeListener() {
+                    @Override
+                    public void onChange(String setting) {
+                        boolean enabled = mHdmiCecConfig.getIntValue(
+                                HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL)
+                                    == HdmiControlManager.ROUTING_CONTROL_ENABLED;
+                        if (isAudioSystemDevice()) {
+                            if (audioSystem() == null) {
+                                Slog.w(TAG, "Switch device has not registered yet."
+                                        + " Can't turn routing on.");
+                            } else {
+                                audioSystem().setRoutingControlFeatureEnabled(enabled);
+                            }
+                        }
+                    }
+                }, mServiceThreadExecutor);
+        mHdmiCecConfig.registerChangeListener(
+                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
+                new HdmiCecConfig.SettingChangeListener() {
+                    @Override
+                    public void onChange(String setting) {
+                        boolean enabled = mHdmiCecConfig.getIntValue(
+                                HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL)
+                                    == HdmiControlManager.SYSTEM_AUDIO_CONTROL_ENABLED;
+                        if (isTvDeviceEnabled()) {
+                            tv().setSystemAudioControlFeatureEnabled(enabled);
+                        }
+                        if (isAudioSystemDevice()) {
+                            if (audioSystem() == null) {
+                                Slog.e(TAG, "Audio System device has not registered yet."
+                                        + " Can't turn system audio mode on.");
+                            } else {
+                                audioSystem().onSystemAudioControlFeatureSupportChanged(enabled);
+                            }
+                        }
+                    }
+                }, mServiceThreadExecutor);
+        mHdmiCecConfig.registerChangeListener(
+                HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE,
+                new HdmiCecConfig.SettingChangeListener() {
+                    @Override
+                    public void onChange(String setting) {
+                        setHdmiCecVolumeControlEnabledInternal(getHdmiCecConfig().getIntValue(
+                                HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE));
+                    }
+                }, mServiceThreadExecutor);
         mHdmiCecConfig.registerChangeListener(
                 HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
                 new HdmiCecConfig.SettingChangeListener() {
@@ -634,6 +681,12 @@ public class HdmiControlService extends SystemService {
         // on boot, if device is interactive, set HDMI CEC state as powered on as well
         if (mPowerManager.isInteractive() && isPowerStandbyOrTransient()) {
             mPowerStatusController.setPowerStatus(HdmiControlManager.POWER_STATUS_ON);
+            // Start all actions that were queued because the device was in standby
+            if (mAddressAllocated) {
+                for (HdmiCecLocalDevice localDevice : getAllLocalDevices()) {
+                    localDevice.startQueuedActions();
+                }
+            }
         }
     }
 
@@ -757,11 +810,8 @@ public class HdmiControlService extends SystemService {
     private void registerContentObserver() {
         ContentResolver resolver = getContext().getContentResolver();
         String[] settings = new String[] {
-                Global.HDMI_CONTROL_VOLUME_CONTROL_ENABLED,
-                Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED,
                 Global.MHL_INPUT_SWITCHING_ENABLED,
                 Global.MHL_POWER_CHARGE_ENABLED,
-                Global.HDMI_CEC_SWITCH_ENABLED,
                 Global.DEVICE_NAME
         };
         for (String s : settings) {
@@ -781,33 +831,6 @@ public class HdmiControlService extends SystemService {
             String option = uri.getLastPathSegment();
             boolean enabled = readBooleanSetting(option, true);
             switch (option) {
-                case Global.HDMI_CONTROL_VOLUME_CONTROL_ENABLED:
-                    setHdmiCecVolumeControlEnabledInternal(getHdmiCecConfig().getIntValue(
-                            HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE));
-                    break;
-                case Global.HDMI_SYSTEM_AUDIO_CONTROL_ENABLED:
-                    if (isTvDeviceEnabled()) {
-                        tv().setSystemAudioControlFeatureEnabled(enabled);
-                    }
-                    if (isAudioSystemDevice()) {
-                        if (audioSystem() == null) {
-                            Slog.e(TAG, "Audio System device has not registered yet."
-                                    + " Can't turn system audio mode on.");
-                            break;
-                        }
-                        audioSystem().onSystemAduioControlFeatureSupportChanged(enabled);
-                    }
-                    break;
-                case Global.HDMI_CEC_SWITCH_ENABLED:
-                    if (isAudioSystemDevice()) {
-                        if (audioSystem() == null) {
-                            Slog.w(TAG, "Switch device has not registered yet."
-                                    + " Can't turn routing on.");
-                            break;
-                        }
-                        audioSystem().setRoutingControlFeatureEnables(enabled);
-                    }
-                    break;
                 case Global.MHL_INPUT_SWITCHING_ENABLED:
                     setMhlInputChangeEnabled(enabled);
                     break;
@@ -1222,13 +1245,11 @@ public class HdmiControlService extends SystemService {
     @ServiceThreadOnly
     void onHotplug(int portId, boolean connected) {
         assertRunOnServiceThread();
+        // initPortInfo at hotplug event.
+        mHdmiCecNetwork.initPortInfo();
 
         if (connected && !isTvDevice()
                 && getPortInfo(portId).getType() == HdmiPortInfo.PORT_OUTPUT) {
-            if (isSwitchDevice()) {
-                mHdmiCecNetwork.initPortInfo();
-                HdmiLogger.debug("initPortInfo for switch device when onHotplug from tx.");
-            }
             ArrayList<HdmiCecLocalDevice> localDevices = new ArrayList<>();
             for (int type : mLocalDevices) {
                 HdmiCecLocalDevice localDevice = mHdmiCecNetwork.getLocalDevice(type);
@@ -1378,8 +1399,9 @@ public class HdmiControlService extends SystemService {
                     deviceInfo.getLogicalAddress(), deviceInfo.getPhysicalAddress(),
                     deviceInfo.getPortId(), deviceInfo.getDeviceType(), deviceInfo.getVendorId(),
                     newDisplayName, deviceInfo.getDevicePowerStatus(), deviceInfo.getCecVersion()));
-            sendCecCommand(HdmiCecMessageBuilder.buildSetOsdNameCommand(
-                    device.mAddress, Constants.ADDR_TV, newDisplayName));
+            sendCecCommand(
+                    HdmiCecMessageBuilder.buildSetOsdNameCommand(
+                            deviceInfo.getLogicalAddress(), Constants.ADDR_TV, newDisplayName));
         }
     }
 
@@ -1658,11 +1680,6 @@ public class HdmiControlService extends SystemService {
                         Slog.e(TAG, "Callback cannot be null");
                         return;
                     }
-                    if (isPowerStandby()) {
-                        Slog.e(TAG, "Device is in standby. Not handling deviceSelect");
-                        invokeCallback(callback, HdmiControlManager.RESULT_INCORRECT_MODE);
-                        return;
-                    }
                     HdmiCecLocalDeviceTv tv = tv();
                     if (tv == null) {
                         if (!mAddressAllocated) {
@@ -1703,11 +1720,6 @@ public class HdmiControlService extends SystemService {
                 public void run() {
                     if (callback == null) {
                         Slog.e(TAG, "Callback cannot be null");
-                        return;
-                    }
-                    if (isPowerStandby()) {
-                        Slog.e(TAG, "Device is in standby. Not handling portSelect");
-                        invokeCallback(callback, HdmiControlManager.RESULT_INCORRECT_MODE);
                         return;
                     }
                     HdmiCecLocalDeviceTv tv = tv();
@@ -2277,7 +2289,9 @@ public class HdmiControlService extends SystemService {
                     }
                     sendCecCommand(
                             HdmiCecMessageBuilder.buildSetSystemAudioMode(
-                                    audioSystem().mAddress, Constants.ADDR_BROADCAST, true));
+                                    audioSystem().getDeviceInfo().getLogicalAddress(),
+                                    Constants.ADDR_BROADCAST,
+                                    true));
                 }
             });
         }
@@ -2359,7 +2373,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public List<String> getUserCecSettings() {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 return HdmiControlService.this.getHdmiCecConfig().getUserSettings();
             } finally {
@@ -2370,7 +2384,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public List<String> getAllowedCecSettingStringValues(String name) {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 return HdmiControlService.this.getHdmiCecConfig().getAllowedStringValues(name);
             } finally {
@@ -2381,7 +2395,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public int[] getAllowedCecSettingIntValues(String name) {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 List<Integer> allowedValues =
                         HdmiControlService.this.getHdmiCecConfig().getAllowedIntValues(name);
@@ -2394,7 +2408,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public String getCecSettingStringValue(String name) {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 return HdmiControlService.this.getHdmiCecConfig().getStringValue(name);
             } finally {
@@ -2405,7 +2419,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public void setCecSettingStringValue(String name, String value) {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 HdmiControlService.this.getHdmiCecConfig().setStringValue(name, value);
             } finally {
@@ -2416,7 +2430,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public int getCecSettingIntValue(String name) {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 return HdmiControlService.this.getHdmiCecConfig().getIntValue(name);
             } finally {
@@ -2427,7 +2441,7 @@ public class HdmiControlService extends SystemService {
         @Override
         public void setCecSettingIntValue(String name, int value) {
             initBinderCall();
-            long token = Binder.clearCallingIdentity();
+            final long token = Binder.clearCallingIdentity();
             try {
                 HdmiControlService.this.getHdmiCecConfig().setIntValue(name, value);
             } finally {
@@ -3183,7 +3197,6 @@ public class HdmiControlService extends SystemService {
             return;
         }
         mCecController.clearLogicalAddress();
-        mHdmiCecNetwork.clearLogicalAddress();
         mHdmiCecNetwork.clearLocalDevices();
     }
 
