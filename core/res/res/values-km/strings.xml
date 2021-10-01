@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"មិន​បាន​ធីក​"</string>
     <string name="selected" msgid="6614607926197755875">"បាន​ជ្រើសរើស"</string>
     <string name="not_selected" msgid="410652016565864475">"មិនបានជ្រើសរើសទេ"</string>
+    <string name="in_progress" msgid="2149208189184319441">"កំពុងដំណើរការ"</string>
     <string name="whichApplication" msgid="5432266899591255759">"បញ្ចប់​សកម្មភាព​ដោយ​ប្រើ"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"បញ្ចប់​សកម្មភាព​ដោយ​ប្រើ​ %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"បញ្ចប់សកម្មភាព"</string>

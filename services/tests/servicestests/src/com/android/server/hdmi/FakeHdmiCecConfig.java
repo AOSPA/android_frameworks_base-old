@@ -69,11 +69,26 @@ final class FakeHdmiCecConfig extends HdmiCecConfig {
                 R.bool.config_cecHdmiCecVersion20_default);
 
         doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecRoutingControl_userConfigurable);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecRoutingControlEnabled_allowed);
+        doReturn(false).when(resources).getBoolean(
+                R.bool.config_cecRoutingControlEnabled_default);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecRoutingControlDisabled_allowed);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecRoutingControlDisabled_default);
+
+        doReturn(true).when(resources).getBoolean(
                 R.bool.config_cecPowerControlMode_userConfigurable);
         doReturn(true).when(resources).getBoolean(
                 R.bool.config_cecPowerControlModeTv_allowed);
-        doReturn(true).when(resources).getBoolean(
+        doReturn(false).when(resources).getBoolean(
                 R.bool.config_cecPowerControlModeTv_default);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecPowerControlModeTvAndAudioSystem_allowed);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecPowerControlModeTvAndAudioSystem_default);
         doReturn(true).when(resources).getBoolean(
                 R.bool.config_cecPowerControlModeBroadcast_allowed);
         doReturn(false).when(resources).getBoolean(
@@ -93,6 +108,17 @@ final class FakeHdmiCecConfig extends HdmiCecConfig {
                 R.bool.config_cecPowerStateChangeOnActiveSourceLostStandbyNow_allowed);
         doReturn(false).when(resources).getBoolean(
                 R.bool.config_cecPowerStateChangeOnActiveSourceLostStandbyNow_default);
+
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecSystemAudioControl_userConfigurable);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecSystemAudioControlEnabled_allowed);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecSystemAudioControlEnabled_default);
+        doReturn(true).when(resources).getBoolean(
+                R.bool.config_cecSystemAudioControlDisabled_allowed);
+        doReturn(false).when(resources).getBoolean(
+                R.bool.config_cecSystemAudioControlDisabled_default);
 
         doReturn(true).when(resources).getBoolean(
                 R.bool.config_cecSystemAudioModeMuting_userConfigurable);

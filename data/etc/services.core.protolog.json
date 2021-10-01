@@ -79,12 +79,6 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
     },
-    "-2029985709": {
-      "message": "setFocusedTask: taskId=%d",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_FOCUS",
-      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
-    },
     "-2024464438": {
       "message": "app-onAnimationFinished(): mOuter=%s",
       "level": "DEBUG",
@@ -102,6 +96,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
+    },
+    "-2010331310": {
+      "message": "resumeTopActivity: Top activity resumed (dontWaitForPause) %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-2006946193": {
       "message": "setClientVisible: %s clientVisible=%b Callers=%s",
@@ -181,6 +181,12 @@
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-1924376693": {
+      "message": " Setting Ready-group to %b. group=%s from %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
+    },
     "-1918702467": {
       "message": "onSyncFinishedDrawing %s",
       "level": "VERBOSE",
@@ -210,6 +216,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_WINDOW_ORGANIZER",
       "at": "com\/android\/server\/wm\/TaskOrganizerController.java"
+    },
+    "-1886145147": {
+      "message": "resumeTopActivity: Going to sleep and all paused",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-1884933373": {
       "message": "enableScreenAfterBoot: mDisplayEnabled=%b mForceDisplayEnabled=%b mShowingBootMessages=%b mSystemBooted=%b. %s",
@@ -246,12 +258,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
       "at": "com\/android\/server\/wm\/AppTransition.java"
-    },
-    "-1861864501": {
-      "message": "resumeTopActivityLocked: Going to sleep and all paused",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "-1844540996": {
       "message": "  Initial targets: %s",
@@ -324,12 +330,6 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimationController.java"
-    },
-    "-1768090656": {
-      "message": "Re-launching after pause: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "-1750384749": {
       "message": "Launch on display check: allow launch on public display",
@@ -415,12 +415,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "-1655805455": {
-      "message": "Enqueue pending stop if needed: %s wasStopping=%b visibleRequested=%b",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "-1647332198": {
       "message": "remove RecentTask %s when finishing user %d",
       "level": "INFO",
@@ -432,6 +426,12 @@
       "level": "INFO",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/ResetTargetTaskHelper.java"
+    },
+    "-1633115609": {
+      "message": "Key dispatch not paused for screen off",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-1632122349": {
       "message": "Changing surface while display frozen: %s",
@@ -486,6 +486,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
+    },
+    "-1564228464": {
+      "message": "App died while pausing: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-1559645910": {
       "message": "Looking for task of type=%s, taskAffinity=%s, intent=%s, info=%s, preferredTDA=%s",
@@ -565,12 +571,6 @@
       "group": "WM_DEBUG_CONFIGURATION",
       "at": "com\/android\/server\/wm\/ActivityStarter.java"
     },
-    "-1492696222": {
-      "message": "App died during pause, not stopping: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "-1480772131": {
       "message": "No app or window is requesting an orientation, return %d for display id=%d",
       "level": "VERBOSE",
@@ -613,6 +613,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1442613680": {
+      "message": " Creating Ready-group for Transition %d with root=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
+    },
     "-1438175584": {
       "message": "Input focus has changed to %s display=%d",
       "level": "VERBOSE",
@@ -637,11 +643,23 @@
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "-1421296808": {
+      "message": "Moving to RESUMED: %s (in existing)",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
     "-1419762046": {
       "message": "moveRootTaskToDisplay: moving taskId=%d to displayId=%d",
       "level": "DEBUG",
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
+    },
+    "-1419461256": {
+      "message": "resumeTopActivity: Resumed %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-1413901262": {
       "message": "startRecentsActivity(): intent=%s",
@@ -708,6 +726,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_IME",
       "at": "com\/android\/server\/wm\/WindowState.java"
+    },
+    "-1311436264": {
+      "message": "Unregister task fragment organizer=%s uid=%d pid=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
     },
     "-1305966693": {
       "message": "Sending position change to %s, onTop: %b",
@@ -804,6 +828,12 @@
       "level": "WARN",
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "-1187377055": {
+      "message": "Enqueue pending stop if needed: %s wasStopping=%b visibleRequested=%b",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-1176488860": {
       "message": "SURFACE isSecure=%b: %s",
@@ -919,12 +949,6 @@
       "group": "WM_DEBUG_RECENTS_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RecentsAnimation.java"
     },
-    "-1066383762": {
-      "message": "Sleep still waiting to pause %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "-1060365734": {
       "message": "Attempted to add QS dialog window with bad token %s.  Aborting.",
       "level": "WARN",
@@ -984,6 +1008,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/WindowState.java"
+    },
+    "-957060823": {
+      "message": "Moving to PAUSING: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-951939129": {
       "message": "Unregister task organizer=%s uid=%d",
@@ -1201,6 +1231,12 @@
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-706481945": {
+      "message": "TaskFragment parent info changed name=%s parentTaskId=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
+    },
     "-705939410": {
       "message": "Waiting for pause to complete...",
       "level": "VERBOSE",
@@ -1237,12 +1273,6 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
     },
-    "-672228342": {
-      "message": "resumeTopActivityLocked: Top activity resumed %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "-668956537": {
       "message": "  THUMBNAIL %s: CREATE",
       "level": "INFO",
@@ -1267,11 +1297,11 @@
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
-    "-650261962": {
-      "message": "Sleep needs to pause %s",
+    "-648891906": {
+      "message": "Activity not running or entered PiP, resuming next.",
       "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-641258376": {
       "message": "realStartActivityLocked: Skipping start of r=%s some activities pausing...",
@@ -1308,12 +1338,6 @@
       "level": "INFO",
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
-    },
-    "-606328116": {
-      "message": "resumeTopActivityLocked: Top activity resumed (dontWaitForPause) %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "-597091183": {
       "message": "Delete TaskDisplayArea uid=%d",
@@ -1375,11 +1399,11 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowAnimator.java"
     },
-    "-533690126": {
-      "message": "resumeTopActivityLocked: Resumed %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
+    "-542756093": {
+      "message": "TaskFragment vanished name=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
     },
     "-532081937": {
       "message": "  Commit activity becoming invisible: %s",
@@ -1387,11 +1411,11 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
     },
-    "-527683022": {
-      "message": "resumeTopActivityLocked: Skip resume: some activity pausing.",
+    "-521613870": {
+      "message": "App died during pause, not stopping: %s",
       "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-519504830": {
       "message": "applyAnimation: anim=%s nextAppTransition=ANIM_CUSTOM transit=%s isEntrance=%b Callers=%s",
@@ -1476,18 +1500,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayRotation.java"
-    },
-    "-427457280": {
-      "message": "App died while pausing: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
-    "-417514857": {
-      "message": "Key dispatch not paused for screen off",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "-415865166": {
       "message": "findFocusedWindow: Found new focus @ %s",
@@ -1597,11 +1609,17 @@
       "group": "WM_DEBUG_LOCKTASK",
       "at": "com\/android\/server\/wm\/LockTaskController.java"
     },
-    "-303497363": {
-      "message": "reparent: moving activity=%s to task=%d at %d",
+    "-312353598": {
+      "message": "Executing finish of activity: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
+    "-310337305": {
+      "message": "Activity config changed during resume: %s, new next: %s",
       "level": "INFO",
-      "group": "WM_DEBUG_ADD_REMOVE",
-      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "-302468788": {
       "message": "Expected target rootTask=%s to be top most but found rootTask=%s",
@@ -1621,12 +1639,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "-279436615": {
-      "message": "Moving to PAUSING: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "-262984451": {
       "message": "Relaunch failed %s",
       "level": "INFO",
@@ -1639,6 +1651,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "-248761393": {
+      "message": "startPausing: taskFrag =%s mResumedActivity=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
     "-240296576": {
       "message": "handleAppTransitionReady: displayId=%d appTransition={%s} openingApps=[%s] closingApps=[%s] transit=%s",
       "level": "VERBOSE",
@@ -1650,12 +1668,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_CONFIGURATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
-    },
-    "-234244777": {
-      "message": "Activity config changed during resume: %s, new next: %s",
-      "level": "INFO",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "-230587670": {
       "message": "SyncGroup %d:  Unfinished container: %s",
@@ -1723,12 +1735,6 @@
       "group": "WM_DEBUG_STARTING_WINDOW",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
-    "-118786523": {
-      "message": "Resume failed; resetting state to %s: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "-116086365": {
       "message": "******************** ENABLING SCREEN!",
       "level": "INFO",
@@ -1776,6 +1782,18 @@
       "level": "INFO",
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/Session.java"
+    },
+    "-80004683": {
+      "message": "Resume failed; resetting state to %s: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
+    "-55185509": {
+      "message": "setFocusedTask: taskId=%d touchedActivity=%s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_FOCUS",
+      "at": "com\/android\/server\/wm\/ActivityTaskManagerService.java"
     },
     "-50336993": {
       "message": "moveFocusableActivityToTop: activity=%s",
@@ -1909,12 +1927,6 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowContextListenerController.java"
     },
-    "94402792": {
-      "message": "Moving to RESUMED: %s (in existing)",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "95216706": {
       "message": "hideIme target: %s ",
       "level": "DEBUG",
@@ -1932,6 +1944,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_APP_TRANSITIONS",
       "at": "com\/android\/server\/wm\/AppTransitionController.java"
+    },
+    "102618780": {
+      "message": "resumeTopActivity: Pausing %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "108170907": {
       "message": "Add starting %s: startingData=%s",
@@ -2173,6 +2191,18 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "327461496": {
+      "message": "Complete pause: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
+    "341055768": {
+      "message": "resumeTopActivity: Skip resume: need to start pausing",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
     "342460966": {
       "message": "DRAG %s: pos=(%d,%d)",
       "level": "INFO",
@@ -2190,6 +2220,12 @@
       "level": "INFO",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "352982444": {
+      "message": " allReady query: used=%b override=%b states=[%s]",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "355720268": {
       "message": "stopFreezingDisplayLocked: Unfreezing now",
@@ -2227,11 +2263,11 @@
       "group": "WM_DEBUG_BOOT",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "391189028": {
-      "message": "pauseBackTasks: task=%s mResumedActivity=%s",
-      "level": "DEBUG",
+    "378825104": {
+      "message": "Enqueueing pending pause: %s",
+      "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/TaskDisplayArea.java"
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "397105698": {
       "message": "grantEmbeddedWindowFocus remove request for win=%s dropped since no candidate was found",
@@ -2365,6 +2401,12 @@
       "group": "WM_SHOW_TRANSACTIONS",
       "at": "com\/android\/server\/wm\/WindowSurfaceController.java"
     },
+    "573582981": {
+      "message": "reparent: moving activity=%s to new task fragment in task=%d at %d",
+      "level": "INFO",
+      "group": "WM_DEBUG_ADD_REMOVE",
+      "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
     "579298675": {
       "message": "Moving to DESTROYED: %s (removed from history)",
       "level": "VERBOSE",
@@ -2467,6 +2509,12 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "660908897": {
+      "message": "Auto-PIP allowed, entering PIP mode directly: %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
     "662572728": {
       "message": "Attempted to add a toast window with bad token %s.  Aborting.",
       "level": "WARN",
@@ -2485,11 +2533,23 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
+    "669361121": {
+      "message": "Sleep still need to stop %d activities",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
     "674932310": {
       "message": "Setting Intent of %s to target %s",
       "level": "VERBOSE",
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/Task.java"
+    },
+    "675705156": {
+      "message": "resumeTopActivity: Top activity resumed %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "685047360": {
       "message": "Resizing window %s",
@@ -2520,12 +2580,6 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/ActivityTaskSupervisor.java"
-    },
-    "709500946": {
-      "message": "resumeTopActivityLocked: Skip resume: need to start pausing",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
     },
     "715749922": {
       "message": "Allowlisting %d:%s",
@@ -2629,12 +2683,6 @@
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/RootWindowContainer.java"
     },
-    "897964776": {
-      "message": "Complete pause: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "898863925": {
       "message": "Attempted to add QS dialog window with unknown token %s.  Aborting.",
       "level": "WARN",
@@ -2658,6 +2706,12 @@
       "level": "VERBOSE",
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/WindowStateAnimator.java"
+    },
+    "935418348": {
+      "message": "resumeTopActivity: Skip resume: some activity pausing.",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "950074526": {
       "message": "setLockTaskMode: Can't lock due to auth",
@@ -2707,11 +2761,11 @@
       "group": "WM_DEBUG_TASKS",
       "at": "com\/android\/server\/wm\/ActivityTaskSupervisor.java"
     },
-    "988389910": {
-      "message": "resumeTopActivityLocked: Pausing %s",
-      "level": "DEBUG",
+    "987903142": {
+      "message": "Sleep needs to pause %s",
+      "level": "VERBOSE",
       "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "996960396": {
       "message": "Starting Transition %d",
@@ -2719,17 +2773,23 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
     },
-    "1001509841": {
-      "message": "Auto-PIP allowed, entering PIP mode directly: %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "1001904964": {
       "message": "***** BOOT TIMEOUT: forcing display enabled",
       "level": "WARN",
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
+    },
+    "1011462000": {
+      "message": "Re-launching after pause: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
+    },
+    "1022095595": {
+      "message": "TaskFragment info changed name=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
     },
     "1023413388": {
       "message": "Finish waiting for pause of: %s",
@@ -2917,6 +2977,12 @@
       "group": "WM_DEBUG_STATES",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
+    "1284122013": {
+      "message": "TaskFragment appeared name=%s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
+    },
     "1288731814": {
       "message": "WindowState.hideLw: setting mFocusMayChange true",
       "level": "INFO",
@@ -3073,6 +3139,12 @@
       "group": "WM_DEBUG_WINDOW_TRANSITIONS",
       "at": "com\/android\/server\/wm\/Transition.java"
     },
+    "1494644409": {
+      "message": "  Rejecting as detached: %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
+    },
     "1495525537": {
       "message": "createWallpaperAnimations()",
       "level": "DEBUG",
@@ -3163,12 +3235,6 @@
       "group": "WM_DEBUG_APP_TRANSITIONS_ANIM",
       "at": "com\/android\/server\/wm\/WindowContainer.java"
     },
-    "1585450696": {
-      "message": "resumeTopActivityLocked: Restarting %s",
-      "level": "DEBUG",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "1589610525": {
       "message": "applyAnimation NEXT_TRANSIT_TYPE_OPEN_CROSS_PROFILE_APPS: anim=%s transit=%s isEntrance=true Callers=%s",
       "level": "VERBOSE",
@@ -3217,6 +3283,12 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/DisplayContent.java"
     },
+    "1653025361": {
+      "message": "Register task fragment organizer=%s uid=%d pid=%d",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_ORGANIZER",
+      "at": "com\/android\/server\/wm\/TaskFragmentOrganizerController.java"
+    },
     "1653210583": {
       "message": "Removing app %s delayed=%b animation=%s animating=%b",
       "level": "VERBOSE",
@@ -3228,6 +3300,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_IME",
       "at": "com\/android\/server\/wm\/InsetsStateController.java"
+    },
+    "1670933628": {
+      "message": " Setting allReady override",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_WINDOW_TRANSITIONS",
+      "at": "com\/android\/server\/wm\/Transition.java"
     },
     "1671994402": {
       "message": "Nulling last startingData",
@@ -3385,18 +3463,6 @@
       "group": "WM_DEBUG_ORIENTATION",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
     },
-    "1837992242": {
-      "message": "Executing finish of activity: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
-    "1847414670": {
-      "message": "Activity not running or entered PiP, resuming next.",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "1853793312": {
       "message": "Notify removed startingWindow %s",
       "level": "VERBOSE",
@@ -3408,6 +3474,12 @@
       "level": "DEBUG",
       "group": "WM_DEBUG_FOCUS",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "1856783490": {
+      "message": "resumeTopActivity: Restarting %s",
+      "level": "DEBUG",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "1865125884": {
       "message": "finishScreenTurningOn: mAwake=%b, mScreenOnEarly=%b, mScreenOnFully=%b, mKeyguardDrawComplete=%b, mWindowManagerDrawComplete=%b",
@@ -3421,29 +3493,23 @@
       "group": "WM_ERROR",
       "at": "com\/android\/server\/wm\/WindowManagerService.java"
     },
-    "1884961873": {
-      "message": "Sleep still need to stop %d activities",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "1891501279": {
       "message": "cancelAnimation(): reason=%s",
       "level": "DEBUG",
       "group": "WM_DEBUG_REMOTE_ANIMATIONS",
       "at": "com\/android\/server\/wm\/RemoteAnimationController.java"
     },
-    "1894239744": {
-      "message": "Enqueueing pending pause: %s",
-      "level": "VERBOSE",
-      "group": "WM_DEBUG_STATES",
-      "at": "com\/android\/server\/wm\/Task.java"
-    },
     "1903353011": {
       "message": "notifyAppStopped: %s",
       "level": "VERBOSE",
       "group": "WM_DEBUG_ADD_REMOVE",
       "at": "com\/android\/server\/wm\/ActivityRecord.java"
+    },
+    "1912291550": {
+      "message": "Sleep still waiting to pause %s",
+      "level": "VERBOSE",
+      "group": "WM_DEBUG_STATES",
+      "at": "com\/android\/server\/wm\/TaskFragment.java"
     },
     "1918448345": {
       "message": "Task appeared taskId=%d",

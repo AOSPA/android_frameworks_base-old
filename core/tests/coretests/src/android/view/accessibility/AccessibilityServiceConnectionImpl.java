@@ -34,6 +34,8 @@ import java.util.List;
 public class AccessibilityServiceConnectionImpl extends IAccessibilityServiceConnection.Stub {
     public void setServiceInfo(AccessibilityServiceInfo info) {}
 
+    public void setAttributionTag(String attributionTag) {}
+
     public String[] findAccessibilityNodeInfoByAccessibilityId(int accessibilityWindowId,
             long accessibilityNodeId, int interactionId,
             IAccessibilityInteractionConnectionCallback callback, int flags, long threadId,
@@ -166,4 +168,7 @@ public class AccessibilityServiceConnectionImpl extends IAccessibilityServiceCon
 
     public void logTrace(long timestamp, String where, String callingParams, int processId,
             long threadId, int callingUid, Bundle callingStack) {}
+
+    public void logTrace(long timestamp, String where, long loggingTypes, String callingParams,
+            int processId, long threadId, int callingUid, Bundle serializedCallingStackInBundle) {}
 }

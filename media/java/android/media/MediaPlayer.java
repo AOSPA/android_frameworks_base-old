@@ -19,7 +19,6 @@ package android.media;
 import static android.Manifest.permission.BIND_IMS_SERVICE;
 import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 
-import android.annotation.CallbackExecutor;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
@@ -4311,7 +4310,7 @@ public class MediaPlayer extends PlayerBase
     @RequiresPermission(BIND_IMS_SERVICE)
     public void setOnRtpRxNoticeListener(
             @NonNull Context context,
-            @NonNull @CallbackExecutor Executor executor,
+            @NonNull Executor executor,
             @NonNull OnRtpRxNoticeListener listener) {
         Objects.requireNonNull(context);
         Preconditions.checkArgument(

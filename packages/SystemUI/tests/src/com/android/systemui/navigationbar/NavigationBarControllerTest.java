@@ -81,6 +81,8 @@ public class NavigationBarControllerTest extends SysuiTestCase {
     private NavigationBar mDefaultNavBar;
     private NavigationBar mSecondaryNavBar;
 
+    private CommandQueue mCommandQueue = mock(CommandQueue.class);
+
     private static final int SECONDARY_DISPLAY = 1;
 
     @Before
@@ -99,11 +101,11 @@ public class NavigationBarControllerTest extends SysuiTestCase {
                         mock(StatusBarStateController.class),
                         mock(SysUiState.class),
                         mock(BroadcastDispatcher.class),
-                        mock(CommandQueue.class),
+                        mCommandQueue,
                         Optional.of(mock(Pip.class)),
                         Optional.of(mock(LegacySplitScreen.class)),
                         Optional.of(mock(Recents.class)),
-                        () -> mock(StatusBar.class),
+                        () -> Optional.of(mock(StatusBar.class)),
                         mock(ShadeController.class),
                         mock(NotificationRemoteInputManager.class),
                         mock(NotificationShadeDepthController.class),
@@ -112,6 +114,8 @@ public class NavigationBarControllerTest extends SysuiTestCase {
                         mock(UiEventLogger.class),
                         mock(NavigationBarOverlayController.class),
                         mock(ConfigurationController.class),
+                        mock(NavigationBarA11yHelper.class),
+                        mock(TaskbarDelegate.class),
                         mock(UserTracker.class)));
         initializeNavigationBars();
     }
@@ -138,6 +142,8 @@ public class NavigationBarControllerTest extends SysuiTestCase {
 
     @Test
     public void testCreateNavigationBarsIncludeDefaultTrue() {
+        // Tablets may be using taskbar and the logic is different
+        mNavigationBarController.mIsTablet = false;
         doNothing().when(mNavigationBarController).createNavigationBar(any(), any(), any());
 
         mNavigationBarController.createNavigationBars(true, null);
@@ -274,5 +280,10 @@ public class NavigationBarControllerTest extends SysuiTestCase {
         mNavigationBarController.disableAnimationsDuringHide(SECONDARY_DISPLAY, 500L);
 
         verify(mSecondaryNavBar).disableAnimationsDuringHide(eq(500L));
+    }
+
+    @Test
+    public void test3ButtonTaskbarFlagDisabledNoRegister() {
+        verify(mCommandQueue, never()).addCallback(any(TaskbarDelegate.class));
     }
 }

@@ -100,8 +100,8 @@ class UserSwitcherControllerTest : SysuiTestCase() {
         context.orCreateTestableResources.addOverride(
                 com.android.internal.R.bool.config_guestUserAutoCreated, false)
 
-        context.addMockSystemService(Context.FACE_SERVICE, mock(FaceManager::class.java))
-        context.addMockSystemService(Context.FINGERPRINT_SERVICE,
+        mContext.addMockSystemService(Context.FACE_SERVICE, mock(FaceManager::class.java))
+        mContext.addMockSystemService(Context.FINGERPRINT_SERVICE,
                 mock(FingerprintManager::class.java))
 
         `when`(userManager.canAddMoreUsers()).thenReturn(true)

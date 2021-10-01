@@ -19,16 +19,15 @@ package com.android.systemui.navigationbar;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManagerPolicyConstants.NAV_BAR_MODE_3BUTTON;
 
+import static com.android.systemui.shared.recents.utilities.Utilities.isTablet;
+
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.content.res.Configuration;
-import android.content.res.Resources;
 import android.hardware.display.DisplayManager;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.RemoteException;
-import android.os.SystemProperties;
-import android.util.DisplayMetrics;
 import android.util.Log;
 import android.util.SparseArray;
 import android.view.Display;
@@ -86,8 +85,6 @@ public class NavigationBarController implements Callbacks,
         ConfigurationController.ConfigurationListener,
         NavigationModeController.ModeChangedListener, Dumpable {
 
-    private static final float TABLET_MIN_DPS = 600;
-
     private static final String TAG = NavigationBarController.class.getSimpleName();
 
     private final Context mContext;
@@ -107,18 +104,19 @@ public class NavigationBarController implements Callbacks,
     private final Optional<Pip> mPipOptional;
     private final Optional<LegacySplitScreen> mSplitScreenOptional;
     private final Optional<Recents> mRecentsOptional;
-    private final Lazy<StatusBar> mStatusBarLazy;
+    private final Lazy<Optional<StatusBar>> mStatusBarOptionalLazy;
     private final ShadeController mShadeController;
     private final NotificationRemoteInputManager mNotificationRemoteInputManager;
     private final SystemActions mSystemActions;
     private final UiEventLogger mUiEventLogger;
     private final Handler mHandler;
+    private final NavigationBarA11yHelper mNavigationBarA11yHelper;
     private final DisplayManager mDisplayManager;
     private final NavigationBarOverlayController mNavBarOverlayController;
     private final TaskbarDelegate mTaskbarDelegate;
     private final NotificationShadeDepthController mNotificationShadeDepthController;
     private int mNavMode;
-    private boolean mIsTablet;
+    @VisibleForTesting boolean mIsTablet;
     private final UserTracker mUserTracker;
 
     /** A displayId - nav bar maps. */
@@ -148,7 +146,7 @@ public class NavigationBarController implements Callbacks,
             Optional<Pip> pipOptional,
             Optional<LegacySplitScreen> splitScreenOptional,
             Optional<Recents> recentsOptional,
-            Lazy<StatusBar> statusBarLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             ShadeController shadeController,
             NotificationRemoteInputManager notificationRemoteInputManager,
             NotificationShadeDepthController notificationShadeDepthController,
@@ -157,6 +155,8 @@ public class NavigationBarController implements Callbacks,
             UiEventLogger uiEventLogger,
             NavigationBarOverlayController navBarOverlayController,
             ConfigurationController configurationController,
+            NavigationBarA11yHelper navigationBarA11yHelper,
+            TaskbarDelegate taskbarDelegate,
             UserTracker userTracker) {
         mContext = context;
         mWindowManager = windowManager;
@@ -175,13 +175,14 @@ public class NavigationBarController implements Callbacks,
         mPipOptional = pipOptional;
         mSplitScreenOptional = splitScreenOptional;
         mRecentsOptional = recentsOptional;
-        mStatusBarLazy = statusBarLazy;
+        mStatusBarOptionalLazy = statusBarOptionalLazy;
         mShadeController = shadeController;
         mNotificationRemoteInputManager = notificationRemoteInputManager;
         mNotificationShadeDepthController = notificationShadeDepthController;
         mSystemActions = systemActions;
         mUiEventLogger = uiEventLogger;
         mHandler = mainHandler;
+        mNavigationBarA11yHelper = navigationBarA11yHelper;
         mDisplayManager = mContext.getSystemService(DisplayManager.class);
         commandQueue.addCallback(this);
         configurationController.addCallback(this);
@@ -189,15 +190,17 @@ public class NavigationBarController implements Callbacks,
         mNavBarOverlayController = navBarOverlayController;
         mNavMode = mNavigationModeController.addListener(this);
         mNavigationModeController.addListener(this);
-        mTaskbarDelegate = new TaskbarDelegate(mOverviewProxyService);
-        mIsTablet = isTablet(mContext.getResources().getConfiguration());
+        mTaskbarDelegate = taskbarDelegate;
+        mTaskbarDelegate.setOverviewProxyService(overviewProxyService,
+                navigationBarA11yHelper, mSysUiFlagsContainer);
+        mIsTablet = isTablet(mContext);
         mUserTracker = userTracker;
     }
 
     @Override
     public void onConfigChanged(Configuration newConfig) {
         boolean isOldConfigTablet = mIsTablet;
-        mIsTablet = isTablet(newConfig);
+        mIsTablet = isTablet(newConfig, mContext);
         boolean largeScreenChanged = mIsTablet != isOldConfigTablet;
         // If we folded/unfolded while in 3 button, show navbar in folded state, hide in unfolded
         if (largeScreenChanged && updateNavbarForTaskbar()) {
@@ -237,25 +240,28 @@ public class NavigationBarController implements Callbacks,
         });
     }
 
-    /**
-     * @return {@code true} if navbar was added/removed, false otherwise
-     */
-    public boolean updateNavbarForTaskbar() {
-        if (!isThreeButtonTaskbarFlagEnabled()) {
-            return false;
+    /** @see #initializeTaskbarIfNecessary() */
+    private boolean updateNavbarForTaskbar() {
+        boolean taskbarShown = initializeTaskbarIfNecessary();
+        if (!taskbarShown && mNavigationBars.get(mContext.getDisplayId()) == null) {
+            createNavigationBar(mContext.getDisplay(), null, null);
         }
+        return taskbarShown;
+    }
 
-        if (mIsTablet && mNavMode == NAV_BAR_MODE_3BUTTON) {
+    /** @return {@code true} if taskbar is enabled, false otherwise */
+    private boolean initializeTaskbarIfNecessary() {
+        boolean isShowingTaskbar = mIsTablet && mNavMode == NAV_BAR_MODE_3BUTTON;
+        if (isShowingTaskbar) {
             // Remove navigation bar when taskbar is showing, currently only for 3 button mode
             removeNavigationBar(mContext.getDisplayId());
             mCommandQueue.addCallback(mTaskbarDelegate);
-        } else if (mNavigationBars.get(mContext.getDisplayId()) == null) {
-            // Add navigation bar after taskbar goes away
-            createNavigationBar(mContext.getDisplay(), null, null);
+            mTaskbarDelegate.init(mContext.getDisplayId());
+        } else {
             mCommandQueue.removeCallback(mTaskbarDelegate);
+            mTaskbarDelegate.destroy();
         }
-
-        return true;
+        return isShowingTaskbar;
     }
 
     @Override
@@ -266,7 +272,7 @@ public class NavigationBarController implements Callbacks,
     @Override
     public void onDisplayReady(int displayId) {
         Display display = mDisplayManager.getDisplay(displayId);
-        mIsTablet = isTablet(mContext.getResources().getConfiguration());
+        mIsTablet = isTablet(mContext);
         createNavigationBar(display, null /* savedState */, null /* result */);
     }
 
@@ -302,7 +308,7 @@ public class NavigationBarController implements Callbacks,
      */
     public void createNavigationBars(final boolean includeDefaultDisplay,
             RegisterStatusBarResult result) {
-        if (updateNavbarForTaskbar()) {
+        if (initializeTaskbarIfNecessary()) {
             return;
         }
 
@@ -326,7 +332,7 @@ public class NavigationBarController implements Callbacks,
             return;
         }
 
-        if (isThreeButtonTaskbarEnabled()) {
+        if (mIsTablet && mNavMode == NAV_BAR_MODE_3BUTTON) {
             return;
         }
 
@@ -363,7 +369,7 @@ public class NavigationBarController implements Callbacks,
                 mPipOptional,
                 mSplitScreenOptional,
                 mRecentsOptional,
-                mStatusBarLazy,
+                mStatusBarOptionalLazy,
                 mShadeController,
                 mNotificationRemoteInputManager,
                 mNotificationShadeDepthController,
@@ -371,6 +377,7 @@ public class NavigationBarController implements Callbacks,
                 mHandler,
                 mNavBarOverlayController,
                 mUiEventLogger,
+                mNavigationBarA11yHelper,
                 mUserTracker);
         mNavigationBars.put(displayId, navBar);
 
@@ -395,7 +402,6 @@ public class NavigationBarController implements Callbacks,
     void removeNavigationBar(int displayId) {
         NavigationBar navBar = mNavigationBars.get(displayId);
         if (navBar != null) {
-            navBar.setAutoHideController(/* autoHideController */ null);
             navBar.destroyView();
             mNavigationBars.remove(displayId);
         }
@@ -460,24 +466,6 @@ public class NavigationBarController implements Callbacks,
     @Nullable
     public NavigationBar getDefaultNavigationBar() {
         return mNavigationBars.get(DEFAULT_DISPLAY);
-    }
-
-    private boolean isThreeButtonTaskbarEnabled() {
-        return mIsTablet && mNavMode == NAV_BAR_MODE_3BUTTON &&
-                isThreeButtonTaskbarFlagEnabled();
-    }
-
-    private boolean isThreeButtonTaskbarFlagEnabled() {
-        return SystemProperties.getBoolean("persist.debug.taskbar_three_button", false);
-    }
-
-    private boolean isTablet(Configuration newConfig) {
-        float density = Resources.getSystem().getDisplayMetrics().density;
-        int size = Math.min((int) (density * newConfig.screenWidthDp),
-                (int) (density* newConfig.screenHeightDp));
-        DisplayMetrics metrics = mContext.getResources().getDisplayMetrics();
-        float densityRatio = (float) metrics.densityDpi / DisplayMetrics.DENSITY_DEFAULT;
-        return (size / densityRatio) >= TABLET_MIN_DPS;
     }
 
     @Override

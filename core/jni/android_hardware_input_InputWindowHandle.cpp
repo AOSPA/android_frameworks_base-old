@@ -26,13 +26,16 @@
 #include <ui/Region.h>
 #include <utils/threads.h>
 
+#include <gui/WindowInfo.h>
 #include "android_hardware_input_InputApplicationHandle.h"
 #include "android_util_Binder.h"
 #include "core_jni_helpers.h"
-#include "input/InputWindow.h"
 #include "jni.h"
 
 namespace android {
+
+using gui::TouchOcclusionMode;
+using gui::WindowInfo;
 
 struct WeakRefHandleField {
     jfieldID ctrl;
@@ -66,7 +69,6 @@ static struct {
     jfieldID packageName;
     jfieldID inputFeatures;
     jfieldID displayId;
-    jfieldID portalToDisplayId;
     jfieldID replaceTouchableRegionWithCrop;
     WeakRefHandleField touchableRegionSurfaceControl;
 } gInputWindowHandleClassInfo;
@@ -115,9 +117,9 @@ bool NativeInputWindowHandle::updateInfo() {
 
     mInfo.name = getStringField(env, obj, gInputWindowHandleClassInfo.name, "<null>");
 
-    mInfo.flags = Flags<InputWindowInfo::Flag>(
+    mInfo.flags = Flags<WindowInfo::Flag>(
             env->GetIntField(obj, gInputWindowHandleClassInfo.layoutParamsFlags));
-    mInfo.type = static_cast<InputWindowInfo::Type>(
+    mInfo.type = static_cast<WindowInfo::Type>(
             env->GetIntField(obj, gInputWindowHandleClassInfo.layoutParamsType));
     mInfo.dispatchingTimeout = std::chrono::milliseconds(
             env->GetLongField(obj, gInputWindowHandleClassInfo.dispatchingTimeoutMillis));
@@ -159,12 +161,10 @@ bool NativeInputWindowHandle::updateInfo() {
     mInfo.ownerUid = env->GetIntField(obj,
             gInputWindowHandleClassInfo.ownerUid);
     mInfo.packageName = getStringField(env, obj, gInputWindowHandleClassInfo.packageName, "<null>");
-    mInfo.inputFeatures = static_cast<InputWindowInfo::Feature>(
+    mInfo.inputFeatures = static_cast<WindowInfo::Feature>(
             env->GetIntField(obj, gInputWindowHandleClassInfo.inputFeatures));
     mInfo.displayId = env->GetIntField(obj,
             gInputWindowHandleClassInfo.displayId);
-    mInfo.portalToDisplayId = env->GetIntField(obj,
-            gInputWindowHandleClassInfo.portalToDisplayId);
 
     jobject inputApplicationHandleObj = env->GetObjectField(obj,
             gInputWindowHandleClassInfo.inputApplicationHandle);
@@ -347,9 +347,6 @@ int register_android_view_InputWindowHandle(JNIEnv* env) {
 
     GET_FIELD_ID(gInputWindowHandleClassInfo.displayId, clazz,
             "displayId", "I");
-
-    GET_FIELD_ID(gInputWindowHandleClassInfo.portalToDisplayId, clazz,
-            "portalToDisplayId", "I");
 
     GET_FIELD_ID(gInputWindowHandleClassInfo.replaceTouchableRegionWithCrop, clazz,
             "replaceTouchableRegionWithCrop", "Z");

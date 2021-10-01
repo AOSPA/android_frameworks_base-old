@@ -2320,14 +2320,16 @@ public class NotificationManagerService extends SystemService {
 
         mUserProfiles.updateCache(getContext());
 
-        telephonyManager.listen(new PhoneStateListener() {
-            @Override
-            public void onCallStateChanged(int state, String incomingNumber) {
-                if (mCallState == state) return;
-                if (DBG) Slog.d(TAG, "Call state changed: " + callStateToString(state));
-                mCallState = state;
-            }
-        }, PhoneStateListener.LISTEN_CALL_STATE);
+        if (mPackageManagerClient.hasSystemFeature(PackageManager.FEATURE_TELEPHONY)) {
+            telephonyManager.listen(new PhoneStateListener() {
+                @Override
+                public void onCallStateChanged(int state, String incomingNumber) {
+                    if (mCallState == state) return;
+                    if (DBG) Slog.d(TAG, "Call state changed: " + callStateToString(state));
+                    mCallState = state;
+                }
+            }, PhoneStateListener.LISTEN_CALL_STATE);
+        }
 
         mSettingsObserver = new SettingsObserver(mHandler);
 
@@ -4363,8 +4365,7 @@ public class NotificationManagerService extends SystemService {
                             final int userId = r.getSbn().getUserId();
                             if (userId != info.userid && userId != UserHandle.USER_ALL &&
                                     !mUserProfiles.isCurrentProfile(userId)) {
-                                throw new SecurityException("Disallowed call from listener: "
-                                        + info.service);
+                                continue;
                             }
                             cancelNotificationFromListenerLocked(info, callingUid, callingPid,
                                     r.getSbn().getPackageName(), r.getSbn().getTag(),
@@ -4431,8 +4432,7 @@ public class NotificationManagerService extends SystemService {
                         final int userId = r.getSbn().getUserId();
                         if (userId != info.userid && userId != UserHandle.USER_ALL
                                 && !mUserProfiles.isCurrentProfile(userId)) {
-                            throw new SecurityException("Disallowed call from listener: "
-                                    + info.service);
+                            continue;
                         }
                         seen.add(r);
                         if (!r.isSeen()) {

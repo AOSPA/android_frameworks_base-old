@@ -57,9 +57,9 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.settings.UserTracker;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
 import com.android.systemui.util.settings.SecureSettings;
@@ -324,6 +324,11 @@ public class ThemeOverlayController extends SystemUI implements Dumpable {
         }
 
         mDeviceProvisionedController.addCallback(mDeviceProvisionedListener);
+
+        // All wallpaper color and keyguard logic only applies when Monet is enabled.
+        if (!mIsMonetEnabled) {
+            return;
+        }
 
         // Upon boot, make sure we have the most up to date colors
         Runnable updateColors = () -> {

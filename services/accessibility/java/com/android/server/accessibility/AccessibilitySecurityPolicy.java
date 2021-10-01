@@ -444,8 +444,10 @@ public class AccessibilitySecurityPolicy {
     private boolean isValidPackageForUid(String packageName, int uid) {
         final long token = Binder.clearCallingIdentity();
         try {
+            // Since we treat calls from a profile as if made by its parent, using
+            // MATCH_ANY_USER to query the uid of the given package name.
             return uid == mPackageManager.getPackageUidAsUser(
-                    packageName, UserHandle.getUserId(uid));
+                    packageName, PackageManager.MATCH_ANY_USER, UserHandle.getUserId(uid));
         } catch (PackageManager.NameNotFoundException e) {
             return false;
         } finally {
@@ -534,7 +536,8 @@ public class AccessibilitySecurityPolicy {
 
         int servicePackageUid = serviceInfo.applicationInfo.uid;
         if (mAppOpsManager.noteOpNoThrow(AppOpsManager.OPSTR_BIND_ACCESSIBILITY_SERVICE,
-                servicePackageUid, serviceInfo.packageName) != AppOpsManager.MODE_ALLOWED) {
+                servicePackageUid, serviceInfo.packageName, null, null)
+                != AppOpsManager.MODE_ALLOWED) {
             Slog.w(LOG_TAG, "Skipping accessibility service " + new ComponentName(
                     serviceInfo.packageName, serviceInfo.name).flattenToShortString()
                     + ": disallowed by AppOps");
@@ -559,17 +562,21 @@ public class AccessibilitySecurityPolicy {
             return true;
         }
 
-        final int uid = resolveInfo.serviceInfo.applicationInfo.uid;
+        final int servicePackageUid = resolveInfo.serviceInfo.applicationInfo.uid;
+        final int callingPid = Binder.getCallingPid();
         final long identityToken = Binder.clearCallingIdentity();
+        final String attributionTag = service.getAttributionTag();
         try {
             // For the caller is system, just block the data to a11y services.
-            if (OWN_PROCESS_ID == Binder.getCallingPid()) {
+            if (OWN_PROCESS_ID == callingPid) {
                 return mAppOpsManager.noteOpNoThrow(AppOpsManager.OPSTR_ACCESS_ACCESSIBILITY,
-                        uid, packageName) == AppOpsManager.MODE_ALLOWED;
+                        servicePackageUid, packageName, attributionTag, null)
+                        == AppOpsManager.MODE_ALLOWED;
             }
 
             return mAppOpsManager.noteOp(AppOpsManager.OPSTR_ACCESS_ACCESSIBILITY,
-                    uid, packageName) == AppOpsManager.MODE_ALLOWED;
+                    servicePackageUid, packageName, attributionTag, null)
+                    == AppOpsManager.MODE_ALLOWED;
         } finally {
             Binder.restoreCallingIdentity(identityToken);
         }

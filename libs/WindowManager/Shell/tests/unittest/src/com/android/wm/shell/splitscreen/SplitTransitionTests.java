@@ -102,7 +102,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mMainStage = new MainStage(mTaskOrganizer, DEFAULT_DISPLAY, mock(
                 StageTaskListener.StageListenerCallbacks.class), mSyncQueue, mSurfaceSession);
         mMainStage.onTaskAppeared(new TestRunningTaskInfoBuilder().build(), createMockSurface());
-        mSideStage = new SideStage(mTaskOrganizer, DEFAULT_DISPLAY, mock(
+        mSideStage = new SideStage(mContext, mTaskOrganizer, DEFAULT_DISPLAY, mock(
                 StageTaskListener.StageListenerCallbacks.class), mSyncQueue, mSurfaceSession);
         mSideStage.onTaskAppeared(new TestRunningTaskInfoBuilder().build(), createMockSurface());
         mStageCoordinator = new SplitTestUtils.TestStageCoordinator(mContext, DEFAULT_DISPLAY,
@@ -130,6 +130,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mMainStage.onTaskAppeared(mMainChild, createMockSurface());
         mSideStage.onTaskAppeared(mSideChild, createMockSurface());
         boolean accepted = mStageCoordinator.startAnimation(transition, info,
+                mock(SurfaceControl.Transaction.class),
                 mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         assertTrue(accepted);
@@ -168,6 +169,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mSideStage.onTaskAppeared(newTask, createMockSurface());
         boolean accepted = mStageCoordinator.startAnimation(transition, info,
                 mock(SurfaceControl.Transaction.class),
+                mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         assertFalse(accepted);
         assertTrue(mStageCoordinator.isSplitScreenVisible());
@@ -187,6 +189,7 @@ public class SplitTransitionTests extends ShellTestCase {
         info.addChange(closeChange);
         mSideStage.onTaskVanished(newTask);
         accepted = mStageCoordinator.startAnimation(transition, info,
+                mock(SurfaceControl.Transaction.class),
                 mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         assertFalse(accepted);
@@ -223,6 +226,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mSideStage.onTaskVanished(mSideChild);
         mStageCoordinator.startAnimation(transition, info,
                 mock(SurfaceControl.Transaction.class),
+                mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         assertFalse(mStageCoordinator.isSplitScreenVisible());
     }
@@ -243,6 +247,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mMainStage.onTaskVanished(mMainChild);
         mSideStage.onTaskVanished(mSideChild);
         boolean accepted = mStageCoordinator.startAnimation(transition, info,
+                mock(SurfaceControl.Transaction.class),
                 mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         assertTrue(accepted);
@@ -274,6 +279,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mSideStage.onTaskVanished(mSideChild);
         boolean accepted = mStageCoordinator.startAnimation(transition, info,
                 mock(SurfaceControl.Transaction.class),
+                mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         assertTrue(accepted);
         assertFalse(mStageCoordinator.isSplitScreenVisible());
@@ -297,6 +303,7 @@ public class SplitTransitionTests extends ShellTestCase {
         mMainStage.onTaskAppeared(mMainChild, createMockSurface());
         mSideStage.onTaskAppeared(mSideChild, createMockSurface());
         mStageCoordinator.startAnimation(enterTransit, enterInfo,
+                mock(SurfaceControl.Transaction.class),
                 mock(SurfaceControl.Transaction.class),
                 mock(Transitions.TransitionFinishCallback.class));
         mMainStage.activate(new Rect(0, 0, 100, 100), new WindowContainerTransaction());
@@ -335,10 +342,11 @@ public class SplitTransitionTests extends ShellTestCase {
 
         @Override
         public void startAnimation(IBinder transition, TransitionInfo info,
-                SurfaceControl.Transaction t, IRemoteTransitionFinishedCallback finishCallback)
+                SurfaceControl.Transaction startTransaction,
+                IRemoteTransitionFinishedCallback finishCallback)
                 throws RemoteException {
             mCalled = true;
-            finishCallback.onTransitionFinished(mRemoteFinishWCT);
+            finishCallback.onTransitionFinished(mRemoteFinishWCT, null /* sct */);
         }
 
         @Override

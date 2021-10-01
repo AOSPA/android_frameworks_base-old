@@ -171,7 +171,11 @@ public class MediaRecorder implements AudioRouting,
     }
 
     /**
+     *
      * Sets the {@link LogSessionId} for MediaRecorder.
+     *
+     * <p>The log session ID is a random 32-byte hexadecimal string that is used for monitoring the
+     * MediaRecorder performance.</p>
      *
      * @param id the global ID for monitoring the MediaRecorder performance
      */

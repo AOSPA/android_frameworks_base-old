@@ -76,6 +76,10 @@ platform_bootclasspath {
             module: "com.android.mediaprovider-bootclasspath-fragment",
         },
         {
+            apex: "com.android.nearby",
+            module: "com.android.nearby-bootclasspath-fragment",
+        },
+        {
             apex: "com.android.os.statsd",
             module: "com.android.os.statsd-bootclasspath-fragment",
         },
@@ -94,6 +98,10 @@ platform_bootclasspath {
         {
             apex: "com.android.tethering",
             module: "com.android.tethering-bootclasspath-fragment",
+        },
+        {
+            apex: "com.android.uwb",
+            module: "com.android.uwb-bootclasspath-fragment",
         },
         {
             apex: "com.android.wifi",

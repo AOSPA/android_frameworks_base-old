@@ -51,7 +51,11 @@ import dagger.multibindings.IntoMap;
 /**
  * SystemUI objects that are injectable should go here.
  */
-@Module(includes = {RecentsModule.class, StatusBarModule.class, KeyguardModule.class})
+@Module(includes = {
+        RecentsModule.class,
+        StatusBarModule.class,
+        KeyguardModule.class,
+})
 public abstract class SystemUIBinder {
     /** Inject into AuthController. */
     @Binds

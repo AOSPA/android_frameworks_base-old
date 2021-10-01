@@ -16,8 +16,8 @@
 
 package com.android.systemui.qs
 
+import android.test.suitebuilder.annotation.SmallTest
 import android.testing.AndroidTestingRunner
-import androidx.test.filters.SmallTest
 import com.android.internal.logging.MetricsLogger
 import com.android.internal.logging.testing.UiEventLoggerFake
 import com.android.systemui.SysuiTestCase
@@ -27,7 +27,7 @@ import com.android.systemui.plugins.qs.QSTile
 import com.android.systemui.plugins.qs.QSTileView
 import com.android.systemui.qs.customize.QSCustomizerController
 import com.android.systemui.qs.logging.QSLogger
-import com.android.systemui.statusbar.FeatureFlags
+import com.android.systemui.flags.FeatureFlags
 import org.junit.After
 import org.junit.Before
 import org.junit.Test
@@ -66,6 +66,10 @@ class QuickQSPanelControllerTest : SysuiTestCase() {
     private lateinit var tileView: QSTileView
     @Mock
     private lateinit var featureFlags: FeatureFlags
+    @Mock
+    private lateinit var quickQsBrightnessController: QuickQSBrightnessController
+    @Mock
+    private lateinit var footerActionsController: FooterActionsController
 
     private lateinit var controller: QuickQSPanelController
 
@@ -75,6 +79,7 @@ class QuickQSPanelControllerTest : SysuiTestCase() {
 
         `when`(quickQSPanel.tileLayout).thenReturn(tileLayout)
         `when`(quickQSPanel.dumpableTag).thenReturn("")
+        `when`(quickQSPanel.resources).thenReturn(mContext.resources)
         `when`(qsTileHost.createTileView(any(), any(), anyBoolean())).thenReturn(tileView)
 
         controller = QuickQSPanelController(
@@ -87,7 +92,8 @@ class QuickQSPanelControllerTest : SysuiTestCase() {
                 uiEventLogger,
                 qsLogger,
                 dumpManager,
-                featureFlags
+                quickQsBrightnessController,
+                footerActionsController
         )
 
         controller.init()

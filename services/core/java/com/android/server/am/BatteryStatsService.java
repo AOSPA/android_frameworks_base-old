@@ -492,9 +492,9 @@ public final class BatteryStatsService extends IBatteryStats.Stub
         final PowerManagerInternal powerMgr = LocalServices.getService(PowerManagerInternal.class);
         powerMgr.registerLowPowerModeObserver(this);
         synchronized (mStats) {
-            mStats.notePowerSaveModeLocked(
+            mStats.notePowerSaveModeLockedInit(
                     powerMgr.getLowPowerState(ServiceType.BATTERY_STATS).batterySaverEnabled,
-                    SystemClock.elapsedRealtime(), SystemClock.uptimeMillis(), true);
+                    SystemClock.elapsedRealtime(), SystemClock.uptimeMillis());
         }
         (new WakeupReasonThread()).start();
     }
@@ -537,7 +537,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
             mHandler.post(() -> {
                 synchronized (mStats) {
                     mStats.notePowerSaveModeLocked(result.batterySaverEnabled,
-                            elapsedRealtime, uptime, false);
+                            elapsedRealtime, uptime);
                 }
             });
         }
@@ -1984,7 +1984,7 @@ public final class BatteryStatsService extends IBatteryStats.Stub
     }
 
     @Override
-    public void noteResetBleScan() {
+    public void noteBleScanReset() {
         enforceCallingPermission();
         synchronized (mLock) {
             final long elapsedRealtime = SystemClock.elapsedRealtime();

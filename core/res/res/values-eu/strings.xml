@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"markatu gabe"</string>
     <string name="selected" msgid="6614607926197755875">"hautatuta"</string>
     <string name="not_selected" msgid="410652016565864475">"hautatu gabe"</string>
+    <string name="in_progress" msgid="2149208189184319441">"abian"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Gauzatu ekintza hau erabilita:"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Osatu ekintza %1$s erabiliz"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Osatu ekintza"</string>

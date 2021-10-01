@@ -152,7 +152,6 @@ import android.util.Slog;
 import android.util.SparseArray;
 import android.util.TimeUtils;
 import android.util.TypedValue;
-import android.util.imetracing.ImeTracing;
 import android.util.proto.ProtoOutputStream;
 import android.view.InputDevice.InputSourceClass;
 import android.view.InsetsState.InternalInsetsType;
@@ -193,6 +192,7 @@ import com.android.internal.R;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.drawable.BackgroundBlurDrawable;
+import com.android.internal.inputmethod.ImeTracing;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.os.IResultReceiver;
 import com.android.internal.os.SomeArgs;
@@ -254,11 +254,11 @@ public final class ViewRootImpl implements ViewParent,
     private static final boolean MT_RENDERER_AVAILABLE = true;
 
     /**
-     * Whether or not to report end-to-end input latency. Disabled temporarily as a
+     * Whether or not to report end-to-end input latency. Can be disabled temporarily as a
      * risk mitigation against potential jank caused by acquiring a weak reference
-     * per frame
+     * per frame.
      */
-    private static final boolean ENABLE_INPUT_LATENCY_TRACKING = false;
+    private static final boolean ENABLE_INPUT_LATENCY_TRACKING = true;
 
     /**
      * Set this system property to true to force the view hierarchy to render
@@ -291,6 +291,21 @@ public final class ViewRootImpl implements ViewParent,
      * Maximum time to wait for {@link View#dispatchScrollCaptureSearch} to complete.
      */
     private static final int SCROLL_CAPTURE_REQUEST_TIMEOUT_MILLIS = 2500;
+
+    /**
+     * If set to {@code true}, the new logic to layout system bars as normal window and to use
+     * layout result to get insets will be applied. Otherwise, the old hard-coded window logic will
+     * be applied.
+     */
+    private static final String USE_FLEXIBLE_INSETS = "persist.debug.flexible_insets";
+
+    /**
+     * A flag to indicate to use the new generalized insets window logic, or the old hard-coded
+     * insets window layout logic.
+     * {@hide}
+     */
+    public static final boolean INSETS_LAYOUT_GENERALIZATION =
+            SystemProperties.getBoolean(USE_FLEXIBLE_INSETS, true);
 
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
     static final ThreadLocal<HandlerActionQueue> sRunQueues = new ThreadLocal<HandlerActionQueue>();
@@ -389,6 +404,8 @@ public final class ViewRootImpl implements ViewParent,
     View mView;
 
     View mAccessibilityFocusedHost;
+    // Accessibility-focused virtual view. The bounds and sourceNodeId of
+    // mAccessibilityFocusedVirtualView is up-to-date while other fields may be stale.
     AccessibilityNodeInfo mAccessibilityFocusedVirtualView;
 
     // True if the window currently has pointer capture enabled.
@@ -1120,7 +1137,7 @@ public final class ViewRootImpl implements ViewParent,
                     controlInsetsForCompatibility(mWindowAttributes);
                     res = mWindowSession.addToDisplayAsUser(mWindow, mWindowAttributes,
                             getHostVisibility(), mDisplay.getDisplayId(), userId,
-                            mInsetsController.getRequestedVisibility(), inputChannel, mTempInsets,
+                            mInsetsController.getRequestedVisibilities(), inputChannel, mTempInsets,
                             mTempControls);
                     if (mTranslator != null) {
                         mTranslator.translateInsetsStateInScreenToAppWindow(mTempInsets);
@@ -2505,6 +2522,14 @@ public final class ViewRootImpl implements ViewParent,
                 || lp.type == TYPE_VOLUME_OVERLAY;
     }
 
+    private Rect getWindowBoundsInsetSystemBars() {
+        final Rect bounds = new Rect(
+                mContext.getResources().getConfiguration().windowConfiguration.getBounds());
+        bounds.inset(mInsetsController.getState().calculateInsets(
+                bounds, Type.systemBars(), false /* ignoreVisibility */));
+        return bounds;
+    }
+
     int dipToPx(int dip) {
         final DisplayMetrics displayMetrics = mContext.getResources().getDisplayMetrics();
         return (int) (displayMetrics.density * dip + 0.5f);
@@ -2591,8 +2616,9 @@ public final class ViewRootImpl implements ViewParent,
                     || lp.height == ViewGroup.LayoutParams.WRAP_CONTENT) {
                 // For wrap content, we have to remeasure later on anyways. Use size consistent with
                 // below so we get best use of the measure cache.
-                desiredWindowWidth = dipToPx(config.screenWidthDp);
-                desiredWindowHeight = dipToPx(config.screenHeightDp);
+                final Rect bounds = getWindowBoundsInsetSystemBars();
+                desiredWindowWidth = bounds.width();
+                desiredWindowHeight = bounds.height();
             } else {
                 // After addToDisplay, the frame contains the frameHint from window manager, which
                 // for most windows is going to be the same size as the result of relayoutWindow.
@@ -2669,9 +2695,9 @@ public final class ViewRootImpl implements ViewParent,
                         desiredWindowWidth = size.x;
                         desiredWindowHeight = size.y;
                     } else {
-                        Configuration config = res.getConfiguration();
-                        desiredWindowWidth = dipToPx(config.screenWidthDp);
-                        desiredWindowHeight = dipToPx(config.screenHeightDp);
+                        final Rect bounds = getWindowBoundsInsetSystemBars();
+                        desiredWindowWidth = bounds.width();
+                        desiredWindowHeight = bounds.height();
                     }
                 }
             }
@@ -4816,6 +4842,9 @@ public final class ViewRootImpl implements ViewParent,
     }
 
     /**
+     * Get accessibility-focused virtual view. The bounds and sourceNodeId of the returned node is
+     * up-to-date while other fields may be stale.
+     *
      * @hide
      */
     @UnsupportedAppUsage
@@ -9917,7 +9946,10 @@ public final class ViewRootImpl implements ViewParent,
         if (!mUseMTRenderer) {
             return;
         }
-        mWindowDrawCountDown = new CountDownLatch(mWindowCallbacks.size());
+        // Only wait if it will report next draw.
+        if (mReportNextDraw) {
+            mWindowDrawCountDown = new CountDownLatch(mWindowCallbacks.size());
+        }
         for (int i = mWindowCallbacks.size() - 1; i >= 0; i--) {
             mWindowCallbacks.get(i).onRequestDraw(mReportNextDraw);
         }

@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"तपासले नाही"</string>
     <string name="selected" msgid="6614607926197755875">"निवडला"</string>
     <string name="not_selected" msgid="410652016565864475">"निवडला नाही"</string>
+    <string name="in_progress" msgid="2149208189184319441">"प्रगतीपथावर आहे"</string>
     <string name="whichApplication" msgid="5432266899591255759">"याचा वापर करून क्रिया पूर्ण करा"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"%1$s वापरून क्रिया पूर्ण करा"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"क्रिया पूर्ण झाली"</string>

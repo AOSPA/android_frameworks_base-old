@@ -84,6 +84,7 @@ public class SettingsToPropertiesMapper {
         DeviceConfig.NAMESPACE_CONNECTIVITY,
         DeviceConfig.NAMESPACE_INPUT_NATIVE_BOOT,
         DeviceConfig.NAMESPACE_INTELLIGENCE_CONTENT_SUGGESTIONS,
+        DeviceConfig.NAMESPACE_LMKD_NATIVE,
         DeviceConfig.NAMESPACE_MEDIA_NATIVE,
         DeviceConfig.NAMESPACE_NETD_NATIVE,
         DeviceConfig.NAMESPACE_PROFCOLLECT_NATIVE_BOOT,
@@ -92,6 +93,8 @@ public class SettingsToPropertiesMapper {
         DeviceConfig.NAMESPACE_STATSD_NATIVE,
         DeviceConfig.NAMESPACE_STATSD_NATIVE_BOOT,
         DeviceConfig.NAMESPACE_STORAGE_NATIVE_BOOT,
+        DeviceConfig.NAMESPACE_SURFACE_FLINGER_NATIVE_BOOT,
+        DeviceConfig.NAMESPACE_SWCODEC_NATIVE,
         DeviceConfig.NAMESPACE_WINDOW_MANAGER_NATIVE_BOOT,
     };
 

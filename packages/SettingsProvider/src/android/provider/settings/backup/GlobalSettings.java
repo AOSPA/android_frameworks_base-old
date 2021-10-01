@@ -40,6 +40,9 @@ public class GlobalSettings {
     public static final String[] SETTINGS_TO_BACKUP = {
         Settings.Global.APPLY_RAMPING_RINGER,
         Settings.Global.BUGREPORT_IN_POWER_MENU,
+        Settings.Global.CLOCKWORK_SYSUI_PACKAGE_NAME,
+        Settings.Global.CLOCKWORK_SYSUI_MAIN_ACTIVITY_NAME,
+        Settings.Global.CLOCKWORK_HOME_READY,
         Settings.Global.STAY_ON_WHILE_PLUGGED_IN,
         Settings.Global.APP_AUTO_RESTRICTION_ENABLED,
         Settings.Global.AUTO_TIME,
@@ -76,5 +79,7 @@ public class GlobalSettings {
         Settings.Global.ARE_USER_DISABLED_HDR_FORMATS_ALLOWED,
         Settings.Global.DEVICE_CONFIG_SYNC_DISABLED,
         Settings.Global.POWER_BUTTON_LONG_PRESS,
+        Settings.Global.AUTOMATIC_POWER_SAVE_MODE,
+        Settings.Global.ADVANCED_BATTERY_USAGE_AMOUNT,
     };
 }

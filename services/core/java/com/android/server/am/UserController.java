@@ -425,6 +425,7 @@ class UserController implements Handler.Callback {
     }
 
     @GuardedBy("mLock")
+    @VisibleForTesting
     List<Integer> getRunningUsersLU() {
         ArrayList<Integer> runningUsers = new ArrayList<>();
         for (Integer userId : mUserLru) {
@@ -450,7 +451,7 @@ class UserController implements Handler.Callback {
     }
 
     @GuardedBy("mLock")
-    void stopRunningUsersLU(int maxRunningUsers) {
+    private void stopRunningUsersLU(int maxRunningUsers) {
         List<Integer> currentlyRunning = getRunningUsersLU();
         Iterator<Integer> iterator = currentlyRunning.iterator();
         while (currentlyRunning.size() > maxRunningUsers && iterator.hasNext()) {
@@ -590,7 +591,11 @@ class UserController implements Handler.Callback {
                 Slogf.w(TAG, "User key got locked unexpectedly, leaving user locked.");
                 return;
             }
+
+            final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+            t.traceBegin("UM.onBeforeUnlockUser-" + userId);
             mInjector.getUserManager().onBeforeUnlockUser(userId);
+            t.traceEnd();
             synchronized (mLock) {
                 // Do not proceed if unexpected state
                 if (!uss.setState(STATE_RUNNING_LOCKED, STATE_RUNNING_UNLOCKING)) {
@@ -612,7 +617,7 @@ class UserController implements Handler.Callback {
      * Step from {@link UserState#STATE_RUNNING_UNLOCKING} to
      * {@link UserState#STATE_RUNNING_UNLOCKED}.
      */
-    void finishUserUnlocked(final UserState uss) {
+    private void finishUserUnlocked(final UserState uss) {
         final int userId = uss.mHandle.getIdentifier();
         EventLog.writeEvent(EventLogTags.UC_FINISH_USER_UNLOCKED, userId);
         // Only keep marching forward if user is actually unlocked
@@ -907,7 +912,7 @@ class UserController implements Handler.Callback {
     private void stopSingleUserLU(final int userId, boolean allowDelayedLocking,
             final IStopUserCallback stopUserCallback,
             KeyEvictedCallback keyEvictedCallback) {
-        if (DEBUG_MU) Slogf.i(TAG, "stopSingleUserLocked userId=" + userId);
+        Slogf.i(TAG, "stopSingleUserLU userId=" + userId);
         final UserState uss = mStartedUsers.get(userId);
         if (uss == null) {  // User is not started
             // If mDelayUserDataLocking is set and allowDelayedLocking is not set, we need to lock
@@ -1000,7 +1005,7 @@ class UserController implements Handler.Callback {
         }
     }
 
-    void finishUserStopping(final int userId, final UserState uss,
+    private void finishUserStopping(final int userId, final UserState uss,
             final boolean allowDelayedLocking) {
         EventLog.writeEvent(EventLogTags.UC_FINISH_USER_STOPPING, userId);
         synchronized (mLock) {
@@ -1041,6 +1046,7 @@ class UserController implements Handler.Callback {
                 Binder.getCallingPid(), userId);
     }
 
+    @VisibleForTesting
     void finishUserStopped(UserState uss, boolean allowDelayedLocking) {
         final int userId = uss.mHandle.getIdentifier();
         if (DEBUG_MU) {
@@ -1264,7 +1270,7 @@ class UserController implements Handler.Callback {
         });
     }
 
-    void startProfiles() {
+    private void startProfiles() {
         int currentUserId = getCurrentUserId();
         if (DEBUG_MU) Slogf.i(TAG, "startProfilesLocked");
         List<UserInfo> profiles = mInjector.getUserManager().getProfiles(
@@ -1317,6 +1323,7 @@ class UserController implements Handler.Callback {
         return startUserNoChecks(userId, /* foreground= */ false, /* unlockListener= */ null);
     }
 
+    @VisibleForTesting
     boolean startUser(final @UserIdInt int userId, final boolean foreground) {
         return startUser(userId, foreground, null);
     }
@@ -1683,7 +1690,11 @@ class UserController implements Handler.Callback {
             return false;
         }
 
-        if (!finishUserUnlocking(uss)) {
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("finishUserUnlocking-" + userId);
+        final boolean finishUserUnlockingResult = finishUserUnlocking(uss);
+        t.traceEnd();
+        if (!finishUserUnlockingResult) {
             notifyFinished(userId, listener);
             return false;
         }
@@ -1775,6 +1786,7 @@ class UserController implements Handler.Callback {
     }
 
     /** Called on handler thread */
+    @VisibleForTesting
     void dispatchUserSwitchComplete(@UserIdInt int userId) {
         mInjector.getWindowManager().setSwitchingUser(false);
         final int observerCount = mUserSwitchObservers.beginBroadcast();
@@ -1848,7 +1860,11 @@ class UserController implements Handler.Callback {
         }
     }
 
+    @VisibleForTesting
     void dispatchUserSwitch(final UserState uss, final int oldUserId, final int newUserId) {
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("dispatchUserSwitch-" + oldUserId + "-to-" + newUserId);
+
         EventLog.writeEvent(EventLogTags.UC_DISPATCH_USER_SWITCH, oldUserId, newUserId);
 
         final int observerCount = mUserSwitchObservers.beginBroadcast();
@@ -1901,27 +1917,36 @@ class UserController implements Handler.Callback {
             }
         }
         mUserSwitchObservers.finishBroadcast();
+        t.traceEnd(); // end dispatchUserSwitch-
     }
 
     @GuardedBy("mLock")
-    void sendContinueUserSwitchLU(UserState uss, int oldUserId, int newUserId) {
+    private void sendContinueUserSwitchLU(UserState uss, int oldUserId, int newUserId) {
         mCurWaitingUserSwitchCallbacks = null;
         mHandler.removeMessages(USER_SWITCH_TIMEOUT_MSG);
         mHandler.sendMessage(mHandler.obtainMessage(CONTINUE_USER_SWITCH_MSG,
                 oldUserId, newUserId, uss));
     }
 
+    @VisibleForTesting
     void continueUserSwitch(UserState uss, int oldUserId, int newUserId) {
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("continueUserSwitch-" + oldUserId + "-to-" + newUserId);
+
         EventLog.writeEvent(EventLogTags.UC_CONTINUE_USER_SWITCH, oldUserId, newUserId);
 
         if (isUserSwitchUiEnabled()) {
+            t.traceBegin("stopFreezingScreen");
             mInjector.getWindowManager().stopFreezingScreen();
+            t.traceEnd();
         }
         uss.switching = false;
         mHandler.removeMessages(REPORT_USER_SWITCH_COMPLETE_MSG);
         mHandler.sendMessage(mHandler.obtainMessage(REPORT_USER_SWITCH_COMPLETE_MSG, newUserId, 0));
         stopGuestOrEphemeralUserIfBackground(oldUserId);
         stopBackgroundUsersOnSwitchIfEnforced(oldUserId);
+
+        t.traceEnd(); // end continueUserSwitch
     }
 
     private void moveUserToForeground(UserState uss, int oldUserId, int newUserId) {
@@ -2354,7 +2379,7 @@ class UserController implements Handler.Callback {
     }
 
     @GuardedBy("mLock")
-    UserInfo getCurrentUserLU() {
+    private UserInfo getCurrentUserLU() {
         int userId = getCurrentOrTargetUserIdLU();
         return getUserInfo(userId);
     }
@@ -2366,12 +2391,12 @@ class UserController implements Handler.Callback {
     }
 
     @GuardedBy("mLock")
-    int getCurrentOrTargetUserIdLU() {
+    private int getCurrentOrTargetUserIdLU() {
         return mTargetUserId != UserHandle.USER_NULL ? mTargetUserId : mCurrentUserId;
     }
 
     @GuardedBy("mLock")
-    int getCurrentUserIdLU() {
+    private int getCurrentUserIdLU() {
         return mCurrentUserId;
     }
 
@@ -2670,7 +2695,11 @@ class UserController implements Handler.Callback {
                         USER_LIFECYCLE_EVENT_STATE_FINISH);
                 logUserLifecycleEvent(msg.arg1, USER_LIFECYCLE_EVENT_UNLOCKED_USER,
                         USER_LIFECYCLE_EVENT_STATE_BEGIN);
+
+                final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+                t.traceBegin("finishUserUnlocked-" + userId);
                 finishUserUnlocked((UserState) msg.obj);
+                t.traceEnd();
                 break;
             case USER_UNLOCKED_MSG:
                 mInjector.getSystemServiceManager().onUserUnlocked(msg.arg1);

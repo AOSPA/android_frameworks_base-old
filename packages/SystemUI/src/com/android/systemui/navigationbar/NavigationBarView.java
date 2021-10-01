@@ -69,6 +69,7 @@ import com.android.systemui.Dependency;
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.navigationbar.RotationButton.RotationButtonUpdatesCallback;
 import com.android.systemui.navigationbar.buttons.ButtonDispatcher;
 import com.android.systemui.navigationbar.buttons.ContextualButton;
 import com.android.systemui.navigationbar.buttons.ContextualButtonGroup;
@@ -96,6 +97,8 @@ import com.android.wm.shell.pip.Pip;
 import java.io.PrintWriter;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.Optional;
+import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
 public class NavigationBarView extends FrameLayout implements
@@ -162,6 +165,7 @@ public class NavigationBarView extends FrameLayout implements
     private Configuration mTmpLastConfiguration;
 
     private NavigationBarInflaterView mNavigationInflaterView;
+    private Optional<Recents> mRecentsOptional = Optional.empty();
     private NotificationPanelViewController mPanelView;
     private RotationContextButton mRotationContextButton;
     private FloatingRotationButton mFloatingRotationButton;
@@ -250,7 +254,7 @@ public class NavigationBarView extends FrameLayout implements
                 @Override
                 public boolean performAccessibilityAction(View host, int action, Bundle args) {
                     if (action == R.id.action_toggle_overview) {
-                        Dependency.get(Recents.class).toggleRecentApps();
+                        mRecentsOptional.ifPresent(Recents::toggleRecentApps);
                     } else {
                         return super.performAccessibilityAction(host, action, args);
                     }
@@ -273,14 +277,23 @@ public class NavigationBarView extends FrameLayout implements
                 false /* inScreen */, false /* useNearestRegion */));
     };
 
-    private final Consumer<Boolean> mRotationButtonListener = (visible) -> {
-        if (visible) {
-            // If the button will actually become visible and the navbar is about to hide,
-            // tell the statusbar to keep it around for longer
-            mAutoHideController.touchAutoHide();
-        }
-        notifyActiveTouchRegions();
-    };
+    private final RotationButtonUpdatesCallback mRotationButtonListener =
+            new RotationButtonUpdatesCallback() {
+                @Override
+                public void onVisibilityChanged(boolean visible) {
+                    if (visible) {
+                        // If the button will actually become visible and the navbar is about
+                        // to hide, tell the statusbar to keep it around for longer
+                        mAutoHideController.touchAutoHide();
+                    }
+                    notifyActiveTouchRegions();
+                }
+
+                @Override
+                public void onPositionChanged() {
+                    notifyActiveTouchRegions();
+                }
+            };
 
     private final Consumer<Boolean> mNavbarOverlayVisibilityChangeCallback = (visible) -> {
         if (visible) {
@@ -342,6 +355,7 @@ public class NavigationBarView extends FrameLayout implements
         mEdgeBackGestureHandler = Dependency.get(EdgeBackGestureHandler.Factory.class)
                 .create(mContext);
         mEdgeBackGestureHandler.setStateChangeCallback(this::updateStates);
+        Executor backgroundExecutor = Dependency.get(Dependency.BACKGROUND_EXECUTOR);
         mRegionSamplingHelper = new RegionSamplingHelper(this,
                 new RegionSamplingHelper.SamplingCallback() {
                     @Override
@@ -364,7 +378,7 @@ public class NavigationBarView extends FrameLayout implements
                     public boolean isSamplingEnabled() {
                         return isGesturalModeOnDefaultDisplay(getContext(), mNavBarMode);
                     }
-                });
+                }, backgroundExecutor);
 
         mNavBarOverlayController = Dependency.get(NavigationBarOverlayController.class);
         if (mNavBarOverlayController.isNavigationBarOverlayEnabled()) {
@@ -383,6 +397,10 @@ public class NavigationBarView extends FrameLayout implements
 
     public LightBarTransitionsController getLightTransitionsController() {
         return mBarTransitions.getLightTransitionsController();
+    }
+
+    public void setComponents(Optional<Recents> recentsOptional) {
+        mRecentsOptional = recentsOptional;
     }
 
     public void setComponents(NotificationPanelViewController panel) {

@@ -237,6 +237,9 @@
          value is calculated in ConversationLayout#updateActionListPadding() -->
     <dimen name="notification_actions_padding_start">36dp</dimen>
 
+    <!-- The max width of a priority action button when it is collapsed to just the icon. -->
+    <dimen name="notification_actions_collapsed_priority_width">60dp</dimen>
+
     <!-- The start padding to optionally use (e.g. if there's extra space) for CallStyle
          notification actions.
          this = conversation_content_start (80dp) - button inset (4dp) - action padding (12dp) -->
@@ -920,7 +923,7 @@
 
     <dimen name="chooser_action_button_icon_size">18dp</dimen>
 
-    <!-- For Waterfall Display -->
+    <!-- For main built-in Waterfall Display -->
     <dimen name="waterfall_display_left_edge_size">0px</dimen>
     <dimen name="waterfall_display_top_edge_size">0px</dimen>
     <dimen name="waterfall_display_right_edge_size">0px</dimen>
@@ -943,4 +946,10 @@
     <dimen name="starting_surface_icon_size">160dp</dimen>
     <!-- The default width/height of the icon on the spec of adaptive icon drawable. -->
     <dimen name="starting_surface_default_icon_size">108dp</dimen>
+
+    <!-- For secondary built-in Waterfall Display -->
+    <dimen name="secondary_waterfall_display_left_edge_size">0px</dimen>
+    <dimen name="secondary_waterfall_display_top_edge_size">0px</dimen>
+    <dimen name="secondary_waterfall_display_right_edge_size">0px</dimen>
+    <dimen name="secondary_waterfall_display_bottom_edge_size">0px</dimen>
 </resources>

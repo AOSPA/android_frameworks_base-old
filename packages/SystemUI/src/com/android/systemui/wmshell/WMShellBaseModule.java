@@ -44,6 +44,7 @@ import com.android.wm.shell.bubbles.BubbleController;
 import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.DisplayImeController;
+import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.DisplayLayout;
 import com.android.wm.shell.common.FloatingContentCoordinator;
 import com.android.wm.shell.common.ShellExecutor;
@@ -55,6 +56,7 @@ import com.android.wm.shell.common.annotations.ShellAnimationThread;
 import com.android.wm.shell.common.annotations.ShellMainThread;
 import com.android.wm.shell.common.annotations.ShellSplashscreenThread;
 import com.android.wm.shell.draganddrop.DragAndDropController;
+import com.android.wm.shell.freeform.FreeformTaskListener;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutout;
 import com.android.wm.shell.hidedisplaycutout.HideDisplayCutoutController;
 import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
@@ -105,6 +107,14 @@ public abstract class WMShellBaseModule {
     static DisplayController provideDisplayController(Context context,
             IWindowManager wmService, @ShellMainThread ShellExecutor mainExecutor) {
         return new DisplayController(context, wmService, mainExecutor);
+    }
+
+    @WMSingleton
+    @Provides
+    static DisplayInsetsController provideDisplayInsetsController( IWindowManager wmService,
+            DisplayController displayController,
+            @ShellMainThread ShellExecutor mainExecutor) {
+        return new DisplayInsetsController(wmService, displayController, mainExecutor);
     }
 
     @WMSingleton
@@ -194,11 +204,12 @@ public abstract class WMShellBaseModule {
             ShellTaskOrganizer organizer,
             DisplayController displayController,
             @ShellMainThread ShellExecutor mainExecutor,
-            @ShellMainThread Handler mainHandler) {
+            @ShellMainThread Handler mainHandler,
+            SyncTransactionQueue syncQueue) {
         return Optional.of(BubbleController.create(context, null /* synchronizer */,
                 floatingContentCoordinator, statusBarService, windowManager,
                 windowManagerShellWrapper, launcherApps, taskStackListener,
-                uiEventLogger, organizer, displayController, mainExecutor, mainHandler));
+                uiEventLogger, organizer, displayController, mainExecutor, mainHandler, syncQueue));
     }
 
     //
@@ -210,6 +221,13 @@ public abstract class WMShellBaseModule {
     static FullscreenTaskListener provideFullscreenTaskListener(SyncTransactionQueue syncQueue) {
         return new FullscreenTaskListener(syncQueue);
     }
+
+    //
+    // Freeform (optional feature)
+    //
+
+    @BindsOptionalOf
+    abstract Optional<FreeformTaskListener> optionalFreeformTaskListener();
 
     //
     // Hide display cutout
@@ -327,9 +345,11 @@ public abstract class WMShellBaseModule {
     @WMSingleton
     @Provides
     static Transitions provideTransitions(ShellTaskOrganizer organizer, TransactionPool pool,
-            Context context, @ShellMainThread ShellExecutor mainExecutor,
+            DisplayController displayController, Context context,
+            @ShellMainThread ShellExecutor mainExecutor,
             @ShellAnimationThread ShellExecutor animExecutor) {
-        return new Transitions(organizer, pool, context, mainExecutor, animExecutor);
+        return new Transitions(organizer, pool, displayController, context, mainExecutor,
+                animExecutor);
     }
 
     //
@@ -424,8 +444,9 @@ public abstract class WMShellBaseModule {
     @Provides
     static TaskViewFactoryController provideTaskViewFactoryController(
             ShellTaskOrganizer shellTaskOrganizer,
-            @ShellMainThread ShellExecutor mainExecutor) {
-        return new TaskViewFactoryController(shellTaskOrganizer, mainExecutor);
+            @ShellMainThread ShellExecutor mainExecutor,
+            SyncTransactionQueue syncQueue) {
+        return new TaskViewFactoryController(shellTaskOrganizer, mainExecutor, syncQueue);
     }
 
     //
@@ -440,7 +461,9 @@ public abstract class WMShellBaseModule {
 
     @WMSingleton
     @Provides
-    static ShellInitImpl provideShellInitImpl(DisplayImeController displayImeController,
+    static ShellInitImpl provideShellInitImpl(DisplayController displayController,
+            DisplayImeController displayImeController,
+            DisplayInsetsController displayInsetsController,
             DragAndDropController dragAndDropController,
             ShellTaskOrganizer shellTaskOrganizer,
             Optional<BubbleController> bubblesOptional,
@@ -449,10 +472,13 @@ public abstract class WMShellBaseModule {
             Optional<AppPairsController> appPairsOptional,
             Optional<PipTouchHandler> pipTouchHandlerOptional,
             FullscreenTaskListener fullscreenTaskListener,
+            Optional<Optional<FreeformTaskListener>> freeformTaskListener,
             Transitions transitions,
             StartingWindowController startingWindow,
             @ShellMainThread ShellExecutor mainExecutor) {
-        return new ShellInitImpl(displayImeController,
+        return new ShellInitImpl(displayController,
+                displayImeController,
+                displayInsetsController,
                 dragAndDropController,
                 shellTaskOrganizer,
                 bubblesOptional,
@@ -461,6 +487,7 @@ public abstract class WMShellBaseModule {
                 appPairsOptional,
                 pipTouchHandlerOptional,
                 fullscreenTaskListener,
+                freeformTaskListener,
                 transitions,
                 startingWindow,
                 mainExecutor);

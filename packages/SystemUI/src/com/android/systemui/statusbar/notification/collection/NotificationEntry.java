@@ -127,11 +127,8 @@ public final class NotificationEntry extends ListEntry {
     public int targetSdk;
     private long lastFullScreenIntentLaunchTime = NOT_LAUNCHED_YET;
     public CharSequence remoteInputText;
-    // Mimetype and Uri used to display the image in the notification *after* it has been sent.
     public String remoteInputMimeType;
     public Uri remoteInputUri;
-    // ContentInfo used to keep the attachment permission alive until RemoteInput is sent or
-    // cancelled.
     public ContentInfo remoteInputAttachment;
     private Notification.BubbleMetadata mBubbleMetadata;
     private ShortcutInfo mShortcutInfo;

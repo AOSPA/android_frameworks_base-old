@@ -103,10 +103,10 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.TaskStackChangeListener;
 import com.android.systemui.shared.system.TaskStackChangeListeners;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.phone.KeyguardBypassController;
 import com.android.systemui.telephony.TelephonyListenerManager;
@@ -2903,6 +2903,20 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         updateBiometricListeningState();
     }
 
+    /** Notifies that the occluded state changed. */
+    public void onKeyguardOccludedChanged(boolean occluded) {
+        Assert.isMainThread();
+        if (DEBUG) {
+            Log.d(TAG, "onKeyguardOccludedChanged(" + occluded + ")");
+        }
+        for (int i = 0; i < mCallbacks.size(); i++) {
+            KeyguardUpdateMonitorCallback cb = mCallbacks.get(i).get();
+            if (cb != null) {
+                cb.onKeyguardOccludedChanged(occluded);
+            }
+        }
+    }
+
     /**
      * Handle {@link #MSG_KEYGUARD_RESET}
      */
@@ -3085,6 +3099,7 @@ public class KeyguardUpdateMonitor implements TrustManager.TrustListener, Dumpab
         callback.onPhoneStateChanged(mPhoneState);
         callback.onRefreshCarrierInfo();
         callback.onClockVisibilityChanged();
+        callback.onKeyguardOccludedChanged(mKeyguardOccluded);
         callback.onKeyguardVisibilityChangedRaw(mKeyguardIsVisible);
         callback.onTelephonyCapable(mTelephonyCapable);
         callback.onLockScreenModeChanged(mLockScreenMode);

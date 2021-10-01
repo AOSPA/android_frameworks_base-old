@@ -273,6 +273,7 @@ public final class PowerManagerService extends SystemService
     private final BatterySavingStats mBatterySavingStats;
     private final AttentionDetector mAttentionDetector;
     private final FaceDownDetector mFaceDownDetector;
+    private final ScreenUndimDetector mScreenUndimDetector;
     private final BinderService mBinderService;
     private final LocalService mLocalService;
     private final NativeWrapper mNativeWrapper;
@@ -351,6 +352,12 @@ public final class PowerManagerService extends SystemService
     // Manages the desired power state of displays. The actual state may lag behind the
     // requested because it is updated asynchronously by the display power controller.
     private DisplayGroupPowerStateMapper mDisplayGroupPowerStateMapper;
+
+    // The suspend blocker used to keep the CPU alive while the device is booting.
+    private final SuspendBlocker mBootingSuspendBlocker;
+
+    // True if the wake lock suspend blocker has been acquired.
+    private boolean mHoldingBootingSuspendBlocker;
 
     // The suspend blocker used to keep the CPU alive when an application has acquired
     // a wake lock.
@@ -831,9 +838,10 @@ public final class PowerManagerService extends SystemService
     static class Injector {
         Notifier createNotifier(Looper looper, Context context, IBatteryStats batteryStats,
                 SuspendBlocker suspendBlocker, WindowManagerPolicy policy,
-                FaceDownDetector faceDownDetector) {
+                FaceDownDetector faceDownDetector, ScreenUndimDetector screenUndimDetector) {
             return new Notifier(
-                    looper, context, batteryStats, suspendBlocker, policy, faceDownDetector);
+                    looper, context, batteryStats, suspendBlocker, policy, faceDownDetector,
+                    screenUndimDetector);
         }
 
         SuspendBlocker createSuspendBlocker(PowerManagerService service, String name) {
@@ -954,6 +962,7 @@ public final class PowerManagerService extends SystemService
                 mInjector.createAmbientDisplaySuppressionController(context);
         mAttentionDetector = new AttentionDetector(this::onUserAttention, mLock);
         mFaceDownDetector = new FaceDownDetector(this::onFlip);
+        mScreenUndimDetector = new ScreenUndimDetector();
 
         mBatterySavingStats = new BatterySavingStats(mLock);
         mBatterySaverPolicy =
@@ -1036,10 +1045,16 @@ public final class PowerManagerService extends SystemService
         }
 
         synchronized (mLock) {
+            mBootingSuspendBlocker =
+                    mInjector.createSuspendBlocker(this, "PowerManagerService.Booting");
             mWakeLockSuspendBlocker =
                     mInjector.createSuspendBlocker(this, "PowerManagerService.WakeLocks");
             mDisplaySuspendBlocker =
                     mInjector.createSuspendBlocker(this, "PowerManagerService.Display");
+            if (mBootingSuspendBlocker != null) {
+                mBootingSuspendBlocker.acquire();
+                mHoldingBootingSuspendBlocker = true;
+            }
             if (mDisplaySuspendBlocker != null) {
                 mDisplaySuspendBlocker.acquire();
                 mHoldingDisplaySuspendBlocker = true;
@@ -1140,7 +1155,7 @@ public final class PowerManagerService extends SystemService
             mBatteryStats = BatteryStatsService.getService();
             mNotifier = mInjector.createNotifier(Looper.getMainLooper(), mContext, mBatteryStats,
                     mInjector.createSuspendBlocker(this, "PowerManagerService.Broadcasts"),
-                    mPolicy, mFaceDownDetector);
+                    mPolicy, mFaceDownDetector, mScreenUndimDetector);
 
             mWirelessChargerDetector = mInjector.createWirelessChargerDetector(sensorManager,
                     mInjector.createSuspendBlocker(
@@ -1175,6 +1190,7 @@ public final class PowerManagerService extends SystemService
         mBatterySaverController.systemReady();
         mBatterySaverPolicy.systemReady();
         mFaceDownDetector.systemReady(mContext);
+        mScreenUndimDetector.systemReady(mContext);
 
         // Register for settings changes.
         resolver.registerContentObserver(Settings.Secure.getUriFor(
@@ -3180,6 +3196,7 @@ public final class PowerManagerService extends SystemService
 
                 final boolean ready = mDisplayManagerInternal.requestPowerState(groupId,
                         displayPowerRequest, mRequestWaitForNegativeProximity);
+                mNotifier.onScreenPolicyUpdate(displayPowerRequest.policy);
 
                 if (DEBUG_SPEW) {
                     Slog.d(TAG, "updateDisplayPowerStateLocked: displayReady=" + ready
@@ -3385,6 +3402,10 @@ public final class PowerManagerService extends SystemService
         }
 
         // First acquire suspend blockers if needed.
+        if (!mBootCompleted && !mHoldingBootingSuspendBlocker) {
+            mBootingSuspendBlocker.acquire();
+            mHoldingBootingSuspendBlocker = true;
+        }
         if (needWakeLockSuspendBlocker && !mHoldingWakeLockSuspendBlocker) {
             mWakeLockSuspendBlocker.acquire();
             mHoldingWakeLockSuspendBlocker = true;
@@ -3411,6 +3432,10 @@ public final class PowerManagerService extends SystemService
         }
 
         // Then release suspend blockers if needed.
+        if (mBootCompleted && mHoldingBootingSuspendBlocker) {
+            mBootingSuspendBlocker.release();
+            mHoldingBootingSuspendBlocker = false;
+        }
         if (!needWakeLockSuspendBlocker && mHoldingWakeLockSuspendBlocker) {
             mWakeLockSuspendBlocker.release();
             mHoldingWakeLockSuspendBlocker = false;

@@ -18,16 +18,20 @@ package android.inputmethodservice;
 
 import android.annotation.MainThread;
 import android.annotation.NonNull;
-import android.app.Service;
+import android.annotation.Nullable;
+import android.content.Context;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.os.Bundle;
 import android.os.IBinder;
-import android.util.proto.ProtoOutputStream;
+import android.os.RemoteException;
 import android.view.KeyEvent;
 import android.view.MotionEvent;
-import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputContentInfo;
+import android.view.WindowManager;
+import android.view.WindowManagerGlobal;
 import android.view.inputmethod.InputMethod;
 import android.view.inputmethod.InputMethodSession;
+import android.window.WindowProviderService;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -44,9 +48,22 @@ import java.io.PrintWriter;
  * implement.  This base class takes care of reporting your InputMethod from
  * the service when clients bind to it, but provides no standard implementation
  * of the InputMethod interface itself.  Derived classes must implement that
- * interface.
+ * interface.</p>
+ *
+ * <p>After {@link android.os.Build.VERSION_CODES#S}, the maximum possible area to show the soft
+ * input may not be the entire screen. For example, some devices may support to show the soft input
+ * on only half of screen.</p>
+ *
+ * <p>In that case, moving the soft input from one half screen to another will trigger a
+ * {@link android.content.res.Resources} update to match the new {@link Configuration} and
+ * this {@link AbstractInputMethodService} may also receive a
+ * {@link #onConfigurationChanged(Configuration)} callback if there's notable configuration changes
+ * </p>
+ *
+ * @see android.content.ComponentCallbacks#onConfigurationChanged(Configuration)
+ * @see Context#isUiContext Context#isUiContext to see the concept of UI Context.
  */
-public abstract class AbstractInputMethodService extends Service
+public abstract class AbstractInputMethodService extends WindowProviderService
         implements KeyEvent.Callback {
     private InputMethod mInputMethod;
     
@@ -196,16 +213,6 @@ public abstract class AbstractInputMethodService extends Service
     public abstract AbstractInputMethodSessionImpl onCreateInputMethodSessionInterface();
 
     /**
-     * Dumps the internal state of IME to a protocol buffer output stream.
-     *
-     * @param proto ProtoOutputStream to dump data to.
-     * @param icProto {@link InputConnection} call data in proto format.
-     * @hide
-     */
-    @SuppressWarnings("HiddenAbstractMethod")
-    public abstract void dumpProtoInternal(ProtoOutputStream proto, ProtoOutputStream icProto);
-
-    /**
      * Implement this to handle {@link android.os.Binder#dump Binder.dump()}
      * calls on your input method.
      */
@@ -218,9 +225,36 @@ public abstract class AbstractInputMethodService extends Service
         if (mInputMethod == null) {
             mInputMethod = onCreateInputMethodInterface();
         }
-        return new IInputMethodWrapper(this, mInputMethod);
+        return new IInputMethodWrapper(createInputMethodServiceInternal(), mInputMethod);
     }
-    
+
+    /**
+     * Used to inject custom {@link InputMethodServiceInternal}.
+     *
+     * @return the {@link InputMethodServiceInternal} to be used.
+     */
+    @NonNull
+    InputMethodServiceInternal createInputMethodServiceInternal() {
+        return new InputMethodServiceInternal() {
+            /**
+             * {@inheritDoc}
+             */
+            @NonNull
+            @Override
+            public Context getContext() {
+                return AbstractInputMethodService.this;
+            }
+
+            /**
+             * {@inheritDoc}
+             */
+            @Override
+            public void dump(FileDescriptor fd, PrintWriter fout, String[] args) {
+                AbstractInputMethodService.this.dump(fd, fout, args);
+            }
+        };
+    }
+
     /**
      * Implement this to handle trackball events on your input method.
      *
@@ -243,38 +277,33 @@ public abstract class AbstractInputMethodService extends Service
         return false;
     }
 
-    /**
-     * Allow the receiver of {@link InputContentInfo} to obtain a temporary read-only access
-     * permission to the content.
-     *
-     * <p>Default implementation does nothing.</p>
-     *
-     * @param inputContentInfo Content to be temporarily exposed from the input method to the
-     * application.
-     * This cannot be {@code null}.
-     * @param inputConnection {@link InputConnection} with which
-     * {@link InputConnection#commitContent(InputContentInfo, int, android.os.Bundle)} will be
-     * called.
-     * @return {@code false} if we cannot allow a temporary access permission.
-     * @hide
-     */
-    public void exposeContent(@NonNull InputContentInfo inputContentInfo,
-            @NonNull InputConnection inputConnection) {
-        return;
-    }
-
-    /**
-     * Called when the user took some actions that should be taken into consideration to update the
-     * MRU list for input method rotation.
-     *
-     * @hide
-     */
-    public void notifyUserActionIfNecessary() {
-    }
-
+    // TODO(b/149463653): remove it in T. We missed the API deadline in S.
     /** @hide */
     @Override
     public final boolean isUiContext() {
         return true;
+    }
+
+    /** @hide */
+    @Override
+    public final int getWindowType() {
+        return WindowManager.LayoutParams.TYPE_INPUT_METHOD;
+    }
+
+    /** @hide */
+    @Override
+    @Nullable
+    public final Bundle getWindowContextOptions() {
+        return null;
+    }
+
+    /** @hide */
+    @Override
+    public final int getInitialDisplayId() {
+        try {
+            return WindowManagerGlobal.getWindowManagerService().getImeDisplayId();
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
     }
 }

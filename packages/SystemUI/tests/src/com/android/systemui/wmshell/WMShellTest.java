@@ -41,6 +41,7 @@ import com.android.wm.shell.onehanded.OneHanded;
 import com.android.wm.shell.onehanded.OneHandedEventCallback;
 import com.android.wm.shell.onehanded.OneHandedTransitionCallback;
 import com.android.wm.shell.pip.Pip;
+import com.android.wm.shell.splitscreen.SplitScreen;
 
 import org.junit.Before;
 import org.junit.Test;
@@ -69,6 +70,7 @@ public class WMShellTest extends SysuiTestCase {
     @Mock SysUiState mSysUiState;
     @Mock Pip mPip;
     @Mock LegacySplitScreen mLegacySplitScreen;
+    @Mock SplitScreen mSplitScreen;
     @Mock OneHanded mOneHanded;
     @Mock HideDisplayCutout mHideDisplayCutout;
     @Mock WakefulnessLifecycle mWakefulnessLifecycle;
@@ -81,7 +83,7 @@ public class WMShellTest extends SysuiTestCase {
         MockitoAnnotations.initMocks(this);
 
         mWMShell = new WMShell(mContext, Optional.of(mPip), Optional.of(mLegacySplitScreen),
-                Optional.of(mOneHanded), Optional.of(mHideDisplayCutout),
+                Optional.of(mSplitScreen), Optional.of(mOneHanded), Optional.of(mHideDisplayCutout),
                 Optional.of(mShellCommandHandler), mCommandQueue, mConfigurationController,
                 mKeyguardUpdateMonitor, mNavigationModeController,
                 mScreenLifecycle, mSysUiState, mProtoTracer, mWakefulnessLifecycle,
@@ -96,8 +98,15 @@ public class WMShellTest extends SysuiTestCase {
     }
 
     @Test
+    public void initLegacySplitScreen_registersCallbacks() {
+        mWMShell.initLegacySplitScreen(mLegacySplitScreen);
+
+        verify(mKeyguardUpdateMonitor).registerCallback(any(KeyguardUpdateMonitorCallback.class));
+    }
+
+    @Test
     public void initSplitScreen_registersCallbacks() {
-        mWMShell.initSplitScreen(mLegacySplitScreen);
+        mWMShell.initSplitScreen(mSplitScreen);
 
         verify(mKeyguardUpdateMonitor).registerCallback(any(KeyguardUpdateMonitorCallback.class));
     }

@@ -18,6 +18,7 @@ package android.content.pm.parsing.component;
 
 import static android.content.pm.parsing.ParsingPackageImpl.sForInternedString;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.os.Parcel;
@@ -36,18 +37,30 @@ public class ParsedInstrumentation extends ParsedComponent {
     @Nullable
     @DataClass.ParcelWith(ForInternedString.class)
     private String targetProcesses;
-    boolean handleProfiling;
-    boolean functionalTest;
+    private boolean handleProfiling;
+    private boolean functionalTest;
 
     public ParsedInstrumentation() {
     }
 
-    public void setTargetPackage(@Nullable String targetPackage) {
-        this.targetPackage = TextUtils.safeIntern(targetPackage);
+    public ParsedInstrumentation setFunctionalTest(boolean functionalTest) {
+        this.functionalTest = functionalTest;
+        return this;
     }
 
-    public void setTargetProcesses(@Nullable String targetProcesses) {
+    public ParsedInstrumentation setHandleProfiling(boolean handleProfiling) {
+        this.handleProfiling = handleProfiling;
+        return this;
+    }
+
+    public ParsedInstrumentation setTargetPackage(@Nullable String targetPackage) {
+        this.targetPackage = TextUtils.safeIntern(targetPackage);
+        return this;
+    }
+
+    public ParsedInstrumentation setTargetProcesses(@Nullable String targetProcesses) {
         this.targetProcesses = TextUtils.safeIntern(targetProcesses);
+        return this;
     }
 
     public String toString() {
@@ -82,6 +95,7 @@ public class ParsedInstrumentation extends ParsedComponent {
         this.functionalTest = in.readByte() != 0;
     }
 
+    @NonNull
     public static final Parcelable.Creator<ParsedInstrumentation> CREATOR =
             new Parcelable.Creator<ParsedInstrumentation>() {
                 @Override

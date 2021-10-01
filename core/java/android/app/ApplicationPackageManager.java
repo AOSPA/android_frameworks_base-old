@@ -317,6 +317,16 @@ public class ApplicationPackageManager extends PackageManager {
     }
 
     @Override
+    public @NonNull IntentSender getLaunchIntentSenderForPackage(@NonNull String packageName) {
+        try {
+            return mPM.getLaunchIntentSenderForPackage(packageName, mContext.getPackageName(),
+                    mContext.getAttributionTag(), getUserId());
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    @Override
     public int[] getPackageGids(String packageName) throws NameNotFoundException {
         return getPackageGids(packageName, 0);
     }
@@ -1047,7 +1057,7 @@ public class ApplicationPackageManager extends PackageManager {
             throws NameNotFoundException {
         try {
             int uid = mPM.getUidForSharedUser(sharedUserName);
-            if(uid != -1) {
+            if (uid != Process.INVALID_UID) {
                 return uid;
             }
         } catch (RemoteException e) {

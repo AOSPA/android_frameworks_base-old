@@ -104,6 +104,7 @@ class PrivacyDotViewController @Inject constructor(
                 setNewLayoutRects()
             }
         })
+
         configurationController.addCallback(object : ConfigurationController.ConfigurationListener {
             override fun onLayoutDirectionChanged(isRtl: Boolean) {
                 synchronized(this) {
@@ -477,7 +478,7 @@ class PrivacyDotViewController @Inject constructor(
     private fun resolveState(state: ViewState) {
         dlog("resolveState $state")
         if (!state.viewInitialized) {
-            dlog("resolveState: view is not initialized. skipping.")
+            dlog("resolveState: view is not initialized. skipping")
             return
         }
 

@@ -307,11 +307,6 @@ class InsetsSourceProvider {
             // to control the window for now.
             return;
         }
-        if (target != null && target.getWindow() != null) {
-            // ime control target could be a different window.
-            // Refer WindowState#getImeControlTarget().
-            target = target.getWindow().getImeControlTarget();
-        }
 
         if (mWin != null && mWin.getSurfaceControl() == null) {
             // if window doesn't have a surface, set it null and return.
@@ -381,8 +376,11 @@ class InsetsSourceProvider {
             return;
         }
         mClientVisible = clientVisible;
-        mDisplayContent.mWmService.mH.obtainMessage(
-                LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED, mDisplayContent).sendToTarget();
+        if (!mDisplayContent.mLayoutAndAssignWindowLayersScheduled) {
+            mDisplayContent.mLayoutAndAssignWindowLayersScheduled = true;
+            mDisplayContent.mWmService.mH.obtainMessage(
+                    LAYOUT_AND_ASSIGN_WINDOW_LAYERS_IF_NEEDED, mDisplayContent).sendToTarget();
+        }
         updateVisibility();
     }
 

@@ -85,6 +85,7 @@ import android.view.Gravity;
 import android.view.InputWindowHandle;
 import android.view.InsetsSource;
 import android.view.InsetsState;
+import android.view.InsetsVisibilities;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 
@@ -437,9 +438,9 @@ public class WindowStateTests extends WindowTestsBase {
                 .setWindow(statusBar, null /* frameProvider */, null /* imeFrameProvider */);
         mDisplayContent.getInsetsStateController().onBarControlTargetChanged(
                 app, null /* fakeTopControlling */, app, null /* fakeNavControlling */);
-        final InsetsState state = new InsetsState();
-        state.getSource(ITYPE_STATUS_BAR).setVisible(false);
-        app.updateRequestedVisibility(state);
+        final InsetsVisibilities requestedVisibilities = new InsetsVisibilities();
+        requestedVisibilities.setVisibility(ITYPE_STATUS_BAR, false);
+        app.setRequestedVisibilities(requestedVisibilities);
         mDisplayContent.getInsetsStateController().getSourceProvider(ITYPE_STATUS_BAR)
                 .updateClientVisibility(app);
         waitUntilHandlersIdle();
@@ -945,5 +946,20 @@ public class WindowStateTests extends WindowTestsBase {
                 mNotificationShadeWindow);
         assertNotNull(state.peekSource(ITYPE_IME));
         assertTrue(state.getSource(ITYPE_IME).isVisible());
+    }
+
+    @Test
+    public void testRequestedVisibility() {
+        final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
+        app.mActivityRecord.setVisible(false);
+        app.mActivityRecord.setVisibility(false /* visible */, false /* deferHidingClient */);
+        assertFalse(app.isVisibleRequested());
+
+        // It doesn't have a surface yet, but should still be visible requested.
+        app.setHasSurface(false);
+        app.mActivityRecord.setVisibility(true /* visible */, false /* deferHidingClient */);
+
+        assertFalse(app.isVisible());
+        assertTrue(app.isVisibleRequested());
     }
 }

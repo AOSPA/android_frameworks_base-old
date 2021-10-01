@@ -1662,7 +1662,7 @@ public class LockSettingsService extends ILockSettings.Stub {
                             + PERMISSION);
         }
 
-        long identity = Binder.clearCallingIdentity();
+        final long identity = Binder.clearCallingIdentity();
         try {
             enforceFrpResolved();
             // When changing credential for profiles with unified challenge, some callers

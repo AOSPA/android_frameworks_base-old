@@ -36,12 +36,10 @@ import android.sysprop.HdmiProperties;
 import android.util.ArrayMap;
 import android.util.Log;
 
-import com.android.internal.annotations.GuardedBy;
 import com.android.internal.util.ConcurrentUtils;
 
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
-import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
@@ -69,32 +67,6 @@ public final class HdmiControlManager {
     @Nullable private final IHdmiControlService mService;
 
     private static final int INVALID_PHYSICAL_ADDRESS = 0xFFFF;
-
-    /**
-     * A cache of the current device's physical address. When device's HDMI out port
-     * is not connected to any device, it is set to {@link #INVALID_PHYSICAL_ADDRESS}.
-     *
-     * <p>Otherwise it is updated by the {@link ClientHotplugEventListener} registered
-     * with {@link com.android.server.hdmi.HdmiControlService} by the
-     * {@link #addHotplugEventListener(HotplugEventListener)} and the address is from
-     * {@link com.android.server.hdmi.HdmiControlService#getPortInfo()}
-     */
-    @GuardedBy("mLock")
-    private int mLocalPhysicalAddress = INVALID_PHYSICAL_ADDRESS;
-
-    private void setLocalPhysicalAddress(int physicalAddress) {
-        synchronized (mLock) {
-            mLocalPhysicalAddress = physicalAddress;
-        }
-    }
-
-    private int getLocalPhysicalAddress() {
-        synchronized (mLock) {
-            return mLocalPhysicalAddress;
-        }
-    }
-
-    private final Object mLock = new Object();
 
     /**
      * Broadcast Action: Display OSD message.
@@ -346,7 +318,7 @@ public final class HdmiControlManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface HdmiCecControl {}
 
-    // -- Supported HDM-CEC versions.
+    // -- Supported HDMI-CEC versions.
     /**
      * Version constant for HDMI-CEC v1.4b.
      *
@@ -371,23 +343,67 @@ public final class HdmiControlManager {
     @Retention(RetentionPolicy.SOURCE)
     public @interface HdmiCecVersion {}
 
+    // -- Whether the Routing Control feature is enabled or disabled.
+    /**
+     * Routing Control feature enabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ROUTING_CONTROL_ENABLED = 1;
+    /**
+     * Routing Control feature disabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ROUTING_CONTROL_DISABLED = 0;
+    /**
+     * @hide
+     */
+    @IntDef(prefix = { "ROUTING_CONTROL_" }, value = {
+            ROUTING_CONTROL_ENABLED,
+            ROUTING_CONTROL_DISABLED
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface RoutingControl {}
+
     // -- Scope of CEC power control messages sent by a playback device.
     /**
-     * Send CEC power control messages to TV only.
+     * Send CEC power control messages to TV only:
+     * Upon going to sleep, send {@code <Standby>} to TV only.
+     * Upon waking up, attempt to turn on the TV via {@code <One Touch Play>} but do not turn on the
+     * Audio system via {@code <System Audio Mode Request>}.
      *
      * @hide
      */
     @SystemApi
     public static final String POWER_CONTROL_MODE_TV = "to_tv";
     /**
-     * Broadcast CEC power control messages to all devices in the network.
+     * Send CEC power control messages to TV and Audio System:
+     * Upon going to sleep, send {@code <Standby>} to TV and Audio system.
+     * Upon waking up, attempt to turn on the TV via {@code <One Touch Play>} and attempt to turn on
+     * the Audio system via {@code <System Audio Mode Request>}.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM = "to_tv_and_audio_system";
+    /**
+     * Broadcast CEC power control messages to all devices in the network:
+     * Upon going to sleep, send {@code <Standby>} to all devices in the network.
+     * Upon waking up, attempt to turn on the TV via {@code <One Touch Play>} and attempt to turn on
+     * the Audio system via {@code <System Audio Mode Request>}.
      *
      * @hide
      */
     @SystemApi
     public static final String POWER_CONTROL_MODE_BROADCAST = "broadcast";
     /**
-     * Don't send any CEC power control messages.
+     * Don't send any CEC power control messages:
+     * Upon going to sleep, do not send any {@code <Standby>} message.
+     * Upon waking up, do not turn on the TV via {@code <One Touch Play>} and do not turn on the
+     * Audio system via {@code <System Audio Mode Request>}.
      *
      * @hide
      */
@@ -398,6 +414,7 @@ public final class HdmiControlManager {
      */
     @StringDef(prefix = { "POWER_CONTROL_MODE_" }, value = {
             POWER_CONTROL_MODE_TV,
+            POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM,
             POWER_CONTROL_MODE_BROADCAST,
             POWER_CONTROL_MODE_NONE
     })
@@ -428,6 +445,31 @@ public final class HdmiControlManager {
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface ActiveSourceLostBehavior {}
+
+    // -- Whether System Audio Control is enabled or disabled.
+    /**
+     * System Audio Control enabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int SYSTEM_AUDIO_CONTROL_ENABLED = 1;
+    /**
+     * System Audio Control disabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int SYSTEM_AUDIO_CONTROL_DISABLED = 0;
+    /**
+     * @hide
+     */
+    @IntDef(prefix = { "SYSTEM_AUDIO_CONTROL_" }, value = {
+            SYSTEM_AUDIO_CONTROL_ENABLED,
+            SYSTEM_AUDIO_CONTROL_DISABLED
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface SystemAudioControl {}
 
     // -- Whether System Audio Mode muting is enabled or disabled.
     /**
@@ -710,6 +752,13 @@ public final class HdmiControlManager {
     @SystemApi
     public static final String CEC_SETTING_NAME_HDMI_CEC_VERSION = "hdmi_cec_version";
     /**
+     * Name of a setting deciding whether the Routing Control feature is enabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String CEC_SETTING_NAME_ROUTING_CONTROL = "routing_control";
+    /**
      * Name of a setting deciding on the power control mode.
      *
      * @hide
@@ -724,6 +773,14 @@ public final class HdmiControlManager {
     @SystemApi
     public static final String CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST =
             "power_state_change_on_active_source_lost";
+    /**
+     * Name of a setting deciding whether System Audio Control is enabled.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final String CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL =
+            "system_audio_control";
     /**
      * Name of a setting deciding whether System Audio Muting is allowed.
      *
@@ -778,7 +835,7 @@ public final class HdmiControlManager {
     public static final String CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY =
             "tv_wake_on_one_touch_play";
     /**
-     * Name of a setting deciding whether the device will also turn off other CEC devices
+     * Name of a setting deciding whether the TV will also turn off other CEC devices
      * when it goes to standby mode.
      *
      * @hide
@@ -842,6 +899,7 @@ public final class HdmiControlManager {
         CEC_SETTING_NAME_HDMI_CEC_VERSION,
         CEC_SETTING_NAME_POWER_CONTROL_MODE,
         CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST,
+        CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
         CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
         CEC_SETTING_NAME_VOLUME_CONTROL_MODE,
         CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
@@ -886,37 +944,6 @@ public final class HdmiControlManager {
         mHasAudioSystemDevice = hasDeviceType(types, HdmiDeviceInfo.DEVICE_AUDIO_SYSTEM);
         mHasSwitchDevice = hasDeviceType(types, HdmiDeviceInfo.DEVICE_PURE_CEC_SWITCH);
         mIsSwitchDevice = HdmiProperties.is_switch().orElse(false);
-        addHotplugEventListener(new ClientHotplugEventListener());
-    }
-
-    private final class ClientHotplugEventListener implements HotplugEventListener {
-
-        @Override
-        public void onReceived(HdmiHotplugEvent event) {
-            List<HdmiPortInfo> ports = new ArrayList<>();
-            try {
-                ports = mService.getPortInfo();
-            } catch (RemoteException e) {
-                throw e.rethrowFromSystemServer();
-            }
-            if (ports.isEmpty()) {
-                Log.e(TAG, "Can't find port info, not updating connected status. "
-                        + "Hotplug event:" + event);
-                return;
-            }
-            // If the HDMI OUT port is plugged or unplugged, update the mLocalPhysicalAddress
-            for (HdmiPortInfo port : ports) {
-                if (port.getId() == event.getPort()) {
-                    if (port.getType() == HdmiPortInfo.PORT_OUTPUT) {
-                        setLocalPhysicalAddress(
-                                event.isConnected()
-                                        ? port.getAddress()
-                                        : INVALID_PHYSICAL_ADDRESS);
-                    }
-                    break;
-                }
-            }
-        }
     }
 
     private static boolean hasDeviceType(int[] types, int type) {
@@ -1318,7 +1345,11 @@ public final class HdmiControlManager {
      */
     @SystemApi
     public int getPhysicalAddress() {
-        return getLocalPhysicalAddress();
+        try {
+            return mService.getPhysicalAddress();
+        } catch (RemoteException e) {
+            return INVALID_PHYSICAL_ADDRESS;
+        }
     }
 
     /**
@@ -1335,7 +1366,7 @@ public final class HdmiControlManager {
     @SystemApi
     public boolean isDeviceConnected(@NonNull HdmiDeviceInfo targetDevice) {
         Objects.requireNonNull(targetDevice);
-        int physicalAddress = getLocalPhysicalAddress();
+        int physicalAddress = getPhysicalAddress();
         if (physicalAddress == INVALID_PHYSICAL_ADDRESS) {
             return false;
         }
@@ -1356,7 +1387,7 @@ public final class HdmiControlManager {
     @SystemApi
     public boolean isRemoteDeviceConnected(@NonNull HdmiDeviceInfo targetDevice) {
         Objects.requireNonNull(targetDevice);
-        int physicalAddress = getLocalPhysicalAddress();
+        int physicalAddress = getPhysicalAddress();
         if (physicalAddress == INVALID_PHYSICAL_ADDRESS) {
             return false;
         }
@@ -2021,6 +2052,56 @@ public final class HdmiControlManager {
     }
 
     /**
+     * Set the status of Routing Control feature.
+     *
+     * <p>This allows to enable/disable Routing Control on the device.
+     * If enabled, the switch device will route to the correct input source on
+     * receiving Routing Control related messages. If disabled, you can only
+     * switch the input via controls on this device.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.HDMI_CEC)
+    public void setRoutingControl(@NonNull @RoutingControl int value) {
+        if (mService == null) {
+            Log.e(TAG, "HdmiControlService is not available");
+            throw new RuntimeException("HdmiControlService is not available");
+        }
+        try {
+            mService.setCecSettingIntValue(CEC_SETTING_NAME_ROUTING_CONTROL, value);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the current status of Routing Control feature.
+     *
+     * <p>Reflects whether Routing Control is currently enabled on the device.
+     * If enabled, the switch device will route to the correct input source on
+     * receiving Routing Control related messages. If disabled, you can only
+     * switch the input via controls on this device.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    @RoutingControl
+    @RequiresPermission(android.Manifest.permission.HDMI_CEC)
+    public int getRoutingControl() {
+        if (mService == null) {
+            Log.e(TAG, "HdmiControlService is not available");
+            throw new RuntimeException("HdmiControlService is not available");
+        }
+        try {
+            return mService.getCecSettingIntValue(CEC_SETTING_NAME_ROUTING_CONTROL);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Set the status of Power Control.
      *
      * <p>Specifies to which devices Power Control messages should be sent:
@@ -2108,6 +2189,58 @@ public final class HdmiControlManager {
         try {
             return mService.getCecSettingStringValue(
                     CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Set the current status of System Audio Control.
+     *
+     * <p>Sets whether HDMI System Audio Control feature is enabled. If enabled,
+     * TV or Audio System will try to turn on the System Audio Mode if there's a
+     * connected CEC-enabled AV Receiver. Then an audio stream will be played on
+     * the AVR instead of TV speaker or Audio System speakers. If disabled, the
+     * System Audio Mode will never be activated.
+     *
+     * @hide
+     */
+    @SystemApi
+    @RequiresPermission(android.Manifest.permission.HDMI_CEC)
+    public void setSystemAudioControl(@NonNull @SystemAudioControl int value) {
+        if (mService == null) {
+            Log.e(TAG, "HdmiControlService is not available");
+            throw new RuntimeException("HdmiControlService is not available");
+        }
+        try {
+            mService.setCecSettingIntValue(CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL, value);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
+     * Get the current status of System Audio Control.
+     *
+     * <p>Reflects whether HDMI System Audio Control feature is enabled. If enabled,
+     * TV or Audio System will try to turn on the System Audio Mode if there's a
+     * connected CEC-enabled AV Receiver. Then an audio stream will be played on
+     * the AVR instead of TV speaker or Audio System speakers. If disabled, the
+     * System Audio Mode will never be activated.
+     *
+     * @hide
+     */
+    @SystemApi
+    @NonNull
+    @SystemAudioControl
+    @RequiresPermission(android.Manifest.permission.HDMI_CEC)
+    public int getSystemAudioControl() {
+        if (mService == null) {
+            Log.e(TAG, "HdmiControlService is not available");
+            throw new RuntimeException("HdmiControlService is not available");
+        }
+        try {
+            return mService.getCecSettingIntValue(CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }

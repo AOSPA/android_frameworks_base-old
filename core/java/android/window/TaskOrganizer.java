@@ -222,6 +222,7 @@ public class TaskOrganizer extends WindowOrganizer {
         }
     }
 
+
     /**
      * Restarts the top activity in the given task by killing its process if it is visible.
      * @hide
@@ -289,6 +290,7 @@ public class TaskOrganizer extends WindowOrganizer {
         }
     };
 
+    @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS)
     private ITaskOrganizerController getController() {
         try {
             return getWindowOrganizerController().getTaskOrganizerController();

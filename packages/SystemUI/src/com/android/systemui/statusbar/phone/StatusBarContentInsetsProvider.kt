@@ -19,7 +19,6 @@ package com.android.systemui.statusbar.phone
 import android.content.Context
 import android.content.res.Resources
 import android.graphics.Rect
-import android.util.Log
 import android.util.Pair
 import android.view.DisplayCutout
 import android.view.View.LAYOUT_DIRECTION_RTL

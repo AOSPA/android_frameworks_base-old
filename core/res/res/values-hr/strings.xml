@@ -1202,6 +1202,7 @@
     <string name="not_checked" msgid="7972320087569023342">"nije potvrđeno"</string>
     <string name="selected" msgid="6614607926197755875">"odabrano"</string>
     <string name="not_selected" msgid="410652016565864475">"nije odabrano"</string>
+    <string name="in_progress" msgid="2149208189184319441">"u tijeku"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Radnju dovrši pomoću stavke"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Dovršavanje radnje pomoću aplikacije %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Dovrši radnju"</string>

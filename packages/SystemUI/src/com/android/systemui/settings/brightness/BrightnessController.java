@@ -30,7 +30,6 @@ import android.hardware.display.DisplayManager.DisplayListener;
 import android.net.Uri;
 import android.os.AsyncTask;
 import android.os.Handler;
-import android.os.Looper;
 import android.os.Message;
 import android.os.PowerManager;
 import android.os.RemoteException;
@@ -47,15 +46,16 @@ import com.android.internal.display.BrightnessSynchronizer;
 import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.nano.MetricsProto.MetricsEvent;
 import com.android.settingslib.RestrictedLockUtilsInternal;
-import com.android.systemui.Dependency;
 import com.android.systemui.broadcast.BroadcastDispatcher;
+import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.settings.CurrentUserTracker;
+import com.android.systemui.statusbar.policy.BrightnessMirrorController;
 
 import java.util.ArrayList;
 
 import javax.inject.Inject;
 
-public class BrightnessController implements ToggleSlider.Listener {
+public class BrightnessController implements ToggleSlider.Listener, MirroredBrightnessController {
     private static final String TAG = "StatusBar.BrightnessController";
     private static final int SLIDER_ANIMATION_DURATION = 3000;
 
@@ -108,6 +108,11 @@ public class BrightnessController implements ToggleSlider.Listener {
     private float mBrightnessMax = PowerManager.BRIGHTNESS_MAX;
 
     private ValueAnimator mSliderAnimator;
+
+    @Override
+    public void setMirror(BrightnessMirrorController controller) {
+        mControl.setMirrorControllerAndMirror(controller);
+    }
 
     public interface BrightnessStateChangeCallback {
         /** Indicates that some of the brightness settings have changed */
@@ -282,12 +287,15 @@ public class BrightnessController implements ToggleSlider.Listener {
         }
     };
 
-    public BrightnessController(Context context, ToggleSlider control,
-            BroadcastDispatcher broadcastDispatcher) {
+    public BrightnessController(
+            Context context,
+            ToggleSlider control,
+            BroadcastDispatcher broadcastDispatcher,
+            @Background Handler bgHandler) {
         mContext = context;
         mControl = control;
         mControl.setMax(GAMMA_SPACE_MAX);
-        mBackgroundHandler = new Handler((Looper) Dependency.get(Dependency.BG_LOOPER));
+        mBackgroundHandler = bgHandler;
         mUserTracker = new CurrentUserTracker(broadcastDispatcher) {
             @Override
             public void onUserSwitched(int newUserId) {
@@ -385,6 +393,14 @@ public class BrightnessController implements ToggleSlider.Listener {
         });
     }
 
+    public void hideSlider() {
+        mControl.hideView();
+    }
+
+    public void showSlider() {
+        mControl.showView();
+    }
+
     private void setBrightness(float brightness) {
         mDisplayManager.setTemporaryBrightness(mDisplayId, brightness);
     }
@@ -450,16 +466,25 @@ public class BrightnessController implements ToggleSlider.Listener {
     public static class Factory {
         private final Context mContext;
         private final BroadcastDispatcher mBroadcastDispatcher;
+        private final Handler mBackgroundHandler;
 
         @Inject
-        public Factory(Context context, BroadcastDispatcher broadcastDispatcher) {
+        public Factory(
+                Context context,
+                BroadcastDispatcher broadcastDispatcher,
+                @Background Handler bgHandler) {
             mContext = context;
             mBroadcastDispatcher = broadcastDispatcher;
+            mBackgroundHandler = bgHandler;
         }
 
         /** Create a {@link BrightnessController} */
         public BrightnessController create(ToggleSlider toggleSlider) {
-            return new BrightnessController(mContext, toggleSlider, mBroadcastDispatcher);
+            return new BrightnessController(
+                    mContext,
+                    toggleSlider,
+                    mBroadcastDispatcher,
+                    mBackgroundHandler);
         }
     }
 

@@ -30,11 +30,11 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.dagger.qualifiers.UiBackground;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.keyguard.WakefulnessLifecycle;
 import com.android.systemui.people.widget.PeopleSpaceWidgetManager;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.settings.UserContextProvider;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationListener;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.notification.AssistantFeedbackController;
@@ -126,7 +126,7 @@ public interface NotificationsModule {
     @Provides
     static NotificationGutsManager provideNotificationGutsManager(
             Context context,
-            Lazy<StatusBar> statusBarLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             @Main Handler mainHandler,
             @Background Handler bgHandler,
             AccessibilityManager accessibilityManager,
@@ -145,7 +145,7 @@ public interface NotificationsModule {
             ShadeController shadeController) {
         return new NotificationGutsManager(
                 context,
-                statusBarLazy,
+                statusBarOptionalLazy,
                 mainHandler,
                 bgHandler,
                 accessibilityManager,

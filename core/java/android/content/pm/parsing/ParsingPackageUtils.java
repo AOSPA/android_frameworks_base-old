@@ -18,8 +18,10 @@ package android.content.pm.parsing;
 
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
 import static android.content.pm.ActivityInfo.RESIZE_MODE_UNRESIZEABLE;
+import static android.content.pm.PackageManager.INSTALL_FAILED_INVALID_APK;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_BAD_MANIFEST;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES;
+import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_NOT_APK;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_RESOURCES_ARSC_COMPRESSED;
 import static android.content.pm.PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION;
@@ -45,10 +47,8 @@ import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.Property;
-import android.content.pm.PackageParser;
-import android.content.pm.PackageParser.PackageParserException;
-import android.content.pm.PackageParser.SigningDetails;
 import android.content.pm.Signature;
+import android.content.pm.SigningDetails;
 import android.content.pm.parsing.component.ComponentParseUtils;
 import android.content.pm.parsing.component.ParsedActivity;
 import android.content.pm.parsing.component.ParsedActivityUtils;
@@ -74,6 +74,7 @@ import android.content.pm.parsing.result.ParseInput;
 import android.content.pm.parsing.result.ParseInput.DeferredError;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
+import android.content.pm.permission.CompatibilityPermissionInfo;
 import android.content.pm.split.DefaultSplitAssetLoader;
 import android.content.pm.split.SplitAssetDependencyLoader;
 import android.content.pm.split.SplitAssetLoader;
@@ -89,6 +90,7 @@ import android.os.Bundle;
 import android.os.FileUtils;
 import android.os.Parcel;
 import android.os.RemoteException;
+import android.os.SystemProperties;
 import android.os.Trace;
 import android.os.UserHandle;
 import android.os.ext.SdkExtensions;
@@ -97,6 +99,7 @@ import android.text.TextUtils;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.AttributeSet;
+import android.util.Base64;
 import android.util.DisplayMetrics;
 import android.util.Pair;
 import android.util.Slog;
@@ -120,7 +123,12 @@ import java.io.File;
 import java.io.IOException;
 import java.lang.annotation.Retention;
 import java.lang.annotation.RetentionPolicy;
+import java.security.KeyFactory;
+import java.security.NoSuchAlgorithmException;
 import java.security.PublicKey;
+import java.security.spec.EncodedKeySpec;
+import java.security.spec.InvalidKeySpecException;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.List;
@@ -273,31 +281,25 @@ public class ParsingPackageUtils {
                                 manifestArray);
                     }
                 });
-        try {
-            result = parser.parsePackage(input, file, parseFlags);
-            if (result.isError()) {
-                return result;
-            }
-        } catch (PackageParser.PackageParserException e) {
-            return input.error(PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
-                    "Error parsing package", e);
+        result = parser.parsePackage(input, file, parseFlags);
+        if (result.isError()) {
+            return input.error(result);
         }
 
-        try {
-            ParsingPackage pkg = result.getResult();
-            if (collectCertificates) {
-                pkg.setSigningDetails(
-                        ParsingPackageUtils.getSigningDetails(pkg, false /* skipVerify */));
+        final ParsingPackage pkg = result.getResult();
+        if (collectCertificates) {
+            final ParseResult<SigningDetails> ret =
+                    ParsingPackageUtils.getSigningDetails(input, pkg, false /*skipVerify*/);
+            if (ret.isError()) {
+                return input.error(ret);
             }
-
-            // Need to call this to finish the parsing stage
-            pkg.hideAsParsed();
-
-            return input.success(pkg);
-        } catch (PackageParser.PackageParserException e) {
-            return input.error(PackageManager.INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
-                    "Error collecting package certificates", e);
+            pkg.setSigningDetails(ret.getResult());
         }
+
+        // Need to call this to finish the parsing stage
+        pkg.hideAsParsed();
+
+        return input.success(pkg);
     }
 
     private boolean mOnlyCoreApps;
@@ -327,19 +329,15 @@ public class ParsingPackageUtils {
      * requiring identical package name and version codes, a single base APK,
      * and unique split names.
      * <p>
-     * Note that this <em>does not</em> perform signature verification; that
-     * must be done separately in {@link #getSigningDetails(ParsingPackageRead, boolean)}.
+     * Note that this <em>does not</em> perform signature verification; that must
+     * be done separately in {@link #getSigningDetails(ParseInput, ParsingPackageRead, boolean)}.
      *
      * If {@code useCaches} is true, the package parser might return a cached
      * result from a previous parse of the same {@code packageFile} with the same
      * {@code flags}. Note that this method does not check whether {@code packageFile}
      * has changed since the last parse, it's up to callers to do so.
-     *
-     * @see PackageParser#parsePackageLite(File, int)
      */
-    public ParseResult<ParsingPackage> parsePackage(ParseInput input, File packageFile,
-            int flags)
-            throws PackageParserException {
+    public ParseResult<ParsingPackage> parsePackage(ParseInput input, File packageFile, int flags) {
         if (packageFile.isDirectory()) {
             return parseClusterPackage(input, packageFile, flags);
         } else {
@@ -353,8 +351,8 @@ public class ParsingPackageUtils {
      * identical package name and version codes, a single base APK, and unique
      * split names.
      * <p>
-     * Note that this <em>does not</em> perform signature verification; that
-     * must be done separately in {@link #getSigningDetails(ParsingPackageRead, boolean)}.
+     * Note that this <em>does not</em> perform signature verification; that must
+     * be done separately in {@link #getSigningDetails(ParseInput, ParsingPackageRead, boolean)}.
      */
     private ParseResult<ParsingPackage> parseClusterPackage(ParseInput input, File packageDir,
             int flags) {
@@ -404,15 +402,19 @@ public class ParsingPackageUtils {
 
                 for (int i = 0; i < num; i++) {
                     final AssetManager splitAssets = assetLoader.getSplitAssetManager(i);
-                    parseSplitApk(input, pkg, i, splitAssets, flags);
+                    final ParseResult<ParsingPackage> split =
+                            parseSplitApk(input, pkg, i, splitAssets, flags);
+                    if (split.isError()) {
+                        return input.error(split);
+                    }
                 }
             }
 
             pkg.setUse32BitAbi(lite.isUse32bitAbi());
             return input.success(pkg);
-        } catch (PackageParserException e) {
-            return input.error(INSTALL_PARSE_FAILED_UNEXPECTED_EXCEPTION,
-                    "Failed to load assets: " + lite.getBaseApkPath(), e);
+        } catch (IllegalArgumentException e) {
+            return input.error(e.getCause() instanceof IOException ? INSTALL_FAILED_INVALID_APK
+                    : INSTALL_PARSE_FAILED_NOT_APK, e.getMessage(), e);
         } finally {
             IoUtils.closeQuietly(assetLoader);
         }
@@ -421,11 +423,11 @@ public class ParsingPackageUtils {
     /**
      * Parse the given APK file, treating it as as a single monolithic package.
      * <p>
-     * Note that this <em>does not</em> perform signature verification; that
-     * must be done separately in {@link #getSigningDetails(ParsingPackageRead, boolean)}.
+     * Note that this <em>does not</em> perform signature verification; that must
+     * be done separately in {@link #getSigningDetails(ParseInput, ParsingPackageRead, boolean)}.
      */
     private ParseResult<ParsingPackage> parseMonolithicPackage(ParseInput input, File apkFile,
-            int flags) throws PackageParserException {
+            int flags) {
         final ParseResult<PackageLite> liteResult =
                 ApkLiteParseUtils.parseMonolithicPackageLite(input, apkFile, flags);
         if (liteResult.isError()) {
@@ -459,8 +461,7 @@ public class ParsingPackageUtils {
     }
 
     private ParseResult<ParsingPackage> parseBaseApk(ParseInput input, File apkFile,
-            String codePath, SplitAssetLoader assetLoader, int flags)
-            throws PackageParserException {
+            String codePath, SplitAssetLoader assetLoader, int flags) {
         final String apkPath = apkFile.getAbsolutePath();
 
         String volumeUuid = null;
@@ -471,7 +472,13 @@ public class ParsingPackageUtils {
 
         if (DEBUG_JAR) Slog.d(TAG, "Scanning base APK: " + apkPath);
 
-        final AssetManager assets = assetLoader.getBaseAssetManager();
+        final AssetManager assets;
+        try {
+            assets = assetLoader.getBaseAssetManager();
+        } catch (IllegalArgumentException e) {
+            return input.error(e.getCause() instanceof IOException ? INSTALL_FAILED_INVALID_APK
+                    : INSTALL_PARSE_FAILED_NOT_APK, e.getMessage(), e);
+        }
         final int cookie = assets.findCookieForPath(apkPath);
         if (cookie == 0) {
             return input.error(INSTALL_PARSE_FAILED_BAD_MANIFEST,
@@ -528,7 +535,12 @@ public class ParsingPackageUtils {
             pkg.setVolumeUuid(volumeUuid);
 
             if ((flags & PARSE_COLLECT_CERTIFICATES) != 0) {
-                pkg.setSigningDetails(getSigningDetails(pkg, false));
+                final ParseResult<SigningDetails> ret =
+                        getSigningDetails(input, pkg, false /*skipVerify*/);
+                if (ret.isError()) {
+                    return input.error(ret);
+                }
+                pkg.setSigningDetails(ret.getResult());
             } else {
                 pkg.setSigningDetails(SigningDetails.UNKNOWN);
             }
@@ -634,11 +646,13 @@ public class ParsingPackageUtils {
      */
     private ParseResult<ParsingPackage> parseSplitApk(ParseInput input, ParsingPackage pkg,
             Resources res, XmlResourceParser parser, int flags, int splitIndex)
-            throws XmlPullParserException, IOException, PackageParserException {
-        AttributeSet attrs = parser;
-
+            throws XmlPullParserException, IOException {
         // We parsed manifest tag earlier; just skip past it
-        PackageParser.parsePackageSplitNames(parser, attrs);
+        final ParseResult<Pair<String, String>> packageSplitResult =
+                ApkLiteParseUtils.parsePackageSplitNames(input, parser);
+        if (packageSplitResult.isError()) {
+            return input.error(packageSplitResult);
+        }
 
         int type;
 
@@ -905,7 +919,7 @@ public class ParsingPackageUtils {
             );
         }
 
-        convertNewPermissions(pkg);
+        convertCompatPermissions(pkg);
 
         convertSplitPermissions(pkg);
 
@@ -1059,7 +1073,7 @@ public class ParsingPackageUtils {
                                     + " must define a public-key value on first use at "
                                     + parser.getPositionDescription());
                         } else if (encodedKey != null) {
-                            PublicKey currentKey = PackageParser.parsePublicKey(encodedKey);
+                            PublicKey currentKey = parsePublicKey(encodedKey);
                             if (currentKey == null) {
                                 Slog.w(TAG, "No recognized valid key in 'public-key' tag at "
                                         + parser.getPositionDescription() + " key-set "
@@ -1297,8 +1311,8 @@ public class ParsingPackageUtils {
             final int size = usesPermissions.size();
             for (int i = 0; i < size; i++) {
                 final ParsedUsesPermission usesPermission = usesPermissions.get(i);
-                if (Objects.equals(usesPermission.name, name)) {
-                    if (usesPermission.usesPermissionFlags != usesPermissionFlags) {
+                if (Objects.equals(usesPermission.getName(), name)) {
+                    if (usesPermission.getUsesPermissionFlags() != usesPermissionFlags) {
                         return input.error("Conflicting uses-permissions flags: "
                                 + name + " in package: " + pkg.getPackageName() + " at: "
                                 + parser.getPositionDescription());
@@ -1603,8 +1617,39 @@ public class ParsingPackageUtils {
     }
 
     /**
-     * {@link ParseResult} version of
-     * {@link PackageParser#computeMinSdkVersion(int, String, int, String[], String[])}
+     * Computes the minSdkVersion to use at runtime. If the package is not
+     * compatible with this platform, populates {@code outError[0]} with an
+     * error message.
+     * <p>
+     * If {@code minCode} is not specified, e.g. the value is {@code null},
+     * then behavior varies based on the {@code platformSdkVersion}:
+     * <ul>
+     * <li>If the platform SDK version is greater than or equal to the
+     * {@code minVers}, returns the {@code mniVers} unmodified.
+     * <li>Otherwise, returns -1 to indicate that the package is not
+     * compatible with this platform.
+     * </ul>
+     * <p>
+     * Otherwise, the behavior varies based on whether the current platform
+     * is a pre-release version, e.g. the {@code platformSdkCodenames} array
+     * has length > 0:
+     * <ul>
+     * <li>If this is a pre-release platform and the value specified by
+     * {@code targetCode} is contained within the array of allowed pre-release
+     * codenames, this method will return {@link Build.VERSION_CODES#CUR_DEVELOPMENT}.
+     * <li>If this is a released platform, this method will return -1 to
+     * indicate that the package is not compatible with this platform.
+     * </ul>
+     *
+     * @param minVers minSdkVersion number, if specified in the application
+     *                manifest, or 1 otherwise
+     * @param minCode minSdkVersion code, if specified in the application
+     *                manifest, or {@code null} otherwise
+     * @param platformSdkVersion platform SDK version number, typically
+     *                           Build.VERSION.SDK_INT
+     * @param platformSdkCodenames array of allowed prerelease SDK codenames
+     *                             for this platform
+     * @return the minSdkVersion to use at runtime if successful
      */
     public static ParseResult<Integer> computeMinSdkVersion(@IntRange(from = 1) int minVers,
             @Nullable String minCode, @IntRange(from = 1) int platformSdkVersion,
@@ -1641,8 +1686,31 @@ public class ParsingPackageUtils {
     }
 
     /**
-     * {@link ParseResult} version of
-     * {@link PackageParser#computeTargetSdkVersion(int, String, String[], String[])}
+     * Computes the targetSdkVersion to use at runtime. If the package is not
+     * compatible with this platform, populates {@code outError[0]} with an
+     * error message.
+     * <p>
+     * If {@code targetCode} is not specified, e.g. the value is {@code null},
+     * then the {@code targetVers} will be returned unmodified.
+     * <p>
+     * Otherwise, the behavior varies based on whether the current platform
+     * is a pre-release version, e.g. the {@code platformSdkCodenames} array
+     * has length > 0:
+     * <ul>
+     * <li>If this is a pre-release platform and the value specified by
+     * {@code targetCode} is contained within the array of allowed pre-release
+     * codenames, this method will return {@link Build.VERSION_CODES#CUR_DEVELOPMENT}.
+     * <li>If this is a released platform, this method will return -1 to
+     * indicate that the package is not compatible with this platform.
+     * </ul>
+     *
+     * @param targetVers targetSdkVersion number, if specified in the
+     *                   application manifest, or 0 otherwise
+     * @param targetCode targetSdkVersion code, if specified in the application
+     *                   manifest, or {@code null} otherwise
+     * @param platformSdkCodenames array of allowed pre-release SDK codenames
+     *                             for this platform
+     * @return the targetSdkVersion to use at runtime if successful
      */
     public static ParseResult<Integer> computeTargetSdkVersion(@IntRange(from = 0) int targetVers,
             @Nullable String targetCode, @NonNull String[] platformSdkCodenames,
@@ -2674,7 +2742,7 @@ public class ParsingPackageUtils {
                     R.styleable.AndroidManifestResourceOverlay_requiredSystemPropertyName);
             String propValue = sa.getString(
                     R.styleable.AndroidManifestResourceOverlay_requiredSystemPropertyValue);
-            if (!PackageParser.checkRequiredSystemProperties(propName, propValue)) {
+            if (!checkRequiredSystemProperties(propName, propValue)) {
                 String message = "Skipping target and overlay pair " + target + " and "
                         + pkg.getBaseApkPath()
                         + ": overlay ignored due to required system property: "
@@ -2791,30 +2859,15 @@ public class ParsingPackageUtils {
         }
     }
 
-    private static void convertNewPermissions(ParsingPackage pkg) {
-        final int NP = PackageParser.NEW_PERMISSIONS.length;
-        StringBuilder newPermsMsg = null;
-        for (int ip = 0; ip < NP; ip++) {
-            final PackageParser.NewPermissionInfo npi
-                    = PackageParser.NEW_PERMISSIONS[ip];
-            if (pkg.getTargetSdkVersion() >= npi.sdkVersion) {
+    private static void convertCompatPermissions(ParsingPackage pkg) {
+        for (int i = 0, size = CompatibilityPermissionInfo.COMPAT_PERMS.length; i < size; i++) {
+            final CompatibilityPermissionInfo info = CompatibilityPermissionInfo.COMPAT_PERMS[i];
+            if (pkg.getTargetSdkVersion() >= info.sdkVersion) {
                 break;
             }
-            if (!pkg.getRequestedPermissions().contains(npi.name)) {
-                if (newPermsMsg == null) {
-                    newPermsMsg = new StringBuilder(128);
-                    newPermsMsg.append(pkg.getPackageName());
-                    newPermsMsg.append(": compat added ");
-                } else {
-                    newPermsMsg.append(' ');
-                }
-                newPermsMsg.append(npi.name);
-                pkg.addUsesPermission(new ParsedUsesPermission(npi.name, 0))
-                        .addImplicitPermission(npi.name);
+            if (!pkg.getRequestedPermissions().contains(info.getName())) {
+                pkg.addImplicitPermission(info.getName());
             }
-        }
-        if (newPermsMsg != null) {
-            Slog.i(TAG, newPermsMsg.toString());
         }
     }
 
@@ -2831,8 +2884,7 @@ public class ParsingPackageUtils {
             for (int in = 0; in < newPerms.size(); in++) {
                 final String perm = newPerms.get(in);
                 if (!requestedPermissions.contains(perm)) {
-                    pkg.addUsesPermission(new ParsedUsesPermission(perm, 0))
-                            .addImplicitPermission(perm);
+                    pkg.addImplicitPermission(perm);
                 }
             }
         }
@@ -2968,6 +3020,114 @@ public class ParsingPackageUtils {
     }
 
     /**
+     * @return {@link PublicKey} of a given encoded public key.
+     */
+    public static final PublicKey parsePublicKey(final String encodedPublicKey) {
+        if (encodedPublicKey == null) {
+            Slog.w(TAG, "Could not parse null public key");
+            return null;
+        }
+
+        try {
+            return parsePublicKey(Base64.decode(encodedPublicKey, Base64.DEFAULT));
+        } catch (IllegalArgumentException e) {
+            Slog.w(TAG, "Could not parse verifier public key; invalid Base64");
+            return null;
+        }
+    }
+
+    /**
+     * @return {@link PublicKey} of the given byte array of a public key.
+     */
+    public static final PublicKey parsePublicKey(final byte[] publicKey) {
+        if (publicKey == null) {
+            Slog.w(TAG, "Could not parse null public key");
+            return null;
+        }
+
+        final EncodedKeySpec keySpec;
+        try {
+            keySpec = new X509EncodedKeySpec(publicKey);
+        } catch (IllegalArgumentException e) {
+            Slog.w(TAG, "Could not parse verifier public key; invalid Base64");
+            return null;
+        }
+
+        /* First try the key as an RSA key. */
+        try {
+            final KeyFactory keyFactory = KeyFactory.getInstance("RSA");
+            return keyFactory.generatePublic(keySpec);
+        } catch (NoSuchAlgorithmException e) {
+            Slog.wtf(TAG, "Could not parse public key: RSA KeyFactory not included in build");
+        } catch (InvalidKeySpecException e) {
+            // Not a RSA public key.
+        }
+
+        /* Now try it as a ECDSA key. */
+        try {
+            final KeyFactory keyFactory = KeyFactory.getInstance("EC");
+            return keyFactory.generatePublic(keySpec);
+        } catch (NoSuchAlgorithmException e) {
+            Slog.wtf(TAG, "Could not parse public key: EC KeyFactory not included in build");
+        } catch (InvalidKeySpecException e) {
+            // Not a ECDSA public key.
+        }
+
+        /* Now try it as a DSA key. */
+        try {
+            final KeyFactory keyFactory = KeyFactory.getInstance("DSA");
+            return keyFactory.generatePublic(keySpec);
+        } catch (NoSuchAlgorithmException e) {
+            Slog.wtf(TAG, "Could not parse public key: DSA KeyFactory not included in build");
+        } catch (InvalidKeySpecException e) {
+            // Not a DSA public key.
+        }
+
+        /* Not a supported key type */
+        return null;
+    }
+
+    /**
+     * Returns {@code true} if both the property name and value are empty or if the given system
+     * property is set to the specified value. Properties can be one or more, and if properties are
+     * more than one, they must be separated by comma, and count of names and values must be equal,
+     * and also every given system property must be set to the corresponding value.
+     * In all other cases, returns {@code false}
+     */
+    public static boolean checkRequiredSystemProperties(@Nullable String rawPropNames,
+            @Nullable String rawPropValues) {
+        if (TextUtils.isEmpty(rawPropNames) || TextUtils.isEmpty(rawPropValues)) {
+            if (!TextUtils.isEmpty(rawPropNames) || !TextUtils.isEmpty(rawPropValues)) {
+                // malformed condition - incomplete
+                Slog.w(TAG, "Disabling overlay - incomplete property :'" + rawPropNames
+                        + "=" + rawPropValues + "' - require both requiredSystemPropertyName"
+                        + " AND requiredSystemPropertyValue to be specified.");
+                return false;
+            }
+            // no valid condition set - so no exclusion criteria, overlay will be included.
+            return true;
+        }
+
+        final String[] propNames = rawPropNames.split(",");
+        final String[] propValues = rawPropValues.split(",");
+
+        if (propNames.length != propValues.length) {
+            Slog.w(TAG, "Disabling overlay - property :'" + rawPropNames
+                    + "=" + rawPropValues + "' - require both requiredSystemPropertyName"
+                    + " AND requiredSystemPropertyValue lists to have the same size.");
+            return false;
+        }
+        for (int i = 0; i < propNames.length; i++) {
+            // Check property value: make sure it is both set and equal to expected value
+            final String currValue = SystemProperties.get(propNames[i]);
+            if (!TextUtils.equals(currValue, propValues[i])) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /**
      * Collect certificates from all the APKs described in the given package. Also asserts that
      * all APK contents are signed correctly and consistently.
      *
@@ -2976,11 +3136,9 @@ public class ParsingPackageUtils {
      *  construct a dummy ParseInput.
      */
     @CheckResult
-    public static SigningDetails getSigningDetails(ParsingPackageRead pkg, boolean skipVerify)
-            throws PackageParserException {
+    public static ParseResult<SigningDetails> getSigningDetails(ParseInput input,
+            ParsingPackageRead pkg, boolean skipVerify) {
         SigningDetails signingDetails = SigningDetails.UNKNOWN;
-
-        ParseInput input = ParseTypeImpl.forDefaultParsing().reset();
 
         Trace.traceBegin(TRACE_TAG_PACKAGE_MANAGER, "collectCertificates");
         try {
@@ -2993,8 +3151,7 @@ public class ParsingPackageUtils {
                     pkg.getTargetSdkVersion()
             );
             if (result.isError()) {
-                throw new PackageParser.PackageParserException(result.getErrorCode(),
-                        result.getErrorMessage(), result.getException());
+                return input.error(result);
             }
 
             signingDetails = result.getResult();
@@ -3011,15 +3168,11 @@ public class ParsingPackageUtils {
                             pkg.getTargetSdkVersion()
                     );
                     if (result.isError()) {
-                        throw new PackageParser.PackageParserException(result.getErrorCode(),
-                                result.getErrorMessage(), result.getException());
+                        return input.error(result);
                     }
-
-
-                    signingDetails = result.getResult();
                 }
             }
-            return signingDetails;
+            return result;
         } finally {
             Trace.traceEnd(TRACE_TAG_PACKAGE_MANAGER);
         }
@@ -3035,35 +3188,42 @@ public class ParsingPackageUtils {
             // must use v2 signing scheme
             minSignatureScheme = SigningDetails.SignatureSchemeVersion.SIGNING_BLOCK_V2;
         }
-        SigningDetails verified;
-        try {
-            if (skipVerify) {
-                // systemDir APKs are already trusted, save time by not verifying; since the
-                // signature is not verified and some system apps can have their V2+ signatures
-                // stripped allow pulling the certs from the jar signature.
-                verified = ApkSignatureVerifier.unsafeGetCertsWithoutVerification(
-                        baseCodePath, SigningDetails.SignatureSchemeVersion.JAR);
-            } else {
-                verified = ApkSignatureVerifier.verify(baseCodePath, minSignatureScheme);
-            }
-        } catch (PackageParserException e) {
-            return input.error(PackageManager.INSTALL_PARSE_FAILED_NO_CERTIFICATES,
-                    "Failed collecting certificates for " + baseCodePath, e);
+        final ParseResult<SigningDetails> verified;
+        if (skipVerify) {
+            // systemDir APKs are already trusted, save time by not verifying; since the
+            // signature is not verified and some system apps can have their V2+ signatures
+            // stripped allow pulling the certs from the jar signature.
+            verified = ApkSignatureVerifier.unsafeGetCertsWithoutVerification(input, baseCodePath,
+                    SigningDetails.SignatureSchemeVersion.JAR);
+        } else {
+            verified = ApkSignatureVerifier.verify(input, baseCodePath, minSignatureScheme);
+        }
+
+        if (verified.isError()) {
+            return input.error(verified);
         }
 
         // Verify that entries are signed consistently with the first pkg
         // we encountered. Note that for splits, certificates may have
         // already been populated during an earlier parse of a base APK.
         if (existingSigningDetails == SigningDetails.UNKNOWN) {
-            return input.success(verified);
+            return verified;
         } else {
-            if (!Signature.areExactMatch(existingSigningDetails.signatures, verified.signatures)) {
+            if (!Signature.areExactMatch(existingSigningDetails.getSignatures(),
+                    verified.getResult().getSignatures())) {
                 return input.error(INSTALL_PARSE_FAILED_INCONSISTENT_CERTIFICATES,
                         baseCodePath + " has mismatched certificates");
             }
 
             return input.success(existingSigningDetails);
         }
+    }
+
+    /**
+     * @hide
+     */
+    public static void setCompatibilityModeEnabled(boolean compatibilityModeEnabled) {
+        sCompatibilityModeEnabled = compatibilityModeEnabled;
     }
 
     /**

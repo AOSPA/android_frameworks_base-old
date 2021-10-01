@@ -1281,6 +1281,12 @@ package android.hardware.soundtrigger {
 
 package android.inputmethodservice {
 
+  public abstract class AbstractInputMethodService extends android.window.WindowProviderService implements android.view.KeyEvent.Callback {
+    method public final int getInitialDisplayId();
+    method @Nullable public final android.os.Bundle getWindowContextOptions();
+    method public final int getWindowType();
+  }
+
   @UiContext public class InputMethodService extends android.inputmethodservice.AbstractInputMethodService {
     field public static final long FINISH_INPUT_NO_FALLBACK_CONNECTION = 156215187L; // 0x94fa793L
   }
@@ -1397,6 +1403,7 @@ package android.location {
 package android.media {
 
   public final class AudioAttributes implements android.os.Parcelable {
+    method public static int[] getSdkUsages();
     method @NonNull public static String usageToXsdString(int);
     method public static int xsdStringToUsage(@NonNull String);
   }
@@ -1421,7 +1428,9 @@ package android.media {
     method @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public int abandonAudioFocusForTest(@NonNull android.media.AudioFocusRequest, @NonNull String);
     method @Nullable public static android.media.AudioDeviceInfo getDeviceInfoFromType(int);
     method @IntRange(from=0) @RequiresPermission("android.permission.QUERY_AUDIO_STATE") public long getFadeOutDurationOnFocusLossMillis(@NonNull android.media.AudioAttributes);
+    method public static final int[] getPublicStreamTypes();
     method @NonNull public java.util.List<java.lang.Integer> getReportedSurroundFormats();
+    method public int getStreamMinVolumeInt(int);
     method @NonNull public java.util.Map<java.lang.Integer,java.lang.Boolean> getSurroundFormats();
     method public boolean hasRegisteredDynamicPolicy();
     method @RequiresPermission(anyOf={android.Manifest.permission.MODIFY_AUDIO_ROUTING, android.Manifest.permission.QUERY_AUDIO_STATE}) public boolean isFullVolumeDevice();
@@ -1446,6 +1455,7 @@ package android.media {
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) public static float getMasterBalance();
     method public static final int getNumStreamTypes();
     method @RequiresPermission(android.Manifest.permission.MODIFY_AUDIO_SETTINGS) public static int setMasterBalance(float);
+    method @NonNull public static String streamToString(int);
     field public static final int DEVICE_ROLE_DISABLED = 2; // 0x2
     field public static final int DEVICE_ROLE_NONE = 0; // 0x0
     field public static final int DEVICE_ROLE_PREFERRED = 1; // 0x1
@@ -1541,6 +1551,13 @@ package android.media.audiopolicy {
 
   public static class AudioPolicy.Builder {
     method @NonNull public android.media.audiopolicy.AudioPolicy.Builder setIsTestFocusPolicy(boolean);
+  }
+
+  public final class AudioProductStrategy implements android.os.Parcelable {
+    method @NonNull public static android.media.AudioAttributes getDefaultAttributes();
+    method public int getLegacyStreamTypeForAudioAttributes(@NonNull android.media.AudioAttributes);
+    method public int getVolumeGroupIdForAudioAttributes(@NonNull android.media.AudioAttributes);
+    method public int getVolumeGroupIdForLegacyStreamType(int);
   }
 
 }
@@ -2121,6 +2138,7 @@ package android.provider {
   public final class DeviceConfig {
     field public static final String NAMESPACE_ALARM_MANAGER = "alarm_manager";
     field public static final String NAMESPACE_ANDROID = "android";
+    field public static final String NAMESPACE_APP_COMPAT_OVERRIDES = "app_compat_overrides";
     field public static final String NAMESPACE_CONSTRAIN_DISPLAY_APIS = "constrain_display_apis";
     field public static final String NAMESPACE_DEVICE_IDLE = "device_idle";
     field public static final String NAMESPACE_JOB_SCHEDULER = "jobscheduler";
@@ -2865,6 +2883,10 @@ package android.view.accessibility {
     method public long getAccessibilityIdForRegion(@NonNull android.graphics.Region);
   }
 
+  public class AccessibilityRecord {
+    method public void setDisplayId(int);
+  }
+
   public final class AccessibilityWindowInfo implements android.os.Parcelable {
     method public static void setNumInstancesInUseCounter(java.util.concurrent.atomic.AtomicInteger);
   }
@@ -3194,6 +3216,59 @@ package android.window {
     field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskAppearedInfo> CREATOR;
   }
 
+  public final class TaskFragmentAppearedInfo implements android.os.Parcelable {
+    method @NonNull public android.view.SurfaceControl getLeash();
+    method @NonNull public android.window.TaskFragmentInfo getTaskFragmentInfo();
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskFragmentAppearedInfo> CREATOR;
+  }
+
+  public final class TaskFragmentCreationParams implements android.os.Parcelable {
+    method @NonNull public android.os.IBinder getFragmentToken();
+    method @NonNull public android.graphics.Rect getInitialBounds();
+    method @NonNull public android.window.TaskFragmentOrganizerToken getOrganizer();
+    method @NonNull public android.os.IBinder getOwnerToken();
+    method public int getWindowingMode();
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskFragmentCreationParams> CREATOR;
+  }
+
+  public static final class TaskFragmentCreationParams.Builder {
+    ctor public TaskFragmentCreationParams.Builder(@NonNull android.window.TaskFragmentOrganizerToken, @NonNull android.os.IBinder, @NonNull android.os.IBinder);
+    method @NonNull public android.window.TaskFragmentCreationParams build();
+    method @NonNull public android.window.TaskFragmentCreationParams.Builder setInitialBounds(@NonNull android.graphics.Rect);
+    method @NonNull public android.window.TaskFragmentCreationParams.Builder setWindowingMode(int);
+  }
+
+  public final class TaskFragmentInfo implements android.os.Parcelable {
+    method public boolean equalsForTaskFragmentOrganizer(@Nullable android.window.TaskFragmentInfo);
+    method @NonNull public java.util.List<android.os.IBinder> getActivities();
+    method @NonNull public android.content.res.Configuration getConfiguration();
+    method @NonNull public android.os.IBinder getFragmentToken();
+    method @NonNull public android.graphics.Point getPositionInParent();
+    method @NonNull public android.window.WindowContainerToken getToken();
+    method public int getWindowingMode();
+    method public boolean hasRunningActivity();
+    method public boolean isEmpty();
+    method public boolean isVisible();
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskFragmentInfo> CREATOR;
+  }
+
+  public class TaskFragmentOrganizer extends android.window.WindowOrganizer {
+    ctor public TaskFragmentOrganizer(@NonNull java.util.concurrent.Executor);
+    method @NonNull public java.util.concurrent.Executor getExecutor();
+    method @NonNull public android.window.TaskFragmentOrganizerToken getOrganizerToken();
+    method public void onTaskFragmentAppeared(@NonNull android.window.TaskFragmentAppearedInfo);
+    method public void onTaskFragmentError(@NonNull android.os.IBinder, @NonNull Throwable);
+    method public void onTaskFragmentInfoChanged(@NonNull android.window.TaskFragmentInfo);
+    method public void onTaskFragmentParentInfoChanged(@NonNull android.os.IBinder, @NonNull android.content.res.Configuration);
+    method public void onTaskFragmentVanished(@NonNull android.window.TaskFragmentInfo);
+    method @CallSuper public void registerOrganizer();
+    method @CallSuper public void unregisterOrganizer();
+  }
+
+  public final class TaskFragmentOrganizerToken implements android.os.Parcelable {
+    field @NonNull public static final android.os.Parcelable.Creator<android.window.TaskFragmentOrganizerToken> CREATOR;
+  }
+
   public class TaskOrganizer extends android.window.WindowOrganizer {
     ctor public TaskOrganizer();
     method @BinderThread public void addStartingWindow(@NonNull android.window.StartingWindowInfo, @NonNull android.os.IBinder);
@@ -3222,9 +3297,13 @@ package android.window {
 
   public final class WindowContainerTransaction implements android.os.Parcelable {
     ctor public WindowContainerTransaction();
+    method @NonNull public android.window.WindowContainerTransaction createTaskFragment(@NonNull android.window.TaskFragmentCreationParams);
+    method @NonNull public android.window.WindowContainerTransaction deleteTaskFragment(@NonNull android.window.WindowContainerToken);
     method public int describeContents();
     method @NonNull public android.window.WindowContainerTransaction reorder(@NonNull android.window.WindowContainerToken, boolean);
     method @NonNull public android.window.WindowContainerTransaction reparent(@NonNull android.window.WindowContainerToken, @Nullable android.window.WindowContainerToken, boolean);
+    method @NonNull public android.window.WindowContainerTransaction reparentActivityToTaskFragment(@NonNull android.os.IBinder, @NonNull android.os.IBinder);
+    method @NonNull public android.window.WindowContainerTransaction reparentChildren(@NonNull android.window.WindowContainerToken, @Nullable android.window.WindowContainerToken);
     method @NonNull public android.window.WindowContainerTransaction reparentTasks(@Nullable android.window.WindowContainerToken, @Nullable android.window.WindowContainerToken, @Nullable int[], @Nullable int[], boolean);
     method @NonNull public android.window.WindowContainerTransaction scheduleFinishEnterPip(@NonNull android.window.WindowContainerToken, @NonNull android.graphics.Rect);
     method @NonNull public android.window.WindowContainerTransaction setActivityWindowingMode(@NonNull android.window.WindowContainerToken, int);
@@ -3232,12 +3311,14 @@ package android.window {
     method @NonNull public android.window.WindowContainerTransaction setAppBounds(@NonNull android.window.WindowContainerToken, @NonNull android.graphics.Rect);
     method @NonNull public android.window.WindowContainerTransaction setBounds(@NonNull android.window.WindowContainerToken, @NonNull android.graphics.Rect);
     method @NonNull public android.window.WindowContainerTransaction setBoundsChangeTransaction(@NonNull android.window.WindowContainerToken, @NonNull android.view.SurfaceControl.Transaction);
+    method @NonNull public android.window.WindowContainerTransaction setErrorCallbackToken(@NonNull android.os.IBinder);
     method @NonNull public android.window.WindowContainerTransaction setFocusable(@NonNull android.window.WindowContainerToken, boolean);
     method @NonNull public android.window.WindowContainerTransaction setHidden(@NonNull android.window.WindowContainerToken, boolean);
     method @NonNull public android.window.WindowContainerTransaction setLaunchRoot(@NonNull android.window.WindowContainerToken, @Nullable int[], @Nullable int[]);
     method @NonNull public android.window.WindowContainerTransaction setScreenSizeDp(@NonNull android.window.WindowContainerToken, int, int);
     method @NonNull public android.window.WindowContainerTransaction setSmallestScreenWidthDp(@NonNull android.window.WindowContainerToken, int);
     method @NonNull public android.window.WindowContainerTransaction setWindowingMode(@NonNull android.window.WindowContainerToken, int);
+    method @NonNull public android.window.WindowContainerTransaction startActivityInTaskFragment(@NonNull android.os.IBinder, @NonNull android.os.IBinder, @NonNull android.content.Intent, @Nullable android.os.Bundle);
     method public void writeToParcel(@NonNull android.os.Parcel, int);
     field @NonNull public static final android.os.Parcelable.Creator<android.window.WindowContainerTransaction> CREATOR;
   }
@@ -3249,13 +3330,14 @@ package android.window {
 
   public class WindowOrganizer {
     ctor public WindowOrganizer();
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public int applySyncTransaction(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.WindowContainerTransactionCallback);
-    method @RequiresPermission(android.Manifest.permission.MANAGE_ACTIVITY_TASKS) public void applyTransaction(@NonNull android.window.WindowContainerTransaction);
+    method @RequiresPermission(value=android.Manifest.permission.MANAGE_ACTIVITY_TASKS, conditional=true) public int applySyncTransaction(@NonNull android.window.WindowContainerTransaction, @NonNull android.window.WindowContainerTransactionCallback);
+    method @RequiresPermission(value=android.Manifest.permission.MANAGE_ACTIVITY_TASKS, conditional=true) public void applyTransaction(@NonNull android.window.WindowContainerTransaction);
   }
 
   @UiContext public abstract class WindowProviderService extends android.app.Service {
     ctor public WindowProviderService();
     method public final void attachToWindowToken(@NonNull android.os.IBinder);
+    method @NonNull public int getInitialDisplayId();
     method @Nullable public android.os.Bundle getWindowContextOptions();
     method public abstract int getWindowType();
   }

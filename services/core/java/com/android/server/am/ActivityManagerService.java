@@ -258,6 +258,7 @@ import android.os.IDeviceIdentifiersPolicyService;
 import android.os.IPermissionController;
 import android.os.IProcessInfoService;
 import android.os.IProgressListener;
+import android.os.InputConstants;
 import android.os.Looper;
 import android.os.Message;
 import android.os.Parcel;
@@ -1853,6 +1854,18 @@ public class ActivityManagerService extends IActivityManager.Stub
                     }
                 });
 
+        mAppOpsService.startWatchingMode(AppOpsManager.OP_RUN_ANY_IN_BACKGROUND, null,
+                new IAppOpsCallback.Stub() {
+                    @Override public void opChanged(int op, int uid, String packageName) {
+                        if (op == AppOpsManager.OP_RUN_ANY_IN_BACKGROUND && packageName != null) {
+                            synchronized (ActivityManagerService.this) {
+                                mServices.updateAppRestrictedAnyInBackgroundLocked(
+                                        uid, packageName);
+                            }
+                        }
+                    }
+                });
+
         final int[] cameraOp = {AppOpsManager.OP_CAMERA};
         mAppOpsService.startWatchingActive(cameraOp, new IAppOpsActiveCallback.Stub() {
             @Override
@@ -3425,7 +3438,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         // control of all writes to the file in question.
 
         // We must complete all stack dumps within 20 seconds.
-        long remainingTime = 20 * 1000;
+        long remainingTime = 20 * 1000 * Build.HW_TIMEOUT_MULTIPLIER;
 
         // As applications are usually interested with the ANR stack traces, but we can't share with
         // them the stack traces other than their own stacks. So after the very first PID is
@@ -3528,30 +3541,39 @@ public class ActivityManagerService extends IActivityManager.Stub
         final long callingId = Binder.clearCallingIdentity();
         try {
             IPackageManager pm = AppGlobals.getPackageManager();
+            boolean permitted = true;
             // Instant packages are not protected
             if (getPackageManagerInternal().isPackageDataProtected(
                     resolvedUserId, packageName)) {
-                throw new SecurityException(
-                        "Cannot clear data for a protected package: " + packageName);
+                if (ActivityManager.checkUidPermission(android.Manifest.permission.MANAGE_USERS,
+                        uid) == PERMISSION_GRANTED) {
+                    // The caller has the MANAGE_USERS permission, tell them what's going on.
+                    throw new SecurityException(
+                            "Cannot clear data for a protected package: " + packageName);
+                } else {
+                    permitted = false; // fall through and throw the SecurityException below.
+                }
             }
 
             ApplicationInfo applicationInfo = null;
-            try {
-                applicationInfo = pm.getApplicationInfo(packageName,
-                        MATCH_UNINSTALLED_PACKAGES, resolvedUserId);
-            } catch (RemoteException e) {
-                /* ignore */
+            if (permitted) {
+                try {
+                    applicationInfo = pm.getApplicationInfo(packageName,
+                            MATCH_UNINSTALLED_PACKAGES, resolvedUserId);
+                } catch (RemoteException e) {
+                    /* ignore */
+                }
+                permitted = (applicationInfo != null && applicationInfo.uid == uid) // own uid data
+                        || (checkComponentPermission(permission.CLEAR_APP_USER_DATA,
+                                pid, uid, -1, true) == PackageManager.PERMISSION_GRANTED);
             }
-            appInfo = applicationInfo;
 
-            final boolean clearingOwnUidData = appInfo != null && appInfo.uid == uid;
-
-            if (!clearingOwnUidData && checkComponentPermission(permission.CLEAR_APP_USER_DATA,
-                        pid, uid, -1, true) != PackageManager.PERMISSION_GRANTED) {
+            if (!permitted) {
                 throw new SecurityException("PID " + pid + " does not have permission "
                         + android.Manifest.permission.CLEAR_APP_USER_DATA + " to clear data"
                         + " of package " + packageName);
             }
+            appInfo = applicationInfo;
 
             final boolean hasInstantMetadata = getPackageManagerInternal()
                     .hasInstantApplicationMetadata(packageName, resolvedUserId);
@@ -3597,15 +3619,17 @@ public class ActivityManagerService extends IActivityManager.Stub
                     intent.addFlags(Intent.FLAG_RECEIVER_INCLUDE_BACKGROUND);
                     intent.putExtra(Intent.EXTRA_UID, (appInfo != null) ? appInfo.uid : -1);
                     intent.putExtra(Intent.EXTRA_USER_HANDLE, resolvedUserId);
+                    final int[] visibilityAllowList =
+                            mPackageManagerInt.getVisibilityAllowList(packageName, resolvedUserId);
                     if (isInstantApp) {
                         intent.putExtra(Intent.EXTRA_PACKAGE_NAME, packageName);
                         broadcastIntentInPackage("android", null, SYSTEM_UID, uid, pid, intent,
                                 null, null, 0, null, null, permission.ACCESS_INSTANT_APPS, null,
-                                false, false, resolvedUserId, false, null);
+                                false, false, resolvedUserId, false, null, visibilityAllowList);
                     } else {
                         broadcastIntentInPackage("android", null, SYSTEM_UID, uid, pid, intent,
                                 null, null, 0, null, null, null, null, false, false, resolvedUserId,
-                                false, null);
+                                false, null, visibilityAllowList);
                     }
 
                     if (observer != null) {
@@ -4186,11 +4210,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             return;
         }
         if (appId < 0) {
-            try {
-                appId = UserHandle.getAppId(AppGlobals.getPackageManager()
-                        .getPackageUid(packageName, MATCH_DEBUG_TRIAGED_MISSING, 0));
-            } catch (RemoteException e) {
-            }
+            appId = UserHandle.getAppId(getPackageManagerInternal().getPackageUid(packageName,
+                    MATCH_DEBUG_TRIAGED_MISSING | MATCH_ANY_USER, UserHandle.USER_SYSTEM));
         }
 
         mProcessList.killAppZygotesLocked(packageName, appId, userId, true /* force */);
@@ -4207,11 +4228,8 @@ public class ActivityManagerService extends IActivityManager.Stub
         }
 
         if (appId < 0 && packageName != null) {
-            try {
-                appId = UserHandle.getAppId(AppGlobals.getPackageManager()
-                        .getPackageUid(packageName, MATCH_DEBUG_TRIAGED_MISSING, 0));
-            } catch (RemoteException e) {
-            }
+            appId = UserHandle.getAppId(getPackageManagerInternal().getPackageUid(packageName,
+                    MATCH_DEBUG_TRIAGED_MISSING | MATCH_ANY_USER, UserHandle.USER_SYSTEM));
         }
 
         boolean didSomething;
@@ -5766,13 +5784,18 @@ public class ActivityManagerService extends IActivityManager.Stub
         if (pid == MY_PID) {
             return PackageManager.PERMISSION_GRANTED;
         }
+        if (uid != ROOT_UID) { // bypass the root
+            if (mPackageManagerInt.filterAppAccess(uid, Binder.getCallingUid())) {
+                return PackageManager.PERMISSION_DENIED;
+            }
+        }
         return mUgmInternal.checkUriPermission(new GrantUri(userId, uri, modeFlags), uid, modeFlags)
                 ? PackageManager.PERMISSION_GRANTED : PackageManager.PERMISSION_DENIED;
     }
 
     @Override
     public int[] checkUriPermissions(@NonNull List<Uri> uris, int pid, int uid,
-            final int modeFlags, IBinder callerToken) {
+            final int modeFlags, int userId, IBinder callerToken) {
         final int size = uris.size();
         int[] res = new int[size];
         // Default value DENIED.
@@ -5780,9 +5803,9 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         for (int i = 0; i < size; i++) {
             final Uri uri = uris.get(i);
-            final int userId = ContentProvider.getUserIdFromUri(uri, mContext.getUserId());
+            final int userIdFromUri = ContentProvider.getUserIdFromUri(uri, userId);
             res[i] = checkUriPermission(ContentProvider.getUriWithoutUserId(uri), pid, uid,
-                    modeFlags, userId, callerToken);
+                    modeFlags, userIdFromUri, callerToken);
         }
         return res;
     }
@@ -8414,11 +8437,13 @@ public class ActivityManagerService extends IActivityManager.Stub
                 if (lines > 0) {
                     sb.append("\n");
 
-                    // Merge several logcat streams, and take the last N lines
                     InputStreamReader input = null;
                     try {
                         java.lang.Process logcat = new ProcessBuilder(
-                                "/system/bin/timeout", "-k", "15s", "10s",
+                                // Time out after 10s, but kill logcat with SEGV
+                                // so we can investigate why it didn't finish.
+                                "/system/bin/timeout", "-s", "SEGV", "10s",
+                                // Merge several logcat streams, and take the last N lines.
                                 "/system/bin/logcat", "-v", "threadtime", "-b", "events", "-b", "system",
                                 "-b", "main", "-b", "crash", "-t", String.valueOf(lines))
                                         .redirectErrorStream(true).start();
@@ -8461,14 +8486,21 @@ public class ActivityManagerService extends IActivityManager.Stub
         // assume our apps are happy - lazy create the list
         final List<ActivityManager.ProcessErrorStateInfo>[] errList = new List[1];
 
+        final int callingUid = Binder.getCallingUid();
         final boolean allUsers = ActivityManager.checkUidPermission(INTERACT_ACROSS_USERS_FULL,
-                Binder.getCallingUid()) == PackageManager.PERMISSION_GRANTED;
-        int userId = UserHandle.getUserId(Binder.getCallingUid());
+                callingUid) == PackageManager.PERMISSION_GRANTED;
+        int userId = UserHandle.getUserId(callingUid);
+
+        final boolean hasDumpPermission = ActivityManager.checkUidPermission(
+                android.Manifest.permission.DUMP, callingUid) == PackageManager.PERMISSION_GRANTED;
 
         synchronized (mProcLock) {
             // iterate across all processes
             mProcessList.forEachLruProcessesLOSP(false, app -> {
                 if (!allUsers && app.userId != userId) {
+                    return;
+                }
+                if (!hasDumpPermission && app.info.uid != callingUid) {
                     return;
                 }
                 final ProcessErrorStateRecord errState = app.mErrorState;
@@ -12179,6 +12211,31 @@ public class ActivityManagerService extends IActivityManager.Stub
             Slog.w(TAG, "Unable to bind backup agent for " + packageName);
             return false;
         }
+        if (app.backupAgentName != null) {
+            final ComponentName backupAgentName = new ComponentName(
+                    app.packageName, app.backupAgentName);
+            int enableState = PackageManager.COMPONENT_ENABLED_STATE_DEFAULT;
+            try {
+                enableState = pm.getComponentEnabledSetting(backupAgentName, instantiatedUserId);
+            } catch (RemoteException e) {
+                // can't happen; package manager is process-local
+            }
+            switch (enableState) {
+                case PackageManager.COMPONENT_ENABLED_STATE_DISABLED:
+                case PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER:
+                case PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED:
+                    Slog.w(TAG, "Unable to bind backup agent for " + backupAgentName
+                            + ", the backup agent component is disabled.");
+                    return false;
+
+                case PackageManager.COMPONENT_ENABLED_STATE_DEFAULT:
+                case PackageManager.COMPONENT_ENABLED_STATE_ENABLED:
+                default:
+                    // Since there's no way to declare a backup agent disabled in the manifest,
+                    // assume the case COMPONENT_ENABLED_STATE_DEFAULT to be enabled.
+                    break;
+            }
+        }
 
         int oldBackupUid;
         int newBackupUid;
@@ -12681,76 +12738,72 @@ public class ActivityManagerService extends IActivityManager.Stub
         int pmFlags = STOCK_PM_FLAGS | MATCH_DEBUG_TRIAGED_MISSING;
 
         List<ResolveInfo> receivers = null;
-        try {
-            HashSet<ComponentName> singleUserReceivers = null;
-            boolean scannedFirstReceivers = false;
-            for (int user : users) {
-                // Skip users that have Shell restrictions
-                if (callingUid == SHELL_UID
-                        && mUserController.hasUserRestriction(
-                                UserManager.DISALLOW_DEBUGGING_FEATURES, user)) {
-                    continue;
-                }
-                List<ResolveInfo> newReceivers = AppGlobals.getPackageManager()
-                        .queryIntentReceivers(intent, resolvedType, pmFlags, user).getList();
-                if (user != UserHandle.USER_SYSTEM && newReceivers != null) {
-                    // If this is not the system user, we need to check for
-                    // any receivers that should be filtered out.
-                    for (int i=0; i<newReceivers.size(); i++) {
-                        ResolveInfo ri = newReceivers.get(i);
-                        if ((ri.activityInfo.flags&ActivityInfo.FLAG_SYSTEM_USER_ONLY) != 0) {
-                            newReceivers.remove(i);
-                            i--;
-                        }
+        HashSet<ComponentName> singleUserReceivers = null;
+        boolean scannedFirstReceivers = false;
+        for (int user : users) {
+            // Skip users that have Shell restrictions
+            if (callingUid == SHELL_UID
+                    && mUserController.hasUserRestriction(
+                    UserManager.DISALLOW_DEBUGGING_FEATURES, user)) {
+                continue;
+            }
+            List<ResolveInfo> newReceivers = mPackageManagerInt
+                    .queryIntentReceivers(intent, resolvedType, pmFlags, callingUid, user);
+            if (user != UserHandle.USER_SYSTEM && newReceivers != null) {
+                // If this is not the system user, we need to check for
+                // any receivers that should be filtered out.
+                for (int i = 0; i < newReceivers.size(); i++) {
+                    ResolveInfo ri = newReceivers.get(i);
+                    if ((ri.activityInfo.flags & ActivityInfo.FLAG_SYSTEM_USER_ONLY) != 0) {
+                        newReceivers.remove(i);
+                        i--;
                     }
                 }
-                if (newReceivers != null && newReceivers.size() == 0) {
-                    newReceivers = null;
-                }
-                if (receivers == null) {
-                    receivers = newReceivers;
-                } else if (newReceivers != null) {
-                    // We need to concatenate the additional receivers
-                    // found with what we have do far.  This would be easy,
-                    // but we also need to de-dup any receivers that are
-                    // singleUser.
-                    if (!scannedFirstReceivers) {
-                        // Collect any single user receivers we had already retrieved.
-                        scannedFirstReceivers = true;
-                        for (int i=0; i<receivers.size(); i++) {
-                            ResolveInfo ri = receivers.get(i);
-                            if ((ri.activityInfo.flags&ActivityInfo.FLAG_SINGLE_USER) != 0) {
-                                ComponentName cn = new ComponentName(
-                                        ri.activityInfo.packageName, ri.activityInfo.name);
-                                if (singleUserReceivers == null) {
-                                    singleUserReceivers = new HashSet<ComponentName>();
-                                }
-                                singleUserReceivers.add(cn);
-                            }
-                        }
-                    }
-                    // Add the new results to the existing results, tracking
-                    // and de-dupping single user receivers.
-                    for (int i=0; i<newReceivers.size(); i++) {
-                        ResolveInfo ri = newReceivers.get(i);
+            }
+            if (newReceivers != null && newReceivers.size() == 0) {
+                newReceivers = null;
+            }
+            if (receivers == null) {
+                receivers = newReceivers;
+            } else if (newReceivers != null) {
+                // We need to concatenate the additional receivers
+                // found with what we have do far.  This would be easy,
+                // but we also need to de-dup any receivers that are
+                // singleUser.
+                if (!scannedFirstReceivers) {
+                    // Collect any single user receivers we had already retrieved.
+                    scannedFirstReceivers = true;
+                    for (int i = 0; i < receivers.size(); i++) {
+                        ResolveInfo ri = receivers.get(i);
                         if ((ri.activityInfo.flags&ActivityInfo.FLAG_SINGLE_USER) != 0) {
                             ComponentName cn = new ComponentName(
                                     ri.activityInfo.packageName, ri.activityInfo.name);
                             if (singleUserReceivers == null) {
                                 singleUserReceivers = new HashSet<ComponentName>();
                             }
-                            if (!singleUserReceivers.contains(cn)) {
-                                singleUserReceivers.add(cn);
-                                receivers.add(ri);
-                            }
-                        } else {
-                            receivers.add(ri);
+                            singleUserReceivers.add(cn);
                         }
                     }
                 }
+                // Add the new results to the existing results, tracking
+                // and de-dupping single user receivers.
+                for (int i = 0; i < newReceivers.size(); i++) {
+                    ResolveInfo ri = newReceivers.get(i);
+                    if ((ri.activityInfo.flags & ActivityInfo.FLAG_SINGLE_USER) != 0) {
+                        ComponentName cn = new ComponentName(
+                                ri.activityInfo.packageName, ri.activityInfo.name);
+                        if (singleUserReceivers == null) {
+                            singleUserReceivers = new HashSet<ComponentName>();
+                        }
+                        if (!singleUserReceivers.contains(cn)) {
+                            singleUserReceivers.add(cn);
+                            receivers.add(ri);
+                        }
+                    } else {
+                        receivers.add(ri);
+                    }
+                }
             }
-        } catch (RemoteException ex) {
-            // pm is in same process, this will never happen.
         }
         if (receivers != null && broadcastAllowList != null) {
             for (int i = receivers.size() - 1; i >= 0; i--) {
@@ -13384,8 +13437,7 @@ public class ActivityManagerService extends IActivityManager.Stub
         List receivers = null;
         List<BroadcastFilter> registeredReceivers = null;
         // Need to resolve the intent to interested receivers...
-        if ((intent.getFlags()&Intent.FLAG_RECEIVER_REGISTERED_ONLY)
-                 == 0) {
+        if ((intent.getFlags() & Intent.FLAG_RECEIVER_REGISTERED_ONLY) == 0) {
             receivers = collectReceiverComponents(
                     intent, resolvedType, callingUid, users, broadcastAllowList);
         }
@@ -13703,7 +13755,8 @@ public class ActivityManagerService extends IActivityManager.Stub
             IIntentReceiver resultTo, int resultCode, String resultData, Bundle resultExtras,
             String requiredPermission, Bundle bOptions, boolean serialized, boolean sticky,
             int userId, boolean allowBackgroundActivityStarts,
-            @Nullable IBinder backgroundActivityStartsToken) {
+            @Nullable IBinder backgroundActivityStartsToken,
+            @Nullable int[] broadcastAllowList) {
         synchronized(this) {
             intent = verifyBroadcastLocked(intent);
 
@@ -13715,8 +13768,7 @@ public class ActivityManagerService extends IActivityManager.Stub
                         resultTo, resultCode, resultData, resultExtras, requiredPermissions, null,
                         OP_NONE, bOptions, serialized, sticky, -1, uid, realCallingUid,
                         realCallingPid, userId, allowBackgroundActivityStarts,
-                        backgroundActivityStartsToken,
-                        null /* broadcastAllowList */);
+                        backgroundActivityStartsToken, broadcastAllowList);
             } finally {
                 Binder.restoreCallingIdentity(origId);
             }
@@ -15385,6 +15437,12 @@ public class ActivityManagerService extends IActivityManager.Stub
     @VisibleForTesting
     public final class LocalService extends ActivityManagerInternal
             implements ActivityManagerLocal {
+
+        @Override
+        public Pair<String, String> getAppProfileStatsForDebugging(long time, int lines) {
+            return mAppProfiler.getAppProfileStatsForDebugging(time, lines);
+        }
+
         @Override
         public String checkContentProviderAccess(String authority, int userId) {
             return mCpHelper.checkContentProviderAccess(authority, userId);
@@ -15906,13 +15964,14 @@ public class ActivityManagerService extends IActivityManager.Stub
                 IIntentReceiver resultTo, int resultCode, String resultData, Bundle resultExtras,
                 String requiredPermission, Bundle bOptions, boolean serialized, boolean sticky,
                 int userId, boolean allowBackgroundActivityStarts,
-                @Nullable IBinder backgroundActivityStartsToken) {
+                @Nullable IBinder backgroundActivityStartsToken,
+                @Nullable int[] broadcastAllowList) {
             synchronized (ActivityManagerService.this) {
                 return ActivityManagerService.this.broadcastIntentInPackage(packageName, featureId,
                         uid, realCallingUid, realCallingPid, intent, resolvedType, resultTo,
                         resultCode, resultData, resultExtras, requiredPermission, bOptions,
                         serialized, sticky, userId, allowBackgroundActivityStarts,
-                        backgroundActivityStartsToken);
+                        backgroundActivityStartsToken, broadcastAllowList);
             }
         }
 
@@ -16043,8 +16102,22 @@ public class ActivityManagerService extends IActivityManager.Stub
 
         @Override
         public void inputDispatchingResumed(int pid) {
-            // TODO (b/171218828)
-            return;
+            final ProcessRecord proc;
+            synchronized (mPidsSelfLocked) {
+                proc = mPidsSelfLocked.get(pid);
+            }
+            if (proc != null) {
+                mAppErrors.handleDismissAnrDialogs(proc);
+            }
+        }
+
+        @Override
+        public void rescheduleAnrDialog(Object data) {
+            Message msg = Message.obtain();
+            msg.what = SHOW_NOT_RESPONDING_UI_MSG;
+            msg.obj = (AppNotRespondingDialog.Data) data;
+
+            mUiHandler.sendMessageDelayed(msg, InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS);
         }
 
         @Override
@@ -16456,6 +16529,15 @@ public class ActivityManagerService extends IActivityManager.Stub
             synchronized (ActivityManagerService.this) {
                 return mProcessList.getIsolatedProcessesLocked(uid);
             }
+        }
+
+        /** @see ActivityManagerService#sendIntentSender */
+        @Override
+        public int sendIntentSender(IIntentSender target, IBinder allowlistToken, int code,
+                Intent intent, String resolvedType,
+                IIntentReceiver finishedReceiver, String requiredPermission, Bundle options) {
+            return ActivityManagerService.this.sendIntentSender(target, allowlistToken, code,
+                    intent, resolvedType, finishedReceiver, requiredPermission, options);
         }
     }
 

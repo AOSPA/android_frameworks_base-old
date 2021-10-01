@@ -28,6 +28,7 @@
 
 #include <android/media/AudioVibratorInfo.h>
 #include <audiomanager/AudioManager.h>
+#include <media/AudioContainers.h>
 #include <media/AudioPolicy.h>
 #include <media/AudioSystem.h>
 #include <media/MicrophoneInfo.h>
@@ -207,6 +208,7 @@ static struct {
     jmethodID getId;
     jmethodID getResonantFrequency;
     jmethodID getQFactor;
+    jmethodID getMaxAmplitude;
 } gVibratorMethods;
 
 static Mutex gLock;
@@ -812,7 +814,8 @@ android_media_AudioSystem_getMasterBalance(JNIEnv *env, jobject thiz)
 static jint
 android_media_AudioSystem_getDevicesForStream(JNIEnv *env, jobject thiz, jint stream)
 {
-    return (jint) AudioSystem::getDevicesForStream(static_cast <audio_stream_type_t>(stream));
+    return (jint)deviceTypesToBitMask(
+            AudioSystem::getDevicesForStream(static_cast<audio_stream_type_t>(stream)));
 }
 
 static jint
@@ -2704,6 +2707,8 @@ static jint android_media_AudioSystem_setVibratorInfos(JNIEnv *env, jobject thiz
         vibratorInfo.resonantFrequency =
                 env->CallFloatMethod(jVibrator.get(), gVibratorMethods.getResonantFrequency);
         vibratorInfo.qFactor = env->CallFloatMethod(jVibrator.get(), gVibratorMethods.getQFactor);
+        vibratorInfo.maxAmplitude =
+                env->CallFloatMethod(jVibrator.get(), gVibratorMethods.getMaxAmplitude);
         vibratorInfos.push_back(vibratorInfo);
     }
     return (jint)check_AudioSystem_Command(AudioSystem::setVibratorInfos(vibratorInfos));
@@ -3070,6 +3075,8 @@ int register_android_media_AudioSystem(JNIEnv *env)
     gVibratorMethods.getResonantFrequency =
             GetMethodIDOrDie(env, vibratorClass, "getResonantFrequency", "()F");
     gVibratorMethods.getQFactor = GetMethodIDOrDie(env, vibratorClass, "getQFactor", "()F");
+    gVibratorMethods.getMaxAmplitude =
+            GetMethodIDOrDie(env, vibratorClass, "getHapticChannelMaximumAmplitude", "()F");
 
     AudioSystem::addErrorCallback(android_media_AudioSystem_error_callback);
 

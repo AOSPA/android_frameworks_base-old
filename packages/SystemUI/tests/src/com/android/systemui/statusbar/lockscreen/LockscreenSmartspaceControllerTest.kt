@@ -41,7 +41,7 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.plugins.statusbar.StatusBarStateController.StateListener
 import com.android.systemui.settings.UserTracker
-import com.android.systemui.statusbar.FeatureFlags
+import com.android.systemui.flags.FeatureFlags
 import com.android.systemui.statusbar.policy.ConfigurationController
 import com.android.systemui.statusbar.policy.ConfigurationController.ConfigurationListener
 import com.android.systemui.util.concurrency.FakeExecution
@@ -389,7 +389,6 @@ class LockscreenSmartspaceControllerTest : SysuiTestCase() {
         verify(userTracker).removeCallback(userListener)
         verify(contentResolver).unregisterContentObserver(settingsObserver)
         verify(configurationController).removeCallback(configChangeListener)
-        verify(statusBarStateController).removeCallback(statusBarStateListener)
     }
 
     @Test

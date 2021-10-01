@@ -117,6 +117,7 @@ import com.android.server.am.UserState;
 import com.android.server.pm.UserManagerInternal.UserLifecycleListener;
 import com.android.server.pm.UserManagerInternal.UserRestrictionsListener;
 import com.android.server.storage.DeviceStorageMonitorInternal;
+import com.android.server.utils.Slogf;
 import com.android.server.utils.TimingsTraceAndSlog;
 import com.android.server.wm.ActivityTaskManagerInternal;
 
@@ -727,7 +728,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /* Prunes out any partially created or partially removed users. */
-    void cleanupPartialUsers() {
+    private void cleanupPartialUsers() {
         ArrayList<UserInfo> partials = new ArrayList<>();
         synchronized (mUsersLock) {
             final int userSize = mUsers.size();
@@ -755,7 +756,7 @@ public class UserManagerService extends IUserManager.Stub {
      * Removes any pre-created users from the system. Should be invoked after OTAs, to ensure
      * pre-created users are not stale. New pre-created pool can be re-created after the update.
      */
-    void cleanupPreCreatedUsers() {
+    private void cleanupPreCreatedUsers() {
         final ArrayList<UserInfo> preCreatedUsers;
         synchronized (mUsersLock) {
             final int userSize = mUsers.size();
@@ -1213,6 +1214,10 @@ public class UserManagerService extends IUserManager.Stub {
 
     private void logQuietModeEnabled(@UserIdInt int userId, boolean enableQuietMode,
             @Nullable String callingPackage) {
+        Slogf.i(LOG_TAG,
+                "requestQuietModeEnabled called by package %s, with enableQuietMode %b.",
+                callingPackage,
+                enableQuietMode);
         UserData userData;
         synchronized (mUsersLock) {
             userData = getUserDataLU(userId);
@@ -2293,13 +2298,13 @@ public class UserManagerService extends IUserManager.Stub {
 
     // Package private for the inner class.
     @GuardedBy("mRestrictionsLock")
-    void applyUserRestrictionsLR(@UserIdInt int userId) {
+    private void applyUserRestrictionsLR(@UserIdInt int userId) {
         updateUserRestrictionsInternalLR(null, userId);
     }
 
     @GuardedBy("mRestrictionsLock")
     // Package private for the inner class.
-    void applyUserRestrictionsForAllUsersLR() {
+    private void applyUserRestrictionsForAllUsersLR() {
         if (DBG) {
             debug("applyUserRestrictionsForAllUsersLR");
         }
@@ -2352,6 +2357,9 @@ public class UserManagerService extends IUserManager.Stub {
      * {@link #canAddMoreProfilesToUser}.
      */
     private boolean canAddMoreUsersOfType(UserTypeDetails userTypeDetails) {
+        if (!userTypeDetails.isEnabled()) {
+            return false;
+        }
         final int max = userTypeDetails.getMaxAllowed();
         if (max == UserTypeDetails.UNLIMITED_NUMBER_OF_USERS) {
             return true; // Indicates that there is no max.
@@ -2392,7 +2400,7 @@ public class UserManagerService extends IUserManager.Stub {
             boolean allowedToRemoveOne) {
         checkManageUsersPermission("check if more profiles can be added.");
         final UserTypeDetails type = mUserTypes.get(userType);
-        if (type == null) {
+        if (type == null || !type.isEnabled()) {
             return false;
         }
         // Managed profiles have their own specific rules.
@@ -2900,8 +2908,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     @GuardedBy("mUsersLock")
-    @VisibleForTesting
-    void upgradeUserTypesLU(@NonNull List<UserTypeFactory.UserTypeUpgrade> upgradeOps,
+    private void upgradeUserTypesLU(@NonNull List<UserTypeFactory.UserTypeUpgrade> upgradeOps,
             @NonNull ArrayMap<String, UserTypeDetails> userTypes,
             final int formerUserTypeVersion,
             @NonNull Set<Integer> userIdsToWrite) {
@@ -3549,6 +3556,12 @@ public class UserManagerService extends IUserManager.Stub {
                     + ") indicated SYSTEM user, which cannot be created.");
             return null;
         }
+        if (!userTypeDetails.isEnabled()) {
+            throwCheckedUserOperationException(
+                    "Cannot add a user of disabled type " + userType + ".",
+                    UserManager.USER_OPERATION_ERROR_MAX_USERS);
+        }
+
         synchronized (mUsersLock) {
             if (mForceEphemeralUsers) {
                 flags |= UserInfo.FLAG_EPHEMERAL;
@@ -3880,6 +3893,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     /** Checks that the flags do not contain mutually exclusive types/properties. */
+    @VisibleForTesting
     static boolean checkUserTypeConsistency(@UserInfoFlag int flags) {
         // Mask to check that flags don't refer to multiple user types.
         final int userTypeFlagMask = UserInfo.FLAG_GUEST | UserInfo.FLAG_DEMO
@@ -4186,6 +4200,7 @@ public class UserManagerService extends IUserManager.Stub {
                         return false;
                     }
 
+                    Slog.i(LOG_TAG, "Removing user " + userId);
                     addRemovingUserIdLocked(userId);
                 }
 
@@ -4308,8 +4323,8 @@ public class UserManagerService extends IUserManager.Stub {
         }
     }
 
-    void finishRemoveUser(final @UserIdInt int userId) {
-        if (DBG) Slog.i(LOG_TAG, "finishRemoveUser " + userId);
+    private void finishRemoveUser(final @UserIdInt int userId) {
+        Slog.i(LOG_TAG, "finishRemoveUser " + userId);
 
         UserInfo user;
         synchronized (mUsersLock) {
@@ -4368,6 +4383,7 @@ public class UserManagerService extends IUserManager.Stub {
     }
 
     private void removeUserState(final @UserIdInt int userId) {
+        Slog.i(LOG_TAG, "Removing user state of user " + userId);
         try {
             mContext.getSystemService(StorageManager.class).destroyUserKey(userId);
         } catch (IllegalStateException e) {
@@ -4814,8 +4830,15 @@ public class UserManagerService extends IUserManager.Stub {
         final int userSerial = userInfo.serialNumber;
         // Migrate only if build fingerprints mismatch
         boolean migrateAppsData = !Build.FINGERPRINT.equals(userInfo.lastLoggedInFingerprint);
+
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("prepareUserData-" + userId);
         mUserDataPreparer.prepareUserData(userId, userSerial, StorageManager.FLAG_STORAGE_CE);
+        t.traceEnd();
+
+        t.traceBegin("reconcileAppsData-" + userId);
         mPm.reconcileAppsData(userId, StorageManager.FLAG_STORAGE_CE, migrateAppsData);
+        t.traceEnd();
     }
 
     /**
@@ -4984,7 +5007,7 @@ public class UserManagerService extends IUserManager.Stub {
         (new Shell()).exec(this, in, out, err, args, callback, resultReceiver);
     }
 
-    int onShellCommand(Shell shell, String cmd) {
+    private int onShellCommand(Shell shell, String cmd) {
         if (cmd == null) {
             return shell.handleDefaultCommands(cmd);
         }
@@ -5064,8 +5087,11 @@ public class UserManagerService extends IUserManager.Stub {
                             Binder.restoreCallingIdentity(ident);
                         }
                     }
-                    pw.printf("%d: id=%d, name=%s, flags=%s%s%s%s%s%s%s%s%s\n", i, user.id,
+                    pw.printf("%d: id=%d, name=%s, type=%s, flags=%s%s%s%s%s%s%s%s%s\n",
+                            i,
+                            user.id,
                             user.name,
+                            user.userType.replace("android.os.usertype.", ""),
                             UserInfo.flagsToString(user.flags),
                             hasParent ? " (parentId=" + user.profileGroupId + ")" : "",
                             running ? " (running)" : "",

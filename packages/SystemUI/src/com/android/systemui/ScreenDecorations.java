@@ -808,8 +808,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
            return false;
         }
 
-        return context.getResources().getBoolean(
-                com.android.internal.R.bool.config_fillMainBuiltInDisplayCutout);
+        return DisplayCutout.getFillBuiltInDisplayCutout(
+                context.getResources(), context.getDisplay().getUniqueId());
     }
 
     private void updateLayoutParams() {
@@ -1096,7 +1096,8 @@ public class ScreenDecorations extends SystemUI implements Tunable {
             int dw = flipped ? lh : lw;
             int dh = flipped ? lw : lh;
 
-            Path path = DisplayCutout.pathFromResources(getResources(), dw, dh);
+            Path path = DisplayCutout.pathFromResources(
+                    getResources(), getDisplay().getUniqueId(), dw, dh);
             if (path != null) {
                 mBoundingPath.set(path);
             } else {

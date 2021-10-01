@@ -86,7 +86,10 @@
     <bool name="config_navigation_bar_enable_auto_dim_no_visible_wallpaper">true</bool>
 
     <!-- The maximum number of tiles in the QuickQSPanel -->
-    <integer name="quick_qs_panel_max_columns">4</integer>
+    <integer name="quick_qs_panel_max_tiles">4</integer>
+
+    <!-- The maximum number of rows in the QuickQSPanel -->
+    <integer name="quick_qs_panel_max_rows">2</integer>
 
     <!-- The number of columns in the QuickSettings -->
     <integer name="quick_settings_num_columns">2</integer>
@@ -310,7 +313,8 @@
     <!-- SystemUIFactory component -->
     <string name="config_systemUIFactoryComponent" translatable="false">com.android.systemui.SystemUIFactory</string>
 
-    <!-- SystemUI Services: The classes of the stuff to start. -->
+    <!-- SystemUI Services: The classes of base stuff to start by default for all
+         configurations. -->
     <string-array name="config_systemUIServiceComponents" translatable="false">
         <item>com.android.systemui.util.NotificationChannels</item>
         <item>com.android.systemui.keyguard.KeyguardViewMediator</item>
@@ -335,6 +339,12 @@
         <item>com.android.systemui.accessibility.SystemActions</item>
         <item>com.android.systemui.toast.ToastUI</item>
         <item>com.android.systemui.wmshell.WMShell</item>
+    </string-array>
+
+    <!-- SystemUI Services: The classes of the additional stuff to start. Services here are
+                            specified as an overlay to provide configuration-specific services that
+                            supplement those listed in config_systemUIServiceComponents. -->
+    <string-array name="config_additionalSystemUIServiceComponents" translatable="false">
     </string-array>
 
     <!-- QS tile shape store width. negative implies fill configuration instead of stroke-->
@@ -612,8 +622,6 @@
 
     <!-- Whether wallet view is shown in landscape / seascape orientations -->
     <bool name="global_actions_show_landscape_wallet_view">false</bool>
-    <!-- Whether global actions should show an informational message about changes in S -->
-    <bool name="global_actions_show_change_info">false</bool>
 
     <!-- Package name of the preferred system app to perform eSOS action -->
     <string name="config_preferredEmergencySosPackage" translatable="false"></string>
@@ -674,4 +682,29 @@
          1 - Override the setting to always bypass keyguard
          2 - Override the setting to never bypass keyguard -->
     <integer name="config_face_unlock_bypass_override">0</integer>
+
+    <!-- Whether the communal service should be enabled -->
+    <bool name="config_communalServiceEnabled">false</bool>
+
+    <!-- Component name of communal source service -->
+    <string name="config_communalSourceComponent" translatable="false">@null</string>
+
+    <!-- Whether idle mode should be enabled. When enabled, the lock screen will timeout to an idle
+         screen on inactivity. -->
+    <bool name="config_enableIdleMode">false</bool>
+
+    <!-- Timeout to idle mode duration in milliseconds. -->
+    <integer name="config_idleModeTimeout">10000</integer>
+
+    <!-- The maximum number of attempts to reconnect to the communal source target after failing
+         to connect -->
+    <integer name="config_communalSourceMaxReconnectAttempts">10</integer>
+
+    <!-- The initial amount of time (in milliseconds) before attempting to reconnect to a communal
+         source. This value is used as the base value in an exponential backoff in subsequent
+         attempts. -->
+    <integer name="config_communalSourceReconnectBaseDelay">1000</integer>
+
+    <!-- Flag to activate notification to contents feature -->
+    <bool name="config_notificationToContents">false</bool>
 </resources>

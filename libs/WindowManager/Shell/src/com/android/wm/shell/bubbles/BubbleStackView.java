@@ -19,6 +19,8 @@ package com.android.wm.shell.bubbles;
 import static android.view.ViewGroup.LayoutParams.MATCH_PARENT;
 import static android.view.ViewGroup.LayoutParams.WRAP_CONTENT;
 
+import static com.android.wm.shell.animation.Interpolators.ALPHA_IN;
+import static com.android.wm.shell.animation.Interpolators.ALPHA_OUT;
 import static com.android.wm.shell.bubbles.BubbleDebugConfig.DEBUG_BUBBLE_STACK_VIEW;
 import static com.android.wm.shell.bubbles.BubbleDebugConfig.TAG_BUBBLES;
 import static com.android.wm.shell.bubbles.BubbleDebugConfig.TAG_WITH_CLASS_NAME;
@@ -33,11 +35,11 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.res.Resources;
 import android.content.res.TypedArray;
-import android.graphics.Color;
 import android.graphics.Outline;
 import android.graphics.PointF;
 import android.graphics.Rect;
 import android.graphics.RectF;
+import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.provider.Settings;
 import android.util.Log;
@@ -106,13 +108,7 @@ public class BubbleStackView extends FrameLayout
      */
     private static final float FLYOUT_OVERSCROLL_ATTENUATION_FACTOR = 8f;
 
-    /** Duration of the flyout alpha animations. */
-    private static final int FLYOUT_ALPHA_ANIMATION_DURATION = 100;
-
     private static final int FADE_IN_DURATION = 320;
-
-    /** Percent to darken the bubbles when they're in the dismiss target. */
-    private static final float DARKEN_PERCENT = 0.3f;
 
     /** How long to wait, in milliseconds, before hiding the flyout. */
     @VisibleForTesting
@@ -121,6 +117,10 @@ public class BubbleStackView extends FrameLayout
     private static final float EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT = 0.1f;
 
     private static final int EXPANDED_VIEW_ALPHA_ANIMATION_DURATION = 150;
+
+    private static final int MANAGE_MENU_SCRIM_ANIM_DURATION = 150;
+
+    private static final float SCRIM_ALPHA = 0.6f;
 
     /**
      * How long to wait to animate the stack temporarily invisible after a drag/flyout hide
@@ -195,7 +195,8 @@ public class BubbleStackView extends FrameLayout
     private StackAnimationController mStackAnimationController;
     private ExpandedAnimationController mExpandedAnimationController;
 
-    private View mTaskbarScrim;
+    private View mScrim;
+    private View mManageMenuScrim;
     private FrameLayout mExpandedViewContainer;
 
     /** Matrix used to scale the expanded view container with a given pivot point. */
@@ -555,7 +556,7 @@ public class BubbleStackView extends FrameLayout
 
             if (mBubbleData.isExpanded()) {
                 if (mManageEduView != null) {
-                    mManageEduView.hide(false /* show */);
+                    mManageEduView.hide();
                 }
 
                 // If we're expanded, tell the animation controller to prepare to drag this bubble,
@@ -576,19 +577,16 @@ public class BubbleStackView extends FrameLayout
                 mBubbleContainer.setActiveController(mStackAnimationController);
                 hideFlyoutImmediate();
 
-                if (!mPositioner.showingInTaskbar()) {
-                    // Also, save the magnetized stack so we can dispatch touch events to it.
-                    mMagnetizedObject = mStackAnimationController.getMagnetizedStack(
-                            mMagneticTarget);
-                    mMagnetizedObject.setMagnetListener(mStackMagnetListener);
-                } else {
+                if (mPositioner.showingInTaskbar()) {
                     // In taskbar, the stack isn't draggable so we shouldn't dispatch touch events.
                     mMagnetizedObject = null;
+                } else {
+                    // Save the magnetized stack so we can dispatch touch events to it.
+                    mMagnetizedObject = mStackAnimationController.getMagnetizedStack();
+                    mMagnetizedObject.clearAllTargets();
+                    mMagnetizedObject.addTarget(mMagneticTarget);
+                    mMagnetizedObject.setMagnetListener(mStackMagnetListener);
                 }
-
-                // Also, save the magnetized stack so we can dispatch touch events to it.
-                mMagnetizedObject = mStackAnimationController.getMagnetizedStack(mMagneticTarget);
-                mMagnetizedObject.setMagnetListener(mStackMagnetListener);
 
                 mIsDraggingStack = true;
 
@@ -796,8 +794,6 @@ public class BubbleStackView extends FrameLayout
         mBubbleContainer.setClipChildren(false);
         addView(mBubbleContainer, new FrameLayout.LayoutParams(MATCH_PARENT, MATCH_PARENT));
 
-        updateUserEdu();
-
         mExpandedViewContainer = new FrameLayout(context);
         mExpandedViewContainer.setElevation(elevation);
         mExpandedViewContainer.setClipChildren(false);
@@ -861,11 +857,20 @@ public class BubbleStackView extends FrameLayout
             mBubbleData.setExpanded(true);
         });
 
-        mTaskbarScrim = new View(getContext());
-        mTaskbarScrim.setBackgroundColor(Color.BLACK);
-        addView(mTaskbarScrim);
-        mTaskbarScrim.setAlpha(0f);
-        mTaskbarScrim.setVisibility(GONE);
+        mScrim = new View(getContext());
+        mScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mScrim.setBackgroundDrawable(new ColorDrawable(
+                getResources().getColor(android.R.color.system_neutral1_1000)));
+        addView(mScrim);
+        mScrim.setAlpha(0f);
+
+        mManageMenuScrim = new View(getContext());
+        mManageMenuScrim.setImportantForAccessibility(View.IMPORTANT_FOR_ACCESSIBILITY_NO);
+        mManageMenuScrim.setBackgroundDrawable(new ColorDrawable(
+                getResources().getColor(android.R.color.system_neutral1_1000)));
+        addView(mManageMenuScrim, new LayoutParams(MATCH_PARENT, MATCH_PARENT));
+        mManageMenuScrim.setAlpha(0f);
+        mManageMenuScrim.setVisibility(INVISIBLE);
 
         mOrientationChangedListener =
                 (v, left, top, right, bottom, oldLeft, oldTop, oldRight, oldBottom) -> {
@@ -881,7 +886,6 @@ public class BubbleStackView extends FrameLayout
                         mRelativeStackPositionBeforeRotation = null;
                     }
 
-                    setUpDismissView();
                     if (mIsExpanded) {
                         // Re-draw bubble row and pointer for new orientation.
                         beforeExpandedViewAnimation();
@@ -890,8 +894,10 @@ public class BubbleStackView extends FrameLayout
                         mExpandedAnimationController.expandFromStack(() -> {
                             afterExpandedViewAnimation();
                         } /* after */);
+                        final float translationY = mPositioner.getExpandedViewY(mExpandedBubble,
+                                getBubbleIndex(mExpandedBubble));
                         mExpandedViewContainer.setTranslationX(0f);
-                        mExpandedViewContainer.setTranslationY(mPositioner.getExpandedViewY());
+                        mExpandedViewContainer.setTranslationY(translationY);
                         mExpandedViewContainer.setAlpha(1f);
                     }
                     removeOnLayoutChangeListener(mOrientationChangedListener);
@@ -921,8 +927,10 @@ public class BubbleStackView extends FrameLayout
         setOnClickListener(view -> {
             if (mShowingManage) {
                 showManageMenu(false /* show */);
+            } else if (mManageEduView != null && mManageEduView.getVisibility() == VISIBLE) {
+                mManageEduView.hide();
             } else if (mStackEduView != null && mStackEduView.getVisibility() == VISIBLE) {
-                mStackEduView.hide(false);
+                mStackEduView.hide(false /* isExpanding */);
             } else if (mBubbleData.isExpanded()) {
                 mBubbleData.setExpanded(false);
             }
@@ -1043,10 +1051,9 @@ public class BubbleStackView extends FrameLayout
                 contentResolver, "bubble_dismiss_radius", mBubbleSize * 2 /* default */);
 
         // Save the MagneticTarget instance for the newly set up view - we'll add this to the
-        // MagnetizedObjects.
+        // MagnetizedObjects when the dismiss view gets shown.
         mMagneticTarget = new MagnetizedObject.MagneticTarget(
                 mDismissView.getCircle(), dismissRadius);
-
         mBubbleContainer.bringToFront();
     }
 
@@ -1122,10 +1129,10 @@ public class BubbleStackView extends FrameLayout
             return;
         }
         if (mManageEduView == null) {
-            mManageEduView = new ManageEducationView(mContext);
+            mManageEduView = new ManageEducationView(mContext, mPositioner);
             addView(mManageEduView);
         }
-        mManageEduView.show(mExpandedBubble.getExpandedView(), mTempRect);
+        mManageEduView.show(mExpandedBubble.getExpandedView());
     }
 
     /**
@@ -1153,21 +1160,27 @@ public class BubbleStackView extends FrameLayout
             return false;
         }
         if (mStackEduView == null) {
-            mStackEduView = new StackEducationView(mContext);
+            mStackEduView = new StackEducationView(mContext, mPositioner, mBubbleController);
             addView(mStackEduView);
         }
         mBubbleContainer.bringToFront();
         return mStackEduView.show(mPositioner.getDefaultStartPosition());
     }
 
+    // Recreates & shows the education views. Call when a theme/config change happens.
     private void updateUserEdu() {
-        maybeShowStackEdu();
-        if (mManageEduView != null) {
-            mManageEduView.invalidate();
+        if (mStackEduView != null && mStackEduView.getVisibility() == VISIBLE) {
+            removeView(mStackEduView);
+            mStackEduView = new StackEducationView(mContext, mPositioner, mBubbleController);
+            addView(mStackEduView);
+            mBubbleContainer.bringToFront(); // Stack appears on top of the stack education
+            mStackEduView.show(mPositioner.getDefaultStartPosition());
         }
-        maybeShowManageEdu();
-        if (mStackEduView != null) {
-            mStackEduView.invalidate();
+        if (mManageEduView != null && mManageEduView.getVisibility() == VISIBLE) {
+            removeView(mManageEduView);
+            mManageEduView = new ManageEducationView(mContext, mPositioner);
+            addView(mManageEduView);
+            mManageEduView.show(mExpandedBubble.getExpandedView());
         }
     }
 
@@ -1176,7 +1189,7 @@ public class BubbleStackView extends FrameLayout
         if (mFlyout != null) {
             removeView(mFlyout);
         }
-        mFlyout = new BubbleFlyoutView(getContext());
+        mFlyout = new BubbleFlyoutView(getContext(), mPositioner);
         mFlyout.setVisibility(GONE);
         mFlyout.setOnClickListener(mFlyoutClickListener);
         mFlyout.setOnTouchListener(mFlyoutTouchListener);
@@ -1223,6 +1236,10 @@ public class BubbleStackView extends FrameLayout
         updateOverflow();
         updateUserEdu();
         updateExpandedViewTheme();
+        mScrim.setBackgroundDrawable(new ColorDrawable(
+                getResources().getColor(android.R.color.system_neutral1_1000)));
+        mManageMenuScrim.setBackgroundDrawable(new ColorDrawable(
+                getResources().getColor(android.R.color.system_neutral1_1000)));
     }
 
     /**
@@ -1260,6 +1277,7 @@ public class BubbleStackView extends FrameLayout
         setUpManageMenu();
         setUpFlyout();
         setUpDismissView();
+        updateUserEdu();
         mBubbleSize = mPositioner.getBubbleSize();
         for (Bubble b : mBubbleData.getBubbles()) {
             if (b.getIconView() == null) {
@@ -1540,6 +1558,7 @@ public class BubbleStackView extends FrameLayout
                     bubble.cleanupViews();
                 }
                 updatePointerPosition();
+                updateExpandedView();
                 logBubbleEvent(bubble, FrameworkStatsLog.BUBBLE_UICHANGED__ACTION__DISMISSED);
                 return;
             }
@@ -1715,6 +1734,21 @@ public class BubbleStackView extends FrameLayout
         notifyExpansionChanged(mExpandedBubble, mIsExpanded);
     }
 
+    /**
+     * Called when back press occurs while bubbles are expanded.
+     */
+    public void onBackPressed() {
+        if (mIsExpanded) {
+            if (mShowingManage) {
+                showManageMenu(false);
+            } else if (mManageEduView != null && mManageEduView.getVisibility() == VISIBLE) {
+                mManageEduView.hide();
+            } else {
+                setExpanded(false);
+            }
+        }
+    }
+
     void setBubbleVisibility(Bubble b, boolean visible) {
         if (b.getIconView() != null) {
             b.getIconView().setVisibility(visible ? VISIBLE : GONE);
@@ -1801,6 +1835,20 @@ public class BubbleStackView extends FrameLayout
         mExpandedViewAlphaAnimator.start();
     }
 
+    private void showScrim(boolean show) {
+        if (show) {
+            mScrim.animate()
+                    .setInterpolator(ALPHA_IN)
+                    .alpha(SCRIM_ALPHA)
+                    .start();
+        } else {
+            mScrim.animate()
+                    .alpha(0f)
+                    .setInterpolator(ALPHA_OUT)
+                    .start();
+        }
+    }
+
     private void animateExpansion() {
         cancelDelayedExpandCollapseSwitchAnimations();
         final boolean showVertically = mPositioner.showBubblesVertically();
@@ -1810,6 +1858,7 @@ public class BubbleStackView extends FrameLayout
         }
         beforeExpandedViewAnimation();
 
+        showScrim(true);
         updateZOrder();
         updateBadges(false /* setBadgeForCollapsedStack */);
         mBubbleContainer.setActiveController(mExpandedAnimationController);
@@ -1821,19 +1870,10 @@ public class BubbleStackView extends FrameLayout
             }
         } /* after */);
 
-        if (mPositioner.showingInTaskbar()
-                // Don't need the scrim when the bar is at the bottom
-                && mPositioner.getTaskbarPosition() != BubblePositioner.TASKBAR_POSITION_BOTTOM) {
-            mTaskbarScrim.getLayoutParams().width = mPositioner.getTaskbarSize();
-            mTaskbarScrim.setTranslationX(mStackOnLeftOrWillBe
-                    ? 0f
-                    : mPositioner.getAvailableRect().right - mPositioner.getTaskbarSize());
-            mTaskbarScrim.setVisibility(VISIBLE);
-            mTaskbarScrim.animate().alpha(1f).start();
-        }
-
+        final float translationY = mPositioner.getExpandedViewY(mExpandedBubble,
+                getBubbleIndex(mExpandedBubble));
         mExpandedViewContainer.setTranslationX(0f);
-        mExpandedViewContainer.setTranslationY(mPositioner.getExpandedViewY());
+        mExpandedViewContainer.setTranslationY(translationY);
         mExpandedViewContainer.setAlpha(1f);
 
         int index;
@@ -1882,7 +1922,7 @@ public class BubbleStackView extends FrameLayout
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     bubbleWillBeAt + mBubbleSize / 2f,
-                    mPositioner.getExpandedViewY());
+                    translationY);
         }
         mExpandedViewContainer.setAnimationMatrix(mExpandedViewContainerMatrix);
 
@@ -1934,11 +1974,16 @@ public class BubbleStackView extends FrameLayout
     private void animateCollapse() {
         cancelDelayedExpandCollapseSwitchAnimations();
 
+        if (mManageEduView != null && mManageEduView.getVisibility() == VISIBLE) {
+            mManageEduView.hide();
+        }
         // Hide the menu if it's visible.
         showManageMenu(false);
 
         mIsExpanded = false;
         mIsExpansionAnimating = true;
+
+        showScrim(false);
 
         mBubbleContainer.cancelAllAnimations();
 
@@ -1956,10 +2001,6 @@ public class BubbleStackView extends FrameLayout
                 mStackAnimationController.getStackPositionAlongNearestHorizontalEdge()
                 /* collapseTo */,
                 () -> mBubbleContainer.setActiveController(mStackAnimationController));
-
-        if (mTaskbarScrim.getVisibility() == VISIBLE) {
-            mTaskbarScrim.animate().alpha(0f).start();
-        }
 
         int index;
         if (mExpandedBubble != null && BubbleOverflow.KEY.equals(mExpandedBubble.getKey())) {
@@ -1986,7 +2027,7 @@ public class BubbleStackView extends FrameLayout
             mExpandedViewContainerMatrix.setScale(
                     1f, 1f,
                     expandingFromBubbleAt + mBubbleSize / 2f,
-                    mPositioner.getExpandedViewY());
+                    mPositioner.getExpandedViewY(mExpandedBubble, index));
         }
 
         mExpandedViewAlphaAnimator.reverse();
@@ -2013,7 +2054,7 @@ public class BubbleStackView extends FrameLayout
                     final BubbleViewProvider previouslySelected = mExpandedBubble;
                     beforeExpandedViewAnimation();
                     if (mManageEduView != null) {
-                        mManageEduView.hide(false /* fromExpansion */);
+                        mManageEduView.hide();
                     }
 
                     if (DEBUG_BUBBLE_STACK_VIEW) {
@@ -2027,10 +2068,6 @@ public class BubbleStackView extends FrameLayout
                     afterExpandedViewAnimation();
                     if (previouslySelected != null) {
                         previouslySelected.setTaskViewVisibility(false);
-                    }
-
-                    if (mPositioner.showingInTaskbar()) {
-                        mTaskbarScrim.setVisibility(GONE);
                     }
                 })
                 .start();
@@ -2093,7 +2130,7 @@ public class BubbleStackView extends FrameLayout
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     1f - EXPANDED_VIEW_ANIMATE_SCALE_AMOUNT,
                     expandingFromBubbleDestination + mBubbleSize / 2f,
-                    mPositioner.getExpandedViewY());
+                    mPositioner.getExpandedViewY(mExpandedBubble, expandingFromBubbleDestination));
         }
 
         mExpandedViewContainer.setAnimationMatrix(mExpandedViewContainerMatrix);
@@ -2408,20 +2445,19 @@ public class BubbleStackView extends FrameLayout
 
 
             if (mFlyout.getVisibility() == View.VISIBLE) {
-                mFlyout.animateUpdate(bubble.getFlyoutMessage(), getWidth(),
+                mFlyout.animateUpdate(bubble.getFlyoutMessage(),
                         mStackAnimationController.getStackPosition(), !bubble.showDot(),
                         mAfterFlyoutHidden /* onHide */);
             } else {
                 mFlyout.setVisibility(INVISIBLE);
                 mFlyout.setupFlyoutStartingAsDot(bubble.getFlyoutMessage(),
-                        mStackAnimationController.getStackPosition(), getWidth(),
+                        mStackAnimationController.getStackPosition(),
                         mStackAnimationController.isStackOnLeftSide(),
                         bubble.getIconView().getDotColor() /* dotColor */,
                         expandFlyoutAfterDelay /* onLayoutComplete */,
                         mAfterFlyoutHidden /* onHide */,
                         bubble.getIconView().getDotCenter(),
-                        !bubble.showDot(),
-                        mPositioner);
+                        !bubble.showDot());
             }
             mFlyout.bringToFront();
         });
@@ -2506,6 +2542,24 @@ public class BubbleStackView extends FrameLayout
             return;
         }
 
+        if (show) {
+            mManageMenuScrim.setVisibility(VISIBLE);
+            mManageMenuScrim.setTranslationZ(mManageMenu.getElevation() - 1f);
+        }
+        Runnable endAction = () -> {
+            if (!show) {
+                mManageMenuScrim.setVisibility(INVISIBLE);
+                mManageMenuScrim.setTranslationZ(0f);
+            }
+        };
+
+        mManageMenuScrim.animate()
+                .setDuration(MANAGE_MENU_SCRIM_ANIM_DURATION)
+                .setInterpolator(show ? ALPHA_IN : ALPHA_OUT)
+                .alpha(show ? SCRIM_ALPHA : 0f)
+                .withEndAction(endAction)
+                .start();
+
         // If available, update the manage menu's settings option with the expanded bubble's app
         // name and icon.
         if (show && mBubbleData.hasBubbleInStackWithKey(mExpandedBubble.getKey())) {
@@ -2515,7 +2569,6 @@ public class BubbleStackView extends FrameLayout
                     R.string.bubbles_app_settings, bubble.getAppName()));
         }
 
-        mExpandedBubble.getExpandedView().getManageButtonBoundsOnScreen(mTempRect);
         if (mExpandedBubble.getExpandedView().getTaskView() != null) {
             mExpandedBubble.getExpandedView().getTaskView().setObscuredTouchRect(mShowingManage
                     ? new Rect(0, 0, getWidth(), getHeight())
@@ -2527,7 +2580,11 @@ public class BubbleStackView extends FrameLayout
 
         // When the menu is open, it should be at these coordinates. The menu pops out to the right
         // in LTR and to the left in RTL.
-        final float targetX = isLtr ? mTempRect.left : mTempRect.right - mManageMenu.getWidth();
+        mExpandedBubble.getExpandedView().getManageButtonBoundsOnScreen(mTempRect);
+        final float margin = mExpandedBubble.getExpandedView().getManageButtonMargin();
+        final float targetX = isLtr
+                ? mTempRect.left - margin
+                : mTempRect.right + margin - mManageMenu.getWidth();
         final float targetY = mTempRect.bottom - mManageMenu.getHeight();
 
         final float xOffsetForAnimation = (isLtr ? 1 : -1) * mManageMenu.getWidth() / 4f;
@@ -2714,7 +2771,9 @@ public class BubbleStackView extends FrameLayout
             mExpandedViewContainer.setVisibility(mIsExpanded ? VISIBLE : GONE);
         }
         if (mExpandedBubble != null && mExpandedBubble.getExpandedView() != null) {
-            mExpandedViewContainer.setTranslationY(mPositioner.getExpandedViewY());
+            mExpandedViewContainer.setTranslationY(mPositioner.getExpandedViewY(mExpandedBubble,
+                    mExpandedAnimationController.getBubbleXOrYForOrientation(
+                            getBubbleIndex(mExpandedBubble))));
             mExpandedViewContainer.setTranslationX(0f);
             mExpandedBubble.getExpandedView().updateView(
                     mExpandedViewContainer.getLocationOnScreen());

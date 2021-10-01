@@ -18,6 +18,7 @@ package android.content.pm.parsing.component;
 
 import static android.content.pm.parsing.ParsingPackageImpl.sForInternedString;
 
+import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.content.ComponentName;
 import android.os.Parcel;
@@ -30,7 +31,7 @@ import com.android.internal.util.Parcelling.BuiltIn.ForInternedString;
 /** @hide **/
 public class ParsedService extends ParsedMainComponent {
 
-    int foregroundServiceType;
+    private int foregroundServiceType;
     @Nullable
     @DataClass.ParcelWith(ForInternedString.class)
     private String permission;
@@ -39,6 +40,11 @@ public class ParsedService extends ParsedMainComponent {
         super(other);
         this.foregroundServiceType = other.foregroundServiceType;
         this.permission = other.permission;
+    }
+
+    public ParsedService setForegroundServiceType(int foregroundServiceType) {
+        this.foregroundServiceType = foregroundServiceType;
+        return this;
     }
 
     public ParsedMainComponent setPermission(String permission) {
@@ -78,6 +84,7 @@ public class ParsedService extends ParsedMainComponent {
         this.permission = sForInternedString.unparcel(in);
     }
 
+    @NonNull
     public static final Parcelable.Creator<ParsedService> CREATOR = new Creator<ParsedService>() {
         @Override
         public ParsedService createFromParcel(Parcel source) {

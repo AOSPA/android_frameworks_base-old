@@ -279,7 +279,7 @@ public class OomAdjuster {
     @GuardedBy("mService")
     private boolean mPendingFullOomAdjUpdate = false;
 
-    private final PlatformCompatCache mPlatformCompatCache;
+    final PlatformCompatCache mPlatformCompatCache;
 
     /** Overrideable by a test */
     @VisibleForTesting
@@ -332,6 +332,12 @@ public class OomAdjuster {
             }
         }
 
+        void onApplicationInfoChanged(ApplicationInfo app) {
+            for (int i = mCaches.size() - 1; i >= 0; i--) {
+                mCaches.valueAt(i).onApplicationInfoChanged(app);
+            }
+        }
+
         static class CacheItem implements CompatChange.ChangeListener {
             private final PlatformCompat mPlatformCompat;
             private final long mChangeId;
@@ -351,22 +357,14 @@ public class OomAdjuster {
                     final int index = mCache.indexOfKey(app.packageName);
                     Pair<Boolean, WeakReference<ApplicationInfo>> p;
                     if (index < 0) {
-                        p = new Pair<>(mPlatformCompat.isChangeEnabledInternalNoLogging(mChangeId,
-                                                                                        app),
-                                new WeakReference<>(app));
-                        mCache.put(app.packageName, p);
-                        return p.first;
+                        return fetchLocked(app, index);
                     }
                     p = mCache.valueAt(index);
                     if (p.second.get() == app) {
                         return p.first;
                     }
                     // Cache is invalid, regenerate it
-                    p = new Pair<>(mPlatformCompat.isChangeEnabledInternalNoLogging(mChangeId,
-                                                                                    app),
-                            new WeakReference<>(app));
-                    mCache.setValueAt(index, p);
-                    return p.first;
+                    return fetchLocked(app, index);
                 }
             }
 
@@ -376,10 +374,40 @@ public class OomAdjuster {
                 }
             }
 
+            @GuardedBy("mLock")
+            boolean fetchLocked(ApplicationInfo app, int index) {
+                final Pair<Boolean, WeakReference<ApplicationInfo>> p = new Pair<>(
+                        mPlatformCompat.isChangeEnabledInternalNoLogging(mChangeId, app),
+                        new WeakReference<>(app));
+                if (index >= 0) {
+                    mCache.setValueAt(index, p);
+                } else {
+                    mCache.put(app.packageName, p);
+                }
+                return p.first;
+            }
+
+            void onApplicationInfoChanged(ApplicationInfo app) {
+                synchronized (mLock) {
+                    final int index = mCache.indexOfKey(app.packageName);
+                    if (index >= 0) {
+                        fetchLocked(app, index);
+                    }
+                }
+            }
+
             @Override
             public void onCompatChange(String packageName) {
                 synchronized (mLock) {
-                    mCache.remove(packageName);
+                    final int index = mCache.indexOfKey(packageName);
+                    if (index >= 0) {
+                        final ApplicationInfo app = mCache.valueAt(index).second.get();
+                        if (app != null) {
+                            fetchLocked(app, index);
+                        } else {
+                            mCache.removeAt(index);
+                        }
+                    }
                 }
             }
         }
@@ -521,6 +549,7 @@ public class OomAdjuster {
         }
 
         app.mState.resetCachedInfo();
+        app.mState.setCurBoundByNonBgRestrictedApp(false);
         UidRecord uidRec = app.getUidRecord();
         if (uidRec != null) {
             if (DEBUG_UID_OBSERVERS) {
@@ -654,6 +683,7 @@ public class OomAdjuster {
         state.setContainsCycle(false);
         state.setProcStateChanged(false);
         state.resetCachedInfo();
+        state.setCurBoundByNonBgRestrictedApp(false);
         // Check if this process is in the pending list too, remove from pending list if so.
         mPendingProcessSet.remove(app);
         boolean success = performUpdateOomAdjLSP(app, cachedAdj, topApp,
@@ -944,6 +974,7 @@ public class OomAdjuster {
                 state.setCurRawAdj(ProcessList.UNKNOWN_ADJ);
                 state.setSetCapability(PROCESS_CAPABILITY_NONE);
                 state.resetCachedInfo();
+                state.setCurBoundByNonBgRestrictedApp(false);
             }
         }
         mProcessesInCycle.clear();
@@ -1969,6 +2000,7 @@ public class OomAdjuster {
         }
 
         int capabilityFromFGS = 0; // capability from foreground service.
+        boolean boundByNonBgRestricted = state.isCurBoundByNonBgRestrictedApp();
         boolean scheduleLikeTopApp = false;
         for (int is = psr.numberOfRunningServices() - 1;
                 is >= 0 && (adj > ProcessList.FOREGROUND_APP_ADJ
@@ -2082,6 +2114,11 @@ public class OomAdjuster {
                     int clientProcState = cstate.getCurRawProcState();
 
                     final boolean clientIsSystem = clientProcState < PROCESS_STATE_TOP;
+
+                    boundByNonBgRestricted |= cstate.isCurBoundByNonBgRestrictedApp()
+                            || clientProcState <= PROCESS_STATE_BOUND_TOP
+                            || (clientProcState == PROCESS_STATE_FOREGROUND_SERVICE
+                                    && !cstate.isBackgroundRestricted());
 
                     if (client.mOptRecord.shouldNotFreeze()) {
                         // Propagate the shouldNotFreeze flag down the bindings.
@@ -2405,6 +2442,12 @@ public class OomAdjuster {
                     // Propagate the shouldNotFreeze flag down the bindings.
                     app.mOptRecord.setShouldNotFreeze(true);
                 }
+
+                boundByNonBgRestricted |= cstate.isCurBoundByNonBgRestrictedApp()
+                        || clientProcState <= PROCESS_STATE_BOUND_TOP
+                        || (clientProcState == PROCESS_STATE_FOREGROUND_SERVICE
+                                && !cstate.isBackgroundRestricted());
+
                 String adjType = null;
                 if (adj > clientAdj) {
                     if (state.hasShownUi() && !state.getCachedIsHomeProcess()
@@ -2582,6 +2625,7 @@ public class OomAdjuster {
         state.updateLastInvisibleTime(hasVisibleActivities);
         state.setHasForegroundActivities(foregroundActivities);
         state.setCompletedAdjSeq(mAdjSeq);
+        state.setCurBoundByNonBgRestrictedApp(boundByNonBgRestricted);
 
         // if curAdj or curProcState improved, then this process was promoted
         return state.getCurAdj() < prevAppAdj || state.getCurProcState() < prevProcState
@@ -2947,6 +2991,19 @@ public class OomAdjuster {
         if (state.getCurCapability() != state.getSetCapability()) {
             changes |= ActivityManagerService.ProcessChangeItem.CHANGE_CAPABILITY;
             state.setSetCapability(state.getCurCapability());
+        }
+
+        final boolean curBoundByNonBgRestrictedApp = state.isCurBoundByNonBgRestrictedApp();
+        if (curBoundByNonBgRestrictedApp != state.isSetBoundByNonBgRestrictedApp()) {
+            state.setSetBoundByNonBgRestrictedApp(curBoundByNonBgRestrictedApp);
+            if (!curBoundByNonBgRestrictedApp && state.isBackgroundRestricted()) {
+                mService.mHandler.post(() -> {
+                    synchronized (mService) {
+                        mService.mServices.stopAllForegroundServicesLocked(
+                                app.uid, app.info.packageName);
+                    }
+                });
+            }
         }
 
         if (changes != 0) {

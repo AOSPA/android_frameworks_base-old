@@ -82,8 +82,10 @@ public final class HdmiCecConfigTest {
         assertThat(hdmiCecConfig.getAllSettings())
                 .containsExactly(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED,
                     HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
+                    HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL,
                     HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE,
                     HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST,
+                    HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
                     HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
                     HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE,
                     HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
@@ -103,8 +105,10 @@ public final class HdmiCecConfigTest {
         assertThat(hdmiCecConfig.getUserSettings())
                 .containsExactly(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_ENABLED,
                     HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
+                    HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL,
                     HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE,
                     HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST,
+                    HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
                     HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
                     HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE,
                     HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
@@ -125,7 +129,9 @@ public final class HdmiCecConfigTest {
         assertThat(hdmiCecConfig.getUserSettings())
                 .containsExactly(HdmiControlManager.CEC_SETTING_NAME_HDMI_CEC_VERSION,
                     HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE,
+                    HdmiControlManager.CEC_SETTING_NAME_ROUTING_CONTROL,
                     HdmiControlManager.CEC_SETTING_NAME_POWER_STATE_CHANGE_ON_ACTIVE_SOURCE_LOST,
+                    HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_CONTROL,
                     HdmiControlManager.CEC_SETTING_NAME_SYSTEM_AUDIO_MODE_MUTING,
                     HdmiControlManager.CEC_SETTING_NAME_VOLUME_CONTROL_MODE,
                     HdmiControlManager.CEC_SETTING_NAME_TV_WAKE_ON_ONE_TOUCH_PLAY,
@@ -188,6 +194,7 @@ public final class HdmiCecConfigTest {
         assertThat(hdmiCecConfig.getAllowedStringValues(
                     HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE))
                 .containsExactly(HdmiControlManager.POWER_CONTROL_MODE_TV,
+                                 HdmiControlManager.POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM,
                                  HdmiControlManager.POWER_CONTROL_MODE_BROADCAST,
                                  HdmiControlManager.POWER_CONTROL_MODE_NONE);
     }
@@ -199,6 +206,7 @@ public final class HdmiCecConfigTest {
         assertThat(hdmiCecConfig.getAllowedStringValues(
                     HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE))
                 .containsExactly(HdmiControlManager.POWER_CONTROL_MODE_TV,
+                                 HdmiControlManager.POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM,
                                  HdmiControlManager.POWER_CONTROL_MODE_BROADCAST);
     }
 
@@ -255,12 +263,12 @@ public final class HdmiCecConfigTest {
         HdmiCecConfig hdmiCecConfig = new HdmiCecConfig(mContext, mStorageAdapter);
         assertThat(hdmiCecConfig.getDefaultStringValue(
                     HdmiControlManager.CEC_SETTING_NAME_POWER_CONTROL_MODE))
-                .isEqualTo(HdmiControlManager.POWER_CONTROL_MODE_TV);
+                .isEqualTo(HdmiControlManager.POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM);
     }
 
     @Test
     public void getDefaultStringValue_WithOverride() {
-        setBooleanResource(R.bool.config_cecPowerControlModeTv_default, false);
+        setBooleanResource(R.bool.config_cecPowerControlModeTvAndAudioSystem_default, false);
         setBooleanResource(R.bool.config_cecPowerControlModeBroadcast_default, true);
         HdmiCecConfig hdmiCecConfig = new HdmiCecConfig(mContext, mStorageAdapter);
         assertThat(hdmiCecConfig.getDefaultStringValue(
@@ -277,7 +285,7 @@ public final class HdmiCecConfigTest {
 
     @Test
     public void getDefaultStringValue_NoDefault() {
-        setBooleanResource(R.bool.config_cecPowerControlModeTv_default, false);
+        setBooleanResource(R.bool.config_cecPowerControlModeTvAndAudioSystem_default, false);
         assertThrows(RuntimeException.class,
                 () -> new HdmiCecConfig(mContext, mStorageAdapter));
     }
@@ -334,7 +342,7 @@ public final class HdmiCecConfigTest {
     public void getStringValue_GlobalSetting_BasicSanity() {
         when(mStorageAdapter.retrieveGlobalSetting(
                   Global.HDMI_CONTROL_SEND_STANDBY_ON_SLEEP,
-                  HdmiControlManager.POWER_CONTROL_MODE_TV))
+                  HdmiControlManager.POWER_CONTROL_MODE_TV_AND_AUDIO_SYSTEM))
             .thenReturn(HdmiControlManager.POWER_CONTROL_MODE_BROADCAST);
         HdmiCecConfig hdmiCecConfig = new HdmiCecConfig(mContext, mStorageAdapter);
         assertThat(hdmiCecConfig.getStringValue(

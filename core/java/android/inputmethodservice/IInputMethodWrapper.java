@@ -47,7 +47,6 @@ import com.android.internal.view.IInputMethod;
 import com.android.internal.view.IInputMethodSession;
 import com.android.internal.view.IInputSessionCallback;
 import com.android.internal.view.InlineSuggestionsRequestInfo;
-import com.android.internal.view.InputConnectionWrapper;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -77,7 +76,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
     private static final int DO_CHANGE_INPUTMETHOD_SUBTYPE = 80;
     private static final int DO_CREATE_INLINE_SUGGESTIONS_REQUEST = 90;
 
-    final WeakReference<AbstractInputMethodService> mTarget;
+    final WeakReference<InputMethodServiceInternal> mTarget;
     final Context mContext;
     @UnsupportedAppUsage
     final HandlerCaller mCaller;
@@ -86,7 +85,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
     /**
      * This is not {@null} only between {@link #bindInput(InputBinding)} and {@link #unbindInput()}
-     * so that {@link InputConnectionWrapper} can query if {@link #unbindInput()} has already been
+     * so that {@link RemoteInputConnection} can query if {@link #unbindInput()} has already been
      * called or not, mainly to avoid unnecessary blocking operations.
      *
      * <p>This field must be set and cleared only from the binder thread(s), where the system
@@ -130,12 +129,12 @@ class IInputMethodWrapper extends IInputMethod.Stub
         }
     }
 
-    public IInputMethodWrapper(AbstractInputMethodService context, InputMethod inputMethod) {
-        mTarget = new WeakReference<>(context);
-        mContext = context.getApplicationContext();
+    IInputMethodWrapper(InputMethodServiceInternal imsInternal, InputMethod inputMethod) {
+        mTarget = new WeakReference<>(imsInternal);
+        mContext = imsInternal.getContext().getApplicationContext();
         mCaller = new HandlerCaller(mContext, null, this, true /*asyncHandler*/);
         mInputMethod = new WeakReference<>(inputMethod);
-        mTargetSdkVersion = context.getApplicationInfo().targetSdkVersion;
+        mTargetSdkVersion = imsInternal.getContext().getApplicationInfo().targetSdkVersion;
     }
 
     @MainThread
@@ -150,7 +149,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
         switch (msg.what) {
             case DO_DUMP: {
-                AbstractInputMethodService target = mTarget.get();
+                InputMethodServiceInternal target = mTarget.get();
                 if (target == null) {
                     return;
                 }
@@ -170,8 +169,8 @@ class IInputMethodWrapper extends IInputMethod.Stub
             case DO_INITIALIZE_INTERNAL: {
                 SomeArgs args = (SomeArgs) msg.obj;
                 try {
-                    inputMethod.initializeInternal((IBinder) args.arg1, msg.arg1,
-                            (IInputMethodPrivilegedOperations) args.arg2, (int) args.arg3);
+                    inputMethod.initializeInternal((IBinder) args.arg1,
+                            (IInputMethodPrivilegedOperations) args.arg2, msg.arg1);
                 } finally {
                     args.recycle();
                 }
@@ -192,7 +191,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
                 final CancellationGroup cancellationGroup = (CancellationGroup) args.arg4;
                 SomeArgs moreArgs = (SomeArgs) args.arg5;
                 final InputConnection ic = inputContext != null
-                        ? new InputConnectionWrapper(
+                        ? new RemoteInputConnection(
                                 mTarget, inputContext, moreArgs.argi3, cancellationGroup)
                         : null;
                 info.makeCompatible(mTargetSdkVersion);
@@ -252,11 +251,11 @@ class IInputMethodWrapper extends IInputMethod.Stub
     @BinderThread
     @Override
     protected void dump(FileDescriptor fd, PrintWriter fout, String[] args) {
-        AbstractInputMethodService target = mTarget.get();
+        InputMethodServiceInternal target = mTarget.get();
         if (target == null) {
             return;
         }
-        if (target.checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
+        if (target.getContext().checkCallingOrSelfPermission(android.Manifest.permission.DUMP)
                 != PackageManager.PERMISSION_GRANTED) {
             
             fout.println("Permission Denial: can't dump InputMethodManager from from pid="
@@ -279,11 +278,10 @@ class IInputMethodWrapper extends IInputMethod.Stub
 
     @BinderThread
     @Override
-    public void initializeInternal(IBinder token, int displayId,
-            IInputMethodPrivilegedOperations privOps, int configChanges) {
+    public void initializeInternal(IBinder token, IInputMethodPrivilegedOperations privOps,
+            int configChanges) {
         mCaller.executeOrSendMessage(
-                mCaller.obtainMessageIOOO(DO_INITIALIZE_INTERNAL, displayId, token, privOps,
-                        configChanges));
+                mCaller.obtainMessageIOO(DO_INITIALIZE_INTERNAL, configChanges, token, privOps));
     }
 
     @BinderThread
@@ -303,7 +301,7 @@ class IInputMethodWrapper extends IInputMethod.Stub
         mCancellationGroup = new CancellationGroup();
         // This IInputContext is guaranteed to implement all the methods.
         final int missingMethodFlags = 0;
-        InputConnection ic = new InputConnectionWrapper(mTarget,
+        InputConnection ic = new RemoteInputConnection(mTarget,
                 IInputContext.Stub.asInterface(binding.getConnectionToken()), missingMethodFlags,
                 mCancellationGroup);
         InputBinding nu = new InputBinding(ic, binding);

@@ -31,10 +31,11 @@ import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageInstaller;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageParser.PackageParserException;
-import android.content.pm.PackageParser.SigningDetails;
+import android.content.pm.SigningDetails;
 import android.content.pm.parsing.PackageInfoWithoutStateUtils;
 import android.content.pm.parsing.ParsingPackageUtils;
+import android.content.pm.parsing.result.ParseResult;
+import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.Binder;
 import android.os.Environment;
 import android.os.RemoteException;
@@ -247,6 +248,14 @@ public abstract class ApexManager {
      */
     abstract ApexInfoList submitStagedSession(ApexSessionParams params)
             throws PackageManagerException;
+
+    /**
+     * Returns {@code ApeInfo} about apex sessions that have been marked ready via
+     * {@link #markStagedSessionReady(int)}
+     *
+     * Returns empty array if there is no staged apex session or if there is any error.
+     */
+    abstract ApexInfo[] getStagedApexInfos(ApexSessionParams params);
 
     /**
      * Mark a staged session previously submitted using {@code submitStagedSession} as ready to be
@@ -583,8 +592,8 @@ public abstract class ApexManager {
                         }
                         factoryPackagesSet.add(packageInfo.packageName);
                     }
-                } else if (throwable instanceof PackageParserException) {
-                    final PackageParserException e = (PackageParserException) throwable;
+                } else if (throwable instanceof PackageManagerException) {
+                    final PackageManagerException e = (PackageManagerException) throwable;
                     // Skip parsing non-coreApp apex file if system is in minimal boot state.
                     if (e.error == PackageManager.INSTALL_PARSE_FAILED_ONLY_COREAPP_ALLOWED) {
                         Slog.w(TAG, "Scan apex failed, not a coreApp:" + ai.modulePath);
@@ -753,6 +762,19 @@ public abstract class ApexManager {
                 throw new PackageManagerException(
                         PackageInstaller.SessionInfo.STAGED_SESSION_VERIFICATION_FAILED,
                         "apexd verification failed : " + e.getMessage());
+            }
+        }
+
+        @Override
+        ApexInfo[] getStagedApexInfos(ApexSessionParams params) {
+            try {
+                return waitForApexService().getStagedApexInfos(params);
+            } catch (RemoteException re) {
+                Slog.w(TAG, "Unable to contact apexservice" + re.getMessage());
+                throw new RuntimeException(re);
+            } catch (Exception e) {
+                Slog.w(TAG, "Failed to collect staged apex infos" + e.getMessage());
+                return new ApexInfo[0];
             }
         }
 
@@ -988,15 +1010,17 @@ public abstract class ApexManager {
         }
 
         private SigningDetails getSigningDetails(PackageInfo pkg) throws PackageManagerException {
-            int minSignatureScheme =
+            final int minSignatureScheme =
                     ApkSignatureVerifier.getMinimumSignatureSchemeVersionForTargetSdk(
                             pkg.applicationInfo.targetSdkVersion);
-            try {
-                return ApkSignatureVerifier.verify(pkg.applicationInfo.sourceDir,
-                        minSignatureScheme);
-            } catch (PackageParserException e) {
-                throw PackageManagerException.from(e);
+            final ParseTypeImpl input = ParseTypeImpl.forDefaultParsing();
+            final ParseResult<SigningDetails> result = ApkSignatureVerifier.verify(
+                    input, pkg.applicationInfo.sourceDir, minSignatureScheme);
+            if (result.isError()) {
+                throw new PackageManagerException(result.getErrorCode(), result.getErrorMessage(),
+                        result.getException());
             }
+            return result.getResult();
         }
 
         private void checkApexSignature(PackageInfo existingApexPkg, PackageInfo newApexPkg)
@@ -1244,6 +1268,11 @@ public abstract class ApexManager {
                 throws PackageManagerException {
             throw new PackageManagerException(PackageManager.INSTALL_FAILED_INTERNAL_ERROR,
                     "Device doesn't support updating APEX");
+        }
+
+        @Override
+        ApexInfo[] getStagedApexInfos(ApexSessionParams params) {
+            throw new UnsupportedOperationException();
         }
 
         @Override

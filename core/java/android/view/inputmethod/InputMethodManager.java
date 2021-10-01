@@ -18,7 +18,6 @@ package android.view.inputmethod;
 
 import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
 import static android.Manifest.permission.WRITE_SECURE_SETTINGS;
-import static android.util.imetracing.ImeTracing.PROTO_ARG;
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.DISPLAY_ID;
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.EDITOR_INFO;
 import static android.view.inputmethod.InputMethodEditorTraceProto.InputMethodClientsTraceProto.ClientSideProto.IME_INSETS_SOURCE_CONSUMER;
@@ -73,7 +72,6 @@ import android.util.Pools.SimplePool;
 import android.util.PrintWriterPrinter;
 import android.util.Printer;
 import android.util.SparseArray;
-import android.util.imetracing.ImeTracing;
 import android.util.proto.ProtoOutputStream;
 import android.view.Display;
 import android.view.ImeFocusController;
@@ -88,19 +86,19 @@ import android.view.WindowManager.LayoutParams.SoftInputModeFlags;
 import android.view.autofill.AutofillManager;
 
 import com.android.internal.annotations.GuardedBy;
+import com.android.internal.inputmethod.ImeTracing;
+import com.android.internal.inputmethod.InputBindResult;
 import com.android.internal.inputmethod.InputMethodDebug;
 import com.android.internal.inputmethod.InputMethodPrivilegedOperationsRegistry;
+import com.android.internal.inputmethod.RemoteInputConnectionImpl;
 import com.android.internal.inputmethod.SoftInputShowHideReason;
 import com.android.internal.inputmethod.StartInputFlags;
 import com.android.internal.inputmethod.StartInputReason;
 import com.android.internal.inputmethod.UnbindReason;
 import com.android.internal.os.SomeArgs;
-import com.android.internal.view.IInputConnectionWrapper;
-import com.android.internal.view.IInputContext;
 import com.android.internal.view.IInputMethodClient;
 import com.android.internal.view.IInputMethodManager;
 import com.android.internal.view.IInputMethodSession;
-import com.android.internal.view.InputBindResult;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -367,7 +365,7 @@ public final class InputMethodManager {
     final H mH;
 
     // Our generic input connection if the current target does not have its own.
-    final IInputContext mIInputContext;
+    private final RemoteInputConnectionImpl mFallbackInputConnection;
 
     private final int mDisplayId;
 
@@ -409,8 +407,7 @@ public final class InputMethodManager {
     /**
      * The InputConnection that was last retrieved from the served view.
      */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.P, trackingBug = 115609023)
-    IInputConnectionWrapper mServedInputConnectionWrapper;
+    RemoteInputConnectionImpl mServedInputConnection;
     /**
      * The completions that were last provided by the served view.
      */
@@ -699,8 +696,8 @@ public final class InputMethodManager {
          */
         @Override
         public void finishComposingText() {
-            if (mServedInputConnectionWrapper != null) {
-                mServedInputConnectionWrapper.finishComposingText();
+            if (mServedInputConnection != null) {
+                mServedInputConnection.finishComposingText();
             }
         }
 
@@ -754,9 +751,9 @@ public final class InputMethodManager {
                     return false;
                 }
 
-                return mServedInputConnectionWrapper != null
-                        && mServedInputConnectionWrapper.isActive()
-                        && mServedInputConnectionWrapper.getServedView() == view;
+                return mServedInputConnection != null
+                        && mServedInputConnection.isActive()
+                        && mServedInputConnection.getServedView() == view;
             }
         }
     }
@@ -921,12 +918,9 @@ public final class InputMethodManager {
                             // that this happened and make sure our own editor's
                             // state is reset.
                             mRestartOnNextWindowFocus = true;
-                            try {
-                                // Note that finishComposingText() is allowed to run
-                                // even when we are not active.
-                                mIInputContext.finishComposingText();
-                            } catch (RemoteException e) {
-                            }
+                            // Note that finishComposingText() is allowed to run
+                            // even when we are not active.
+                            mFallbackInputConnection.finishComposingText();
                         }
                         // Check focus again in case that "onWindowFocus" is called before
                         // handling this message.
@@ -956,15 +950,15 @@ public final class InputMethodManager {
                 }
                 case MSG_REPORT_FULLSCREEN_MODE: {
                     final boolean fullscreen = msg.arg1 != 0;
-                    InputConnection ic = null;
+                    RemoteInputConnectionImpl ic = null;
                     synchronized (mH) {
-                        mFullscreenMode = fullscreen;
-                        if (mServedInputConnectionWrapper != null) {
-                            ic = mServedInputConnectionWrapper.getInputConnection();
+                        if (mFullscreenMode != fullscreen && mServedInputConnection != null) {
+                            ic = mServedInputConnection;
+                            mFullscreenMode = fullscreen;
                         }
                     }
                     if (ic != null) {
-                        ic.reportFullscreenMode(fullscreen);
+                        ic.dispatchReportFullscreenMode(fullscreen);
                     }
                     return;
                 }
@@ -1033,8 +1027,6 @@ public final class InputMethodManager {
         }
     };
 
-    final InputConnection mDummyInputConnection = new BaseInputConnection(this, false);
-
     /**
      * For layoutlib to clean up static objects inside {@link InputMethodManager}.
      */
@@ -1083,7 +1075,7 @@ public final class InputMethodManager {
         // 1) doing so has no effect for A and 2) doing so is sufficient for B.
         final long identity = Binder.clearCallingIdentity();
         try {
-            service.addClient(imm.mClient, imm.mIInputContext, displayId);
+            service.addClient(imm.mClient, imm.mFallbackInputConnection, displayId);
         } catch (RemoteException e) {
             e.rethrowFromSystemServer();
         } finally {
@@ -1128,7 +1120,8 @@ public final class InputMethodManager {
         mMainLooper = looper;
         mH = new H(looper);
         mDisplayId = displayId;
-        mIInputContext = new IInputConnectionWrapper(looper, mDummyInputConnection, this, null);
+        mFallbackInputConnection = new RemoteInputConnectionImpl(looper,
+                new BaseInputConnection(this, false), this, null);
     }
 
     /**
@@ -1203,18 +1196,6 @@ public final class InputMethodManager {
         synchronized (sLock) {
             return sInstance;
         }
-    }
-
-    /** @hide */
-    @UnsupportedAppUsage
-    public IInputMethodClient getClient() {
-        return mClient;
-    }
-
-    /** @hide */
-    @UnsupportedAppUsage
-    public IInputContext getInputContext() {
-        return mIInputContext;
     }
 
     /**
@@ -1400,8 +1381,7 @@ public final class InputMethodManager {
     public boolean isAcceptingText() {
         checkFocus();
         synchronized (mH) {
-            return mServedInputConnectionWrapper != null
-                    && mServedInputConnectionWrapper.getInputConnection() != null;
+            return mServedInputConnection != null && !mServedInputConnection.isFinished();
         }
     }
 
@@ -1455,9 +1435,9 @@ public final class InputMethodManager {
      */
     void clearConnectionLocked() {
         mCurrentTextBoxAttribute = null;
-        if (mServedInputConnectionWrapper != null) {
-            mServedInputConnectionWrapper.deactivate();
-            mServedInputConnectionWrapper = null;
+        if (mServedInputConnection != null) {
+            mServedInputConnection.deactivate();
+            mServedInputConnection = null;
         }
     }
 
@@ -1953,11 +1933,11 @@ public final class InputMethodManager {
             mCurrentTextBoxAttribute = tba;
 
             mServedConnecting = false;
-            if (mServedInputConnectionWrapper != null) {
-                mServedInputConnectionWrapper.deactivate();
-                mServedInputConnectionWrapper = null;
+            if (mServedInputConnection != null) {
+                mServedInputConnection.deactivate();
+                mServedInputConnection = null;
             }
-            IInputConnectionWrapper servedContext;
+            RemoteInputConnectionImpl servedInputConnection;
             final int missingMethodFlags;
             if (ic != null) {
                 mCursorSelStart = tba.initialSelStart;
@@ -1974,14 +1954,14 @@ public final class InputMethodManager {
                 } else {
                     icHandler = ic.getHandler();
                 }
-                servedContext = new IInputConnectionWrapper(
+                servedInputConnection = new RemoteInputConnectionImpl(
                         icHandler != null ? icHandler.getLooper() : vh.getLooper(), ic, this, view);
             } else {
-                servedContext = null;
+                servedInputConnection = null;
                 missingMethodFlags = 0;
                 icHandler = null;
             }
-            mServedInputConnectionWrapper = servedContext;
+            mServedInputConnection = servedInputConnection;
 
             if (DEBUG) {
                 Log.v(TAG, "START INPUT: view=" + dumpViewInfo(view) + " ic="
@@ -1991,7 +1971,7 @@ public final class InputMethodManager {
             try {
                 res = mService.startInputOrWindowGainedFocus(
                         startInputReason, mClient, windowGainingFocus, startInputFlags,
-                        softInputMode, windowFlags, tba, servedContext, missingMethodFlags,
+                        softInputMode, windowFlags, tba, servedInputConnection, missingMethodFlags,
                         view.getContext().getApplicationInfo().targetSdkVersion);
             } catch (RemoteException e) {
                 throw e.rethrowFromSystemServer();
@@ -3086,7 +3066,7 @@ public final class InputMethodManager {
 
         p.println("  mService=" + mService);
         p.println("  mMainLooper=" + mMainLooper);
-        p.println("  mIInputContext=" + mIInputContext);
+        p.println("  mFallbackInputConnection=" + mFallbackInputConnection);
         p.println("  mActive=" + mActive
                 + " mRestartOnNextWindowFocus=" + mRestartOnNextWindowFocus
                 + " mBindSequence=" + mBindSequence
@@ -3107,7 +3087,7 @@ public final class InputMethodManager {
         } else {
             p.println("  mCurrentTextBoxAttribute: null");
         }
-        p.println("  mServedInputConnectionWrapper=" + mServedInputConnectionWrapper);
+        p.println("  mServedInputConnection=" + mServedInputConnection);
         p.println("  mCompletions=" + Arrays.toString(mCompletions));
         p.println("  mCursorRect=" + mCursorRect);
         p.println("  mCursorSelStart=" + mCursorSelStart
@@ -3192,7 +3172,7 @@ public final class InputMethodManager {
         }
 
         for (String arg : args) {
-            if (arg.equals(PROTO_ARG)) {
+            if (arg.equals(ImeTracing.PROTO_ARG)) {
                 final ProtoOutputStream proto = new ProtoOutputStream(fd);
                 dumpDebug(proto, null /* icProto */);
                 proto.flush();
@@ -3211,7 +3191,7 @@ public final class InputMethodManager {
      * @hide
      */
     @GuardedBy("mH")
-    public void dumpDebug(ProtoOutputStream proto, ProtoOutputStream icProto) {
+    public void dumpDebug(ProtoOutputStream proto, @Nullable byte[] icProto) {
         if (mCurrentInputMethodSession == null) {
             return;
         }
@@ -3233,11 +3213,11 @@ public final class InputMethodManager {
             if (mImeInsetsConsumer != null) {
                 mImeInsetsConsumer.dumpDebug(proto, IME_INSETS_SOURCE_CONSUMER);
             }
-            if (mServedInputConnectionWrapper != null) {
-                mServedInputConnectionWrapper.dumpDebug(proto, INPUT_CONNECTION);
+            if (mServedInputConnection != null) {
+                mServedInputConnection.dumpDebug(proto, INPUT_CONNECTION);
             }
             if (icProto != null) {
-                proto.write(INPUT_CONNECTION_CALL, icProto.getBytes());
+                proto.write(INPUT_CONNECTION_CALL, icProto);
             }
         }
     }

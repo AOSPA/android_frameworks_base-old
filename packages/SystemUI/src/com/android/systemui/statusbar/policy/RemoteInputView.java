@@ -72,11 +72,10 @@ import android.widget.TextView;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.graphics.ColorUtils;
-import com.android.internal.logging.MetricsLogger;
 import com.android.internal.logging.UiEvent;
 import com.android.internal.logging.UiEventLogger;
-import com.android.internal.logging.nano.MetricsProto;
 import com.android.internal.util.ContrastColorUtil;
 import com.android.systemui.Dependency;
 import com.android.systemui.R;
@@ -151,7 +150,9 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         @UiEvent(doc = "User sent data through the notification remote input view")
         NOTIFICATION_REMOTE_INPUT_SEND(797),
         @UiEvent(doc = "Failed attempt to send data through the notification remote input view")
-        NOTIFICATION_REMOTE_INPUT_FAILURE(798);
+        NOTIFICATION_REMOTE_INPUT_FAILURE(798),
+        @UiEvent(doc = "User attached an image to the remote input view")
+        NOTIFICATION_REMOTE_INPUT_ATTACH_IMAGE(825);
 
         private final int mId;
         NotificationRemoteInputEvent(int id) {
@@ -283,7 +284,8 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         });
     }
 
-    private void setAttachment(ContentInfo item) {
+    @VisibleForTesting
+    protected void setAttachment(ContentInfo item) {
         if (mEntry.remoteInputAttachment != null && mEntry.remoteInputAttachment != item) {
             // We need to release permissions when sending the attachment to the target
             // app or if it is deleted by the user. When sending to the target app, we
@@ -309,6 +311,10 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
             attachment.setVisibility(GONE);
         } else {
             attachment.setVisibility(VISIBLE);
+            mUiEventLogger.logWithInstanceId(
+                    NotificationRemoteInputEvent.NOTIFICATION_REMOTE_INPUT_ATTACH_IMAGE,
+                    mEntry.getSbn().getUid(), mEntry.getSbn().getPackageName(),
+                    mEntry.getSbn().getInstanceId());
         }
         updateSendButton();
     }
@@ -413,8 +419,6 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
                 mEntry.getSbn().getPackageName(),
                 mEntry.getSbn().getUser().getIdentifier());
 
-        MetricsLogger.action(mContext, MetricsProto.MetricsEvent.ACTION_REMOTE_INPUT_SEND,
-                mEntry.getSbn().getPackageName());
         mUiEventLogger.logWithInstanceId(
                 NotificationRemoteInputEvent.NOTIFICATION_REMOTE_INPUT_SEND,
                 mEntry.getSbn().getUid(), mEntry.getSbn().getPackageName(),
@@ -423,8 +427,6 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
             mPendingIntent.send(mContext, 0, intent);
         } catch (PendingIntent.CanceledException e) {
             Log.i(TAG, "Unable to send remote input result", e);
-            MetricsLogger.action(mContext, MetricsProto.MetricsEvent.ACTION_REMOTE_INPUT_FAIL,
-                    mEntry.getSbn().getPackageName());
             mUiEventLogger.logWithInstanceId(
                     NotificationRemoteInputEvent.NOTIFICATION_REMOTE_INPUT_FAILURE,
                     mEntry.getSbn().getUid(), mEntry.getSbn().getPackageName(),
@@ -501,8 +503,6 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
         mRemoteInputQuickSettingsDisabler.setRemoteInputActive(false);
 
         if (logClose) {
-            MetricsLogger.action(mContext, MetricsProto.MetricsEvent.ACTION_REMOTE_INPUT_CLOSE,
-                    mEntry.getSbn().getPackageName());
             mUiEventLogger.logWithInstanceId(
                     NotificationRemoteInputEvent.NOTIFICATION_REMOTE_INPUT_CLOSE,
                     mEntry.getSbn().getUid(), mEntry.getSbn().getPackageName(),
@@ -584,8 +584,6 @@ public class RemoteInputView extends LinearLayout implements View.OnClickListene
     }
 
     public void focus() {
-        MetricsLogger.action(mContext, MetricsProto.MetricsEvent.ACTION_REMOTE_INPUT_OPEN,
-                mEntry.getSbn().getPackageName());
         mUiEventLogger.logWithInstanceId(
                 NotificationRemoteInputEvent.NOTIFICATION_REMOTE_INPUT_OPEN,
                 mEntry.getSbn().getUid(), mEntry.getSbn().getPackageName(),

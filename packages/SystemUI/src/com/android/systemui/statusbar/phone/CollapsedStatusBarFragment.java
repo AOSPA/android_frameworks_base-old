@@ -39,9 +39,9 @@ import android.widget.LinearLayout;
 
 import com.android.systemui.R;
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.events.SystemStatusAnimationCallback;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
@@ -57,8 +57,11 @@ import org.jetbrains.annotations.NotNull;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Optional;
 
 import javax.inject.Inject;
+
+import dagger.Lazy;
 
 /**
  * Contains the collapsed status bar and handles hiding/showing based on disable flags
@@ -85,7 +88,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     private View mCenteredIconArea;
     private int mDisabled1;
     private int mDisabled2;
-    private final StatusBar mStatusBarComponent;
+    private Lazy<Optional<StatusBar>> mStatusBarOptionalLazy;
     private DarkIconManager mDarkIconManager;
     private View mOperatorNameFrame;
     private final CommandQueue mCommandQueue;
@@ -123,7 +126,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
             KeyguardStateController keyguardStateController,
             NetworkController networkController,
             StatusBarStateController statusBarStateController,
-            StatusBar statusBarComponent,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             CommandQueue commandQueue
     ) {
         mOngoingCallController = ongoingCallController;
@@ -135,7 +138,7 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         mKeyguardStateController = keyguardStateController;
         mNetworkController = networkController;
         mStatusBarStateController = statusBarStateController;
-        mStatusBarComponent = statusBarComponent;
+        mStatusBarOptionalLazy = statusBarOptionalLazy;
         mCommandQueue = commandQueue;
     }
 
@@ -272,7 +275,8 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     }
 
     protected int adjustDisableFlags(int state) {
-        boolean headsUpVisible = mStatusBarComponent.headsUpShouldBeVisible();
+        boolean headsUpVisible = mStatusBarOptionalLazy.get()
+                .map(StatusBar::headsUpShouldBeVisible).orElse(false);
         if (headsUpVisible) {
             state |= DISABLE_CLOCK;
         }
@@ -300,7 +304,8 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
         // The shelf will be hidden when dozing with a custom clock, we must show notification
         // icons in this occasion.
         if (mStatusBarStateController.isDozing()
-                && mStatusBarComponent.getPanelController().hasCustomClock()) {
+                && mStatusBarOptionalLazy.get().map(
+                        sb -> sb.getPanelController().hasCustomClock()).orElse(false)) {
             state |= DISABLE_CLOCK | DISABLE_SYSTEM_INFO;
         }
 
@@ -341,10 +346,13 @@ public class CollapsedStatusBarFragment extends Fragment implements CommandQueue
     }
 
     private boolean shouldHideNotificationIcons() {
-        if (!mStatusBar.isClosed() && mStatusBarComponent.hideStatusBarIconsWhenExpanded()) {
+        final Optional<StatusBar> statusBarOptional = mStatusBarOptionalLazy.get();
+        if (!mStatusBar.isClosed()
+                && statusBarOptional.map(
+                        StatusBar::hideStatusBarIconsWhenExpanded).orElse(false)) {
             return true;
         }
-        if (mStatusBarComponent.hideStatusBarIconsForBouncer()) {
+        if (statusBarOptional.map(StatusBar::hideStatusBarIconsForBouncer).orElse(false)) {
             return true;
         }
         return false;

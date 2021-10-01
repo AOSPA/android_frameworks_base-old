@@ -2260,7 +2260,7 @@ class ContextImpl extends Context {
             int modeFlags) {
         try {
             return ActivityManager.getService().checkUriPermissions(uris, pid, uid, modeFlags,
-                    null);
+                    getUserId(), null);
         } catch (RemoteException e) {
             throw e.rethrowFromSystemServer();
         }
@@ -2721,10 +2721,13 @@ class ContextImpl extends Context {
         // need to override their display in ResourcesManager.
         baseContext.mForceDisplayOverrideInResources = false;
         baseContext.mContextType = CONTEXT_TYPE_WINDOW_CONTEXT;
-        baseContext.mDisplay = display;
 
         final Resources windowContextResources = createWindowContextResources(baseContext);
         baseContext.setResources(windowContextResources);
+        // Associate the display with window context resources so that configuration update from
+        // the server side will also apply to the display's metrics.
+        baseContext.mDisplay = ResourcesManager.getInstance()
+                .getAdjustedDisplay(display.getDisplayId(), windowContextResources);
 
         return baseContext;
     }
@@ -3188,12 +3191,6 @@ class ContextImpl extends Context {
     @UnsupportedAppUsage
     final void setOuterContext(@NonNull Context context) {
         mOuterContext = context;
-        // TODO(b/149463653): check if we still need this method after migrating IMS to
-        //  WindowContext.
-        if (mOuterContext.isUiContext() && mContextType <= CONTEXT_TYPE_DISPLAY_CONTEXT) {
-            mContextType = CONTEXT_TYPE_WINDOW_CONTEXT;
-            mIsConfigurationBasedContext = true;
-        }
     }
 
     @UnsupportedAppUsage

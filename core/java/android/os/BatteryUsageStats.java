@@ -82,8 +82,6 @@ public final class BatteryUsageStats implements Parcelable {
 
     public static final int AGGREGATE_BATTERY_CONSUMER_SCOPE_COUNT = 2;
 
-    private static final int STATSD_PULL_ATOM_MAX_BYTES = 45000;
-
     // XML tags and attributes for BatteryUsageStats persistence
     static final String XML_TAG_BATTERY_USAGE_STATS = "battery_usage_stats";
     static final String XML_TAG_AGGREGATE = "aggregate";
@@ -111,6 +109,8 @@ public final class BatteryUsageStats implements Parcelable {
     static final String XML_ATTR_HIGHEST_DRAIN_PACKAGE = "highest_drain_package";
     static final String XML_ATTR_TIME_IN_FOREGROUND = "time_in_foreground";
     static final String XML_ATTR_TIME_IN_BACKGROUND = "time_in_background";
+
+    private static final int STATSD_PULL_ATOM_MAX_BYTES = 45000;
 
     private final int mDischargePercentage;
     private final double mBatteryCapacityMah;

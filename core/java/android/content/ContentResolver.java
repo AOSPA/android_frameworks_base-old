@@ -3196,6 +3196,21 @@ public abstract class ContentResolver implements ContentInterface {
     }
 
     /**
+     * Returns the package name of the syncadapter that matches a given account type, authority
+     * and user.
+     * @hide
+     */
+    @Nullable
+    public static String getSyncAdapterPackageAsUser(@NonNull String accountType,
+            @NonNull String authority, @UserIdInt int userId) {
+        try {
+            return getContentService().getSyncAdapterPackageAsUser(accountType, authority, userId);
+        } catch (RemoteException e) {
+            throw e.rethrowFromSystemServer();
+        }
+    }
+
+    /**
      * Check if the provider should be synced when a network tickle is received
      * <p>This method requires the caller to hold the permission
      * {@link android.Manifest.permission#READ_SYNC_SETTINGS}.
@@ -3292,7 +3307,7 @@ public abstract class ContentResolver implements ContentInterface {
      * @param authority the provider to specify in the sync request
      * @param extras extra parameters to go along with the sync request
      * @param pollFrequency how frequently the sync should be performed, in seconds.
-     * On Android API level 24 and above, a minmam interval of 15 minutes is enforced.
+     * On Android API level 24 and above, a minimum interval of 15 minutes is enforced.
      * On previous versions, the minimum interval is 1 hour.
      * @throws IllegalArgumentException if an illegal extra was set or if any of the parameters
      * are null.

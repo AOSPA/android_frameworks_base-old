@@ -18,7 +18,6 @@ package com.android.server.wm;
 
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
-import static android.view.Display.INVALID_DISPLAY;
 import static android.view.WindowManager.INPUT_CONSUMER_PIP;
 import static android.view.WindowManager.INPUT_CONSUMER_RECENTS_ANIMATION;
 import static android.view.WindowManager.INPUT_CONSUMER_WALLPAPER;
@@ -39,6 +38,7 @@ import static android.view.WindowManager.LayoutParams.TYPE_NAVIGATION_BAR_PANEL;
 import static android.view.WindowManager.LayoutParams.TYPE_NOTIFICATION_SHADE;
 import static android.view.WindowManager.LayoutParams.TYPE_SECURE_SYSTEM_OVERLAY;
 import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR;
+import static android.view.WindowManager.LayoutParams.TYPE_STATUS_BAR_ADDITIONAL;
 import static android.view.WindowManager.LayoutParams.TYPE_VOICE_INTERACTION;
 import static android.view.WindowManager.LayoutParams.TYPE_WALLPAPER;
 
@@ -307,7 +307,10 @@ final class InputMonitor {
         boolean useSurfaceCrop = false;
         final Task task = w.getTask();
         if (task != null) {
-            if (task.isOrganized() && task.getWindowingMode() != WINDOWING_MODE_FULLSCREEN) {
+            // TODO(b/165794636): Remove the special case for freeform window once drag resizing is
+            // handled by WM shell.
+            if (task.isOrganized() && task.getWindowingMode() != WINDOWING_MODE_FULLSCREEN
+                        && !task.inFreeformWindowingMode()) {
                 // If the window is in a TaskManaged by a TaskOrganizer then most cropping will
                 // be applied using the SurfaceControl hierarchy from the Organizer. This means
                 // we need to make sure that these changes in crop are reflected in the input
@@ -539,7 +542,8 @@ final class InputMonitor {
             if (mAddRecentsAnimationInputConsumerHandle && shouldApplyRecentsInputConsumer) {
                 if (recentsAnimationController.updateInputConsumerForApp(
                         mRecentsAnimationInputConsumer.mWindowHandle)) {
-                    mRecentsAnimationInputConsumer.show(mInputTransaction, w.mActivityRecord);
+                    mRecentsAnimationInputConsumer.show(mInputTransaction,
+                            recentsAnimationController.getHighestLayerTask());
                     mAddRecentsAnimationInputConsumerHandle = false;
                 }
             }
@@ -617,7 +621,6 @@ final class InputMonitor {
         inputWindowHandle.setScaleFactor(1f);
         inputWindowHandle.setLayoutParamsFlags(
                 FLAG_NOT_TOUCH_MODAL | FLAG_NOT_TOUCHABLE | FLAG_NOT_FOCUSABLE);
-        inputWindowHandle.setPortalToDisplayId(INVALID_DISPLAY);
         inputWindowHandle.clearTouchableRegion();
         inputWindowHandle.setTouchableRegionCrop(null);
     }
@@ -650,6 +653,7 @@ final class InputMonitor {
                 || type == TYPE_DOCK_DIVIDER
                 || type == TYPE_ACCESSIBILITY_OVERLAY
                 || type == TYPE_INPUT_CONSUMER
-                || type == TYPE_VOICE_INTERACTION;
+                || type == TYPE_VOICE_INTERACTION
+                || type == TYPE_STATUS_BAR_ADDITIONAL;
     }
 }

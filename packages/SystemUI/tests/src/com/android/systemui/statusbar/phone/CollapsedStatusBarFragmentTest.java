@@ -37,8 +37,8 @@ import androidx.test.filters.SmallTest;
 
 import com.android.systemui.R;
 import com.android.systemui.SysuiBaseFragmentTest;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
@@ -51,6 +51,8 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.mockito.Mockito;
 
+import java.util.Optional;
+
 @RunWith(AndroidTestingRunner.class)
 @RunWithLooper(setAsMainLooper = true)
 @SmallTest
@@ -61,6 +63,7 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     private OngoingCallController mOngoingCallController;
     private SystemStatusAnimationScheduler mAnimationScheduler;
     private StatusBarLocationPublisher mLocationPublisher;
+
     // Set in instantiate()
     private StatusBarIconController mStatusBarIconController;
     private NetworkController mNetworkController;
@@ -70,12 +73,15 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
     private final StatusBar mStatusBar = mock(StatusBar.class);
     private final CommandQueue mCommandQueue = mock(CommandQueue.class);
 
+
     public CollapsedStatusBarFragmentTest() {
         super(CollapsedStatusBarFragment.class);
     }
 
     @Before
     public void setup() {
+        mStatusBarStateController = mDependency
+                .injectMockDependency(StatusBarStateController.class);
         injectLeakCheckedDependencies(ALL_SUPPORTED_CLASSES);
         when(mStatusBar.getPanelController()).thenReturn(
                 mock(NotificationPanelViewController.class));
@@ -248,9 +254,10 @@ public class CollapsedStatusBarFragmentTest extends SysuiBaseFragmentTest {
                 mKeyguardStateController,
                 mNetworkController,
                 mStatusBarStateController,
-                mStatusBar,
+                () -> Optional.of(mStatusBar),
                 mCommandQueue);
     }
+
 
     private void setUpNotificationIconAreaController() {
         mMockNotificationAreaController = mock(NotificationIconAreaController.class);

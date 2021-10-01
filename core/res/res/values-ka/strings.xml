@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"არ არის მონიშნული"</string>
     <string name="selected" msgid="6614607926197755875">"არჩეულია"</string>
     <string name="not_selected" msgid="410652016565864475">"არ არის არჩეული"</string>
+    <string name="in_progress" msgid="2149208189184319441">"მიმდინარეობს"</string>
     <string name="whichApplication" msgid="5432266899591255759">"რა გამოვიყენოთ?"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"მოქმედების %1$s-ის გამოყენებით დასრულება"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"მოქმედების დასრულება"</string>

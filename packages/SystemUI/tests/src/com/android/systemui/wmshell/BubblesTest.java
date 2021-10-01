@@ -24,6 +24,7 @@ import static android.service.notification.NotificationListenerService.REASON_CA
 import static android.service.notification.NotificationListenerService.REASON_GROUP_SUMMARY_CANCELED;
 
 import static com.android.dx.mockito.inline.extended.ExtendedMockito.spyOn;
+import static com.android.wm.shell.bubbles.Bubbles.DISMISS_NOTIF_CANCEL;
 
 import static com.google.common.truth.Truth.assertThat;
 
@@ -75,11 +76,11 @@ import com.android.systemui.SysuiTestCase;
 import com.android.systemui.biometrics.AuthController;
 import com.android.systemui.colorextraction.SysuiColorExtractor;
 import com.android.systemui.dump.DumpManager;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.keyguard.KeyguardViewMediator;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.shared.system.QuickStepContract;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.NotificationLockscreenUserManager;
 import com.android.systemui.statusbar.NotificationRemoveInterceptor;
 import com.android.systemui.statusbar.RankingBuilder;
@@ -120,6 +121,7 @@ import com.android.wm.shell.bubbles.Bubbles;
 import com.android.wm.shell.common.DisplayController;
 import com.android.wm.shell.common.FloatingContentCoordinator;
 import com.android.wm.shell.common.ShellExecutor;
+import com.android.wm.shell.common.SyncTransactionQueue;
 import com.android.wm.shell.common.TaskStackListenerImpl;
 
 import com.google.common.collect.ImmutableList;
@@ -331,7 +333,8 @@ public class BubblesTest extends SysuiTestCase {
                 mPositioner,
                 mock(DisplayController.class),
                 syncExecutor,
-                mock(Handler.class));
+                mock(Handler.class),
+                mock(SyncTransactionQueue.class));
         mBubbleController.setExpandListener(mBubbleExpandListener);
         spyOn(mBubbleController);
 
@@ -439,7 +442,7 @@ public class BubblesTest extends SysuiTestCase {
                 mRow.getKey(), Bubbles.DISMISS_USER_GESTURE);
 
         mBubbleController.removeBubble(
-                mRow.getKey(), Bubbles.DISMISS_NOTIF_CANCEL);
+                mRow.getKey(), DISMISS_NOTIF_CANCEL);
         verify(mNotificationEntryManager, times(1)).performRemoveNotification(
                 eq(mRow.getSbn()), any(), anyInt());
         assertThat(mBubbleData.getOverflowBubbles()).isEmpty();
@@ -1144,6 +1147,28 @@ public class BubblesTest extends SysuiTestCase {
         // Verify these are in the overflow
         assertThat(mBubbleData.getOverflowBubbleWithKey(mBubbleEntryUser11.getKey())).isNotNull();
         assertThat(mBubbleData.getOverflowBubbleWithKey(mBubbleEntry2User11.getKey())).isNotNull();
+
+        // Would have loaded bubbles twice because of user switch
+        verify(mDataRepository, times(2)).loadBubbles(anyInt(), any());
+    }
+
+    /**
+     * Verifies we only load the overflow data once.
+     */
+    @Test
+    public void testOverflowLoadedOnce() {
+        mBubbleController.updateBubble(mBubbleEntry);
+        mBubbleController.updateBubble(mBubbleEntry2);
+        mBubbleData.dismissAll(Bubbles.DISMISS_USER_GESTURE);
+        assertThat(mBubbleData.getOverflowBubbles().isEmpty()).isFalse();
+
+        mBubbleController.updateBubble(mBubbleEntry);
+        mBubbleController.updateBubble(mBubbleEntry2);
+        mBubbleController.removeBubble(mBubbleEntry.getKey(), DISMISS_NOTIF_CANCEL);
+        mBubbleController.removeBubble(mBubbleEntry2.getKey(), DISMISS_NOTIF_CANCEL);
+        assertThat(mBubbleData.getOverflowBubbles()).isEmpty();
+
+        verify(mDataRepository, times(1)).loadBubbles(anyInt(), any());
     }
 
 

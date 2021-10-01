@@ -747,6 +747,15 @@ public final class Settings implements Watchable, Snappable {
         mRenamedPackages.remove(pkgName);
     }
 
+    void pruneRenamedPackagesLPw() {
+        for (int i = mRenamedPackages.size() - 1; i >= 0; i--) {
+            PackageSetting ps = mPackages.get(mRenamedPackages.valueAt(i));
+            if (ps == null) {
+                mRenamedPackages.removeAt(i);
+            }
+        }
+    }
+
     /** Gets and optionally creates a new shared user id. */
     SharedUserSetting getSharedUserLPw(String name, int pkgFlags, int pkgPrivateFlags,
             boolean create) throws PackageManagerException {
@@ -1117,9 +1126,9 @@ public final class Settings implements Watchable, Snappable {
      *         already registered.
      * @throws PackageManagerException If a user ID could not be allocated.
      */
-    boolean registerAppIdLPw(PackageSetting p) throws PackageManagerException {
+    boolean registerAppIdLPw(PackageSetting p, boolean forceNew) throws PackageManagerException {
         final boolean createdNew;
-        if (p.appId == 0) {
+        if (p.appId == 0 || forceNew) {
             // Assign new user ID
             p.appId = acquireAndRegisterNewAppIdLPw(p);
             createdNew = true;
@@ -1169,12 +1178,13 @@ public final class Settings implements Watchable, Snappable {
     // by that time.
     void insertPackageSettingLPw(PackageSetting p, AndroidPackage pkg) {
         // Update signatures if needed.
-        if (p.signatures.mSigningDetails.signatures == null) {
+        if (p.signatures.mSigningDetails.getSignatures() == null) {
             p.signatures.mSigningDetails = pkg.getSigningDetails();
         }
         // If this app defines a shared user id initialize
         // the shared user signatures as well.
-        if (p.sharedUser != null && p.sharedUser.signatures.mSigningDetails.signatures == null) {
+        if (p.sharedUser != null
+                && p.sharedUser.signatures.mSigningDetails.getSignatures() == null) {
             p.sharedUser.signatures.mSigningDetails = pkg.getSigningDetails();
         }
         addPackageSettingLPw(p, p.sharedUser);
@@ -2966,6 +2976,17 @@ public final class Settings implements Watchable, Snappable {
             mReadMessages.append("Error reading: " + e.toString());
             PackageManagerService.reportSettingsProblem(Log.ERROR, "Error reading settings: " + e);
             Slog.wtf(PackageManagerService.TAG, "Error reading package manager settings", e);
+        } finally {
+            if (!mVersion.containsKey(StorageManager.UUID_PRIVATE_INTERNAL)) {
+                Slog.wtf(PackageManagerService.TAG,
+                        "No internal VersionInfo found in settings, using current.");
+                findOrCreateVersion(StorageManager.UUID_PRIVATE_INTERNAL).forceCurrent();
+            }
+            if (!mVersion.containsKey(StorageManager.UUID_PRIMARY_PHYSICAL)) {
+                Slog.wtf(PackageManagerService.TAG,
+                        "No external VersionInfo found in settings, using current.");
+                findOrCreateVersion(StorageManager.UUID_PRIMARY_PHYSICAL).forceCurrent();
+            }
         }
 
         // If the build is setup to drop runtime permissions
@@ -4490,7 +4511,7 @@ public final class Settings implements Watchable, Snappable {
             pw.print(prefix); pw.print("  versionName="); pw.println(pkg.getVersionName());
             pw.print(prefix); pw.print("  usesNonSdkApi="); pw.println(pkg.isUsesNonSdkApi());
             pw.print(prefix); pw.print("  splits="); dumpSplitNames(pw, pkg); pw.println();
-            final int apkSigningVersion = pkg.getSigningDetails().signatureSchemeVersion;
+            final int apkSigningVersion = pkg.getSigningDetails().getSignatureSchemeVersion();
             pw.print(prefix); pw.print("  apkSigningVersion="); pw.println(apkSigningVersion);
             pw.print(prefix); pw.print("  applicationInfo=");
             pw.println(pkg.toAppInfoToString());

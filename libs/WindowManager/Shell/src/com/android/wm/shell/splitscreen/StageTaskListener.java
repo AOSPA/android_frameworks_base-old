@@ -71,8 +71,8 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
     }
 
     private final StageListenerCallbacks mCallbacks;
-    private final SyncTransactionQueue mSyncQueue;
     private final SurfaceSession mSurfaceSession;
+    protected final SyncTransactionQueue mSyncQueue;
 
     protected ActivityManager.RunningTaskInfo mRootTaskInfo;
     protected SurfaceControl mRootLeash;
@@ -95,6 +95,15 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
 
     boolean containsTask(int taskId) {
         return mChildrenTaskInfo.contains(taskId);
+    }
+
+    /** @return {@code true} if this listener contains the currently focused task. */
+    boolean isFocused() {
+        if (mRootTaskInfo.isFocused) return true;
+        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
+            if (mChildrenTaskInfo.valueAt(i).isFocused) return true;
+        }
+        return false;
     }
 
     @Override

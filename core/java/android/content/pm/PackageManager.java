@@ -1053,26 +1053,37 @@ public abstract class PackageManager {
 
     /** @hide */
     @Retention(RetentionPolicy.SOURCE)
-    @IntDef(value = {
-            RollbackDataPolicy.RESTORE,
-            RollbackDataPolicy.WIPE,
-            RollbackDataPolicy.RETAIN
+    @IntDef(prefix = { "ROLLBACK_DATA_POLICY_" }, value = {
+            ROLLBACK_DATA_POLICY_RESTORE,
+            ROLLBACK_DATA_POLICY_WIPE,
+            ROLLBACK_DATA_POLICY_RETAIN
     })
-    public @interface RollbackDataPolicy {
-        /**
-         * User data will be backed up during install and restored during rollback.
-         */
-        int RESTORE = 0;
-        /**
-         * User data won't be backed up during install but will be wiped out during rollback.
-         */
-        int WIPE = 1;
-        /**
-         * User data won't be backed up during install and won't be restored during rollback.
-         * TODO: Not implemented yet.
-         */
-        int RETAIN = 2;
-    }
+    public @interface RollbackDataPolicy {}
+
+    /**
+     * User data will be backed up during install and restored during rollback.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ROLLBACK_DATA_POLICY_RESTORE = 0;
+
+    /**
+     * User data won't be backed up during install but will be wiped out during rollback.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ROLLBACK_DATA_POLICY_WIPE = 1;
+
+    /**
+     * User data won't be backed up during install and won't be restored during rollback.
+     * TODO: Not implemented yet.
+     *
+     * @hide
+     */
+    @SystemApi
+    public static final int ROLLBACK_DATA_POLICY_RETAIN = 2;
 
     /** @hide */
     @IntDef(flag = true, prefix = { "INSTALL_" }, value = {
@@ -3699,6 +3710,17 @@ public abstract class PackageManager {
     public static final String FEATURE_KEYSTORE_APP_ATTEST_KEY =
             "android.hardware.keystore.app_attest_key";
 
+    /**
+     * Feature for {@link #getSystemAvailableFeatures} and {@link #hasSystemFeature}: The device
+     * is opted-in to receive per-app compatibility overrides that are applied in
+     * {@link com.android.server.compat.overrides.AppCompatOverridesService}.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.FEATURE)
+    public static final String FEATURE_APP_COMPAT_OVERRIDES =
+            "android.software.app_compat_overrides";
+
     /** @hide */
     public static final boolean APP_ENUMERATION_ENABLED_BY_DEFAULT = true;
 
@@ -4470,12 +4492,17 @@ public abstract class PackageManager {
      * main activity in the category {@link Intent#CATEGORY_LAUNCHER}. Returns
      * <code>null</code> if neither are found.
      *
+     * <p>Consider using {@link #getLaunchIntentSenderForPackage(String)} if
+     * the caller is not allowed to query for the <code>packageName</code>.
+     *
      * @param packageName The name of the package to inspect.
      *
      * @return A fully-qualified {@link Intent} that can be used to launch the
      * main activity in the package. Returns <code>null</code> if the package
      * does not contain such an activity, or if <em>packageName</em> is not
      * recognized.
+     *
+     * @see #getLaunchIntentSenderForPackage(String)
      */
     public abstract @Nullable Intent getLaunchIntentForPackage(@NonNull String packageName);
 
@@ -4508,6 +4535,28 @@ public abstract class PackageManager {
      */
     @SuppressWarnings("HiddenAbstractMethod")
     public abstract @Nullable Intent getCarLaunchIntentForPackage(@NonNull String packageName);
+
+    /**
+     * Returns an {@link IntentSender} that can be used to launch a front-door activity in a
+     * package. This is used, for example, to implement an "open" button when browsing through
+     * packages. The current implementation is the same with
+     * {@link #getLaunchIntentForPackage(String)}. Instead of returning the {@link Intent}, it
+     * returns the {@link IntentSender} which is not restricted by the package visibility.
+     *
+     * <p>The caller can invoke
+     * {@link IntentSender#sendIntent(Context, int, Intent, IntentSender.OnFinished, Handler)}
+     * to launch the activity. An {@link IntentSender.SendIntentException} is thrown if the
+     * package does not contain such an activity, or if <em>packageName</em> is not recognized.
+     *
+     * @param packageName The name of the package to inspect.
+     * @return Returns a {@link IntentSender} to launch the activity.
+     *
+     * @see #getLaunchIntentForPackage(String)
+     */
+    public @NonNull IntentSender getLaunchIntentSenderForPackage(@NonNull String packageName) {
+        throw new UnsupportedOperationException("getLaunchIntentSenderForPackage not implemented"
+                + "in subclass");
+    }
 
     /**
      * Return an array of all of the POSIX secondary group IDs that have been
@@ -6798,7 +6847,7 @@ public abstract class PackageManager {
     @NonNull
     public Resources getResourcesForApplication(@NonNull ApplicationInfo app, @Nullable
             Configuration configuration) throws NameNotFoundException {
-        throw new UnsupportedOperationException();
+        return getResourcesForApplication(app);
     }
 
     /**

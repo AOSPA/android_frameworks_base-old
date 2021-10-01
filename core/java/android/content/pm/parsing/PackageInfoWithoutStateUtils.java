@@ -32,7 +32,6 @@ import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageParser;
 import android.content.pm.PackageUserState;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
@@ -40,6 +39,7 @@ import android.content.pm.ProviderInfo;
 import android.content.pm.SELinuxUtil;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
+import android.content.pm.SigningDetails;
 import android.content.pm.SigningInfo;
 import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.parsing.component.ComponentParseUtils;
@@ -273,16 +273,16 @@ public class PackageInfoWithoutStateUtils {
                 pi.requestedPermissionsFlags = new int[size];
                 for (int i = 0; i < size; i++) {
                     final ParsedUsesPermission usesPermission = usesPermissions.get(i);
-                    pi.requestedPermissions[i] = usesPermission.name;
+                    pi.requestedPermissions[i] = usesPermission.getName();
                     // The notion of required permissions is deprecated but for compatibility.
                     pi.requestedPermissionsFlags[i] |=
                             PackageInfo.REQUESTED_PERMISSION_REQUIRED;
                     if (grantedPermissions != null
-                            && grantedPermissions.contains(usesPermission.name)) {
+                            && grantedPermissions.contains(usesPermission.getName())) {
                         pi.requestedPermissionsFlags[i] |=
                                 PackageInfo.REQUESTED_PERMISSION_GRANTED;
                     }
-                    if ((usesPermission.usesPermissionFlags
+                    if ((usesPermission.getUsesPermissionFlags()
                             & ParsedUsesPermission.FLAG_NEVER_FOR_LOCATION) != 0) {
                         pi.requestedPermissionsFlags[i] |=
                                 PackageInfo.REQUESTED_PERMISSION_NEVER_FOR_LOCATION;
@@ -330,26 +330,26 @@ public class PackageInfoWithoutStateUtils {
             pi.isApex = true;
         }
 
-        PackageParser.SigningDetails signingDetails = pkg.getSigningDetails();
+        final SigningDetails signingDetails = pkg.getSigningDetails();
         // deprecated method of getting signing certificates
         if ((flags & PackageManager.GET_SIGNATURES) != 0) {
             if (signingDetails.hasPastSigningCertificates()) {
                 // Package has included signing certificate rotation information.  Return the oldest
                 // cert so that programmatic checks keep working even if unaware of key rotation.
                 pi.signatures = new Signature[1];
-                pi.signatures[0] = signingDetails.pastSigningCertificates[0];
+                pi.signatures[0] = signingDetails.getPastSigningCertificates()[0];
             } else if (signingDetails.hasSignatures()) {
                 // otherwise keep old behavior
-                int numberOfSigs = signingDetails.signatures.length;
+                int numberOfSigs = signingDetails.getSignatures().length;
                 pi.signatures = new Signature[numberOfSigs];
-                System.arraycopy(signingDetails.signatures, 0, pi.signatures, 0,
+                System.arraycopy(signingDetails.getSignatures(), 0, pi.signatures, 0,
                         numberOfSigs);
             }
         }
 
         // replacement for GET_SIGNATURES
         if ((flags & PackageManager.GET_SIGNING_CERTIFICATES) != 0) {
-            if (signingDetails != PackageParser.SigningDetails.UNKNOWN) {
+            if (signingDetails != SigningDetails.UNKNOWN) {
                 // only return a valid SigningInfo if there is signing information to report
                 pi.signingInfo = new SigningInfo(signingDetails);
             } else {
@@ -398,6 +398,13 @@ public class PackageInfoWithoutStateUtils {
             assignUserFields(pkg, ai, userId);
         }
 
+        updateApplicationInfo(ai, flags, state);
+
+        return ai;
+    }
+
+    private static void updateApplicationInfo(ApplicationInfo ai, int flags,
+            PackageUserState state) {
         if ((flags & PackageManager.GET_META_DATA) == 0) {
             ai.metaData = null;
         }
@@ -407,7 +414,7 @@ public class PackageInfoWithoutStateUtils {
         }
 
         // CompatibilityMode is global state.
-        if (!android.content.pm.PackageParser.sCompatibilityModeEnabled) {
+        if (!ParsingPackageUtils.sCompatibilityModeEnabled) {
             ai.disableCompatibilityMode();
         }
 
@@ -439,7 +446,37 @@ public class PackageInfoWithoutStateUtils {
             ai.resourceDirs = overlayPaths.getResourceDirs().toArray(new String[0]);
             ai.overlayPaths = overlayPaths.getOverlayPaths().toArray(new String[0]);
         }
+    }
 
+    @Nullable
+    public static ApplicationInfo generateDelegateApplicationInfo(@Nullable ApplicationInfo ai,
+            @PackageManager.ApplicationInfoFlags int flags, @NonNull PackageUserState state,
+            int userId) {
+        if (ai == null || !checkUseInstalledOrHidden(flags, state, ai)) {
+            return null;
+        }
+        // This is used to return the ResolverActivity or instantAppInstallerActivity;
+        // we will just always make a copy.
+        ai = new ApplicationInfo(ai);
+        ai.initForUser(userId);
+        ai.icon = (ParsingPackageUtils.sUseRoundIcon && ai.roundIconRes != 0) ? ai.roundIconRes
+                : ai.iconRes;
+        updateApplicationInfo(ai, flags, state);
+        return ai;
+    }
+
+    @Nullable
+    public static ActivityInfo generateDelegateActivityInfo(@Nullable ActivityInfo a,
+            @PackageManager.ComponentInfoFlags int flags, @NonNull PackageUserState state,
+            int userId) {
+        if (a == null || !checkUseInstalledOrHidden(flags, state, a.applicationInfo)) {
+            return null;
+        }
+        // This is used to return the ResolverActivity or instantAppInstallerActivity;
+        // we will just always make a copy.
+        final ActivityInfo ai = new ActivityInfo(a);
+        ai.applicationInfo =
+                generateDelegateApplicationInfo(ai.applicationInfo, flags, state, userId);
         return ai;
     }
 
@@ -498,7 +535,7 @@ public class PackageInfoWithoutStateUtils {
         ai.setMaxAspectRatio(maxAspectRatio != null ? maxAspectRatio : 0f);
         Float minAspectRatio = a.getMinAspectRatio();
         ai.setMinAspectRatio(minAspectRatio != null ? minAspectRatio : 0f);
-        ai.supportsSizeChanges = a.getSupportsSizeChanges();
+        ai.supportsSizeChanges = a.isSupportsSizeChanges();
         ai.requestedVrComponent = a.getRequestedVrComponent();
         ai.rotationAnimation = a.getRotationAnimation();
         ai.colorMode = a.getColorMode();
@@ -713,7 +750,24 @@ public class PackageInfoWithoutStateUtils {
     @Nullable
     public static Attribution generateAttribution(ParsedAttribution pa) {
         if (pa == null) return null;
-        return new Attribution(pa.tag, pa.label);
+        return new Attribution(pa.getTag(), pa.getLabel());
+    }
+
+    private static boolean checkUseInstalledOrHidden(int flags, @NonNull PackageUserState state,
+            @Nullable ApplicationInfo appInfo) {
+        // Returns false if the package is hidden system app until installed.
+        if ((flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) == 0
+                && !state.installed
+                && appInfo != null && appInfo.hiddenUntilInstalled) {
+            return false;
+        }
+
+        // If available for the target user, or trying to match uninstalled packages and it's
+        // a system app.
+        return state.isAvailable(flags)
+                || (appInfo != null && appInfo.isSystemApp()
+                && ((flags & PackageManager.MATCH_KNOWN_PACKAGES) != 0
+                || (flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) != 0));
     }
 
     private static void assignSharedFieldsForComponentInfo(@NonNull ComponentInfo componentInfo,

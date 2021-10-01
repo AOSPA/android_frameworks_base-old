@@ -63,8 +63,6 @@ import android.hardware.display.DisplayManagerGlobal;
 import android.hardware.display.DisplayManagerInternal;
 import android.hardware.display.DisplayManagerInternal.DisplayGroupListener;
 import android.hardware.display.DisplayManagerInternal.DisplayTransactionListener;
-import android.hardware.display.DisplayManagerInternal.RefreshRateLimitation;
-import android.hardware.display.DisplayManagerInternal.RefreshRateRange;
 import android.hardware.display.DisplayViewport;
 import android.hardware.display.DisplayedContentSample;
 import android.hardware.display.DisplayedContentSamplingAttributes;
@@ -645,6 +643,9 @@ public final class DisplayManagerService extends SystemService {
         synchronized (mSyncRoot) {
             final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(displayId);
             if (display != null) {
+                // Do not let constrain be overwritten by override from WindowManager.
+                info.shouldConstrainMetricsForLauncher =
+                        display.getDisplayInfoLocked().shouldConstrainMetricsForLauncher;
                 if (display.setDisplayInfoOverrideFromWindowManagerLocked(info)) {
                     handleLogicalDisplayChangedLocked(display);
                     scheduleTraversalLocked(false);
@@ -1734,6 +1735,21 @@ public final class DisplayManagerService extends SystemService {
         }
     }
 
+    void setShouldConstrainMetricsForLauncher(boolean constrain) {
+        // Apply constrain for every display.
+        synchronized (mSyncRoot) {
+            int[] displayIds = mLogicalDisplayMapper.getDisplayIdsLocked(Process.myUid());
+            for (int i : displayIds) {
+                final LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(i);
+                if (display == null) {
+                    return;
+                }
+                display.getDisplayInfoLocked().shouldConstrainMetricsForLauncher = constrain;
+                setDisplayInfoOverrideFromWindowManagerInternal(i, display.getDisplayInfoLocked());
+            }
+        }
+    }
+
     private void clearViewportsLocked() {
         mViewports.clear();
     }
@@ -1760,10 +1776,13 @@ public final class DisplayManagerService extends SystemService {
         final DisplayDeviceInfo info = device.getDisplayDeviceInfoLocked();
         final boolean ownContent = (info.flags & DisplayDeviceInfo.FLAG_OWN_CONTENT_ONLY) != 0;
 
+        // Mirror the part of WM hierarchy that corresponds to the provided window token.
+        IBinder windowTokenClientToMirror = device.getWindowTokenClientToMirrorLocked();
+
         // Find the logical display that the display device is showing.
         // Certain displays only ever show their own content.
         LogicalDisplay display = mLogicalDisplayMapper.getDisplayLocked(device);
-        if (!ownContent) {
+        if (!ownContent && windowTokenClientToMirror == null) {
             if (display != null && !display.hasContentLocked()) {
                 // If the display does not have any content of its own, then
                 // automatically mirror the requested logical display contents if possible.
@@ -3335,6 +3354,40 @@ public final class DisplayManagerService extends SystemService {
                 config = device.getDisplayDeviceConfig();
             }
             return config.getRefreshRateLimitations();
+        }
+
+        @Override
+        public IBinder getWindowTokenClientToMirror(int displayId) {
+            final DisplayDevice device;
+            synchronized (mSyncRoot) {
+                device = getDeviceForDisplayLocked(displayId);
+                if (device == null) {
+                    return null;
+                }
+            }
+            return device.getWindowTokenClientToMirrorLocked();
+        }
+
+        @Override
+        public void setWindowTokenClientToMirror(int displayId, IBinder windowToken) {
+            synchronized (mSyncRoot) {
+                final DisplayDevice device = getDeviceForDisplayLocked(displayId);
+                if (device != null) {
+                    device.setWindowTokenClientToMirrorLocked(windowToken);
+                }
+            }
+        }
+
+        @Override
+        public Point getDisplaySurfaceDefaultSize(int displayId) {
+            final DisplayDevice device;
+            synchronized (mSyncRoot) {
+                device = getDeviceForDisplayLocked(displayId);
+                if (device == null) {
+                    return null;
+                }
+            }
+            return device.getDisplaySurfaceDefaultSize();
         }
     }
 

@@ -30,6 +30,7 @@ import android.content.pm.PackageManager.ApplicationInfoFlags;
 import android.content.pm.PackageManager.ComponentInfoFlags;
 import android.content.pm.PackageManager.PackageInfoFlags;
 import android.content.pm.PackageManager.ResolveInfoFlags;
+import android.content.pm.SigningDetails.CertCapabilities;
 import android.content.pm.overlay.OverlayPaths;
 import android.content.pm.parsing.component.ParsedMainComponent;
 import android.os.Bundle;
@@ -38,6 +39,7 @@ import android.os.HandlerExecutor;
 import android.os.IBinder;
 import android.os.Looper;
 import android.os.PersistableBundle;
+import android.os.Process;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.SparseArray;
@@ -69,7 +71,6 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
             PACKAGE_BROWSER,
             PACKAGE_SYSTEM_TEXT_CLASSIFIER,
             PACKAGE_PERMISSION_CONTROLLER,
-            PACKAGE_DOCUMENTER,
             PACKAGE_CONFIGURATOR,
             PACKAGE_INCIDENT_REPORT_APPROVER,
             PACKAGE_APP_PREDICTOR,
@@ -352,6 +353,12 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
 
 
     /**
+     * Retrieve all receivers that can handle a broadcast of the given intent.
+     */
+    public abstract List<ResolveInfo> queryIntentReceivers(Intent intent,
+            String resolvedType, int flags, int filterCallingUid, int userId);
+
+    /**
      * Retrieve all services that can be performed for the given intent.
      * @see PackageManager#queryIntentServices(Intent, int)
      */
@@ -560,11 +567,6 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
     public abstract ResolveInfo resolveService(Intent intent, String resolvedType,
            int flags, int userId, int callingUid);
 
-   /**
-    * Resolves a content provider intent.
-    */
-    public abstract ProviderInfo resolveContentProvider(String name, int flags, int userId);
-
     /**
     * Resolves a content provider intent.
     */
@@ -710,6 +712,29 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
     public abstract boolean filterAppAccess(
             @NonNull String packageName, int callingUid, int userId);
 
+    /**
+     * Returns whether or not access to the application which belongs to the given UID should be
+     * filtered. If the UID is part of a shared user ID, return {@code true} if all applications
+     * belong to the shared user ID should be filtered.
+     *
+     * @see #filterAppAccess(AndroidPackage, int, int)
+     */
+    public abstract boolean filterAppAccess(int uid, int callingUid);
+
+    /**
+     * Fetches all app Ids that a given application is currently visible to the provided user.
+     *
+     * <p>
+     * <strong>Note: </strong>This only includes UIDs >= {@link Process#FIRST_APPLICATION_UID}
+     * as all other UIDs can already see all applications.
+     * </p>
+     *
+     * If the app is visible to all UIDs, null is returned. If the app is not visible to any
+     * applications, the int array will be empty.
+     */
+    @Nullable
+    public abstract int[] getVisibilityAllowList(@NonNull String packageName, int userId);
+
     /** Returns whether the given package was signed by the platform */
     public abstract boolean isPlatformSigned(String pkg);
 
@@ -736,7 +761,7 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
      * signing history for {@code serverUid} and with the {@code capability} specified.
      */
     public abstract boolean hasSignatureCapability(int serverUid, int clientUid,
-            @PackageParser.SigningDetails.CertCapabilities int capability);
+            @CertCapabilities int capability);
 
     /**
      * Get appIds of all available apps which specified android:sharedUserId in the manifest.
@@ -821,7 +846,7 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
 
     /**
      * Perform the given action for each installed package for a user.
-     * Note that packages lock will be held while performin the actions.
+     * Note that packages lock will be held while performing the actions.
      */
     public abstract void forEachInstalledPackage(
             @NonNull Consumer<AndroidPackage> actionLocked, @UserIdInt int userId);

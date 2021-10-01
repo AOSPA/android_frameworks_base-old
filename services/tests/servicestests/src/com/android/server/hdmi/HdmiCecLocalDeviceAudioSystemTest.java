@@ -53,6 +53,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.ArrayList;
+import java.util.Collections;
 
 @SmallTest
 @Presubmit
@@ -96,7 +97,8 @@ public class HdmiCecLocalDeviceAudioSystemTest {
         mMyLooper = mTestLooper.getLooper();
 
         mHdmiControlService =
-            new HdmiControlService(InstrumentationRegistry.getTargetContext()) {
+            new HdmiControlService(InstrumentationRegistry.getTargetContext(),
+                    Collections.emptyList()) {
                 @Override
                 AudioManager getAudioManager() {
                     return new AudioManager() {
@@ -210,7 +212,7 @@ public class HdmiCecLocalDeviceAudioSystemTest {
         mHdmiControlService.setMessageValidator(new HdmiCecMessageValidator(mHdmiControlService));
         mLocalDevices.add(mHdmiCecLocalDeviceAudioSystem);
         mLocalDevices.add(mHdmiCecLocalDevicePlayback);
-        mHdmiCecLocalDeviceAudioSystem.setRoutingControlFeatureEnables(true);
+        mHdmiCecLocalDeviceAudioSystem.setRoutingControlFeatureEnabled(true);
         mHdmiPortInfo = new HdmiPortInfo[4];
         mHdmiPortInfo[0] =
             new HdmiPortInfo(
@@ -793,12 +795,13 @@ public class HdmiCecLocalDeviceAudioSystemTest {
 
     @Test
     public void setActiveSource_localDevice_playback() {
-        mHdmiControlService.setActiveSource(mHdmiCecLocalDevicePlayback.mAddress,
+        mHdmiControlService.setActiveSource(
+                mHdmiCecLocalDevicePlayback.getDeviceInfo().getLogicalAddress(),
                 SELF_PHYSICAL_ADDRESS,
                 "HdmiControlServiceTest");
 
-        assertThat(mHdmiControlService.getLocalActiveSource().logicalAddress).isEqualTo(
-                mHdmiCecLocalDevicePlayback.mAddress);
+        assertThat(mHdmiControlService.getLocalActiveSource().logicalAddress)
+                .isEqualTo(mHdmiCecLocalDevicePlayback.getDeviceInfo().getLogicalAddress());
         assertThat(mHdmiControlService.getLocalActiveSource().physicalAddress).isEqualTo(
                 SELF_PHYSICAL_ADDRESS);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isTrue();
@@ -807,12 +810,13 @@ public class HdmiCecLocalDeviceAudioSystemTest {
 
     @Test
     public void setActiveSource_localDevice_audio() {
-        mHdmiControlService.setActiveSource(mHdmiCecLocalDeviceAudioSystem.mAddress,
+        mHdmiControlService.setActiveSource(
+                mHdmiCecLocalDeviceAudioSystem.getDeviceInfo().getLogicalAddress(),
                 SELF_PHYSICAL_ADDRESS,
                 "HdmiControlServiceTest");
 
-        assertThat(mHdmiControlService.getLocalActiveSource().logicalAddress).isEqualTo(
-                mHdmiCecLocalDeviceAudioSystem.mAddress);
+        assertThat(mHdmiControlService.getLocalActiveSource().logicalAddress)
+                .isEqualTo(mHdmiCecLocalDeviceAudioSystem.getDeviceInfo().getLogicalAddress());
         assertThat(mHdmiControlService.getLocalActiveSource().physicalAddress).isEqualTo(
                 SELF_PHYSICAL_ADDRESS);
         assertThat(mHdmiCecLocalDevicePlayback.isActiveSource()).isFalse();

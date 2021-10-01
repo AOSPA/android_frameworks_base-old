@@ -33,7 +33,6 @@ import android.annotation.DurationMillisLong;
 import android.annotation.IntRange;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
-import android.os.RemoteCallback;
 import android.util.IndentingPrintWriter;
 
 import com.android.internal.annotations.GuardedBy;
@@ -166,12 +165,6 @@ class ControllerImpl extends LocationTimeZoneProviderController {
             stopProviders();
             mPrimaryProvider.destroy();
             mSecondaryProvider.destroy();
-
-            // If the controller has made a "certain" suggestion, it should make an uncertain
-            // suggestion to cancel it.
-            if (mLastSuggestion != null && mLastSuggestion.getZoneIds() != null) {
-                makeSuggestion(createUncertainSuggestion("Controller is destroyed"));
-            }
         }
     }
 
@@ -182,6 +175,16 @@ class ControllerImpl extends LocationTimeZoneProviderController {
 
         // By definition, if both providers are stopped, the controller is uncertain.
         cancelUncertaintyTimeout();
+
+        // If a previous "certain" suggestion has been made, then a new "uncertain"
+        // suggestion must now be made to indicate the controller {does not / no longer has}
+        // an opinion and will not be sending further updates (until at least the providers are
+        // re-started).
+        if (mLastSuggestion != null && mLastSuggestion.getZoneIds() != null) {
+            GeolocationTimeZoneSuggestion suggestion = createUncertainSuggestion(
+                    "Providers are stopping");
+            makeSuggestion(suggestion);
+        }
     }
 
     @GuardedBy("mSharedLock")
@@ -275,21 +278,6 @@ class ControllerImpl extends LocationTimeZoneProviderController {
             }
         } else {
             stopProviders();
-
-            // There can be an uncertainty timeout set if the controller most recently received
-            // an uncertain event. This is a no-op if there isn't a timeout set.
-            cancelUncertaintyTimeout();
-
-            // If a previous "certain" suggestion has been made, then a new "uncertain"
-            // suggestion must now be made to indicate the controller {does not / no longer has}
-            // an opinion and will not be sending further updates (until at least the config
-            // changes again and providers are re-started).
-            if (mLastSuggestion != null && mLastSuggestion.getZoneIds() != null) {
-                GeolocationTimeZoneSuggestion suggestion = createUncertainSuggestion(
-                        "Provider is stopped:"
-                                + " primary=" + mPrimaryProvider.getCurrentState());
-                makeSuggestion(suggestion);
-            }
         }
     }
 
@@ -601,41 +589,14 @@ class ControllerImpl extends LocationTimeZoneProviderController {
     }
 
     /**
-     * Passes a test command to the specified provider. If the provider name does not match a
-     * known provider, then the command is logged and discarded.
+     * Clears recorded provider state changes (for use during tests).
      */
-    void handleProviderTestCommand(
-            @IntRange(from = 0, to = 1) int providerIndex, @NonNull TestCommand testCommand,
-            @Nullable RemoteCallback callback) {
-        mThreadingDomain.assertCurrentThread();
-
-        LocationTimeZoneProvider targetProvider = getLocationTimeZoneProvider(providerIndex);
-        if (targetProvider == null) {
-            warnLog("Unable to process test command:"
-                    + " providerIndex=" + providerIndex + ", testCommand=" + testCommand);
-            return;
-        }
-
-        synchronized (mSharedLock) {
-            try {
-                targetProvider.handleTestCommand(testCommand, callback);
-            } catch (Exception e) {
-                warnLog("Unable to process test command:"
-                        + " providerIndex=" + providerIndex + ", testCommand=" + testCommand, e);
-            }
-        }
-    }
-
-    /**
-     * Sets whether the controller should record provider state changes for later dumping via
-     * {@link #getStateForTests()}.
-     */
-    void setProviderStateRecordingEnabled(boolean enabled) {
+    void clearRecordedProviderStates() {
         mThreadingDomain.assertCurrentThread();
 
         synchronized (mSharedLock) {
-            mPrimaryProvider.setStateChangeRecordingEnabled(enabled);
-            mSecondaryProvider.setStateChangeRecordingEnabled(enabled);
+            mPrimaryProvider.clearRecordedStates();
+            mSecondaryProvider.clearRecordedStates();
         }
     }
 

@@ -24,12 +24,13 @@ import android.os.Handler;
 import com.android.internal.statusbar.IStatusBarService;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.plugins.ActivityStarter;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.qs.carrier.QSCarrierGroupController;
 import com.android.systemui.statusbar.ActionClickLogger;
 import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.MediaArtworkProcessor;
 import com.android.systemui.statusbar.NotificationClickNotifier;
 import com.android.systemui.statusbar.NotificationListener;
@@ -92,7 +93,7 @@ public interface StatusBarDependenciesModule {
             NotificationLockscreenUserManager lockscreenUserManager,
             SmartReplyController smartReplyController,
             NotificationEntryManager notificationEntryManager,
-            Lazy<StatusBar> statusBarLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             StatusBarStateController statusBarStateController,
             Handler mainHandler,
             RemoteInputUriController remoteInputUriController,
@@ -103,7 +104,7 @@ public interface StatusBarDependenciesModule {
                 lockscreenUserManager,
                 smartReplyController,
                 notificationEntryManager,
-                statusBarLazy,
+                statusBarOptionalLazy,
                 statusBarStateController,
                 mainHandler,
                 remoteInputUriController,
@@ -116,7 +117,7 @@ public interface StatusBarDependenciesModule {
     @Provides
     static NotificationMediaManager provideNotificationMediaManager(
             Context context,
-            Lazy<StatusBar> statusBarLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             Lazy<NotificationShadeWindowController> notificationShadeWindowController,
             NotificationEntryManager notificationEntryManager,
             MediaArtworkProcessor mediaArtworkProcessor,
@@ -129,7 +130,7 @@ public interface StatusBarDependenciesModule {
             MediaDataManager mediaDataManager) {
         return new NotificationMediaManager(
                 context,
-                statusBarLazy,
+                statusBarOptionalLazy,
                 notificationShadeWindowController,
                 notificationEntryManager,
                 mediaArtworkProcessor,
@@ -253,4 +254,9 @@ public interface StatusBarDependenciesModule {
         ongoingCallController.init();
         return ongoingCallController;
     }
+
+    /** */
+    @Binds
+    QSCarrierGroupController.SlotIndexResolver provideSlotIndexResolver(
+            QSCarrierGroupController.SubscriptionManagerSlotIndexResolver impl);
 }

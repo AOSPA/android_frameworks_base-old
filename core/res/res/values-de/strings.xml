@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"deaktiviert"</string>
     <string name="selected" msgid="6614607926197755875">"ausgewählt"</string>
     <string name="not_selected" msgid="410652016565864475">"nicht ausgewählt"</string>
+    <string name="in_progress" msgid="2149208189184319441">"Noch nicht abgeschlossen"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Aktion durchführen mit"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Aktion mit %1$s abschließen"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Abschließen"</string>

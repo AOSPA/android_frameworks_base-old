@@ -64,13 +64,14 @@ import com.android.internal.app.IAppOpsService;
 import com.android.internal.infra.AndroidFuture;
 import com.android.internal.util.IntPair;
 import com.android.internal.util.function.pooled.PooledLambda;
-import com.android.server.FgThread;
 import com.android.server.LocalServices;
+import com.android.server.PermissionThread;
 import com.android.server.SystemService;
 import com.android.server.pm.UserManagerInternal;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.policy.PermissionPolicyInternal.OnInitializedCallback;
+import com.android.server.utils.TimingsTraceAndSlog;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -278,7 +279,7 @@ public final class PermissionPolicyService extends SystemService {
                 PermissionControllerManager manager = mPermControllerManagers.get(user);
                 if (manager == null) {
                     manager = new PermissionControllerManager(
-                            getUserContext(getContext(), user), FgThread.getHandler());
+                            getUserContext(getContext(), user), PermissionThread.getHandler());
                     mPermControllerManagers.put(user, manager);
                 }
                 manager.updateUserSensitiveForApp(uid);
@@ -286,8 +287,9 @@ public final class PermissionPolicyService extends SystemService {
         }, UserHandle.ALL, intentFilter, null, null);
 
         PermissionControllerManager manager = new PermissionControllerManager(
-                getUserContext(getContext(), Process.myUserHandle()), FgThread.getHandler());
-        FgThread.getHandler().postDelayed(manager::updateUserSensitive,
+                getUserContext(getContext(), Process.myUserHandle()),
+                PermissionThread.getHandler());
+        PermissionThread.getHandler().postDelayed(manager::updateUserSensitive,
                 USER_SENSITIVE_UPDATE_DELAY_MS);
     }
 
@@ -314,7 +316,7 @@ public final class PermissionPolicyService extends SystemService {
         if (isStarted(changedUserId)) {
             synchronized (mLock) {
                 if (mIsPackageSyncsScheduled.add(new Pair<>(packageName, changedUserId))) {
-                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                    PermissionThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                             PermissionPolicyService
                                     ::synchronizePackagePermissionsAndAppOpsForUser,
                             this, packageName, changedUserId));
@@ -365,7 +367,11 @@ public final class PermissionPolicyService extends SystemService {
             return;
         }
 
+
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
+        t.traceBegin("Permission_grant_default_permissions-" + userId);
         grantOrUpgradeDefaultRuntimePermissionsIfNeeded(userId);
+        t.traceEnd();
 
         final OnInitializedCallback callback;
 
@@ -375,11 +381,15 @@ public final class PermissionPolicyService extends SystemService {
         }
 
         // Force synchronization as permissions might have changed
+        t.traceBegin("Permission_synchronize_permissions-" + userId);
         synchronizePermissionsAndAppOpsForUser(userId);
+        t.traceEnd();
 
         // Tell observers we are initialized for this user.
         if (callback != null) {
+            t.traceBegin("Permission_onInitialized-" + userId);
             callback.onInitialized(userId);
+            t.traceEnd();
         }
     }
 
@@ -394,6 +404,7 @@ public final class PermissionPolicyService extends SystemService {
 
     private void grantOrUpgradeDefaultRuntimePermissionsIfNeeded(@UserIdInt int userId) {
         if (DEBUG) Slog.i(LOG_TAG, "grantOrUpgradeDefaultPermsIfNeeded(" + userId + ")");
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
 
         final PackageManagerInternal packageManagerInternal =
                 LocalServices.getService(PackageManagerInternal.class);
@@ -411,9 +422,9 @@ public final class PermissionPolicyService extends SystemService {
             final PermissionControllerManager permissionControllerManager =
                     new PermissionControllerManager(
                             getUserContext(getContext(), UserHandle.of(userId)),
-                            FgThread.getHandler());
+                            PermissionThread.getHandler());
             permissionControllerManager.grantOrUpgradeDefaultRuntimePermissions(
-                    FgThread.getExecutor(), successful -> {
+                    PermissionThread.getExecutor(), successful -> {
                         if (successful) {
                             future.complete(null);
                         } else {
@@ -426,9 +437,12 @@ public final class PermissionPolicyService extends SystemService {
                         }
                     });
             try {
+                t.traceBegin("Permission_callback_waiting-" + userId);
                 future.get();
             } catch (InterruptedException | ExecutionException e) {
                 throw new IllegalStateException(e);
+            } finally {
+                t.traceEnd();
             }
 
             permissionControllerManager.updateUserSensitive();
@@ -494,14 +508,19 @@ public final class PermissionPolicyService extends SystemService {
      */
     private void synchronizePermissionsAndAppOpsForUser(@UserIdInt int userId) {
         if (DEBUG) Slog.i(LOG_TAG, "synchronizePermissionsAndAppOpsForUser(" + userId + ")");
+        final TimingsTraceAndSlog t = new TimingsTraceAndSlog();
 
         final PackageManagerInternal packageManagerInternal = LocalServices.getService(
                 PackageManagerInternal.class);
         final PermissionToOpSynchroniser synchronizer = new PermissionToOpSynchroniser(
                 getUserContext(getContext(), UserHandle.of(userId)));
+        t.traceBegin("Permission_synchronize_addPackages-" + userId);
         packageManagerInternal.forEachPackage(
                 (pkg) -> synchronizer.addPackage(pkg.getPackageName()));
+        t.traceEnd();
+        t.traceBegin("Permission_syncPackages-" + userId);
         synchronizer.syncPackages();
+        t.traceEnd();
     }
 
     private void resetAppOpPermissionsIfNotRequestedForUidAsync(int uid) {
@@ -509,7 +528,7 @@ public final class PermissionPolicyService extends SystemService {
             synchronized (mLock) {
                 if (!mIsUidSyncScheduled.get(uid)) {
                     mIsUidSyncScheduled.put(uid, true);
-                    FgThread.getHandler().sendMessage(PooledLambda.obtainMessage(
+                    PermissionThread.getHandler().sendMessage(PooledLambda.obtainMessage(
                             PermissionPolicyService::resetAppOpPermissionsIfNotRequestedForUid,
                             this, uid));
                 }

@@ -32,11 +32,9 @@ interface ActivityThreadInternal {
 
     boolean isInDensityCompatMode();
 
-    boolean hasImeComponent();
-
     boolean isCachedProcessState();
 
     Application getApplication();
 
-    ArrayList<ComponentCallbacks2> collectComponentCallbacks(boolean includeActivities);
+    ArrayList<ComponentCallbacks2> collectComponentCallbacks(boolean includeUiContexts);
 }

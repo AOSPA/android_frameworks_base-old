@@ -1182,6 +1182,7 @@
     <string name="not_checked" msgid="7972320087569023342">"hindi nilagyan ng check"</string>
     <string name="selected" msgid="6614607926197755875">"pinili"</string>
     <string name="not_selected" msgid="410652016565864475">"hindi pinili"</string>
+    <string name="in_progress" msgid="2149208189184319441">"isinasagawa"</string>
     <string name="whichApplication" msgid="5432266899591255759">"Kumpletuhin ang pagkilos gamit ang"</string>
     <string name="whichApplicationNamed" msgid="6969946041713975681">"Tapusin ang pagkilos gamit ang %1$s"</string>
     <string name="whichApplicationLabel" msgid="7852182961472531728">"Gawin ang pagkilos"</string>

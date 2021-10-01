@@ -24,6 +24,8 @@ import android.app.INotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.om.OverlayManager;
+import android.hardware.SensorManager;
+import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.hardware.display.ColorDisplayManager;
 import android.os.Handler;
@@ -59,10 +61,13 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.AlwaysOnDisplayPolicy;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
+import com.android.systemui.keyguard.LifecycleScreenStatusProvider;
 import com.android.systemui.model.SysUiState;
+import com.android.systemui.navigationbar.NavigationBarA11yHelper;
 import com.android.systemui.navigationbar.NavigationBarController;
 import com.android.systemui.navigationbar.NavigationBarOverlayController;
 import com.android.systemui.navigationbar.NavigationModeController;
+import com.android.systemui.navigationbar.TaskbarDelegate;
 import com.android.systemui.plugins.PluginInitializerImpl;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.ReduceBrightColorsController;
@@ -75,6 +80,9 @@ import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.shared.system.WindowManagerWrapper;
+import com.android.unfold.UnfoldTransitionFactory;
+import com.android.unfold.UnfoldTransitionProgressProvider;
+import com.android.unfold.config.UnfoldTransitionConfig;
 import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.statusbar.NotificationRemoteInputManager;
 import com.android.systemui.statusbar.NotificationShadeDepthController;
@@ -225,7 +233,7 @@ public class DependencyProvider {
             Optional<Pip> pipOptional,
             Optional<LegacySplitScreen> splitScreenOptional,
             Optional<Recents> recentsOptional,
-            Lazy<StatusBar> statusBarLazy,
+            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
             ShadeController shadeController,
             NotificationRemoteInputManager notificationRemoteInputManager,
             NotificationShadeDepthController notificationShadeDepthController,
@@ -234,6 +242,8 @@ public class DependencyProvider {
             UiEventLogger uiEventLogger,
             NavigationBarOverlayController navBarOverlayController,
             ConfigurationController configurationController,
+            NavigationBarA11yHelper navigationBarA11yHelper,
+            TaskbarDelegate taskbarDelegate,
             UserTracker userTracker) {
         return new NavigationBarController(context,
                 windowManager,
@@ -252,7 +262,7 @@ public class DependencyProvider {
                 pipOptional,
                 splitScreenOptional,
                 recentsOptional,
-                statusBarLazy,
+                statusBarOptionalLazy,
                 shadeController,
                 notificationRemoteInputManager,
                 notificationShadeDepthController,
@@ -261,6 +271,8 @@ public class DependencyProvider {
                 uiEventLogger,
                 navBarOverlayController,
                 configurationController,
+                navigationBarA11yHelper,
+                taskbarDelegate,
                 userTracker);
     }
 
@@ -367,6 +379,37 @@ public class DependencyProvider {
     @Provides
     public WindowManagerWrapper providesWindowManagerWrapper() {
         return WindowManagerWrapper.getInstance();
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    public UnfoldTransitionProgressProvider provideUnfoldTransitionProgressProvider(
+            Context context,
+            UnfoldTransitionConfig config,
+            LifecycleScreenStatusProvider screenStatusProvider,
+            DeviceStateManager deviceStateManager,
+            SensorManager sensorManager,
+            @Main Executor executor,
+            @Main Handler handler
+    ) {
+        return UnfoldTransitionFactory
+                .createUnfoldTransitionProgressProvider(
+                        context,
+                        config,
+                        screenStatusProvider,
+                        deviceStateManager,
+                        sensorManager,
+                        handler,
+                        executor
+                );
+    }
+
+    /** */
+    @Provides
+    @SysUISingleton
+    public UnfoldTransitionConfig provideUnfoldTransitionConfig(Context context) {
+        return UnfoldTransitionFactory.createConfig(context);
     }
 
     /** */

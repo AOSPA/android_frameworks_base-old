@@ -74,7 +74,7 @@ import com.android.systemui.R;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.IFiveGStateListener;
-import com.android.systemui.statusbar.FeatureFlags;
+import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.statusbar.policy.NetworkController.IconState;
 import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
 import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;

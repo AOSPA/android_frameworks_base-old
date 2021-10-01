@@ -63,6 +63,7 @@ android_library {
         "res",
     ],
     static_libs: [
+        "WifiTrackerLib",
         "WindowManager-Shell",
         "SystemUIAnimationLib",
         "SystemUIPluginLib",
@@ -156,6 +157,7 @@ android_library {
         "src/**/I*.aidl",
     ],
     static_libs: [
+        "WifiTrackerLib",
         "SystemUIAnimationLib",
         "SystemUIPluginLib",
         "SystemUISharedLib",

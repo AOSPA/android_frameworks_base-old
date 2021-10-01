@@ -62,6 +62,8 @@
 
 namespace android {
 
+using gui::FocusRequest;
+
 static void doThrowNPE(JNIEnv* env) {
     jniThrowNullPointerException(env, NULL);
 }
@@ -890,8 +892,9 @@ static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
 }
 
 static jobject nativeGetPhysicalDisplayToken(JNIEnv* env, jclass clazz, jlong physicalDisplayId) {
-    sp<IBinder> token =
-            SurfaceComposerClient::getPhysicalDisplayToken(PhysicalDisplayId(physicalDisplayId));
+    const auto id = DisplayId::fromValue<PhysicalDisplayId>(physicalDisplayId);
+    if (!id) return nullptr;
+    sp<IBinder> token = SurfaceComposerClient::getPhysicalDisplayToken(*id);
     return javaObjectForIBinder(env, token);
 }
 
@@ -1011,6 +1014,17 @@ static void nativeSetDisplayLayerStack(JNIEnv* env, jclass clazz,
     {
         auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
         transaction->setDisplayLayerStack(token, layerStack);
+    }
+}
+
+static void nativeSetDisplayFlags(JNIEnv* env, jclass clazz, jlong transactionObj, jobject tokenObj,
+                                  jint flags) {
+    sp<IBinder> token(ibinderForJavaObject(env, tokenObj));
+    if (token == NULL) return;
+
+    {
+        auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+        transaction->setDisplayFlags(token, flags);
     }
 }
 
@@ -1889,6 +1903,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeSetDisplaySurface },
     {"nativeSetDisplayLayerStack", "(JLandroid/os/IBinder;I)V",
             (void*)nativeSetDisplayLayerStack },
+    {"nativeSetDisplayFlags", "(JLandroid/os/IBinder;I)V",
+            (void*)nativeSetDisplayFlags },
     {"nativeSetDisplayProjection", "(JLandroid/os/IBinder;IIIIIIIII)V",
             (void*)nativeSetDisplayProjection },
     {"nativeSetDisplaySize", "(JLandroid/os/IBinder;II)V",

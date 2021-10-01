@@ -1726,7 +1726,6 @@ final public class MediaCodec {
     private static final int CB_ERROR = 3;
     private static final int CB_OUTPUT_FORMAT_CHANGE = 4;
 
-
     private class EventHandler extends Handler {
         private MediaCodec mCodec;
 
