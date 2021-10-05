@@ -72,6 +72,7 @@ import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Background;
 import com.android.systemui.demomode.DemoMode;
 import com.android.systemui.demomode.DemoModeController;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.settings.CurrentUserTracker;
 import com.android.systemui.statusbar.FeatureFlags;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController.DeviceProvisionedListener;
@@ -128,6 +129,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
     private Config mConfig;
     private final CarrierConfigTracker mCarrierConfigTracker;
     private final FeatureFlags mFeatureFlags;
+    private final DumpManager mDumpManager;
 
     private TelephonyCallback.ActiveDataSubscriptionIdListener mPhoneStateListener;
     private int mActiveMobileDataSubscription = SubscriptionManager.INVALID_SUBSCRIPTION_ID;
@@ -223,7 +225,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
             AccessPointControllerImpl accessPointController,
             DemoModeController demoModeController,
             CarrierConfigTracker carrierConfigTracker,
-            FeatureFlags featureFlags) {
+            FeatureFlags featureFlags,
+            DumpManager dumpManager) {
         this(context, connectivityManager,
                 telephonyManager,
                 telephonyListenerManager,
@@ -241,7 +244,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
                 broadcastDispatcher,
                 demoModeController,
                 carrierConfigTracker,
-                featureFlags);
+                featureFlags,
+                dumpManager);
         mReceiverHandler.post(mRegisterListeners);
     }
 
@@ -261,7 +265,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
             BroadcastDispatcher broadcastDispatcher,
             DemoModeController demoModeController,
             CarrierConfigTracker carrierConfigTracker,
-            FeatureFlags featureFlags
+            FeatureFlags featureFlags,
+            DumpManager dumpManager
     ) {
         mContext = context;
         mTelephonyListenerManager = telephonyListenerManager;
@@ -280,6 +285,7 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mDemoModeController = demoModeController;
         mCarrierConfigTracker = carrierConfigTracker;
         mFeatureFlags = featureFlags;
+        mDumpManager = dumpManager;
 
         // telephony
         mPhone = telephonyManager;
@@ -432,6 +438,8 @@ public class NetworkControllerImpl extends BroadcastReceiver
         mDemoModeController.addCallback(this);
         mProviderModelBehavior = mFeatureFlags.isCombinedStatusBarSignalIconsEnabled();
         mProviderModelSetting = mFeatureFlags.isProviderModelSettingEnabled();
+
+        mDumpManager.registerDumpable(TAG, this);
     }
 
     private final Runnable mClearForceValidated = () -> {

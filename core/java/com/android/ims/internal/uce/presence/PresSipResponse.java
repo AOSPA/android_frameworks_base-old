@@ -128,7 +128,6 @@ public class PresSipResponse implements Parcelable {
      * code.
      * @hide
      */
-    @UnsupportedAppUsage
     public String getReasonHeader() {
         return mReasonHeader;
     }
@@ -137,7 +136,6 @@ public class PresSipResponse implements Parcelable {
      * Sets the SIP response code reason header.
      * @hide
      */
-    @UnsupportedAppUsage
     public void setReasonHeader(String reasonHeader) {
         this.mReasonHeader = reasonHeader;
     }
