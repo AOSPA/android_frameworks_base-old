@@ -92,7 +92,6 @@ public class PresTupleInfo implements Parcelable {
      * Sets the version.
      * @hide
      */
-    @UnsupportedAppUsage
     public void setVersion(String version) {
         this.mVersion = version;
     }

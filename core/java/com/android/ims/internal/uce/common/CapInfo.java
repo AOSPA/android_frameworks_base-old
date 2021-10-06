@@ -244,12 +244,12 @@ public class CapInfo implements Parcelable {
         this.mFtSnFSupported =  ftSnFSupported;
     }
 
-    /**
-     * Checks whether File transfer HTTP is supported.
-     * @deprecated Use {@link #isCapabilitySupported(String)} instead.
-     */
-    @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public boolean isFtHttpSupported() {
+   /**
+    * Checks whether File transfer HTTP is supported.
+    * @deprecated Use {@link #isCapabilitySupported(String)} instead.
+    */
+   @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
+   public boolean isFtHttpSupported() {
        return  mFtHttpSupported;
     }
 
@@ -281,6 +281,7 @@ public class CapInfo implements Parcelable {
     }
 
     /**
+     * Checks whether IS is supported.
      * @deprecated Use {@link #isCapabilitySupported(String)} instead.
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
@@ -289,6 +290,7 @@ public class CapInfo implements Parcelable {
     }
 
     /**
+     * Sets IS as supported or not supported.
      * @deprecated Use {@link #addCapability(String, String)} instead.
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
@@ -297,6 +299,7 @@ public class CapInfo implements Parcelable {
     }
 
     /**
+     * Checks whether video sharing is supported during a CS call.
      * @deprecated Use {@link #isCapabilitySupported(String)} instead.
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
@@ -305,6 +308,8 @@ public class CapInfo implements Parcelable {
     }
 
     /**
+     * Sets video sharing as supported or not supported during a CS
+     * call.
      * @deprecated Use {@link #addCapability(String, String)} instead.
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
