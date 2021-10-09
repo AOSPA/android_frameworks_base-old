@@ -263,6 +263,27 @@ public class A2dpProfile implements LocalBluetoothProfile {
         }
     }
 
+    public boolean isMandatoryCodec(BluetoothDevice device) {
+        if (V) Log.d(TAG, " execute isMandatoryCodec()");
+        if (mService == null) {
+            if (V) Log.d(TAG,"mService is null.");
+            return false;
+        }
+        BluetoothDevice bluetoothDevice = (device != null) ? device : mService.getActiveDevice();
+        if (bluetoothDevice == null) {
+            return false;
+        }
+        BluetoothCodecConfig codecConfig = null;
+        if (mService.getCodecStatus(bluetoothDevice) != null) {
+            codecConfig = mService.getCodecStatus(bluetoothDevice).getCodecConfig();
+        }
+        if (codecConfig != null)  {
+            return codecConfig.isMandatoryCodec();
+        } else {
+            return false;
+        }
+    }
+
     public void setHighQualityAudioEnabled(BluetoothDevice device, boolean enabled) {
         if (V) Log.d(TAG, " execute setHighQualityAudioEnabled()");
         int prefValue = enabled
