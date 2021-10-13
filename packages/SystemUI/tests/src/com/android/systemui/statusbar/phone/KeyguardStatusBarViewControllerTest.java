@@ -114,11 +114,7 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
     private StatusBarUserSwitcherController mStatusBarUserSwitcherController;
     @Mock
     private StatusBarUserInfoTracker mStatusBarUserInfoTracker;
-<<<<<<< HEAD
-    @Mock private SecureSettings mSecureSettings;
     @Mock private CommandQueue mCommandQueue;
-=======
->>>>>>> 8486c57d15cb (Revert "Add settings observing for vibrate icon to Keyguard")
 
     private TestNotificationPanelViewStateProvider mNotificationPanelViewStateProvider;
     private KeyguardStatusBarView mKeyguardStatusBarView;
@@ -164,14 +160,8 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
                 mUserManager,
                 mStatusBarUserSwitcherFeatureController,
                 mStatusBarUserSwitcherController,
-<<<<<<< HEAD
                 mStatusBarUserInfoTracker,
-                mSecureSettings,
-                mCommandQueue,
-                mFakeExecutor
-=======
-                mStatusBarUserInfoTracker
->>>>>>> 8486c57d15cb (Revert "Add settings observing for vibrate icon to Keyguard")
+                mCommandQueue
         );
     }
 
