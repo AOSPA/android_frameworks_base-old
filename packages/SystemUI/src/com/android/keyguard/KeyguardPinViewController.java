@@ -16,17 +16,24 @@
 
 package com.android.keyguard;
 
+import android.os.AsyncTask;
 import android.view.View;
 
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.internal.widget.LockPatternUtils.RequestThrottledException;
+import com.android.internal.widget.LockscreenCredential;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import com.android.keyguard.PasswordTextView.QuickUnlockListener;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingCollector;
 
 public class KeyguardPinViewController
         extends KeyguardPinBasedInputViewController<KeyguardPINView> {
+    private final int mCurrentUserId = KeyguardUpdateMonitor.getCurrentUser();
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final KeyguardSecurityCallback mKeyguardSecurityCallback;
+    private final LockPatternUtils mLockPatternUtils;
 
     protected KeyguardPinViewController(KeyguardPINView view,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -40,6 +47,8 @@ public class KeyguardPinViewController
                 messageAreaControllerFactory, latencyTracker, liftToActivateListener,
                 emergencyButtonController, falsingCollector);
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mKeyguardSecurityCallback = keyguardSecurityCallback;
+        mLockPatternUtils = lockPatternUtils;
     }
 
     @Override
@@ -49,10 +58,18 @@ public class KeyguardPinViewController
         View cancelBtn = mView.findViewById(R.id.cancel_button);
         if (cancelBtn != null) {
             cancelBtn.setOnClickListener(view -> {
-                getKeyguardSecurityCallback().reset();
-                getKeyguardSecurityCallback().onCancelClicked();
+                mKeyguardSecurityCallback.reset();
+                mKeyguardSecurityCallback.onCancelClicked();
             });
         }
+
+        mPasswordEntry.setQuickUnlockListener(new QuickUnlockListener() {
+            public void onValidateQuickUnlock(String password) {
+                if (password != null && password.length() == getPINPasswordLength()) {
+                    validateQuickUnlock(mLockPatternUtils, password, mCurrentUserId);
+                }
+            }
+        });
     }
 
     @Override
@@ -71,5 +88,48 @@ public class KeyguardPinViewController
     public boolean startDisappearAnimation(Runnable finishRunnable) {
         return mView.startDisappearAnimation(
                 mKeyguardUpdateMonitor.needsSlowUnlockTransition(), finishRunnable);
+    }
+
+    private AsyncTask<?, ?, ?> validateQuickUnlock(final LockPatternUtils utils,
+            final String password, final int userId) {
+        AsyncTask<Void, Void, Boolean> task = new AsyncTask<Void, Void, Boolean>() {
+
+            @Override
+            protected Boolean doInBackground(Void... args) {
+                try {
+                    return utils.checkCredential(LockscreenCredential.createPinOrNone(password),
+                            userId, null);
+                } catch (RequestThrottledException ex) {
+                    return false;
+                }
+            }
+
+            @Override
+            protected void onPostExecute(Boolean result) {
+                runQuickUnlock(result);
+            }
+        };
+        task.execute();
+        return task;
+    }
+
+    private void runQuickUnlock(Boolean matched) {
+        if (matched) {
+            mPasswordEntry.setEnabled(false);
+            mKeyguardSecurityCallback.reportUnlockAttempt(mCurrentUserId, true, 0);
+            mKeyguardSecurityCallback.dismiss(true, mCurrentUserId);
+            mView.resetPasswordText(true, true);
+        }
+    }
+
+    private int getPINPasswordLength() {
+        int mPINPasswordLength = -1;
+        try {
+            mPINPasswordLength = (int) mLockPatternUtils.getLockSettings().getLong(
+                    "lockscreen.pin_password_length", -1, mCurrentUserId);
+        } catch (Exception e) {
+            // do nothing
+        }
+        return mPINPasswordLength >= 4 ? mPINPasswordLength : -1;
     }
 }
