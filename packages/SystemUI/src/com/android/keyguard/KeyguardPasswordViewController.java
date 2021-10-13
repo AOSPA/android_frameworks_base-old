@@ -18,6 +18,7 @@ package com.android.keyguard;
 
 import android.content.res.ColorStateList;
 import android.content.res.Resources;
+import android.os.AsyncTask;
 import android.os.UserHandle;
 import android.text.Editable;
 import android.text.InputType;
@@ -38,6 +39,8 @@ import android.widget.TextView.OnEditorActionListener;
 
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.internal.widget.LockPatternUtils.RequestThrottledException;
+import com.android.internal.widget.LockscreenCredential;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
 import com.android.settingslib.Utils;
 import com.android.systemui.R;
@@ -52,9 +55,11 @@ public class KeyguardPasswordViewController
 
     private static final int DELAY_MILLIS_TO_REEVALUATE_IME_SWITCH_ICON = 500;  // 500ms
 
+    private final int mCurrentUserId = KeyguardUpdateMonitor.getCurrentUser();
     private final KeyguardSecurityCallback mKeyguardSecurityCallback;
     private final InputMethodManager mInputMethodManager;
     private final DelayableExecutor mMainExecutor;
+    private final LockPatternUtils mLockPatternUtils;
     private final boolean mShowImeAtScreenOn;
     private EditText mPasswordEntry;
     private ImageView mSwitchImeButton;
@@ -89,6 +94,10 @@ public class KeyguardPasswordViewController
         public void afterTextChanged(Editable s) {
             if (!TextUtils.isEmpty(s)) {
                 onUserInput();
+                LockscreenCredential entry = mView.getEnteredCredential();
+                if (entry.size() == mLockPatternUtils.getPINPasswordLength(mCurrentUserId)) {
+                    validateQuickUnlock(entry);
+                }
             }
         }
     };
@@ -126,6 +135,7 @@ public class KeyguardPasswordViewController
         mShowImeAtScreenOn = resources.getBoolean(R.bool.kg_show_ime_at_screen_on);
         mPasswordEntry = mView.findViewById(mView.getPasswordTextViewId());
         mSwitchImeButton = mView.findViewById(R.id.switch_ime_button);
+        mLockPatternUtils = lockPatternUtils;
     }
 
     @Override
@@ -309,5 +319,29 @@ public class KeyguardPasswordViewController
                 // imm.getEnabledInputMethodSubtypeList(null, false) will return the current IME's
                 //enabled input method subtype (The current IME should be LatinIME.)
                 || imm.getEnabledInputMethodSubtypeList(null, false).size() > 1;
+    }
+
+    private void validateQuickUnlock(final LockscreenCredential password) {
+        AsyncTask<Void, Void, Boolean> task = new AsyncTask<Void, Void, Boolean>() {
+
+            @Override
+            protected Boolean doInBackground(Void... args) {
+                try {
+                    return mLockPatternUtils.checkCredential(password, mCurrentUserId, null);
+                } catch (RequestThrottledException ex) {
+                    return false;
+                }
+            }
+
+            @Override
+            protected void onPostExecute(Boolean result) {
+                if (result) {
+                    mKeyguardSecurityCallback.reportUnlockAttempt(mCurrentUserId, true, 0);
+                    mKeyguardSecurityCallback.dismiss(true, mCurrentUserId);
+                    mView.resetPasswordText(true, true);
+                }
+            }
+        };
+        task.execute();
     }
 }
