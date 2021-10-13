@@ -16,17 +16,24 @@
 
 package com.android.keyguard;
 
+import android.os.AsyncTask;
 import android.view.View;
 
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.LockPatternUtils;
+import com.android.internal.widget.LockPatternUtils.RequestThrottledException;
+import com.android.internal.widget.LockscreenCredential;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import com.android.keyguard.PasswordTextView.QuickUnlockListener;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingCollector;
 
 public class KeyguardPinViewController
         extends KeyguardPinBasedInputViewController<KeyguardPINView> {
+    private final int mCurrentUserId = KeyguardUpdateMonitor.getCurrentUser();
     private final KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    private final KeyguardSecurityCallback mKeyguardSecurityCallback;
+    private final LockPatternUtils mLockPatternUtils;
 
     protected KeyguardPinViewController(KeyguardPINView view,
             KeyguardUpdateMonitor keyguardUpdateMonitor,
@@ -40,6 +47,8 @@ public class KeyguardPinViewController
                 messageAreaControllerFactory, latencyTracker, liftToActivateListener,
                 emergencyButtonController, falsingCollector);
         mKeyguardUpdateMonitor = keyguardUpdateMonitor;
+        mKeyguardSecurityCallback = keyguardSecurityCallback;
+        mLockPatternUtils = lockPatternUtils;
     }
 
     @Override
@@ -49,10 +58,19 @@ public class KeyguardPinViewController
         View cancelBtn = mView.findViewById(R.id.cancel_button);
         if (cancelBtn != null) {
             cancelBtn.setOnClickListener(view -> {
-                getKeyguardSecurityCallback().reset();
-                getKeyguardSecurityCallback().onCancelClicked();
+                mKeyguardSecurityCallback.reset();
+                mKeyguardSecurityCallback.onCancelClicked();
             });
         }
+
+        mPasswordEntry.setQuickUnlockListener(new QuickUnlockListener() {
+            public void onValidateQuickUnlock(String password) {
+                if (password != null && password.length() == mLockPatternUtils.getPINPasswordLength(
+                        mCurrentUserId)) {
+                    validateQuickUnlock(password);
+                }
+            }
+        });
     }
 
     @Override
@@ -71,5 +89,31 @@ public class KeyguardPinViewController
     public boolean startDisappearAnimation(Runnable finishRunnable) {
         return mView.startDisappearAnimation(
                 mKeyguardUpdateMonitor.needsSlowUnlockTransition(), finishRunnable);
+    }
+
+    private void validateQuickUnlock(final String password) {
+        AsyncTask<Void, Void, Boolean> task = new AsyncTask<Void, Void, Boolean>() {
+
+            @Override
+            protected Boolean doInBackground(Void... args) {
+                try {
+                    return mLockPatternUtils.checkCredential(
+                            LockscreenCredential.createPinOrNone(password), mCurrentUserId, null);
+                } catch (RequestThrottledException ex) {
+                    return false;
+                }
+            }
+
+            @Override
+            protected void onPostExecute(Boolean result) {
+                if (result) {
+                    mPasswordEntry.setEnabled(false);
+                    mKeyguardSecurityCallback.reportUnlockAttempt(mCurrentUserId, true, 0);
+                    mKeyguardSecurityCallback.dismiss(true, mCurrentUserId);
+                    mView.resetPasswordText(true, true);
+                }
+            }
+        };
+        task.execute();
     }
 }
