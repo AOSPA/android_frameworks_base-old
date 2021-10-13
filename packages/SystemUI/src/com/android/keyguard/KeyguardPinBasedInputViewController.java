@@ -25,6 +25,7 @@ import android.view.View.OnTouchListener;
 import com.android.internal.util.LatencyTracker;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardSecurityModel.SecurityMode;
+import com.android.keyguard.PasswordTextView.QuickUnlockListener;
 import com.android.systemui.R;
 import com.android.systemui.classifier.FalsingCollector;
 
@@ -33,6 +34,7 @@ public abstract class KeyguardPinBasedInputViewController<T extends KeyguardPinB
 
     private final LiftToActivateListener mLiftToActivateListener;
     private final FalsingCollector mFalsingCollector;
+    private final LockPatternUtils mLockPatternUtils;
     protected PasswordTextView mPasswordEntry;
 
     private final OnKeyListener mOnKeyListener = (v, keyCode, event) -> {
@@ -65,6 +67,7 @@ public abstract class KeyguardPinBasedInputViewController<T extends KeyguardPinB
         mLiftToActivateListener = liftToActivateListener;
         mFalsingCollector = falsingCollector;
         mPasswordEntry = mView.findViewById(mView.getPasswordTextViewId());
+        mLockPatternUtils = lockPatternUtils;
     }
 
     @Override
@@ -81,6 +84,15 @@ public abstract class KeyguardPinBasedInputViewController<T extends KeyguardPinB
         }
         mPasswordEntry.setOnKeyListener(mOnKeyListener);
         mPasswordEntry.setUserActivityListener(this::onUserInput);
+        mPasswordEntry.setQuickUnlockListener(new QuickUnlockListener() {
+            public void onValidateQuickUnlock(String password) {
+                if (password != null && password.length() ==
+                        mLockPatternUtils.getPinPasswordLength(
+                        KeyguardUpdateMonitor.getCurrentUser())) {
+                    verifyPasswordAndUnlock();
+                }
+            }
+        });
 
         View deleteButton = mView.findViewById(R.id.delete_button);
         deleteButton.setOnTouchListener(mActionButtonTouchListener);
@@ -101,6 +113,11 @@ public abstract class KeyguardPinBasedInputViewController<T extends KeyguardPinB
 
         View okButton = mView.findViewById(R.id.key_enter);
         if (okButton != null) {
+            if (mLockPatternUtils.getPinPasswordLength(
+                    KeyguardUpdateMonitor.getCurrentUser()) != -1) {
+                okButton.setVisibility(View.INVISIBLE);
+                return;
+            }
             okButton.setOnTouchListener(mActionButtonTouchListener);
             okButton.setOnClickListener(new View.OnClickListener() {
                 @Override
