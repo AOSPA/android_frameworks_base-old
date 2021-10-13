@@ -80,6 +80,11 @@ public class LockPatternUtils {
     public static final String LEGACY_LOCK_PATTERN_ENABLED = "legacy_lock_pattern_enabled";
 
     /**
+     * The key to store PIN/Password length for quick unlock.
+     **/
+    public static final String KEY_PIN_PASSWORD_LENGTH = "pin_password_length";
+
+    /**
      * The interval of the countdown for showing progress of the lockout.
      */
     public static final long FAILED_ATTEMPT_COUNTDOWN_INTERVAL_MS = 1000L;
@@ -1751,6 +1756,24 @@ public class LockPatternUtils {
             getLockSettings().removeCachedUnifiedChallenge(userId);
         } catch (RemoteException re) {
             re.rethrowFromSystemServer();
+        }
+    }
+
+    public static int getPINPasswordLength(int userId) {
+        int mPINPasswordLength = 0;
+        try {
+            mPINPasswordLength = (int) getLockSettings().getLong(KEY_PIN_PASSWORD_LENGTH, 0, userId);
+        } catch (Exception e) {
+            Log.d("getPINPasswordLength", "getLong error: " + e.getMessage());
+        }
+        return mPINPasswordLength >= 4 ? mPINPasswordLength : 0;
+    }
+
+    public static void setPINPasswordLength(int length, int userId) {
+        try {
+            getLockSettings().setLong(KEY_PIN_PASSWORD_LENGTH, (long) length, userId);
+        } catch (Exception e) {
+            Log.d("savePINPasswordLength", "saveLong error: " + e.getMessage());
         }
     }
 }
