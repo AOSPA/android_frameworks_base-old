@@ -3444,6 +3444,14 @@ final class InstallPackageHelper {
                 // Ignore entries which are not packages
                 continue;
             }
+
+            if (mPm.mPackagesToBeDisabled.values() != null &&
+                    mPm.mPackagesToBeDisabled.values().contains(file.toString())) {
+                // Ignore entries contained in {@link #mPm.mPackagesToBeDisabled}
+                Slog.d(TAG, "ignoring package: " + file);
+                continue;
+            }
+
             if ((scanFlags & SCAN_DROP_CACHE) != 0) {
                 final PackageCacher cacher = new PackageCacher(mPm.getCacheDir());
                 Log.w(TAG, "Dropping cache of " + file.getAbsolutePath());
