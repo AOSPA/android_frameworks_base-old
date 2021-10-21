@@ -61,6 +61,7 @@ import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.phone.dagger.CentralSurfacesComponent;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
+import com.android.systemui.statusbar.policy.FlashlightController;
 import com.android.systemui.statusbar.policy.HeadsUpManager;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
@@ -99,7 +100,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
     private final int mDisplayId;
     private final boolean mVibrateOnOpening;
     private final VibrationEffect mCameraLaunchGestureVibrationEffect;
-
+    private final FlashlightController mFlashlightController;
 
     private static final VibrationAttributes HARDWARE_FEEDBACK_VIBRATION_ATTRIBUTES =
             VibrationAttributes.createForUsage(VibrationAttributes.USAGE_HARDWARE_FEEDBACK);
@@ -131,7 +132,8 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             Optional<Vibrator> vibratorOptional,
             LightBarController lightBarController,
             DisableFlagsLogger disableFlagsLogger,
-            @DisplayId int displayId) {
+            @DisplayId int displayId,
+            FlashlightController flashlightController) {
 
         mCentralSurfaces = centralSurfaces;
         mContext = context;
@@ -158,6 +160,7 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
         mLightBarController = lightBarController;
         mDisableFlagsLogger = disableFlagsLogger;
         mDisplayId = displayId;
+        mFlashlightController = flashlightController;
 
         mVibrateOnOpening = resources.getBoolean(R.bool.config_vibrateOnIconAnimation);
         mCameraLaunchGestureVibrationEffect = getCameraGestureVibrationEffect(
@@ -593,5 +596,12 @@ public class CentralSurfacesCommandQueueCallbacks implements CommandQueue.Callba
             timings[i] = pattern[i];
         }
         return VibrationEffect.createWaveform(timings, /* repeat= */ -1);
+    }
+
+    @Override
+    public void toggleCameraFlash() {
+        if (mFlashlightController.isAvailable()) {
+            mFlashlightController.setFlashlight(!mFlashlightController.isEnabled());
+        }
     }
 }

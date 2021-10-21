@@ -43,6 +43,7 @@ import com.android.systemui.statusbar.StatusBarStateControllerImpl;
 import com.android.systemui.statusbar.VibratorHelper;
 import com.android.systemui.statusbar.notification.stack.NotificationStackScrollLayoutController;
 import com.android.systemui.statusbar.policy.DeviceProvisionedController;
+import com.android.systemui.statusbar.policy.FlashlightController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.RemoteInputQuickSettingsDisabler;
 
@@ -80,6 +81,7 @@ public class CentralSurfacesCommandQueueCallbacksTest extends SysuiTestCase {
     @Mock private Vibrator mVibrator;
     @Mock private LightBarController mLightBarController;
     @Mock private StatusBarHideIconsForBouncerManager mStatusBarHideIconsForBouncerManager;
+    @Mock private FlashlightController mFlashlightController;
 
     CentralSurfacesCommandQueueCallbacks mSbcqCallbacks;
 
@@ -113,7 +115,8 @@ public class CentralSurfacesCommandQueueCallbacksTest extends SysuiTestCase {
                 Optional.of(mVibrator),
                 mLightBarController,
                 new DisableFlagsLogger(),
-                DEFAULT_DISPLAY);
+                DEFAULT_DISPLAY,
+                mFlashlightController);
 
         when(mDeviceProvisionedController.isCurrentUserSetup()).thenReturn(true);
         when(mRemoteInputQuickSettingsDisabler.adjustDisableFlags(anyInt()))
