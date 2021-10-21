@@ -170,6 +170,7 @@ public class CommandQueue extends IStatusBar.Stub implements
     private static final int MSG_ENTER_STAGE_SPLIT_FROM_RUNNING_APP = 71 << MSG_SHIFT;
     private static final int MSG_SHOW_MEDIA_OUTPUT_SWITCHER = 72 << MSG_SHIFT;
     private static final int MSG_TOGGLE_TASKBAR = 73 << MSG_SHIFT;
+    private static final int MSG_TOGGLE_CAMERA_FLASH = 74 << MSG_SHIFT;
 
     // Device Integration: new case to handler disable message from VirtualDisplay
     private static final int MSG_DISABLE_VD = 100 << MSG_SHIFT;
@@ -504,6 +505,11 @@ public class CommandQueue extends IStatusBar.Stub implements
          * @see IStatusBar#showMediaOutputSwitcher
          */
         default void showMediaOutputSwitcher(String packageName) {}
+
+        /**
+         * @see IStatusBar#toggleCameraFlash
+         */
+        default void toggleCameraFlash() {}
     }
 
     @VisibleForTesting
@@ -1366,6 +1372,14 @@ public class CommandQueue extends IStatusBar.Stub implements
         mHandler.obtainMessage(MSG_GO_TO_FULLSCREEN_FROM_SPLIT).sendToTarget();
     }
 
+    @Override
+    public void toggleCameraFlash() {
+        synchronized (mLock) {
+            mHandler.removeMessages(MSG_TOGGLE_CAMERA_FLASH);
+            mHandler.sendEmptyMessage(MSG_TOGGLE_CAMERA_FLASH);
+        }
+    }
+
     private final class H extends Handler {
         private H(Looper l) {
             super(l);
@@ -1830,6 +1844,11 @@ public class CommandQueue extends IStatusBar.Stub implements
                     String clientPackageName = (String) args.arg1;
                     for (int i = 0; i < mCallbacks.size(); i++) {
                         mCallbacks.get(i).showMediaOutputSwitcher(clientPackageName);
+                    }
+                    break;
+                case MSG_TOGGLE_CAMERA_FLASH:
+                    for (int i = 0; i < mCallbacks.size(); i++) {
+                        mCallbacks.get(i).toggleCameraFlash();
                     }
                     break;
             }
