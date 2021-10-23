@@ -93,7 +93,7 @@ public class PixelPropsUtils {
         if (packageName.equals(PACKAGE_GMS)) {
             sIsGms = true;
         }
-        if ((packageName.startsWith("com.google.") && !Arrays.asList(packagesToKeep).contains(packageName))
+        if ((packageName.startsWith("com.google.") || packageName.startsWith("com.chrome.") && !Arrays.asList(packagesToKeep).contains(packageName))
                 || Arrays.asList(extraPackagesToChange).contains(packageName)) {
             if (DEBUG) Log.d(TAG, "Defining props for: " + packageName);
             if (Arrays.asList(packagesToChangeP5).contains(packageName)) {
