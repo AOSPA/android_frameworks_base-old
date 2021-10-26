@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": true,
+      "key": {
+        "uuid": "efb27538_8b24d157",
+        "filename": "packages/SystemUI/res/values/lineage_config.xml",
+        "patchSetId": 1
+      },
+      "lineNbr": 1,
+      "author": {
+        "id": 1000488
+      },
+      "writtenOn": "2021-10-26T15:22:03Z",
+      "side": 1,
+      "message": "aospa_config.xml",
+      "revId": "016c5ccbc7fddb565c6f60450449bfeaf63704d8",
+      "serverId": "3162e3d8-d894-470e-abd9-724f7b0effad"
+    }
+  ]
+}
