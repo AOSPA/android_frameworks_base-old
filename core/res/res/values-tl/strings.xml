@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"tumawag at mamahala ng mga tawag sa telepono"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Mga sensor ng katawan"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"i-access ang data ng sensor tungkol sa iyong vital signs"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Mga Notification"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"magpakita ng mga notification"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Kunin ang content ng window"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Siyasatin ang nilalaman ng isang window kung saan ka nakikipag-ugnayan."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"I-on ang Explore by Touch"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Pinapayagan ang app na i-disable ang keylock at anumang nauugnay na seguridad sa password. Halimbawa, hindi pinapagana ng telepono ang keylock kapag nakakatanggap ng papasok na tawag sa telepono, pagkatapos ay muling pinapagana ang keylock kapag tapos na ang tawag."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"humiling ng pagiging kumplikado ng lock ng screen"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Pinapayagan ang app na malaman ang antas ng pagiging kumplikado ng lock ng screen (mataas, katamtaman, mababa, o wala), na nagsasaad ng posibleng hanay ng haba at uri ng lock ng screen. Puwede ring imungkahi ng app sa mga user na i-update nila ang lock ng screen sa isang partikular na antas ngunit malaya ang mga user na balewalain ito at mag-navigate palayo. Tandaang hindi naka-store bilang plaintext ang lock ng screen kaya hindi alam ng app ang eksaktong password."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"magpakita ng mga notification"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Pinapayagan ang app na magpakita ng mga notification"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"gumamit ng biometric hardware"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Pinapayagan ang app na gumamit ng biometric hardware para sa pag-authenticate"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"pamahalaan ang hardware ng fingerprint"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Gamitin ang iyong fingerprint o lock ng screen para magpatuloy"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Nagkaproblema. Subukan ulit."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Icon ng fingerprint"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Pag-unlock Gamit ang Mukha"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Isyu sa Pag-unlock Gamit ang Mukha"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Gamitin ang iyong mukha o lock ng screen para magpatuloy"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Nagkaproblema. Subukan ulit."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Face icon"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"basahin ang mga setting ng sync"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Pinapayagan ang app na basahin ang mga setting ng pag-sync para sa isang account. Halimbawa, matutukoy nito kung naka-sync ang app na Mga Tao sa isang account."</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Kapag naka-on ang shortcut, magsisimula ang isang feature ng pagiging naa-access kapag pinindot ang parehong button ng volume."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"I-on ang shortcut para sa mga feature ng pagiging naa-access?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Mao-on ang mga feature ng accessibility kapag pinindot nang matagal ang parehong volume key nang ilang segundo. Posibleng mabago nito ang paggana ng iyong device.\n\nMga kasalukuyang feature:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nPuwede mong baguhin ang mga napiling feature sa Mga Setting &gt; Accessibility."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"I-on ang shortcut ng <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Mao-on ang feature ng accessibility na <xliff:g id="SERVICE">%1$s</xliff:g> kapag pinindot nang matagal ang parehong volume key nang ilang segundo. Posibleng mabago nito ang paggana ng iyong device.\n\nPuwede mong palitan ng ibang feature ang shortcut na ito sa Mga Setting &gt; Accessibility."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"I-on"</string>

@@ -306,6 +306,8 @@ public final class SystemServer implements Dumpable {
             "com.android.clockwork.power.WearPowerService";
     private static final String WEAR_SIDEKICK_SERVICE_CLASS =
             "com.google.android.clockwork.sidekick.SidekickService";
+    private static final String WEAR_DISPLAYOFFLOAD_SERVICE_CLASS =
+            "com.google.android.clockwork.displayoffload.DisplayOffloadService";
     private static final String WEAR_DISPLAY_SERVICE_CLASS =
             "com.google.android.clockwork.display.WearDisplayService";
     private static final String WEAR_LEFTY_SERVICE_CLASS =
@@ -444,7 +446,6 @@ public final class SystemServer implements Dumpable {
     private static final String SYSPROP_START_UPTIME = "sys.system_server.start_uptime";
 
     private Future<?> mZygotePreload;
-    private Future<?> mBlobStoreServiceStart;
 
     private final SystemServerDumper mDumper = new SystemServerDumper();
 
@@ -648,6 +649,21 @@ public final class SystemServer implements Dumpable {
         TimeUtils.formatDuration(mRuntimeStartElapsedTime, pw); pw.println();
     }
 
+    /**
+     * Service used to dump {@link SystemServer} state that is not associated with any service.
+     *
+     * <p>To dump all services:
+     *
+     * <pre><code>adb shell dumpsys system_server_dumper</code></pre>
+     *
+     * <p>To get a list of all services:
+     *
+     * <pre><code>adb shell dumpsys system_server_dumper --list</code></pre>
+     *
+     * <p>To dump a specific service (use {@code --list} above to get service names):
+     *
+     * <pre><code>adb shell dumpsys system_server_dumper --name NAME</code></pre>
+     */
     private final class SystemServerDumper extends Binder {
 
         @GuardedBy("mDumpables")
@@ -1122,6 +1138,13 @@ public final class SystemServer implements Dumpable {
         // Manages LEDs and display backlight so we need it to bring up the display.
         t.traceBegin("StartLightsService");
         mSystemServiceManager.startService(LightsService.class);
+        t.traceEnd();
+
+        t.traceBegin("StartDisplayOffloadService");
+        // Package manager isn't started yet; need to use SysProp not hardware feature
+        if (SystemProperties.getBoolean("config.enable_display_offload", false)) {
+            mSystemServiceManager.startService(WEAR_DISPLAYOFFLOAD_SERVICE_CLASS);
+        }
         t.traceEnd();
 
         t.traceBegin("StartSidekickService");
@@ -2116,14 +2139,11 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(DockObserver.class);
             t.traceEnd();
 
-            // TODO(b/191495635): re-enable thermal observer after fixing b/191375904.
-            /*
             if (isWatch) {
                 t.traceBegin("StartThermalObserver");
                 mSystemServiceManager.startService(THERMAL_OBSERVER_CLASS);
                 t.traceEnd();
             }
-            */
 
             t.traceBegin("StartWiredAccessoryManager");
             try {
@@ -2299,12 +2319,9 @@ public final class SystemServer implements Dumpable {
                 t.traceEnd();
             }
 
-            mBlobStoreServiceStart = SystemServerInitThreadPool.submit(() -> {
-                final TimingsTraceAndSlog traceLog = TimingsTraceAndSlog.newAsyncLog();
-                traceLog.traceBegin(START_BLOB_STORE_SERVICE);
-                mSystemServiceManager.startService(BLOB_STORE_MANAGER_SERVICE_CLASS);
-                traceLog.traceEnd();
-            }, START_BLOB_STORE_SERVICE);
+            t.traceBegin(START_BLOB_STORE_SERVICE);
+            mSystemServiceManager.startService(BLOB_STORE_MANAGER_SERVICE_CLASS);
+            t.traceEnd();
 
             // Dreams (interactive idle-time views, a/k/a screen savers, and doze mode)
             t.traceBegin("StartDreamManager");
@@ -2477,8 +2494,6 @@ public final class SystemServer implements Dumpable {
             t.traceEnd();
         }
 
-        // TODO(b/191495635): Re-enable these services after fixing b/191375904.
-       /*
        if (isWatch) {
             // Must be started before services that depend it, e.g. WearConnectivityService
             t.traceBegin("StartWearPowerService");
@@ -2507,7 +2522,6 @@ public final class SystemServer implements Dumpable {
             mSystemServiceManager.startService(WEAR_GLOBAL_ACTIONS_SERVICE_CLASS);
             t.traceEnd();
         }
-        */
 
         if (!mPackageManager.hasSystemFeature(PackageManager.FEATURE_SLICES_DISABLED)) {
             t.traceBegin("StartSliceManagerService");
@@ -2728,9 +2742,6 @@ public final class SystemServer implements Dumpable {
         t.traceBegin("AppCompatOverridesService");
         mSystemServiceManager.startService(APP_COMPAT_OVERRIDES_SERVICE_CLASS);
         t.traceEnd();
-
-        ConcurrentUtils.waitForFutureNoInterrupt(mBlobStoreServiceStart,
-                START_BLOB_STORE_SERVICE);
 
         // These are needed to propagate to the runnable below.
         final NetworkManagementService networkManagementF = networkManagement;

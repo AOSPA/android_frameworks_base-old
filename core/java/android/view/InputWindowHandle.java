@@ -17,6 +17,7 @@
 package android.view;
 
 import android.annotation.Nullable;
+import android.graphics.Matrix;
 import android.graphics.Region;
 import android.gui.TouchOcclusionMode;
 import android.os.IBinder;
@@ -40,6 +41,17 @@ public final class InputWindowHandle {
     // The token associates input data with a window and its input channel. The client input
     // channel and the server input channel will both contain this token.
     public IBinder token;
+
+    /**
+     * The {@link IWindow} handle if InputWindowHandle is associated with a window, null otherwise.
+     */
+    @Nullable
+    private IBinder windowToken;
+    /**
+     * Used to cache IWindow from the windowToken so we don't need to convert every time getWindow
+     * is called.
+     */
+    private IWindow window;
 
     // The window name.
     public String name;
@@ -116,6 +128,12 @@ public final class InputWindowHandle {
      */
     public boolean replaceTouchableRegionWithCrop;
 
+    /**
+     * The transform that should be applied to the Window to get it from screen coordinates to
+     * window coordinates
+     */
+    public Matrix transform;
+
     private native void nativeDispose();
 
     public InputWindowHandle(InputApplicationHandle inputApplicationHandle, int displayId) {
@@ -130,6 +148,9 @@ public final class InputWindowHandle {
                         .append(frameRight).append(",").append(frameBottom).append("]")
                 .append(", touchableRegion=").append(touchableRegion)
                 .append(", visible=").append(visible)
+                .append(", scaleFactor=").append(scaleFactor)
+                .append(", transform=").append(transform)
+                .append(", windowToken=").append(windowToken)
                 .toString();
 
     }
@@ -160,5 +181,18 @@ public final class InputWindowHandle {
      */
     public void setTouchableRegionCrop(@Nullable SurfaceControl bounds) {
         touchableRegionSurfaceControl = new WeakReference<>(bounds);
+    }
+
+    public void setWindowToken(IWindow iwindow) {
+        windowToken = iwindow.asBinder();
+        window = iwindow;
+    }
+
+    public IWindow getWindow() {
+        if (window != null) {
+            return window;
+        }
+        window = IWindow.Stub.asInterface(windowToken);
+        return window;
     }
 }

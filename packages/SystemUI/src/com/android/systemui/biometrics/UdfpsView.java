@@ -25,6 +25,7 @@ import android.graphics.Color;
 import android.graphics.Paint;
 import android.graphics.PointF;
 import android.graphics.RectF;
+import android.hardware.biometrics.SensorLocationInternal;
 import android.hardware.fingerprint.FingerprintSensorPropertiesInternal;
 import android.os.Build;
 import android.os.UserHandle;
@@ -141,11 +142,12 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
                 : mAnimationViewController.getPaddingX();
         int paddingY = mAnimationViewController == null ? 0
                 : mAnimationViewController.getPaddingY();
+        final SensorLocationInternal location = mSensorProps.getLocation();
         mSensorRect.set(
                 paddingX,
                 paddingY,
-                2 * mSensorProps.sensorRadius + paddingX,
-                2 * mSensorProps.sensorRadius + paddingY);
+                2 * location.sensorRadius + paddingX,
+                2 * location.sensorRadius + paddingY);
 
         if (mAnimationViewController != null) {
             mAnimationViewController.onSensorRectUpdated(new RectF(mSensorRect));
@@ -239,18 +241,20 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
         if (mGhbmView != null && surface == null) {
             Log.e(TAG, "doIlluminate | surface must be non-null for GHBM");
         }
-        mHbmProvider.enableHbm(mHbmType, surface, () -> {
-            if (mGhbmView != null) {
-                mGhbmView.drawIlluminationDot(mSensorRect);
-            }
-            if (onIlluminatedRunnable != null) {
-                // No framework API can reliably tell when a frame reaches the panel. A timeout
-                // is the safest solution.
-                postDelayed(onIlluminatedRunnable, mOnIlluminatedDelayMs);
-            } else {
-                Log.w(TAG, "doIlluminate | onIlluminatedRunnable is null");
-            }
-        });
+        if (mHbmProvider != null) {
+            mHbmProvider.enableHbm(mHbmType, surface, () -> {
+                if (mGhbmView != null) {
+                    mGhbmView.drawIlluminationDot(mSensorRect);
+                }
+                if (onIlluminatedRunnable != null) {
+                    // No framework API can reliably tell when a frame reaches the panel. A timeout
+                    // is the safest solution.
+                    postDelayed(onIlluminatedRunnable, mOnIlluminatedDelayMs);
+                } else {
+                    Log.w(TAG, "doIlluminate | onIlluminatedRunnable is null");
+                }
+            });
+        }
     }
 
     @Override
@@ -263,6 +267,8 @@ public class UdfpsView extends FrameLayout implements DozeReceiver, UdfpsIllumin
             mGhbmView.setGhbmIlluminationListener(null);
             mGhbmView.setVisibility(View.INVISIBLE);
         }
-        mHbmProvider.disableHbm(null /* onHbmDisabled */);
+        if (mHbmProvider != null) {
+            mHbmProvider.disableHbm(null /* onHbmDisabled */);
+        }
     }
 }

@@ -27,7 +27,6 @@ import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.annotation.Group2
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.endRotation
 import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.ImeAppHelper
 import com.android.server.wm.flicker.helpers.WindowUtils
@@ -42,6 +41,7 @@ import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
+import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.wm.shell.flicker.DOCKED_STACK_DIVIDER_COMPONENT
 import com.android.wm.shell.flicker.helpers.SimpleAppHelper
 import com.android.wm.shell.flicker.testapp.Components
@@ -110,7 +110,7 @@ class ResizeLegacySplitScreen(
     @Test
     fun topAppWindowIsAlwaysVisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(Components.SimpleActivity.COMPONENT)
+            this.isAppWindowVisible(Components.SimpleActivity.COMPONENT.toFlickerComponent())
         }
     }
 
@@ -118,7 +118,7 @@ class ResizeLegacySplitScreen(
     @Test
     fun bottomAppWindowIsAlwaysVisible() {
         testSpec.assertWm {
-            this.isAppWindowVisible(Components.ImeActivity.COMPONENT)
+            this.isAppWindowVisible(Components.ImeActivity.COMPONENT.toFlickerComponent())
         }
     }
 
@@ -129,27 +129,25 @@ class ResizeLegacySplitScreen(
     fun statusBarLayerIsVisible() = testSpec.statusBarLayerIsVisible()
 
     @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered(testSpec.config.endRotation)
+    fun entireScreenCovered() = testSpec.entireScreenCovered()
 
     @Test
-    fun navBarLayerRotatesAndScales() =
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.endRotation)
+    fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     @Test
-    fun statusBarLayerRotatesScales() =
-        testSpec.statusBarLayerRotatesScales(testSpec.config.endRotation)
+    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
     @Test
     fun topAppLayerIsAlwaysVisible() {
         testSpec.assertLayers {
-            this.isVisible(Components.SimpleActivity.COMPONENT)
+            this.isVisible(Components.SimpleActivity.COMPONENT.toFlickerComponent())
         }
     }
 
     @Test
     fun bottomAppLayerIsAlwaysVisible() {
         testSpec.assertLayers {
-            this.isVisible(Components.ImeActivity.COMPONENT)
+            this.isVisible(Components.ImeActivity.COMPONENT.toFlickerComponent())
         }
     }
 
@@ -174,8 +172,10 @@ class ResizeLegacySplitScreen(
                 dividerBounds.bottom - WindowUtils.dockedStackDividerInset,
                 displayBounds.right,
                 displayBounds.bottom - WindowUtils.navigationBarHeight)
-            visibleRegion(Components.SimpleActivity.COMPONENT).coversExactly(topAppBounds)
-            visibleRegion(Components.ImeActivity.COMPONENT).coversExactly(bottomAppBounds)
+            visibleRegion(Components.SimpleActivity.COMPONENT.toFlickerComponent())
+                .coversExactly(topAppBounds)
+            visibleRegion(Components.ImeActivity.COMPONENT.toFlickerComponent())
+                .coversExactly(bottomAppBounds)
         }
     }
 
@@ -194,8 +194,10 @@ class ResizeLegacySplitScreen(
                 displayBounds.right,
                 displayBounds.bottom - WindowUtils.navigationBarHeight)
 
-            visibleRegion(Components.SimpleActivity.COMPONENT).coversExactly(topAppBounds)
-            visibleRegion(Components.ImeActivity.COMPONENT).coversExactly(bottomAppBounds)
+            visibleRegion(Components.SimpleActivity.COMPONENT.toFlickerComponent())
+                .coversExactly(topAppBounds)
+            visibleRegion(Components.ImeActivity.COMPONENT.toFlickerComponent())
+                .coversExactly(bottomAppBounds)
         }
     }
 

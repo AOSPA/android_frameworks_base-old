@@ -16,6 +16,8 @@
 
 package android.os;
 
+import static java.util.Objects.requireNonNull;
+
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
@@ -26,6 +28,7 @@ import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.ExceptionUtils;
 import android.util.Log;
+import android.util.MathUtils;
 import android.util.Size;
 import android.util.SizeF;
 import android.util.Slog;
@@ -56,7 +59,9 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
+import java.util.function.Supplier;
 
 /**
  * Container for a message (data and object references) that can
@@ -280,6 +285,10 @@ public final class Parcel {
     private static final int VAL_SIZE = 26;
     private static final int VAL_SIZEF = 27;
     private static final int VAL_DOUBLEARRAY = 28;
+    private static final int VAL_CHAR = 29;
+    private static final int VAL_SHORTARRAY = 30;
+    private static final int VAL_CHARARRAY = 31;
+    private static final int VAL_FLOATARRAY = 32;
 
     // The initial int32 in a Binder call's reply Parcel header:
     // Keep these in sync with libbinder's binder/Status.h.
@@ -301,6 +310,8 @@ public final class Parcel {
 
     @CriticalNative
     private static native void nativeMarkSensitive(long nativePtr);
+    @FastNative
+    private static native void nativeMarkForBinder(long nativePtr, IBinder binder);
     @CriticalNative
     private static native int nativeDataSize(long nativePtr);
     @CriticalNative
@@ -469,6 +480,21 @@ public final class Parcel {
     }
 
     /**
+     * Retrieve a new Parcel object from the pool for use with a specific binder.
+     *
+     * Associate this parcel with a binder object. This marks the parcel as being prepared for a
+     * transaction on this specific binder object. Based on this, the format of the wire binder
+     * protocol may change. For future compatibility, it is recommended to use this for all
+     * Parcels.
+     */
+    @NonNull
+    public static Parcel obtain(@NonNull IBinder binder) {
+        Parcel parcel = Parcel.obtain();
+        parcel.markForBinder(binder);
+        return parcel;
+    }
+
+    /**
      * Put a Parcel object back into the pool.  You must not touch
      * the object after this call.
      */
@@ -525,6 +551,16 @@ public final class Parcel {
 
     /**
      * Parcel data should be zero'd before realloc'd or deleted.
+     *
+     * Note: currently this feature requires multiple things to work in concert:
+     * - markSensitive must be called on every relative Parcel
+     * - FLAG_CLEAR_BUF must be passed into the kernel
+     * This requires having code which does the right thing in every method and in every backend
+     * of AIDL. Rather than exposing this API, it should be replaced with a single API on
+     * IBinder objects which can be called once, and the information should be fed into the
+     * Parcel using markForBinder APIs. In terms of code size and number of API calls, this is
+     * much more extensible.
+     *
      * @hide
      */
     public final void markSensitive() {
@@ -532,9 +568,16 @@ public final class Parcel {
     }
 
     /**
+     * @hide
+     */
+    private void markForBinder(@NonNull IBinder binder) {
+        nativeMarkForBinder(mNativePtr, binder);
+    }
+
+    /**
      * Returns the total amount of data contained in the parcel.
      */
-    public final int dataSize() {
+    public int dataSize() {
         return nativeDataSize(mNativePtr);
     }
 
@@ -676,6 +719,66 @@ public final class Parcel {
      */
     public final boolean hasFileDescriptors() {
         return nativeHasFileDescriptors(mNativePtr);
+    }
+
+    /**
+     * Check if the object used in {@link #readValue(ClassLoader)} / {@link #writeValue(Object)}
+     * has file descriptors.
+     *
+     * <p>For most cases, it will use the self-reported {@link Parcelable#describeContents()} method
+     * for that.
+     *
+     * @throws IllegalArgumentException if you provide any object not supported by above methods.
+     *         Most notably, if you pass {@link Parcel}, this method will throw, for that check
+     *         {@link Parcel#hasFileDescriptors()}
+     *
+     * @hide
+     */
+    public static boolean hasFileDescriptors(Object value) {
+        if (value instanceof LazyValue) {
+            return ((LazyValue) value).hasFileDescriptors();
+        } else if (value instanceof Parcelable) {
+            if ((((Parcelable) value).describeContents()
+                    & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0) {
+                return true;
+            }
+        } else if (value instanceof Parcelable[]) {
+            Parcelable[] array = (Parcelable[]) value;
+            for (int n = array.length - 1; n >= 0; n--) {
+                Parcelable p = array[n];
+                if (p != null && ((p.describeContents()
+                        & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0)) {
+                    return true;
+                }
+            }
+        } else if (value instanceof SparseArray<?>) {
+            SparseArray<?> array = (SparseArray<?>) value;
+            for (int n = array.size() - 1; n >= 0; n--) {
+                Object object = array.valueAt(n);
+                if (object instanceof Parcelable) {
+                    Parcelable p = (Parcelable) object;
+                    if (p != null && (p.describeContents()
+                            & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0) {
+                        return true;
+                    }
+                }
+            }
+        } else if (value instanceof ArrayList<?>) {
+            ArrayList<?> array = (ArrayList<?>) value;
+            for (int n = array.size() - 1; n >= 0; n--) {
+                Object object = array.get(n);
+                if (object instanceof Parcelable) {
+                    Parcelable p = (Parcelable) object;
+                    if (p != null && ((p.describeContents()
+                            & Parcelable.CONTENTS_FILE_DESCRIPTOR) != 0)) {
+                        return true;
+                    }
+                }
+            }
+        } else {
+            getValueType(value); // Will throw if value is not supported
+        }
+        return false;
     }
 
     /**
@@ -1249,6 +1352,46 @@ public final class Parcel {
         if (N == val.length) {
             for (int i=0; i<N; i++) {
                 val[i] = readInt() != 0;
+            }
+        } else {
+            throw new RuntimeException("bad array lengths");
+        }
+    }
+
+    /** @hide */
+    public void writeShortArray(@Nullable short[] val) {
+        if (val != null) {
+            int n = val.length;
+            writeInt(n);
+            for (int i = 0; i < n; i++) {
+                writeInt(val[i]);
+            }
+        } else {
+            writeInt(-1);
+        }
+    }
+
+    /** @hide */
+    @Nullable
+    public short[] createShortArray() {
+        int n = readInt();
+        if (n >= 0 && n <= (dataAvail() >> 2)) {
+            short[] val = new short[n];
+            for (int i = 0; i < n; i++) {
+                val[i] = (short) readInt();
+            }
+            return val;
+        } else {
+            return null;
+        }
+    }
+
+    /** @hide */
+    public void readShortArray(@NonNull short[] val) {
+        int n = readInt();
+        if (n == val.length) {
+            for (int i = 0; i < n; i++) {
+                val[i] = (short) readInt();
             }
         } else {
             throw new RuntimeException("bad array lengths");
@@ -1832,106 +1975,224 @@ public final class Parcel {
      * should be used).</p>
      */
     public final void writeValue(@Nullable Object v) {
+        if (v instanceof LazyValue) {
+            LazyValue value = (LazyValue) v;
+            value.writeToParcel(this);
+            return;
+        }
+        int type = getValueType(v);
+        writeInt(type);
+        if (isLengthPrefixed(type)) {
+            // Length
+            int length = dataPosition();
+            writeInt(-1); // Placeholder
+            // Object
+            int start = dataPosition();
+            writeValue(type, v);
+            int end = dataPosition();
+            // Backpatch length
+            setDataPosition(length);
+            writeInt(end - start);
+            setDataPosition(end);
+        } else {
+            writeValue(type, v);
+        }
+    }
+
+    /** @hide */
+    public static int getValueType(@Nullable Object v) {
         if (v == null) {
-            writeInt(VAL_NULL);
+            return VAL_NULL;
         } else if (v instanceof String) {
-            writeInt(VAL_STRING);
-            writeString((String) v);
+            return VAL_STRING;
         } else if (v instanceof Integer) {
-            writeInt(VAL_INTEGER);
-            writeInt((Integer) v);
+            return VAL_INTEGER;
         } else if (v instanceof Map) {
-            writeInt(VAL_MAP);
-            writeMap((Map) v);
+            return VAL_MAP;
         } else if (v instanceof Bundle) {
             // Must be before Parcelable
-            writeInt(VAL_BUNDLE);
-            writeBundle((Bundle) v);
+            return VAL_BUNDLE;
         } else if (v instanceof PersistableBundle) {
-            writeInt(VAL_PERSISTABLEBUNDLE);
-            writePersistableBundle((PersistableBundle) v);
+            // Must be before Parcelable
+            return VAL_PERSISTABLEBUNDLE;
+        } else if (v instanceof SizeF) {
+            // Must be before Parcelable
+            return VAL_SIZEF;
         } else if (v instanceof Parcelable) {
             // IMPOTANT: cases for classes that implement Parcelable must
-            // come before the Parcelable case, so that their specific VAL_*
+            // come before the Parcelable case, so that their speci fic VAL_*
             // types will be written.
-            writeInt(VAL_PARCELABLE);
-            writeParcelable((Parcelable) v, 0);
+            return VAL_PARCELABLE;
         } else if (v instanceof Short) {
-            writeInt(VAL_SHORT);
-            writeInt(((Short) v).intValue());
+            return VAL_SHORT;
         } else if (v instanceof Long) {
-            writeInt(VAL_LONG);
-            writeLong((Long) v);
+            return VAL_LONG;
         } else if (v instanceof Float) {
-            writeInt(VAL_FLOAT);
-            writeFloat((Float) v);
+            return VAL_FLOAT;
         } else if (v instanceof Double) {
-            writeInt(VAL_DOUBLE);
-            writeDouble((Double) v);
+            return VAL_DOUBLE;
         } else if (v instanceof Boolean) {
-            writeInt(VAL_BOOLEAN);
-            writeInt((Boolean) v ? 1 : 0);
+            return VAL_BOOLEAN;
         } else if (v instanceof CharSequence) {
             // Must be after String
-            writeInt(VAL_CHARSEQUENCE);
-            writeCharSequence((CharSequence) v);
+            return VAL_CHARSEQUENCE;
         } else if (v instanceof List) {
-            writeInt(VAL_LIST);
-            writeList((List) v);
+            return VAL_LIST;
         } else if (v instanceof SparseArray) {
-            writeInt(VAL_SPARSEARRAY);
-            writeSparseArray((SparseArray) v);
+            return VAL_SPARSEARRAY;
         } else if (v instanceof boolean[]) {
-            writeInt(VAL_BOOLEANARRAY);
-            writeBooleanArray((boolean[]) v);
+            return VAL_BOOLEANARRAY;
         } else if (v instanceof byte[]) {
-            writeInt(VAL_BYTEARRAY);
-            writeByteArray((byte[]) v);
+            return VAL_BYTEARRAY;
         } else if (v instanceof String[]) {
-            writeInt(VAL_STRINGARRAY);
-            writeStringArray((String[]) v);
+            return VAL_STRINGARRAY;
         } else if (v instanceof CharSequence[]) {
             // Must be after String[] and before Object[]
-            writeInt(VAL_CHARSEQUENCEARRAY);
-            writeCharSequenceArray((CharSequence[]) v);
+            return VAL_CHARSEQUENCEARRAY;
         } else if (v instanceof IBinder) {
-            writeInt(VAL_IBINDER);
-            writeStrongBinder((IBinder) v);
+            return VAL_IBINDER;
         } else if (v instanceof Parcelable[]) {
-            writeInt(VAL_PARCELABLEARRAY);
-            writeParcelableArray((Parcelable[]) v, 0);
+            return VAL_PARCELABLEARRAY;
         } else if (v instanceof int[]) {
-            writeInt(VAL_INTARRAY);
-            writeIntArray((int[]) v);
+            return VAL_INTARRAY;
         } else if (v instanceof long[]) {
-            writeInt(VAL_LONGARRAY);
-            writeLongArray((long[]) v);
+            return VAL_LONGARRAY;
         } else if (v instanceof Byte) {
-            writeInt(VAL_BYTE);
-            writeInt((Byte) v);
+            return VAL_BYTE;
         } else if (v instanceof Size) {
-            writeInt(VAL_SIZE);
-            writeSize((Size) v);
-        } else if (v instanceof SizeF) {
-            writeInt(VAL_SIZEF);
-            writeSizeF((SizeF) v);
+            return VAL_SIZE;
         } else if (v instanceof double[]) {
-            writeInt(VAL_DOUBLEARRAY);
-            writeDoubleArray((double[]) v);
+            return VAL_DOUBLEARRAY;
+        } else if (v instanceof Character) {
+            return VAL_CHAR;
+        } else if (v instanceof short[]) {
+            return VAL_SHORTARRAY;
+        } else if (v instanceof char[]) {
+            return VAL_CHARARRAY;
+        } else  if (v instanceof float[]) {
+            return VAL_FLOATARRAY;
         } else {
             Class<?> clazz = v.getClass();
             if (clazz.isArray() && clazz.getComponentType() == Object.class) {
                 // Only pure Object[] are written here, Other arrays of non-primitive types are
                 // handled by serialization as this does not record the component type.
-                writeInt(VAL_OBJECTARRAY);
-                writeArray((Object[]) v);
+                return VAL_OBJECTARRAY;
             } else if (v instanceof Serializable) {
                 // Must be last
-                writeInt(VAL_SERIALIZABLE);
-                writeSerializable((Serializable) v);
+                return VAL_SERIALIZABLE;
             } else {
-                throw new RuntimeException("Parcel: unable to marshal value " + v);
+                throw new IllegalArgumentException("Parcel: unknown type for value " + v);
             }
+        }
+    }
+    /**
+     * Writes value {@code v} in the parcel. This does NOT write the int representing the type
+     * first.
+     *
+     * @hide
+     */
+    public void writeValue(int type, @Nullable Object v) {
+        switch (type) {
+            case VAL_NULL:
+                break;
+            case VAL_STRING:
+                writeString((String) v);
+                break;
+            case VAL_INTEGER:
+                writeInt((Integer) v);
+                break;
+            case VAL_MAP:
+                writeMap((Map) v);
+                break;
+            case VAL_BUNDLE:
+                writeBundle((Bundle) v);
+                break;
+            case VAL_PERSISTABLEBUNDLE:
+                writePersistableBundle((PersistableBundle) v);
+                break;
+            case VAL_PARCELABLE:
+                writeParcelable((Parcelable) v, 0);
+                break;
+            case VAL_SHORT:
+                writeInt(((Short) v).intValue());
+                break;
+            case VAL_LONG:
+                writeLong((Long) v);
+                break;
+            case VAL_FLOAT:
+                writeFloat((Float) v);
+                break;
+            case VAL_DOUBLE:
+                writeDouble((Double) v);
+                break;
+            case VAL_BOOLEAN:
+                writeInt((Boolean) v ? 1 : 0);
+                break;
+            case VAL_CHARSEQUENCE:
+                writeCharSequence((CharSequence) v);
+                break;
+            case VAL_LIST:
+                writeList((List) v);
+                break;
+            case VAL_SPARSEARRAY:
+                writeSparseArray((SparseArray) v);
+                break;
+            case VAL_BOOLEANARRAY:
+                writeBooleanArray((boolean[]) v);
+                break;
+            case VAL_BYTEARRAY:
+                writeByteArray((byte[]) v);
+                break;
+            case VAL_STRINGARRAY:
+                writeStringArray((String[]) v);
+                break;
+            case VAL_CHARSEQUENCEARRAY:
+                writeCharSequenceArray((CharSequence[]) v);
+                break;
+            case VAL_IBINDER:
+                writeStrongBinder((IBinder) v);
+                break;
+            case VAL_PARCELABLEARRAY:
+                writeParcelableArray((Parcelable[]) v, 0);
+                break;
+            case VAL_INTARRAY:
+                writeIntArray((int[]) v);
+                break;
+            case VAL_LONGARRAY:
+                writeLongArray((long[]) v);
+                break;
+            case VAL_BYTE:
+                writeInt((Byte) v);
+                break;
+            case VAL_SIZE:
+                writeSize((Size) v);
+                break;
+            case VAL_SIZEF:
+                writeSizeF((SizeF) v);
+                break;
+            case VAL_DOUBLEARRAY:
+                writeDoubleArray((double[]) v);
+                break;
+            case VAL_CHAR:
+                writeInt((Character) v);
+                break;
+            case VAL_SHORTARRAY:
+                writeShortArray((short[]) v);
+                break;
+            case VAL_CHARARRAY:
+                writeCharArray((char[]) v);
+                break;
+            case VAL_FLOATARRAY:
+                writeFloatArray((float[]) v);
+                break;
+            case VAL_OBJECTARRAY:
+                writeArray((Object[]) v);
+                break;
+            case VAL_SERIALIZABLE:
+                writeSerializable((Serializable) v);
+                break;
+            default:
+                throw new RuntimeException("Parcel: unable to marshal value " + v);
         }
     }
 
@@ -2608,7 +2869,20 @@ public final class Parcel {
      */
     public final void readList(@NonNull List outVal, @Nullable ClassLoader loader) {
         int N = readInt();
-        readListInternal(outVal, N, loader);
+        readListInternal(outVal, N, loader, /* clazz */ null);
+    }
+
+    /**
+     * Same as {@link #readList(List, ClassLoader)} but accepts {@code clazz} parameter as
+     * the type required for each item. If the item to be deserialized is not an instance
+     * of that class or any of its children class
+     * a {@link BadParcelableException} will be thrown.
+     */
+    public <T> void readList(@NonNull List<? super T> outVal,
+            @Nullable ClassLoader loader, @NonNull Class<T> clazz) {
+        Objects.requireNonNull(clazz);
+        int n = readInt();
+        readListInternal(outVal, n, loader, clazz);
     }
 
     /**
@@ -2807,7 +3081,7 @@ public final class Parcel {
             return null;
         }
         ArrayList l = new ArrayList(N);
-        readListInternal(l, N, loader);
+        readListInternal(l, N, loader, /* clazz */ null);
         return l;
     }
 
@@ -3207,103 +3481,370 @@ public final class Parcel {
      */
     @Nullable
     public final Object readValue(@Nullable ClassLoader loader) {
+        return readValue(loader, /* clazz */ null);
+    }
+
+
+    /**
+     * @param clazz The type of the object expected or {@code null} for performing no checks.
+     */
+    @Nullable
+    private <T> T readValue(@Nullable ClassLoader loader, @Nullable Class<T> clazz) {
         int type = readInt();
+        final T object;
+        if (isLengthPrefixed(type)) {
+            int length = readInt();
+            int start = dataPosition();
+            object = readValue(type, loader, clazz);
+            int actual = dataPosition() - start;
+            if (actual != length) {
+                Slog.wtfStack(TAG,
+                        "Unparcelling of " + object + " of type " + Parcel.valueTypeToString(type)
+                                + "  consumed " + actual + " bytes, but " + length + " expected.");
+            }
+        } else {
+            object = readValue(type, loader, clazz);
+        }
+        return object;
+    }
 
+    /**
+     * This will return a {@link Supplier} for length-prefixed types that deserializes the object
+     * when {@link Supplier#get()} is called, for other types it will return the object itself.
+     *
+     * <p>After calling {@link Supplier#get()} the parcel cursor will not change. Note that you
+     * shouldn't recycle the parcel, not at least until all objects have been retrieved. No
+     * synchronization attempts are made.
+     *
+     * </p>The supplier returned implements {@link #equals(Object)} and {@link #hashCode()}. Two
+     * suppliers are equal if either of the following is true:
+     * <ul>
+     *   <li>{@link Supplier#get()} has been called on both and both objects returned are equal.
+     *   <li>{@link Supplier#get()} hasn't been called on either one and everything below is true:
+     *   <ul>
+     *       <li>The {@code loader} parameters used to retrieve each are equal.
+     *       <li>They both have the same type.
+     *       <li>They have the same payload length.
+     *       <li>Their binary content is the same.
+     *   </ul>
+     * </ul>
+     *
+     * @hide
+     */
+    @Nullable
+    public Object readLazyValue(@Nullable ClassLoader loader) {
+        int start = dataPosition();
+        int type = readInt();
+        if (isLengthPrefixed(type)) {
+            int length = readInt();
+            setDataPosition(MathUtils.addOrThrow(dataPosition(), length));
+            return new LazyValue(this, start, length, type, loader);
+        } else {
+            return readValue(type, loader, /* clazz */ null);
+        }
+    }
+
+    private static final class LazyValue implements Supplier<Object> {
+        private final int mPosition;
+        private final int mLength;
+        private final int mType;
+        @Nullable private final ClassLoader mLoader;
+        @Nullable private Object mObject;
+        @Nullable private volatile Parcel mValueParcel;
+
+        /**
+         * This goes from non-null to null once. Always check the nullability of this object before
+         * performing any operations, either involving itself or mObject since the happens-before
+         * established by this volatile will guarantee visibility of either. We can assume this
+         * parcel won't change anymore.
+         */
+        @Nullable private volatile Parcel mSource;
+
+        LazyValue(Parcel source, int position, int length, int type, @Nullable ClassLoader loader) {
+            mSource = requireNonNull(source);
+            mPosition = position;
+            mLength = length;
+            mType = type;
+            mLoader = loader;
+        }
+
+        @Override
+        public Object get() {
+            Parcel source = mSource;
+            if (source != null) {
+                synchronized (source) {
+                    int restore = source.dataPosition();
+                    try {
+                        source.setDataPosition(mPosition);
+                        mObject = source.readValue(mLoader);
+                    } finally {
+                        source.setDataPosition(restore);
+                    }
+                    mSource = null;
+                }
+            }
+            return mObject;
+        }
+
+        public void writeToParcel(Parcel out) {
+            Parcel source = mSource;
+            if (source != null) {
+                out.appendFrom(source, mPosition, mLength + 8);
+            } else {
+                out.writeValue(mObject);
+            }
+        }
+
+        public boolean hasFileDescriptors() {
+            Parcel source = mSource;
+            return (source != null)
+                    ? getValueParcel(source).hasFileDescriptors()
+                    : Parcel.hasFileDescriptors(mObject);
+        }
+
+        @Override
+        public String toString() {
+            return (mSource != null)
+                    ? "Supplier{" + valueTypeToString(mType) + "@" + mPosition + "+" + mLength + '}'
+                    : "Supplier{" + mObject + "}";
+        }
+
+        /**
+         * We're checking if the *lazy value* is equal to another one, not if the *object*
+         * represented by the lazy value is equal to the other one. So, if there are two lazy values
+         * and one of them has been deserialized but the other hasn't this will always return false.
+         */
+        @Override
+        public boolean equals(Object other) {
+            if (this == other) {
+                return true;
+            }
+            if (!(other instanceof LazyValue)) {
+                return false;
+            }
+            LazyValue value = (LazyValue) other;
+            // Check if they are either both serialized or both deserialized.
+            Parcel source = mSource;
+            Parcel otherSource = value.mSource;
+            if ((source == null) != (otherSource == null)) {
+                return false;
+            }
+            // If both are deserialized, compare the live objects.
+            if (source == null) {
+                // Note that here it's guaranteed that both mObject references contain valid values
+                // (possibly null) since mSource will have provided the memory barrier for those and
+                // once deserialized we never go back to serialized state.
+                return Objects.equals(mObject, value.mObject);
+            }
+            // Better safely fail here since this could mean we get different objects.
+            if (!Objects.equals(mLoader, value.mLoader)) {
+                return false;
+            }
+            // Otherwise compare metadata prior to comparing payload.
+            if (mType != value.mType || mLength != value.mLength) {
+                return false;
+            }
+            // Finally we compare the payload.
+            return getValueParcel(source).compareData(value.getValueParcel(otherSource)) == 0;
+        }
+
+        @Override
+        public int hashCode() {
+            // Accessing mSource first to provide memory barrier for mObject
+            return Objects.hash(mSource == null, mObject, mLoader, mType, mLength);
+        }
+
+        /** This extracts the parcel section responsible for the object and returns it. */
+        private Parcel getValueParcel(Parcel source) {
+            Parcel parcel = mValueParcel;
+            if (parcel == null) {
+                parcel = Parcel.obtain();
+                // mLength is the length of object representation, excluding the type and length.
+                // mPosition is the position of the entire value container, right before the type.
+                // So, we add 4 bytes for the type + 4 bytes for the length written.
+                parcel.appendFrom(source, mPosition, mLength + 8);
+                mValueParcel = parcel;
+            }
+            return parcel;
+        }
+    }
+
+    /**
+     * Reads a value from the parcel of type {@code type}. Does NOT read the int representing the
+     * type first.
+     * @param clazz The type of the object expected or {@code null} for performing no checks.
+     */
+    @SuppressWarnings("unchecked")
+    @Nullable
+    private <T> T readValue(int type, @Nullable ClassLoader loader, @Nullable Class<T> clazz) {
+        final Object object;
         switch (type) {
-        case VAL_NULL:
-            return null;
+            case VAL_NULL:
+                object = null;
+                break;
 
-        case VAL_STRING:
-            return readString();
+            case VAL_STRING:
+                object = readString();
+                break;
 
-        case VAL_INTEGER:
-            return readInt();
+            case VAL_INTEGER:
+                object = readInt();
+                break;
 
-        case VAL_MAP:
-            return readHashMap(loader);
+            case VAL_MAP:
+                object = readHashMap(loader);
+                break;
 
-        case VAL_PARCELABLE:
-            return readParcelable(loader);
+            case VAL_PARCELABLE:
+                object = readParcelableInternal(loader, clazz);
+                break;
 
-        case VAL_SHORT:
-            return (short) readInt();
+            case VAL_SHORT:
+                object = (short) readInt();
+                break;
 
-        case VAL_LONG:
-            return readLong();
+            case VAL_LONG:
+                object = readLong();
+                break;
 
-        case VAL_FLOAT:
-            return readFloat();
+            case VAL_FLOAT:
+                object = readFloat();
+                break;
 
-        case VAL_DOUBLE:
-            return readDouble();
+            case VAL_DOUBLE:
+                object = readDouble();
+                break;
 
-        case VAL_BOOLEAN:
-            return readInt() == 1;
+            case VAL_BOOLEAN:
+                object = readInt() == 1;
+                break;
 
-        case VAL_CHARSEQUENCE:
-            return readCharSequence();
+            case VAL_CHARSEQUENCE:
+                object = readCharSequence();
+                break;
 
-        case VAL_LIST:
-            return readArrayList(loader);
+            case VAL_LIST:
+                object = readArrayList(loader);
+                break;
 
-        case VAL_BOOLEANARRAY:
-            return createBooleanArray();
+            case VAL_BOOLEANARRAY:
+                object = createBooleanArray();
+                break;
 
-        case VAL_BYTEARRAY:
-            return createByteArray();
+            case VAL_BYTEARRAY:
+                object = createByteArray();
+                break;
 
-        case VAL_STRINGARRAY:
-            return readStringArray();
+            case VAL_STRINGARRAY:
+                object = readStringArray();
+                break;
 
-        case VAL_CHARSEQUENCEARRAY:
-            return readCharSequenceArray();
+            case VAL_CHARSEQUENCEARRAY:
+                object = readCharSequenceArray();
+                break;
 
-        case VAL_IBINDER:
-            return readStrongBinder();
+            case VAL_IBINDER:
+                object = readStrongBinder();
+                break;
 
-        case VAL_OBJECTARRAY:
-            return readArray(loader);
+            case VAL_OBJECTARRAY:
+                object = readArray(loader);
+                break;
 
-        case VAL_INTARRAY:
-            return createIntArray();
+            case VAL_INTARRAY:
+                object = createIntArray();
+                break;
 
-        case VAL_LONGARRAY:
-            return createLongArray();
+            case VAL_LONGARRAY:
+                object = createLongArray();
+                break;
 
-        case VAL_BYTE:
-            return readByte();
+            case VAL_BYTE:
+                object = readByte();
+                break;
 
-        case VAL_SERIALIZABLE:
-            return readSerializable(loader);
+            case VAL_SERIALIZABLE:
+                object = readSerializable(loader);
+                break;
 
-        case VAL_PARCELABLEARRAY:
-            return readParcelableArray(loader);
+            case VAL_PARCELABLEARRAY:
+                object = readParcelableArray(loader);
+                break;
 
-        case VAL_SPARSEARRAY:
-            return readSparseArray(loader);
+            case VAL_SPARSEARRAY:
+                object = readSparseArray(loader);
+                break;
 
-        case VAL_SPARSEBOOLEANARRAY:
-            return readSparseBooleanArray();
+            case VAL_SPARSEBOOLEANARRAY:
+                object = readSparseBooleanArray();
+                break;
 
-        case VAL_BUNDLE:
-            return readBundle(loader); // loading will be deferred
+            case VAL_BUNDLE:
+                object = readBundle(loader); // loading will be deferred
+                break;
 
-        case VAL_PERSISTABLEBUNDLE:
-            return readPersistableBundle(loader);
+            case VAL_PERSISTABLEBUNDLE:
+                object = readPersistableBundle(loader);
+                break;
 
-        case VAL_SIZE:
-            return readSize();
+            case VAL_SIZE:
+                object = readSize();
+                break;
 
-        case VAL_SIZEF:
-            return readSizeF();
+            case VAL_SIZEF:
+                object = readSizeF();
+                break;
 
-        case VAL_DOUBLEARRAY:
-            return createDoubleArray();
+            case VAL_DOUBLEARRAY:
+                object = createDoubleArray();
+                break;
 
-        default:
-            int off = dataPosition() - 4;
-            throw new RuntimeException(
-                "Parcel " + this + ": Unmarshalling unknown type code " + type + " at offset " + off);
+            case VAL_CHAR:
+                object = (char) readInt();
+                break;
+
+            case VAL_SHORTARRAY:
+                object = createShortArray();
+                break;
+
+            case VAL_CHARARRAY:
+                object = createCharArray();
+                break;
+
+            case VAL_FLOATARRAY:
+                object = createFloatArray();
+                break;
+
+            default:
+                int off = dataPosition() - 4;
+                throw new RuntimeException(
+                    "Parcel " + this + ": Unmarshalling unknown type code " + type
+                            + " at offset " + off);
+        }
+        if (clazz != null && !clazz.isInstance(object)) {
+            throw new BadParcelableException("Unparcelled object " + object
+                    + " is not an instance of required class " + clazz.getName()
+                    + " provided in the parameter");
+        }
+        return (T) object;
+    }
+
+    private boolean isLengthPrefixed(int type) {
+        // In general, we want custom types and containers of custom types to be length-prefixed,
+        // this allows clients (eg. Bundle) to skip their content during deserialization. The
+        // exception to this is Bundle, since Bundle is already length-prefixed and already copies
+        // the correspondent section of the parcel internally.
+        switch (type) {
+            case VAL_MAP:
+            case VAL_PARCELABLE:
+            case VAL_LIST:
+            case VAL_SPARSEARRAY:
+            case VAL_PARCELABLEARRAY:
+            case VAL_OBJECTARRAY:
+            case VAL_SERIALIZABLE:
+                return true;
+            default:
+                return false;
         }
     }
 
@@ -3318,17 +3859,42 @@ public final class Parcel {
      * @throws BadParcelableException Throws BadParcelableException if there
      * was an error trying to instantiate the Parcelable.
      */
-    @SuppressWarnings("unchecked")
     @Nullable
     public final <T extends Parcelable> T readParcelable(@Nullable ClassLoader loader) {
-        Parcelable.Creator<?> creator = readParcelableCreator(loader);
+        return readParcelableInternal(loader, /* clazz */ null);
+    }
+
+    /**
+     * Same as {@link #readParcelable(ClassLoader)} but accepts {@code clazz} parameter as the type
+     * required for each item. If the item to be deserialized is not an instance of that class or
+     * any of its children classes a {@link BadParcelableException} will be thrown.
+     */
+    @Nullable
+    public <T extends Parcelable> T readParcelable(@Nullable ClassLoader loader,
+            @NonNull Class<T> clazz) {
+        Objects.requireNonNull(clazz);
+        return readParcelableInternal(loader, clazz);
+    }
+
+    /**
+     *
+     * @param clazz The type of the parcelable expected or {@code null} for performing no checks.
+     */
+    @SuppressWarnings("unchecked")
+    @Nullable
+    private <T> T readParcelableInternal(@Nullable ClassLoader loader, @Nullable Class<T> clazz) {
+        if (clazz != null && !Parcelable.class.isAssignableFrom(clazz)) {
+            throw new BadParcelableException("About to unparcel a parcelable object "
+                    + " but class required " + clazz.getName() + " is not Parcelable");
+        }
+        Parcelable.Creator<?> creator = readParcelableCreatorInternal(loader, clazz);
         if (creator == null) {
             return null;
         }
         if (creator instanceof Parcelable.ClassLoaderCreator<?>) {
-          Parcelable.ClassLoaderCreator<?> classLoaderCreator =
-              (Parcelable.ClassLoaderCreator<?>) creator;
-          return (T) classLoaderCreator.createFromParcel(this, loader);
+            Parcelable.ClassLoaderCreator<?> classLoaderCreator =
+                    (Parcelable.ClassLoaderCreator<?>) creator;
+            return (T) classLoaderCreator.createFromParcel(this, loader);
         }
         return (T) creator.createFromParcel(this);
     }
@@ -3362,6 +3928,28 @@ public final class Parcel {
      */
     @Nullable
     public final Parcelable.Creator<?> readParcelableCreator(@Nullable ClassLoader loader) {
+        return readParcelableCreatorInternal(loader, /* clazz */ null);
+    }
+
+    /**
+     * Same as {@link #readParcelableCreator(ClassLoader)} but accepts {@code clazz} parameter
+     * as the required type. If the item to be deserialized is not an instance of that class
+     * or any of its children classes a {@link BadParcelableException} will be thrown.
+     */
+    @Nullable
+    public <T> Parcelable.Creator<T> readParcelableCreator(
+            @Nullable ClassLoader loader, @NonNull Class<T> clazz) {
+        Objects.requireNonNull(clazz);
+        return readParcelableCreatorInternal(loader, clazz);
+    }
+
+    /**
+     * @param clazz The type of the parcelable expected or {@code null} for performing no checks.
+     */
+    @SuppressWarnings("unchecked")
+    @Nullable
+    private <T> Parcelable.Creator<T> readParcelableCreatorInternal(
+            @Nullable ClassLoader loader, @Nullable Class<T> clazz) {
         String name = readString();
         if (name == null) {
             return null;
@@ -3377,7 +3965,15 @@ public final class Parcel {
             creator = map.get(name);
         }
         if (creator != null) {
-            return creator;
+            if (clazz != null) {
+                Class<?> parcelableClass = creator.getClass().getEnclosingClass();
+                if (!clazz.isAssignableFrom(parcelableClass)) {
+                    throw new BadParcelableException("Parcelable creator " + name + " is not "
+                            + "a subclass of required class " + clazz.getName()
+                            + " provided in the parameter");
+                }
+            }
+            return (Parcelable.Creator<T>) creator;
         }
 
         try {
@@ -3393,6 +3989,14 @@ public final class Parcel {
                 throw new BadParcelableException("Parcelable protocol requires subclassing "
                         + "from Parcelable on class " + name);
             }
+            if (clazz != null) {
+                if (!clazz.isAssignableFrom(parcelableClass)) {
+                    throw new BadParcelableException("Parcelable creator " + name + " is not "
+                            + "a subclass of required class " + clazz.getName()
+                            + " provided in the parameter");
+                }
+            }
+
             Field f = parcelableClass.getField("CREATOR");
             if ((f.getModifiers() & Modifier.STATIC) == 0) {
                 throw new BadParcelableException("Parcelable protocol requires "
@@ -3430,7 +4034,7 @@ public final class Parcel {
             map.put(name, creator);
         }
 
-        return creator;
+        return (Parcelable.Creator<T>) creator;
     }
 
     /**
@@ -3609,49 +4213,49 @@ public final class Parcel {
         }
     }
 
-    /* package */ void readArrayMapInternal(@NonNull ArrayMap outVal, int N,
-            @Nullable ClassLoader loader) {
-        if (DEBUG_ARRAY_MAP) {
-            RuntimeException here =  new RuntimeException("here");
-            here.fillInStackTrace();
-            Log.d(TAG, "Reading " + N + " ArrayMap entries", here);
-        }
-        int startPos;
-        while (N > 0) {
-            if (DEBUG_ARRAY_MAP) startPos = dataPosition();
-            String key = readString();
-            Object value = readValue(loader);
-            if (DEBUG_ARRAY_MAP) Log.d(TAG, "  Read #" + (N-1) + " "
-                    + (dataPosition()-startPos) + " bytes: key=0x"
-                    + Integer.toHexString((key != null ? key.hashCode() : 0)) + " " + key);
-            outVal.append(key, value);
-            N--;
-        }
-        outVal.validate();
+    /* package */ void readArrayMapInternal(@NonNull ArrayMap<? super String, Object> outVal,
+            int size, @Nullable ClassLoader loader) {
+        readArrayMap(outVal, size, /* sorted */ true, /* lazy */ false, loader);
     }
 
-    /* package */ void readArrayMapSafelyInternal(@NonNull ArrayMap outVal, int N,
-            @Nullable ClassLoader loader) {
-        if (DEBUG_ARRAY_MAP) {
-            RuntimeException here =  new RuntimeException("here");
-            here.fillInStackTrace();
-            Log.d(TAG, "Reading safely " + N + " ArrayMap entries", here);
-        }
-        while (N > 0) {
+    /**
+     * Reads a map into {@code map}.
+     *
+     * @param sorted Whether the keys are sorted by their hashes, if so we use an optimized path.
+     * @param lazy   Whether to populate the map with lazy {@link Supplier} objects for
+     *               length-prefixed values. See {@link Parcel#readLazyValue(ClassLoader)} for more
+     *               details.
+     * @return whether the parcel can be recycled or not.
+     * @hide
+     */
+    boolean readArrayMap(ArrayMap<? super String, Object> map, int size, boolean sorted,
+            boolean lazy, @Nullable ClassLoader loader) {
+        boolean recycle = true;
+        while (size > 0) {
             String key = readString();
-            if (DEBUG_ARRAY_MAP) Log.d(TAG, "  Read safe #" + (N-1) + ": key=0x"
-                    + (key != null ? key.hashCode() : 0) + " " + key);
-            Object value = readValue(loader);
-            outVal.put(key, value);
-            N--;
+            Object value = (lazy) ? readLazyValue(loader) : readValue(loader);
+            if (value instanceof LazyValue) {
+                recycle = false;
+            }
+            if (sorted) {
+                map.append(key, value);
+            } else {
+                map.put(key, value);
+            }
+            size--;
         }
+        if (sorted) {
+            map.validate();
+        }
+        return recycle;
     }
 
     /**
      * @hide For testing only.
      */
     @UnsupportedAppUsage(maxTargetSdk = Build.VERSION_CODES.R, trackingBug = 170729553)
-    public void readArrayMap(@NonNull ArrayMap outVal, @Nullable ClassLoader loader) {
+    public void readArrayMap(@NonNull ArrayMap<? super String, Object> outVal,
+            @Nullable ClassLoader loader) {
         final int N = readInt();
         if (N < 0) {
             return;
@@ -3680,13 +4284,21 @@ public final class Parcel {
         return result;
     }
 
-    private void readListInternal(@NonNull List outVal, int N,
+    private void readListInternal(@NonNull List outVal, int n,
             @Nullable ClassLoader loader) {
-        while (N > 0) {
-            Object value = readValue(loader);
+        readListInternal(outVal, n, loader, null);
+    }
+
+    /**
+     * @param clazz The type of the object expected or {@code null} for performing no checks.
+     */
+    private <T> void readListInternal(@NonNull List<? super T> outVal, int n,
+            @Nullable ClassLoader loader, @Nullable Class<T> clazz) {
+        while (n > 0) {
+            T value = readValue(loader, clazz);
             //Log.d(TAG, "Unmarshalling value=" + value);
             outVal.add(value);
-            N--;
+            n--;
         }
     }
 
@@ -3735,5 +4347,43 @@ public final class Parcel {
      */
     public long getBlobAshmemSize() {
         return nativeGetBlobAshmemSize(mNativePtr);
+    }
+
+    private static String valueTypeToString(int type) {
+        switch (type) {
+            case VAL_NULL: return "VAL_NULL";
+            case VAL_INTEGER: return "VAL_INTEGER";
+            case VAL_MAP: return "VAL_MAP";
+            case VAL_BUNDLE: return "VAL_BUNDLE";
+            case VAL_PERSISTABLEBUNDLE: return "VAL_PERSISTABLEBUNDLE";
+            case VAL_PARCELABLE: return "VAL_PARCELABLE";
+            case VAL_SHORT: return "VAL_SHORT";
+            case VAL_LONG: return "VAL_LONG";
+            case VAL_FLOAT: return "VAL_FLOAT";
+            case VAL_DOUBLE: return "VAL_DOUBLE";
+            case VAL_BOOLEAN: return "VAL_BOOLEAN";
+            case VAL_CHARSEQUENCE: return "VAL_CHARSEQUENCE";
+            case VAL_LIST: return "VAL_LIST";
+            case VAL_SPARSEARRAY: return "VAL_SPARSEARRAY";
+            case VAL_BOOLEANARRAY: return "VAL_BOOLEANARRAY";
+            case VAL_BYTEARRAY: return "VAL_BYTEARRAY";
+            case VAL_STRINGARRAY: return "VAL_STRINGARRAY";
+            case VAL_CHARSEQUENCEARRAY: return "VAL_CHARSEQUENCEARRAY";
+            case VAL_IBINDER: return "VAL_IBINDER";
+            case VAL_PARCELABLEARRAY: return "VAL_PARCELABLEARRAY";
+            case VAL_INTARRAY: return "VAL_INTARRAY";
+            case VAL_LONGARRAY: return "VAL_LONGARRAY";
+            case VAL_BYTE: return "VAL_BYTE";
+            case VAL_SIZE: return "VAL_SIZE";
+            case VAL_SIZEF: return "VAL_SIZEF";
+            case VAL_DOUBLEARRAY: return "VAL_DOUBLEARRAY";
+            case VAL_CHAR: return "VAL_CHAR";
+            case VAL_SHORTARRAY: return "VAL_SHORTARRAY";
+            case VAL_CHARARRAY: return "VAL_CHARARRAY";
+            case VAL_FLOATARRAY: return "VAL_FLOATARRAY";
+            case VAL_OBJECTARRAY: return "VAL_OBJECTARRAY";
+            case VAL_SERIALIZABLE: return "VAL_SERIALIZABLE";
+            default: return "UNKNOWN(" + type + ")";
+        }
     }
 }

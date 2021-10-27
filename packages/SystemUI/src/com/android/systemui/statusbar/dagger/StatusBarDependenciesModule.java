@@ -22,8 +22,12 @@ import android.content.Context;
 import android.os.Handler;
 
 import com.android.internal.statusbar.IStatusBarService;
+import com.android.systemui.animation.ActivityLaunchAnimator;
+import com.android.systemui.animation.DialogLaunchAnimator;
+import com.android.systemui.animation.LaunchAnimator;
 import com.android.systemui.dagger.SysUISingleton;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.media.MediaDataManager;
 import com.android.systemui.plugins.ActivityStarter;
@@ -61,11 +65,11 @@ import com.android.systemui.statusbar.phone.StatusBar;
 import com.android.systemui.statusbar.phone.StatusBarIconController;
 import com.android.systemui.statusbar.phone.StatusBarIconControllerImpl;
 import com.android.systemui.statusbar.phone.StatusBarRemoteInputCallback;
+import com.android.systemui.statusbar.phone.SystemUIHostDialogProvider;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallController;
 import com.android.systemui.statusbar.phone.ongoingcall.OngoingCallLogger;
 import com.android.systemui.statusbar.policy.RemoteInputUriController;
 import com.android.systemui.tracing.ProtoTracer;
-import com.android.systemui.util.DeviceConfigProxy;
 import com.android.systemui.util.concurrency.DelayableExecutor;
 import com.android.systemui.util.time.SystemClock;
 import com.android.wm.shell.bubbles.Bubbles;
@@ -98,7 +102,8 @@ public interface StatusBarDependenciesModule {
             Handler mainHandler,
             RemoteInputUriController remoteInputUriController,
             NotificationClickNotifier clickNotifier,
-            ActionClickLogger actionClickLogger) {
+            ActionClickLogger actionClickLogger,
+            DumpManager dumpManager) {
         return new NotificationRemoteInputManager(
                 context,
                 lockscreenUserManager,
@@ -109,7 +114,8 @@ public interface StatusBarDependenciesModule {
                 mainHandler,
                 remoteInputUriController,
                 clickNotifier,
-                actionClickLogger);
+                actionClickLogger,
+                dumpManager);
     }
 
     /** */
@@ -126,8 +132,8 @@ public interface StatusBarDependenciesModule {
             NotifCollection notifCollection,
             FeatureFlags featureFlags,
             @Main DelayableExecutor mainExecutor,
-            DeviceConfigProxy deviceConfigProxy,
-            MediaDataManager mediaDataManager) {
+            MediaDataManager mediaDataManager,
+            DumpManager dumpManager) {
         return new NotificationMediaManager(
                 context,
                 statusBarOptionalLazy,
@@ -139,8 +145,8 @@ public interface StatusBarDependenciesModule {
                 notifCollection,
                 featureFlags,
                 mainExecutor,
-                deviceConfigProxy,
-                mediaDataManager);
+                mediaDataManager,
+                dumpManager);
     }
 
     /** */
@@ -246,11 +252,12 @@ public interface StatusBarDependenciesModule {
             ActivityStarter activityStarter,
             @Main Executor mainExecutor,
             IActivityManager iActivityManager,
-            OngoingCallLogger logger) {
+            OngoingCallLogger logger,
+            DumpManager dumpManager) {
         OngoingCallController ongoingCallController =
                 new OngoingCallController(
                         notifCollection, featureFlags, systemClock, activityStarter, mainExecutor,
-                        iActivityManager, logger);
+                        iActivityManager, logger, dumpManager);
         ongoingCallController.init();
         return ongoingCallController;
     }
@@ -259,4 +266,29 @@ public interface StatusBarDependenciesModule {
     @Binds
     QSCarrierGroupController.SlotIndexResolver provideSlotIndexResolver(
             QSCarrierGroupController.SubscriptionManagerSlotIndexResolver impl);
+
+    /**
+     */
+    @Provides
+    @SysUISingleton
+    static LaunchAnimator provideLaunchAnimator(Context context) {
+        return new LaunchAnimator(context);
+    }
+
+    /**
+     */
+    @Provides
+    @SysUISingleton
+    static ActivityLaunchAnimator provideActivityLaunchAnimator(LaunchAnimator launchAnimator) {
+        return new ActivityLaunchAnimator(launchAnimator);
+    }
+
+    /**
+     */
+    @Provides
+    @SysUISingleton
+    static DialogLaunchAnimator provideDialogLaunchAnimator(Context context,
+            LaunchAnimator launchAnimator) {
+        return new DialogLaunchAnimator(context, launchAnimator, new SystemUIHostDialogProvider());
+    }
 }

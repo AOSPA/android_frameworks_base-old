@@ -134,7 +134,7 @@ public class StartingWindowController implements RemoteCallable<StartingWindowCo
                 mStartingSurfaceDrawer.addSplashScreenStartingWindow(windowInfo, appToken,
                         suggestionType);
             } else if (suggestionType == STARTING_WINDOW_TYPE_SNAPSHOT) {
-                final TaskSnapshot snapshot = windowInfo.mTaskSnapshot;
+                final TaskSnapshot snapshot = windowInfo.taskSnapshot;
                 mStartingSurfaceDrawer.makeTaskSnapshotWindow(windowInfo, appToken,
                         snapshot);
             }
@@ -177,6 +177,13 @@ public class StartingWindowController implements RemoteCallable<StartingWindowCo
     }
 
     /**
+     * Called when the IME has drawn on the organized task.
+     */
+    public void onImeDrawnOnTask(int taskId) {
+        mSplashScreenExecutor.execute(() -> mStartingSurfaceDrawer.onImeDrawnOnTask(taskId));
+    }
+
+    /**
      * Called when the content of a task is ready to show, starting window can be removed.
      */
     public void removeStartingWindow(int taskId, SurfaceControl leash, Rect frame,
@@ -216,6 +223,11 @@ public class StartingWindowController implements RemoteCallable<StartingWindowCo
             final int color = mStartingSurfaceDrawer.estimateTaskBackgroundColor(taskInfo);
             return color != Color.TRANSPARENT
                     ? color : SplashscreenContentDrawer.getSystemBGColor();
+        }
+
+        @Override
+        public void setSysuiProxy(SysuiProxy proxy) {
+            mSplashScreenExecutor.execute(() -> mStartingSurfaceDrawer.setSysuiProxy(proxy));
         }
     }
 

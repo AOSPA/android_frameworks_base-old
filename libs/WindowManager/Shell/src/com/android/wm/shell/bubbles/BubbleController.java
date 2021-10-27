@@ -69,6 +69,7 @@ import android.util.SparseArray;
 import android.util.SparseSetArray;
 import android.view.View;
 import android.view.ViewGroup;
+import android.view.WindowInsets;
 import android.view.WindowManager;
 import android.window.WindowContainerTransaction;
 
@@ -144,7 +145,6 @@ public class BubbleController {
 
     private BubbleLogger mLogger;
     private BubbleData mBubbleData;
-    private View mBubbleScrim;
     @Nullable private BubbleStackView mStackView;
     private BubbleIconFactory mBubbleIconFactory;
     private BubblePositioner mBubblePositioner;
@@ -188,6 +188,9 @@ public class BubbleController {
 
     /** Saved direction, used to detect layout direction changes @link #onConfigChanged}. */
     private int mLayoutDirection = View.LAYOUT_DIRECTION_UNDEFINED;
+
+    /** Saved insets, used to detect WindowInset changes. */
+    private WindowInsets mWindowInsets;
 
     private boolean mInflateSynchronously;
 
@@ -628,8 +631,14 @@ public class BubbleController {
             mAddedToWindowManager = true;
             mBubbleData.getOverflow().initialize(this);
             mWindowManager.addView(mStackView, mWmLayoutParams);
-            // Position info is dependent on us being attached to a window
-            mBubblePositioner.update();
+            mStackView.setOnApplyWindowInsetsListener((view, windowInsets) -> {
+                if (!windowInsets.equals(mWindowInsets)) {
+                    mWindowInsets = windowInsets;
+                    mBubblePositioner.update();
+                    mStackView.onDisplaySizeChanged();
+                }
+                return windowInsets;
+            });
         } catch (IllegalStateException e) {
             // This means the stack has already been added. This shouldn't happen...
             e.printStackTrace();
@@ -1369,8 +1378,9 @@ public class BubbleController {
     private class BubblesImeListener extends PinnedStackListenerForwarder.PinnedTaskListener {
         @Override
         public void onImeVisibilityChanged(boolean imeVisible, int imeHeight) {
+            mBubblePositioner.setImeVisible(imeVisible, imeHeight);
             if (mStackView != null) {
-                mStackView.onImeVisibilityChanged(imeVisible, imeHeight);
+                mStackView.animateForIme(imeVisible);
             }
         }
     }

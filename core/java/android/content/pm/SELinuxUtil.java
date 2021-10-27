@@ -16,7 +16,7 @@
 
 package android.content.pm;
 
-import com.android.internal.util.ArrayUtils;
+import android.content.pm.pkg.PackageUserState;
 
 /**
  * Utility methods that need to be used in application space.
@@ -31,11 +31,10 @@ public final class SELinuxUtil {
     public static final String COMPLETE_STR = ":complete";
 
     /** @hide */
-    public static String assignSeinfoUser(PackageUserState userState) {
-        if (userState.instantApp) {
+    public static String getSeinfoUser(PackageUserState userState) {
+        if (userState.isInstantApp()) {
            return INSTANT_APP_STR + COMPLETE_STR;
         }
         return COMPLETE_STR;
     }
-
 }

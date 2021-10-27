@@ -654,11 +654,19 @@
         -->
     </integer-array>
 
+    <!-- When entering this device state (defined in device_state_configuration.xml),
+         we should wake the device. -1 to disable the feature (do not wake on any device-state
+         transition). -->
+    <integer name="config_deviceStateOnWhichToWakeUp">-1</integer>
+
     <!-- Indicate the display area rect for foldable devices in folded state. -->
     <string name="config_foldedArea"></string>
 
     <!-- Indicates whether to enable an animation when unfolding a device or not -->
     <bool name="config_unfoldTransitionEnabled">false</bool>
+
+    <!-- Indicates whether to enable hinge angle sensor when using unfold animation -->
+    <bool name="config_unfoldTransitionHingeAngle">false</bool>
 
     <!-- Indicates that the device supports having more than one internal display on at the same
          time. Only applicable to devices with more than one internal display. If this option is
@@ -971,6 +979,20 @@
     -->
     <integer name="config_longPressOnPowerBehavior">5</integer>
 
+    <!-- The time in milliseconds after which a press on power button is considered "long". -->
+    <integer name="config_longPressOnPowerDurationMs">500</integer>
+
+    <!-- The possible UI options to be surfaced for configuring long press power on duration
+         action. Value set in config_longPressOnPowerDurationMs should be one of the available
+         options to allow users to restore default. -->
+    <integer-array name="config_longPressOnPowerDurationSettings">
+        <item>250</item>
+        <item>350</item>
+        <item>500</item>
+        <item>650</item>
+        <item>750</item>
+    </integer-array>
+
     <!-- Whether the setting to change long press on power behaviour from default to assistant (5)
          is available in Settings.
      -->
@@ -1063,34 +1085,27 @@
     <!-- Vibrator pattern for feedback about a long screen/key press -->
     <integer-array name="config_longPressVibePattern">
         <item>0</item>
-        <item>1</item>
-        <item>20</item>
-        <item>21</item>
+        <item>30</item>
     </integer-array>
 
     <!-- Vibrator pattern for feedback about touching a virtual key -->
     <integer-array name="config_virtualKeyVibePattern">
         <item>0</item>
-        <item>10</item>
         <item>20</item>
-        <item>30</item>
     </integer-array>
 
-    <!-- Vibrator pattern for a very short but reliable vibration for soft keyboard tap -->
-    <integer-array name="config_keyboardTapVibePattern">
-        <item>40</item>
+    <!-- Vibrator pattern for feedback that simulates a double click effect -->
+    <integer-array name="config_doubleClickVibePattern">
+        <item>0</item>
+        <item>30</item>
+        <item>100</item>
+        <item>30</item>
     </integer-array>
 
     <!-- Vibrator pattern for feedback when selecting an hour/minute tick of a Clock -->
     <integer-array name="config_clockTickVibePattern">
-        <item>125</item>
-        <item>30</item>
-    </integer-array>
-
-    <!-- Vibrator pattern for feedback when selecting a day/month/year date of a Calendar -->
-    <integer-array name="config_calendarDateVibePattern">
-        <item>125</item>
-        <item>30</item>
+        <item>0</item>
+        <item>10</item>
     </integer-array>
 
     <!-- Vibrator pattern for feedback about booting with safe mode enabled -->
@@ -1101,14 +1116,6 @@
         <item>21</item>
         <item>500</item>
         <item>600</item>
-    </integer-array>
-
-    <!-- Vibrator pattern for feedback about hitting a scroll barrier -->
-    <integer-array name="config_scrollBarrierVibePattern">
-        <item>0</item>
-        <item>15</item>
-        <item>10</item>
-        <item>10</item>
     </integer-array>
 
     <!-- The URI to associate with each ringtone effect constant, intended to be used with the
@@ -1437,6 +1444,14 @@
          The brightness values must be between 0 and 255 and be non-decreasing.
          This must be overridden in platform specific overlays -->
     <integer-array name="config_autoBrightnessLcdBacklightValues">
+    </integer-array>
+
+    <!-- Array of output values for LCD backlight in doze mode corresponding to the lux values
+         in the config_autoBrightnessLevels array.  This array should have size one greater
+         than the size of the config_autoBrightnessLevels array.
+         The brightness values must be between 0 and 255 and be non-decreasing.
+         This must be overridden in platform specific overlays -->
+    <integer-array name="config_autoBrightnessLcdBacklightValues_doze">
     </integer-array>
 
     <!-- Array of desired screen brightness in nits corresponding to the lux values
@@ -2303,6 +2318,15 @@
 
     <!-- Type of the tap sensor. Empty if tap is not supported. -->
     <string name="config_dozeTapSensorType" translatable="false"></string>
+
+    <!-- Type of the ambient tap sensor per device posture (defined by WM Jetpack posture).
+         Unspecified values use config_dozeTapSensor -->
+    <string-array name="config_dozeTapSensorPostureMapping" translatable="false">
+        <item></item> <!-- UNKNOWN -->
+        <item></item> <!-- CLOSED -->
+        <item></item> <!-- HALF_OPENED -->
+        <item></item> <!-- OPENED -->
+    </string-array>
 
     <!-- Type of the long press sensor. Empty if long press is not supported. -->
     <string name="config_dozeLongPressSensorType" translatable="false"></string>
@@ -3211,6 +3235,11 @@
          or a single SIM device can have 1 phones/logical modems, but 2 physical slots (one eSIM
          and one pSIM) -->
     <integer name="config_num_physical_slots">1</integer>
+
+    <!-- When a radio power off request is received, we will delay completing the request until
+         either IMS moves to the deregistered state or the timeout defined by this configuration
+         elapses. If 0, this feature is disabled and we do not delay radio power off requests.-->
+    <integer name="config_delay_for_ims_dereg_millis">0</integer>
 
     <!--Thresholds for LTE dbm in status bar-->
     <integer-array translatable="false" name="config_lteDbmThresholds">
@@ -4530,6 +4559,13 @@
          If non-positive, then the refresh rate is unchanged even if thresholds are configured. -->
     <integer name="config_fixedRefreshRateInHighZone">0</integer>
 
+    <!-- Default refresh rate while the device has high brightness mode enabled for Sunlight.
+         This value overrides values from DisplayDeviceConfig -->
+    <integer name="config_defaultRefreshRateInHbmSunlight">0</integer>
+
+    <!-- Default refresh rate while the device has high brightness mode enabled for HDR. -->
+    <integer name="config_defaultRefreshRateInHbmHdr">0</integer>
+
     <!-- The type of the light sensor to be used by the display framework for things like
          auto-brightness. If unset, then it just gets the default sensor of type TYPE_LIGHT. -->
     <string name="config_displayLightSensorType" translatable="false" />
@@ -4583,11 +4619,32 @@
       -->
     </integer-array>
 
+    <!-- An array of arrays of side fingerprint sensor properties relative to each display.
+         Note: this value is temporary and is expected to be queried directly
+         from the HAL in the future. -->
+    <array name="config_sfps_sensor_props" translatable="false">
+        <!--
+            <array>
+                <item>displayId</item>
+                <item>sensorLocationX</item>
+                <item>sensorLocationY</item>
+                <item>sensorRadius</item>
+            <array>
+        -->
+    </array>
+
     <!-- How long it takes for the HW to start illuminating after the illumination is requested. -->
     <integer name="config_udfps_illumination_transition_ms">50</integer>
 
     <!-- Indicates whether device has a power button fingerprint sensor. -->
     <bool name="config_is_powerbutton_fps" translatable="false" >false</bool>
+
+    <!-- When each intermediate UDFPS enroll stage ends, as a fraction of total progress. -->
+    <string-array name="config_udfps_enroll_stage_thresholds" translatable="false">
+        <item>0.25</item>
+        <item>0.5</item>
+        <item>0.75</item>
+    </string-array>
 
     <!-- Messages that should not be shown to the user during face auth enrollment. This should be
          used to hide messages that may be too chatty or messages that the user can't do much about.
@@ -4853,8 +4910,8 @@
     <item name="config_fixedOrientationLetterboxAspectRatio" format="float" type="dimen">0.0</item>
 
     <!-- Corners radius for activity presented the letterbox mode. Values < 0 will be ignored and
-         corners of the activity won't be rounded. -->
-    <integer name="config_letterboxActivityCornersRadius">0</integer>
+         min between device bottom corner radii will be used instead. -->
+    <integer name="config_letterboxActivityCornersRadius">-1</integer>
 
     <!-- Blur radius for the Option 3 in R.integer.config_letterboxBackgroundType. Values < 0 are
         ignored and 0 is used. -->
@@ -4888,14 +4945,27 @@
             - Option 3 is selected for R.integer.config_letterboxBackgroundType and blur requested
             but isn't supported on the device or both dark scrim alpha and blur radius aren't
             provided.
-        Defaults to black if not specified.
      -->
-    <color name="config_letterboxBackgroundColor">#000</color>
+    <color name="config_letterboxBackgroundColor">@android:color/system_neutral2_500</color>
 
     <!-- Horizonal position of a center of the letterboxed app window.
         0 corresponds to the left side of the screen and 1 to the right side. If given value < 0
         or > 1, it is ignored and central positionis used (0.5). -->
     <item name="config_letterboxHorizontalPositionMultiplier" format="float" type="dimen">0.5</item>
+
+    <!-- Whether reachability repositioning is allowed for letterboxed fullscreen apps in landscape
+        device orientation. -->
+    <bool name="config_letterboxIsReachabilityEnabled">false</bool>
+
+    <!-- Default horizonal position of the letterboxed app window when reachability is
+        enabled and an app is fullscreen in landscape device orientation. When reachability is
+        enabled, the position can change between left, center and right. This config defines the
+        default one:
+            - Option 0 - Left.
+            - Option 1 - Center.
+            - Option 2 - Right.
+        If given value is outside of this range, the option 1 (center) is assummed. -->
+    <integer name="config_letterboxDefaultPositionForReachability">1</integer>
 
     <!-- If true, hide the display cutout with display area -->
     <bool name="config_hideDisplayCutoutWithDisplayArea">false</bool>
@@ -5136,6 +5206,14 @@
            - config_fillBuiltInDisplayCutoutArray
            - config_maskBuiltInDisplayCutoutArray
            - config_waterfallCutoutArray
+           - config_roundedCornerRadiusArray
+           - config_roundedCornerTopRadiusArray
+           - config_roundedCornerBottomRadiusArray
+           - config_builtInDisplayIsRoundArray (config in SystemUI resource)
+           - config_roundedCornerMultipleRadiusArray (config in SystemUI resource)
+           - config_roundedCornerDrawableArray (config in SystemUI resource)
+           - config_roundedCornerTopDrawableArray (config in SystemUI resource)
+           - config_roundedCornerBottomDrawableArray (config in SystemUI resource)
 
          Leave this array empty for single display device and the system will load the default main
          built-in related configs.
@@ -5192,9 +5270,70 @@
         <item>@array/config_secondaryBuiltInDisplayWaterfallCutout</item>
     </array>
 
+    <!-- The component name of the activity for the companion-device-manager notification access
+     confirmation. -->
+    <string name="config_notificationAccessConfirmationActivity" translatable="false">
+        com.android.settings/com.android.settings.notification.NotificationAccessConfirmationActivity
+    </string>
+
     <!-- Whether the airplane mode should be reset when device boots in non-safemode after exiting
          from safemode.
          This flag should be enabled only when the product does not have any UI to toggle airplane
          mode like automotive devices.-->
     <bool name="config_autoResetAirplaneMode">false</bool>
+
+    <!-- Wear OS: the name of the package containing the device's sysui. -->
+    <string name="config_wearSysUiPackage" translatable="false"/>
+
+    <!-- Wear OS: the name of the main activity of the device's sysui. -->
+    <string name="config_wearSysUiMainActivity" translatable="false"/>
+
+    <bool name="config_secondaryBuiltInDisplayIsRound">@bool/config_windowIsRound</bool>
+
+    <!-- The display round config for each display in a multi-display device. -->
+    <array name="config_builtInDisplayIsRoundArray" translatable="false">
+        <item>@bool/config_mainBuiltInDisplayIsRound</item>
+        <item>@bool/config_secondaryBuiltInDisplayIsRound</item>
+    </array>
+
+    <!-- The rounded corner radius for each display in a multi-display device. -->
+    <array name="config_roundedCornerRadiusArray" translatable="false">
+        <item>@dimen/rounded_corner_radius</item>
+        <item>@dimen/secondary_rounded_corner_radius</item>
+    </array>
+
+    <!-- The top rounded corner radius for each display in a multi-display device. -->
+    <array name="config_roundedCornerTopRadiusArray" translatable="false">
+        <item>@dimen/rounded_corner_radius_top</item>
+        <item>@dimen/secondary_rounded_corner_radius_top</item>
+    </array>
+
+    <!-- The bottom rounded corner radius for each display in a multi-display device. -->
+    <array name="config_roundedCornerBottomRadiusArray" translatable="false">
+        <item>@dimen/rounded_corner_radius_bottom</item>
+        <item>@dimen/secondary_rounded_corner_radius_bottom</item>
+    </array>
+
+    <!-- The rounded corner radius adjustment for each display in a multi-display device. -->
+    <array name="config_roundedCornerRadiusAdjustmentArray" translatable="false">
+        <item>@dimen/rounded_corner_radius_adjustment</item>
+        <item>@dimen/secondary_rounded_corner_radius_adjustment</item>
+    </array>
+
+    <!-- The rounded corner radius top adjustment for each display in a multi-display device. -->
+    <array name="config_roundedCornerTopRadiusAdjustmentArray" translatable="false">
+        <item>@dimen/rounded_corner_radius_top_adjustment</item>
+        <item>@dimen/secondary_rounded_corner_radius_top_adjustment</item>
+    </array>
+
+    <!-- The rounded corner radius bottom adjustment for each display in a multi-display device. -->
+    <array name="config_roundedCornerBottomRadiusAdjustmentArray" translatable="false">
+        <item>@dimen/rounded_corner_radius_bottom_adjustment</item>
+        <item>@dimen/secondary_rounded_corner_radius_bottom_adjustment</item>
+    </array>
+
+    <!-- Shape of the work badge icon for viewport size 24. -->
+    <string name="config_work_badge_path_24" translatable="false">
+        M20,6h-4L16,4c0,-1.11 -0.89,-2 -2,-2h-4c-1.11,0 -2,0.89 -2,2v2L4,6c-1.11,0 -1.99,0.89 -1.99,2L2,19c0,1.11 0.89,2 2,2h16c1.11,0 2,-0.89 2,-2L22,8c0,-1.11 -0.89,-2 -2,-2zM14,6h-4L10,4h4v2z
+    </string>
 </resources>

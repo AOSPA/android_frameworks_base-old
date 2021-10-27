@@ -388,7 +388,8 @@ public class HardwareRenderer {
          */
         public @NonNull FrameRenderRequest setFrameCommitCallback(@NonNull Executor executor,
                 @NonNull Runnable frameCommitCallback) {
-            setFrameCompleteCallback(frameNr -> executor.execute(frameCommitCallback));
+            nSetFrameCommitCallback(mNativeProxy,
+                    didProduceBuffer -> executor.execute(frameCommitCallback));
             return this;
         }
 
@@ -609,6 +610,11 @@ public class HardwareRenderer {
     }
 
     /** @hide */
+    public void setFrameCommitCallback(FrameCommitCallback callback) {
+        nSetFrameCommitCallback(mNativeProxy, callback);
+    }
+
+    /** @hide */
     public void setFrameCompleteCallback(FrameCompleteCallback callback) {
         nSetFrameCompleteCallback(mNativeProxy, callback);
     }
@@ -752,22 +758,14 @@ public class HardwareRenderer {
         nCancelLayerUpdate(mNativeProxy, layer.getDeferredLayerUpdater());
     }
 
-    private ASurfaceTransactionCallback mASurfaceTransactionCallback;
-
     /** @hide */
-    public void setASurfaceTransactionCallback(ASurfaceTransactionCallback callback) {
-        // ensure callback is kept alive on the java side since weak ref is used in native code
-        mASurfaceTransactionCallback = callback;
+    protected void setASurfaceTransactionCallback(ASurfaceTransactionCallback callback) {
         nSetASurfaceTransactionCallback(mNativeProxy, callback);
     }
 
-    private PrepareSurfaceControlForWebviewCallback mAPrepareSurfaceControlForWebviewCallback;
-
     /** @hide */
-    public void setPrepareSurfaceControlForWebviewCallback(
+    protected void setPrepareSurfaceControlForWebviewCallback(
             PrepareSurfaceControlForWebviewCallback callback) {
-        // ensure callback is kept alive on the java side since weak ref is used in native code
-        mAPrepareSurfaceControlForWebviewCallback = callback;
         nSetPrepareSurfaceControlForWebviewCallback(mNativeProxy, callback);
     }
 
@@ -820,6 +818,13 @@ public class HardwareRenderer {
      */
     public boolean loadSystemProperties() {
         return nLoadSystemProperties(mNativeProxy);
+    }
+
+    /**
+     * @hide
+     */
+    public static void dumpGlobalProfileInfo(FileDescriptor fd, @DumpFlags int dumpFlags) {
+        nDumpGlobalProfileInfo(fd, dumpFlags);
     }
 
     /**
@@ -904,13 +909,27 @@ public class HardwareRenderer {
      *
      * @hide
      */
+    public interface FrameCommitCallback {
+        /**
+         * Invoked after a new frame was drawn
+         *
+         * @param didProduceBuffer The draw successfully produced a new buffer.
+         */
+        void onFrameCommit(boolean didProduceBuffer);
+    }
+
+    /**
+     * Interface used to be notified when RenderThread has finished an attempt to draw. This doesn't
+     * mean a new frame has drawn, specifically if there's nothing new to draw, but only that
+     * RenderThread had a chance to draw a frame.
+     *
+     * @hide
+     */
     public interface FrameCompleteCallback {
         /**
-         * Invoked after a frame draw
-         *
-         * @param frameNr The id of the frame that was drawn.
+         * Invoked after a frame draw was attempted.
          */
-        void onFrameComplete(long frameNr);
+        void onFrameComplete();
     }
 
     /**
@@ -1299,7 +1318,7 @@ public class HardwareRenderer {
     /**
      * @hide
      */
-    public static native boolean isWebViewOverlaysEnabled();
+    protected static native boolean isWebViewOverlaysEnabled();
 
     /** @hide */
     protected static native void setupShadersDiskCache(String cacheFile, String skiaCacheFile);
@@ -1378,6 +1397,8 @@ public class HardwareRenderer {
     private static native void nDumpProfileInfo(long nativeProxy, FileDescriptor fd,
             @DumpFlags int dumpFlags);
 
+    private static native void nDumpGlobalProfileInfo(FileDescriptor fd, @DumpFlags int dumpFlags);
+
     private static native void nAddRenderNode(long nativeProxy, long rootRenderNode,
             boolean placeFront);
 
@@ -1398,6 +1419,9 @@ public class HardwareRenderer {
             PrepareSurfaceControlForWebviewCallback callback);
 
     private static native void nSetFrameCallback(long nativeProxy, FrameDrawingCallback callback);
+
+    private static native void nSetFrameCommitCallback(long nativeProxy,
+            FrameCommitCallback callback);
 
     private static native void nSetFrameCompleteCallback(long nativeProxy,
             FrameCompleteCallback callback);

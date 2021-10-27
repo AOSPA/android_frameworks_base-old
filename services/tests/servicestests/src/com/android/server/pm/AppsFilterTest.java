@@ -762,7 +762,7 @@ public class AppsFilterTest {
         ParsingPackage overlay = pkg("com.some.package.overlay")
                 .setOverlay(true)
                 .setOverlayTarget(target.getPackageName())
-                .setOverlayTargetName("overlayableName");
+                .setOverlayTargetOverlayableName("overlayableName");
         ParsingPackage actor = pkg("com.some.package.actor");
 
         final AppsFilter appsFilter = new AppsFilter(
@@ -787,7 +787,7 @@ public class AppsFilterTest {
                         if (overlay.getPackageName().equals(pkg.getPackageName())) {
                             Map<String, Set<String>> map = new ArrayMap<>();
                             Set<String> set = new ArraySet<>();
-                            set.add(overlay.getOverlayTargetName());
+                            set.add(overlay.getOverlayTargetOverlayableName());
                             map.put(overlay.getOverlayTarget(), set);
                             return map;
                         }
@@ -829,7 +829,7 @@ public class AppsFilterTest {
         assertTrue(appsFilter.shouldFilterApplication(DUMMY_OVERLAY_APPID, overlaySetting,
                 actorSetting, SYSTEM_USER));
 
-        appsFilter.removePackage(targetSetting);
+        appsFilter.removePackage(targetSetting, false /* isReplace */);
 
         // Actor loses visibility to the overlay via removal of the target
         assertTrue(appsFilter.shouldFilterApplication(DUMMY_ACTOR_APPID, actorSetting,
@@ -847,7 +847,7 @@ public class AppsFilterTest {
         ParsingPackage overlay = pkg("com.some.package.overlay")
                 .setOverlay(true)
                 .setOverlayTarget(target.getPackageName())
-                .setOverlayTargetName("overlayableName");
+                .setOverlayTargetOverlayableName("overlayableName");
         ParsingPackage actorOne = pkg("com.some.package.actor.one");
         ParsingPackage actorTwo = pkg("com.some.package.actor.two");
 
@@ -874,7 +874,7 @@ public class AppsFilterTest {
                         if (overlay.getPackageName().equals(pkg.getPackageName())) {
                             Map<String, Set<String>> map = new ArrayMap<>();
                             Set<String> set = new ArraySet<>();
-                            set.add(overlay.getOverlayTargetName());
+                            set.add(overlay.getOverlayTargetOverlayableName());
                             map.put(overlay.getOverlayTarget(), set);
                             return map;
                         }
@@ -914,7 +914,8 @@ public class AppsFilterTest {
         PackageSetting target = simulateAddPackage(appsFilter, pkg("com.some.package"),
                 DUMMY_TARGET_APPID);
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(target.name, null, null, null, false));
+                DUMMY_CALLING_APPID,
+                withInstallSource(target.getPackageName(), null, null, null, false));
 
         assertFalse(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
                 SYSTEM_USER));
@@ -931,7 +932,8 @@ public class AppsFilterTest {
         PackageSetting target = simulateAddPackage(appsFilter, pkg("com.some.package"),
                 DUMMY_TARGET_APPID);
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(target.name, null, null, null, true));
+                DUMMY_CALLING_APPID,
+                withInstallSource(target.getPackageName(), null, null, null, true));
 
         assertTrue(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
                 SYSTEM_USER));
@@ -953,7 +955,8 @@ public class AppsFilterTest {
                 DUMMY_TARGET_APPID);
         watcher.verifyChangeReported("add package");
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(null, target.name, null, null, false));
+                DUMMY_CALLING_APPID, withInstallSource(null, target.getPackageName(), null, null,
+                        false));
         watcher.verifyChangeReported("add package");
 
         assertTrue(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
@@ -977,7 +980,8 @@ public class AppsFilterTest {
                 DUMMY_TARGET_APPID);
         watcher.verifyChangeReported("add package");
         PackageSetting calling = simulateAddPackage(appsFilter, pkg("com.some.other.package"),
-                DUMMY_CALLING_APPID, withInstallSource(null, null, target.name, null, false));
+                DUMMY_CALLING_APPID, withInstallSource(null, null, target.getPackageName(), null,
+                        false));
         watcher.verifyChangeReported("add package");
 
         assertFalse(appsFilter.shouldFilterApplication(DUMMY_CALLING_APPID, calling, target,
@@ -1074,7 +1078,8 @@ public class AppsFilterTest {
         watcher.verifyNoChangeReported("getVisibility");
 
         // provider read
-        appsFilter.grantImplicitAccess(hasProviderAppId, queriesProviderAppId);
+        appsFilter.grantImplicitAccess(hasProviderAppId, queriesProviderAppId,
+                false /* retainOnUpdate */);
         watcher.verifyChangeReported("grantImplicitAccess");
 
         // ensure implicit access is included in the filter
@@ -1143,7 +1148,8 @@ public class AppsFilterTest {
         watcher.verifyNoChangeReported("get");
 
         // provider read
-        appsFilter.grantImplicitAccess(hasProviderAppId, queriesProviderAppId);
+        appsFilter.grantImplicitAccess(
+                hasProviderAppId, queriesProviderAppId, false /* retainOnUpdate */);
         watcher.verifyChangeReported("grantImplicitAccess");
 
         // ensure implicit access is included in the filter
@@ -1154,7 +1160,7 @@ public class AppsFilterTest {
         watcher.verifyNoChangeReported("get");
 
         // remove a package
-        appsFilter.removePackage(seesNothing);
+        appsFilter.removePackage(seesNothing, false /* isReplace */);
         watcher.verifyChangeReported("removePackage");
     }
 
@@ -1231,7 +1237,7 @@ public class AppsFilterTest {
         mExisting.put(newPkg.getPackageName(), setting);
         if (sharedUserSetting != null) {
             sharedUserSetting.addPackage(setting);
-            setting.sharedUser = sharedUserSetting;
+            setting.setSharedUser(sharedUserSetting);
         }
         filter.addPackage(setting);
         return setting;

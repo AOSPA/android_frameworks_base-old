@@ -332,6 +332,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"uskutečňování a spravování telefonních hovorů"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Tělesné senzory"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"přístup k datům ze snímačů vašich životních funkcí"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Oznámení"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"zobrazovat oznámení"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Načítat obsah oken"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Může prozkoumávat obsah oken, se kterými pracujete."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Zapnout funkci Prozkoumání dotykem"</string>
@@ -555,6 +557,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Umožňuje aplikaci vypnout zámek kláves a související zabezpečení heslem. Telefon například vypne zámek klávesnice při příchozím hovoru a po skončení hovoru jej zase zapne."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"zjištění složitosti zámku obrazovky"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Umožňuje aplikaci zjistit úroveň složitosti zámku obrazovky (vysoká, střední, nízká nebo žádná), která ukazuje možnou délku a typ zámku obrazovky. Aplikace také může uživatelům navrhovat, aby zámek obrazovky upravili na určitou úroveň, ale uživatelé mohou návrhy klidně ignorovat a odejít. Zámek obrazovky není uložen jako prostý text, a tak aplikace přesné heslo nezná."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"zobrazovat oznámení"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Povolí aplikaci zobrazovat oznámení"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"použití biometrického hardwaru"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Umožňuje aplikaci použít k ověření biometrický hardware"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"správa hardwaru na čtení otisků prstů"</string>
@@ -615,6 +619,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Pokračujte ověřením pomocí otisku prstu nebo zámku obrazovky"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Došlo k chybě. Zkuste to znovu."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Ikona otisku prstů"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Odemknutí obličejem"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Problém s odemykáním obličejem"</string>
@@ -667,6 +672,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Pokračujte ověřením pomocí obličeje nebo zámku obrazovky"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Došlo k chybě. Zkuste to znovu."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Ikona obličeje"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"čtení nastavení synchronizace"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Umožňuje aplikaci číst nastavení synchronizace v účtu. Může například určit, zda je s účtem synchronizována aplikace Lidé."</string>
@@ -1370,9 +1376,9 @@
     <string name="sms_control_message" msgid="6574313876316388239">"Aplikace &lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt;odesílá velký počet SMS zpráv. Chcete aplikaci povolit, aby zprávy odesílala i nadále?"</string>
     <string name="sms_control_yes" msgid="4858845109269524622">"Povolit"</string>
     <string name="sms_control_no" msgid="4845717880040355570">"Odmítnout"</string>
-    <string name="sms_short_code_confirm_message" msgid="1385416688897538724">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; chce odeslat zprávu na adresu &lt;b&gt;<xliff:g id="DEST_ADDRESS">%2$s</xliff:g>&lt;/b&gt;."</string>
+    <string name="sms_short_code_confirm_message" msgid="1385416688897538724">"&lt;b&gt;<xliff:g id="APP_NAME">%1$s</xliff:g>&lt;/b&gt; chce odeslat zprávu na číslo &lt;b&gt;<xliff:g id="DEST_ADDRESS">%2$s</xliff:g>&lt;/b&gt;."</string>
     <string name="sms_short_code_details" msgid="2723725738333388351">"Tato akce "<b>"může vést k naúčtování poplatků"</b>" na váš účet u mobilního operátora."</string>
-    <string name="sms_premium_short_code_details" msgid="1400296309866638111"><b>"Tato akce povede k naúčtování poplatku na váš účet u mobilního operátora."</b></string>
+    <string name="sms_premium_short_code_details" msgid="1400296309866638111"><b>"Tato akce může vést k naúčtování ceny služby třetí strany na vrub vašeho účtu u mobilního operátora."</b></string>
     <string name="sms_short_code_confirm_allow" msgid="920477594325526691">"Odeslat"</string>
     <string name="sms_short_code_confirm_deny" msgid="1356917469323768230">"Zrušit"</string>
     <string name="sms_short_code_remember_choice" msgid="1374526438647744862">"Zapamatovat moji volbu"</string>
@@ -1736,7 +1742,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Když je tato zkratka zapnutá, můžete funkci přístupnosti spustit tím, že na tři sekundy podržíte obě tlačítka hlasitosti."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Zapnout zkratku funkcí pro usnadnění přístupu?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Podržením obou tlačítek hlasitosti po dobu několika sekund zapnete funkce pro usnadnění přístupu. Tato funkce může změnit fungování zařízení.\n\nAktuální funkce:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nVybrané funkce můžete změnit v Nastavení &gt; Přístupnost."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Zapnout zkratku služby <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Podržením obou tlačítek hlasitosti po dobu několika sekund zapnete funkci pro usnadnění přístupu <xliff:g id="SERVICE">%1$s</xliff:g>. Tato funkce může změnit fungování zařízení.\n\nZkratku můžete nastavit na jinou funkci v Nastavení &gt; Přístupnost."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Zapnout"</string>

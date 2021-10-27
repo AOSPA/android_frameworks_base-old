@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.Postsubmit
 import android.view.Surface
 import androidx.test.filters.RequiresDevice
 import com.android.server.wm.flicker.FlickerParametersRunnerFactory
@@ -53,7 +52,6 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
-@Postsubmit
 class ExitPipViaExpandButtonClickTest(
     testSpec: FlickerTestParameter
 ) : ExitPipToAppTransition(testSpec) {
@@ -72,6 +70,8 @@ class ExitPipViaExpandButtonClickTest(
             transitions {
                 // This will bring PipApp to fullscreen
                 pipApp.expandPipWindowToApp(wmHelper)
+                // Wait until the other app is no longer visible
+                wmHelper.waitForSurfaceAppeared(testApp.component.toWindowName())
             }
         }
 

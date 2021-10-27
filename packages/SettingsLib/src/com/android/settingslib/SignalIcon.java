@@ -15,6 +15,8 @@
  */
 package com.android.settingslib;
 
+import com.android.settingslib.mobile.TelephonyIcons;
+
 import java.text.SimpleDateFormat;
 import java.util.Objects;
 
@@ -40,9 +42,17 @@ public class SignalIcon {
         // For logging.
         public final String name;
 
-        public IconGroup(String name, int[][] sbIcons, int[][] qsIcons, int[] contentDesc,
-                int sbNullState, int qsNullState, int sbDiscState, int qsDiscState,
-                int discContentDesc) {
+        public IconGroup(
+                String name,
+                int[][] sbIcons,
+                int[][] qsIcons,
+                int[] contentDesc,
+                int sbNullState,
+                int qsNullState,
+                int sbDiscState,
+                int qsDiscState,
+                int discContentDesc
+        ) {
             this.name = name;
             this.sbIcons = sbIcons;
             this.qsIcons = qsIcons;
@@ -131,6 +141,19 @@ public class SignalIcon {
                     && other.activityOut == activityOut
                     && other.rssi == rssi;
         }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(
+                    connected,
+                    enabled,
+                    level,
+                    inetCondition,
+                    iconGroup,
+                    activityIn,
+                    activityOut,
+                    rssi);
+        }
     }
 
     /**
@@ -139,18 +162,31 @@ public class SignalIcon {
     public static class MobileIconGroup extends IconGroup {
         public final int dataContentDescription; // mContentDescriptionDataType
         public final int dataType;
-        public final boolean isWide;
-        public final int qsDataType;
 
-        public MobileIconGroup(String name, int[][] sbIcons, int[][] qsIcons, int[] contentDesc,
-                int sbNullState, int qsNullState, int sbDiscState, int qsDiscState,
-                int discContentDesc, int dataContentDesc, int dataType, boolean isWide) {
-            super(name, sbIcons, qsIcons, contentDesc, sbNullState, qsNullState, sbDiscState,
-                qsDiscState, discContentDesc);
+        public MobileIconGroup(
+                String name,
+                int[][] sbIcons,
+                int[][] qsIcons,
+                int[] contentDesc,
+                int sbNullState,
+                int qsNullState,
+                int sbDiscState,
+                int qsDiscState,
+                int discContentDesc,
+                int dataContentDesc,
+                int dataType
+        ) {
+            super(name,
+                    sbIcons,
+                    qsIcons,
+                    contentDesc,
+                    sbNullState,
+                    qsNullState,
+                    sbDiscState,
+                    qsDiscState,
+                    discContentDesc);
             this.dataContentDescription = dataContentDesc;
             this.dataType = dataType;
-            this.isWide = isWide;
-            this.qsDataType = dataType; // TODO: remove this field
         }
     }
 
@@ -197,6 +233,27 @@ public class SignalIcon {
             roamingDataEnabled = state.roamingDataEnabled;
         }
 
+        /** @return true if this state is disabled or not default data */
+        public boolean isDataDisabledOrNotDefault() {
+            return (iconGroup == TelephonyIcons.DATA_DISABLED
+                    || (iconGroup == TelephonyIcons.NOT_DEFAULT_DATA)) && userSetup;
+        }
+
+        /** @return if this state is considered to have inbound activity */
+        public boolean hasActivityIn() {
+            return dataConnected && !carrierNetworkChangeMode && activityIn;
+        }
+
+        /** @return if this state is considered to have outbound activity */
+        public boolean hasActivityOut() {
+            return dataConnected && !carrierNetworkChangeMode && activityOut;
+        }
+
+        /** @return true if this state should show a RAT icon in quick settings */
+        public boolean showQuickSettingsRatIcon() {
+            return dataConnected || isDataDisabledOrNotDefault();
+        }
+
         @Override
         protected void toString(StringBuilder builder) {
             super.toString(builder);
@@ -212,12 +269,13 @@ public class SignalIcon {
             builder.append("carrierNetworkChangeMode=").append(carrierNetworkChangeMode)
                     .append(',');
             builder.append("userSetup=").append(userSetup).append(',');
-            builder.append("defaultDataOff=").append(defaultDataOff);
+            builder.append("defaultDataOff=").append(defaultDataOff).append(',');
             builder.append("imsRegistered=").append(imsRegistered).append(',');
             builder.append("voiceCapable=").append(voiceCapable).append(',');
             builder.append("videoCapable=").append(videoCapable).append(',');
             builder.append("mobileDataEnabled=").append(mobileDataEnabled).append(',');
             builder.append("roamingDataEnabled=").append(roamingDataEnabled);
+            builder.append("showQuickSettingsRatIcon=").append(showQuickSettingsRatIcon());
         }
 
         @Override
@@ -239,6 +297,27 @@ public class SignalIcon {
                     && ((MobileState) o).videoCapable == videoCapable
                     && ((MobileState) o).mobileDataEnabled == mobileDataEnabled
                     && ((MobileState) o).roamingDataEnabled == roamingDataEnabled;
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(super.hashCode(),
+                    networkName,
+                    networkNameData,
+                    dataSim,
+                    dataConnected,
+                    isEmergency,
+                    airplaneMode,
+                    carrierNetworkChangeMode,
+                    userSetup,
+                    isDefault,
+                    roaming,
+                    defaultDataOff,
+                    imsRegistered,
+                    voiceCapable,
+                    videoCapable,
+                    mobileDataEnabled,
+                    roamingDataEnabled);
         }
     }
 }

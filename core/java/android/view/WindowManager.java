@@ -123,6 +123,7 @@ import java.lang.annotation.RetentionPolicy;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.Executor;
 import java.util.function.Consumer;
 
@@ -320,6 +321,25 @@ public interface WindowManager extends ViewManager {
     int TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE = 27;
 
     /**
+     * A window in a new task fragment is being opened.
+     * @hide
+     */
+    int TRANSIT_OLD_TASK_FRAGMENT_OPEN = 28;
+
+    /**
+     * A window in the top-most activity of task fragment is being closed to reveal the activity
+     * below.
+     * @hide
+     */
+    int TRANSIT_OLD_TASK_FRAGMENT_CLOSE = 29;
+
+    /**
+     * A window of task fragment is changing bounds.
+     * @hide
+     */
+    int TRANSIT_OLD_TASK_FRAGMENT_CHANGE = 30;
+
+    /**
      * @hide
      */
     @IntDef(prefix = { "TRANSIT_OLD_" }, value = {
@@ -344,7 +364,10 @@ public interface WindowManager extends ViewManager {
             TRANSIT_OLD_TRANSLUCENT_ACTIVITY_OPEN,
             TRANSIT_OLD_TRANSLUCENT_ACTIVITY_CLOSE,
             TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE,
-            TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE
+            TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE,
+            TRANSIT_OLD_TASK_FRAGMENT_OPEN,
+            TRANSIT_OLD_TASK_FRAGMENT_CLOSE,
+            TRANSIT_OLD_TASK_FRAGMENT_CHANGE
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface TransitionOldType {}
@@ -381,8 +404,11 @@ public interface WindowManager extends ViewManager {
     int TRANSIT_CHANGE = 6;
     /**
      * The keyguard was visible and has been dismissed.
+     * @deprecated use {@link #TRANSIT_TO_BACK} + {@link #TRANSIT_FLAG_KEYGUARD_GOING_AWAY} for
+     *             keyguard going away with Shell transition.
      * @hide
      */
+    @Deprecated
     int TRANSIT_KEYGUARD_GOING_AWAY = 7;
     /**
      * A window is appearing above a locked keyguard.
@@ -487,6 +513,12 @@ public interface WindowManager extends ViewManager {
     int TRANSIT_FLAG_IS_RECENTS = 0x80;
 
     /**
+     * Transition flag: Indicates that keyguard should go away with this transition.
+     * @hide
+     */
+    int TRANSIT_FLAG_KEYGUARD_GOING_AWAY = 0x100;
+
+    /**
      * @hide
      */
     @IntDef(flag = true, prefix = { "TRANSIT_FLAG_" }, value = {
@@ -497,7 +529,8 @@ public interface WindowManager extends ViewManager {
             TRANSIT_FLAG_APP_CRASHED,
             TRANSIT_FLAG_OPEN_BEHIND,
             TRANSIT_FLAG_KEYGUARD_LOCKED,
-            TRANSIT_FLAG_IS_RECENTS
+            TRANSIT_FLAG_IS_RECENTS,
+            TRANSIT_FLAG_KEYGUARD_GOING_AWAY
     })
     @Retention(RetentionPolicy.SOURCE)
     @interface TransitionFlags {}
@@ -678,6 +711,20 @@ public interface WindowManager extends ViewManager {
      * @see Display#getRealSize(Point)
      */
     default @NonNull WindowMetrics getMaximumWindowMetrics() {
+        throw new UnsupportedOperationException();
+    }
+
+    /**
+     * Returns a set of {@link WindowMetrics} for the given display. Each WindowMetrics instance
+     * is the maximum WindowMetrics for a device state, including rotations. This is not guaranteed
+     * to include all possible device states.
+     *
+     * This API can only be used by Launcher.
+     *
+     * @param displayId the id of the logical display
+     * @hide
+     */
+    default @NonNull Set<WindowMetrics> getPossibleMaximumWindowMetrics(int displayId) {
         throw new UnsupportedOperationException();
     }
 
@@ -2095,6 +2142,7 @@ public interface WindowManager extends ViewManager {
          * {@hide}
          */
         @UnsupportedAppUsage
+        @TestApi
         public static final int FLAG_SLIPPERY = 0x20000000;
 
         /**
@@ -3499,6 +3547,14 @@ public interface WindowManager extends ViewManager {
         public Insets providedInternalInsets = Insets.NONE;
 
         /**
+         * If specified, the insets provided by this window for the IME will be our window frame
+         * minus the insets specified by providedInternalImeInsets.
+         *
+         * @hide
+         */
+        public Insets providedInternalImeInsets = Insets.NONE;
+
+        /**
          * {@link LayoutParams} to be applied to the window when layout with a assigned rotation.
          * This will make layout during rotation change smoothly.
          *
@@ -3872,6 +3928,7 @@ public interface WindowManager extends ViewManager {
                 out.writeInt(0);
             }
             providedInternalInsets.writeToParcel(out, 0 /* parcelableFlags */);
+            providedInternalImeInsets.writeToParcel(out, 0 /* parcelableFlags */);
             if (paramsForRotation != null) {
                 checkNonRecursiveParams();
                 out.writeInt(paramsForRotation.length);
@@ -3951,6 +4008,7 @@ public interface WindowManager extends ViewManager {
                 in.readIntArray(providesInsetsTypes);
             }
             providedInternalInsets = Insets.CREATOR.createFromParcel(in);
+            providedInternalImeInsets = Insets.CREATOR.createFromParcel(in);
             int paramsForRotationLength = in.readInt();
             if (paramsForRotationLength > 0) {
                 paramsForRotation = new LayoutParams[paramsForRotationLength];
@@ -4257,6 +4315,11 @@ public interface WindowManager extends ViewManager {
                 changes |= LAYOUT_CHANGED;
             }
 
+            if (!providedInternalImeInsets.equals(o.providedInternalImeInsets)) {
+                providedInternalImeInsets = o.providedInternalImeInsets;
+                changes |= LAYOUT_CHANGED;
+            }
+
             if (!Arrays.equals(paramsForRotation, o.paramsForRotation)) {
                 paramsForRotation = o.paramsForRotation;
                 checkNonRecursiveParams();
@@ -4461,6 +4524,10 @@ public interface WindowManager extends ViewManager {
             if (!providedInternalInsets.equals(Insets.NONE)) {
                 sb.append(" providedInternalInsets=");
                 sb.append(providedInternalInsets);
+            }
+            if (!providedInternalImeInsets.equals(Insets.NONE)) {
+                sb.append(" providedInternalImeInsets=");
+                sb.append(providedInternalImeInsets);
             }
             if (paramsForRotation != null && paramsForRotation.length != 0) {
                 sb.append(System.lineSeparator());

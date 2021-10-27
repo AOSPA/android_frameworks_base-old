@@ -19,7 +19,6 @@ package com.android.server.wm;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FREEFORM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.app.WindowConfiguration.WINDOWING_MODE_MULTI_WINDOW;
-import static android.app.WindowConfiguration.WINDOWING_MODE_SPLIT_SCREEN_PRIMARY;
 import static android.content.pm.ActivityInfo.CONFIG_ORIENTATION;
 import static android.content.pm.ActivityInfo.CONFIG_SCREEN_LAYOUT;
 import static android.content.pm.ActivityInfo.FLAG_SUPPORTS_PICTURE_IN_PICTURE;
@@ -40,6 +39,7 @@ import static android.os.Process.NOBODY_UID;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.WindowManager.LayoutParams.FIRST_APPLICATION_WINDOW;
 import static android.view.WindowManager.LayoutParams.FIRST_SUB_WINDOW;
+import static android.view.WindowManager.LayoutParams.FLAG_ALT_FOCUSABLE_IM;
 import static android.view.WindowManager.LayoutParams.FLAG_DISMISS_KEYGUARD;
 import static android.view.WindowManager.LayoutParams.FLAG_SHOW_WHEN_LOCKED;
 import static android.view.WindowManager.LayoutParams.TYPE_APPLICATION;
@@ -82,7 +82,6 @@ import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBL
 import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBLE_BEHIND_TRANSLUCENT;
 import static com.android.server.wm.WindowContainer.POSITION_TOP;
 import static com.android.server.wm.WindowStateAnimator.ROOT_TASK_CLIP_AFTER_ANIM;
-import static com.android.server.wm.WindowStateAnimator.ROOT_TASK_CLIP_BEFORE_ANIM;
 import static com.android.server.wm.WindowStateAnimator.ROOT_TASK_CLIP_NONE;
 
 import static com.google.common.truth.Truth.assertThat;
@@ -218,7 +217,7 @@ public class ActivityRecordTests extends WindowTestsBase {
     public void testNoCleanupMovingActivityInSameStack() {
         final ActivityRecord activity = createActivityWith2LevelTask();
         final Task rootTask = activity.getRootTask();
-        final Task newTask = new TaskBuilder(mAtm.mTaskSupervisor).setParentTask(rootTask).build();
+        final Task newTask = createTaskInRootTask(rootTask, 0 /* userId */);
         activity.reparent(newTask, 0, null /*reason*/);
         verify(rootTask, times(0)).cleanUpActivityReferences(any());
     }
@@ -2509,8 +2508,10 @@ public class ActivityRecordTests extends WindowTestsBase {
     @Test
     public void testTransferStartingWindow() {
         registerTestStartingWindowOrganizer();
-        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setCreateTask(true).build();
-        final ActivityRecord activity2 = new ActivityBuilder(mAtm).setCreateTask(true).build();
+        final ActivityRecord activity1 = new ActivityBuilder(mAtm).setCreateTask(true)
+                .setVisible(false).build();
+        final ActivityRecord activity2 = new ActivityBuilder(mAtm).setCreateTask(true)
+                .setVisible(false).build();
         activity1.addStartingWindow(mPackageName,
                 android.R.style.Theme, null, "Test", 0, 0, 0, 0, null, true, true, false, true,
                 false, false);
@@ -2519,6 +2520,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 android.R.style.Theme, null, "Test", 0, 0, 0, 0, activity1,
                 true, true, false, true, false, false);
         waitUntilHandlersIdle();
+        assertFalse(mDisplayContent.mSkipAppTransitionAnimation);
         assertNoStartingWindow(activity1);
         assertHasStartingWindow(activity2);
     }
@@ -2626,6 +2628,7 @@ public class ActivityRecordTests extends WindowTestsBase {
                 false /* newTask */, false /* isTaskSwitch */, null /* options */,
                 null /* sourceRecord */);
 
+        assertTrue(mDisplayContent.mSkipAppTransitionAnimation);
         assertNull(middle.mStartingWindow);
         assertHasStartingWindow(top);
         assertTrue(top.isVisible());
@@ -2697,8 +2700,8 @@ public class ActivityRecordTests extends WindowTestsBase {
         final WindowState startingWindow = createWindowState(
                 new WindowManager.LayoutParams(TYPE_APPLICATION_STARTING), activity1);
         activity1.addWindow(startingWindow);
-        activity1.attachStartingWindow(startingWindow);
         activity1.mStartingData = mock(StartingData.class);
+        activity1.attachStartingWindow(startingWindow);
         final Task task = activity1.getTask();
         final Rect taskBounds = task.getBounds();
         final int width = taskBounds.width();
@@ -2719,11 +2722,17 @@ public class ActivityRecordTests extends WindowTestsBase {
                 mAtm, null /* fragmentToken */, false /* createdByOrganizer */);
         fragmentSetup.accept(taskFragment2, new Rect(width / 2, 0, width, height));
         task.addChild(taskFragment2, POSITION_TOP);
-        final ActivityRecord activity2 = new ActivityBuilder(mAtm).build();
+        final ActivityRecord activity2 = new ActivityBuilder(mAtm)
+                .setResizeMode(ActivityInfo.RESIZE_MODE_UNRESIZEABLE).build();
         activity2.mVisibleRequested = true;
         taskFragment2.addChild(activity2);
+        assertTrue(activity2.isResizeable());
         activity1.reparent(taskFragment1, POSITION_TOP);
 
+        verify(activity1.getSyncTransaction()).reparent(eq(startingWindow.mSurfaceControl),
+                eq(task.mSurfaceControl));
+        assertEquals(activity1.mStartingData, startingWindow.mStartingData);
+        assertEquals(task.mSurfaceControl, startingWindow.getAnimationLeashParent());
         assertEquals(task, activity1.mStartingData.mAssociatedTask);
         assertEquals(taskFragment1.getBounds(), activity1.getBounds());
         // The activity was resized by task fragment, but starting window must still cover the task.
@@ -2772,10 +2781,36 @@ public class ActivityRecordTests extends WindowTestsBase {
 
         assertEquals(taskBounds, activity.getAnimationBounds(ROOT_TASK_CLIP_AFTER_ANIM));
         assertEquals(new Point(0, 0), animationPosition);
+    }
 
-        // ROOT_TASK_CLIP_BEFORE_ANIM should use stack bounds since it won't be clipped later.
-        task.getWindowConfiguration().setWindowingMode(WINDOWING_MODE_SPLIT_SCREEN_PRIMARY);
-        assertEquals(rootTask.getBounds(), activity.getAnimationBounds(ROOT_TASK_CLIP_BEFORE_ANIM));
+    @Test
+    public void testTransitionAnimationBounds_returnTaskFragment() {
+        removeGlobalMinSizeRestriction();
+        final Task task = new TaskBuilder(mSupervisor).setCreateParentTask(true).build();
+        final Task rootTask = task.getRootTask();
+        final TaskFragment taskFragment = createTaskFragmentWithParentTask(task,
+                false /* createEmbeddedTask */);
+        final ActivityRecord activity = taskFragment.getTopNonFinishingActivity();
+        final Rect stackBounds = new Rect(0, 0, 1000, 600);
+        final Rect taskBounds = new Rect(100, 400, 600, 800);
+        final Rect taskFragmentBounds = new Rect(100, 400, 300, 800);
+        final Rect activityBounds = new Rect(100, 400, 300, 600);
+        // Set the bounds and windowing mode to window configuration directly, otherwise the
+        // testing setups may be discarded by configuration resolving.
+        rootTask.getWindowConfiguration().setBounds(stackBounds);
+        task.getWindowConfiguration().setBounds(taskBounds);
+        taskFragment.getWindowConfiguration().setBounds(taskFragmentBounds);
+        activity.getWindowConfiguration().setBounds(activityBounds);
+
+        // Check that anim bounds for freeform window match task fragment bounds
+        task.getWindowConfiguration().setWindowingMode(WINDOWING_MODE_FREEFORM);
+        assertEquals(taskFragment.getBounds(), activity.getAnimationBounds(ROOT_TASK_CLIP_NONE));
+
+        // ROOT_TASK_CLIP_AFTER_ANIM should use task fragment bounds since they will be clipped by
+        // bounds animation layer.
+        task.getWindowConfiguration().setWindowingMode(WINDOWING_MODE_FULLSCREEN);
+        assertEquals(taskFragment.getBounds(),
+                activity.getAnimationBounds(ROOT_TASK_CLIP_AFTER_ANIM));
     }
 
     @Test
@@ -2905,6 +2940,92 @@ public class ActivityRecordTests extends WindowTestsBase {
         assertFalse(activity.mVisibleRequested);
         assertFalse(activity.mDisplayContent.mOpeningApps.contains(activity));
         assertFalse(activity.mDisplayContent.mClosingApps.contains(activity));
+    }
+
+    @Test
+    public void testImeInsetsFrozenFlag_resetWhenReparented() {
+        final ActivityRecord activity = createActivityWithTask();
+        final WindowState app = createWindow(null, TYPE_APPLICATION, activity, "app");
+        final WindowState imeWindow = createWindow(null, TYPE_APPLICATION, "imeWindow");
+        final Task newTask = new TaskBuilder(mSupervisor).build();
+        makeWindowVisible(app, imeWindow);
+        mDisplayContent.mInputMethodWindow = imeWindow;
+        mDisplayContent.setImeLayeringTarget(app);
+        mDisplayContent.setImeInputTarget(app);
+
+        // Simulate app is closing and expect the last IME is shown and IME insets is frozen.
+        app.mActivityRecord.commitVisibility(false, false);
+        assertTrue(app.mActivityRecord.mLastImeShown);
+        assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+
+        // Expect IME insets frozen state will reset when the activity is reparent to the new task.
+        activity.setState(RESUMED, "test");
+        activity.reparent(newTask, 0 /* top */, "test");
+        assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+    }
+
+    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @Test
+    public void testImeInsetsFrozenFlag_resetWhenResized() {
+        final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
+        makeWindowVisibleAndDrawn(app, mImeWindow);
+        mDisplayContent.setImeLayeringTarget(app);
+        mDisplayContent.setImeInputTarget(app);
+
+        // Simulate app is closing and expect the last IME is shown and IME insets is frozen.
+        app.mActivityRecord.commitVisibility(false, false);
+        assertTrue(app.mActivityRecord.mLastImeShown);
+        assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+
+        // Expect IME insets frozen state will reset when the activity is reparent to the new task.
+        app.mActivityRecord.onResize();
+        assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+    }
+
+    @UseTestDisplay(addWindows = W_INPUT_METHOD)
+    @Test
+    public void testImeInsetsFrozenFlag_resetWhenNoImeFocusableInActivity() {
+        final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
+        makeWindowVisibleAndDrawn(app, mImeWindow);
+        mDisplayContent.setImeLayeringTarget(app);
+        mDisplayContent.setImeInputTarget(app);
+
+        // Simulate app is closing and expect the last IME is shown and IME insets is frozen.
+        mDisplayContent.mOpeningApps.clear();
+        app.mActivityRecord.commitVisibility(false, false);
+        app.mActivityRecord.onWindowsGone();
+
+        assertTrue(app.mActivityRecord.mLastImeShown);
+        assertTrue(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+
+        // Expect IME insets frozen state will reset when the activity has no IME focusable window.
+        app.mActivityRecord.forAllWindowsUnchecked(w -> {
+            w.mAttrs.flags |= FLAG_ALT_FOCUSABLE_IM;
+            return true;
+        }, true);
+
+        app.mActivityRecord.commitVisibility(true, false);
+        app.mActivityRecord.onWindowsVisible();
+
+        assertFalse(app.mActivityRecord.mImeInsetsFrozenUntilStartInput);
+    }
+
+    @Test
+    public void testInClosingAnimation_doNotHideSurface() {
+        final WindowState app = createWindow(null, TYPE_APPLICATION, "app");
+        makeWindowVisibleAndDrawn(app);
+
+        // Put the activity in close transition.
+        mDisplayContent.mOpeningApps.clear();
+        mDisplayContent.mClosingApps.add(app.mActivityRecord);
+        mDisplayContent.prepareAppTransition(TRANSIT_CLOSE);
+
+        // Update visibility and call to remove window
+        app.mActivityRecord.commitVisibility(false, false);
+        app.mActivityRecord.prepareSurfaces();
+
+        // Because the app is waiting for transition, it should not hide the surface.
+        assertTrue(app.mActivityRecord.isSurfaceShowing());
     }
 
     private void assertHasStartingWindow(ActivityRecord atoken) {

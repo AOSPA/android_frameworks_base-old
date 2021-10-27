@@ -16,6 +16,9 @@
 
 package com.android.systemui.biometrics
 
+import android.graphics.Rect
+import android.hardware.biometrics.BiometricOverlayConstants.REASON_AUTH_KEYGUARD
+import android.hardware.biometrics.BiometricOverlayConstants.REASON_UNKNOWN
 import android.hardware.biometrics.SensorProperties
 import android.hardware.display.DisplayManager
 import android.hardware.display.DisplayManagerGlobal
@@ -30,8 +33,12 @@ import android.view.Display
 import android.view.DisplayAdjustments.DEFAULT_DISPLAY_ADJUSTMENTS
 import android.view.DisplayInfo
 import android.view.LayoutInflater
+import android.view.View
+import android.view.WindowInsets
 import android.view.WindowManager
+import android.view.WindowMetrics
 import androidx.test.filters.SmallTest
+import com.airbnb.lottie.LottieAnimationView
 import com.android.systemui.R
 import com.android.systemui.SysuiTestCase
 import com.android.systemui.util.concurrency.FakeExecutor
@@ -42,9 +49,13 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import org.mockito.ArgumentCaptor
 import org.mockito.ArgumentMatchers.eq
+import org.mockito.Captor
 import org.mockito.Mock
 import org.mockito.Mockito.`when`
 import org.mockito.Mockito.any
+import org.mockito.Mockito.mock
+import org.mockito.Mockito.never
+import org.mockito.Mockito.reset
 import org.mockito.Mockito.verify
 import org.mockito.junit.MockitoJUnit
 
@@ -66,11 +77,13 @@ class SidefpsControllerTest : SysuiTestCase() {
     @Mock
     lateinit var windowManager: WindowManager
     @Mock
-    lateinit var sidefpsView: SidefpsView
+    lateinit var sidefpsView: View
     @Mock
     lateinit var displayManager: DisplayManager
     @Mock
     lateinit var handler: Handler
+    @Captor
+    lateinit var overlayCaptor: ArgumentCaptor<View>
 
     private val executor = FakeExecutor(FakeSystemClock())
     private lateinit var overlayController: ISidefpsController
@@ -79,6 +92,8 @@ class SidefpsControllerTest : SysuiTestCase() {
     @Before
     fun setup() {
         `when`(layoutInflater.inflate(R.layout.sidefps_view, null, false)).thenReturn(sidefpsView)
+        `when`(sidefpsView.findViewById<LottieAnimationView>(eq(R.id.sidefps_animation)))
+            .thenReturn(mock(LottieAnimationView::class.java))
         `when`(fingerprintManager.sensorPropertiesInternal).thenReturn(
                 listOf(
                         FingerprintSensorPropertiesInternal(
@@ -99,6 +114,9 @@ class SidefpsControllerTest : SysuiTestCase() {
                         DEFAULT_DISPLAY_ADJUSTMENTS
                 )
         )
+        `when`(windowManager.maximumWindowMetrics).thenReturn(
+            WindowMetrics(Rect(0, 0, 800, 800), WindowInsets.CONSUMED)
+        )
 
         sideFpsController = SidefpsController(
                 mContext, layoutInflater, fingerprintManager, windowManager, executor,
@@ -112,13 +130,61 @@ class SidefpsControllerTest : SysuiTestCase() {
 
     @Test
     fun testSubscribesToOrientationChangesWhenShowingOverlay() {
-        overlayController.show()
+        overlayController.show(SENSOR_ID, REASON_UNKNOWN)
         executor.runAllReady()
 
         verify(displayManager).registerDisplayListener(any(), eq(handler))
 
-        overlayController.hide()
+        overlayController.hide(SENSOR_ID)
         executor.runAllReady()
         verify(displayManager).unregisterDisplayListener(any())
+    }
+
+    @Test
+    fun testShowsAndHides() {
+        overlayController.show(SENSOR_ID, REASON_UNKNOWN)
+        executor.runAllReady()
+
+        verify(windowManager).addView(overlayCaptor.capture(), any())
+
+        reset(windowManager)
+        overlayController.hide(SENSOR_ID)
+        executor.runAllReady()
+
+        verify(windowManager, never()).addView(any(), any())
+        verify(windowManager).removeView(eq(overlayCaptor.value))
+    }
+
+    @Test
+    fun testShowsOnce() {
+        repeat(5) {
+            overlayController.show(SENSOR_ID, REASON_UNKNOWN)
+            executor.runAllReady()
+        }
+
+        verify(windowManager).addView(any(), any())
+        verify(windowManager, never()).removeView(any())
+    }
+
+    @Test
+    fun testHidesOnce() {
+        overlayController.show(SENSOR_ID, REASON_UNKNOWN)
+        executor.runAllReady()
+
+        repeat(5) {
+            overlayController.hide(SENSOR_ID)
+            executor.runAllReady()
+        }
+
+        verify(windowManager).addView(any(), any())
+        verify(windowManager).removeView(any())
+    }
+
+    @Test
+    fun testIgnoredForKeyguard() {
+        overlayController.show(SENSOR_ID, REASON_AUTH_KEYGUARD)
+        executor.runAllReady()
+
+        verify(windowManager, never()).addView(any(), any())
     }
 }

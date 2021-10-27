@@ -296,7 +296,8 @@ class ProcessErrorStateRecord {
             EventLog.writeEvent(EventLogTags.AM_ANR, mApp.userId, pid, mApp.processName,
                     mApp.info.flags, annotation);
 
-            if (mService.mTraceErrorLogger.isAddErrorIdEnabled()) {
+            if (mService.mTraceErrorLogger != null
+                    && mService.mTraceErrorLogger.isAddErrorIdEnabled()) {
                 errorId = mService.mTraceErrorLogger.generateErrorId();
                 mService.mTraceErrorLogger.addErrorIdToTrace(mApp.processName, errorId);
             } else {
@@ -418,9 +419,10 @@ class ProcessErrorStateRecord {
         StringWriter tracesFileException = new StringWriter();
         // To hold the start and end offset to the ANR trace file respectively.
         final long[] offsets = new long[2];
+        final String criticalEventLog = CriticalEventLog.getInstance().logLinesForAnrFile();
         File tracesFile = ActivityManagerService.dumpStackTraces(firstPids,
                 isSilentAnr ? null : processCpuTracker, isSilentAnr ? null : lastPids,
-                nativePids, tracesFileException, offsets, annotation);
+                nativePids, tracesFileException, offsets, annotation, criticalEventLog);
 
         long dueTime = SystemClock.uptimeMillis()
                     + AnrHelper.APP_NOT_RESPONDING_DEFER_TIMEOUT_MILLIS;
@@ -488,7 +490,7 @@ class ProcessErrorStateRecord {
         float loadingProgress = 1;
         IncrementalMetrics incrementalMetrics = null;
         final PackageManagerInternal packageManagerInternal = mService.getPackageManagerInternal();
-        if (mApp.info != null && mApp.info.packageName != null) {
+        if (mApp.info != null && mApp.info.packageName != null && packageManagerInternal != null) {
             IncrementalStatesInfo incrementalStatesInfo =
                     packageManagerInternal.getIncrementalStatesInfo(
                             mApp.info.packageName, mApp.uid, mApp.userId);

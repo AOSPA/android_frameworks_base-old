@@ -228,7 +228,7 @@ public interface BluetoothProfile {
      * Broadcast
      * @hide
      */
-    public int BROADCAST = 25;
+    public int BROADCAST = 32;
 
     /**
      * VCP
@@ -270,12 +270,19 @@ public interface BluetoothProfile {
     public static final int MCP_SERVER = 31;
 
     /**
+     * Coordinated Set Identification Profile set coordinator
+     *
+     */
+    // Temporary fix for b/203821845
+    int CSIP_SET_COORDINATOR = 25;
+
+    /**
      * Max profile ID. This value should be updated whenever a new profile is added to match
      * the largest value assigned to a profile.
      *
      * @hide
      */
-    int MAX_PROFILE_ID = 31;
+    int MAX_PROFILE_ID = 32;
 
     /**
      * Default priority for devices that we try to auto-connect to and

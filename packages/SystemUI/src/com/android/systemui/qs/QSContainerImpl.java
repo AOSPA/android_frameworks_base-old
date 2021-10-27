@@ -23,6 +23,7 @@ import android.content.res.Configuration;
 import android.graphics.Canvas;
 import android.graphics.Path;
 import android.graphics.Point;
+import android.graphics.PointF;
 import android.util.AttributeSet;
 import android.view.View;
 import android.view.WindowInsets;
@@ -208,9 +209,17 @@ public class QSContainerImpl extends FrameLayout implements Dumpable {
 
     protected int calculateContainerHeight() {
         int heightOverride = mHeightOverride != -1 ? mHeightOverride : getMeasuredHeight();
+        // Need to add the dragHandle height so touches will be intercepted by it.
+        int dragHandleHeight;
+        if (mDragHandle.getVisibility() == VISIBLE) {
+            dragHandleHeight = Math.round((1 - mQsExpansion) * mDragHandle.getHeight());
+        } else {
+            dragHandleHeight = 0;
+        }
         return mQSCustomizer.isCustomizing() ? mQSCustomizer.getHeight()
                 : Math.round(mQsExpansion * (heightOverride - mHeader.getHeight()))
-                + mHeader.getHeight();
+                + mHeader.getHeight()
+                + dragHandleHeight;
     }
 
     int calculateContainerBottom() {
@@ -226,6 +235,7 @@ public class QSContainerImpl extends FrameLayout implements Dumpable {
         mQsExpansion = expansion;
         mQSPanelContainer.setScrollingEnabled(expansion > 0f);
         mDragHandle.setAlpha(1.0f - expansion);
+        mDragHandle.setClickable(expansion == 0f); // Only clickable when fully collapsed
         updateExpansion();
     }
 
@@ -293,6 +303,16 @@ public class QSContainerImpl extends FrameLayout implements Dumpable {
         if (updatePath) {
             updateClippingPath();
         }
+    }
+
+    @Override
+    protected boolean isTransformedTouchPointInView(float x, float y,
+            View child, PointF outLocalPoint) {
+        // Prevent touches outside the clipped area from propagating to a child in that area.
+        if (mClippingEnabled && y + getTranslationY() > mFancyClippingTop) {
+            return false;
+        }
+        return super.isTransformedTouchPointInView(x, y, child, outLocalPoint);
     }
 
     private void updateClippingPath() {

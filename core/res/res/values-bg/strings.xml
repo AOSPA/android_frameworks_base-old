@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"да извършва телефонни обаждания и да ги управлява"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Сензори за тяло"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"достъп до сензорните данни за жизнените ви показатели"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Известия"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"показване на известията"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Извличане на съдържанието от прозореца"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Инспектиране на съдържанието на прозорец, с който взаимодействате."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Включване на изследването чрез докосване"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Разрешава на приложението да деактивира заключването на клавиатурата и свързаната защита с парола. Например телефонът деактивира заключването при получаване на входящо обаждане и после го активира отново, когато обаждането завърши."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"заявяване на сложност на опцията за заключване на екрана"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Разрешава на приложението да разбере нивото на сложност на опцията за заключване на екрана (високо, средно, ниско или липса на такова), което указва възможния диапазон на дължината и типа на опцията. Приложението може също да предложи на потребителите да актуализират опцията за заключване на екрана до определено ниво, но те могат да пренебрегнат това и да излязат от него. Обърнете внимание, че опцията за заключване на екрана не се съхранява като обикновен текст, така че приложението не знае точната парола."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"показване на известията"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Разрешава на приложението да показва известия"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"използване на хардуера за биометрични данни"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Разрешава на приложението да използва хардуера за биометрични данни с цел удостоверяване"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"управление на хардуера за отпечатъци"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Използвайте отпечатъка си или опцията за заключване на екрана, за да продължите"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Нещо се обърка. Опитайте отново."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Икона за отпечатък"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Отключване с лице"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Проблем с отключването с лице"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Използвайте лицето си или опцията за заключване на екрана, за да продължите"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Нещо се обърка. Опитайте отново."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Икона на лице"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"четене на настройките за синхронизиране"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Разрешава на приложението да чете настройките за синхронизиране на профил. Например това може да определи дали приложението Хора е синхронизирано с даден профил."</string>
@@ -861,7 +867,7 @@
     <string name="relationTypeReferredBy" msgid="5285082289602849400">"Препоръчан/а от"</string>
     <string name="relationTypeRelative" msgid="3396498519818009134">"Роднина"</string>
     <string name="relationTypeSister" msgid="3721676005094140671">"Сестра"</string>
-    <string name="relationTypeSpouse" msgid="6916682664436031703">"Съпруг/а"</string>
+    <string name="relationTypeSpouse" msgid="6916682664436031703">"Съпруг(а)"</string>
     <string name="sipAddressTypeCustom" msgid="6283889809842649336">"Персонализиран"</string>
     <string name="sipAddressTypeHome" msgid="5918441930656878367">"Домашен"</string>
     <string name="sipAddressTypeWork" msgid="7873967986701216770">"Служебен"</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Когато прекият път е включен, можете да стартирате дадена функция за достъпност, като натиснете двата бутона за силата на звука и ги задържите за 3 секунди."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Искате ли да включите прекия път за функциите за достъпност?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Натиснете двата бутона за силата на звука и ги задръжте за няколко секунди, за да включите функциите за достъпност. Това може да промени начина, по който работи устройството ви.\n\nТекущи функции:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nМожете да промените избраните функции от „Настройки“ &gt; „Достъпност“."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"Искате ли да включите прекия път за <xliff:g id="SERVICE">%1$s</xliff:g>?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Натиснете двата бутона за силата на звука и ги задръжте за няколко секунди, за да включите функцията за достъпност <xliff:g id="SERVICE">%1$s</xliff:g>. Това може да промени начина, по който работи устройството ви.\n\nМожете да зададете друга функция за този пряк път от „Настройки“ &gt; „Достъпност“."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Включване"</string>

@@ -16,15 +16,19 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_RECENTS;
 import static android.app.WindowConfiguration.ACTIVITY_TYPE_STANDARD;
 import static android.app.WindowConfiguration.ROTATION_UNDEFINED;
 import static android.view.Display.DEFAULT_DISPLAY;
 import static android.view.Display.INVALID_DISPLAY;
+import static android.view.WindowManager.INPUT_CONSUMER_RECENTS_ANIMATION;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_SEAMLESS;
 import static android.view.WindowManager.LayoutParams.ROTATION_ANIMATION_UNSPECIFIED;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
@@ -54,6 +58,7 @@ import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.ActivityManager;
+import android.content.pm.ActivityInfo;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.Binder;
@@ -66,7 +71,7 @@ import android.util.ArraySet;
 import android.util.Slog;
 import android.view.SurfaceControl;
 import android.view.animation.Animation;
-import android.window.IRemoteTransition;
+import android.window.RemoteTransition;
 import android.window.TransitionInfo;
 
 import com.android.internal.annotations.VisibleForTesting;
@@ -119,7 +124,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     private @TransitionFlags int mFlags;
     private final TransitionController mController;
     private final BLASTSyncEngine mSyncEngine;
-    private IRemoteTransition mRemoteTransition = null;
+    private RemoteTransition mRemoteTransition = null;
 
     /** Only use for clean-up after binder death! */
     private SurfaceControl.Transaction mStartTransaction = null;
@@ -138,6 +143,15 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     /** The final animation targets derived from participants after promotion. */
     private ArraySet<WindowContainer> mTargets = null;
 
+    /**
+     * Set of participating windowtokens (activity/wallpaper) which are visible at the end of
+     * the transition animation.
+     */
+    private final ArraySet<WindowToken> mVisibleAtTransitionEndTokens = new ArraySet<>();
+
+    /** Set of transient activities (lifecycle initially tied to this transition). */
+    private ArraySet<ActivityRecord> mTransientLaunches = null;
+
     /** Custom activity-level animation options and callbacks. */
     private TransitionInfo.AnimationOptions mOverrideOptions;
     private IRemoteCallback mClientAnimationStartCallback = null;
@@ -149,7 +163,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     // TODO(b/188595497): remove when not needed.
     /** @see RecentsAnimationController#mNavigationBarAttachedToApp */
     private boolean mNavBarAttachedToApp = false;
-    private int mNavBarDisplayId = INVALID_DISPLAY;
+    private int mRecentsDisplayId = INVALID_DISPLAY;
 
     Transition(@TransitionType int type, @TransitionFlags int flags,
             TransitionController controller, BLASTSyncEngine syncEngine) {
@@ -164,9 +178,28 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         mFlags |= flag;
     }
 
+    /** Records an activity as transient-launch. This activity must be already collected. */
+    void setTransientLaunch(@NonNull ActivityRecord activity) {
+        if (mTransientLaunches == null) {
+            mTransientLaunches = new ArraySet<>();
+        }
+        mTransientLaunches.add(activity);
+        ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS, "Transition %d: Set %s as "
+                + "transient-launch", mSyncId, activity);
+    }
+
+    boolean isTransientLaunch(@NonNull ActivityRecord activity) {
+        return mTransientLaunches != null && mTransientLaunches.contains(activity);
+    }
+
     @VisibleForTesting
     int getSyncId() {
         return mSyncId;
+    }
+
+    @TransitionFlags
+    int getFlags() {
+        return mFlags;
     }
 
     /**
@@ -235,6 +268,18 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                 + " %s", mSyncId, wc);
         collect(wc);
         mChanges.get(wc).mExistenceChanged = true;
+    }
+
+    /**
+     * Specifies configuration change explicitly for the window container, so it can be chosen as
+     * transition target. This is usually used with transition mode
+     * {@link android.view.WindowManager#TRANSIT_CHANGE}.
+     */
+    void setKnownConfigChanges(WindowContainer<?> wc, @ActivityInfo.Config int changes) {
+        final ChangeInfo changeInfo = mChanges.get(wc);
+        if (changeInfo != null) {
+            changeInfo.mKnownConfigChanges = changes;
+        }
     }
 
     private void sendRemoteCallback(@Nullable IRemoteCallback callback) {
@@ -344,7 +389,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         for (int i = 0; i < mParticipants.size(); ++i) {
             final ActivityRecord ar = mParticipants.valueAt(i).asActivityRecord();
             if (ar != null) {
-                if (!ar.isVisibleRequested()) {
+                boolean visibleAtTransitionEnd = mVisibleAtTransitionEndTokens.contains(ar);
+                // We need both the expected visibility AND current requested-visibility to be
+                // false. If it is expected-visible but not currently visible, it means that
+                // another animation is queued-up to animate this to invisibility, so we can't
+                // remove the surfaces yet. If it is currently visible, but not expected-visible,
+                // then doing commitVisibility here would actually be out-of-order and leave the
+                // activity in a bad state.
+                if (!visibleAtTransitionEnd && !ar.isVisibleRequested()) {
                     boolean commitVisibility = true;
                     if (ar.getDeferHidingClient() && ar.getTask() != null) {
                         if (ar.pictureInPictureArgs != null
@@ -367,17 +419,20 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                         activitiesWentInvisible = true;
                     }
                 }
-                if (mChanges.get(ar).mVisible != ar.isVisibleRequested()) {
+                if (mChanges.get(ar).mVisible != visibleAtTransitionEnd) {
                     // Legacy dispatch relies on this (for now).
-                    ar.mEnteringAnimation = ar.isVisibleRequested();
+                    ar.mEnteringAnimation = visibleAtTransitionEnd;
                 }
                 mController.dispatchLegacyAppTransitionFinished(ar);
             }
             final WallpaperWindowToken wt = mParticipants.valueAt(i).asWallpaperToken();
-            if (wt != null && !wt.isVisibleRequested()) {
-                ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
-                        "  Commit wallpaper becoming invisible: %s", wt);
-                wt.commitVisibility(false /* visible */);
+            if (wt != null) {
+                final boolean visibleAtTransitionEnd = mVisibleAtTransitionEndTokens.contains(wt);
+                if (!visibleAtTransitionEnd && !wt.isVisibleRequested()) {
+                    ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
+                            "  Commit wallpaper becoming invisible: %s", wt);
+                    wt.commitVisibility(false /* visible */);
+                }
             }
         }
         if (activitiesWentInvisible) {
@@ -390,6 +445,13 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         sendRemoteCallback(mClientAnimationFinishCallback);
 
         legacyRestoreNavigationBarFromApp();
+
+        if (mRecentsDisplayId != INVALID_DISPLAY) {
+            // Clean up input monitors (for recents)
+            final DisplayContent dc =
+                    mController.mAtm.mRootWindowContainer.getDisplayContent(mRecentsDisplayId);
+            dc.getInputMonitor().setActiveRecents(null /* activity */, null /* layer */);
+        }
     }
 
     void abort() {
@@ -404,11 +466,11 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         mSyncEngine.abort(mSyncId);
     }
 
-    void setRemoteTransition(IRemoteTransition remoteTransition) {
+    void setRemoteTransition(RemoteTransition remoteTransition) {
         mRemoteTransition = remoteTransition;
     }
 
-    IRemoteTransition getRemoteTransition() {
+    RemoteTransition getRemoteTransition() {
         return mRemoteTransition;
     }
 
@@ -487,6 +549,15 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             }
         }
 
+        // Record windowtokens (activity/wallpaper) that are expected to be visible after the
+        // transition animation. This will be used in finishTransition to prevent prematurely
+        // committing visibility.
+        for (int i = mParticipants.size() - 1; i >= 0; --i) {
+            final WindowContainer wc = mParticipants.valueAt(i);
+            if (wc.asWindowToken() == null || !wc.isVisibleRequested()) continue;
+            mVisibleAtTransitionEndTokens.add(wc.asWindowToken());
+        }
+
         mStartTransaction = transaction;
         mFinishTransaction = mController.mAtm.mWindowManager.mTransactionFactory.get();
         buildFinishTransaction(mFinishTransaction, info.getRootLeash());
@@ -524,7 +595,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (mFinishTransaction != null) {
             mFinishTransaction.apply();
         }
-        finishTransition();
+        mController.finishTransition(this);
     }
 
     /** @see RecentsAnimationController#attachNavigationBarToApp */
@@ -534,7 +605,43 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         }
         final DisplayContent dc =
                 mController.mAtm.mRootWindowContainer.getDisplayContent(displayId);
-        if (dc == null || !dc.getDisplayPolicy().shouldAttachNavBarToAppDuringTransition()
+        if (dc == null) return;
+        mRecentsDisplayId = displayId;
+
+        // Recents has an input-consumer to grab input from the "live tile" app. Set that up here
+        final InputConsumerImpl recentsAnimationInputConsumer =
+                dc.getInputMonitor().getInputConsumer(INPUT_CONSUMER_RECENTS_ANIMATION);
+        if (recentsAnimationInputConsumer != null) {
+            // find the top-most going-away activity and the recents activity. The top-most
+            // is used as layer reference while the recents is used for registering the consumer
+            // override.
+            ActivityRecord recentsActivity = null;
+            ActivityRecord topActivity = null;
+            for (int i = 0; i < info.getChanges().size(); ++i) {
+                final TransitionInfo.Change change = info.getChanges().get(i);
+                if (change.getTaskInfo() == null) continue;
+                final Task task = Task.fromWindowContainerToken(
+                        info.getChanges().get(i).getTaskInfo().token);
+                if (task == null) continue;
+                final int activityType = change.getTaskInfo().topActivityType;
+                final boolean isRecents = activityType == ACTIVITY_TYPE_HOME
+                        || activityType == ACTIVITY_TYPE_RECENTS;
+                if (isRecents && recentsActivity == null) {
+                    recentsActivity = task.getTopVisibleActivity();
+                } else if (!isRecents && topActivity == null) {
+                    topActivity = task.getTopNonFinishingActivity();
+                }
+            }
+            if (recentsActivity != null && topActivity != null) {
+                recentsAnimationInputConsumer.mWindowHandle.touchableRegion.set(
+                        topActivity.getBounds());
+                dc.getInputMonitor().setActiveRecents(recentsActivity, topActivity);
+            }
+        }
+
+        // The rest of this function handles nav-bar reparenting
+
+        if (!dc.getDisplayPolicy().shouldAttachNavBarToAppDuringTransition()
                 // Skip the case where the nav bar is controlled by fade rotation.
                 || dc.getFadeRotationAnimationController() != null) {
             return;
@@ -561,7 +668,6 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             return;
         }
         mNavBarAttachedToApp = true;
-        mNavBarDisplayId = displayId;
         navWindow.mToken.cancelAnimation();
         final SurfaceControl.Transaction t = navWindow.mToken.getPendingTransaction();
         final SurfaceControl navSurfaceControl = navWindow.mToken.getSurfaceControl();
@@ -585,12 +691,17 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         if (!mNavBarAttachedToApp) return;
         mNavBarAttachedToApp = false;
 
+        if (mRecentsDisplayId == INVALID_DISPLAY) {
+            Slog.e(TAG, "Reparented navigation bar without a valid display");
+            mRecentsDisplayId = DEFAULT_DISPLAY;
+        }
+
         if (mController.mStatusBar != null) {
-            mController.mStatusBar.setNavigationBarLumaSamplingEnabled(mNavBarDisplayId, true);
+            mController.mStatusBar.setNavigationBarLumaSamplingEnabled(mRecentsDisplayId, true);
         }
 
         final DisplayContent dc =
-                mController.mAtm.mRootWindowContainer.getDisplayContent(mNavBarDisplayId);
+                mController.mAtm.mRootWindowContainer.getDisplayContent(mRecentsDisplayId);
         final WindowState navWindow = dc.getDisplayPolicy().getNavigationBar();
         if (navWindow == null) return;
         navWindow.setSurfaceTranslationY(0);
@@ -622,13 +733,14 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
     }
 
     private void handleNonAppWindowsInTransition(int displayId,
-            @TransitionType int transit, int flags) {
+            @TransitionType int transit, @TransitionFlags int flags) {
         final DisplayContent dc =
                 mController.mAtm.mRootWindowContainer.getDisplayContent(displayId);
         if (dc == null) {
             return;
         }
-        if (transit == TRANSIT_KEYGUARD_GOING_AWAY
+        if ((transit == TRANSIT_KEYGUARD_GOING_AWAY
+                || (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY) != 0)
                 && !WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
             if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0
                     && (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION) == 0
@@ -646,8 +758,13 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
                     (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER) != 0,
                     (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE) != 0,
                     (flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION) != 0);
-            mController.mAtm.mWindowManager.mPolicy.startKeyguardExitAnimation(
-                    SystemClock.uptimeMillis(), 0 /* duration */);
+            if (!WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation) {
+                // When remote animation is enabled for KEYGUARD_GOING_AWAY transition, SysUI
+                // receives IRemoteAnimationRunner#onAnimationStart to start animation, so we don't
+                // need to call IKeyguardService#keyguardGoingAway here.
+                mController.mAtm.mWindowManager.mPolicy.startKeyguardExitAnimation(
+                        SystemClock.uptimeMillis(), 0 /* duration */);
+            }
         }
         if ((flags & TRANSIT_FLAG_KEYGUARD_LOCKED) != 0) {
             mController.mAtm.mWindowManager.mPolicy.applyKeyguardOcclusionChange();
@@ -896,7 +1013,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             // Wallpaper must be the top (regardless of how nested it is in DisplayAreas).
             boolean skipIntermediateReports = isWallpaper(wc);
             for (WindowContainer p = wc.getParent(); p != null; p = p.getParent()) {
-                if (!p.isAttached() || !changes.get(p).hasChanged(p)) {
+                if (!p.isAttached() || changes.get(p) == null || !changes.get(p).hasChanged(p)) {
                     // Again, we're skipping no-ops
                     break;
                 }
@@ -1119,6 +1236,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
         final Rect mAbsoluteBounds = new Rect();
         boolean mShowWallpaper;
         int mRotation = ROTATION_UNDEFINED;
+        @ActivityInfo.Config int mKnownConfigChanges;
 
         ChangeInfo(@NonNull WindowContainer origState) {
             mVisible = origState.isVisibleRequested();
@@ -1141,6 +1259,7 @@ class Transition extends Binder implements BLASTSyncEngine.TransactionReadyListe
             final boolean currVisible = newState.isVisibleRequested();
             if (currVisible == mVisible && !mVisible) return false;
             return currVisible != mVisible
+                    || mKnownConfigChanges != 0
                     // if mWindowingMode is 0, this container wasn't attached at collect time, so
                     // assume no change in windowing-mode.
                     || (mWindowingMode != 0 && newState.getWindowingMode() != mWindowingMode)

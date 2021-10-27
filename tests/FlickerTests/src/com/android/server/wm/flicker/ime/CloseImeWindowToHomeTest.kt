@@ -34,10 +34,9 @@ import com.android.server.wm.flicker.navBarLayerIsVisible
 import com.android.server.wm.flicker.navBarLayerRotatesAndScales
 import com.android.server.wm.flicker.navBarWindowIsVisible
 import com.android.server.wm.flicker.entireScreenCovered
-import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
+import com.android.server.wm.traces.common.FlickerComponentName
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -95,9 +94,9 @@ class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
     fun visibleWindowsShownMoreThanOneConsecutiveEntry() {
         testSpec.assertWm {
             this.visibleWindowsShownMoreThanOneConsecutiveEntry(listOf(
-                WindowManagerStateHelper.IME_COMPONENT,
-                WindowManagerStateHelper.SPLASH_SCREEN_COMPONENT,
-                WindowManagerStateHelper.SNAPSHOT_COMPONENT))
+                FlickerComponentName.IME,
+                FlickerComponentName.SPLASH_SCREEN,
+                FlickerComponentName.SNAPSHOT))
         }
     }
 
@@ -125,8 +124,7 @@ class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
 
     @Presubmit
     @Test
-    fun entireScreenCovered() = testSpec.entireScreenCovered(testSpec.config.startRotation,
-        Surface.ROTATION_0)
+    fun entireScreenCovered() = testSpec.entireScreenCovered()
 
     @Presubmit
     @Test
@@ -144,22 +142,19 @@ class CloseImeWindowToHomeTest(private val testSpec: FlickerTestParameter) {
 
     @Presubmit
     @Test
-    fun navBarLayerRotatesAndScales() =
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.startRotation, Surface.ROTATION_0)
+    fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     @Presubmit
     @Test
-    fun statusBarLayerRotatesScales() {
-        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation, Surface.ROTATION_0)
-    }
+    fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
     @Presubmit
     @Test
     fun visibleLayersShownMoreThanOneConsecutiveEntry() {
         testSpec.assertLayers {
             this.visibleLayersShownMoreThanOneConsecutiveEntry(listOf(
-                    WindowManagerStateHelper.IME_COMPONENT,
-                    WindowManagerStateHelper.SPLASH_SCREEN_COMPONENT))
+                FlickerComponentName.IME,
+                FlickerComponentName.SPLASH_SCREEN))
         }
     }
 

@@ -32,7 +32,6 @@ import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageUserState;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ProviderInfo;
@@ -53,6 +52,8 @@ import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedService;
 import android.content.pm.parsing.component.ParsedUsesPermission;
+import android.content.pm.pkg.PackageUserState;
+import android.content.pm.pkg.PackageUserStateUtils;
 import android.os.Environment;
 import android.os.UserHandle;
 
@@ -65,7 +66,9 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Set;
 
-/** @hide **/
+/**
+ * @hide
+ **/
 public class PackageInfoWithoutStateUtils {
 
     public static final String SYSTEM_DATA_PATH =
@@ -82,7 +85,7 @@ public class PackageInfoWithoutStateUtils {
     @Nullable
     public static PackageInfo generate(ParsingPackageRead pkg, ApexInfo apexInfo, int flags) {
         return generateWithComponents(pkg, EmptyArray.INT, flags, 0, 0, Collections.emptySet(),
-                new PackageUserState(), UserHandle.getCallingUserId(), apexInfo);
+                PackageUserState.DEFAULT, UserHandle.getCallingUserId(), apexInfo);
     }
 
     @Nullable
@@ -199,9 +202,9 @@ public class PackageInfoWithoutStateUtils {
     }
 
     /**
-     * This bypasses critical checks that are necessary for usage with data passed outside of
-     * system server.
-     *
+     * This bypasses critical checks that are necessary for usage with data passed outside of system
+     * server.
+     * <p>
      * Prefer {@link #generateWithoutComponents(ParsingPackageRead, int[], int, long, long, Set,
      * PackageUserState, int, ApexInfo, ApplicationInfo)}.
      */
@@ -213,8 +216,8 @@ public class PackageInfoWithoutStateUtils {
         PackageInfo pi = new PackageInfo();
         pi.packageName = pkg.getPackageName();
         pi.splitNames = pkg.getSplitNames();
-        pi.versionCode = pkg.getVersionCode();
-        pi.versionCodeMajor = pkg.getVersionCodeMajor();
+        pi.versionCode = ((ParsingPackageHidden) pkg).getVersionCode();
+        pi.versionCodeMajor = ((ParsingPackageHidden) pkg).getVersionCodeMajor();
         pi.baseRevisionCode = pkg.getBaseRevisionCode();
         pi.splitRevisionCodes = pkg.getSplitRevisionCodes();
         pi.versionName = pkg.getVersionName();
@@ -229,7 +232,7 @@ public class PackageInfoWithoutStateUtils {
         pi.restrictedAccountType = pkg.getRestrictedAccountType();
         pi.requiredAccountType = pkg.getRequiredAccountType();
         pi.overlayTarget = pkg.getOverlayTarget();
-        pi.targetOverlayableName = pkg.getOverlayTargetName();
+        pi.targetOverlayableName = pkg.getOverlayTargetOverlayableName();
         pi.overlayCategory = pkg.getOverlayCategory();
         pi.overlayPriority = pkg.getOverlayPriority();
         pi.mOverlayIsStatic = pkg.isOverlayIsStatic();
@@ -246,10 +249,10 @@ public class PackageInfoWithoutStateUtils {
                 pi.configPreferences = new ConfigurationInfo[size];
                 pkg.getConfigPreferences().toArray(pi.configPreferences);
             }
-            size = pkg.getReqFeatures().size();
+            size = pkg.getRequestedFeatures().size();
             if (size > 0) {
                 pi.reqFeatures = new FeatureInfo[size];
-                pkg.getReqFeatures().toArray(pi.reqFeatures);
+                pkg.getRequestedFeatures().toArray(pi.reqFeatures);
             }
             size = pkg.getFeatureGroups().size();
             if (size > 0) {
@@ -376,23 +379,23 @@ public class PackageInfoWithoutStateUtils {
     }
 
     /**
-     * This bypasses critical checks that are necessary for usage with data passed outside of
-     * system server.
-     *
+     * This bypasses critical checks that are necessary for usage with data passed outside of system
+     * server.
+     * <p>
      * Prefer {@link #generateApplicationInfo(ParsingPackageRead, int, PackageUserState, int)}.
      *
      * @param assignUserFields whether to fill the returned {@link ApplicationInfo} with user
      *                         specific fields. This can be skipped when building from a system
      *                         server package, as there are cached strings which can be used rather
-     *                         than querying and concatenating the comparatively expensive
-     *                         {@link Environment#getDataDirectory(String)}}.
+     *                         than querying and concatenating the comparatively expensive {@link
+     *                         Environment#getDataDirectory(String)}}.
      */
     @NonNull
     public static ApplicationInfo generateApplicationInfoUnchecked(@NonNull ParsingPackageRead pkg,
-            @PackageManager.ApplicationInfoFlags int flags, PackageUserState state, int userId,
-            boolean assignUserFields) {
+            @PackageManager.ApplicationInfoFlags int flags, @NonNull PackageUserState state,
+            int userId, boolean assignUserFields) {
         // Make shallow copy so we can store the metadata/libraries safely
-        ApplicationInfo ai = pkg.toAppInfoWithoutState();
+        ApplicationInfo ai = ((ParsingPackageHidden) pkg).toAppInfoWithoutState();
 
         if (assignUserFields) {
             assignUserFields(pkg, ai, userId);
@@ -418,29 +421,28 @@ public class PackageInfoWithoutStateUtils {
             ai.disableCompatibilityMode();
         }
 
-        ai.flags |= flag(state.stopped, ApplicationInfo.FLAG_STOPPED)
-                | flag(state.installed, ApplicationInfo.FLAG_INSTALLED)
-                | flag(state.suspended, ApplicationInfo.FLAG_SUSPENDED);
-        ai.privateFlags |= flag(state.instantApp, ApplicationInfo.PRIVATE_FLAG_INSTANT)
-                | flag(state.virtualPreload, ApplicationInfo.PRIVATE_FLAG_VIRTUAL_PRELOAD)
-                | flag(state.hidden, ApplicationInfo.PRIVATE_FLAG_HIDDEN);
+        ai.flags |= flag(state.isStopped(), ApplicationInfo.FLAG_STOPPED)
+                | flag(state.isInstalled(), ApplicationInfo.FLAG_INSTALLED)
+                | flag(state.isSuspended(), ApplicationInfo.FLAG_SUSPENDED);
+        ai.privateFlags |= flag(state.isInstantApp(), ApplicationInfo.PRIVATE_FLAG_INSTANT)
+                | flag(state.isVirtualPreload(), ApplicationInfo.PRIVATE_FLAG_VIRTUAL_PRELOAD)
+                | flag(state.isHidden(), ApplicationInfo.PRIVATE_FLAG_HIDDEN);
 
-        if (state.enabled == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
+        if (state.getEnabledState() == PackageManager.COMPONENT_ENABLED_STATE_ENABLED) {
             ai.enabled = true;
-        } else if (state.enabled == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED) {
+        } else if (state.getEnabledState()
+                == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_UNTIL_USED) {
             ai.enabled = (flags & PackageManager.GET_DISABLED_UNTIL_USED_COMPONENTS) != 0;
-        } else if (state.enabled == PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-                || state.enabled == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER) {
+        } else if (state.getEnabledState() == PackageManager.COMPONENT_ENABLED_STATE_DISABLED
+                || state.getEnabledState()
+                == PackageManager.COMPONENT_ENABLED_STATE_DISABLED_USER) {
             ai.enabled = false;
         }
-        ai.enabledSetting = state.enabled;
-        if (ai.category == ApplicationInfo.CATEGORY_UNDEFINED) {
-            ai.category = state.categoryHint;
-        }
+        ai.enabledSetting = state.getEnabledState();
         if (ai.category == ApplicationInfo.CATEGORY_UNDEFINED) {
             ai.category = FallbackCategoryProvider.getFallbackCategory(ai.packageName);
         }
-        ai.seInfoUser = SELinuxUtil.assignSeinfoUser(state);
+        ai.seInfoUser = SELinuxUtil.getSeinfoUser(state);
         final OverlayPaths overlayPaths = state.getAllOverlayPaths();
         if (overlayPaths != null) {
             ai.resourceDirs = overlayPaths.getResourceDirs().toArray(new String[0]);
@@ -499,9 +501,9 @@ public class PackageInfoWithoutStateUtils {
     }
 
     /**
-     * This bypasses critical checks that are necessary for usage with data passed outside of
-     * system server.
-     *
+     * This bypasses critical checks that are necessary for usage with data passed outside of system
+     * server.
+     * <p>
      * Prefer {@link #generateActivityInfo(ParsingPackageRead, ParsedActivity, int,
      * PackageUserState, ApplicationInfo, int)}.
      */
@@ -531,10 +533,8 @@ public class PackageInfoWithoutStateUtils {
         ai.lockTaskLaunchMode = a.getLockTaskLaunchMode();
         ai.screenOrientation = a.getScreenOrientation();
         ai.resizeMode = a.getResizeMode();
-        Float maxAspectRatio = a.getMaxAspectRatio();
-        ai.setMaxAspectRatio(maxAspectRatio != null ? maxAspectRatio : 0f);
-        Float minAspectRatio = a.getMinAspectRatio();
-        ai.setMinAspectRatio(minAspectRatio != null ? minAspectRatio : 0f);
+        ai.setMaxAspectRatio(a.getMaxAspectRatio());
+        ai.setMinAspectRatio(a.getMinAspectRatio());
         ai.supportsSizeChanges = a.isSupportsSizeChanges();
         ai.requestedVrComponent = a.getRequestedVrComponent();
         ai.rotationAnimation = a.getRotationAnimation();
@@ -573,9 +573,9 @@ public class PackageInfoWithoutStateUtils {
     }
 
     /**
-     * This bypasses critical checks that are necessary for usage with data passed outside of
-     * system server.
-     *
+     * This bypasses critical checks that are necessary for usage with data passed outside of system
+     * server.
+     * <p>
      * Prefer {@link #generateServiceInfo(ParsingPackageRead, ParsedService, int, PackageUserState,
      * ApplicationInfo, int)}.
      */
@@ -623,9 +623,9 @@ public class PackageInfoWithoutStateUtils {
     }
 
     /**
-     * This bypasses critical checks that are necessary for usage with data passed outside of
-     * system server.
-     *
+     * This bypasses critical checks that are necessary for usage with data passed outside of system
+     * server.
+     * <p>
      * Prefer {@link #generateProviderInfo(ParsingPackageRead, ParsedProvider, int,
      * PackageUserState, ApplicationInfo, int)}.
      */
@@ -757,14 +757,14 @@ public class PackageInfoWithoutStateUtils {
             @Nullable ApplicationInfo appInfo) {
         // Returns false if the package is hidden system app until installed.
         if ((flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) == 0
-                && !state.installed
+                && !state.isInstalled()
                 && appInfo != null && appInfo.hiddenUntilInstalled) {
             return false;
         }
 
         // If available for the target user, or trying to match uninstalled packages and it's
         // a system app.
-        return state.isAvailable(flags)
+        return PackageUserStateUtils.isAvailable(state, flags)
                 || (appInfo != null && appInfo.isSystemApp()
                 && ((flags & PackageManager.MATCH_KNOWN_PACKAGES) != 0
                 || (flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) != 0));
@@ -801,7 +801,9 @@ public class PackageInfoWithoutStateUtils {
         }
     }
 
-    /** @see ApplicationInfo#flags */
+    /**
+     * @see ApplicationInfo#flags
+     */
     public static int appInfoFlags(ParsingPackageRead pkg) {
         // @formatter:off
         return flag(pkg.isExternalStorage(), ApplicationInfo.FLAG_EXTERNAL_STORAGE)
@@ -883,7 +885,7 @@ public class PackageInfoWithoutStateUtils {
     private static boolean checkUseInstalled(ParsingPackageRead pkg, PackageUserState state,
             @PackageManager.PackageInfoFlags int flags) {
         // If available for the target user
-        return state.isAvailable(flags);
+        return PackageUserStateUtils.isAvailable(state, flags);
     }
 
     @NonNull

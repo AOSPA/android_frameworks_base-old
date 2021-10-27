@@ -56,6 +56,7 @@ import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_INSET_DECOR;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN;
 import static android.view.WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS;
 import static android.view.WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE;
+import static android.view.WindowManager.LayoutParams.FLAG_SLIPPERY;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_DEFAULT;
 import static android.view.WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES;
@@ -394,6 +395,8 @@ public class DisplayPolicy {
 
     private PointerLocationView mPointerLocationView;
 
+    private int mDisplayCutoutTouchableRegionSize;
+
     /**
      * The area covered by system windows which belong to another display. Forwarded insets is set
      * in case this is a virtual display, this is displayed on another display that has insets, and
@@ -533,7 +536,8 @@ public class DisplayPolicy {
                             if (mStatusBar != null) {
                                 requestTransientBars(mStatusBar);
                             }
-                            checkAltBarSwipeForTransientBars(ALT_BAR_TOP);
+                            checkAltBarSwipeForTransientBars(ALT_BAR_TOP,
+                                    false /* allowForAllPositions */);
                         }
                     }
 
@@ -544,7 +548,8 @@ public class DisplayPolicy {
                                     && mNavigationBarPosition == NAV_BAR_BOTTOM) {
                                 requestTransientBars(mNavigationBar);
                             }
-                            checkAltBarSwipeForTransientBars(ALT_BAR_BOTTOM);
+                            checkAltBarSwipeForTransientBars(ALT_BAR_BOTTOM,
+                                    false /* allowForAllPositions */);
                         }
                     }
 
@@ -554,13 +559,13 @@ public class DisplayPolicy {
                         synchronized (mLock) {
                             mDisplayContent.calculateSystemGestureExclusion(
                                     excludedRegion, null /* outUnrestricted */);
-                            final boolean excluded =
-                                    mSystemGestures.currentGestureStartedInRegion(excludedRegion);
+                            final boolean allowSideSwipe = mNavigationBarAlwaysShowOnSideGesture &&
+                                    !mSystemGestures.currentGestureStartedInRegion(excludedRegion);
                             if (mNavigationBar != null && (mNavigationBarPosition == NAV_BAR_RIGHT
-                                    || !excluded && mNavigationBarAlwaysShowOnSideGesture)) {
+                                    || allowSideSwipe)) {
                                 requestTransientBars(mNavigationBar);
                             }
-                            checkAltBarSwipeForTransientBars(ALT_BAR_RIGHT);
+                            checkAltBarSwipeForTransientBars(ALT_BAR_RIGHT, allowSideSwipe);
                         }
                         excludedRegion.recycle();
                     }
@@ -571,13 +576,13 @@ public class DisplayPolicy {
                         synchronized (mLock) {
                             mDisplayContent.calculateSystemGestureExclusion(
                                     excludedRegion, null /* outUnrestricted */);
-                            final boolean excluded =
-                                    mSystemGestures.currentGestureStartedInRegion(excludedRegion);
+                            final boolean allowSideSwipe = mNavigationBarAlwaysShowOnSideGesture &&
+                                    !mSystemGestures.currentGestureStartedInRegion(excludedRegion);
                             if (mNavigationBar != null && (mNavigationBarPosition == NAV_BAR_LEFT
-                                    || !excluded && mNavigationBarAlwaysShowOnSideGesture)) {
+                                    || allowSideSwipe)) {
                                 requestTransientBars(mNavigationBar);
                             }
-                            checkAltBarSwipeForTransientBars(ALT_BAR_LEFT);
+                            checkAltBarSwipeForTransientBars(ALT_BAR_LEFT, allowSideSwipe);
                         }
                         excludedRegion.recycle();
                     }
@@ -783,8 +788,7 @@ public class DisplayPolicy {
             }
         };
         displayContent.mAppTransition.registerListenerLocked(mAppTransitionListener);
-        mService.mAtmService.getTransitionController().registerLegacyListener(
-                mAppTransitionListener);
+        displayContent.mTransitionController.registerLegacyListener(mAppTransitionListener);
         mImmersiveModeConfirmation = new ImmersiveModeConfirmation(mContext, looper,
                 mService.mVrModeEnabled);
 
@@ -824,17 +828,19 @@ public class DisplayPolicy {
         mHandler.post(mGestureNavigationSettingsObserver::register);
     }
 
-    private void checkAltBarSwipeForTransientBars(@WindowManagerPolicy.AltBarPosition int pos) {
-        if (mStatusBarAlt != null && mStatusBarAltPosition == pos) {
+    private void checkAltBarSwipeForTransientBars(@WindowManagerPolicy.AltBarPosition int pos,
+            boolean allowForAllPositions) {
+        if (mStatusBarAlt != null && (mStatusBarAltPosition == pos || allowForAllPositions)) {
             requestTransientBars(mStatusBarAlt);
         }
-        if (mNavigationBarAlt != null && mNavigationBarAltPosition == pos) {
+        if (mNavigationBarAlt != null
+                && (mNavigationBarAltPosition == pos || allowForAllPositions)) {
             requestTransientBars(mNavigationBarAlt);
         }
-        if (mClimateBarAlt != null && mClimateBarAltPosition == pos) {
+        if (mClimateBarAlt != null && (mClimateBarAltPosition == pos || allowForAllPositions)) {
             requestTransientBars(mClimateBarAlt);
         }
-        if (mExtraNavBarAlt != null && mExtraNavBarAltPosition == pos) {
+        if (mExtraNavBarAlt != null && (mExtraNavBarAltPosition == pos || allowForAllPositions)) {
             requestTransientBars(mExtraNavBarAlt);
         }
     }
@@ -1018,6 +1024,20 @@ public class DisplayPolicy {
     }
 
     /**
+     * Only trusted overlays are allowed to use FLAG_SLIPPERY.
+     */
+    static int sanitizeFlagSlippery(int flags, int privateFlags, String name) {
+        if ((flags & FLAG_SLIPPERY) == 0) {
+            return flags;
+        }
+        if ((privateFlags & PRIVATE_FLAG_TRUSTED_OVERLAY) != 0) {
+            return flags;
+        }
+        Slog.w(TAG, "Removing FLAG_SLIPPERY for non-trusted overlay " + name);
+        return flags & ~FLAG_SLIPPERY;
+    }
+
+    /**
      * Sanitize the layout parameters coming from a client.  Allows the policy
      * to do things like ensure that windows of a specific type can't take
      * input focus.
@@ -1097,6 +1117,8 @@ public class DisplayPolicy {
         if (mExtraNavBarAlt == win) {
             mExtraNavBarAltPosition = getAltBarPosition(attrs);
         }
+
+        attrs.flags = sanitizeFlagSlippery(attrs.flags, attrs.privateFlags, win.getName());
     }
 
     /**
@@ -1255,8 +1277,21 @@ public class DisplayPolicy {
                                 rect.bottom = rect.top + getStatusBarHeight(displayFrames);
                             }
                         };
+                final TriConsumer<DisplayFrames, WindowState, Rect> gestureFrameProvider =
+                        (displayFrames, windowState, rect) -> {
+                            rect.bottom = rect.top + getStatusBarHeight(displayFrames);
+                            final DisplayCutout cutout =
+                                    displayFrames.mInsetsState.getDisplayCutout();
+                            if (cutout != null) {
+                                final Rect top = cutout.getBoundingRectTop();
+                                if (!top.isEmpty()) {
+                                    rect.bottom = rect.bottom + mDisplayCutoutTouchableRegionSize;
+                                }
+                            }
+                        };
                 mDisplayContent.setInsetProvider(ITYPE_STATUS_BAR, win, frameProvider);
-                mDisplayContent.setInsetProvider(ITYPE_TOP_MANDATORY_GESTURES, win, frameProvider);
+                mDisplayContent.setInsetProvider(
+                        ITYPE_TOP_MANDATORY_GESTURES, win, gestureFrameProvider);
                 mDisplayContent.setInsetProvider(ITYPE_TOP_TAPPABLE_ELEMENT, win, frameProvider);
                 break;
             case TYPE_NAVIGATION_BAR:
@@ -1321,6 +1356,12 @@ public class DisplayPolicy {
             default:
                 if (attrs.providesInsetsTypes != null) {
                     for (@InternalInsetsType int insetsType : attrs.providesInsetsTypes) {
+                        final TriConsumer<DisplayFrames, WindowState, Rect> imeFrameProvider =
+                                !attrs.providedInternalImeInsets.equals(Insets.NONE)
+                                    ? (displayFrames, windowState, inOutFrame) ->
+                                            inOutFrame.inset(windowState.getLayoutingAttrs(
+                                                displayFrames.mRotation).providedInternalImeInsets)
+                                    : null;
                         switch (insetsType) {
                             case ITYPE_STATUS_BAR:
                                 mStatusBarAlt = win;
@@ -1340,12 +1381,13 @@ public class DisplayPolicy {
                                 break;
                         }
                         if (!INSETS_LAYOUT_GENERALIZATION) {
-                            mDisplayContent.setInsetProvider(insetsType, win, null);
+                            mDisplayContent.setInsetProvider(insetsType, win, null,
+                                    imeFrameProvider);
                         } else {
                             mDisplayContent.setInsetProvider(insetsType, win, (displayFrames,
                                     windowState, inOutFrame) -> inOutFrame.inset(
                                             windowState.getLayoutingAttrs(displayFrames.mRotation)
-                                                    .providedInternalInsets));
+                                                    .providedInternalInsets), imeFrameProvider);
                         }
                     }
                 }
@@ -2237,11 +2279,14 @@ public class DisplayPolicy {
             mStatusBarHeightForRotation[landscapeRotation] =
                     mStatusBarHeightForRotation[seascapeRotation] =
                             res.getDimensionPixelSize(R.dimen.status_bar_height_landscape);
+            mDisplayCutoutTouchableRegionSize = res.getDimensionPixelSize(
+                    R.dimen.display_cutout_touchable_region_size);
         } else {
             mStatusBarHeightForRotation[portraitRotation] =
                     mStatusBarHeightForRotation[upsideDownRotation] =
                             mStatusBarHeightForRotation[landscapeRotation] =
                                     mStatusBarHeightForRotation[seascapeRotation] = 0;
+            mDisplayCutoutTouchableRegionSize = 0;
         }
 
         // Height of the navigation bar when presented horizontally at bottom
@@ -2541,7 +2586,7 @@ public class DisplayPolicy {
      */
     float getWindowCornerRadius() {
         return mDisplayContent.getDisplay().getType() == TYPE_INTERNAL
-                ? ScreenDecorationsUtils.getWindowCornerRadius(mContext.getResources()) : 0f;
+                ? ScreenDecorationsUtils.getWindowCornerRadius(mContext) : 0f;
     }
 
     boolean isShowingDreamLw() {
@@ -3263,6 +3308,7 @@ public class DisplayPolicy {
         pw.print(" mAllowLockscreenWhenOn="); pw.println(mAllowLockscreenWhenOn);
         pw.print(prefix); pw.print("mRemoteInsetsControllerControlsSystemBars=");
         pw.println(mDisplayContent.getInsetsPolicy().getRemoteInsetsControllerControlsSystemBars());
+        mSystemGestures.dump(pw, prefix);
 
         pw.print(prefix); pw.println("Looper state:");
         mHandler.getLooper().dump(new PrintWriterPrinter(pw), prefix + "  ");

@@ -56,6 +56,7 @@ import android.os.Bundle;
 import android.os.IBinder;
 import android.os.Parcel;
 import android.os.RemoteException;
+import android.util.AndroidRuntimeException;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.Slog;
@@ -121,7 +122,8 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
      * A Map which manages the relationship between
      * {@link TaskFragmentCreationParams#getFragmentToken()} and {@link TaskFragment}
      */
-    private final ArrayMap<IBinder, TaskFragment> mLaunchTaskFragments = new ArrayMap<>();
+    @VisibleForTesting
+    final ArrayMap<IBinder, TaskFragment> mLaunchTaskFragments = new ArrayMap<>();
 
     WindowOrganizerController(ActivityTaskManagerService atm) {
         mService = atm;
@@ -274,8 +276,6 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 syncId = startSyncWithOrganizer(callback);
                 applyTransaction(t, syncId, null /* transition */, caller);
                 setSyncReady(syncId);
-                mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY)
-                        .executeAppTransition();
             }
         } finally {
             Binder.restoreCallingIdentity(ident);
@@ -318,7 +318,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
      * @param caller Info about the calling process.
      */
     private void applyTransaction(@NonNull WindowContainerTransaction t, int syncId,
-            @Nullable Transition transition, @Nullable CallerInfo caller) {
+            @Nullable Transition transition, @NonNull CallerInfo caller) {
         int effects = 0;
         ProtoLog.v(WM_DEBUG_WINDOW_ORGANIZER, "Apply window transaction, syncId=%d", syncId);
         mService.deferWindowLayout();
@@ -327,7 +327,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
             if (transition != null) {
                 // First check if we have a display rotation transition and if so, update it.
                 final DisplayContent dc = DisplayRotation.getDisplayFromTransition(transition);
-                if (dc != null && transition.mChanges.get(dc).mRotation != dc.getRotation()) {
+                if (dc != null && transition.mChanges.get(dc).hasChanged(dc)) {
                     // Go through all tasks and collect them before the rotation
                     // TODO(shell-transitions): move collect() to onConfigurationChange once
                     //       wallpaper handling is synchronized.
@@ -462,6 +462,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 container.onRequestedOverrideConfigurationChanged(c);
             }
             effects |= TRANSACT_EFFECTS_CLIENT_CONFIG;
+            if (windowMask != 0 && container.isEmbedded()) {
+                // Changing bounds of the embedded TaskFragments may result in lifecycle changes.
+                effects |= TRANSACT_EFFECTS_LIFECYCLE;
+            }
         }
         if ((change.getChangeMask() & WindowContainerTransaction.Change.CHANGE_FOCUSABLE) != 0) {
             if (container.setFocusable(change.getFocusable())) {
@@ -540,7 +544,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
 
     private int applyHierarchyOp(WindowContainerTransaction.HierarchyOp hop, int effects,
             int syncId, @Nullable Transition transition, boolean isInLockTaskMode,
-            @Nullable CallerInfo caller, @Nullable IBinder errorCallbackToken,
+            @NonNull CallerInfo caller, @Nullable IBinder errorCallbackToken,
             @Nullable ITaskFragmentOrganizer organizer) {
         final int type = hop.getType();
         switch (type) {
@@ -628,11 +632,28 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                 final int taskId = launchOpts.getInt(
                         WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
                 launchOpts.remove(WindowContainerTransaction.HierarchyOp.LAUNCH_KEY_TASK_ID);
-                final SafeActivityOptions safeOptions = caller != null
-                        ? SafeActivityOptions.fromBundle(launchOpts, caller.mPid, caller.mUid)
-                        : SafeActivityOptions.fromBundle(launchOpts);
-                mService.mTaskSupervisor.startActivityFromRecents(caller.mPid, caller.mUid,
-                        taskId, safeOptions);
+                final SafeActivityOptions safeOptions =
+                        SafeActivityOptions.fromBundle(launchOpts, caller.mPid, caller.mUid);
+                final Integer[] starterResult = { null };
+                // startActivityFromRecents should not be called in lock.
+                mService.mH.post(() -> {
+                    try {
+                        starterResult[0] = mService.mTaskSupervisor.startActivityFromRecents(
+                                caller.mPid, caller.mUid, taskId, safeOptions);
+                    } catch (Throwable t) {
+                        starterResult[0] = ActivityManager.START_CANCELED;
+                        Slog.w(TAG, t);
+                    }
+                    synchronized (mGlobalLock) {
+                        mGlobalLock.notifyAll();
+                    }
+                });
+                while (starterResult[0] == null) {
+                    try {
+                        mGlobalLock.wait();
+                    } catch (InterruptedException ignored) {
+                    }
+                }
                 break;
             case HIERARCHY_OP_TYPE_PENDING_INTENT:
                 String resolvedType = hop.getActivityIntent() != null
@@ -652,18 +673,10 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     options = activityOptions.toBundle();
                 }
 
-                int res = mService.mAmInternal.sendIntentSender(hop.getPendingIntent().getTarget(),
+                mService.mAmInternal.sendIntentSender(hop.getPendingIntent().getTarget(),
                         hop.getPendingIntent().getWhitelistToken(), 0 /* code */,
                         hop.getActivityIntent(), resolvedType, null /* finishReceiver */,
                         null /* requiredPermission */, options);
-                if (res != ActivityManager.START_SUCCESS
-                        && res != ActivityManager.START_TASK_TO_FRONT) {
-                    if (!mTransitionController.isShellTransitionsEnabled()) {
-                        final DisplayContent dc =
-                                mService.mRootWindowContainer.getDisplayContent(DEFAULT_DISPLAY);
-                        dc.cancelAppTransition();
-                    }
-                }
                 break;
             case HIERARCHY_OP_TYPE_CREATE_TASK_FRAGMENT:
                 final TaskFragmentCreationParams taskFragmentCreationOptions =
@@ -681,7 +694,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     throw new IllegalArgumentException(
                             "Can only delete organized TaskFragment, but not Task.");
                 }
-                deleteTaskFragment(taskFragment, errorCallbackToken);
+                effects |= deleteTaskFragment(taskFragment, errorCallbackToken);
                 break;
             case HIERARCHY_OP_TYPE_START_ACTIVITY_IN_TASK_FRAGMENT:
                 fragmentToken = hop.getContainer();
@@ -698,10 +711,9 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                         .startActivityInTaskFragment(tf, activityIntent, activityOptions,
                                 hop.getCallingActivity());
                 if (!isStartResultSuccessful(result)) {
-                    final Throwable exception =
-                            new ActivityNotFoundException("start activity in taskFragment failed");
                     sendTaskFragmentOperationFailure(tf.getTaskFragmentOrganizer(),
-                            errorCallbackToken, exception);
+                            errorCallbackToken,
+                            convertStartFailureToThrowable(result, activityIntent));
                 }
                 break;
             case HIERARCHY_OP_TYPE_REPARENT_ACTIVITY_TO_TASK_FRAGMENT:
@@ -714,6 +726,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     break;
                 }
                 activity.reparent(mLaunchTaskFragments.get(fragmentToken), POSITION_TOP);
+                effects |= TRANSACT_EFFECTS_LIFECYCLE;
                 break;
             case HIERARCHY_OP_TYPE_REPARENT_CHILDREN:
                 final WindowContainer oldParent = WindowContainer.fromBinder(hop.getContainer());
@@ -726,6 +739,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     break;
                 }
                 reparentTaskFragment(oldParent, newParent, errorCallbackToken);
+                effects |= TRANSACT_EFFECTS_LIFECYCLE;
                 break;
             case HIERARCHY_OP_TYPE_SET_ADJACENT_TASK_FRAGMENTS:
                 fragmentToken = hop.getContainer();
@@ -741,6 +755,22 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                     break;
                 }
                 tf1.setAdjacentTaskFragment(tf2);
+                effects |= TRANSACT_EFFECTS_LIFECYCLE;
+
+                final Bundle bundle = hop.getLaunchOptions();
+                final WindowContainerTransaction.TaskFragmentAdjacentParams adjacentParams =
+                        bundle != null ? new WindowContainerTransaction.TaskFragmentAdjacentParams(
+                                bundle) : null;
+                if (adjacentParams == null) {
+                    break;
+                }
+
+                tf1.setDelayLastActivityRemoval(
+                        adjacentParams.shouldDelayPrimaryLastActivityRemoval());
+                if (tf2 != null) {
+                    tf2.setDelayLastActivityRemoval(
+                            adjacentParams.shouldDelaySecondaryLastActivityRemoval());
+                }
                 break;
         }
         return effects;
@@ -1170,7 +1200,7 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
     }
 
-    void deleteTaskFragment(@NonNull TaskFragment taskFragment,
+    private int deleteTaskFragment(@NonNull TaskFragment taskFragment,
             @Nullable IBinder errorCallbackToken) {
         final int index = mLaunchTaskFragments.indexOfValue(taskFragment);
         if (index < 0) {
@@ -1179,10 +1209,11 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
                             + "taskFragment");
             sendTaskFragmentOperationFailure(taskFragment.getTaskFragmentOrganizer(),
                     errorCallbackToken, exception);
-            return;
+            return 0;
         }
         mLaunchTaskFragments.removeAt(index);
         taskFragment.remove(true /* withTransition */, "deleteTaskFragment");
+        return TRANSACT_EFFECTS_LIFECYCLE;
     }
 
     @Nullable
@@ -1207,5 +1238,22 @@ class WindowOrganizerController extends IWindowOrganizerController.Stub
         }
         mService.mTaskFragmentOrganizerController
                 .onTaskFragmentError(organizer, errorCallbackToken, exception);
+    }
+
+    private Throwable convertStartFailureToThrowable(int result, Intent intent) {
+        switch (result) {
+            case ActivityManager.START_INTENT_NOT_RESOLVED:
+            case ActivityManager.START_CLASS_NOT_FOUND:
+                return new ActivityNotFoundException("No Activity found to handle " + intent);
+            case ActivityManager.START_PERMISSION_DENIED:
+                return new SecurityException("Permission denied and not allowed to start activity "
+                        + intent);
+            case ActivityManager.START_CANCELED:
+                return new AndroidRuntimeException("Activity could not be started for " + intent
+                        + " with error code : " + result);
+            default:
+                return new AndroidRuntimeException("Start activity failed with error code : "
+                        + result + " when starting " + intent);
+        }
     }
 }

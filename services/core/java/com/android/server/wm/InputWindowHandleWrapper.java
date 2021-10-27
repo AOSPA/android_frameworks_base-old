@@ -20,6 +20,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.Region;
 import android.os.IBinder;
+import android.view.IWindow;
 import android.view.InputApplicationHandle;
 import android.view.InputWindowHandle;
 import android.view.SurfaceControl;
@@ -265,6 +266,18 @@ class InputWindowHandleWrapper {
         }
         mHandle.replaceTouchableRegionWithCrop = replace;
         mChanged = true;
+    }
+
+    void setWindowToken(IWindow windowToken) {
+        if (mHandle.getWindow() == windowToken) {
+            return;
+        }
+        mHandle.setWindowToken(windowToken);
+        mChanged = true;
+    }
+
+    boolean isTrustedOverlay() {
+        return mHandle.trustedOverlay;
     }
 
     @Override

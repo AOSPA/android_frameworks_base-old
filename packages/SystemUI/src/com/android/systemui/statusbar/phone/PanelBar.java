@@ -18,6 +18,7 @@ package com.android.systemui.statusbar.phone;
 
 import static java.lang.Float.isNaN;
 
+import android.annotation.CallSuper;
 import android.content.Context;
 import android.os.Bundle;
 import android.os.Parcelable;
@@ -32,8 +33,6 @@ public abstract class PanelBar extends FrameLayout {
     private static final boolean SPEW = false;
     private static final String PANEL_BAR_SUPER_PARCELABLE = "panel_bar_super_parcelable";
     private static final String STATE = "state";
-    private boolean mBouncerShowing;
-    private boolean mExpanded;
     protected float mPanelFraction;
 
     public static final void LOG(String fmt, Object... args) {
@@ -98,33 +97,6 @@ public abstract class PanelBar extends FrameLayout {
         pv.setBar(this);
     }
 
-    public void setBouncerShowing(boolean showing) {
-        mBouncerShowing = showing;
-        int important = showing ? IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS
-                : IMPORTANT_FOR_ACCESSIBILITY_AUTO;
-
-        setImportantForAccessibility(important);
-        updateVisibility();
-
-        if (mPanel != null) mPanel.getView().setImportantForAccessibility(important);
-    }
-
-    public float getExpansionFraction() {
-        return mPanelFraction;
-    }
-
-    public boolean isExpanded() {
-        return mExpanded;
-    }
-
-    protected void updateVisibility() {
-        mPanel.getView().setVisibility(shouldPanelBeVisible() ? VISIBLE : INVISIBLE);
-    }
-
-    protected boolean shouldPanelBeVisible() {
-        return mExpanded || mBouncerShowing;
-    }
-
     public boolean panelEnabled() {
         return true;
     }
@@ -162,7 +134,13 @@ public abstract class PanelBar extends FrameLayout {
         return mPanel == null || mPanel.getView().dispatchTouchEvent(event);
     }
 
-    public abstract void panelScrimMinFractionChanged(float minFraction);
+    /**
+     * Percentage of panel expansion offset, caused by pulling down on a heads-up.
+     */
+    @CallSuper
+    public void onPanelMinFractionChanged(float minFraction) {
+        mPanel.setMinFraction(minFraction);
+    }
 
     /**
      * @param frac the fraction from the expansion in [0, 1]
@@ -175,11 +153,8 @@ public abstract class PanelBar extends FrameLayout {
         }
         boolean fullyClosed = true;
         boolean fullyOpened = false;
-        if (SPEW) LOG("panelExpansionChanged: start state=%d", mState);
-        PanelViewController pv = mPanel;
-        mExpanded = expanded;
+        if (SPEW) LOG("panelExpansionChanged: start state=%d, f=%.1f", mState, frac);
         mPanelFraction = frac;
-        updateVisibility();
         // adjust any other panels that may be partially visible
         if (expanded) {
             if (mState == STATE_CLOSED) {
@@ -187,9 +162,7 @@ public abstract class PanelBar extends FrameLayout {
                 onPanelPeeked();
             }
             fullyClosed = false;
-            final float thisFrac = pv.getExpandedFraction();
-            if (SPEW) LOG("panelExpansionChanged:  -> %s: f=%.1f", pv.getName(), thisFrac);
-            fullyOpened = thisFrac >= 1f;
+            fullyOpened = frac >= 1f;
         }
         if (fullyOpened && !mTracking) {
             go(STATE_OPEN);

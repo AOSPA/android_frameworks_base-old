@@ -222,6 +222,9 @@ class StorageManagerService extends IStorageManager.Stub
     @GuardedBy("mLock")
     private final Set<Integer> mFuseMountedUser = new ArraySet<>();
 
+    @GuardedBy("mLock")
+    private final Set<Integer> mCeStoragePreparedUsers = new ArraySet<>();
+
     public static class Lifecycle extends SystemService {
         private StorageManagerService mStorageManagerService;
 
@@ -1542,7 +1545,18 @@ class StorageManagerService extends IStorageManager.Stub
         }
 
         if (vol.type == VolumeInfo.TYPE_EMULATED) {
-            if (!mStorageSessionController.supportsExternalStorage(vol.mountUserId)) {
+            final Context volumeUserContext = mContext.createContextAsUser(
+                    UserHandle.of(vol.mountUserId), 0);
+
+            boolean isMediaSharedWithParent =
+                    (volumeUserContext != null) ? volumeUserContext.getSystemService(
+                            UserManager.class).isMediaSharedWithParent() : false;
+
+            // For all the users where media is shared with parent, creation of emulated volume
+            // should not be skipped even if media provider instance is not running in that user
+            // space
+            if (!isMediaSharedWithParent
+                    && !mStorageSessionController.supportsExternalStorage(vol.mountUserId)) {
                 Slog.d(TAG, "Ignoring volume " + vol.getId() + " because user "
                         + Integer.toString(vol.mountUserId)
                         + " does not support external storage.");
@@ -3403,8 +3417,12 @@ class StorageManagerService extends IStorageManager.Stub
                     mInstaller.tryMountDataMirror(volumeUuid);
                 }
             }
-        } catch (Exception e) {
+        } catch (RemoteException | Installer.InstallerException e) {
             Slog.wtf(TAG, e);
+            // Make sure to re-throw this exception; we must not ignore failure
+            // to prepare the user storage as it could indicate that encryption
+            // wasn't successfully set up.
+            throw new RuntimeException(e);
         }
     }
 
@@ -4379,8 +4397,13 @@ class StorageManagerService extends IStorageManager.Stub
                 packageName = packagesForUid[0];
             }
 
-            if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
-                return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
+            final long token = Binder.clearCallingIdentity();
+            try {
+                if (mPmInternal.isInstantApp(packageName, UserHandle.getUserId(uid))) {
+                    return StorageManager.MOUNT_MODE_EXTERNAL_NONE;
+                }
+            } finally {
+                Binder.restoreCallingIdentity(token);
             }
 
             if (mStorageManagerInternal.isExternalStorageService(uid)) {
@@ -4866,6 +4889,20 @@ class StorageManagerService extends IStorageManager.Stub
                 }
             }
             return primaryVolumeIds;
+        }
+
+        @Override
+        public void markCeStoragePrepared(int userId) {
+            synchronized (mLock) {
+                mCeStoragePreparedUsers.add(userId);
+            }
+        }
+
+        @Override
+        public boolean isCeStoragePrepared(int userId) {
+            synchronized (mLock) {
+                return mCeStoragePreparedUsers.contains(userId);
+            }
         }
     }
 }

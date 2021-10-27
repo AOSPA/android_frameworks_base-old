@@ -16,15 +16,21 @@
 
 package com.android.server.tare;
 
+import static android.provider.Settings.Global.TARE_ALARM_MANAGER_CONSTANTS;
+import static android.provider.Settings.Global.TARE_JOB_SCHEDULER_CONSTANTS;
 import static android.text.format.DateUtils.HOUR_IN_MILLIS;
 import static android.text.format.DateUtils.MINUTE_IN_MILLIS;
 
+import static com.android.server.tare.TareUtils.appToString;
 import static com.android.server.tare.TareUtils.getCurrentTimeMillis;
+import static com.android.server.tare.TareUtils.narcToString;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AlarmManager;
 import android.app.tare.IEconomyManager;
+import android.app.usage.UsageEvents;
+import android.app.usage.UsageStatsManagerInternal;
 import android.content.BroadcastReceiver;
 import android.content.ContentResolver;
 import android.content.Context;
@@ -56,6 +62,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.DumpUtils;
 import com.android.server.LocalServices;
 import com.android.server.SystemService;
+import com.android.server.pm.UserManagerInternal;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -78,8 +85,13 @@ public class InternalResourceService extends SystemService {
     static final long UNUSED_RECLAMATION_PERIOD_MS = 24 * HOUR_IN_MILLIS;
     /** How much of an app's unused wealth should be reclaimed periodically. */
     private static final float DEFAULT_UNUSED_RECLAMATION_PERCENTAGE = .1f;
+    /** The amount of time to delay reclamation by after boot. */
+    private static final long RECLAMATION_STARTUP_DELAY_MS = 30_000L;
+    private static final int PACKAGE_QUERY_FLAGS =
+            PackageManager.MATCH_DIRECT_BOOT_AWARE | PackageManager.MATCH_DIRECT_BOOT_UNAWARE
+                    | PackageManager.MATCH_APEX;
 
-    /** Global local for all resource economy state. */
+    /** Global lock for all resource economy state. */
     private final Object mLock = new Object();
 
     private final Handler mHandler;
@@ -88,13 +100,16 @@ public class InternalResourceService extends SystemService {
     private final PackageManagerInternal mPackageManagerInternal;
 
     private final Agent mAgent;
-    private final CompleteEconomicPolicy mCompleteEconomicPolicy;
     private final ConfigObserver mConfigObserver;
     private final EconomyManagerStub mEconomyManagerStub;
+    private final Scribe mScribe;
+
+    @GuardedBy("mLock")
+    private CompleteEconomicPolicy mCompleteEconomicPolicy;
 
     @NonNull
     @GuardedBy("mLock")
-    private List<PackageInfo> mPkgCache = new ArrayList<>();
+    private final List<PackageInfo> mPkgCache = new ArrayList<>();
 
     /** Cached mapping of UIDs (for all users) to a list of packages in the UID. */
     @GuardedBy("mLock")
@@ -109,9 +124,6 @@ public class InternalResourceService extends SystemService {
     // In the range [0,100] to represent 0% to 100% battery.
     @GuardedBy("mLock")
     private int mCurrentBatteryLevel;
-    // TODO: load from disk
-    @GuardedBy("mLock")
-    private long mLastUnusedReclamationTime;
 
     private final BroadcastReceiver mBroadcastReceiver = new BroadcastReceiver() {
         @Nullable
@@ -161,13 +173,25 @@ public class InternalResourceService extends SystemService {
         }
     };
 
+    private final UsageStatsManagerInternal.UsageEventListener mSurveillanceAgent =
+            new UsageStatsManagerInternal.UsageEventListener() {
+                /**
+                 * Callback to inform listeners of a new event.
+                 */
+                @Override
+                public void onUsageEvent(int userId, @NonNull UsageEvents.Event event) {
+                    mHandler.obtainMessage(MSG_PROCESS_USAGE_EVENT, userId, 0, event)
+                            .sendToTarget();
+                }
+            };
+
     private final AlarmManager.OnAlarmListener mUnusedWealthReclamationListener =
             new AlarmManager.OnAlarmListener() {
                 @Override
                 public void onAlarm() {
                     synchronized (mLock) {
                         mAgent.reclaimUnusedAssetsLocked(DEFAULT_UNUSED_RECLAMATION_PERCENTAGE);
-                        mLastUnusedReclamationTime = getCurrentTimeMillis();
+                        mScribe.setLastReclamationTimeLocked(getCurrentTimeMillis());
                         scheduleUnusedWealthReclamationLocked();
                     }
                 }
@@ -175,6 +199,7 @@ public class InternalResourceService extends SystemService {
 
     private static final int MSG_NOTIFY_AFFORDABILITY_CHANGE_LISTENER = 0;
     private static final int MSG_SCHEDULE_UNUSED_WEALTH_RECLAMATION_EVENT = 1;
+    private static final int MSG_PROCESS_USAGE_EVENT = 2;
     private static final String ALARM_TAG_WEALTH_RECLAMATION = "*tare.reclamation*";
     private static final String KEY_PKG = "pkg";
 
@@ -195,8 +220,9 @@ public class InternalResourceService extends SystemService {
         mPackageManager = context.getPackageManager();
         mPackageManagerInternal = LocalServices.getService(PackageManagerInternal.class);
         mEconomyManagerStub = new EconomyManagerStub();
+        mScribe = new Scribe(this);
         mCompleteEconomicPolicy = new CompleteEconomicPolicy(this);
-        mAgent = new Agent(this, mCompleteEconomicPolicy);
+        mAgent = new Agent(this, mScribe);
 
         mConfigObserver = new ConfigObserver(mHandler, context);
 
@@ -223,11 +249,34 @@ public class InternalResourceService extends SystemService {
         return mLock;
     }
 
+    /** Returns the installed packages for all users. */
+    @NonNull
+    @GuardedBy("mLock")
+    CompleteEconomicPolicy getCompleteEconomicPolicyLocked() {
+        return mCompleteEconomicPolicy;
+    }
+
     @NonNull
     List<PackageInfo> getInstalledPackages() {
         synchronized (mLock) {
             return mPkgCache;
         }
+    }
+
+    /** Returns the installed packages for the specified user. */
+    @NonNull
+    List<PackageInfo> getInstalledPackages(final int userId) {
+        final List<PackageInfo> userPkgs = new ArrayList<>();
+        synchronized (mLock) {
+            for (int i = 0; i < mPkgCache.size(); ++i) {
+                final PackageInfo packageInfo = mPkgCache.get(i);
+                if (packageInfo.applicationInfo != null
+                        && UserHandle.getUserId(packageInfo.applicationInfo.uid) == userId) {
+                    userPkgs.add(packageInfo);
+                }
+            }
+        }
+        return userPkgs;
     }
 
     @GuardedBy("mLock")
@@ -283,9 +332,10 @@ public class InternalResourceService extends SystemService {
         final int userId = UserHandle.getUserId(uid);
         final PackageInfo packageInfo;
         try {
-            packageInfo = mPackageManager.getPackageInfoAsUser(pkgName, 0, userId);
+            packageInfo =
+                    mPackageManager.getPackageInfoAsUser(pkgName, PACKAGE_QUERY_FLAGS, userId);
         } catch (PackageManager.NameNotFoundException e) {
-            Slog.wtf(TAG, "PM couldn't find newly added package: " + pkgName);
+            Slog.wtf(TAG, "PM couldn't find newly added package: " + pkgName, e);
             return;
         }
         synchronized (mPackageToUidCache) {
@@ -337,7 +387,8 @@ public class InternalResourceService extends SystemService {
 
     void onUserAdded(final int userId) {
         synchronized (mLock) {
-            loadInstalledPackageListLocked();
+            mPkgCache.addAll(
+                    mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId));
             mAgent.grantBirthrightsLocked(userId);
         }
     }
@@ -354,7 +405,6 @@ public class InternalResourceService extends SystemService {
                     break;
                 }
             }
-            loadInstalledPackageListLocked();
             mAgent.onUserRemovedLocked(userId, removedPkgs);
         }
     }
@@ -374,10 +424,46 @@ public class InternalResourceService extends SystemService {
     }
 
     @GuardedBy("mLock")
+    private void processUsageEventLocked(final int userId, @NonNull UsageEvents.Event event) {
+        if (!mIsEnabled) {
+            return;
+        }
+        final String pkgName = event.getPackageName();
+        if (DEBUG) {
+            Slog.d(TAG, "Processing event " + event.getEventType()
+                    + " for " + appToString(userId, pkgName));
+        }
+        final long nowElapsed = SystemClock.elapsedRealtime();
+        switch (event.getEventType()) {
+            case UsageEvents.Event.ACTIVITY_RESUMED:
+                mAgent.noteOngoingEventLocked(userId, pkgName,
+                        EconomicPolicy.REWARD_TOP_ACTIVITY, null, nowElapsed);
+                break;
+            case UsageEvents.Event.ACTIVITY_PAUSED:
+            case UsageEvents.Event.ACTIVITY_STOPPED:
+            case UsageEvents.Event.ACTIVITY_DESTROYED:
+                final long now = getCurrentTimeMillis();
+                mAgent.stopOngoingActionLocked(userId, pkgName,
+                        EconomicPolicy.REWARD_TOP_ACTIVITY, null, nowElapsed, now);
+                break;
+            case UsageEvents.Event.USER_INTERACTION:
+            case UsageEvents.Event.CHOOSER_ACTION:
+                mAgent.noteInstantaneousEventLocked(userId, pkgName,
+                        EconomicPolicy.REWARD_OTHER_USER_INTERACTION, null);
+                break;
+            case UsageEvents.Event.NOTIFICATION_INTERRUPTION:
+            case UsageEvents.Event.NOTIFICATION_SEEN:
+                mAgent.noteInstantaneousEventLocked(userId, pkgName,
+                        EconomicPolicy.REWARD_NOTIFICATION_SEEN, null);
+                break;
+        }
+    }
+
+    @GuardedBy("mLock")
     private void scheduleUnusedWealthReclamationLocked() {
         final long now = getCurrentTimeMillis();
-        final long nextReclamationTime =
-                Math.max(mLastUnusedReclamationTime + UNUSED_RECLAMATION_PERIOD_MS, now + 30_000);
+        final long nextReclamationTime = Math.max(now + RECLAMATION_STARTUP_DELAY_MS,
+                mScribe.getLastReclamationTimeLocked() + UNUSED_RECLAMATION_PERIOD_MS);
         mHandler.post(() -> {
             // Never call out to AlarmManager with the lock held. This sits below AM.
             AlarmManager alarmManager = getContext().getSystemService(AlarmManager.class);
@@ -388,7 +474,7 @@ public class InternalResourceService extends SystemService {
                         ALARM_TAG_WEALTH_RECLAMATION, mUnusedWealthReclamationListener, mHandler);
             } else {
                 mHandler.sendEmptyMessageDelayed(
-                        MSG_SCHEDULE_UNUSED_WEALTH_RECLAMATION_EVENT, 30_000);
+                        MSG_SCHEDULE_UNUSED_WEALTH_RECLAMATION_EVENT, RECLAMATION_STARTUP_DELAY_MS);
             }
         });
     }
@@ -415,10 +501,17 @@ public class InternalResourceService extends SystemService {
 
     @GuardedBy("mLock")
     private void loadInstalledPackageListLocked() {
-        mPkgCache = mPackageManager.getInstalledPackages(0);
+        mPkgCache.clear();
+        final UserManagerInternal userManagerInternal =
+                LocalServices.getService(UserManagerInternal.class);
+        final int[] userIds = userManagerInternal.getUserIds();
+        for (int userId : userIds) {
+            mPkgCache.addAll(
+                    mPackageManager.getInstalledPackagesAsUser(PACKAGE_QUERY_FLAGS, userId));
+        }
     }
 
-    private void registerReceivers() {
+    private void registerListeners() {
         final IntentFilter filter = new IntentFilter();
         filter.addAction(Intent.ACTION_BATTERY_LEVEL_CHANGED);
         getContext().registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, filter, null, null);
@@ -435,6 +528,9 @@ public class InternalResourceService extends SystemService {
         userFilter.addAction(Intent.ACTION_USER_ADDED);
         getContext()
                 .registerReceiverAsUser(mBroadcastReceiver, UserHandle.ALL, userFilter, null, null);
+
+        UsageStatsManagerInternal usmi = LocalServices.getService(UsageStatsManagerInternal.class);
+        usmi.registerListener(mSurveillanceAgent);
     }
 
     /** Perform long-running and/or heavy setup work. This should be called off the main thread. */
@@ -446,6 +542,7 @@ public class InternalResourceService extends SystemService {
             if (isFirstSetup) {
                 mAgent.grantBirthrightsLocked();
             }
+            scheduleUnusedWealthReclamationLocked();
         }
     }
 
@@ -454,10 +551,9 @@ public class InternalResourceService extends SystemService {
             return;
         }
         synchronized (mLock) {
-            registerReceivers();
+            registerListeners();
             mCurrentBatteryLevel = getCurrentBatteryLevel();
             mHandler.post(this::setupHeavyWork);
-            scheduleUnusedWealthReclamationLocked();
             mCompleteEconomicPolicy.setup();
         }
     }
@@ -477,8 +573,12 @@ public class InternalResourceService extends SystemService {
                 }
             });
             mPkgCache.clear();
+            mScribe.tearDownLocked();
             mUidToPackageCache.clear();
             getContext().unregisterReceiver(mBroadcastReceiver);
+            UsageStatsManagerInternal usmi =
+                    LocalServices.getService(UsageStatsManagerInternal.class);
+            usmi.unregisterListener(mSurveillanceAgent);
         }
         synchronized (mPackageToUidCache) {
             mPackageToUidCache.clear();
@@ -504,6 +604,15 @@ public class InternalResourceService extends SystemService {
                     listener.onAffordabilityChanged(userId, pkgName,
                             affordabilityNote.getActionBill(),
                             affordabilityNote.isCurrentlyAffordable());
+                }
+                break;
+
+                case MSG_PROCESS_USAGE_EVENT: {
+                    final int userId = msg.arg1;
+                    final UsageEvents.Event event = (UsageEvents.Event) msg.obj;
+                    synchronized (mLock) {
+                        processUsageEventLocked(userId, event);
+                    }
                 }
                 break;
 
@@ -534,6 +643,10 @@ public class InternalResourceService extends SystemService {
                 if ("-h".equals(arg) || "--help".equals(arg)) {
                     dumpHelp(pw);
                     return;
+                } else if ("-a".equals(arg)) {
+                    // -a is passed when dumping a bug report so we have to acknowledge the
+                    // argument. However, we currently don't do anything differently for bug
+                    // reports.
                 } else if (arg.length() > 0 && arg.charAt(0) == '-') {
                     pw.println("Unknown option: " + arg);
                     return;
@@ -597,14 +710,14 @@ public class InternalResourceService extends SystemService {
             long requiredBalance = 0;
             final List<EconomyManagerInternal.AnticipatedAction> projectedActions =
                     bill.getAnticipatedActions();
-            for (int i = 0; i < projectedActions.size(); ++i) {
-                AnticipatedAction action = projectedActions.get(i);
-                final long cost =
-                        mCompleteEconomicPolicy.getCostOfAction(action.actionId, userId, pkgName);
-                requiredBalance += cost * action.numInstantaneousCalls
-                        + cost * (action.ongoingDurationMs / 1000);
-            }
             synchronized (mLock) {
+                for (int i = 0; i < projectedActions.size(); ++i) {
+                    AnticipatedAction action = projectedActions.get(i);
+                    final long cost = mCompleteEconomicPolicy.getCostOfAction(
+                            action.actionId, userId, pkgName);
+                    requiredBalance += cost * action.numInstantaneousCalls
+                            + cost * (action.ongoingDurationMs / 1000);
+                }
                 return mAgent.getBalanceLocked(userId, pkgName) >= requiredBalance;
             }
         }
@@ -621,16 +734,16 @@ public class InternalResourceService extends SystemService {
             long totalCostPerSecond = 0;
             final List<EconomyManagerInternal.AnticipatedAction> projectedActions =
                     bill.getAnticipatedActions();
-            for (int i = 0; i < projectedActions.size(); ++i) {
-                AnticipatedAction action = projectedActions.get(i);
-                final long cost =
-                        mCompleteEconomicPolicy.getCostOfAction(action.actionId, userId, pkgName);
-                totalCostPerSecond += cost;
-            }
-            if (totalCostPerSecond == 0) {
-                return FOREVER_MS;
-            }
             synchronized (mLock) {
+                for (int i = 0; i < projectedActions.size(); ++i) {
+                    AnticipatedAction action = projectedActions.get(i);
+                    final long cost = mCompleteEconomicPolicy.getCostOfAction(
+                            action.actionId, userId, pkgName);
+                    totalCostPerSecond += cost;
+                }
+                if (totalCostPerSecond == 0) {
+                    return FOREVER_MS;
+                }
                 return mAgent.getBalanceLocked(userId, pkgName) * 1000 / totalCostPerSecond;
             }
         }
@@ -683,15 +796,24 @@ public class InternalResourceService extends SystemService {
         public void start() {
             mContentResolver.registerContentObserver(
                     Settings.Global.getUriFor(Settings.Global.ENABLE_TARE), false, this);
-            updateConfig();
+            mContentResolver.registerContentObserver(
+                    Settings.Global.getUriFor(TARE_ALARM_MANAGER_CONSTANTS), false, this);
+            mContentResolver.registerContentObserver(
+                    Settings.Global.getUriFor(TARE_JOB_SCHEDULER_CONSTANTS), false, this);
+            updateEnabledStatus();
         }
 
         @Override
-        public void onChange(boolean selfChange) {
-            updateConfig();
+        public void onChange(boolean selfChange, Uri uri) {
+            if (uri.equals(Settings.Global.getUriFor(Settings.Global.ENABLE_TARE))) {
+                updateEnabledStatus();
+            } else if (uri.equals(Settings.Global.getUriFor(TARE_ALARM_MANAGER_CONSTANTS))
+                    || uri.equals(Settings.Global.getUriFor(TARE_JOB_SCHEDULER_CONSTANTS))) {
+                updateEconomicPolicy();
+            }
         }
 
-        private void updateConfig() {
+        private void updateEnabledStatus() {
             final boolean isTareEnabled = Settings.Global.getInt(mContentResolver,
                     Settings.Global.ENABLE_TARE, Settings.Global.DEFAULT_ENABLE_TARE) == 1;
             if (mIsEnabled != isTareEnabled) {
@@ -700,6 +822,17 @@ public class InternalResourceService extends SystemService {
                     setupEverything();
                 } else {
                     tearDownEverything();
+                }
+            }
+        }
+
+        private void updateEconomicPolicy() {
+            synchronized (mLock) {
+                mCompleteEconomicPolicy.tearDown();
+                mCompleteEconomicPolicy = new CompleteEconomicPolicy(InternalResourceService.this);
+                if (mIsEnabled && mBootPhase >= PHASE_SYSTEM_SERVICES_READY) {
+                    mCompleteEconomicPolicy.setup();
+                    mAgent.onPricingChangedLocked();
                 }
             }
         }
@@ -720,9 +853,26 @@ public class InternalResourceService extends SystemService {
             pw.print("Current battery level: ");
             pw.println(mCurrentBatteryLevel);
 
-            mCompleteEconomicPolicy.dump(pw);
-            pw.println();
+            final long maxCircluation = getMaxCirculationLocked();
+            pw.print("Max circulation (current/satiated): ");
+            pw.print(narcToString(maxCircluation));
+            pw.print("/");
+            pw.println(narcToString(mCompleteEconomicPolicy.getMaxSatiatedCirculation()));
 
+            final long currentCirculation = mScribe.getNarcsInCirculationLocked();
+            pw.print("Current GDP: ");
+            pw.print(narcToString(currentCirculation));
+            pw.print(" (");
+            pw.print(String.format("%.2f", 100f * currentCirculation / maxCircluation));
+            pw.println("% of current max)");
+
+            pw.println();
+            mCompleteEconomicPolicy.dump(pw);
+
+            pw.println();
+            mScribe.dumpLocked(pw);
+
+            pw.println();
             mAgent.dumpLocked(pw);
         }
     }

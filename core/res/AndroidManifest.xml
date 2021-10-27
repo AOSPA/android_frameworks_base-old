@@ -56,6 +56,7 @@
     <protected-broadcast android:name="android.intent.action.PACKAGE_VERIFIED" />
     <protected-broadcast android:name="android.intent.action.PACKAGES_SUSPENDED" />
     <protected-broadcast android:name="android.intent.action.PACKAGES_UNSUSPENDED" />
+    <protected-broadcast android:name="android.intent.action.PACKAGES_SUSPENSION_CHANGED" />
     <protected-broadcast android:name="android.intent.action.PACKAGE_UNSUSPENDED_MANUALLY" />
     <protected-broadcast android:name="android.intent.action.DISTRACTING_PACKAGES_CHANGED" />
     <protected-broadcast android:name="android.intent.action.ACTION_PREFERRED_ACTIVITY_CHANGED" />
@@ -64,6 +65,7 @@
     <protected-broadcast android:name="android.intent.action.CONFIGURATION_CHANGED" />
     <protected-broadcast android:name="android.intent.action.SPLIT_CONFIGURATION_CHANGED" />
     <protected-broadcast android:name="android.intent.action.LOCALE_CHANGED" />
+    <protected-broadcast android:name="android.intent.action.APPLICATION_LOCALE_CHANGED" />
     <protected-broadcast android:name="android.intent.action.BATTERY_CHANGED" />
     <protected-broadcast android:name="android.intent.action.BATTERY_LEVEL_CHANGED" />
     <protected-broadcast android:name="android.intent.action.BATTERY_LOW" />
@@ -206,6 +208,9 @@
         android:name="android.bluetooth.hearingaid.profile.action.PLAYING_STATE_CHANGED" />
     <protected-broadcast
         android:name="android.bluetooth.hearingaid.profile.action.ACTIVE_DEVICE_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.CSIS_CONNECTION_STATE_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.CSIS_DEVICE_AVAILABLE" />
+    <protected-broadcast android:name="android.bluetooth.action.CSIS_SET_MEMBER_AVAILABLE" />
     <protected-broadcast
         android:name="android.bluetooth.volume-control.profile.action.CONNECTION_STATE_CHANGED" />
     <protected-broadcast
@@ -254,6 +259,8 @@
         android:name="com.android.bluetooth.BluetoothMapContentObserver.action.MESSAGE_DELIVERY" />
     <protected-broadcast
         android:name="android.bluetooth.pan.profile.action.CONNECTION_STATE_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_CONNECTION_STATE_CHANGED" />
+    <protected-broadcast android:name="android.bluetooth.action.LE_AUDIO_ACTIVE_DEVICE_CHANGED" />
     <protected-broadcast
         android:name="android.bluetooth.action.TETHERING_STATE_CHANGED" />
     <protected-broadcast android:name="android.bluetooth.pbap.profile.action.CONNECTION_STATE_CHANGED" />
@@ -780,7 +787,16 @@
         android:permissionGroup="android.permission-group.UNDEFINED"
         android:label="@string/permlab_writeContacts"
         android:description="@string/permdesc_writeContacts"
-        android:protectionLevel="dangerous" />
+      android:protectionLevel="dangerous" />
+
+    <!-- Allows an application to set default account for new contacts.
+        <p> This permission is only granted to system applications fulfilling the Contacts app role.
+        <p>Protection level: internal|role
+        @SystemApi
+        @hide
+    -->
+    <permission android:name="android.permission.SET_DEFAULT_ACCOUNT_FOR_CONTACTS"
+        android:protectionLevel="internal|role" />
 
     <!-- ====================================================================== -->
     <!-- Permissions for accessing user's calendar                              -->
@@ -1517,6 +1533,28 @@
         android:label="@string/permlab_useBiometric"
         android:description="@string/permdesc_useBiometric"
         android:protectionLevel="normal" />
+
+   <!-- ======================================================================= -->
+    <!-- Permissions for posting notifications                                  -->
+    <!-- ====================================================================== -->
+    <eat-comment />
+
+    <!-- Used for permissions that are associated with posting notifications
+    -->
+    <permission-group android:name="android.permission-group.NOTIFICATIONS"
+          android:icon="@drawable/ic_notifications_alerted"
+          android:label="@string/permgrouplab_notifications"
+          android:description="@string/permgroupdesc_notifications"
+          android:priority="850" />
+
+    <!-- Allows an app to post notifications
+         <p>Protection level: dangerous
+    -->
+    <permission android:name="android.permission.POST_NOTIFICATIONS"
+                android:permissionGroup="android.permission-group.UNDEFINED"
+                android:label="@string/permlab_postNotification"
+                android:description="@string/permdesc_postNotification"
+                android:protectionLevel="dangerous" />
 
     <!-- ====================================================================== -->
     <!-- REMOVED PERMISSIONS                                                    -->
@@ -2985,13 +3023,11 @@
                 android:protectionLevel="signature" />
 
     <!-- Allows an app to set and release automotive projection.
-         <p>Once permissions can be granted via role-only, this needs to be changed to
-          protectionLevel="role" and added to the SYSTEM_AUTOMOTIVE_PROJECTION role.
          @hide
          @SystemApi
     -->
     <permission android:name="android.permission.TOGGLE_AUTOMOTIVE_PROJECTION"
-                android:protectionLevel="signature|privileged" />
+                android:protectionLevel="internal|role" />
 
     <!-- Allows an app to prevent non-system-overlay windows from being drawn on top of it -->
     <permission android:name="android.permission.HIDE_OVERLAY_WINDOWS"
@@ -3190,6 +3226,12 @@
     <p>Not for use by third-party applications. -->
     <permission android:name="android.permission.READ_DEVICE_CONFIG"
         android:protectionLevel="signature|preinstalled" />
+
+    <!-- @SystemApi @hide Allows applications like settings to read system-owned
+     application-specific locale configs.
+     <p>Not for use by third-party applications. -->
+    <permission android:name="android.permission.READ_APP_SPECIFIC_LOCALES"
+                android:protectionLevel="signature" />
 
     <!-- @hide Allows an application to monitor {@link android.provider.Settings.Config} access.
     <p>Not for use by third-party applications. -->
@@ -4364,6 +4406,11 @@
     <permission android:name="android.permission.REQUEST_OBSERVE_COMPANION_DEVICE_PRESENCE"
                 android:protectionLevel="normal" />
 
+    <!-- Allows an application to deliver companion messages to system
+         -->
+    <permission android:name="android.permission.DELIVER_COMPANION_MESSAGES"
+                android:protectionLevel="normal" />
+
     <!-- Allows an application to create new companion device associations.
          @SystemApi
          @hide -->
@@ -4902,6 +4949,18 @@
     <!-- @hide Internal permission to allows an application to access card content provider. -->
     <permission android:name="android.permission.WRITE_SETTINGS_HOMEPAGE_DATA"
                 android:protectionLevel="signature|privileged" />
+
+    <!-- An application needs this permission for
+         {@link android.provider.Settings#ACTION_SETTINGS_LARGE_SCREEN_DEEP_LINK} to show its
+         {@link android.app.Activity} in 2-pane of Settings app. -->
+    <permission android:name="android.permission.LAUNCH_TWO_PANE_SETTINGS_DEEP_LINK"
+                android:protectionLevel="signature|preinstalled" />
+
+    <!-- @SystemApi {@link android.app.Activity} should require this permission to ensure that only
+         the settings app can embed it in a 2-pane window.
+         @hide -->
+    <permission android:name="android.permission.ALLOW_PLACE_IN_TWO_PANE_SETTINGS"
+                android:protectionLevel="signature" />
 
     <!-- @SystemApi Allows applications to set a live wallpaper.
          @hide XXX Change to signature once the picker is moved to its
@@ -5905,7 +5964,6 @@
                   android:excludeFromRecents="true"
                   android:documentLaunchMode="never"
                   android:relinquishTaskIdentity="true"
-                  android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation|keyboard|keyboardHidden"
                   android:process=":ui"
                   android:visibleToInstantApps="true">
             <intent-filter>

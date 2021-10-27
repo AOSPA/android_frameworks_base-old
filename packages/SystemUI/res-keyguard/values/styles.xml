@@ -17,7 +17,7 @@
 */
 -->
 
-<resources>
+<resources xmlns:android="http://schemas.android.com/apk/res/android">
     <!-- Keyguard PIN pad styles -->
     <style name="Keyguard.TextView" parent="@android:style/Widget.DeviceDefault.TextView">
         <item name="android:textSize">@dimen/kg_status_line_font_size</item>
@@ -58,12 +58,12 @@
         <item name="android:textColor">?android:attr/textColorPrimary</item>
     </style>
     <style name="NumPadKey.Delete">
-        <item name="android:colorControlNormal">?android:attr/textColorSecondary</item>
+        <item name="android:colorControlNormal">@color/numpad_key_color_secondary</item>
         <item name="android:src">@drawable/ic_backspace_24dp</item>
     </style>
     <style name="NumPadKey.Enter">
-      <item name="android:colorControlNormal">?android:attr/textColorSecondary</item>
-      <item name="android:src">@drawable/ic_keyboard_tab_36dp</item>
+        <item name="android:colorControlNormal">@color/numpad_key_color_secondary</item>
+        <item name="android:src">@drawable/ic_keyboard_tab_36dp</item>
     </style>
     <style name="Widget.TextView.NumPadKey.Klondike"
            parent="@android:style/Widget.DeviceDefault.TextView">
@@ -145,5 +145,9 @@
         <item name="android:textColor">?attr/wallpaperTextColor</item>
         <item name="android:shadowColor">@color/keyguard_shadow_color</item>
         <item name="android:shadowRadius">?attr/shadowRadius</item>
+    </style>
+
+    <style name="TextAppearance.Keyguard.BottomArea.Button">
+        <item name="android:shadowRadius">0</item>
     </style>
 </resources>

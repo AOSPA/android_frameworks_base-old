@@ -79,6 +79,8 @@ public class PhoneStatusBarView extends PanelBar {
     private int mStatusBarHeight;
     @Nullable
     private List<StatusBar.ExpansionChangedListener> mExpansionChangedListeners;
+    @Nullable
+    private PanelExpansionStateChangedListener mPanelExpansionStateChangedListener;
 
     private PanelEnabledProvider mPanelEnabledProvider;
 
@@ -100,6 +102,10 @@ public class PhoneStatusBarView extends PanelBar {
     public void setExpansionChangedListeners(
             @Nullable List<StatusBar.ExpansionChangedListener> listeners) {
         mExpansionChangedListeners = listeners;
+    }
+
+    void setPanelExpansionStateChangedListener(PanelExpansionStateChangedListener listener) {
+        mPanelExpansionStateChangedListener = listener;
     }
 
     public void setScrimController(ScrimController scrimController) {
@@ -273,10 +279,11 @@ public class PhoneStatusBarView extends PanelBar {
     }
 
     @Override
-    public void panelScrimMinFractionChanged(float minFraction) {
+    public void onPanelMinFractionChanged(float minFraction) {
         if (isNaN(minFraction)) {
             throw new IllegalArgumentException("minFraction cannot be NaN");
         }
+        super.onPanelMinFractionChanged(minFraction);
         if (mMinFraction != minFraction) {
             mMinFraction = minFraction;
             updateScrimFraction();
@@ -287,8 +294,12 @@ public class PhoneStatusBarView extends PanelBar {
     public void panelExpansionChanged(float frac, boolean expanded) {
         super.panelExpansionChanged(frac, expanded);
         updateScrimFraction();
-        if ((frac == 0 || frac == 1) && mBar.getNavigationBarView() != null) {
-            mBar.getNavigationBarView().onStatusBarPanelStateChanged();
+        if ((frac == 0 || frac == 1)) {
+            if (mPanelExpansionStateChangedListener != null) {
+                mPanelExpansionStateChangedListener.onPanelExpansionStateChanged();
+            } else {
+                Log.w(TAG, "No PanelExpansionStateChangedListener provided.");
+            }
         }
 
         if (mExpansionChangedListeners != null) {
@@ -391,19 +402,15 @@ public class PhoneStatusBarView extends PanelBar {
                 getPaddingBottom());
     }
 
-    public void setHeadsUpVisible(boolean headsUpVisible) {
-        mHeadsUpVisible = headsUpVisible;
-        updateVisibility();
-    }
-
-    @Override
-    protected boolean shouldPanelBeVisible() {
-        return mHeadsUpVisible || super.shouldPanelBeVisible();
-    }
-
     /** An interface that will provide whether panel is enabled. */
     interface PanelEnabledProvider {
         /** Returns true if the panel is enabled and false otherwise. */
         boolean panelEnabled();
+    }
+
+    /** A listener that will be notified when a panel's expansion state may have changed. */
+    public interface PanelExpansionStateChangedListener {
+        /** Called when a panel's expansion state may have changed. */
+        void onPanelExpansionStateChanged();
     }
 }

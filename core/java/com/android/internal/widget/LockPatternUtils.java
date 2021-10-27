@@ -17,6 +17,7 @@
 package com.android.internal.widget;
 
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_ALPHABETIC;
+import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_MANAGED;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_NUMERIC;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_NUMERIC_COMPLEX;
 import static android.app.admin.DevicePolicyManager.PASSWORD_QUALITY_SOMETHING;
@@ -857,14 +858,6 @@ public class LockPatternUtils {
         return isManagedProfile(userHandle) && !hasSeparateChallenge(userHandle);
     }
 
-    /**
-     * Retrieves whether the current DPM allows use of the Profile Challenge.
-     */
-    public boolean isSeparateProfileChallengeAllowed(int userHandle) {
-        return isManagedProfile(userHandle)
-                && getDevicePolicyManager().isSeparateProfileChallengeAllowed(userHandle);
-    }
-
     private boolean hasSeparateChallenge(int userHandle) {
         try {
             return getLockSettings().getSeparateProfileChallengeEnabled(userHandle);
@@ -1280,6 +1273,14 @@ public class LockPatternUtils {
             Log.e(TAG, "Could not get StrongAuth", e);
             return StrongAuthTracker.getDefaultFlags(mContext);
         }
+    }
+
+    /**
+     * Whether the user is not allowed to set any credentials via PASSWORD_QUALITY_MANAGED.
+     */
+    public boolean isCredentialsDisabledForUser(int userId) {
+        return getDevicePolicyManager().getPasswordQuality(/* admin= */ null, userId)
+                == PASSWORD_QUALITY_MANAGED;
     }
 
     /**

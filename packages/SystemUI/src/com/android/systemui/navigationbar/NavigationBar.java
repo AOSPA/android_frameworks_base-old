@@ -125,6 +125,7 @@ import com.android.systemui.accessibility.SystemActions;
 import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.dagger.qualifiers.Main;
+import com.android.systemui.dump.DumpManager;
 import com.android.systemui.model.SysUiState;
 import com.android.systemui.navigationbar.buttons.ButtonDispatcher;
 import com.android.systemui.navigationbar.buttons.KeyButtonView;
@@ -422,6 +423,12 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
             new Handler(Looper.getMainLooper())) {
         @Override
         public void onChange(boolean selfChange, Uri uri) {
+            // TODO(b/198002034): Content observers currently can still be called back after being
+            // unregistered, and in this case we can ignore the change if the nav bar has been
+            // destroyed already
+            if (mNavigationBarView == null) {
+                return;
+            }
             updateAssistantEntrypoints();
         }
     };
@@ -648,7 +655,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         if (mIsOnDefaultDisplay) {
             final RotationButtonController rotationButtonController =
                     mNavigationBarView.getRotationButtonController();
-            rotationButtonController.addRotationCallback(mRotationWatcher);
+            rotationButtonController.setRotationCallback(mRotationWatcher);
 
             // Reset user rotation pref to match that of the WindowManager if starting in locked
             // mode. This will automatically happen when switching from auto-rotate to locked mode.
@@ -670,7 +677,8 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
                 : new LightBarController(mContext,
                         Dependency.get(DarkIconDispatcher.class),
                         Dependency.get(BatteryController.class),
-                        Dependency.get(NavigationModeController.class));
+                        Dependency.get(NavigationModeController.class),
+                        Dependency.get(DumpManager.class));
         setLightBarController(lightBarController);
 
         // TODO(b/118592525): to support multi-display, we start to add something which is
@@ -687,6 +695,9 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
 
     @Override
     public void onViewDetachedFromWindow(View v) {
+        final RotationButtonController rotationButtonController =
+                mNavigationBarView.getRotationButtonController();
+        rotationButtonController.setRotationCallback(null);
         mNavigationBarView.getBarTransitions().destroy();
         mNavigationBarView.getLightTransitionsController().destroy(mContext);
         mOverviewProxyService.removeCallback(mOverviewProxyListener);
@@ -701,6 +712,7 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
         mHandler.removeCallbacks(mAutoDim);
         mHandler.removeCallbacks(mOnVariableDurationHomeLongClick);
         mHandler.removeCallbacks(mEnableLayoutTransitions);
+        mNavigationBarA11yHelper.removeA11yEventListener(mAccessibilityListener);
         mFrame = null;
         mNavigationBarView = null;
         mOrientationHandle = null;
@@ -1380,10 +1392,11 @@ public class NavigationBar implements View.OnAttachStateChangeListener,
     void updateAccessibilityServicesState() {
         int a11yFlags = mNavigationBarA11yHelper.getA11yButtonState();
 
-        boolean clickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_CLICKABLE) != 0;
-        boolean longClickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE) != 0;
-        mNavigationBarView.setAccessibilityButtonState(clickable, longClickable);
-
+        if (mNavigationBarView != null) {
+            boolean clickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_CLICKABLE) != 0;
+            boolean longClickable = (a11yFlags & SYSUI_STATE_A11Y_BUTTON_LONG_CLICKABLE) != 0;
+            mNavigationBarView.setAccessibilityButtonState(clickable, longClickable);
+        }
         updateSystemUiStateFlags(a11yFlags);
     }
 

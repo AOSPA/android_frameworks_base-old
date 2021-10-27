@@ -20,6 +20,7 @@ import static android.app.WindowConfiguration.ACTIVITY_TYPE_DREAM;
 import static android.app.WindowConfiguration.WINDOWING_MODE_FULLSCREEN;
 import static android.os.Trace.TRACE_TAG_WINDOW_MANAGER;
 import static android.view.Display.DEFAULT_DISPLAY;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
 import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
@@ -27,6 +28,7 @@ import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_W
 import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_OCCLUDE;
 import static android.view.WindowManager.TRANSIT_KEYGUARD_UNOCCLUDE;
+import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_NO_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_SUBTLE_WINDOW_ANIMATIONS;
 import static android.view.WindowManagerPolicyConstants.KEYGUARD_GOING_AWAY_FLAG_TO_SHADE;
@@ -107,13 +109,13 @@ class KeyguardController {
     }
 
     /**
-     * @return {@code true} for default display when AOD is showing. Otherwise, same as
-     *         {@link #isKeyguardOrAodShowing(int)}
+     * @return {@code true} for default display when AOD is showing, not going away. Otherwise, same
+     *         as {@link #isKeyguardOrAodShowing(int)}
      * TODO(b/125198167): Replace isKeyguardOrAodShowing() by this logic.
      */
     boolean isKeyguardUnoccludedOrAodShowing(int displayId) {
         if (displayId == DEFAULT_DISPLAY && mAodShowing) {
-            return true;
+            return !mKeyguardGoingAway;
         }
         return isKeyguardOrAodShowing(displayId);
     }
@@ -235,8 +237,14 @@ class KeyguardController {
                     mAodShowing ? 1 : 0,
                     1 /* keyguardGoingAway */,
                     "keyguardGoingAway");
-            mRootWindowContainer.getDefaultDisplay().requestTransitionAndLegacyPrepare(
-                    TRANSIT_KEYGUARD_GOING_AWAY, convertTransitFlags(flags));
+            final int transitFlags = convertTransitFlags(flags);
+            final DisplayContent dc = mRootWindowContainer.getDefaultDisplay();
+            dc.prepareAppTransition(TRANSIT_KEYGUARD_GOING_AWAY, transitFlags);
+            // We are deprecating TRANSIT_KEYGUARD_GOING_AWAY for Shell transition and use
+            // TRANSIT_FLAG_KEYGUARD_GOING_AWAY to indicate that it should animate keyguard going
+            // away.
+            dc.mAtmService.getTransitionController().requestTransitionIfNeeded(
+                    TRANSIT_TO_BACK, transitFlags, null /* trigger */, dc);
             updateKeyguardSleepToken();
 
             // Some stack visibility might change (e.g. docked stack)
@@ -276,7 +284,7 @@ class KeyguardController {
     }
 
     private int convertTransitFlags(int keyguardGoingAwayFlags) {
-        int result = 0;
+        int result = TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
         if ((keyguardGoingAwayFlags & KEYGUARD_GOING_AWAY_FLAG_TO_SHADE) != 0) {
             result |= TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
         }
@@ -367,7 +375,7 @@ class KeyguardController {
         // TODO(b/113840485): Handle app transition for individual display, and apply occluded
         // state change to secondary displays.
         // For now, only default display fully supports occluded change. Other displays only
-        // updates keygaurd sleep token on that display.
+        // updates keyguard sleep token on that display.
         if (displayId != DEFAULT_DISPLAY) {
             updateKeyguardSleepToken(displayId);
             return;
@@ -382,15 +390,6 @@ class KeyguardController {
                                 isDisplayOccluded(DEFAULT_DISPLAY)
                                         ? TRANSIT_KEYGUARD_OCCLUDE
                                         : TRANSIT_KEYGUARD_UNOCCLUDE, 0 /* flags */);
-                // When the occluding activity also turns on the display, visibility of the activity
-                // can be committed before KEYGUARD_OCCLUDE transition is handled.
-                // Set mRequestForceTransition flag to make sure that the app transition animation
-                // is applied for such case.
-                // TODO(b/194243906): Fix this before enabling the remote keyguard animation.
-                if (WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation
-                        && topActivity != null) {
-                    topActivity.mRequestForceTransition = true;
-                }
                 updateKeyguardSleepToken(DEFAULT_DISPLAY);
                 mWindowManager.executeAppTransition();
             } finally {
@@ -489,7 +488,7 @@ class KeyguardController {
         final KeyguardDisplayState state = getDisplayState(displayId);
         if (isKeyguardUnoccludedOrAodShowing(displayId)) {
             state.mSleepTokenAcquirer.acquire(displayId);
-        } else if (!isKeyguardUnoccludedOrAodShowing(displayId)) {
+        } else {
             state.mSleepTokenAcquirer.release(displayId);
         }
     }

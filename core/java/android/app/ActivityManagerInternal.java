@@ -169,6 +169,7 @@ public abstract class ActivityManagerInternal {
     /**
      * Update information about which app IDs are on the temp allowlist.
      * @param appids the updated list of appIds in temp allowlist.
+     *               If null, it is to update only changingUid.
      * @param changingUid uid to add or remove to temp allowlist.
      * @param adding true to add to temp allowlist, false to remove from temp allowlist.
      * @param durationMs when adding is true, the duration to be in temp allowlist.
@@ -178,7 +179,7 @@ public abstract class ActivityManagerInternal {
      * @param callingUid the callingUid that setup this temp allowlist, only valid when param adding
      *                   is true.
      */
-    public abstract void updateDeviceIdleTempAllowlist(int[] appids, int changingUid,
+    public abstract void updateDeviceIdleTempAllowlist(@Nullable int[] appids, int changingUid,
             boolean adding, long durationMs, @TempAllowListType int type,
             @ReasonCode int reasonCode,
             @Nullable String reason, int callingUid);
@@ -674,4 +675,23 @@ public abstract class ActivityManagerInternal {
     public abstract int sendIntentSender(IIntentSender target, IBinder allowlistToken, int code,
             Intent intent, String resolvedType,
             IIntentReceiver finishedReceiver, String requiredPermission, Bundle options);
+
+    /**
+     * Sets the provider to communicate between voice interaction manager service and
+     * ActivityManagerService.
+     */
+    public abstract void setVoiceInteractionManagerProvider(
+            @Nullable VoiceInteractionManagerProvider provider);
+
+    /**
+     * Provides the interface to communicate between voice interaction manager service and
+     * ActivityManagerService.
+     */
+    public interface VoiceInteractionManagerProvider {
+        /**
+         * Notifies the service when a high-level activity event has been changed, for example,
+         * an activity was resumed or stopped.
+         */
+        void notifyActivityEventChanged();
+    }
 }

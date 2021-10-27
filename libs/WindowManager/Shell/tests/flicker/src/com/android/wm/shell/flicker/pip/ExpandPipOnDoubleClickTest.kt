@@ -16,7 +16,7 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.Postsubmit
+import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
 import androidx.test.filters.RequiresDevice
@@ -26,7 +26,6 @@ import com.android.server.wm.flicker.FlickerTestParameterFactory
 import com.android.server.wm.flicker.LAUNCHER_COMPONENT
 import com.android.server.wm.flicker.annotation.Group3
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.traces.parser.toLayerName
 import org.junit.FixMethodOrder
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -55,7 +54,6 @@ import org.junit.runners.Parameterized
 @Parameterized.UseParametersRunnerFactory(FlickerParametersRunnerFactory::class)
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 @Group3
-@Postsubmit
 class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition(testSpec) {
     override val transition: FlickerBuilder.(Map<String, Any?>) -> Unit
         get() = buildTransition(eachRun = true) {
@@ -68,6 +66,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
      * Checks that the pip app window remains inside the display bounds throughout the whole
      * animation
      */
+    @Presubmit
     @Test
     fun pipWindowRemainInsideVisibleBounds() {
         testSpec.assertWm {
@@ -79,6 +78,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
      * Checks that the pip app layer remains inside the display bounds throughout the whole
      * animation
      */
+    @Presubmit
     @Test
     fun pipLayerRemainInsideVisibleBounds() {
         testSpec.assertLayers {
@@ -89,6 +89,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     /**
      * Checks [pipApp] window remains visible throughout the animation
      */
+    @Presubmit
     @Test
     fun pipWindowIsAlwaysVisible() {
         testSpec.assertWm {
@@ -99,6 +100,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     /**
      * Checks [pipApp] layer remains visible throughout the animation
      */
+    @Presubmit
     @Test
     fun pipLayerIsAlwaysVisible() {
         testSpec.assertLayers {
@@ -109,6 +111,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     /**
      * Checks that the visible region of [pipApp] always expands during the animation
      */
+    @Presubmit
     @Test
     fun pipLayerExpands() {
         val layerName = pipApp.component.toLayerName()
@@ -120,6 +123,10 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
         }
     }
 
+    /**
+     * Checks [pipApp] window remains pinned throughout the animation
+     */
+    @Presubmit
     @Test
     fun windowIsAlwaysPinned() {
         testSpec.assertWm {
@@ -130,6 +137,7 @@ class ExpandPipOnDoubleClickTest(testSpec: FlickerTestParameter) : PipTransition
     /**
      * Checks [pipApp] layer remains visible throughout the animation
      */
+    @Presubmit
     @Test
     fun launcherIsAlwaysVisible() {
         testSpec.assertLayers {

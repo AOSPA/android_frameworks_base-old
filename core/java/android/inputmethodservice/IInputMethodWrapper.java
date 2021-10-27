@@ -32,7 +32,6 @@ import android.view.InputChannel;
 import android.view.inputmethod.EditorInfo;
 import android.view.inputmethod.InputBinding;
 import android.view.inputmethod.InputConnection;
-import android.view.inputmethod.InputConnectionInspector;
 import android.view.inputmethod.InputMethod;
 import android.view.inputmethod.InputMethodSession;
 import android.view.inputmethod.InputMethodSubtype;
@@ -189,19 +188,13 @@ class IInputMethodWrapper extends IInputMethod.Stub
                 final IInputContext inputContext = (IInputContext) args.arg2;
                 final EditorInfo info = (EditorInfo) args.arg3;
                 final CancellationGroup cancellationGroup = (CancellationGroup) args.arg4;
-                SomeArgs moreArgs = (SomeArgs) args.arg5;
+                final boolean restarting = args.argi5 == 1;
                 final InputConnection ic = inputContext != null
-                        ? new RemoteInputConnection(
-                                mTarget, inputContext, moreArgs.argi3, cancellationGroup)
+                        ? new RemoteInputConnection(mTarget, inputContext, cancellationGroup)
                         : null;
                 info.makeCompatible(mTargetSdkVersion);
-                inputMethod.dispatchStartInputWithToken(
-                        ic,
-                        info,
-                        moreArgs.argi1 == 1 /* restarting */,
-                        startInputToken);
+                inputMethod.dispatchStartInputWithToken(ic, info, restarting, startInputToken);
                 args.recycle();
-                moreArgs.recycle();
                 return;
             }
             case DO_CREATE_SESSION: {
@@ -299,11 +292,8 @@ class IInputMethodWrapper extends IInputMethod.Stub
             Log.e(TAG, "bindInput must be paired with unbindInput.");
         }
         mCancellationGroup = new CancellationGroup();
-        // This IInputContext is guaranteed to implement all the methods.
-        final int missingMethodFlags = 0;
         InputConnection ic = new RemoteInputConnection(mTarget,
-                IInputContext.Stub.asInterface(binding.getConnectionToken()), missingMethodFlags,
-                mCancellationGroup);
+                IInputContext.Stub.asInterface(binding.getConnectionToken()), mCancellationGroup);
         InputBinding nu = new InputBinding(ic, binding);
         mCaller.executeOrSendMessage(mCaller.obtainMessageO(DO_SET_INPUT_CONTEXT, nu));
     }
@@ -324,17 +314,13 @@ class IInputMethodWrapper extends IInputMethod.Stub
     @BinderThread
     @Override
     public void startInput(IBinder startInputToken, IInputContext inputContext,
-            @InputConnectionInspector.MissingMethodFlags final int missingMethods,
             EditorInfo attribute, boolean restarting) {
         if (mCancellationGroup == null) {
             Log.e(TAG, "startInput must be called after bindInput.");
             mCancellationGroup = new CancellationGroup();
         }
-        SomeArgs args = SomeArgs.obtain();
-        args.argi1 = restarting ? 1 : 0;
-        args.argi3 = missingMethods;
-        mCaller.executeOrSendMessage(mCaller.obtainMessageOOOOO(DO_START_INPUT, startInputToken,
-                inputContext, attribute, mCancellationGroup, args));
+        mCaller.executeOrSendMessage(mCaller.obtainMessageOOOOII(DO_START_INPUT, startInputToken,
+                inputContext, attribute, mCancellationGroup, restarting ? 1 : 0, 0 /* unused */));
     }
 
     @BinderThread

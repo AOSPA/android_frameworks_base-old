@@ -27,16 +27,20 @@ import android.app.IActivityManager;
 import android.content.Context;
 import android.content.pm.ActivityInfo;
 import android.graphics.PixelFormat;
+import android.graphics.Region;
 import android.os.Binder;
 import android.os.RemoteException;
 import android.os.Trace;
 import android.util.Log;
 import android.view.Display;
 import android.view.Gravity;
+import android.view.IWindow;
+import android.view.IWindowSession;
 import android.view.View;
 import android.view.ViewGroup;
 import android.view.WindowManager;
 import android.view.WindowManager.LayoutParams;
+import android.view.WindowManagerGlobal;
 
 import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.systemui.Dumpable;
@@ -507,6 +511,19 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
     }
 
     @Override
+    public void setTouchExclusionRegion(Region region) {
+        try {
+            final IWindowSession session = WindowManagerGlobal.getWindowSession();
+            session.updateTapExcludeRegion(
+                    IWindow.Stub.asInterface(getNotificationShadeView().getWindowToken()),
+                    region);
+        } catch (RemoteException e) {
+            Log.e(TAG, "could not update the tap exclusion region:" + e);
+        }
+    }
+
+
+    @Override
     public void setKeyguardShowing(boolean showing) {
         mCurrentState.mKeyguardShowing = showing;
         apply(mCurrentState);
@@ -606,12 +623,11 @@ public class NotificationShadeWindowControllerImpl implements NotificationShadeW
     }
 
     @Override
-    public void setLightRevealScrimAmount(float amount) {
-        boolean lightRevealScrimOpaque = amount == 0;
-        if (mCurrentState.mLightRevealScrimOpaque == lightRevealScrimOpaque) {
+    public void setLightRevealScrimOpaque(boolean opaque) {
+        if (mCurrentState.mLightRevealScrimOpaque == opaque) {
             return;
         }
-        mCurrentState.mLightRevealScrimOpaque = lightRevealScrimOpaque;
+        mCurrentState.mLightRevealScrimOpaque = opaque;
         apply(mCurrentState);
     }
 

@@ -97,12 +97,36 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
         return mChildrenTaskInfo.contains(taskId);
     }
 
+    /**
+     * Returns the top activity uid for the top child task.
+     */
+    int getTopChildTaskUid() {
+        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
+            final ActivityManager.RunningTaskInfo info = mChildrenTaskInfo.valueAt(i);
+            if (info.topActivityInfo == null) {
+                continue;
+            }
+            return info.topActivityInfo.applicationInfo.uid;
+        }
+        return 0;
+    }
+
     /** @return {@code true} if this listener contains the currently focused task. */
     boolean isFocused() {
-        if (mRootTaskInfo.isFocused) return true;
-        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
-            if (mChildrenTaskInfo.valueAt(i).isFocused) return true;
+        if (mRootTaskInfo == null) {
+            return false;
         }
+
+        if (mRootTaskInfo.isFocused) {
+            return true;
+        }
+
+        for (int i = mChildrenTaskInfo.size() - 1; i >= 0; --i) {
+            if (mChildrenTaskInfo.valueAt(i).isFocused) {
+                return true;
+            }
+        }
+
         return false;
     }
 
@@ -114,8 +138,11 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
             mRootTaskInfo = taskInfo;
             mCallbacks.onRootTaskAppeared();
             sendStatusChanged();
-            mSyncQueue.runInSync(t -> mDimLayer =
-                    SurfaceUtils.makeDimLayer(t, mRootLeash, "Dim layer", mSurfaceSession));
+            mSyncQueue.runInSync(t -> {
+                t.hide(mRootLeash);
+                mDimLayer =
+                        SurfaceUtils.makeDimLayer(t, mRootLeash, "Dim layer", mSurfaceSession);
+            });
         } else if (taskInfo.parentTaskId == mRootTaskInfo.taskId) {
             final int taskId = taskInfo.taskId;
             mChildrenLeashes.put(taskId, leash);
@@ -198,6 +225,13 @@ class StageTaskListener implements ShellTaskOrganizer.TaskListener {
 
     void setBounds(Rect bounds, WindowContainerTransaction wct) {
         wct.setBounds(mRootTaskInfo.token, bounds);
+    }
+
+    void reorderChild(int taskId, boolean onTop, WindowContainerTransaction wct) {
+        if (!containsTask(taskId)) {
+            return;
+        }
+        wct.reorder(mChildrenTaskInfo.get(taskId).token, onTop /* onTop */);
     }
 
     void setVisibility(boolean visible, WindowContainerTransaction wct) {

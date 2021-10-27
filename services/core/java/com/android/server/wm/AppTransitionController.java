@@ -39,6 +39,9 @@ import static android.view.WindowManager.TRANSIT_OLD_KEYGUARD_UNOCCLUDE;
 import static android.view.WindowManager.TRANSIT_OLD_NONE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_CHANGE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_CLOSE;
+import static android.view.WindowManager.TRANSIT_OLD_TASK_FRAGMENT_OPEN;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_OPEN_BEHIND;
 import static android.view.WindowManager.TRANSIT_OLD_TASK_TO_BACK;
@@ -68,6 +71,7 @@ import static com.android.server.wm.WindowManagerDebugConfig.SHOW_LIGHT_TRANSACT
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WITH_CLASS_NAME;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
+import android.annotation.IntDef;
 import android.annotation.Nullable;
 import android.os.Trace;
 import android.util.ArrayMap;
@@ -82,10 +86,13 @@ import android.view.WindowManager.TransitionFlags;
 import android.view.WindowManager.TransitionOldType;
 import android.view.WindowManager.TransitionType;
 import android.view.animation.Animation;
+import android.window.ITaskFragmentOrganizer;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
 
+import java.lang.annotation.Retention;
+import java.lang.annotation.RetentionPolicy;
 import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.function.Predicate;
@@ -101,6 +108,20 @@ public class AppTransitionController {
     private final WallpaperController mWallpaperControllerLocked;
     private RemoteAnimationDefinition mRemoteAnimationDefinition = null;
     private static final int KEYGUARD_GOING_AWAY_ANIMATION_DURATION = 400;
+
+    private static final int TYPE_NONE = 0;
+    private static final int TYPE_ACTIVITY = 1;
+    private static final int TYPE_TASK_FRAGMENT = 2;
+    private static final int TYPE_TASK = 3;
+
+    @IntDef(prefix = { "TYPE_" }, value = {
+            TYPE_NONE,
+            TYPE_ACTIVITY,
+            TYPE_TASK_FRAGMENT,
+            TYPE_TASK
+    })
+    @Retention(RetentionPolicy.SOURCE)
+    @interface TransitContainerType {}
 
     private final ArrayMap<WindowContainer, Integer> mTempTransitionReasons = new ArrayMap<>();
 
@@ -144,8 +165,8 @@ public class AppTransitionController {
     void handleAppTransitionReady() {
         mTempTransitionReasons.clear();
         if (!transitionGoodToGo(mDisplayContent.mOpeningApps, mTempTransitionReasons)
-                || !transitionGoodToGo(mDisplayContent.mChangingContainers,
-                        mTempTransitionReasons)) {
+                || !transitionGoodToGo(mDisplayContent.mChangingContainers, mTempTransitionReasons)
+                || !transitionGoodToGoForTaskFragments()) {
             return;
         }
         Trace.traceBegin(Trace.TRACE_TAG_WINDOW_MANAGER, "AppTransitionReady");
@@ -185,8 +206,8 @@ public class AppTransitionController {
                 mDisplayContent.mOpeningApps);
 
         final @TransitionOldType int transit = getTransitCompatType(
-                mDisplayContent.mAppTransition,
-                mDisplayContent.mOpeningApps, mDisplayContent.mClosingApps,
+                mDisplayContent.mAppTransition, mDisplayContent.mOpeningApps,
+                mDisplayContent.mClosingApps, mDisplayContent.mChangingContainers,
                 mWallpaperControllerLocked.getWallpaperTarget(), getOldWallpaper(),
                 mDisplayContent.mSkipAppTransitionAnimation);
         mDisplayContent.mSkipAppTransitionAnimation = false;
@@ -213,7 +234,13 @@ public class AppTransitionController {
         final ActivityRecord topChangingApp =
                 getTopApp(mDisplayContent.mChangingContainers, false /* ignoreHidden */);
         final WindowManager.LayoutParams animLp = getAnimLp(animLpActivity);
-        overrideWithRemoteAnimationIfSet(animLpActivity, transit, activityTypes);
+
+        // Check if there is any override
+        if (!overrideWithTaskFragmentRemoteAnimation(transit, activityTypes)) {
+            // Unfreeze the windows that were previously frozen for TaskFragment animation.
+            unfreezeEmbeddedChangingWindows();
+            overrideWithRemoteAnimationIfSet(animLpActivity, transit, activityTypes);
+        }
 
         final boolean voiceInteraction = containsVoiceInteraction(mDisplayContent.mOpeningApps)
                 || containsVoiceInteraction(mDisplayContent.mOpeningApps);
@@ -267,6 +294,7 @@ public class AppTransitionController {
      * @param appTransition {@link AppTransition} for managing app transition state.
      * @param openingApps {@link ActivityRecord}s which are becoming visible.
      * @param closingApps {@link ActivityRecord}s which are becoming invisible.
+     * @param changingContainers {@link WindowContainer}s which are changed in configuration.
      * @param wallpaperTarget If non-null, this is the currently visible window that is associated
      *                        with the wallpaper.
      * @param oldWallpaper The currently visible window that is associated with the wallpaper in
@@ -275,8 +303,8 @@ public class AppTransitionController {
      */
     static @TransitionOldType int getTransitCompatType(AppTransition appTransition,
             ArraySet<ActivityRecord> openingApps, ArraySet<ActivityRecord> closingApps,
-            @Nullable WindowState wallpaperTarget, @Nullable WindowState oldWallpaper,
-            boolean skipAppTransitionAnimation) {
+            ArraySet<WindowContainer> changingContainers, @Nullable WindowState wallpaperTarget,
+            @Nullable WindowState oldWallpaper, boolean skipAppTransitionAnimation) {
 
         // Determine if closing and opening app token sets are wallpaper targets, in which case
         // special animations are needed.
@@ -309,8 +337,18 @@ public class AppTransitionController {
 
         // Special transitions
         // TODO(new-app-transitions): Revisit if those can be rewritten by using flags.
-        if (appTransition.containsTransitRequest(TRANSIT_CHANGE)) {
-            return TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE;
+        if (appTransition.containsTransitRequest(TRANSIT_CHANGE) && !changingContainers.isEmpty()) {
+            @TransitContainerType int changingType =
+                    getTransitContainerType(changingContainers.valueAt(0));
+            switch (changingType) {
+                case TYPE_TASK:
+                    return TRANSIT_OLD_TASK_CHANGE_WINDOWING_MODE;
+                case TYPE_TASK_FRAGMENT:
+                    return TRANSIT_OLD_TASK_FRAGMENT_CHANGE;
+                default:
+                    throw new IllegalStateException(
+                            "TRANSIT_CHANGE with unrecognized changing type=" + changingType);
+            }
         }
         if ((flags & TRANSIT_FLAG_APP_CRASHED) != 0) {
             return TRANSIT_OLD_CRASHING_ACTIVITY_CLOSE;
@@ -387,33 +425,38 @@ public class AppTransitionController {
                 openingApps, closingApps, true /* visible */);
         final ArraySet<WindowContainer> closingWcs = getAnimationTargets(
                 openingApps, closingApps, false /* visible */);
-        final boolean isActivityOpening = !openingWcs.isEmpty()
-                && openingWcs.valueAt(0).asActivityRecord() != null;
-        final boolean isActivityClosing = !closingWcs.isEmpty()
-                && closingWcs.valueAt(0).asActivityRecord() != null;
-        final boolean isTaskOpening = !openingWcs.isEmpty() && !isActivityOpening;
-        final boolean isTaskClosing = !closingWcs.isEmpty() && !isActivityClosing;
-
-        if (appTransition.containsTransitRequest(TRANSIT_TO_FRONT) && isTaskOpening) {
+        final WindowContainer<?> openingContainer = !openingWcs.isEmpty()
+                ? openingWcs.valueAt(0) : null;
+        final WindowContainer<?> closingContainer = !closingWcs.isEmpty()
+                ? closingWcs.valueAt(0) : null;
+        @TransitContainerType int openingType = getTransitContainerType(openingContainer);
+        @TransitContainerType int closingType = getTransitContainerType(closingContainer);
+        if (appTransition.containsTransitRequest(TRANSIT_TO_FRONT) && openingType == TYPE_TASK) {
             return TRANSIT_OLD_TASK_TO_FRONT;
         }
-        if (appTransition.containsTransitRequest(TRANSIT_TO_BACK) && isTaskClosing) {
+        if (appTransition.containsTransitRequest(TRANSIT_TO_BACK) && closingType == TYPE_TASK) {
             return TRANSIT_OLD_TASK_TO_BACK;
         }
         if (appTransition.containsTransitRequest(TRANSIT_OPEN)) {
-            if (isTaskOpening) {
+            if (openingType == TYPE_TASK) {
                 return (appTransition.getTransitFlags() & TRANSIT_FLAG_OPEN_BEHIND) != 0
                         ? TRANSIT_OLD_TASK_OPEN_BEHIND : TRANSIT_OLD_TASK_OPEN;
             }
-            if (isActivityOpening) {
+            if (openingType == TYPE_ACTIVITY) {
                 return TRANSIT_OLD_ACTIVITY_OPEN;
+            }
+            if (openingType == TYPE_TASK_FRAGMENT) {
+                return TRANSIT_OLD_TASK_FRAGMENT_OPEN;
             }
         }
         if (appTransition.containsTransitRequest(TRANSIT_CLOSE)) {
-            if (isTaskClosing) {
+            if (closingType == TYPE_TASK) {
                 return TRANSIT_OLD_TASK_CLOSE;
             }
-            if (isActivityClosing) {
+            if (closingType == TYPE_TASK_FRAGMENT) {
+                return TRANSIT_OLD_TASK_FRAGMENT_CLOSE;
+            }
+            if (closingType == TYPE_ACTIVITY) {
                 for (int i = closingApps.size() - 1; i >= 0; i--) {
                     if (closingApps.valueAt(i).visibleIgnoringKeyguard) {
                         return TRANSIT_OLD_ACTIVITY_CLOSE;
@@ -430,6 +473,24 @@ public class AppTransitionController {
         return TRANSIT_OLD_NONE;
     }
 
+    @TransitContainerType
+    private static int getTransitContainerType(@Nullable WindowContainer<?> container) {
+        if (container == null) {
+            return TYPE_NONE;
+        }
+        if (container.asTask() != null) {
+            return TYPE_TASK;
+        }
+        if (container.asTaskFragment() != null) {
+            return TYPE_TASK_FRAGMENT;
+        }
+        if (container.asActivityRecord() != null) {
+            return TYPE_ACTIVITY;
+        }
+        return TYPE_NONE;
+    }
+
+    @Nullable
     private static WindowManager.LayoutParams getAnimLp(ActivityRecord activity) {
         final WindowState mainWindow = activity != null ? activity.findMainWindow() : null;
         return mainWindow != null ? mainWindow.mAttrs : null;
@@ -452,6 +513,112 @@ public class AppTransitionController {
                 : null;
     }
 
+    private void unfreezeEmbeddedChangingWindows() {
+        final ArraySet<WindowContainer> changingContainers = mDisplayContent.mChangingContainers;
+        for (int i = changingContainers.size() - 1; i >= 0; i--) {
+            final WindowContainer wc = changingContainers.valueAt(i);
+            if (wc.isEmbedded()) {
+                wc.mSurfaceFreezer.unfreeze(wc.getSyncTransaction());
+            }
+        }
+    }
+
+    /**
+     * Overrides the pending transition with the remote animation defined by the
+     * {@link ITaskFragmentOrganizer} if all windows in the transition are children of
+     * {@link TaskFragment} that are organized by the same organizer.
+     *
+     * @return {@code true} if the transition is overridden.
+     */
+    private boolean overrideWithTaskFragmentRemoteAnimation(@TransitionOldType int transit,
+            ArraySet<Integer> activityTypes) {
+        final ArrayList<WindowContainer> allWindows = new ArrayList<>();
+        allWindows.addAll(mDisplayContent.mClosingApps);
+        allWindows.addAll(mDisplayContent.mOpeningApps);
+        allWindows.addAll(mDisplayContent.mChangingContainers);
+
+        // It should only animated by the organizer if all windows are below the same leaf Task.
+        Task leafTask = null;
+        for (int i = allWindows.size() - 1; i >= 0; i--) {
+            final ActivityRecord r = getAppFromContainer(allWindows.get(i));
+            if (r == null) {
+                return false;
+            }
+            // The activity may be a child of embedded Task, but we want to find the owner Task.
+            // As a result, find the organized TaskFragment first.
+            final TaskFragment organizedTaskFragment = r.getOrganizedTaskFragment();
+            // There are also cases where the Task contains non-embedded activity, such as launching
+            // split TaskFragments from a non-embedded activity.
+            // The hierarchy may looks like this:
+            // - Task
+            //    - Activity
+            //    - TaskFragment
+            //       - Activity
+            //    - TaskFragment
+            //       - Activity
+            // We also want to have the organizer handle the transition for such case.
+            final Task task = organizedTaskFragment != null
+                    ? organizedTaskFragment.getTask()
+                    : r.getTask();
+            if (task == null) {
+                return false;
+            }
+            // We don't want the organizer to handle transition of other non-embedded Task.
+            if (leafTask != null && leafTask != task) {
+                return false;
+            }
+            final ActivityRecord rootActivity = task.getRootActivity();
+            // We don't want the organizer to handle transition when the whole app is closing.
+            if (rootActivity == null) {
+                return false;
+            }
+            // We don't want the organizer to handle transition of non-embedded activity of other
+            // app.
+            if (r.getUid() != rootActivity.getUid() && !r.isEmbedded()) {
+                return false;
+            }
+            leafTask = task;
+        }
+        if (leafTask == null) {
+            return false;
+        }
+
+        // We don't support remote animation for Task with multiple TaskFragmentOrganizers.
+        final ITaskFragmentOrganizer[] organizer = new ITaskFragmentOrganizer[1];
+        final boolean hasMultipleOrganizers = leafTask.forAllLeafTaskFragments(taskFragment -> {
+            final ITaskFragmentOrganizer tfOrganizer = taskFragment.getTaskFragmentOrganizer();
+            if (tfOrganizer == null) {
+                return false;
+            }
+            if (organizer[0] != null && !organizer[0].asBinder().equals(tfOrganizer.asBinder())) {
+                return true;
+            }
+            organizer[0] = tfOrganizer;
+            return false;
+        });
+        if (hasMultipleOrganizers) {
+            ProtoLog.e(WM_DEBUG_APP_TRANSITIONS, "We don't support remote animation for"
+                    + " Task with multiple TaskFragmentOrganizers.");
+            return false;
+        }
+
+        final RemoteAnimationDefinition definition = organizer[0] != null
+                ? mDisplayContent.mAtmService.mTaskFragmentOrganizerController
+                    .getRemoteAnimationDefinition(organizer[0])
+                : null;
+        final RemoteAnimationAdapter adapter = definition != null
+                ? definition.getAdapter(transit, activityTypes)
+                : null;
+        if (adapter == null) {
+            return false;
+        }
+        mDisplayContent.mAppTransition.overridePendingAppTransitionRemote(adapter);
+        ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
+                "Override with TaskFragment remote animation for transit=%s",
+                AppTransition.appTransitionOldToString(transit));
+        return true;
+    }
+
     /**
      * Overrides the pending transition with the remote animation defined for the transition in the
      * set of defined remote animations in the app window token.
@@ -470,14 +637,22 @@ public class AppTransitionController {
         }
     }
 
+    @Nullable
+    static Task findRootTaskFromContainer(WindowContainer wc) {
+        return wc.asTaskFragment() != null ? wc.asTaskFragment().getRootTask()
+                : wc.asActivityRecord().getRootTask();
+    }
+
+    @Nullable
     static ActivityRecord getAppFromContainer(WindowContainer wc) {
-        return wc.asTask() != null ? wc.asTask().getTopNonFinishingActivity()
+        return wc.asTaskFragment() != null ? wc.asTaskFragment().getTopNonFinishingActivity()
                 : wc.asActivityRecord();
     }
 
     /**
      * @return The window token that determines the animation theme.
      */
+    @Nullable
     private ActivityRecord findAnimLayoutParamsToken(@TransitionOldType int transit,
             ArraySet<Integer> activityTypes) {
         ActivityRecord result;
@@ -490,7 +665,7 @@ public class AppTransitionController {
                 w -> w.getRemoteAnimationDefinition() != null
                         && w.getRemoteAnimationDefinition().hasTransition(transit, activityTypes));
         if (result != null) {
-            return getAppFromContainer(result);
+            return result;
         }
         result = lookForHighestTokenWithFilter(closingApps, openingApps, changingApps,
                 w -> w.fillsParent() && w.findMainWindow() != null);
@@ -633,6 +808,7 @@ public class AppTransitionController {
             boolean canPromote = true;
 
             if (parent == null || !parent.canCreateRemoteAnimationTarget()
+                    || !parent.canBeAnimationTarget()
                     // We cannot promote the animation on Task's parent when the task is in
                     // clearing task in case the animating get stuck when performing the opening
                     // task that behind it.
@@ -728,7 +904,7 @@ public class AppTransitionController {
 
         final AccessibilityController accessibilityController =
                 mDisplayContent.mWmService.mAccessibilityController;
-        if (accessibilityController != null) {
+        if (accessibilityController.hasCallbacks()) {
             accessibilityController.onAppWindowTransition(mDisplayContent.getDisplayId(), transit);
         }
     }
@@ -841,71 +1017,113 @@ public class AppTransitionController {
         ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
                 "Checking %d opening apps (frozen=%b timeout=%b)...", apps.size(),
                 mService.mDisplayFrozen, mDisplayContent.mAppTransition.isTimeout());
-
+        if (mDisplayContent.mAppTransition.isTimeout()) {
+            return true;
+        }
         final ScreenRotationAnimation screenRotationAnimation = mService.mRoot.getDisplayContent(
                 Display.DEFAULT_DISPLAY).getRotationAnimation();
 
-        if (!mDisplayContent.mAppTransition.isTimeout()) {
-            // Imagine the case where we are changing orientation due to an app transition, but a
-            // previous orientation change is still in progress. We won't process the orientation
-            // change for our transition because we need to wait for the rotation animation to
-            // finish.
-            // If we start the app transition at this point, we will interrupt it halfway with a
-            // new rotation animation after the old one finally finishes. It's better to defer the
-            // app transition.
-            if (screenRotationAnimation != null && screenRotationAnimation.isAnimating()
-                    && mDisplayContent.getDisplayRotation().needsUpdate()) {
-                ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
-                        "Delaying app transition for screen rotation animation to finish");
-                return false;
-            }
-            for (int i = 0; i < apps.size(); i++) {
-                WindowContainer wc = apps.valueAt(i);
-                final ActivityRecord activity = getAppFromContainer(wc);
-                if (activity == null) {
-                    continue;
-                }
-                ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
-                        "Check opening app=%s: allDrawn=%b startingDisplayed=%b "
-                                + "startingMoved=%b isRelaunching()=%b startingWindow=%s",
-                        activity, activity.allDrawn, activity.startingDisplayed,
-                        activity.startingMoved, activity.isRelaunching(),
-                        activity.mStartingWindow);
-
-
-                final boolean allDrawn = activity.allDrawn && !activity.isRelaunching();
-                if (!allDrawn && !activity.startingDisplayed && !activity.startingMoved) {
-                    return false;
-                }
-                if (allDrawn) {
-                    outReasons.put(activity, APP_TRANSITION_WINDOWS_DRAWN);
-                } else {
-                    outReasons.put(activity,
-                            activity.mStartingData instanceof SplashScreenStartingData
-                                    ? APP_TRANSITION_SPLASH_SCREEN
-                                    : APP_TRANSITION_SNAPSHOT);
-                }
-            }
-
-            // We also need to wait for the specs to be fetched, if needed.
-            if (mDisplayContent.mAppTransition.isFetchingAppTransitionsSpecs()) {
-                ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "isFetchingAppTransitionSpecs=true");
-                return false;
-            }
-
-            if (!mDisplayContent.mUnknownAppVisibilityController.allResolved()) {
-                ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "unknownApps is not empty: %s",
-                            mDisplayContent.mUnknownAppVisibilityController.getDebugMessage());
-                return false;
-            }
-
-            // If the wallpaper is visible, we need to check it's ready too.
-            boolean wallpaperReady = !mWallpaperControllerLocked.isWallpaperVisible() ||
-                    mWallpaperControllerLocked.wallpaperTransitionReady();
-            if (wallpaperReady) {
-                return true;
-            }
+        // Imagine the case where we are changing orientation due to an app transition, but a
+        // previous orientation change is still in progress. We won't process the orientation
+        // change for our transition because we need to wait for the rotation animation to
+        // finish.
+        // If we start the app transition at this point, we will interrupt it halfway with a
+        // new rotation animation after the old one finally finishes. It's better to defer the
+        // app transition.
+        if (screenRotationAnimation != null && screenRotationAnimation.isAnimating()
+                && mDisplayContent.getDisplayRotation().needsUpdate()) {
+            ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
+                    "Delaying app transition for screen rotation animation to finish");
             return false;
+        }
+        for (int i = 0; i < apps.size(); i++) {
+            WindowContainer wc = apps.valueAt(i);
+            final ActivityRecord activity = getAppFromContainer(wc);
+            if (activity == null) {
+                continue;
+            }
+            ProtoLog.v(WM_DEBUG_APP_TRANSITIONS,
+                    "Check opening app=%s: allDrawn=%b startingDisplayed=%b "
+                            + "startingMoved=%b isRelaunching()=%b startingWindow=%s",
+                    activity, activity.allDrawn, activity.startingDisplayed,
+                    activity.startingMoved, activity.isRelaunching(),
+                    activity.mStartingWindow);
+
+            final boolean allDrawn = activity.allDrawn && !activity.isRelaunching();
+            if (!allDrawn && !activity.startingDisplayed && !activity.startingMoved) {
+                return false;
+            }
+            if (allDrawn) {
+                outReasons.put(activity, APP_TRANSITION_WINDOWS_DRAWN);
+            } else {
+                outReasons.put(activity,
+                        activity.mStartingData instanceof SplashScreenStartingData
+                                ? APP_TRANSITION_SPLASH_SCREEN
+                                : APP_TRANSITION_SNAPSHOT);
+            }
+        }
+
+        // We also need to wait for the specs to be fetched, if needed.
+        if (mDisplayContent.mAppTransition.isFetchingAppTransitionsSpecs()) {
+            ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "isFetchingAppTransitionSpecs=true");
+            return false;
+        }
+
+        if (!mDisplayContent.mUnknownAppVisibilityController.allResolved()) {
+            ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "unknownApps is not empty: %s",
+                    mDisplayContent.mUnknownAppVisibilityController.getDebugMessage());
+            return false;
+        }
+
+        // If the wallpaper is visible, we need to check it's ready too.
+        return !mWallpaperControllerLocked.isWallpaperVisible()
+                || mWallpaperControllerLocked.wallpaperTransitionReady();
+    }
+
+    private boolean transitionGoodToGoForTaskFragments() {
+        if (mDisplayContent.mAppTransition.isTimeout()) {
+            return true;
+        }
+
+        // Check all Tasks in this transition. This is needed because new TaskFragment created for
+        // launching activity may not be in the tracking lists, but we still want to wait for the
+        // activity launch to start the transition.
+        final ArraySet<Task> rootTasks = new ArraySet<>();
+        for (int i = mDisplayContent.mOpeningApps.size() - 1; i >= 0; i--) {
+            rootTasks.add(mDisplayContent.mOpeningApps.valueAt(i).getRootTask());
+        }
+        for (int i = mDisplayContent.mClosingApps.size() - 1; i >= 0; i--) {
+            rootTasks.add(mDisplayContent.mClosingApps.valueAt(i).getRootTask());
+        }
+        for (int i = mDisplayContent.mChangingContainers.size() - 1; i >= 0; i--) {
+            rootTasks.add(
+                    findRootTaskFromContainer(mDisplayContent.mChangingContainers.valueAt(i)));
+        }
+
+        // Organized TaskFragment can be empty for two situations:
+        // 1. New created and is waiting for Activity launch. In this case, we want to wait for
+        //    the Activity launch to trigger the transition.
+        // 2. Last Activity is just removed. In this case, we want to wait for organizer to
+        //    remove the TaskFragment because it may also want to change other TaskFragments in
+        //    the same transition.
+        for (int i = rootTasks.size() - 1; i >= 0; i--) {
+            final Task rootTask = rootTasks.valueAt(i);
+            if (rootTask == null) {
+                // It is possible that one activity may have been removed from the hierarchy. No
+                // need to check for this case.
+                continue;
+            }
+            final boolean notReady = rootTask.forAllLeafTaskFragments(taskFragment -> {
+                if (!taskFragment.isReadyToTransit()) {
+                    ProtoLog.v(WM_DEBUG_APP_TRANSITIONS, "Organized TaskFragment is not ready= %s",
+                            taskFragment);
+                    return true;
+                }
+                return false;
+            });
+            if (notReady) {
+                return false;
+            }
         }
         return true;
     }

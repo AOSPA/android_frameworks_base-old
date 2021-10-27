@@ -147,7 +147,7 @@ class FileInstallArgs extends InstallArgs {
 
         final File targetDir = resolveTargetDir();
         final File beforeCodeFile = mCodeFile;
-        final File afterCodeFile = PackageManagerService.getNextCodePath(targetDir,
+        final File afterCodeFile = PackageManagerServiceUtils.getNextCodePath(targetDir,
                 parsedPackage.getPackageName());
 
         if (DEBUG_INSTALL) Slog.d(TAG, "Renaming " + beforeCodeFile + " to " + afterCodeFile);
@@ -217,7 +217,7 @@ class FileInstallArgs extends InstallArgs {
         if (mCodeFile == null || !mCodeFile.exists()) {
             return false;
         }
-        mPm.removeCodePathLI(mCodeFile);
+        mRemovePackageHelper.removeCodePathLI(mCodeFile);
         return true;
     }
 

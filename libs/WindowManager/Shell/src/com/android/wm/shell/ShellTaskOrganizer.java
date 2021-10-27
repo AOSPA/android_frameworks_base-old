@@ -31,6 +31,7 @@ import android.app.ActivityManager.RunningTaskInfo;
 import android.app.TaskInfo;
 import android.content.Context;
 import android.content.LocusId;
+import android.content.pm.ActivityInfo;
 import android.graphics.Rect;
 import android.os.Binder;
 import android.os.IBinder;
@@ -46,6 +47,7 @@ import android.window.TaskOrganizer;
 
 import com.android.internal.annotations.VisibleForTesting;
 import com.android.internal.protolog.common.ProtoLog;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.wm.shell.common.ScreenshotUtils;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.sizecompatui.SizeCompatUIController;
@@ -231,14 +233,14 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
                             + " already exists");
                 }
                 mTaskListeners.put(listenerType, listener);
+            }
 
-                // Notify the listener of all existing tasks with the given type.
-                for (int i = mTasks.size() - 1; i >= 0; --i) {
-                    final TaskAppearedInfo data = mTasks.valueAt(i);
-                    final TaskListener taskListener = getTaskListener(data.getTaskInfo());
-                    if (taskListener != listener) continue;
-                    listener.onTaskAppeared(data.getTaskInfo(), data.getLeash());
-                }
+            // Notify the listener of all existing tasks with the given type.
+            for (int i = mTasks.size() - 1; i >= 0; --i) {
+                final TaskAppearedInfo data = mTasks.valueAt(i);
+                final TaskListener taskListener = getTaskListener(data.getTaskInfo());
+                if (taskListener != listener) continue;
+                listener.onTaskAppeared(data.getTaskInfo(), data.getLeash());
             }
         }
     }
@@ -264,8 +266,12 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
                 tasks.add(data);
             }
 
-            // Remove listener
-            mTaskListeners.removeAt(index);
+            // Remove listener, there can be the multiple occurrences, so search the whole list.
+            for (int i = mTaskListeners.size() - 1; i >= 0; --i) {
+                if (mTaskListeners.valueAt(i) == listener) {
+                    mTaskListeners.removeAt(i);
+                }
+            }
 
             // Associate tasks with new listeners if needed.
             for (int i = tasks.size() - 1; i >= 0; --i) {
@@ -334,6 +340,13 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     public void onAppSplashScreenViewRemoved(int taskId) {
         if (mStartingWindow != null) {
             mStartingWindow.onAppSplashScreenViewRemoved(taskId);
+        }
+    }
+
+    @Override
+    public void onImeDrawnOnTask(int taskId) {
+        if (mStartingWindow != null) {
+            mStartingWindow.onImeDrawnOnTask(taskId);
         }
     }
 
@@ -488,14 +501,40 @@ public class ShellTaskOrganizer extends TaskOrganizer implements
     }
 
     @Override
+    public void onSizeCompatRestartButtonAppeared(int taskId) {
+        final TaskAppearedInfo info;
+        synchronized (mLock) {
+            info = mTasks.get(taskId);
+        }
+        if (info == null) {
+            return;
+        }
+        logSizeCompatRestartButtonEventReported(info,
+                FrameworkStatsLog.SIZE_COMPAT_RESTART_BUTTON_EVENT_REPORTED__EVENT__APPEARED);
+    }
+
+    @Override
     public void onSizeCompatRestartButtonClicked(int taskId) {
         final TaskAppearedInfo info;
         synchronized (mLock) {
             info = mTasks.get(taskId);
         }
-        if (info != null) {
-            restartTaskTopActivityProcessIfVisible(info.getTaskInfo().token);
+        if (info == null) {
+            return;
         }
+        logSizeCompatRestartButtonEventReported(info,
+                FrameworkStatsLog.SIZE_COMPAT_RESTART_BUTTON_EVENT_REPORTED__EVENT__CLICKED);
+        restartTaskTopActivityProcessIfVisible(info.getTaskInfo().token);
+    }
+
+    private void logSizeCompatRestartButtonEventReported(@NonNull TaskAppearedInfo info,
+            int event) {
+        ActivityInfo topActivityInfo = info.getTaskInfo().topActivityInfo;
+        if (topActivityInfo == null) {
+            return;
+        }
+        FrameworkStatsLog.write(FrameworkStatsLog.SIZE_COMPAT_RESTART_BUTTON_EVENT_REPORTED,
+                topActivityInfo.applicationInfo.uid, event);
     }
 
     /**

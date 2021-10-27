@@ -20,13 +20,11 @@ import android.app.Instrumentation
 import android.content.Context
 import android.platform.test.annotations.Presubmit
 import android.system.helpers.ActivityHelper
-import android.view.Surface
 import androidx.test.filters.FlakyTest
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.server.wm.flicker.FlickerBuilderProvider
 import com.android.server.wm.flicker.FlickerTestParameter
 import com.android.server.wm.flicker.dsl.FlickerBuilder
-import com.android.server.wm.flicker.endRotation
 import com.android.server.wm.flicker.helpers.isRotated
 import com.android.server.wm.flicker.helpers.setRotation
 import com.android.server.wm.flicker.helpers.wakeUpAndGoToHomeScreen
@@ -38,6 +36,7 @@ import com.android.server.wm.flicker.startRotation
 import com.android.server.wm.flicker.statusBarLayerIsVisible
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
 import com.android.server.wm.flicker.statusBarWindowIsVisible
+import com.android.server.wm.traces.parser.toFlickerComponent
 import com.android.wm.shell.flicker.helpers.AppPairsHelper
 import com.android.wm.shell.flicker.helpers.BaseAppHelper
 import com.android.wm.shell.flicker.helpers.MultiWindowHelper.Companion.getDevEnableNonResizableMultiWindow
@@ -55,7 +54,7 @@ abstract class AppPairsTransition(protected val testSpec: FlickerTestParameter) 
     protected val activityHelper = ActivityHelper.getInstance()
     protected val appPairsHelper = AppPairsHelper(instrumentation,
         Components.SplitScreenActivity.LABEL,
-        Components.SplitScreenActivity.COMPONENT)
+        Components.SplitScreenActivity.COMPONENT.toFlickerComponent())
 
     protected val primaryApp = SplitScreenHelper.getPrimary(instrumentation)
     protected val secondaryApp = SplitScreenHelper.getSecondary(instrumentation)
@@ -178,15 +177,9 @@ abstract class AppPairsTransition(protected val testSpec: FlickerTestParameter) 
 
     @Presubmit
     @Test
-    open fun navBarLayerRotatesAndScales() {
-        testSpec.navBarLayerRotatesAndScales(Surface.ROTATION_0,
-            testSpec.config.endRotation)
-    }
+    open fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     @Presubmit
     @Test
-    open fun statusBarLayerRotatesScales() {
-        testSpec.statusBarLayerRotatesScales(Surface.ROTATION_0,
-            testSpec.config.endRotation)
-    }
+    open fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 }

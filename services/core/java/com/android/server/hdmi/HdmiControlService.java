@@ -405,7 +405,7 @@ public class HdmiControlService extends SystemService {
     private TvInputManager mTvInputManager;
 
     @Nullable
-    private PowerManager mPowerManager;
+    private PowerManagerWrapper mPowerManager;
 
     @Nullable
     private Looper mIoLooper;
@@ -734,7 +734,7 @@ public class HdmiControlService extends SystemService {
         if (phase == SystemService.PHASE_SYSTEM_SERVICES_READY) {
             mTvInputManager = (TvInputManager) getContext().getSystemService(
                     Context.TV_INPUT_SERVICE);
-            mPowerManager = getContext().getSystemService(PowerManager.class);
+            mPowerManager = new PowerManagerWrapper(getContext());
         } else if (phase == SystemService.PHASE_BOOT_COMPLETED) {
             runOnServiceThread(this::bootCompleted);
         }
@@ -755,7 +755,11 @@ public class HdmiControlService extends SystemService {
     }
 
     @VisibleForTesting
-    protected PowerManager getPowerManager() {
+    void setPowerManager(PowerManagerWrapper powerManager) {
+        mPowerManager = powerManager;
+    }
+
+    PowerManagerWrapper getPowerManager() {
         return mPowerManager;
     }
 
@@ -1155,7 +1159,7 @@ public class HdmiControlService extends SystemService {
     @ServiceThreadOnly
     void sendCecCommand(HdmiCecMessage command, @Nullable SendMessageCallback callback) {
         assertRunOnServiceThread();
-        if (mMessageValidator.isValid(command) == HdmiCecMessageValidator.OK) {
+        if (mMessageValidator.isValid(command, false) == HdmiCecMessageValidator.OK) {
             mCecController.sendCommand(command, callback);
         } else {
             HdmiLogger.error("Invalid message type:" + command);
@@ -1188,7 +1192,7 @@ public class HdmiControlService extends SystemService {
     @Constants.HandleMessageResult
     protected int handleCecCommand(HdmiCecMessage message) {
         assertRunOnServiceThread();
-        int errorCode = mMessageValidator.isValid(message);
+        int errorCode = mMessageValidator.isValid(message, true);
         if (errorCode != HdmiCecMessageValidator.OK) {
             // We'll not response on the messages with the invalid source or destination
             // or with parameter length shorter than specified in the standard.
@@ -1681,7 +1685,8 @@ public class HdmiControlService extends SystemService {
                         return;
                     }
                     HdmiCecLocalDeviceTv tv = tv();
-                    if (tv == null) {
+                    HdmiCecLocalDevicePlayback playback = playback();
+                    if (tv == null && playback == null) {
                         if (!mAddressAllocated) {
                             mSelectRequestBuffer.set(SelectRequestBuffer.newDeviceSelect(
                                     HdmiControlService.this, deviceId, callback));
@@ -1694,20 +1699,24 @@ public class HdmiControlService extends SystemService {
                         invokeCallback(callback, HdmiControlManager.RESULT_SOURCE_NOT_AVAILABLE);
                         return;
                     }
-                    HdmiMhlLocalDeviceStub device = mMhlController.getLocalDeviceById(deviceId);
-                    if (device != null) {
-                        if (device.getPortId() == tv.getActivePortId()) {
-                            invokeCallback(callback, HdmiControlManager.RESULT_SUCCESS);
+                    if (tv != null) {
+                        HdmiMhlLocalDeviceStub device = mMhlController.getLocalDeviceById(deviceId);
+                        if (device != null) {
+                            if (device.getPortId() == tv.getActivePortId()) {
+                                invokeCallback(callback, HdmiControlManager.RESULT_SUCCESS);
+                                return;
+                            }
+                            // Upon selecting MHL device, we send RAP[Content On] to wake up
+                            // the connected mobile device, start routing control to switch ports.
+                            // callback is handled by MHL action.
+                            device.turnOn(callback);
+                            tv.doManualPortSwitching(device.getPortId(), null);
                             return;
                         }
-                        // Upon selecting MHL device, we send RAP[Content On] to wake up
-                        // the connected mobile device, start routing control to switch ports.
-                        // callback is handled by MHL action.
-                        device.turnOn(callback);
-                        tv.doManualPortSwitching(device.getPortId(), null);
+                        tv.deviceSelect(deviceId, callback);
                         return;
                     }
-                    tv.deviceSelect(deviceId, callback);
+                    playback.deviceSelect(deviceId, callback);
                 }
             });
         }
@@ -2353,6 +2362,25 @@ public class HdmiControlService extends SystemService {
                 pw.increaseIndent();
                 mCecController.dump(pw);
                 pw.decreaseIndent();
+            }
+        }
+
+        @Override
+        public boolean setMessageHistorySize(int newSize) {
+            enforceAccessPermission();
+            if (mCecController == null) {
+                return false;
+            }
+            return mCecController.setMessageHistorySize(newSize);
+        }
+
+        @Override
+        public int getMessageHistorySize() {
+            enforceAccessPermission();
+            if (mCecController != null) {
+                return mCecController.getMessageHistorySize();
+            } else {
+                return 0;
             }
         }
 
@@ -3148,7 +3176,7 @@ public class HdmiControlService extends SystemService {
         });
     }
 
-    private boolean canGoToStandby() {
+    boolean canGoToStandby() {
         for (HdmiCecLocalDevice device : mHdmiCecNetwork.getLocalDeviceList()) {
             if (!device.canGoToStandby()) return false;
         }
@@ -3562,8 +3590,8 @@ public class HdmiControlService extends SystemService {
         invokeInputChangeListener(info);
     }
 
-   void setMhlInputChangeEnabled(boolean enabled) {
-       mMhlController.setOption(OPTION_MHL_INPUT_SWITCHING, toInt(enabled));
+    void setMhlInputChangeEnabled(boolean enabled) {
+        mMhlController.setOption(OPTION_MHL_INPUT_SWITCHING, toInt(enabled));
 
         synchronized (mLock) {
             mMhlInputChangeEnabled = enabled;

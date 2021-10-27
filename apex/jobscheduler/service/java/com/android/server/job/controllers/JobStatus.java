@@ -93,6 +93,7 @@ public final class JobStatus {
     static final int CONSTRAINT_CONTENT_TRIGGER = 1<<26;
     static final int CONSTRAINT_DEVICE_NOT_DOZING = 1 << 25; // Implicit constraint
     static final int CONSTRAINT_WITHIN_QUOTA = 1 << 24;      // Implicit constraint
+    static final int CONSTRAINT_PREFETCH = 1 << 23;
     static final int CONSTRAINT_BACKGROUND_NOT_RESTRICTED = 1 << 22; // Implicit constraint
 
     // The following set of dynamic constraints are for specific use cases (as explained in their
@@ -147,6 +148,7 @@ public final class JobStatus {
     private static final int STATSD_CONSTRAINTS_TO_LOG = CONSTRAINT_CONTENT_TRIGGER
             | CONSTRAINT_DEADLINE
             | CONSTRAINT_IDLE
+            | CONSTRAINT_PREFETCH
             | CONSTRAINT_TARE_WEALTH
             | CONSTRAINT_TIMING_DELAY
             | CONSTRAINT_WITHIN_QUOTA;
@@ -1141,7 +1143,7 @@ public final class JobStatus {
      * treated as an expedited job.
      */
     public boolean shouldTreatAsExpeditedJob() {
-        return mExpeditedQuotaApproved && isRequestedExpeditedJob();
+        return mExpeditedQuotaApproved && mExpeditedTareApproved && isRequestedExpeditedJob();
     }
 
     /**
@@ -1173,6 +1175,11 @@ public final class JobStatus {
     /** @return true if the constraint was changed, false otherwise. */
     boolean setStorageNotLowConstraintSatisfied(final long nowElapsed, boolean state) {
         return setConstraintSatisfied(CONSTRAINT_STORAGE_NOT_LOW, nowElapsed, state);
+    }
+
+    /** @return true if the constraint was changed, false otherwise. */
+    boolean setPrefetchConstraintSatisfied(final long nowElapsed, boolean state) {
+        return setConstraintSatisfied(CONSTRAINT_PREFETCH, nowElapsed, state);
     }
 
     /** @return true if the constraint was changed, false otherwise. */
@@ -1387,6 +1394,9 @@ public final class JobStatus {
             case CONSTRAINT_DEVICE_NOT_DOZING:
                 return JobParameters.STOP_REASON_DEVICE_STATE;
 
+            case CONSTRAINT_PREFETCH:
+                return JobParameters.STOP_REASON_ESTIMATED_APP_LAUNCH_TIME_CHANGED;
+
             case CONSTRAINT_TARE_WEALTH:
             case CONSTRAINT_WITHIN_QUOTA:
                 return JobParameters.STOP_REASON_QUOTA;
@@ -1564,7 +1574,8 @@ public final class JobStatus {
         // sessions (exempt from dynamic restrictions), we need the additional check to ensure
         // that NEVER jobs don't run.
         // TODO: cleanup quota and standby bucket management so we don't need the additional checks
-        if ((!mReadyWithinQuota && !mReadyDynamicSatisfied && !shouldTreatAsExpeditedJob())
+        if (((!mReadyWithinQuota || !mReadyTareWealth)
+                && !mReadyDynamicSatisfied && !shouldTreatAsExpeditedJob())
                 || getEffectiveStandbyBucket() == NEVER_INDEX) {
             return false;
         }
@@ -1580,12 +1591,12 @@ public final class JobStatus {
     /** All constraints besides implicit and deadline. */
     static final int CONSTRAINTS_OF_INTEREST = CONSTRAINT_CHARGING | CONSTRAINT_BATTERY_NOT_LOW
             | CONSTRAINT_STORAGE_NOT_LOW | CONSTRAINT_TIMING_DELAY | CONSTRAINT_CONNECTIVITY
-            | CONSTRAINT_IDLE | CONSTRAINT_CONTENT_TRIGGER;
+            | CONSTRAINT_IDLE | CONSTRAINT_CONTENT_TRIGGER | CONSTRAINT_PREFETCH;
 
     // Soft override covers all non-"functional" constraints
     static final int SOFT_OVERRIDE_CONSTRAINTS =
             CONSTRAINT_CHARGING | CONSTRAINT_BATTERY_NOT_LOW | CONSTRAINT_STORAGE_NOT_LOW
-                    | CONSTRAINT_TIMING_DELAY | CONSTRAINT_IDLE;
+                    | CONSTRAINT_TIMING_DELAY | CONSTRAINT_IDLE | CONSTRAINT_PREFETCH;
 
     /** Returns true whenever all dynamically set constraints are satisfied. */
     public boolean areDynamicConstraintsSatisfied() {
@@ -1773,6 +1784,9 @@ public final class JobStatus {
         }
         if ((constraints&CONSTRAINT_BACKGROUND_NOT_RESTRICTED) != 0) {
             pw.print(" BACKGROUND_NOT_RESTRICTED");
+        }
+        if ((constraints & CONSTRAINT_PREFETCH) != 0) {
+            pw.print(" PREFETCH");
         }
         if ((constraints & CONSTRAINT_TARE_WEALTH) != 0) {
             pw.print(" TARE_WEALTH");

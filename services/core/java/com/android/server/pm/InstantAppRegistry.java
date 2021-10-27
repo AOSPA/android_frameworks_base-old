@@ -56,6 +56,7 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.XmlUtils;
 import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.permission.PermissionManagerServiceInternal;
 import com.android.server.utils.Snappable;
 import com.android.server.utils.SnapshotCache;
@@ -387,7 +388,7 @@ class InstantAppRegistry implements Watchable, Snappable {
 
             // Track instant apps
             if (ps.getInstantApp(userId)) {
-                addInstantAppLPw(userId, ps.appId);
+                addInstantAppLPw(userId, ps.getAppId());
             }
 
             // Remove the in-memory state
@@ -455,12 +456,12 @@ class InstantAppRegistry implements Watchable, Snappable {
             if (ps.getInstantApp(userId)) {
                 // Add a record for an uninstalled instant app
                 addUninstalledInstantAppLPw(pkg, userId);
-                removeInstantAppLPw(userId, ps.appId);
+                removeInstantAppLPw(userId, ps.getAppId());
             } else {
                 // Deleting an app prunes all instant state such as cookie
                 deleteDir(getInstantApplicationDir(pkg.getPackageName(), userId));
                 mCookiePersistence.cancelPendingPersistLPw(pkg, userId);
-                removeAppLPw(userId, ps.appId);
+                removeAppLPw(userId, ps.getAppId());
             }
         }
     }
@@ -618,7 +619,8 @@ class InstantAppRegistry implements Watchable, Snappable {
         }
 
         // TODO(b/135203078): Remove toAppInfo call? Requires significant additions/changes to PM
-        Drawable icon = pkg.toAppInfoWithoutState().loadIcon(mService.mContext.getPackageManager());
+        Drawable icon = AndroidPackageUtils.generateAppInfoWithoutState(pkg)
+                .loadIcon(mService.mContext.getPackageManager());
 
         final Bitmap bitmap;
         if (icon instanceof BitmapDrawable) {
@@ -847,7 +849,7 @@ class InstantAppRegistry implements Watchable, Snappable {
                         } else if (lhsPs.getPkgState().getLatestPackageUseTimeInMills() <
                                 rhsPs.getPkgState().getLatestPackageUseTimeInMills()) {
                             return -1;
-                        } else if (lhsPs.firstInstallTime > rhsPs.firstInstallTime) {
+                        } else if (lhsPs.getFirstInstallTime() > rhsPs.getFirstInstallTime()) {
                             return 1;
                         } else {
                             return -1;
@@ -859,9 +861,11 @@ class InstantAppRegistry implements Watchable, Snappable {
 
         if (packagesToDelete != null) {
             final int packageCount = packagesToDelete.size();
+            final DeletePackageHelper deletePackageHelper = new DeletePackageHelper(mService);
             for (int i = 0; i < packageCount; i++) {
                 final String packageToDelete = packagesToDelete.get(i);
-                if (mService.deletePackageX(packageToDelete, PackageManager.VERSION_CODE_HIGHEST,
+                if (deletePackageHelper.deletePackageX(packageToDelete,
+                        PackageManager.VERSION_CODE_HIGHEST,
                         UserHandle.USER_SYSTEM, PackageManager.DELETE_ALL_USERS,
                         true /*removedBySystem*/) == PackageManager.DELETE_SUCCEEDED) {
                     if (file.getUsableSpace() >= neededSpace) {
@@ -963,7 +967,7 @@ class InstantAppRegistry implements Watchable, Snappable {
 
         // TODO(b/135203078): This may be broken due to inner mutability problems that were broken
         //  as part of moving to PackageInfoUtils. Flags couldn't be determined.
-        ApplicationInfo appInfo = PackageInfoUtils.generateApplicationInfo(ps.pkg, 0,
+        ApplicationInfo appInfo = PackageInfoUtils.generateApplicationInfo(ps.getPkg(), 0,
                 ps.readUserState(userId), userId, ps);
         if (addApplicationInfo) {
             return new InstantAppInfo(appInfo, requestedPermissions, grantedPermissions);

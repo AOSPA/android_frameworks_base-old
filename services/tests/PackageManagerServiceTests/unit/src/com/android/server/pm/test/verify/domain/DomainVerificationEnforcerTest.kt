@@ -19,15 +19,15 @@ package com.android.server.pm.test.verify.domain
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
-import android.content.pm.PackageUserState
 import android.content.pm.parsing.component.ParsedActivity
 import android.content.pm.parsing.component.ParsedIntentInfo
+import android.content.pm.pkg.PackageUserState
+import android.content.pm.pkg.PackageUserStateInternal
 import android.content.pm.verify.domain.DomainVerificationManager
 import android.content.pm.verify.domain.DomainVerificationState
 import android.os.Build
 import android.os.Process
 import android.util.ArraySet
-import android.util.SparseArray
 import androidx.test.platform.app.InstrumentationRegistry
 import com.android.server.pm.PackageSetting
 import com.android.server.pm.parsing.pkg.AndroidPackage
@@ -332,13 +332,13 @@ class DomainVerificationEnforcerTest {
                 domainSetId
             )
         ) {
-            whenever(getName()) { packageName }
-            whenever(getPkg()) { mockPkg(packageName) }
+            whenever(this.packageName) { packageName }
+            whenever(pkg) { mockPkg(packageName) }
             whenever(this.domainSetId) { domainSetId }
-            whenever(readUserState(0)) { PackageUserState() }
-            whenever(readUserState(1)) { PackageUserState() }
+            whenever(readUserState(0)) { PackageUserStateInternal.DEFAULT }
+            whenever(readUserState(1)) { PackageUserStateInternal.DEFAULT }
             whenever(getInstantApp(anyInt())) { false }
-            whenever(isSystem()) { false }
+            whenever(isSystem) { false }
         }
     }
 

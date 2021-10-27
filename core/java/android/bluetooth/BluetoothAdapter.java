@@ -513,6 +513,12 @@ public final class BluetoothAdapter {
     @SystemApi
     public static final int ACTIVE_DEVICE_ALL = 2;
 
+    /** @hide */
+    @IntDef({BluetoothProfile.HEADSET, BluetoothProfile.A2DP,
+            BluetoothProfile.HEARING_AID})
+    @Retention(RetentionPolicy.SOURCE)
+    public @interface ActiveDeviceProfile {}
+
     /**
      * Broadcast Action: The local Bluetooth adapter has started the remote
      * device discovery process.
@@ -1255,13 +1261,17 @@ public final class BluetoothAdapter {
     /**
      * Turn off the local Bluetooth adapter and don't persist the setting.
      *
+     * @param persist Indicate whether the off state should be persisted following the next reboot
      * @return true to indicate adapter shutdown has begun, or false on immediate error
      * @hide
      */
-    @UnsupportedAppUsage(trackingBug = 171933273)
+    @SystemApi
     @RequiresLegacyBluetoothAdminPermission
     @RequiresBluetoothConnectPermission
-    @RequiresPermission(android.Manifest.permission.BLUETOOTH_CONNECT)
+    @RequiresPermission(allOf = {
+            android.Manifest.permission.BLUETOOTH_CONNECT,
+            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
+    })
     public boolean disable(boolean persist) {
         android.util.SeempLog.record(57);
 
@@ -2032,28 +2042,40 @@ public final class BluetoothAdapter {
         return false;
     }
     /**
-     * Connects all enabled and supported bluetooth profiles between the local and remote device.
-     * Connection is asynchronous and you should listen to each profile's broadcast intent
-     * ACTION_CONNECTION_STATE_CHANGED to verify whether connection was successful. For example,
-     * to verify a2dp is connected, you would listen for
-     * {@link BluetoothA2dp#ACTION_CONNECTION_STATE_CHANGED}
+     * Get the active devices for the BluetoothProfile specified
      *
-     * @param device is the remote device with which to connect these profiles
-     * @return true if message sent to try to connect all profiles, false if an error occurred
-     *
+     * @param profile is the profile from which we want the active devices.
+     *                Possible values are:
+     *                {@link BluetoothProfile#HEADSET},
+     *                {@link BluetoothProfile#A2DP},
+     *                {@link BluetoothProfile#HEARING_AID}
+     * @return A list of active bluetooth devices
+     * @throws IllegalArgumentException If profile is not one of {@link ActiveDeviceProfile}
      * @hide
      */
-    @RequiresBluetoothConnectPermission
+    @SystemApi
     @RequiresPermission(allOf = {
             android.Manifest.permission.BLUETOOTH_CONNECT,
             android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-            android.Manifest.permission.MODIFY_PHONE_STATE,
     })
-    public boolean connectAllEnabledProfiles(@NonNull BluetoothDevice device) {
+    public @NonNull List<BluetoothDevice> getActiveDevices(@ActiveDeviceProfile int profile) {
+        if (profile != BluetoothProfile.HEADSET
+                && profile != BluetoothProfile.A2DP
+                && profile != BluetoothProfile.HEARING_AID) {
+            Log.e(TAG, "Invalid profile param value in getActiveDevices");
+            throw new IllegalArgumentException("Profiles must be one of "
+                    + "BluetoothProfile.A2DP, "
+                    + "BluetoothProfile.HEARING_AID, or"
+                    + "BluetoothProfile.HEARING_AID");
+        }
         try {
             mServiceLock.readLock().lock();
             if (mService != null) {
-                return mService.connectAllEnabledProfiles(device, mAttributionSource);
+                if (DBG) {
+                    Log.d(TAG, "getActiveDevices(profile= "
+                            + BluetoothProfile.getProfileName(profile) + ")");
+                }
+                return mService.getActiveDevices(profile, mAttributionSource);
             }
         } catch (RemoteException e) {
             Log.e(TAG, "", e);
@@ -2061,39 +2083,7 @@ public final class BluetoothAdapter {
             mServiceLock.readLock().unlock();
         }
 
-        return false;
-    }
-
-    /**
-     * Disconnects all enabled and supported bluetooth profiles between the local and remote device.
-     * Disconnection is asynchronous and you should listen to each profile's broadcast intent
-     * ACTION_CONNECTION_STATE_CHANGED to verify whether disconnection was successful. For example,
-     * to verify a2dp is disconnected, you would listen for
-     * {@link BluetoothA2dp#ACTION_CONNECTION_STATE_CHANGED}
-     *
-     * @param device is the remote device with which to disconnect these profiles
-     * @return true if message sent to try to disconnect all profiles, false if an error occurred
-     *
-     * @hide
-     */
-    @RequiresBluetoothConnectPermission
-    @RequiresPermission(allOf = {
-            android.Manifest.permission.BLUETOOTH_CONNECT,
-            android.Manifest.permission.BLUETOOTH_PRIVILEGED,
-    })
-    public boolean disconnectAllEnabledProfiles(@NonNull BluetoothDevice device) {
-        try {
-            mServiceLock.readLock().lock();
-            if (mService != null) {
-                return mService.disconnectAllEnabledProfiles(device, mAttributionSource);
-            }
-        } catch (RemoteException e) {
-            Log.e(TAG, "", e);
-        } finally {
-            mServiceLock.readLock().unlock();
-        }
-
-        return false;
+        return new ArrayList<>();
     }
 
     /**
@@ -3204,6 +3194,10 @@ public final class BluetoothAdapter {
         } else if (profile == BluetoothProfile.VOLUME_CONTROL) {
             BluetoothVolumeControl vcs = new BluetoothVolumeControl(context, listener, this);
             return true;
+        } else if (profile == BluetoothProfile.CSIP_SET_COORDINATOR) {
+            BluetoothCsipSetCoordinator csipSetCoordinator =
+                    new BluetoothCsipSetCoordinator(context, listener, this);
+            return true;
         } else {
             return false;
         }
@@ -3318,6 +3312,11 @@ public final class BluetoothAdapter {
             case BluetoothProfile.VOLUME_CONTROL:
                 BluetoothVolumeControl vcs = (BluetoothVolumeControl) proxy;
                 vcs.close();
+                break;
+            case BluetoothProfile.CSIP_SET_COORDINATOR:
+                BluetoothCsipSetCoordinator csipSetCoordinator =
+                        (BluetoothCsipSetCoordinator) proxy;
+                csipSetCoordinator.close();
                 break;
         }
     }

@@ -246,7 +246,7 @@
     <string name="global_action_power_off" msgid="4404936470711393203">"關機"</string>
     <string name="global_action_power_options" msgid="1185286119330160073">"電源"</string>
     <string name="global_action_restart" msgid="4678451019561687074">"重新啟動"</string>
-    <string name="global_action_emergency" msgid="1387617624177105088">"緊急電話"</string>
+    <string name="global_action_emergency" msgid="1387617624177105088">"緊急撥號"</string>
     <string name="global_action_bug_report" msgid="5127867163044170003">"錯誤報告"</string>
     <string name="global_action_logout" msgid="6093581310002476511">"結束"</string>
     <string name="global_action_screenshot" msgid="2610053466156478564">"螢幕截圖"</string>
@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"撥打電話及管理通話"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"人體感測器"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"存取與你生命徵象相關的感應器資料"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"通知"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"顯示通知"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"擷取視窗內容"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"檢查你存取的視窗內容。"</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"啟用輕觸探索功能"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"允許應用程式停用按鍵鎖定以及其他相關的密碼安全性功能。例如：手機收到來電時停用按鍵鎖定，通話結束後重新啟用按鍵鎖定。"</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"要求螢幕鎖定的複雜度"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"允許應用程式記住螢幕鎖定的複雜度 (高、中、低或無)，即螢幕鎖定的可能長度範圍和類型。這樣一來，應用程式還能建議使用者將螢幕鎖定更新為特定複雜度，但使用者可選擇忽略建議並離開應用程式。請注意，系統不會以純文字格式儲存螢幕鎖定選項的內容，因此應用程式不會知道確切密碼。"</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"顯示通知"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"允許應用程式顯示通知"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"使用生物特徵硬體"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"允許應用程式使用生物特徵硬體進行驗證"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"管理指紋硬體"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"請使用指紋解鎖或螢幕鎖定功能驗證身分，才能繼續操作"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"發生錯誤，請再試一次。"</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"指紋圖示"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"人臉解鎖"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"人臉解鎖功能發生問題"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"請使用人臉解鎖或螢幕鎖定功能驗證身分，才能繼續操作"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"發生錯誤，請再試一次。"</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"臉孔圖示"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"讀取同步處理設定"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"允許應用程式讀取帳戶的同步處理設定，例如判斷「使用者」應用程式是否和某個帳戶進行同步處理。"</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"啟用捷徑功能，只要同時按下兩個音量按鈕 3 秒，就能啟動無障礙功能。"</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"要開啟無障礙功能快速鍵嗎？"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"同時按住音量調高鍵和調低鍵數秒，即可開啟無障礙功能。這麼做可能會改變裝置的運作方式。\n\n目前的功能：\n<xliff:g id="SERVICE">%1$s</xliff:g>\n你可以在 [設定] &gt; [無障礙設定] 中變更選取的功能。"</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"要開啟「<xliff:g id="SERVICE">%1$s</xliff:g>」快速鍵嗎？"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"同時按住音量調高鍵和調低鍵數秒，即可開啟「<xliff:g id="SERVICE">%1$s</xliff:g>」無障礙功能。這麼做可能會改變裝置的運作方式。\n\n你可以在 [設定] &gt; [無障礙設定] 中變更這個快速鍵觸發的功能。"</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"開啟"</string>

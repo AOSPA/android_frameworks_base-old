@@ -261,6 +261,27 @@ abstract class HdmiCecLocalDevice {
     }
 
     @ServiceThreadOnly
+    @VisibleForTesting
+    protected boolean isAlreadyActiveSource(HdmiDeviceInfo targetDevice, int targetAddress,
+            IHdmiControlCallback callback) {
+        ActiveSource active = getActiveSource();
+        if (targetDevice.getDevicePowerStatus() == HdmiControlManager.POWER_STATUS_ON
+                && active.isValid()
+                && targetAddress == active.logicalAddress) {
+            invokeCallback(callback, HdmiControlManager.RESULT_SUCCESS);
+            return true;
+        }
+        return false;
+    }
+
+    // Clear all device info.
+    @ServiceThreadOnly
+    void clearDeviceInfoList() {
+        assertRunOnServiceThread();
+        mService.getHdmiCecNetwork().clearDeviceList();
+    }
+
+    @ServiceThreadOnly
     @Constants.HandleMessageResult
     protected final int onMessage(HdmiCecMessage message) {
         assertRunOnServiceThread();
@@ -773,10 +794,10 @@ abstract class HdmiCecLocalDevice {
         byte[] params = message.getParams();
         return message.getOpcode() == Constants.MESSAGE_USER_CONTROL_PRESSED
                 && (params[0] == HdmiCecKeycode.CEC_KEYCODE_VOLUME_DOWN
-                    || params[0] == HdmiCecKeycode.CEC_KEYCODE_VOLUME_UP
-                    || params[0] == HdmiCecKeycode.CEC_KEYCODE_MUTE
-                    || params[0] == HdmiCecKeycode.CEC_KEYCODE_MUTE_FUNCTION
-                    || params[0] == HdmiCecKeycode.CEC_KEYCODE_RESTORE_VOLUME_FUNCTION);
+                        || params[0] == HdmiCecKeycode.CEC_KEYCODE_VOLUME_UP
+                        || params[0] == HdmiCecKeycode.CEC_KEYCODE_MUTE
+                        || params[0] == HdmiCecKeycode.CEC_KEYCODE_MUTE_FUNCTION
+                        || params[0] == HdmiCecKeycode.CEC_KEYCODE_RESTORE_VOLUME_FUNCTION);
     }
 
     @Constants.HandleMessageResult
@@ -1229,13 +1250,13 @@ abstract class HdmiCecLocalDevice {
                 || logicalAddress == mDeviceInfo.getLogicalAddress()) {
             // Don't send key event to invalid device or itself.
             Slog.w(
-                TAG,
-                "Discard volume key event: "
-                    + keyCode
-                    + ", pressed:"
-                    + isPressed
-                    + ", receiverAddr="
-                    + logicalAddress);
+                    TAG,
+                    "Discard volume key event: "
+                            + keyCode
+                            + ", pressed:"
+                            + isPressed
+                            + ", receiverAddr="
+                            + logicalAddress);
         } else if (!action.isEmpty()) {
             action.get(0).processKeyEvent(keyCode, isPressed);
         } else if (isPressed) {

@@ -28,7 +28,6 @@ import android.content.pm.InstrumentationInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageItemInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageUserState;
 import android.content.pm.PermissionGroupInfo;
 import android.content.pm.PermissionInfo;
 import android.content.pm.ProcessInfo;
@@ -47,6 +46,8 @@ import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.parsing.component.ParsedProcess;
 import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedService;
+import android.content.pm.pkg.PackageUserState;
+import android.content.pm.pkg.PackageUserStateUtils;
 import android.os.UserHandle;
 import android.util.ArrayMap;
 import android.util.ArraySet;
@@ -70,8 +71,8 @@ import java.util.Set;
 
 /**
  * Methods that use a {@link PackageSetting} use it to override information provided from the raw
- * package, or to provide information that would otherwise be missing. Null can be passed if none
- * of the state values should be applied.
+ * package, or to provide information that would otherwise be missing. Null can be passed if none of
+ * the state values should be applied.
  *
  * @hide
  **/
@@ -97,7 +98,7 @@ public class PackageInfoUtils {
     public static PackageInfo generate(AndroidPackage pkg, ApexInfo apexInfo, int flags,
             @Nullable PackageSetting pkgSetting) {
         return generateWithComponents(pkg, EmptyArray.INT, flags, 0, 0, Collections.emptySet(),
-                new PackageUserState(), UserHandle.getCallingUserId(), apexInfo, pkgSetting);
+                PackageUserState.DEFAULT, UserHandle.getCallingUserId(), apexInfo, pkgSetting);
     }
 
     /**
@@ -208,8 +209,8 @@ public class PackageInfoUtils {
      */
     @Nullable
     public static ApplicationInfo generateApplicationInfo(AndroidPackage pkg,
-            @PackageManager.ApplicationInfoFlags int flags, PackageUserState state, int userId,
-            @Nullable PackageSetting pkgSetting) {
+            @PackageManager.ApplicationInfoFlags int flags, @NonNull PackageUserState state,
+            int userId, @Nullable PackageSetting pkgSetting) {
         if (pkg == null) {
             return null;
         }
@@ -233,6 +234,9 @@ public class PackageInfoUtils {
             info.sharedLibraryFiles = usesLibraryFiles.isEmpty()
                     ? null : usesLibraryFiles.toArray(new String[0]);
             info.sharedLibraryInfos = usesLibraryInfos.isEmpty() ? null : usesLibraryInfos;
+            if (info.category == ApplicationInfo.CATEGORY_UNDEFINED) {
+                info.category = pkgSetting.getCategoryOverride();
+            }
         }
 
         info.seInfo = AndroidPackageUtils.getSeInfo(pkg, pkgSetting);
@@ -422,7 +426,7 @@ public class PackageInfoUtils {
             @PackageManager.PackageInfoFlags int flags) {
         // Returns false if the package is hidden system app until installed.
         if ((flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) == 0
-                && !state.installed
+                && !state.isInstalled()
                 && pkgSetting != null
                 && pkgSetting.getPkgState().isHiddenUntilInstalled()) {
             return false;
@@ -430,7 +434,7 @@ public class PackageInfoUtils {
 
         // If available for the target user, or trying to match uninstalled packages and it's
         // a system app.
-        return state.isAvailable(flags)
+        return PackageUserStateUtils.isAvailable(state, flags)
                 || (pkg.isSystem()
                 && ((flags & PackageManager.MATCH_KNOWN_PACKAGES) != 0
                 || (flags & PackageManager.MATCH_HIDDEN_UNTIL_INSTALLED_COMPONENTS) != 0));

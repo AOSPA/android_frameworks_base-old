@@ -24,8 +24,6 @@ import android.app.INotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.content.om.OverlayManager;
-import android.hardware.SensorManager;
-import android.hardware.devicestate.DeviceStateManager;
 import android.hardware.display.AmbientDisplayConfiguration;
 import android.hardware.display.ColorDisplayManager;
 import android.os.Handler;
@@ -36,11 +34,8 @@ import android.os.UserHandle;
 import android.view.Choreographer;
 import android.view.IWindowManager;
 import android.view.LayoutInflater;
-import android.view.WindowManager;
-import android.view.accessibility.AccessibilityManager;
 
 import com.android.internal.logging.MetricsLogger;
-import com.android.internal.logging.UiEventLogger;
 import com.android.internal.util.NotificationMessagingUtil;
 import com.android.internal.widget.LockPatternUtils;
 import com.android.keyguard.KeyguardUpdateMonitor;
@@ -51,9 +46,7 @@ import com.android.systemui.R;
 import com.android.systemui.accessibility.AccessibilityButtonModeObserver;
 import com.android.systemui.accessibility.AccessibilityButtonTargetsObserver;
 import com.android.systemui.accessibility.ModeSwitchesController;
-import com.android.systemui.accessibility.SystemActions;
 import com.android.systemui.accessibility.floatingmenu.AccessibilityFloatingMenuController;
-import com.android.systemui.assist.AssistManager;
 import com.android.systemui.broadcast.BroadcastDispatcher;
 import com.android.systemui.broadcast.logging.BroadcastDispatcherLogger;
 import com.android.systemui.dagger.qualifiers.Background;
@@ -61,52 +54,25 @@ import com.android.systemui.dagger.qualifiers.Main;
 import com.android.systemui.doze.AlwaysOnDisplayPolicy;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.keyguard.KeyguardViewMediator;
-import com.android.systemui.keyguard.LifecycleScreenStatusProvider;
-import com.android.systemui.model.SysUiState;
-import com.android.systemui.navigationbar.NavigationBarA11yHelper;
-import com.android.systemui.navigationbar.NavigationBarController;
-import com.android.systemui.navigationbar.NavigationBarOverlayController;
-import com.android.systemui.navigationbar.NavigationModeController;
-import com.android.systemui.navigationbar.TaskbarDelegate;
-import com.android.systemui.plugins.PluginInitializerImpl;
-import com.android.systemui.plugins.statusbar.StatusBarStateController;
 import com.android.systemui.qs.ReduceBrightColorsController;
-import com.android.systemui.recents.OverviewProxyService;
-import com.android.systemui.recents.Recents;
 import com.android.systemui.settings.UserTracker;
-import com.android.systemui.shared.plugins.PluginManager;
-import com.android.systemui.shared.plugins.PluginManagerImpl;
 import com.android.systemui.shared.system.ActivityManagerWrapper;
 import com.android.systemui.shared.system.DevicePolicyManagerWrapper;
 import com.android.systemui.shared.system.TaskStackChangeListeners;
 import com.android.systemui.shared.system.WindowManagerWrapper;
-import com.android.unfold.UnfoldTransitionFactory;
-import com.android.unfold.UnfoldTransitionProgressProvider;
-import com.android.unfold.config.UnfoldTransitionConfig;
-import com.android.systemui.statusbar.CommandQueue;
-import com.android.systemui.statusbar.NotificationRemoteInputManager;
-import com.android.systemui.statusbar.NotificationShadeDepthController;
+import com.android.systemui.statusbar.connectivity.NetworkController;
 import com.android.systemui.statusbar.phone.AutoHideController;
 import com.android.systemui.statusbar.phone.ConfigurationControllerImpl;
-import com.android.systemui.statusbar.phone.ShadeController;
-import com.android.systemui.statusbar.phone.StatusBar;
-import com.android.systemui.statusbar.policy.AccessibilityManagerWrapper;
 import com.android.systemui.statusbar.policy.ConfigurationController;
 import com.android.systemui.statusbar.policy.DataSaverController;
-import com.android.systemui.statusbar.policy.DeviceProvisionedController;
-import com.android.systemui.statusbar.policy.NetworkController;
 import com.android.systemui.theme.ThemeOverlayApplier;
 import com.android.systemui.util.leak.LeakDetector;
 import com.android.systemui.util.settings.SecureSettings;
-import com.android.wm.shell.legacysplitscreen.LegacySplitScreen;
-import com.android.wm.shell.pip.Pip;
 
-import java.util.Optional;
 import java.util.concurrent.Executor;
 
 import javax.inject.Named;
 
-import dagger.Lazy;
 import dagger.Module;
 import dagger.Provides;
 
@@ -174,9 +140,8 @@ public class DependencyProvider {
     /** */
     @Provides
     @SysUISingleton
-    public LeakDetector provideLeakDetector() {
-        return LeakDetector.create();
-
+    public LeakDetector provideLeakDetector(DumpManager dumpManager) {
+        return LeakDetector.create(dumpManager);
     }
 
     @SuppressLint("MissingPermission")
@@ -196,84 +161,16 @@ public class DependencyProvider {
     }
 
     /** */
-    @Provides
-    @SysUISingleton
-    public PluginManager providePluginManager(Context context) {
-        return new PluginManagerImpl(context, new PluginInitializerImpl());
-    }
-
-    /** */
     @SysUISingleton
     @Provides
     static ThemeOverlayApplier provideThemeOverlayManager(Context context,
-            @Background Executor bgExecutor, OverlayManager overlayManager,
+            @Background Executor bgExecutor,
+            @Main Executor mainExecutor,
+            OverlayManager overlayManager,
             DumpManager dumpManager) {
-        return new ThemeOverlayApplier(overlayManager, bgExecutor,
+        return new ThemeOverlayApplier(overlayManager, bgExecutor, mainExecutor,
                 context.getString(R.string.launcher_overlayable_package),
                 context.getString(R.string.themepicker_overlayable_package), dumpManager);
-    }
-
-    /** */
-    @Provides
-    @SysUISingleton
-    public NavigationBarController provideNavigationBarController(Context context,
-            WindowManager windowManager,
-            Lazy<AssistManager> assistManagerLazy,
-            AccessibilityManager accessibilityManager,
-            AccessibilityManagerWrapper accessibilityManagerWrapper,
-            DeviceProvisionedController deviceProvisionedController,
-            MetricsLogger metricsLogger,
-            OverviewProxyService overviewProxyService,
-            NavigationModeController navigationModeController,
-            AccessibilityButtonModeObserver accessibilityButtonModeObserver,
-            StatusBarStateController statusBarStateController,
-            SysUiState sysUiFlagsContainer,
-            BroadcastDispatcher broadcastDispatcher,
-            CommandQueue commandQueue,
-            Optional<Pip> pipOptional,
-            Optional<LegacySplitScreen> splitScreenOptional,
-            Optional<Recents> recentsOptional,
-            Lazy<Optional<StatusBar>> statusBarOptionalLazy,
-            ShadeController shadeController,
-            NotificationRemoteInputManager notificationRemoteInputManager,
-            NotificationShadeDepthController notificationShadeDepthController,
-            SystemActions systemActions,
-            @Main Handler mainHandler,
-            UiEventLogger uiEventLogger,
-            NavigationBarOverlayController navBarOverlayController,
-            ConfigurationController configurationController,
-            NavigationBarA11yHelper navigationBarA11yHelper,
-            TaskbarDelegate taskbarDelegate,
-            UserTracker userTracker) {
-        return new NavigationBarController(context,
-                windowManager,
-                assistManagerLazy,
-                accessibilityManager,
-                accessibilityManagerWrapper,
-                deviceProvisionedController,
-                metricsLogger,
-                overviewProxyService,
-                navigationModeController,
-                accessibilityButtonModeObserver,
-                statusBarStateController,
-                sysUiFlagsContainer,
-                broadcastDispatcher,
-                commandQueue,
-                pipOptional,
-                splitScreenOptional,
-                recentsOptional,
-                statusBarOptionalLazy,
-                shadeController,
-                notificationRemoteInputManager,
-                notificationShadeDepthController,
-                systemActions,
-                mainHandler,
-                uiEventLogger,
-                navBarOverlayController,
-                configurationController,
-                navigationBarA11yHelper,
-                taskbarDelegate,
-                userTracker);
     }
 
     /** */
@@ -379,37 +276,6 @@ public class DependencyProvider {
     @Provides
     public WindowManagerWrapper providesWindowManagerWrapper() {
         return WindowManagerWrapper.getInstance();
-    }
-
-    /** */
-    @Provides
-    @SysUISingleton
-    public UnfoldTransitionProgressProvider provideUnfoldTransitionProgressProvider(
-            Context context,
-            UnfoldTransitionConfig config,
-            LifecycleScreenStatusProvider screenStatusProvider,
-            DeviceStateManager deviceStateManager,
-            SensorManager sensorManager,
-            @Main Executor executor,
-            @Main Handler handler
-    ) {
-        return UnfoldTransitionFactory
-                .createUnfoldTransitionProgressProvider(
-                        context,
-                        config,
-                        screenStatusProvider,
-                        deviceStateManager,
-                        sensorManager,
-                        handler,
-                        executor
-                );
-    }
-
-    /** */
-    @Provides
-    @SysUISingleton
-    public UnfoldTransitionConfig provideUnfoldTransitionConfig(Context context) {
-        return UnfoldTransitionFactory.createConfig(context);
     }
 
     /** */

@@ -211,6 +211,8 @@
 
     <!-- Power menu item for taking a screenshot [CHAR LIMIT=20]-->
     <string name="global_action_screenshot">Screenshot</string>
+    <!-- Message shown in power menu when smart lock has been disabled [CHAR_LIMIT=NONE] -->
+    <string name="global_action_smart_lock_disabled">Smart Lock disabled</string>
 
     <!-- text to show in place of RemoteInput images when they cannot be shown.
          [CHAR LIMIT=50] -->
@@ -1006,7 +1008,7 @@
     <string name="sensor_privacy_start_use_mic_camera_dialog_content">This unblocks access for all apps and services allowed to use your camera or microphone.</string>
 
     <!-- Default name for the media device shown in the output switcher when the name is not available [CHAR LIMIT=30] -->
-    <string name="media_seamless_remote_device">Device</string>
+    <string name="media_seamless_other_device">Other device</string>
 
     <!-- QuickStep: Accessibility to toggle overview [CHAR LIMIT=40] -->
     <string name="quick_step_accessibility_toggle_overview">Toggle Overview</string>
@@ -2988,8 +2990,6 @@
     <!-- Content description for a chip in the status bar showing that the user is currently on a phone call. [CHAR LIMIT=NONE] -->
     <string name="ongoing_phone_call_content_description">Ongoing phone call</string>
 
-    <!-- Provider Model: Title of the airplane mode in the internet dialog. [CHAR LIMIT=50] -->
-    <string name="airplane_mode">Airplane mode</string>
     <!-- Provider Model: Default title of the mobile network in the mobile layout. [CHAR LIMIT=50] -->
     <string name="mobile_data_settings_title">Mobile data</string>
     <!-- Provider Model: Summary text separator for preferences including a short description
@@ -3000,7 +3000,7 @@
     <string name="mobile_data_connection_active">Connected</string>
     <!-- Provider Model:
      Summary indicating that a SIM has no mobile data connection [CHAR LIMIT=50] -->
-    <string name="mobile_data_off_summary">Internet won\u0027t auto\u2011connect</string>
+    <string name="mobile_data_off_summary">Mobile data won\u0027t auto\u2011connect</string>
     <!-- Provider Model:
      Summary indicating that a active SIM and no network available [CHAR LIMIT=50] -->
     <string name="mobile_data_no_connection">No connection</string>
@@ -3020,6 +3020,21 @@
     <string name="wifi_empty_list_wifi_on">Searching for networks\u2026</string>
     <!-- Provider Model: Failure notification for connect -->
     <string name="wifi_failed_connect_message">Failed to connect to network</string>
+    <!-- Provider Model: Toast message for when the user selects cellular as the internet provider and Wi-Fi auto-connect is temporarily disabled [CHAR LIMIT=60]-->
+    <string name="wifi_wont_autoconnect_for_now">Wi\u2011Fi won\u2019t auto-connect for now</string>
     <!-- Provider Model: Title to see all the networks [CHAR LIMIT=50] -->
     <string name="see_all_networks">See all</string>
+    <!-- Summary for warning to disconnect ethernet first then switch to other networks. [CHAR LIMIT=60] -->
+    <string name="to_switch_networks_disconnect_ethernet">To switch networks, disconnect ethernet</string>
+
+    <!-- Text for TileService request dialog. This is shown to the user that an app is requesting
+         user approval to add the shown tile to Quick Settings [CHAR LIMIT=NONE] -->
+    <string name="qs_tile_request_dialog_text"><xliff:g id="appName" example="Fake App">%1$s</xliff:g> wants to add the following tile to Quick Settings</string>
+    <!-- Text for TileService request dialog. Text for button for user to approve adding the tile [CHAR LIMIT=20] -->
+    <string name="qs_tile_request_dialog_add">Add tile</string>
+    <!-- Text for TileService request dialog. Text for button for user to reject adding the tile [CHAR LIMIT=20] -->
+    <string name="qs_tile_request_dialog_not_add">Do not add tile</string>
+
+    <!-- Title for User Switch dialog. [CHAR LIMIT=20] -->
+    <string name="qs_user_switch_dialog_title">Select user</string>
 </resources>

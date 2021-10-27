@@ -124,7 +124,6 @@ filegroup {
         ":libbluetooth-binder-aidl",
         ":libcamera_client_aidl",
         ":libcamera_client_framework_aidl",
-        ":packagemanager_aidl",
         ":libupdate_engine_aidl",
         ":resourcemanager_aidl",
         ":storaged_aidl",
@@ -228,6 +227,7 @@ java_library {
     name: "framework-internal-utils",
     static_libs: [
         "apex_aidl_interface-java",
+        "packagemanager_aidl-java",
         "framework-protos",
         "updatable-driver-protos",
         "ota_metadata_proto_java",
@@ -238,6 +238,7 @@ java_library {
         "android.hardware.contexthub-V1.0-java",
         "android.hardware.contexthub-V1.1-java",
         "android.hardware.contexthub-V1.2-java",
+        "android.hardware.contexthub-V1-java",
         "android.hardware.gnss-V1.0-java",
         "android.hardware.gnss-V2.1-java",
         "android.hardware.health-V1.0-java-constants",
@@ -368,6 +369,8 @@ java_defaults {
         "modules-utils-preconditions",
         "modules-utils-os",
         "framework-permission-aidl-java",
+        "spatializer-aidl-java",
+        "audiopolicy-types-aidl-java",
     ],
 }
 
@@ -436,9 +439,6 @@ filegroup {
     srcs: [
         "core/java/android/net/annotations/PolicyDirection.java",
         "core/java/com/android/internal/util/HexDump.java",
-        "core/java/com/android/internal/util/IState.java",
-        "core/java/com/android/internal/util/State.java",
-        "core/java/com/android/internal/util/StateMachine.java",
         "core/java/com/android/internal/util/WakeupMessage.java",
         "services/core/java/com/android/server/vcn/util/PersistableBundleUtils.java",
         "telephony/java/android/telephony/Annotation.java",
@@ -487,8 +487,6 @@ java_library {
     sdk_version: "module_current",
     min_sdk_version: "30",
     srcs: [
-        ":modules-utils-preconditions-srcs",
-        "core/java/android/os/HandlerExecutor.java",
         "core/java/com/android/internal/util/AsyncChannel.java",
         "core/java/com/android/internal/util/AsyncService.java",
         "core/java/com/android/internal/util/Protocol.java",

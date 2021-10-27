@@ -16,8 +16,6 @@
 
 package com.android.wm.shell.flicker.legacysplitscreen
 
-import android.content.ComponentName
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
@@ -31,7 +29,7 @@ import com.android.server.wm.flicker.helpers.launchSplitScreen
 import com.android.server.wm.flicker.helpers.reopenAppFromOverview
 import com.android.server.wm.flicker.navBarWindowIsVisible
 import com.android.server.wm.flicker.statusBarWindowIsVisible
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
+import com.android.server.wm.traces.common.FlickerComponentName
 import com.android.wm.shell.flicker.dockedStackDividerNotExistsAtEnd
 import com.android.wm.shell.flicker.helpers.SplitScreenHelper
 import org.junit.FixMethodOrder
@@ -71,10 +69,10 @@ class ExitPrimarySplitScreenShowSecondaryFullscreen(
             }
         }
 
-    override val ignoredWindows: List<ComponentName>
-        get() = listOf(LAUNCHER_COMPONENT, WindowManagerStateHelper.SPLASH_SCREEN_COMPONENT,
+    override val ignoredWindows: List<FlickerComponentName>
+        get() = listOf(LAUNCHER_COMPONENT, FlickerComponentName.SPLASH_SCREEN,
             splitScreenApp.component, secondaryApp.component,
-            WindowManagerStateHelper.SNAPSHOT_COMPONENT)
+            FlickerComponentName.SNAPSHOT)
 
     @Presubmit
     @Test
@@ -113,7 +111,7 @@ class ExitPrimarySplitScreenShowSecondaryFullscreen(
     override fun visibleLayersShownMoreThanOneConsecutiveEntry() =
             super.visibleLayersShownMoreThanOneConsecutiveEntry()
 
-    @Postsubmit
+    @Presubmit
     @Test
     override fun visibleWindowsShownMoreThanOneConsecutiveEntry() =
             super.visibleWindowsShownMoreThanOneConsecutiveEntry()

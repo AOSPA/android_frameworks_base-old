@@ -46,6 +46,7 @@ import org.junit.runner.RunWith;
 import static junit.framework.Assert.assertEquals;
 
 import com.android.settingslib.mobile.TelephonyIcons;
+import com.android.systemui.statusbar.connectivity.NetworkControllerBaseTest;
 import com.android.systemui.statusbar.policy.FiveGServiceClient;
 import com.android.systemui.statusbar.policy.FiveGServiceClient.FiveGServiceState;
 

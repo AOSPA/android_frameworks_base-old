@@ -27,6 +27,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.annotation.TestApi;
 import android.compat.annotation.UnsupportedAppUsage;
+import android.content.ClipData;
 import android.graphics.Rect;
 import android.graphics.Region;
 import android.os.Build;
@@ -805,6 +806,7 @@ public class AccessibilityNodeInfo implements Parcelable {
     private CharSequence mContentDescription;
     private CharSequence mTooltipText;
     private String mViewIdResourceName;
+    private String mUniqueId;
     private ArrayList<String> mExtraDataKeys;
 
     @UnsupportedAppUsage
@@ -3462,6 +3464,28 @@ public class AccessibilityNodeInfo implements Parcelable {
     }
 
     /**
+     * Sets the unique id to act as a key to identify the node. If the node instance is replaced
+     * after refreshing the layout, calling this API to assign the same unique id to the new
+     * alike node can help accessibility service to identify it.
+     *
+     * @param uniqueId The unique id that is associated with a visible node on the screen
+     */
+    public void setUniqueId(@Nullable String uniqueId) {
+        enforceNotSealed();
+        mUniqueId = uniqueId;
+    }
+
+    /**
+     * Gets the unique id of the node.
+     *
+     * @return The unique id
+     */
+    @Nullable
+    public String getUniqueId() {
+        return mUniqueId;
+    }
+
+    /**
      * Sets the token and node id of the leashed parent.
      *
      * @param token The token.
@@ -3763,6 +3787,10 @@ public class AccessibilityNodeInfo implements Parcelable {
             nonDefaultFields |= bitAt(fieldIndex);
         }
         fieldIndex++;
+        if (!Objects.equals(mUniqueId, DEFAULT.mUniqueId)) {
+            nonDefaultFields |= bitAt(fieldIndex);
+        }
+        fieldIndex++;
         if (mTextSelectionStart != DEFAULT.mTextSelectionStart) {
             nonDefaultFields |= bitAt(fieldIndex);
         }
@@ -3902,6 +3930,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeCharSequence(mTooltipText);
 
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeString(mViewIdResourceName);
+        if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeString(mUniqueId);
 
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeInt(mTextSelectionStart);
         if (isBitSet(nonDefaultFields, fieldIndex++)) parcel.writeInt(mTextSelectionEnd);
@@ -3981,6 +4010,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         mTraversalAfter = other.mTraversalAfter;
         mWindowId = other.mWindowId;
         mConnectionId = other.mConnectionId;
+        mUniqueId = other.mUniqueId;
         mBoundsInParent.set(other.mBoundsInParent);
         mBoundsInScreen.set(other.mBoundsInScreen);
         mPackageName = other.mPackageName;
@@ -4153,6 +4183,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         if (isBitSet(nonDefaultFields, fieldIndex++)) mPaneTitle = parcel.readCharSequence();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mTooltipText = parcel.readCharSequence();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mViewIdResourceName = parcel.readString();
+        if (isBitSet(nonDefaultFields, fieldIndex++)) mUniqueId = parcel.readString();
 
         if (isBitSet(nonDefaultFields, fieldIndex++)) mTextSelectionStart = parcel.readInt();
         if (isBitSet(nonDefaultFields, fieldIndex++)) mTextSelectionEnd = parcel.readInt();
@@ -4353,6 +4384,14 @@ public class AccessibilityNodeInfo implements Parcelable {
             case R.id.accessibilityActionImeEnter:
                 return "ACTION_IME_ENTER";
             default:
+                // TODO(197520937): Use finalized constants in switch
+                if (action == R.id.accessibilityActionDragStart) {
+                    return "ACTION_DRAG";
+                } else if (action == R.id.accessibilityActionDragCancel) {
+                    return "ACTION_CANCEL_DRAG";
+                } else if (action == R.id.accessibilityActionDragDrop) {
+                    return "ACTION_DROP";
+                }
                 return "ACTION_UNKNOWN";
         }
     }
@@ -4471,6 +4510,7 @@ public class AccessibilityNodeInfo implements Parcelable {
         builder.append("; contentDescription: ").append(mContentDescription);
         builder.append("; tooltipText: ").append(mTooltipText);
         builder.append("; viewIdResName: ").append(mViewIdResourceName);
+        builder.append("; uniqueId: ").append(mUniqueId);
 
         builder.append("; checkable: ").append(isCheckable());
         builder.append("; checked: ").append(isChecked());
@@ -4994,6 +5034,46 @@ public class AccessibilityNodeInfo implements Parcelable {
          */
         @NonNull public static final AccessibilityAction ACTION_IME_ENTER =
                 new AccessibilityAction(R.id.accessibilityActionImeEnter);
+
+        /**
+         * Action to start a drag.
+         * <p>
+         * This action initiates a drag & drop within the system. The source's dragged content is
+         * prepared before the drag begins. In View, this action should prepare the arguments to
+         * {@link View#startDragAndDrop(ClipData, View.DragShadowBuilder, Object, int)} and then
+         * call {@link View#startDragAndDrop(ClipData, View.DragShadowBuilder, Object, int)}. The
+         * equivalent should be performed for other UI toolkits.
+         * </p>
+         *
+         * @see AccessibilityEvent#CONTENT_CHANGE_TYPE_DRAG_STARTED
+         */
+        @NonNull public static final AccessibilityAction ACTION_DRAG_START =
+                new AccessibilityAction(R.id.accessibilityActionDragStart);
+
+        /**
+         * Action to trigger a drop of the content being dragged.
+         * <p>
+         * This action is added to potential drop targets if the source started a drag with
+         * {@link #ACTION_DRAG_START}. In View, these targets are Views that accepted
+         * {@link android.view.DragEvent#ACTION_DRAG_STARTED} and have an
+         * {@link View.OnDragListener}.
+         * </p>
+         *
+         * @see AccessibilityEvent#CONTENT_CHANGE_TYPE_DRAG_DROPPED
+         */
+        @NonNull public static final AccessibilityAction ACTION_DRAG_DROP =
+                new AccessibilityAction(R.id.accessibilityActionDragDrop);
+
+        /**
+         * Action to cancel a drag.
+         * <p>
+         * This action is added to the source that started a drag with {@link #ACTION_DRAG_START}.
+         * </p>
+         *
+         * @see AccessibilityEvent#CONTENT_CHANGE_TYPE_DRAG_CANCELLED
+         */
+        @NonNull public static final AccessibilityAction ACTION_DRAG_CANCEL =
+                new AccessibilityAction(R.id.accessibilityActionDragCancel);
 
         private final int mActionId;
         private final CharSequence mLabel;

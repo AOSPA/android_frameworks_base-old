@@ -16,13 +16,10 @@
 
 package com.android.server.wm;
 
+import static android.app.WindowConfiguration.ACTIVITY_TYPE_HOME;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FLAG_IS_RECENTS;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE;
-import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER;
-import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
+import static android.view.WindowManager.TRANSIT_FLAG_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_NONE;
 import static android.view.WindowManager.TRANSIT_OPEN;
 
@@ -38,6 +35,7 @@ import android.util.proto.ProtoOutputStream;
 import android.view.WindowManager;
 import android.window.IRemoteTransition;
 import android.window.ITransitionPlayer;
+import android.window.RemoteTransition;
 import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
 
@@ -73,15 +71,7 @@ class TransitionController {
 
     final Lock mRunningLock = new Lock();
 
-    private final IBinder.DeathRecipient mTransitionPlayerDeath = () -> {
-        // clean-up/finish any playing transitions.
-        for (int i = 0; i < mPlayingTransitions.size(); ++i) {
-            mPlayingTransitions.get(i).cleanUpOnFailure();
-        }
-        mPlayingTransitions.clear();
-        mTransitionPlayer = null;
-        mRunningLock.doNotifyLocked();
-    };
+    private final IBinder.DeathRecipient mTransitionPlayerDeath;
 
     /** The transition currently being constructed (collecting participants). */
     private Transition mCollectingTransition = null;
@@ -92,6 +82,17 @@ class TransitionController {
     TransitionController(ActivityTaskManagerService atm) {
         mAtm = atm;
         mStatusBar = LocalServices.getService(StatusBarManagerInternal.class);
+        mTransitionPlayerDeath = () -> {
+            synchronized (mAtm.mGlobalLock) {
+                // Clean-up/finish any playing transitions.
+                for (int i = 0; i < mPlayingTransitions.size(); ++i) {
+                    mPlayingTransitions.get(i).cleanUpOnFailure();
+                }
+                mPlayingTransitions.clear();
+                mTransitionPlayer = null;
+                mRunningLock.doNotifyLocked();
+            }
+        };
     }
 
     /** @see #createTransition(int, int) */
@@ -121,11 +122,16 @@ class TransitionController {
 
     void registerTransitionPlayer(@Nullable ITransitionPlayer player) {
         try {
+            // Note: asBinder() can be null if player is same process (likely in a test).
             if (mTransitionPlayer != null) {
-                mTransitionPlayer.asBinder().unlinkToDeath(mTransitionPlayerDeath, 0);
+                if (mTransitionPlayer.asBinder() != null) {
+                    mTransitionPlayer.asBinder().unlinkToDeath(mTransitionPlayerDeath, 0);
+                }
                 mTransitionPlayer = null;
             }
-            player.asBinder().linkToDeath(mTransitionPlayerDeath, 0);
+            if (player.asBinder() != null) {
+                player.asBinder().linkToDeath(mTransitionPlayerDeath, 0);
+            }
             mTransitionPlayer = player;
         } catch (RemoteException e) {
             throw new RuntimeException("Unable to set transition player");
@@ -183,6 +189,20 @@ class TransitionController {
         return false;
     }
 
+    /**
+     * @return {@code true} if {@param ar} is part of a transient-launch activity in an active
+     * transition.
+     */
+    boolean isTransientLaunch(@NonNull ActivityRecord ar) {
+        if (mCollectingTransition != null && mCollectingTransition.isTransientLaunch(ar)) {
+            return true;
+        }
+        for (int i = mPlayingTransitions.size() - 1; i >= 0; --i) {
+            if (mPlayingTransitions.get(i).isTransientLaunch(ar)) return true;
+        }
+        return false;
+    }
+
     @WindowManager.TransitionType
     int getCollectingTransitionType() {
         return mCollectingTransition != null ? mCollectingTransition.mType : TRANSIT_NONE;
@@ -222,7 +242,7 @@ class TransitionController {
     @Nullable
     Transition requestTransitionIfNeeded(@WindowManager.TransitionType int type,
             @WindowManager.TransitionFlags int flags, @Nullable WindowContainer trigger,
-            @NonNull WindowContainer readyGroupRef, @Nullable IRemoteTransition remoteTransition) {
+            @NonNull WindowContainer readyGroupRef, @Nullable RemoteTransition remoteTransition) {
         if (mTransitionPlayer == null) {
             return null;
         }
@@ -230,6 +250,10 @@ class TransitionController {
         if (isCollecting()) {
             // Make the collecting transition wait until this request is ready.
             mCollectingTransition.setReady(readyGroupRef, false);
+            if ((flags & TRANSIT_FLAG_KEYGUARD_GOING_AWAY) != 0) {
+                // Add keyguard flag to dismiss keyguard
+                mCollectingTransition.addFlag(flags);
+            }
         } else {
             newTransition = requestStartTransition(createTransition(type, flags),
                     trigger != null ? trigger.asTask() : null, remoteTransition);
@@ -247,7 +271,7 @@ class TransitionController {
     /** Asks the transition player (shell) to start a created but not yet started transition. */
     @NonNull
     Transition requestStartTransition(@NonNull Transition transition, @Nullable Task startTask,
-            @Nullable IRemoteTransition remoteTransition) {
+            @Nullable RemoteTransition remoteTransition) {
         try {
             ProtoLog.v(ProtoLogGroup.WM_DEBUG_WINDOW_TRANSITIONS,
                     "Requesting StartTransition: %s", transition);
@@ -325,13 +349,18 @@ class TransitionController {
     }
 
     /**
-     * Explicitly mark the collectingTransition as being part of recents gesture. Used for legacy
-     * behaviors.
-     * TODO(b/188669821): Remove once legacy recents behavior is moved to shell.
+     * Record that the launch of {@param activity} is transient (meaning its lifecycle is currently
+     * tied to the transition).
      */
-    void setIsLegacyRecents() {
+    void setTransientLaunch(@NonNull ActivityRecord activity) {
         if (mCollectingTransition == null) return;
-        mCollectingTransition.addFlag(TRANSIT_FLAG_IS_RECENTS);
+        mCollectingTransition.setTransientLaunch(activity);
+
+        // TODO(b/188669821): Remove once legacy recents behavior is moved to shell.
+        // Also interpret HOME transient launch as recents
+        if (activity.getActivityType() == ACTIVITY_TYPE_HOME) {
+            mCollectingTransition.addFlag(TRANSIT_FLAG_IS_RECENTS);
+        }
     }
 
     void legacyDetachNavigationBarFromApp(@NonNull IBinder token) {
@@ -354,11 +383,7 @@ class TransitionController {
     }
 
     void dispatchLegacyAppTransitionStarting(TransitionInfo info) {
-        final boolean keyguardGoingAway = info.getType() == TRANSIT_KEYGUARD_GOING_AWAY
-                || (info.getFlags() & (TRANSIT_FLAG_KEYGUARD_GOING_AWAY_TO_SHADE
-                        | TRANSIT_FLAG_KEYGUARD_GOING_AWAY_NO_ANIMATION
-                        | TRANSIT_FLAG_KEYGUARD_GOING_AWAY_WITH_WALLPAPER
-                        | TRANSIT_FLAG_KEYGUARD_GOING_AWAY_SUBTLE_ANIMATION)) != 0;
+        final boolean keyguardGoingAway = info.isKeyguardGoingAway();
         for (int i = 0; i < mLegacyListeners.size(); ++i) {
             mLegacyListeners.get(i).onAppTransitionStartingLocked(keyguardGoingAway,
                     0 /* durationHint */, SystemClock.uptimeMillis(),

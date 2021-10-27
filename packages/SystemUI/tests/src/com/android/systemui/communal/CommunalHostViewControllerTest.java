@@ -16,6 +16,10 @@
 
 package com.android.systemui.communal;
 
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.any;
+import static org.mockito.Mockito.clearInvocations;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -28,6 +32,9 @@ import com.android.keyguard.KeyguardUpdateMonitor;
 import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.StatusBarState;
+import com.android.systemui.statusbar.phone.DozeParameters;
+import com.android.systemui.statusbar.phone.UnlockedScreenOffAnimationController;
 import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.util.concurrency.FakeExecutor;
 import com.android.systemui.util.time.FakeSystemClock;
@@ -46,6 +53,9 @@ import java.lang.ref.WeakReference;
 @RunWith(AndroidTestingRunner.class)
 public class CommunalHostViewControllerTest extends SysuiTestCase {
     @Mock
+    private CommunalStateController mCommunalStateController;
+
+    @Mock
     private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
 
     @Mock
@@ -57,6 +67,12 @@ public class CommunalHostViewControllerTest extends SysuiTestCase {
     @Mock
     private CommunalHostView mCommunalView;
 
+    @Mock
+    private DozeParameters mDozeParameters;
+
+    @Mock
+    private UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+
     private FakeExecutor mFakeExecutor = new FakeExecutor(new FakeSystemClock());
 
     private CommunalHostViewController mController;
@@ -64,17 +80,23 @@ public class CommunalHostViewControllerTest extends SysuiTestCase {
     @Mock
     private CommunalSource mCommunalSource;
 
+    @Mock
+    private View mChildView;
+
     @Before
     public void setup() {
         MockitoAnnotations.initMocks(this);
 
         when(mKeyguardStateController.isShowing()).thenReturn(true);
         when(mCommunalView.isAttachedToWindow()).thenReturn(true);
+        when(mStatusBarStateController.getState()).thenReturn(StatusBarState.KEYGUARD);
 
-        mController = new CommunalHostViewController(mFakeExecutor, mKeyguardUpdateMonitor,
-                mKeyguardStateController, mStatusBarStateController, mCommunalView);
+        mController = new CommunalHostViewController(mFakeExecutor, mCommunalStateController,
+                mKeyguardUpdateMonitor, mKeyguardStateController, mDozeParameters,
+                mUnlockedScreenOffAnimationController, mStatusBarStateController, mCommunalView);
         mController.init();
         mFakeExecutor.runAllReady();
+
         Mockito.clearInvocations(mCommunalView);
     }
 
@@ -97,33 +119,6 @@ public class CommunalHostViewControllerTest extends SysuiTestCase {
         callbackCapture.getValue().onKeyguardShowingChanged();
         mFakeExecutor.runAllReady();
         verify(mCommunalView).setVisibility(View.INVISIBLE);
-    }
-
-    @Test
-    public void testHideOnBouncer() {
-        ArgumentCaptor<KeyguardUpdateMonitorCallback> callbackCapture =
-                ArgumentCaptor.forClass(KeyguardUpdateMonitorCallback.class);
-
-        // Capture callback value for later use.
-        verify(mKeyguardUpdateMonitor).registerCallback(callbackCapture.capture());
-
-        // Establish a visible communal view.
-        mController.show(new WeakReference<>(mCommunalSource));
-        mFakeExecutor.runAllReady();
-        verify(mCommunalView).setVisibility(View.VISIBLE);
-        Mockito.clearInvocations(mCommunalView);
-
-        // Trigger bouncer.
-        Mockito.clearInvocations(mCommunalView);
-        callbackCapture.getValue().onKeyguardBouncerChanged(true);
-        mFakeExecutor.runAllReady();
-        verify(mCommunalView).setVisibility(View.INVISIBLE);
-
-        // Hide bouncer
-        Mockito.clearInvocations(mCommunalView);
-        callbackCapture.getValue().onKeyguardBouncerChanged(false);
-        mFakeExecutor.runAllReady();
-        verify(mCommunalView).setVisibility(View.VISIBLE);
     }
 
     @Test
@@ -151,5 +146,97 @@ public class CommunalHostViewControllerTest extends SysuiTestCase {
         callbackCapture.getValue().onKeyguardOccludedChanged(false);
         mFakeExecutor.runAllReady();
         verify(mCommunalView).setVisibility(View.VISIBLE);
+    }
+
+    @Test
+    public void testReportOcclusion() {
+        // Ensure CommunalHostViewController reports view occluded when either the QS or Shade is
+        // expanded.
+        clearInvocations(mCommunalStateController);
+        mController.updateShadeExpansion(0);
+        verify(mCommunalStateController).setCommunalViewOccluded(false);
+        clearInvocations(mCommunalStateController);
+        mController.updateQsExpansion(.5f);
+        verify(mCommunalStateController).setCommunalViewOccluded(true);
+        clearInvocations(mCommunalStateController);
+        mController.updateShadeExpansion(.7f);
+        verify(mCommunalStateController).setCommunalViewOccluded(true);
+        clearInvocations(mCommunalStateController);
+        mController.updateShadeExpansion(0);
+        verify(mCommunalStateController).setCommunalViewOccluded(true);
+        clearInvocations(mCommunalStateController);
+        mController.updateQsExpansion(0f);
+        verify(mCommunalStateController).setCommunalViewOccluded(false);
+        clearInvocations(mCommunalStateController);
+    }
+
+    @Test
+    public void testCommunalStateControllerHideNotified() {
+        ArgumentCaptor<KeyguardUpdateMonitorCallback> callbackCapture =
+                ArgumentCaptor.forClass(KeyguardUpdateMonitorCallback.class);
+
+        // Capture callback value for later use.
+        verify(mKeyguardUpdateMonitor).registerCallback(callbackCapture.capture());
+
+        // Establish a visible communal view.
+        mController.show(new WeakReference<>(mCommunalSource));
+        mFakeExecutor.runAllReady();
+
+        // Occlude
+        clearInvocations(mCommunalStateController);
+        callbackCapture.getValue().onKeyguardOccludedChanged(true);
+        mFakeExecutor.runAllReady();
+
+        // Verify state controller is notified communal view is hidden.
+        verify(mCommunalStateController).setCommunalViewShowing(false);
+    }
+
+    @Test
+    public void testAlphaPropagation() {
+        final float alpha = 0.8f;
+
+        // Ensure alpha setting is propagated to children.
+        when(mCommunalView.getChildCount()).thenReturn(1);
+        when(mCommunalView.getChildAt(0)).thenReturn(mChildView);
+        mController.setAlpha(alpha);
+        verify(mChildView).setAlpha(alpha);
+        verify(mCommunalView).setAlpha(alpha);
+    }
+
+    @Test
+    public void testMultipleShowRequestSuppression() {
+        // Ensure first request invokes source.
+        mController.show(new WeakReference<>(mCommunalSource));
+        mFakeExecutor.runAllReady();
+        verify(mCommunalSource).requestCommunalView(any());
+        clearInvocations(mCommunalSource);
+
+        // Ensure subsequent identical request is suppressed
+        mController.show(new WeakReference<>(mCommunalSource));
+        mFakeExecutor.runAllReady();
+        verify(mCommunalSource, never()).requestCommunalView(any());
+    }
+
+    @Test
+    public void testNoShowInvocationOnBouncer() {
+        ArgumentCaptor<KeyguardUpdateMonitorCallback> callbackCapture =
+                ArgumentCaptor.forClass(KeyguardUpdateMonitorCallback.class);
+
+        // Capture callback value for later use.
+        verify(mKeyguardUpdateMonitor).registerCallback(callbackCapture.capture());
+
+        // Set source so it will be cleared if in invalid state.
+        mController.show(new WeakReference<>(mCommunalSource));
+        mFakeExecutor.runAllReady();
+        clearInvocations(mCommunalStateController, mCommunalView);
+
+        // Change bouncer to showing.
+        callbackCapture.getValue().onKeyguardBouncerChanged(true);
+        mFakeExecutor.runAllReady();
+
+        // Verify that there were no requests to remove all child views or set the communal
+        // state to not showing.
+        verify(mCommunalStateController, never()).setCommunalViewShowing(eq(false));
+        verify(mCommunalView, never()).removeAllViews();
     }
 }

@@ -33,8 +33,8 @@ import static com.android.server.tare.TareUtils.narcToString;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.app.AlarmManager;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageInfo;
-import android.content.pm.PackageManager;
 import android.os.Handler;
 import android.os.Looper;
 import android.os.Message;
@@ -55,6 +55,7 @@ import com.android.server.usage.AppStandbyInternal;
 
 import libcore.util.EmptyArray;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Objects;
 import java.util.PriorityQueue;
@@ -75,25 +76,15 @@ class Agent {
      * regularly reclaiming ARCs from it.
      */
     private static final long MIN_UNUSED_TIME_MS = 3 * 24 * HOUR_IN_MILLIS;
-    /**
-     * The maximum amount of time we'll keep a transaction around for.
-     * For now, only keep transactions we actually have a use for. We can increase it if we want
-     * to use older transactions or provide older transactions to apps.
-     */
-    private static final long MAX_TRANSACTION_AGE_MS = 24 * HOUR_IN_MILLIS;
 
     private static final String ALARM_TAG_AFFORDABILITY_CHECK = "*tare.affordability_check*";
-    private static final String ALARM_TAG_LEDGER_CLEANUP = "*tare.ledger_cleanup*";
 
     private final Object mLock;
-    private final CompleteEconomicPolicy mCompleteEconomicPolicy;
     private final Handler mHandler;
     private final InternalResourceService mIrs;
+    private final Scribe mScribe;
 
     private final AppStandbyInternal mAppStandbyInternal;
-
-    @GuardedBy("mLock")
-    private final SparseArrayMap<String, Ledger> mLedgers = new SparseArrayMap<>();
 
     @GuardedBy("mLock")
     private final SparseArrayMap<String, SparseArrayMap<String, OngoingEvent>>
@@ -111,16 +102,6 @@ class Agent {
     private final SparseArrayMap<String, ArraySet<ActionAffordabilityNote>>
             mActionAffordabilityNotes = new SparseArrayMap<>();
 
-    @GuardedBy("mLock")
-    private long mCurrentNarcsInCirculation;
-
-    /**
-     * Listener to track and manage when we remove old transactions from ledgers.
-     */
-    @GuardedBy("mLock")
-    private final LedgerCleanupAlarmListener mLedgerCleanupAlarmListener =
-            new LedgerCleanupAlarmListener();
-
     /**
      * Listener to track and manage when apps will cross the closest affordability threshold (in
      * both directions).
@@ -129,29 +110,63 @@ class Agent {
     private final BalanceThresholdAlarmListener mBalanceThresholdAlarmListener =
             new BalanceThresholdAlarmListener();
 
-    private static final int MSG_CHECK_BALANCE = 0;
-    private static final int MSG_CLEAN_LEDGER = 1;
-    private static final int MSG_SET_ALARMS = 2;
+    /**
+     * Comparator to use to sort apps before we distribute ARCs so that we try to give the most
+     * important apps ARCs first.
+     */
+    @VisibleForTesting
+    final Comparator<PackageInfo> mPackageDistributionComparator =
+            new Comparator<PackageInfo>() {
+                @Override
+                public int compare(PackageInfo pi1, PackageInfo pi2) {
+                    final ApplicationInfo appInfo1 = pi1.applicationInfo;
+                    final ApplicationInfo appInfo2 = pi2.applicationInfo;
+                    // Put any packages that don't declare an application at the end. A missing
+                    // <application> tag likely means the app won't be doing any work anyway.
+                    if (appInfo1 == null) {
+                        if (appInfo2 == null) {
+                            return 0;
+                        }
+                        return 1;
+                    } else if (appInfo2 == null) {
+                        return -1;
+                    }
+                    // Privileged apps eat first. They're likely required for the device to
+                    // function properly.
+                    // TODO: include headless system apps
+                    if (appInfo1.isPrivilegedApp()) {
+                        if (!appInfo2.isPrivilegedApp()) {
+                            return -1;
+                        }
+                    } else if (appInfo2.isPrivilegedApp()) {
+                        return 1;
+                    }
 
-    Agent(@NonNull InternalResourceService irs,
-            @NonNull CompleteEconomicPolicy completeEconomicPolicy) {
+                    // Sort by most recently used.
+                    final long timeSinceLastUsedMs1 =
+                            mAppStandbyInternal.getTimeSinceLastUsedByUser(
+                                    pi1.packageName, UserHandle.getUserId(pi1.applicationInfo.uid));
+                    final long timeSinceLastUsedMs2 =
+                            mAppStandbyInternal.getTimeSinceLastUsedByUser(
+                                    pi2.packageName, UserHandle.getUserId(pi2.applicationInfo.uid));
+                    if (timeSinceLastUsedMs1 < timeSinceLastUsedMs2) {
+                        return -1;
+                    } else if (timeSinceLastUsedMs1 > timeSinceLastUsedMs2) {
+                        return 1;
+                    }
+                    return 0;
+                }
+            };
+
+    private static final int MSG_CHECK_BALANCE = 0;
+    private static final int MSG_SET_BALANCE_ALARM = 1;
+
+    Agent(@NonNull InternalResourceService irs, @NonNull Scribe scribe) {
         mLock = irs.getLock();
         mIrs = irs;
-        mCompleteEconomicPolicy = completeEconomicPolicy;
+        mScribe = scribe;
         mHandler = new AgentHandler(TareHandlerThread.get().getLooper());
         mAppStandbyInternal = LocalServices.getService(AppStandbyInternal.class);
-    }
-
-    @GuardedBy("mLock")
-    @NonNull
-    private Ledger getLedgerLocked(final int userId, @NonNull final String pkgName) {
-        Ledger ledger = mLedgers.get(userId, pkgName);
-        if (ledger == null) {
-            // TODO: load from disk
-            ledger = new Ledger();
-            mLedgers.add(userId, pkgName, ledger);
-        }
-        return ledger;
     }
 
     private class TotalDeltaCalculator implements Consumer<OngoingEvent> {
@@ -179,7 +194,7 @@ class Agent {
     /** Get an app's current balance, factoring in any currently ongoing events. */
     @GuardedBy("mLock")
     long getBalanceLocked(final int userId, @NonNull final String pkgName) {
-        final Ledger ledger = getLedgerLocked(userId, pkgName);
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
         long balance = ledger.getCurrentBalance();
         SparseArrayMap<String, OngoingEvent> ongoingEvents =
                 mCurrentOngoingEvents.get(userId, pkgName);
@@ -202,20 +217,20 @@ class Agent {
         }
 
         final long now = getCurrentTimeMillis();
-        final Ledger ledger = getLedgerLocked(userId, pkgName);
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
 
         final int eventType = getEventType(eventId);
         switch (eventType) {
             case TYPE_ACTION:
-                final long actionCost =
-                        mCompleteEconomicPolicy.getCostOfAction(eventId, userId, pkgName);
+                final long actionCost = economicPolicy.getCostOfAction(eventId, userId, pkgName);
 
                 recordTransactionLocked(userId, pkgName, ledger,
                         new Ledger.Transaction(now, now, eventId, tag, -actionCost), true);
                 break;
 
             case TYPE_REWARD:
-                final EconomicPolicy.Reward reward = mCompleteEconomicPolicy.getReward(eventId);
+                final EconomicPolicy.Reward reward = economicPolicy.getReward(eventId);
                 if (reward != null) {
                     final long rewardSum = ledger.get24HourSum(eventId, now);
                     final long rewardVal = Math.max(0,
@@ -238,8 +253,14 @@ class Agent {
     }
 
     @GuardedBy("mLock")
-    void noteOngoingEventLocked(final int userId, @NonNull final String pkgName, final int eventId,
-            @Nullable String tag, final long startElapsed, final boolean updateBalanceCheck) {
+    private void noteOngoingEventLocked(final int userId, @NonNull final String pkgName,
+            final int eventId, @Nullable String tag, final long startElapsed,
+            final boolean updateBalanceCheck) {
+        if (mIrs.isSystem(userId, pkgName)) {
+            // Events are free for the system. Don't bother recording them.
+            return;
+        }
+
         SparseArrayMap<String, OngoingEvent> ongoingEvents =
                 mCurrentOngoingEvents.get(userId, pkgName);
         if (ongoingEvents == null) {
@@ -248,11 +269,11 @@ class Agent {
         }
         OngoingEvent ongoingEvent = ongoingEvents.get(eventId, tag);
 
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
         final int eventType = getEventType(eventId);
         switch (eventType) {
             case TYPE_ACTION:
-                final long actionCost =
-                        mCompleteEconomicPolicy.getCostOfAction(eventId, userId, pkgName);
+                final long actionCost = economicPolicy.getCostOfAction(eventId, userId, pkgName);
 
                 if (ongoingEvent == null) {
                     ongoingEvents.add(eventId, tag,
@@ -263,7 +284,7 @@ class Agent {
                 break;
 
             case TYPE_REWARD:
-                final EconomicPolicy.Reward reward = mCompleteEconomicPolicy.getReward(eventId);
+                final EconomicPolicy.Reward reward = economicPolicy.getReward(eventId);
                 if (reward != null) {
                     if (ongoingEvent == null) {
                         ongoingEvents.add(eventId, tag, new OngoingEvent(
@@ -285,8 +306,14 @@ class Agent {
 
     @GuardedBy("mLock")
     void onDeviceStateChangedLocked() {
+        onPricingChangedLocked();
+    }
+
+    @GuardedBy("mLock")
+    void onPricingChangedLocked() {
         final long now = getCurrentTimeMillis();
         final long nowElapsed = SystemClock.elapsedRealtime();
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
 
         mCurrentOngoingEvents.forEach((userId, pkgName, ongoingEvents) -> {
             final ArraySet<ActionAffordabilityNote> actionAffordabilityNotes =
@@ -298,7 +325,7 @@ class Agent {
                 for (int i = 0; i < size; ++i) {
                     final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(i);
                     final long originalBalance =
-                            getLedgerLocked(userId, pkgName).getCurrentBalance();
+                            mScribe.getLedgerLocked(userId, pkgName).getCurrentBalance();
                     wasAffordable[i] = originalBalance >= note.getCachedModifiedPrice();
                 }
             } else {
@@ -318,8 +345,9 @@ class Agent {
                 final int size = actionAffordabilityNotes.size();
                 for (int i = 0; i < size; ++i) {
                     final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(i);
-                    note.recalculateModifiedPrice(mCompleteEconomicPolicy, userId, pkgName);
-                    final long newBalance = getLedgerLocked(userId, pkgName).getCurrentBalance();
+                    note.recalculateModifiedPrice(economicPolicy, userId, pkgName);
+                    final long newBalance =
+                            mScribe.getLedgerLocked(userId, pkgName).getCurrentBalance();
                     final boolean isAffordable = newBalance >= note.getCachedModifiedPrice();
                     if (wasAffordable[i] != isAffordable) {
                         note.setNewAffordability(isAffordable);
@@ -335,6 +363,7 @@ class Agent {
     void onAppStatesChangedLocked(final int userId, @NonNull ArraySet<String> pkgNames) {
         final long now = getCurrentTimeMillis();
         final long nowElapsed = SystemClock.elapsedRealtime();
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
 
         for (int i = 0; i < pkgNames.size(); ++i) {
             final String pkgName = pkgNames.valueAt(i);
@@ -350,7 +379,7 @@ class Agent {
                     for (int n = 0; n < size; ++n) {
                         final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(n);
                         final long originalBalance =
-                                getLedgerLocked(userId, pkgName).getCurrentBalance();
+                                mScribe.getLedgerLocked(userId, pkgName).getCurrentBalance();
                         wasAffordable[n] = originalBalance >= note.getCachedModifiedPrice();
                     }
                 } else {
@@ -370,9 +399,9 @@ class Agent {
                     final int size = actionAffordabilityNotes.size();
                     for (int n = 0; n < size; ++n) {
                         final ActionAffordabilityNote note = actionAffordabilityNotes.valueAt(n);
-                        note.recalculateModifiedPrice(mCompleteEconomicPolicy, userId, pkgName);
+                        note.recalculateModifiedPrice(economicPolicy, userId, pkgName);
                         final long newBalance =
-                                getLedgerLocked(userId, pkgName).getCurrentBalance();
+                                mScribe.getLedgerLocked(userId, pkgName).getCurrentBalance();
                         final boolean isAffordable = newBalance >= note.getCachedModifiedPrice();
                         if (wasAffordable[n] != isAffordable) {
                             note.setNewAffordability(isAffordable);
@@ -398,17 +427,22 @@ class Agent {
      *                                    registered bills and notify listeners about any changes.
      */
     @GuardedBy("mLock")
-    void stopOngoingActionLocked(final int userId, @NonNull final String pkgName, final int eventId,
-            @Nullable String tag, final long nowElapsed, final long now,
+    private void stopOngoingActionLocked(final int userId, @NonNull final String pkgName,
+            final int eventId, @Nullable String tag, final long nowElapsed, final long now,
             final boolean updateBalanceCheck, final boolean notifyOnAffordabilityChange) {
-        final Ledger ledger = getLedgerLocked(userId, pkgName);
+        if (mIrs.isSystem(userId, pkgName)) {
+            // Events are free for the system. Don't bother recording them.
+            return;
+        }
+
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
 
         SparseArrayMap<String, OngoingEvent> ongoingEvents =
                 mCurrentOngoingEvents.get(userId, pkgName);
         if (ongoingEvents == null) {
             // This may occur if TARE goes from disabled to enabled while an event is already
             // occurring.
-            Slog.w(TAG, "No ongoing transactions for <" + userId + ">" + pkgName);
+            Slog.w(TAG, "No ongoing transactions for " + appToString(userId, pkgName));
             return;
         }
         final OngoingEvent ongoingEvent = ongoingEvents.get(eventId, tag);
@@ -417,20 +451,18 @@ class Agent {
             // occurring.
             Slog.w(TAG, "Nonexistent ongoing transaction "
                     + eventToString(eventId) + (tag == null ? "" : ":" + tag)
-                    + " for <" + userId + ">" + pkgName + " ended");
+                    + " for " + appToString(userId, pkgName) + " ended");
             return;
         }
         ongoingEvent.refCount--;
         if (ongoingEvent.refCount <= 0) {
-            if (!mIrs.isSystem(userId, pkgName)) {
-                final long startElapsed = ongoingEvent.startTimeElapsed;
-                final long startTime = now - (nowElapsed - startElapsed);
-                final long actualDelta =
-                        getActualDeltaLocked(ongoingEvent, ledger, nowElapsed, now);
-                recordTransactionLocked(userId, pkgName, ledger,
-                        new Ledger.Transaction(startTime, now, eventId, tag, actualDelta),
-                        notifyOnAffordabilityChange);
-            }
+            final long startElapsed = ongoingEvent.startTimeElapsed;
+            final long startTime = now - (nowElapsed - startElapsed);
+            final long actualDelta = getActualDeltaLocked(ongoingEvent, ledger, nowElapsed, now);
+            recordTransactionLocked(userId, pkgName, ledger,
+                    new Ledger.Transaction(startTime, now, eventId, tag, actualDelta),
+                    notifyOnAffordabilityChange);
+
             ongoingEvents.delete(eventId, tag);
         }
         if (updateBalanceCheck) {
@@ -452,8 +484,9 @@ class Agent {
                 Math.min(ongoingEvent.reward.maxDailyReward - rewardSum, computedDelta));
     }
 
+    @VisibleForTesting
     @GuardedBy("mLock")
-    private void recordTransactionLocked(final int userId, @NonNull final String pkgName,
+    void recordTransactionLocked(final int userId, @NonNull final String pkgName,
             @NonNull Ledger ledger, @NonNull Ledger.Transaction transaction,
             final boolean notifyOnAffordabilityChange) {
         if (transaction.delta == 0) {
@@ -465,42 +498,42 @@ class Agent {
                     "Tried to adjust system balance for " + appToString(userId, pkgName));
             return;
         }
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
         final long maxCirculationAllowed = mIrs.getMaxCirculationLocked();
-        final long newArcsInCirculation = mCurrentNarcsInCirculation + transaction.delta;
+        final long curNarcsInCirculation = mScribe.getNarcsInCirculationLocked();
+        final long newArcsInCirculation = curNarcsInCirculation + transaction.delta;
         if (transaction.delta > 0 && newArcsInCirculation > maxCirculationAllowed) {
-            final long newDelta = maxCirculationAllowed - mCurrentNarcsInCirculation;
+            // Set lower bound at 0 so we don't accidentally take away credits when we were trying
+            // to _give_ the app credits.
+            final long newDelta = Math.max(0, maxCirculationAllowed - curNarcsInCirculation);
             Slog.i(TAG, "Would result in too many credits in circulation. Decreasing transaction "
                     + eventToString(transaction.eventId)
                     + (transaction.tag == null ? "" : ":" + transaction.tag)
-                    + " for <" + userId + ">" + pkgName + " by " + (transaction.delta - newDelta));
+                    + " for " + appToString(userId, pkgName)
+                    + " by " + narcToString(transaction.delta - newDelta));
             transaction = new Ledger.Transaction(
                     transaction.startTimeMs, transaction.endTimeMs,
                     transaction.eventId, transaction.tag, newDelta);
         }
         final long originalBalance = ledger.getCurrentBalance();
         if (transaction.delta > 0
-                && originalBalance + transaction.delta
-                > mCompleteEconomicPolicy.getMaxSatiatedBalance()) {
-            final long newDelta = mCompleteEconomicPolicy.getMaxSatiatedBalance() - originalBalance;
+                && originalBalance + transaction.delta > economicPolicy.getMaxSatiatedBalance()) {
+            // Set lower bound at 0 so we don't accidentally take away credits when we were trying
+            // to _give_ the app credits.
+            final long newDelta =
+                    Math.max(0, economicPolicy.getMaxSatiatedBalance() - originalBalance);
             Slog.i(TAG, "Would result in becoming too rich. Decreasing transaction "
                     + eventToString(transaction.eventId)
                     + (transaction.tag == null ? "" : ":" + transaction.tag)
-                    + " for <" + userId + ">" + pkgName + " by " + (transaction.delta - newDelta));
+                    + " for " + appToString(userId, pkgName)
+                    + " by " + narcToString(transaction.delta - newDelta));
             transaction = new Ledger.Transaction(
                     transaction.startTimeMs, transaction.endTimeMs,
                     transaction.eventId, transaction.tag, newDelta);
         }
         ledger.recordTransaction(transaction);
-        mCurrentNarcsInCirculation += transaction.delta;
-        if (!mLedgerCleanupAlarmListener.hasAlarmScheduledLocked(userId, pkgName)) {
-            // The earliest transaction won't change until we clean up the ledger, so no point
-            // continuing to reschedule an existing cleanup.
-            final long cleanupAlarmElapsed = SystemClock.elapsedRealtime() + MAX_TRANSACTION_AGE_MS
-                    - (getCurrentTimeMillis() - ledger.getEarliestTransaction().endTimeMs);
-            mLedgerCleanupAlarmListener.addAlarmLocked(userId, pkgName, cleanupAlarmElapsed);
-        }
-        // TODO: save changes to disk in a background thread
-        if (notifyOnAffordabilityChange) {
+        mScribe.adjustNarcsInCirculationLocked(transaction.delta);
+        if (transaction.delta != 0 && notifyOnAffordabilityChange) {
             final ArraySet<ActionAffordabilityNote> actionAffordabilityNotes =
                     mActionAffordabilityNotes.get(userId, pkgName);
             if (actionAffordabilityNotes != null) {
@@ -527,20 +560,20 @@ class Agent {
      */
     @GuardedBy("mLock")
     void reclaimUnusedAssetsLocked(double percentage) {
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
         final List<PackageInfo> pkgs = mIrs.getInstalledPackages();
         final long now = getCurrentTimeMillis();
         for (int i = 0; i < pkgs.size(); ++i) {
             final int userId = UserHandle.getUserId(pkgs.get(i).applicationInfo.uid);
             final String pkgName = pkgs.get(i).packageName;
-            final Ledger ledger = getLedgerLocked(userId, pkgName);
+            final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
             // AppStandby only counts elapsed time for things like this
             // TODO: should we use clock time instead?
             final long timeSinceLastUsedMs =
                     mAppStandbyInternal.getTimeSinceLastUsedByUser(pkgName, userId);
             if (timeSinceLastUsedMs >= MIN_UNUSED_TIME_MS) {
                 // Use a constant floor instead of the scaled floor from the IRS.
-                final long minBalance =
-                        mCompleteEconomicPolicy.getMinSatiatedBalance(userId, pkgName);
+                final long minBalance = economicPolicy.getMinSatiatedBalance(userId, pkgName);
                 final long curBalance = ledger.getCurrentBalance();
                 long toReclaim = (long) (curBalance * percentage);
                 if (curBalance - toReclaim < minBalance) {
@@ -548,7 +581,7 @@ class Agent {
                 }
                 if (toReclaim > 0) {
                     Slog.i(TAG, "Reclaiming unused wealth! Taking " + toReclaim
-                            + " from <" + userId + ">" + pkgName);
+                            + " from " + appToString(userId, pkgName));
 
                     recordTransactionLocked(userId, pkgName, ledger,
                             new Ledger.Transaction(
@@ -559,19 +592,32 @@ class Agent {
         }
     }
 
+    /** Returns true if an app should be given credits in the general distributions. */
+    private boolean shouldGiveCredits(@NonNull PackageInfo packageInfo) {
+        final ApplicationInfo applicationInfo = packageInfo.applicationInfo;
+        // Skip apps that wouldn't be doing any work. Giving them ARCs would be wasteful.
+        if (applicationInfo == null || !applicationInfo.hasCode()) {
+            return false;
+        }
+        final int userId = UserHandle.getUserId(packageInfo.applicationInfo.uid);
+        // No point allocating ARCs to the system. It can do whatever it wants.
+        return !mIrs.isSystem(userId, packageInfo.packageName);
+    }
+
     @GuardedBy("mLock")
     void distributeBasicIncomeLocked(int batteryLevel) {
         List<PackageInfo> pkgs = mIrs.getInstalledPackages();
+        pkgs.sort(mPackageDistributionComparator);
+
         final long now = getCurrentTimeMillis();
         for (int i = 0; i < pkgs.size(); ++i) {
             final PackageInfo pkgInfo = pkgs.get(i);
-            final int userId = UserHandle.getUserId(pkgInfo.applicationInfo.uid);
-            final String pkgName = pkgInfo.packageName;
-            if (mIrs.isSystem(userId, pkgName)) {
-                // No point allocating ARCs to the system. It can do whatever it wants.
+            if (!shouldGiveCredits(pkgInfo)) {
                 continue;
             }
-            Ledger ledger = getLedgerLocked(userId, pkgName);
+            final int userId = UserHandle.getUserId(pkgInfo.applicationInfo.uid);
+            final String pkgName = pkgInfo.packageName;
+            final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
             final long minBalance = mIrs.getMinBalanceLocked(userId, pkgName);
             final double perc = batteryLevel / 100d;
             // TODO: maybe don't give credits to bankrupt apps until battery level >= 50%
@@ -597,20 +643,20 @@ class Agent {
 
     @GuardedBy("mLock")
     void grantBirthrightsLocked(final int userId) {
-        PackageManager packageManager = mIrs.getContext().getPackageManager();
-        List<PackageInfo> pkgs = packageManager.getInstalledPackagesAsUser(0, userId);
+        final List<PackageInfo> pkgs = mIrs.getInstalledPackages(userId);
         final long maxBirthright =
                 mIrs.getMaxCirculationLocked() / mIrs.getInstalledPackages().size();
         final long now = getCurrentTimeMillis();
 
+        pkgs.sort(mPackageDistributionComparator);
+
         for (int i = 0; i < pkgs.size(); ++i) {
             final PackageInfo packageInfo = pkgs.get(i);
-            final String pkgName = packageInfo.packageName;
-            final Ledger ledger = getLedgerLocked(userId, pkgName);
-            if (mIrs.isSystem(userId, pkgName)) {
-                // No point allocating ARCs to the system. It can do whatever it wants.
+            if (!shouldGiveCredits(packageInfo)) {
                 continue;
             }
+            final String pkgName = packageInfo.packageName;
+            final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
             if (ledger.getCurrentBalance() > 0) {
                 // App already got credits somehow. Move along.
                 Slog.wtf(TAG, "App " + pkgName + " had credits before economy was set up");
@@ -626,7 +672,7 @@ class Agent {
 
     @GuardedBy("mLock")
     void grantBirthrightLocked(final int userId, @NonNull final String pkgName) {
-        final Ledger ledger = getLedgerLocked(userId, pkgName);
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
         if (ledger.getCurrentBalance() > 0) {
             Slog.wtf(TAG, "App " + pkgName + " had credits as soon as it was installed");
             // App already got credits somehow. Move along.
@@ -646,7 +692,6 @@ class Agent {
     @GuardedBy("mLock")
     void onPackageRemovedLocked(final int userId, @NonNull final String pkgName) {
         reclaimAssetsLocked(userId, pkgName);
-        mLedgerCleanupAlarmListener.removeAlarmLocked(userId, pkgName);
         mBalanceThresholdAlarmListener.removeAlarmLocked(userId, pkgName);
     }
 
@@ -656,19 +701,17 @@ class Agent {
      */
     @GuardedBy("mLock")
     private void reclaimAssetsLocked(final int userId, @NonNull final String pkgName) {
-        Ledger ledger = getLedgerLocked(userId, pkgName);
+        final Ledger ledger = mScribe.getLedgerLocked(userId, pkgName);
         if (ledger.getCurrentBalance() != 0) {
-            mCurrentNarcsInCirculation -= ledger.getCurrentBalance();
+            mScribe.adjustNarcsInCirculationLocked(-ledger.getCurrentBalance());
         }
-        // TODO: delete ledger entry from disk
-        mLedgers.delete(userId, pkgName);
+        mScribe.discardLedgerLocked(userId, pkgName);
         mCurrentOngoingEvents.delete(userId, pkgName);
     }
 
     @GuardedBy("mLock")
     void onUserRemovedLocked(final int userId, @NonNull final List<String> pkgNames) {
         reclaimAssetsLocked(userId, pkgNames);
-        mLedgerCleanupAlarmListener.removeAlarmsLocked(userId);
         mBalanceThresholdAlarmListener.removeAlarmsLocked(userId);
     }
 
@@ -800,11 +843,8 @@ class Agent {
 
     @GuardedBy("mLock")
     void tearDownLocked() {
-        mLedgers.clear();
-        mCurrentNarcsInCirculation = 0;
         mCurrentOngoingEvents.clear();
         mBalanceThresholdAlarmListener.dropAllAlarmsLocked();
-        mLedgerCleanupAlarmListener.dropAllAlarmsLocked();
     }
 
     @VisibleForTesting
@@ -845,7 +885,7 @@ class Agent {
 
             @Override
             public String toString() {
-                return "<" + userId + ">" + packageName;
+                return appToString(userId, packageName);
             }
 
             @Override
@@ -1005,7 +1045,7 @@ class Agent {
                                         mAlarmTag, this, mHandler);
                             }
                         } else {
-                            mHandler.sendEmptyMessageDelayed(MSG_SET_ALARMS, 30_000);
+                            mHandler.sendEmptyMessageDelayed(MSG_SET_BALANCE_ALARM, 30_000);
                         }
                     });
                     mTriggerTimeElapsed = nextTriggerTimeElapsed;
@@ -1074,20 +1114,6 @@ class Agent {
         }
     }
 
-    /** Clean up old transactions from {@link Ledger}s. */
-    private class LedgerCleanupAlarmListener extends AlarmQueueListener {
-        private LedgerCleanupAlarmListener() {
-            // We don't need to run cleanup too frequently.
-            super(ALARM_TAG_LEDGER_CLEANUP, false, HOUR_IN_MILLIS);
-        }
-
-        @Override
-        @GuardedBy("mLock")
-        protected void processExpiredAlarmLocked(int userId, @NonNull String packageName) {
-            mHandler.obtainMessage(MSG_CLEAN_LEDGER, userId, 0, packageName).sendToTarget();
-        }
-    }
-
     /** Track when apps will cross the closest affordability threshold (in both directions). */
     private class BalanceThresholdAlarmListener extends AlarmQueueListener {
         private BalanceThresholdAlarmListener() {
@@ -1111,8 +1137,9 @@ class Agent {
             actionAffordabilityNotes = new ArraySet<>();
             mActionAffordabilityNotes.add(userId, pkgName, actionAffordabilityNotes);
         }
+        final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
         final ActionAffordabilityNote note =
-                new ActionAffordabilityNote(bill, listener, mCompleteEconomicPolicy);
+                new ActionAffordabilityNote(bill, listener, economicPolicy);
         if (actionAffordabilityNotes.add(note)) {
             if (!mIrs.isEnabled()) {
                 // When TARE isn't enabled, we always say something is affordable. We also don't
@@ -1121,7 +1148,7 @@ class Agent {
                 note.setNewAffordability(true);
                 return;
             }
-            note.recalculateModifiedPrice(mCompleteEconomicPolicy, userId, pkgName);
+            note.recalculateModifiedPrice(economicPolicy, userId, pkgName);
             note.setNewAffordability(
                     getBalanceLocked(userId, pkgName) >= note.getCachedModifiedPrice());
             mIrs.postAffordabilityChanged(userId, pkgName, note);
@@ -1137,8 +1164,9 @@ class Agent {
         final ArraySet<ActionAffordabilityNote> actionAffordabilityNotes =
                 mActionAffordabilityNotes.get(userId, pkgName);
         if (actionAffordabilityNotes != null) {
+            final CompleteEconomicPolicy economicPolicy = mIrs.getCompleteEconomicPolicyLocked();
             final ActionAffordabilityNote note =
-                    new ActionAffordabilityNote(bill, listener, mCompleteEconomicPolicy);
+                    new ActionAffordabilityNote(bill, listener, economicPolicy);
             if (actionAffordabilityNotes.remove(note)) {
                 // Update ongoing alarm
                 scheduleBalanceCheckLocked(userId, pkgName);
@@ -1261,19 +1289,8 @@ class Agent {
                 }
                 break;
 
-                case MSG_CLEAN_LEDGER: {
-                    final int userId = msg.arg1;
-                    final String pkgName = (String) msg.obj;
+                case MSG_SET_BALANCE_ALARM: {
                     synchronized (mLock) {
-                        final Ledger ledger = getLedgerLocked(userId, pkgName);
-                        ledger.removeOldTransactions(MAX_TRANSACTION_AGE_MS);
-                    }
-                }
-                break;
-
-                case MSG_SET_ALARMS: {
-                    synchronized (mLock) {
-                        mLedgerCleanupAlarmListener.setNextAlarmLocked();
                         mBalanceThresholdAlarmListener.setNextAlarmLocked();
                     }
                 }
@@ -1284,13 +1301,7 @@ class Agent {
 
     @GuardedBy("mLock")
     void dumpLocked(IndentingPrintWriter pw) {
-        pw.print("Current GDP: ");
-        pw.println(narcToString(mCurrentNarcsInCirculation));
-
         pw.println();
         mBalanceThresholdAlarmListener.dumpLocked(pw);
-
-        pw.println();
-        mLedgerCleanupAlarmListener.dumpLocked(pw);
     }
 }

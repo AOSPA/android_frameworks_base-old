@@ -30,6 +30,7 @@ import android.annotation.SdkConstant.SdkConstantType;
 import android.annotation.SuppressLint;
 import android.annotation.SystemApi;
 import android.annotation.TestApi;
+import android.app.ActivityThread;
 import android.app.AppGlobals;
 import android.bluetooth.BluetoothDevice;
 import android.compat.annotation.UnsupportedAppUsage;
@@ -2098,6 +2099,14 @@ public class Intent implements Parcelable, Cloneable {
     public static final String EXTRA_PACKAGE_NAME = "android.intent.extra.PACKAGE_NAME";
 
     /**
+     * Intent extra: A {@link android.os.LocaleList}
+     * <p>
+     * Type: LocaleList
+     * </p>
+     */
+    public static final String EXTRA_LOCALE_LIST = "android.intent.extra.LOCALE_LIST";
+
+    /**
      * Intent extra: A {@link Bundle} of extras for a package being suspended. Will be sent as an
      * extra with {@link #ACTION_MY_PACKAGE_SUSPENDED}.
      *
@@ -2738,6 +2747,22 @@ public class Intent implements Parcelable, Cloneable {
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_PACKAGES_UNSUSPENDED = "android.intent.action.PACKAGES_UNSUSPENDED";
+    /**
+     * Broadcast Action: One of the suspend conditions have been modified for the packages.
+     * <p>Includes the following extras:
+     * <ul>
+     * <li> {@link #EXTRA_CHANGED_PACKAGE_LIST} is the set of packages which have been modified
+     * <li> {@link #EXTRA_CHANGED_UID_LIST} is the set of uids which have been modified
+     * </ul>
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system. It is only sent to registered receivers.
+     *
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_PACKAGES_SUSPENSION_CHANGED =
+            "android.intent.action.PACKAGES_SUSPENSION_CHANGED";
 
     /**
      * Broadcast Action: Distracting packages have been changed.
@@ -3065,13 +3090,46 @@ public class Intent implements Parcelable, Cloneable {
     public static final String ACTION_SPLIT_CONFIGURATION_CHANGED =
             "android.intent.action.SPLIT_CONFIGURATION_CHANGED";
     /**
-     * Broadcast Action: The current device's locale has changed.
+     * Broadcast Action: The receiver's effective locale has changed.
+     *
+     * This happens when the device locale, or the
+     *  {(TODO: will only compile after ag/15518063) @link LocaleManager#setApplicationLocales}
+     *  receiving app's locale changed.
+     *
+     * Can be received by manifest-declared receivers.
+     *
+     * <p class="note"> If only the app locale changed, includes the following extras:
+     * <ul>
+     * <li>{@link #EXTRA_PACKAGE_NAME} is the name of the package for which locale changed.
+     * <li>{@link #EXTRA_LOCALE_LIST} contains locales that are currently set for specified app
+     * </ul>
      *
      * <p class="note">This is a protected intent that can only be sent
      * by the system.
      */
     @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
     public static final String ACTION_LOCALE_CHANGED = "android.intent.action.LOCALE_CHANGED";
+    /**
+     * Broadcast Action: Locale of a particular app has changed.
+     *
+     * <p class="note"> This broadcast is explicitly sent to the
+     * {@link android.content.pm.InstallSourceInfo#getInstallingPackageName} installer
+     *     of the app whose locale has changed.
+     * <p class="note"> The broadcast could also be received by manifest-declared receivers with
+     * {@code android.permission.READ_APP_SPECIFIC_LOCALES}
+     *
+     * <p class="note">This is a protected intent that can only be sent
+     * by the system.
+     *
+     * <p>Includes the following extras:
+     * <ul>
+     * <li>{@link #EXTRA_PACKAGE_NAME} is the name of the package for which locale changed.
+     * <li>{@link #EXTRA_LOCALE_LIST} contains locales that are currently set for specified app
+     * </ul>
+     */
+    @SdkConstant(SdkConstantType.BROADCAST_INTENT_ACTION)
+    public static final String ACTION_APPLICATION_LOCALE_CHANGED =
+            "android.intent.action.APPLICATION_LOCALE_CHANGED";
     /**
      * Broadcast Action:  This is a <em>sticky broadcast</em> containing the
      * charging state, level, and other information about the battery.
@@ -4929,6 +4987,12 @@ public class Intent implements Parcelable, Cloneable {
     @SdkConstant(SdkConstantType.INTENT_CATEGORY)
     public static final String CATEGORY_CAR_LAUNCHER = "android.intent.category.CAR_LAUNCHER";
     /**
+     * Used to indicate that the activity can be used in communal mode.
+     * @hide
+     */
+    @SdkConstant(SdkConstantType.INTENT_CATEGORY)
+    public static final String CATEGORY_COMMUNAL_MODE = "android.intent.category.COMMUNAL_MODE";
+    /**
      * Indicates a Leanback settings activity to be displayed in the Leanback launcher.
      * @hide
      */
@@ -5396,6 +5460,22 @@ public class Intent implements Parcelable, Cloneable {
      * used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD}
      */
     public static final String EXTRA_END_TIME = "android.intent.extra.END_TIME";
+
+    /**
+     * A boolean extra, when used with {@link #ACTION_VIEW_PERMISSION_USAGE_FOR_PERIOD},
+     * that specifies whether the system displayed attribution information in the
+     * permission usage system UI for the chosen entry.
+     *
+     * <p> The extra can only be true if application has specified attributionsAreUserVisible
+     * in its manifest. </p>
+     *
+     * <p> Applications can use this extra to improve their permission usage explanation
+     * experience. </p>
+     * @hide
+     */
+    @SystemApi
+    public static final String EXTRA_SHOWING_ATTRIBUTION =
+            "android.intent.extra.SHOWING_ATTRIBUTION";
 
     /**
      * An Intent[] describing additional, alternate choices you would like shown with
@@ -7005,6 +7085,7 @@ public class Intent implements Parcelable, Cloneable {
     private int mContentUserHint = UserHandle.USER_CURRENT;
     /** Token to track instant app launches. Local only; do not copy cross-process. */
     private String mLaunchToken;
+    private Intent mOriginalIntent; // Used for the experimental "component alias" feature.
 
     // ---------------------------------------------------------------------
 
@@ -7041,6 +7122,7 @@ public class Intent implements Parcelable, Cloneable {
         this.mIdentifier = o.mIdentifier;
         this.mPackage = o.mPackage;
         this.mComponent = o.mComponent;
+        this.mOriginalIntent = o.mOriginalIntent;
 
         if (o.mCategories != null) {
             this.mCategories = new ArraySet<>(o.mCategories);
@@ -8205,6 +8287,22 @@ public class Intent implements Parcelable, Cloneable {
         return mType;
     }
 
+
+    /**
+     * @hide For the experimental component alias feature. Do not use, unless you know what it is.
+     */
+    @Nullable
+    public Intent getOriginalIntent() {
+        return mOriginalIntent;
+    }
+
+    /**
+     * @hide For the experimental component alias feature. Do not use, unless you know what it is.
+     */
+    public void setOriginalIntent(@Nullable Intent originalIntent) {
+        mOriginalIntent = originalIntent;
+    }
+
     /**
      * Return the MIME data type of this intent.  If the type field is
      * explicitly set, that is simply returned.  Otherwise, if the data is set,
@@ -8259,7 +8357,10 @@ public class Intent implements Parcelable, Cloneable {
      *         needed.
      */
     public @Nullable String resolveTypeIfNeeded(@NonNull ContentResolver resolver) {
-        if (mComponent != null) {
+        // Match logic in PackageManagerService#applyEnforceIntentFilterMatching(...)
+        if (mComponent != null && (Process.myUid() == Process.ROOT_UID
+                || Process.myUid() == Process.SYSTEM_UID
+                || mComponent.getPackageName().equals(ActivityThread.currentPackageName()))) {
             return mType;
         }
         return resolveType(resolver);
@@ -10850,6 +10951,11 @@ public class Intent implements Parcelable, Cloneable {
             mSelector.toShortString(b, secure, comp, extras, clip);
             b.append("}");
         }
+        if (mOriginalIntent != null) {
+            b.append(" org={");
+            mOriginalIntent.toShortString(b, secure, comp, extras, clip);
+            b.append("}");
+        }
     }
 
     /** @hide */
@@ -11145,6 +11251,13 @@ public class Intent implements Parcelable, Cloneable {
         }
         out.writeInt(mContentUserHint);
         out.writeBundle(mExtras);
+
+        if (mOriginalIntent != null) {
+            out.writeInt(1);
+            mOriginalIntent.writeToParcel(out, flags);
+        } else {
+            out.writeInt(0);
+        }
     }
 
     public static final @android.annotation.NonNull Parcelable.Creator<Intent> CREATOR
@@ -11198,6 +11311,9 @@ public class Intent implements Parcelable, Cloneable {
         }
         mContentUserHint = in.readInt();
         mExtras = in.readBundle();
+        if (in.readInt() != 0) {
+            mOriginalIntent = new Intent(in);
+        }
     }
 
     /**
@@ -11422,6 +11538,9 @@ public class Intent implements Parcelable, Cloneable {
         if (mClipData != null) {
             mClipData.prepareToLeaveProcess(leavingPackage, getFlags());
         }
+        if (mOriginalIntent != null) {
+            mOriginalIntent.prepareToLeaveProcess(leavingPackage);
+        }
 
         if (mExtras != null && !mExtras.isParcelled()) {
             final Object intent = mExtras.get(Intent.EXTRA_INTENT);
@@ -11517,6 +11636,9 @@ public class Intent implements Parcelable, Cloneable {
         }
         if (mClipData != null) {
             mClipData.prepareToEnterProcess(source);
+        }
+        if (mOriginalIntent != null) {
+            mOriginalIntent.prepareToEnterProcess(false, source);
         }
 
         if (mContentUserHint != UserHandle.USER_CURRENT) {

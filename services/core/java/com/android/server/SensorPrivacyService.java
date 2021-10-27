@@ -347,7 +347,7 @@ public final class SensorPrivacyService extends SystemService {
                             intent.getIntExtra(EXTRA_SENSOR, UNKNOWN), false);
                 }
             }, new IntentFilter(ACTION_DISABLE_INDIVIDUAL_SENSOR_PRIVACY),
-                    MANAGE_SENSOR_PRIVACY, null);
+                    MANAGE_SENSOR_PRIVACY, null, Context.RECEIVER_EXPORTED);
             mUserManagerInternal.addUserRestrictionsListener(this);
         }
 
@@ -420,9 +420,12 @@ public final class SensorPrivacyService extends SystemService {
             }
 
             synchronized (mLock) {
-                if (mSuppressReminders.containsKey(new Pair<>(sensor, user))) {
+                UserHandle parentUser = UserHandle.of(mUserManagerInternal
+                        .getProfileParentId(user.getIdentifier()));
+                if (mSuppressReminders.containsKey(new Pair<>(sensor, parentUser))) {
                     Log.d(TAG,
-                            "Suppressed sensor privacy reminder for " + packageName + "/" + user);
+                            "Suppressed sensor privacy reminder for " + packageName + "/"
+                                    + parentUser);
                     return;
                 }
             }
@@ -708,6 +711,16 @@ public final class SensorPrivacyService extends SystemService {
         @Override
         public void setIndividualSensorPrivacy(@UserIdInt int userId,
                 @SensorPrivacyManager.Sources.Source int source, int sensor, boolean enable) {
+            if (DEBUG) {
+                Log.d(TAG, "callingUid=" + Binder.getCallingUid()
+                        + " callingPid=" + Binder.getCallingPid()
+                        + " setIndividualSensorPrivacy("
+                        + "userId=" + userId
+                        + " source=" + source
+                        + " sensor=" + sensor
+                        + " enable=" + enable
+                        + ")");
+            }
             enforceManageSensorPrivacyPermission();
             if (userId == UserHandle.USER_CURRENT) {
                 userId = mCurrentUser;
@@ -892,6 +905,14 @@ public final class SensorPrivacyService extends SystemService {
 
         @Override
         public boolean isIndividualSensorPrivacyEnabled(@UserIdInt int userId, int sensor) {
+            if (DEBUG) {
+                Log.d(TAG, "callingUid=" + Binder.getCallingUid()
+                        + " callingPid=" + Binder.getCallingPid()
+                        + " isIndividualSensorPrivacyEnabled("
+                        + "userId=" + userId
+                        + " sensor=" + sensor
+                        + ")");
+            }
             enforceObserveSensorPrivacyPermission();
             if (userId == UserHandle.USER_CURRENT) {
                 userId = mCurrentUser;

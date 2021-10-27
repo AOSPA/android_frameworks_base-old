@@ -70,6 +70,9 @@ import static com.android.server.am.ActivityManagerService.TAG_LRU;
 import static com.android.server.am.ActivityManagerService.TAG_OOM_ADJ;
 import static com.android.server.am.ActivityManagerService.TAG_UID_OBSERVERS;
 import static com.android.server.am.AppProfiler.TAG_PSS;
+import static com.android.server.am.PlatformCompatCache.CACHED_COMPAT_CHANGE_CAMERA_MICROPHONE_CAPABILITY;
+import static com.android.server.am.PlatformCompatCache.CACHED_COMPAT_CHANGE_PROCESS_CAPABILITY;
+import static com.android.server.am.PlatformCompatCache.CACHED_COMPAT_CHANGE_USE_SHORT_FGS_USAGE_INTERACTION_TIME;
 import static com.android.server.am.ProcessList.TAG_PROCESS_OBSERVERS;
 import static com.android.server.wm.ActivityTaskManagerDebugConfig.DEBUG_SWITCH;
 
@@ -93,31 +96,25 @@ import android.os.IBinder;
 import android.os.PowerManagerInternal;
 import android.os.Process;
 import android.os.RemoteException;
-import android.os.ServiceManager;
 import android.os.SystemClock;
 import android.os.SystemProperties;
 import android.os.Trace;
 import android.util.ArrayMap;
 import android.util.ArraySet;
 import android.util.BoostFramework;
-import android.util.LongSparseArray;
-import android.util.Pair;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
 import com.android.internal.annotations.CompositeRWLock;
 import com.android.internal.annotations.GuardedBy;
 import com.android.internal.annotations.VisibleForTesting;
-import com.android.internal.compat.IPlatformCompat;
 import com.android.server.LocalServices;
 import com.android.server.ServiceThread;
-import com.android.server.compat.CompatChange;
-import com.android.server.compat.PlatformCompat;
+import com.android.server.am.PlatformCompatCache.CachedCompatChangeId;
 import com.android.server.wm.ActivityServiceConnectionsHolder;
 import com.android.server.wm.WindowProcessController;
 
 import java.io.PrintWriter;
-import java.lang.ref.WeakReference;
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Arrays;
@@ -279,144 +276,12 @@ public class OomAdjuster {
     @GuardedBy("mService")
     private boolean mPendingFullOomAdjUpdate = false;
 
-    final PlatformCompatCache mPlatformCompatCache;
-
     /** Overrideable by a test */
     @VisibleForTesting
-    static class PlatformCompatCache {
-        private final PlatformCompat mPlatformCompat;
-        private final IPlatformCompat mIPlatformCompatProxy;
-        private final LongSparseArray<CacheItem> mCaches = new LongSparseArray<>();
-        private final boolean mCacheEnabled;
-
-        PlatformCompatCache(long[] compatChanges) {
-            IBinder b = ServiceManager.getService(Context.PLATFORM_COMPAT_SERVICE);
-            if (b instanceof PlatformCompat) {
-                mPlatformCompat = (PlatformCompat) ServiceManager.getService(
-                        Context.PLATFORM_COMPAT_SERVICE);
-                for (long changeId: compatChanges) {
-                    mCaches.put(changeId, new CacheItem(mPlatformCompat, changeId));
-                }
-                mIPlatformCompatProxy = null;
-                mCacheEnabled = true;
-            } else {
-                // we are in UT where the platform_compat is not running within the same process
-                mIPlatformCompatProxy = IPlatformCompat.Stub.asInterface(b);
-                mPlatformCompat = null;
-                mCacheEnabled = false;
-            }
-        }
-
-        boolean isChangeEnabled(long changeId, ApplicationInfo app) throws RemoteException {
-            return mCacheEnabled ? mCaches.get(changeId).isChangeEnabled(app)
-                    : mIPlatformCompatProxy.isChangeEnabled(changeId, app);
-        }
-
-        /**
-         * Same as {@link #isChangeEnabled(long, ApplicationInfo)} but instead of throwing a
-         * RemoteException from platform compat, it returns the default value provided.
-         */
-        boolean isChangeEnabled(long changeId, ApplicationInfo app, boolean defaultValue) {
-            try {
-                return mCacheEnabled ? mCaches.get(changeId).isChangeEnabled(app)
-                        : mIPlatformCompatProxy.isChangeEnabled(changeId, app);
-            } catch (RemoteException e) {
-                Slog.w(TAG, "Error reading platform compat change " + changeId, e);
-                return defaultValue;
-            }
-        }
-
-        void invalidate(ApplicationInfo app) {
-            for (int i = mCaches.size() - 1; i >= 0; i--) {
-                mCaches.valueAt(i).invalidate(app);
-            }
-        }
-
-        void onApplicationInfoChanged(ApplicationInfo app) {
-            for (int i = mCaches.size() - 1; i >= 0; i--) {
-                mCaches.valueAt(i).onApplicationInfoChanged(app);
-            }
-        }
-
-        static class CacheItem implements CompatChange.ChangeListener {
-            private final PlatformCompat mPlatformCompat;
-            private final long mChangeId;
-            private final Object mLock = new Object();
-
-            private final ArrayMap<String, Pair<Boolean, WeakReference<ApplicationInfo>>> mCache =
-                    new ArrayMap<>();
-
-            CacheItem(PlatformCompat platformCompat, long changeId) {
-                mPlatformCompat = platformCompat;
-                mChangeId = changeId;
-                mPlatformCompat.registerListener(changeId, this);
-            }
-
-            boolean isChangeEnabled(ApplicationInfo app) {
-                synchronized (mLock) {
-                    final int index = mCache.indexOfKey(app.packageName);
-                    Pair<Boolean, WeakReference<ApplicationInfo>> p;
-                    if (index < 0) {
-                        return fetchLocked(app, index);
-                    }
-                    p = mCache.valueAt(index);
-                    if (p.second.get() == app) {
-                        return p.first;
-                    }
-                    // Cache is invalid, regenerate it
-                    return fetchLocked(app, index);
-                }
-            }
-
-            void invalidate(ApplicationInfo app) {
-                synchronized (mLock) {
-                    mCache.remove(app.packageName);
-                }
-            }
-
-            @GuardedBy("mLock")
-            boolean fetchLocked(ApplicationInfo app, int index) {
-                final Pair<Boolean, WeakReference<ApplicationInfo>> p = new Pair<>(
-                        mPlatformCompat.isChangeEnabledInternalNoLogging(mChangeId, app),
-                        new WeakReference<>(app));
-                if (index >= 0) {
-                    mCache.setValueAt(index, p);
-                } else {
-                    mCache.put(app.packageName, p);
-                }
-                return p.first;
-            }
-
-            void onApplicationInfoChanged(ApplicationInfo app) {
-                synchronized (mLock) {
-                    final int index = mCache.indexOfKey(app.packageName);
-                    if (index >= 0) {
-                        fetchLocked(app, index);
-                    }
-                }
-            }
-
-            @Override
-            public void onCompatChange(String packageName) {
-                synchronized (mLock) {
-                    final int index = mCache.indexOfKey(packageName);
-                    if (index >= 0) {
-                        final ApplicationInfo app = mCache.valueAt(index).second.get();
-                        if (app != null) {
-                            fetchLocked(app, index);
-                        } else {
-                            mCache.removeAt(index);
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    /** Overrideable by a test */
-    @VisibleForTesting
-    protected PlatformCompatCache getPlatformCompatCache() {
-        return mPlatformCompatCache;
+    protected boolean isChangeEnabled(@CachedCompatChangeId int cachedCompatChangeId,
+            ApplicationInfo app, boolean defaultValue) {
+        return PlatformCompatCache.getInstance()
+                .isChangeEnabled(cachedCompatChangeId, app, defaultValue);
     }
 
     OomAdjuster(ActivityManagerService service, ProcessList processList, ActiveUids activeUids) {
@@ -485,10 +350,6 @@ public class OomAdjuster {
         mTmpQueue = new ArrayDeque<ProcessRecord>(mConstants.CUR_MAX_CACHED_PROCESSES << 1);
         mNumSlots = ((ProcessList.CACHED_APP_MAX_ADJ - ProcessList.CACHED_APP_MIN_ADJ + 1) >> 1)
                 / ProcessList.CACHED_APP_IMPORTANCE_LEVELS;
-        mPlatformCompatCache = new PlatformCompatCache(new long[] {
-                PROCESS_CAPABILITY_CHANGE_ID, CAMERA_MICROPHONE_CAPABILITY_CHANGE_ID,
-                USE_SHORT_FGS_USAGE_INTERACTION_TIME
-        });
     }
 
     void initSettings() {
@@ -835,7 +696,7 @@ public class OomAdjuster {
         if (app != null) {
             mPendingProcessSet.remove(app);
             if (procDied) {
-                getPlatformCompatCache().invalidate(app.info);
+                PlatformCompatCache.getInstance().invalidate(app.info);
             }
         }
     }
@@ -1642,6 +1503,7 @@ public class OomAdjuster {
         state.resetAllowStartFgsState();
         if (!cycleReEval) {
             // Don't reset this flag when doing cycles re-evaluation.
+            state.setNoKillOnBgRestrictedAndIdle(false);
             app.mOptRecord.setShouldNotFreeze(false);
         }
 
@@ -2058,12 +1920,8 @@ public class OomAdjuster {
                             (fgsType & FOREGROUND_SERVICE_TYPE_LOCATION)
                                     != 0 ? PROCESS_CAPABILITY_FOREGROUND_LOCATION : 0;
 
-                    boolean enabled = false;
-                    try {
-                        enabled = getPlatformCompatCache().isChangeEnabled(
-                                CAMERA_MICROPHONE_CAPABILITY_CHANGE_ID, s.appInfo);
-                    } catch (RemoteException e) {
-                    }
+                    final boolean enabled = state.getCachedCompatChange(
+                            CACHED_COMPAT_CHANGE_CAMERA_MICROPHONE_CAPABILITY);
                     if (enabled) {
                         capabilityFromFGS |=
                                 (fgsType & FOREGROUND_SERVICE_TYPE_CAMERA)
@@ -2285,12 +2143,8 @@ public class OomAdjuster {
                                 // to client's state.
                                 clientProcState = PROCESS_STATE_BOUND_TOP;
                                 state.bumpAllowStartFgsState(PROCESS_STATE_BOUND_TOP);
-                                boolean enabled = false;
-                                try {
-                                    enabled = getPlatformCompatCache().isChangeEnabled(
-                                            PROCESS_CAPABILITY_CHANGE_ID, client.info);
-                                } catch (RemoteException e) {
-                                }
+                                final boolean enabled = cstate.getCachedCompatChange(
+                                        CACHED_COMPAT_CHANGE_PROCESS_CAPABILITY);
                                 if (enabled) {
                                     if (cr.hasFlag(Context.BIND_INCLUDE_CAPABILITIES)) {
                                         // TOP process passes all capabilities to the service.
@@ -2966,8 +2820,8 @@ public class OomAdjuster {
                 state.setProcStateChanged(true);
             }
         } else if (state.hasReportedInteraction()) {
-            final boolean fgsInteractionChangeEnabled = getPlatformCompatCache().isChangeEnabled(
-                    USE_SHORT_FGS_USAGE_INTERACTION_TIME, app.info, false);
+            final boolean fgsInteractionChangeEnabled = state.getCachedCompatChange(
+                    CACHED_COMPAT_CHANGE_USE_SHORT_FGS_USAGE_INTERACTION_TIME);
             final long interactionThreshold = fgsInteractionChangeEnabled
                     ? mConstants.USAGE_STATS_INTERACTION_INTERVAL_POST_S
                     : mConstants.USAGE_STATS_INTERACTION_INTERVAL_PRE_S;
@@ -2977,8 +2831,8 @@ public class OomAdjuster {
                 maybeUpdateUsageStatsLSP(app, nowElapsed);
             }
         } else {
-            final boolean fgsInteractionChangeEnabled = getPlatformCompatCache().isChangeEnabled(
-                    USE_SHORT_FGS_USAGE_INTERACTION_TIME, app.info, false);
+            final boolean fgsInteractionChangeEnabled = state.getCachedCompatChange(
+                    CACHED_COMPAT_CHANGE_USE_SHORT_FGS_USAGE_INTERACTION_TIME);
             final long interactionThreshold = fgsInteractionChangeEnabled
                     ? mConstants.SERVICE_USAGE_INTERACTION_TIME_POST_S
                     : mConstants.SERVICE_USAGE_INTERACTION_TIME_PRE_S;
@@ -3021,6 +2875,23 @@ public class OomAdjuster {
                             + " type=" + state.getAdjType() + " source=" + state.getAdjSource()
                             + " target=" + state.getAdjTarget() + " capability=" + item.capability);
         }
+
+        if (state.isCached() && !state.shouldNotKillOnBgRestrictedAndIdle()) {
+            // It's eligible to get killed when in UID idle and bg restricted mode,
+            // check if these states are just flipped.
+            if (!state.isSetCached() || state.isSetNoKillOnBgRestrictedAndIdle()) {
+                // Take the timestamp, we'd hold the killing for the background settle time
+                // (for states debouncing to avoid from thrashing).
+                state.setLastCanKillOnBgRestrictedAndIdleTime(nowElapsed);
+                // Kick off the delayed checkup message if needed.
+                if (!mService.mHandler.hasMessages(IDLE_UIDS_MSG)) {
+                    mService.mHandler.sendEmptyMessageDelayed(IDLE_UIDS_MSG,
+                            mConstants.mKillBgRestrictedAndCachedIdleSettleTimeMs);
+                }
+            }
+        }
+        state.setSetCached(state.isCached());
+        state.setSetNoKillOnBgRestrictedAndIdle(state.shouldNotKillOnBgRestrictedAndIdle());
 
         return success;
     }
@@ -3080,8 +2951,8 @@ public class OomAdjuster {
         if (mService.mUsageStatsService == null) {
             return;
         }
-        final boolean fgsInteractionChangeEnabled = getPlatformCompatCache().isChangeEnabled(
-                USE_SHORT_FGS_USAGE_INTERACTION_TIME, app.info, false);
+        final boolean fgsInteractionChangeEnabled = state.getCachedCompatChange(
+                CACHED_COMPAT_CHANGE_USE_SHORT_FGS_USAGE_INTERACTION_TIME);
         boolean isInteraction;
         // To avoid some abuse patterns, we are going to be careful about what we consider
         // to be an app interaction.  Being the top activity doesn't count while the display
@@ -3169,6 +3040,20 @@ public class OomAdjuster {
         }
         if (mLocalPowerManager != null) {
             mLocalPowerManager.finishUidChanges();
+        }
+        // Also check if there are any apps in cached and background restricted mode,
+        // if so, kill it if it's been there long enough, or kick off a msg to check
+        // it later.
+        if (mService.mConstants.mKillBgRestrictedAndCachedIdle) {
+            final ArraySet<ProcessRecord> apps = mProcessList.mAppsInBackgroundRestricted;
+            for (int i = 0, size = apps.size(); i < size; i++) {
+                // Check to see if needs to be killed.
+                final long bgTime = mProcessList.killAppIfBgRestrictedAndCachedIdleLocked(
+                        apps.valueAt(i), nowElapsed) - mConstants.BACKGROUND_SETTLE_TIME;
+                if (bgTime > 0 && (nextTime == 0 || nextTime > bgTime)) {
+                    nextTime = bgTime;
+                }
+            }
         }
         if (nextTime > 0) {
             mService.mHandler.removeMessages(IDLE_UIDS_MSG);

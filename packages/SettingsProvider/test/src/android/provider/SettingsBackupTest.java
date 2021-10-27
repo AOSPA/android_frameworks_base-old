@@ -272,6 +272,7 @@ public class SettingsBackupTest {
                     Settings.Global.DYNAMIC_POWER_SAVINGS_DISABLE_THRESHOLD,
                     Settings.Global.SMART_REPLIES_IN_NOTIFICATIONS_FLAGS,
                     Settings.Global.SMART_SUGGESTIONS_IN_NOTIFICATIONS_FLAGS,
+                    Settings.Global.ENABLE_ACCESSIBILITY_AUDIO_DESCRIPTION_BY_DEFAULT,
                     Settings.Global.ENABLE_ADB_INCREMENTAL_INSTALL_DEFAULT,
                     Settings.Global.ENABLE_MULTI_SLOT_TIMEOUT_MILLIS,
                     Settings.Global.ENHANCED_4G_MODE_ENABLED,
@@ -523,6 +524,7 @@ public class SettingsBackupTest {
                     Settings.Global.UPDATABLE_DRIVER_PRODUCTION_DENYLIST,
                     Settings.Global.UPDATABLE_DRIVER_PRODUCTION_ALLOWLIST,
                     Settings.Global.UPDATABLE_DRIVER_SPHAL_LIBRARIES,
+                    Settings.Global.UWB_ENABLED,
                     Settings.Global.SHOW_ANGLE_IN_USE_DIALOG_BOX,
                     Settings.Global.GPU_DEBUG_LAYER_APP,
                     Settings.Global.ENABLE_GNSS_RAW_MEAS_FULL_TRACKING,
@@ -665,7 +667,10 @@ public class SettingsBackupTest {
                     Settings.Global.Wearable.MASTER_GESTURES_ENABLED,
                     Settings.Global.Wearable.UNGAZE_ENABLED,
                     Settings.Global.Wearable.WEAR_ACTIVITY_AUTO_RESUME_TIMEOUT_MS,
-                    Settings.Global.Wearable.BURN_IN_PROTECTION_ENABLED);
+                    Settings.Global.Wearable.BURN_IN_PROTECTION_ENABLED,
+                    Settings.Global.Wearable.WRIST_ORIENTATION_MODE,
+                    Settings.Global.Wearable.CLOCKWORK_SYSUI_PACKAGE,
+                    Settings.Global.Wearable.CLOCKWORK_SYSUI_MAIN_ACTIVITY);
 
     private static final Set<String> BACKUP_DENY_LIST_SECURE_SETTINGS =
              newHashSet(

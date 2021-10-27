@@ -19,19 +19,24 @@ package com.android.server.wm;
 import static android.os.InputConstants.DEFAULT_DISPATCHING_TIMEOUT_MILLIS;
 import static android.view.SurfaceControl.HIDDEN;
 
+import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
 import android.os.IBinder;
 import android.os.Process;
+import android.view.GestureDetector;
 import android.view.InputChannel;
+import android.view.InputEvent;
 import android.view.InputEventReceiver;
 import android.view.InputWindowHandle;
+import android.view.MotionEvent;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
 
 import com.android.server.UiThread;
 
+import java.util.function.IntConsumer;
 import java.util.function.Supplier;
 
 /**
@@ -65,6 +70,8 @@ public class Letterbox {
     // for overlaping an app window and letterbox surfaces.
     private final LetterboxSurface mFullWindowSurface = new LetterboxSurface("fullWindow");
     private final LetterboxSurface[] mSurfaces = { mLeft, mTop, mRight, mBottom };
+    // Reachability gestures.
+    private final IntConsumer mDoubleTapCallback;
 
     /**
      * Constructs a Letterbox.
@@ -77,7 +84,8 @@ public class Letterbox {
             Supplier<Color> colorSupplier,
             Supplier<Boolean> hasWallpaperBackgroundSupplier,
             Supplier<Integer> blurRadiusSupplier,
-            Supplier<Float> darkScrimAlphaSupplier) {
+            Supplier<Float> darkScrimAlphaSupplier,
+            IntConsumer doubleTapCallback) {
         mSurfaceControlFactory = surfaceControlFactory;
         mTransactionFactory = transactionFactory;
         mAreCornersRounded = areCornersRounded;
@@ -85,6 +93,7 @@ public class Letterbox {
         mHasWallpaperBackgroundSupplier = hasWallpaperBackgroundSupplier;
         mBlurRadiusSupplier = blurRadiusSupplier;
         mDarkScrimAlphaSupplier = darkScrimAlphaSupplier;
+        mDoubleTapCallback = doubleTapCallback;
     }
 
     /**
@@ -231,18 +240,49 @@ public class Letterbox {
         return mAreCornersRounded.get() || mHasWallpaperBackgroundSupplier.get();
     }
 
-    private static class InputInterceptor {
-        final InputChannel mClientChannel;
-        final InputWindowHandle mWindowHandle;
-        final InputEventReceiver mInputEventReceiver;
-        final WindowManagerService mWmService;
-        final IBinder mToken;
+    private final class TapEventReceiver extends InputEventReceiver {
+
+        private final GestureDetector mDoubleTapDetector;
+        private final DoubleTapListener mDoubleTapListener;
+
+        TapEventReceiver(InputChannel inputChannel, Context context) {
+            super(inputChannel, UiThread.getHandler().getLooper());
+            mDoubleTapListener = new DoubleTapListener();
+            mDoubleTapDetector = new GestureDetector(
+                    context, mDoubleTapListener, UiThread.getHandler());
+        }
+
+        @Override
+        public void onInputEvent(InputEvent event) {
+            final MotionEvent motionEvent = (MotionEvent) event;
+            finishInputEvent(event, mDoubleTapDetector.onTouchEvent(motionEvent));
+        }
+    }
+
+    private class DoubleTapListener extends GestureDetector.SimpleOnGestureListener {
+        @Override
+        public boolean onDoubleTapEvent(MotionEvent e) {
+            if (e.getAction() == MotionEvent.ACTION_UP) {
+                mDoubleTapCallback.accept((int) e.getX());
+                return true;
+            }
+            return false;
+        }
+    }
+
+    private final class InputInterceptor {
+
+        private final InputChannel mClientChannel;
+        private final InputWindowHandle mWindowHandle;
+        private final InputEventReceiver mInputEventReceiver;
+        private final WindowManagerService mWmService;
+        private final IBinder mToken;
 
         InputInterceptor(String namePrefix, WindowState win) {
             mWmService = win.mWmService;
             final String name = namePrefix + (win.mActivityRecord != null ? win.mActivityRecord : win);
             mClientChannel = mWmService.mInputManager.createInputChannel(name);
-            mInputEventReceiver = new SimpleInputReceiver(mClientChannel);
+            mInputEventReceiver = new TapEventReceiver(mClientChannel, mWmService.mContext);
 
             mToken = mClientChannel.getToken();
 
@@ -279,12 +319,6 @@ public class Letterbox {
             mWmService.mInputManager.removeInputChannel(mToken);
             mInputEventReceiver.dispose();
             mClientChannel.dispose();
-        }
-
-        private static class SimpleInputReceiver extends InputEventReceiver {
-            SimpleInputReceiver(InputChannel inputChannel) {
-                super(inputChannel, UiThread.getHandler().getLooper());
-            }
         }
     }
 

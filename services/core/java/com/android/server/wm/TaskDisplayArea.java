@@ -32,6 +32,7 @@ import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_BEHIND;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSET;
 import static android.content.pm.ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED;
 import static android.content.res.Configuration.ORIENTATION_LANDSCAPE;
+import static android.view.WindowManagerPolicyConstants.SPLIT_DIVIDER_LAYER;
 
 import static com.android.internal.protolog.ProtoLogGroup.WM_DEBUG_ORIENTATION;
 import static com.android.server.wm.ActivityRecord.State.DESTROYED;
@@ -43,6 +44,9 @@ import static com.android.server.wm.TaskFragment.TASK_FRAGMENT_VISIBILITY_VISIBL
 import static com.android.server.wm.WindowManagerDebugConfig.DEBUG_ROOT_TASK;
 import static com.android.server.wm.WindowManagerDebugConfig.TAG_WM;
 
+import static java.lang.Integer.MIN_VALUE;
+
+import android.annotation.ColorInt;
 import android.annotation.Nullable;
 import android.app.ActivityOptions;
 import android.app.WindowConfiguration;
@@ -81,6 +85,22 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     DisplayContent mDisplayContent;
 
     /**
+     * A color layer that serves as a solid color background to certain animations.
+     */
+    private SurfaceControl mColorBackgroundLayer;
+
+    /**
+     * This counter is used to make sure we don't prematurely clear the background color in the
+     * case that background color animations are interleaved.
+     * NOTE: The last set color will remain until the counter is reset to 0, which means that an
+     * animation background color may sometime remain after the animation has finished through an
+     * animation with a different background color if an animation starts after and ends before
+     * another where both set different background colors. However, this is not a concern as
+     * currently all task animation backgrounds are the same color.
+     */
+    private int mColorLayerCounter = 0;
+
+    /**
      * A control placed at the appropriate level for transitions to occur.
      */
     private SurfaceControl mAppAnimationLayer;
@@ -114,7 +134,6 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     private final ArrayList<WindowContainer> mTmpNormalChildren = new ArrayList<>();
     private final ArrayList<WindowContainer> mTmpHomeChildren = new ArrayList<>();
     private final IntArray mTmpNeedsZBoostIndexes = new IntArray();
-    private int mTmpLayerForSplitScreenDividerAnchor;
     private int mTmpLayerForAnimationLayer;
 
     private ArrayList<Task> mTmpTasks = new ArrayList<>();
@@ -857,26 +876,23 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         layer = adjustRootTaskLayer(t, mTmpHomeChildren, layer, false /* normalRootTasks */);
         // The home animation layer is between the root home tasks and the normal root tasks.
         final int layerForHomeAnimationLayer = layer++;
-        mTmpLayerForSplitScreenDividerAnchor = layer++;
         mTmpLayerForAnimationLayer = layer++;
         layer = adjustRootTaskLayer(t, mTmpNormalChildren, layer, true /* normalRootTasks */);
 
         // The boosted animation layer is between the normal root tasks and the always on top
         // root tasks.
         final int layerForBoostedAnimationLayer = layer++;
+        // Always on top tasks layer should higher than split divider layer so set it as start.
+        layer = SPLIT_DIVIDER_LAYER + 1;
         adjustRootTaskLayer(t, mTmpAlwaysOnTopChildren, layer, false /* normalRootTasks */);
 
         t.setLayer(mHomeAppAnimationLayer, layerForHomeAnimationLayer);
         t.setLayer(mAppAnimationLayer, mTmpLayerForAnimationLayer);
-        t.setLayer(mSplitScreenDividerAnchor, mTmpLayerForSplitScreenDividerAnchor);
+        t.setLayer(mSplitScreenDividerAnchor, SPLIT_DIVIDER_LAYER);
         t.setLayer(mBoostedAppAnimationLayer, layerForBoostedAnimationLayer);
     }
 
     private int adjustNormalRootTaskLayer(WindowContainer child, int layer) {
-        if (child.asTask() != null && child.inSplitScreenWindowingMode()) {
-            // The split screen divider anchor is located above the split screen window.
-            mTmpLayerForSplitScreenDividerAnchor = layer++;
-        }
         if ((child.asTask() != null && child.asTask().isAnimatingByRecents())
                 || child.isAppTransitioning()) {
             // The animation layer is located above the highest animating root task and no
@@ -964,6 +980,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
     void onParentChanged(ConfigurationContainer newParent, ConfigurationContainer oldParent) {
         if (getParent() != null) {
             super.onParentChanged(newParent, oldParent, () -> {
+                mColorBackgroundLayer = makeChildSurface(null)
+                        .setColorLayer()
+                        .setName("colorBackgroundLayer")
+                        .setCallsite("TaskDisplayArea.onParentChanged")
+                        .build();
                 mAppAnimationLayer = makeChildSurface(null)
                         .setName("animationLayer")
                         .setCallsite("TaskDisplayArea.onParentChanged")
@@ -980,6 +1001,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                         .setName("splitScreenDividerAnchor")
                         .setCallsite("TaskDisplayArea.onParentChanged")
                         .build();
+
                 getSyncTransaction()
                         .show(mAppAnimationLayer)
                         .show(mBoostedAppAnimationLayer)
@@ -989,15 +1011,50 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         } else {
             super.onParentChanged(newParent, oldParent);
             mWmService.mTransactionFactory.get()
+                    .remove(mColorBackgroundLayer)
                     .remove(mAppAnimationLayer)
                     .remove(mBoostedAppAnimationLayer)
                     .remove(mHomeAppAnimationLayer)
                     .remove(mSplitScreenDividerAnchor)
                     .apply();
+            mColorBackgroundLayer = null;
             mAppAnimationLayer = null;
             mBoostedAppAnimationLayer = null;
             mHomeAppAnimationLayer = null;
             mSplitScreenDividerAnchor = null;
+        }
+    }
+
+    void setBackgroundColor(@ColorInt int color) {
+        if (mColorBackgroundLayer == null) {
+            return;
+        }
+
+        float r = ((color >> 16) & 0xff) / 255.0f;
+        float g = ((color >>  8) & 0xff) / 255.0f;
+        float b = ((color >>  0) & 0xff) / 255.0f;
+        float a = ((color >> 24) & 0xff) / 255.0f;
+
+        mColorLayerCounter++;
+
+        getPendingTransaction().setLayer(mColorBackgroundLayer, MIN_VALUE)
+                .setColor(mColorBackgroundLayer, new float[]{r, g, b})
+                .setAlpha(mColorBackgroundLayer, a)
+                .setWindowCrop(mColorBackgroundLayer, getSurfaceWidth(), getSurfaceHeight())
+                .setPosition(mColorBackgroundLayer, 0, 0)
+                .show(mColorBackgroundLayer);
+
+        scheduleAnimation();
+    }
+
+    void clearBackgroundColor() {
+        mColorLayerCounter--;
+
+        // Only clear the color layer if we have received the same amounts of clear as set
+        // requests.
+        if (mColorLayerCounter == 0) {
+            getPendingTransaction().hide(mColorBackgroundLayer);
+            scheduleAnimation();
         }
     }
 
@@ -1009,6 +1066,7 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         }
 
         // As TaskDisplayArea is getting a new surface, reparent and reorder the child surfaces.
+        t.reparent(mColorBackgroundLayer, mSurfaceControl);
         t.reparent(mAppAnimationLayer, mSurfaceControl);
         t.reparent(mBoostedAppAnimationLayer, mSurfaceControl);
         t.reparent(mHomeAppAnimationLayer, mSurfaceControl);
@@ -1100,29 +1158,27 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
                 return rootTask;
             }
         } else if (candidateTask != null) {
-            final Task rootTask = candidateTask;
             final int position = onTop ? POSITION_TOP : POSITION_BOTTOM;
             final Task launchRootTask = getLaunchRootTask(windowingMode, activityType, options,
                     sourceTask, launchFlags);
-
             if (launchRootTask != null) {
-                if (rootTask.getParent() == null) {
-                    launchRootTask.addChild(rootTask, position);
-                } else if (rootTask.getParent() != launchRootTask) {
-                    rootTask.reparent(launchRootTask, position);
+                if (candidateTask.getParent() == null) {
+                    launchRootTask.addChild(candidateTask, position);
+                } else if (candidateTask.getParent() != launchRootTask) {
+                    candidateTask.reparent(launchRootTask, position);
                 }
-            } else if (rootTask.getDisplayArea() != this || !rootTask.isRootTask()) {
-                if (rootTask.getParent() == null) {
-                    addChild(rootTask, position);
+            } else if (candidateTask.getDisplayArea() != this || !candidateTask.isRootTask()) {
+                if (candidateTask.getParent() == null) {
+                    addChild(candidateTask, position);
                 } else {
-                    rootTask.reparent(this, onTop);
+                    candidateTask.reparent(this, onTop);
                 }
             }
             // Update windowing mode if necessary, e.g. moving a pinned task to fullscreen.
             if (candidateTask.getWindowingMode() != windowingMode) {
                 candidateTask.setWindowingMode(windowingMode);
             }
-            return rootTask;
+            return candidateTask.getRootTask();
         }
         return new Task.Builder(mAtmService)
                 .setWindowingMode(windowingMode)
@@ -1282,12 +1338,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
         for (int i = mLaunchRootTasks.size() - 1; i >= 0; --i) {
             if (mLaunchRootTasks.get(i).contains(windowingMode, activityType)) {
                 final Task launchRootTask = mLaunchRootTasks.get(i).task;
-                // Return the focusable root task for improving the UX with staged split screen.
                 final TaskFragment adjacentTaskFragment = launchRootTask != null
                         ? launchRootTask.getAdjacentTaskFragment() : null;
                 final Task adjacentRootTask =
                         adjacentTaskFragment != null ? adjacentTaskFragment.asTask() : null;
-                if (adjacentRootTask != null && adjacentRootTask.isFocusedRootTaskOnDisplay()) {
+                if (sourceTask != null && sourceTask.getRootTask() == adjacentRootTask) {
                     return adjacentRootTask;
                 } else {
                     return launchRootTask;
@@ -2163,6 +2218,11 @@ final class TaskDisplayArea extends DisplayArea<WindowContainer> {
 
     void clearPreferredTopFocusableRootTask() {
         mPreferredTopFocusableRootTask = null;
+    }
+
+    @Override
+    TaskDisplayArea getTaskDisplayArea() {
+        return this;
     }
 
     @Override

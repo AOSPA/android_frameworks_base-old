@@ -16,10 +16,14 @@
 
 package com.android.server.wallpaper;
 
+import static android.Manifest.permission.INTERACT_ACROSS_USERS_FULL;
+import static android.Manifest.permission.QUERY_ALL_PACKAGES;
+import static android.Manifest.permission.READ_WALLPAPER_INTERNAL;
 import static android.app.WallpaperManager.COMMAND_REAPPLY;
 import static android.app.WallpaperManager.FLAG_LOCK;
 import static android.app.WallpaperManager.FLAG_SYSTEM;
 import static android.content.pm.PackageManager.MATCH_DIRECT_BOOT_AUTO;
+import static android.content.pm.PackageManager.PERMISSION_GRANTED;
 import static android.os.ParcelFileDescriptor.MODE_CREATE;
 import static android.os.ParcelFileDescriptor.MODE_READ_ONLY;
 import static android.os.ParcelFileDescriptor.MODE_READ_WRITE;
@@ -207,7 +211,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      * wallpaper set and is created for the first time. The CLOSE_WRITE is triggered
      * every time the wallpaper is changed.
      */
-    private class WallpaperObserver extends FileObserver {
+    class WallpaperObserver extends FileObserver {
 
         final int mUserId;
         final WallpaperData mWallpaper;
@@ -225,7 +229,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             mWallpaperLockFile = new File(mWallpaperDir, WALLPAPER_LOCK_ORIG);
         }
 
-        private WallpaperData dataForEvent(boolean sysChanged, boolean lockChanged) {
+        WallpaperData dataForEvent(boolean sysChanged, boolean lockChanged) {
             WallpaperData wallpaper = null;
             synchronized (mLock) {
                 if (lockChanged) {
@@ -308,9 +312,18 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                             }
                             wallpaper.imageWallpaperPending = false;
                             if (sysWallpaperChanged) {
+                                IRemoteCallback.Stub callback = new IRemoteCallback.Stub() {
+                                    @Override
+                                    public void sendResult(Bundle data) throws RemoteException {
+                                        if (DEBUG) {
+                                            Slog.d(TAG, "publish system wallpaper changed!");
+                                        }
+                                        notifyWallpaperChanged(wallpaper);
+                                    }
+                                };
                                 // If this was the system wallpaper, rebind...
                                 bindWallpaperComponentLocked(mImageWallpaper, true,
-                                        false, wallpaper, null);
+                                        false, wallpaper, callback);
                                 notifyColorsWhich |= FLAG_SYSTEM;
                             }
                             if (lockWallpaperChanged
@@ -330,15 +343,9 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                             }
 
                             saveSettingsLocked(wallpaper.userId);
-
-                            // Publish completion *after* we've persisted the changes
-                            if (wallpaper.setComplete != null) {
-                                try {
-                                    wallpaper.setComplete.onWallpaperChanged();
-                                } catch (RemoteException e) {
-                                    // if this fails we don't really care; the setting app may just
-                                    // have crashed and that sort of thing is a fact of life.
-                                }
+                            // Notify the client immediately if only lockscreen wallpaper changed.
+                            if (lockWallpaperChanged && !sysWallpaperChanged) {
+                                notifyWallpaperChanged(wallpaper);
                             }
                         }
                     }
@@ -348,6 +355,18 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
             // Outside of the lock since it will synchronize itself
             if (notifyColorsWhich != 0) {
                 notifyWallpaperColorsChanged(wallpaper, notifyColorsWhich);
+            }
+        }
+    }
+
+    private void notifyWallpaperChanged(WallpaperData wallpaper) {
+        // Publish completion *after* we've persisted the changes
+        if (wallpaper.setComplete != null) {
+            try {
+                wallpaper.setComplete.onWallpaperChanged();
+            } catch (RemoteException e) {
+                // if this fails we don't really care; the setting app may just
+                // have crashed and that sort of thing is a fact of life.
             }
         }
     }
@@ -363,7 +382,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
     }
 
-    private void notifyWallpaperColorsChanged(@NonNull WallpaperData wallpaper, int which) {
+    void notifyWallpaperColorsChanged(@NonNull WallpaperData wallpaper, int which) {
         if (wallpaper.connection != null) {
             wallpaper.connection.forEachDisplayConnector(connector -> {
                 notifyWallpaperColorsChangedOnDisplay(wallpaper, which, connector.mDisplayId);
@@ -567,7 +586,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      * Once a new wallpaper has been written via setWallpaper(...), it needs to be cropped
      * for display.
      */
-    private void generateCrop(WallpaperData wallpaper) {
+    void generateCrop(WallpaperData wallpaper) {
         boolean success = false;
 
         // Only generate crop for default display.
@@ -2045,7 +2064,21 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
     }
 
+    private boolean hasCrossUserPermission() {
+        final int interactPermission =
+                mContext.checkCallingPermission(INTERACT_ACROSS_USERS_FULL);
+        return interactPermission == PERMISSION_GRANTED;
+    }
+
+    @Override
     public boolean hasNamedWallpaper(String name) {
+        final int callingUser = UserHandle.getCallingUserId();
+        final boolean allowCrossUser = hasCrossUserPermission();
+        if (DEBUG) {
+            Slog.d(TAG, "hasNamedWallpaper() caller " + Binder.getCallingUid()
+                    + " cross-user?: " + allowCrossUser);
+        }
+
         synchronized (mLock) {
             List<UserInfo> users;
             final long ident = Binder.clearCallingIdentity();
@@ -2055,6 +2088,11 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 Binder.restoreCallingIdentity(ident);
             }
             for (UserInfo user: users) {
+                if (!allowCrossUser && callingUser != user.id) {
+                    // No cross-user information for callers without permission
+                    continue;
+                }
+
                 // ignore managed profiles
                 if (user.isManagedProfile()) {
                     continue;
@@ -2220,9 +2258,8 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     @Override
     public ParcelFileDescriptor getWallpaperWithFeature(String callingPkg, String callingFeatureId,
             IWallpaperManagerCallback cb, final int which, Bundle outParams, int wallpaperUserId) {
-        final int hasPrivilege = mContext.checkCallingOrSelfPermission(
-                android.Manifest.permission.READ_WALLPAPER_INTERNAL);
-        if (hasPrivilege != PackageManager.PERMISSION_GRANTED) {
+        final boolean hasPrivilege = hasPermission(READ_WALLPAPER_INTERNAL);
+        if (!hasPrivilege) {
             mContext.getSystemService(StorageManager.class).checkPermissionReadImages(true,
                     Binder.getCallingPid(), Binder.getCallingUid(), callingPkg, callingFeatureId);
         }
@@ -2266,17 +2303,26 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         }
     }
 
+    private boolean hasPermission(String permission) {
+        return mContext.checkCallingOrSelfPermission(permission) == PERMISSION_GRANTED;
+    }
+
     @Override
     public WallpaperInfo getWallpaperInfo(int userId) {
-        userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
-                Binder.getCallingUid(), userId, false, true, "getWallpaperInfo", null);
-        synchronized (mLock) {
-            WallpaperData wallpaper = mWallpaperMap.get(userId);
-            if (wallpaper != null && wallpaper.connection != null) {
-                return wallpaper.connection.mInfo;
+        final boolean allow =
+                hasPermission(READ_WALLPAPER_INTERNAL) || hasPermission(QUERY_ALL_PACKAGES);
+        if (allow) {
+            userId = ActivityManager.handleIncomingUser(Binder.getCallingPid(),
+                    Binder.getCallingUid(), userId, false, true, "getWallpaperInfo", null);
+            synchronized (mLock) {
+                WallpaperData wallpaper = mWallpaperMap.get(userId);
+                if (wallpaper != null && wallpaper.connection != null) {
+                    return wallpaper.connection.mInfo;
+                }
             }
-            return null;
         }
+
+        return null;
     }
 
     @Override
@@ -2814,7 +2860,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         return false;
     }
 
-    private boolean bindWallpaperComponentLocked(ComponentName componentName, boolean force,
+    boolean bindWallpaperComponentLocked(ComponentName componentName, boolean force,
             boolean fromUser, WallpaperData wallpaper, IRemoteCallback reply) {
         if (DEBUG_LIVE) {
             Slog.v(TAG, "bindWallpaperComponentLocked: componentName=" + componentName);
@@ -2900,7 +2946,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
                 final int hasPrivilege = mIPackageManager.checkPermission(
                         android.Manifest.permission.AMBIENT_WALLPAPER, wi.getPackageName(),
                         serviceUserId);
-                if (hasPrivilege != PackageManager.PERMISSION_GRANTED) {
+                if (hasPrivilege != PERMISSION_GRANTED) {
                     String msg = "Selected service does not have "
                             + android.Manifest.permission.AMBIENT_WALLPAPER
                             + ": " + componentName;
@@ -3021,9 +3067,29 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
     }
 
     private void checkPermission(String permission) {
-        if (PackageManager.PERMISSION_GRANTED!= mContext.checkCallingOrSelfPermission(permission)) {
+        if (!hasPermission(permission)) {
             throw new SecurityException("Access denied to process: " + Binder.getCallingPid()
                     + ", must have permission " + permission);
+        }
+    }
+
+    private boolean packageBelongsToUid(String packageName, int uid) {
+        int userId = UserHandle.getUserId(uid);
+        int packageUid;
+        try {
+            packageUid = mContext.getPackageManager().getPackageUidAsUser(
+                    packageName, userId);
+        } catch (PackageManager.NameNotFoundException e) {
+            return false;
+        }
+        return packageUid == uid;
+    }
+
+    private void enforcePackageBelongsToUid(String packageName, int uid) {
+        if (!packageBelongsToUid(packageName, uid)) {
+            throw new IllegalArgumentException(
+                    "Invalid package or package does not belong to uid:"
+                            + uid);
         }
     }
 
@@ -3032,7 +3098,10 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      * implemented through through the OP_WRITE_WALLPAPER AppOp.
      */
     public boolean isWallpaperSupported(String callingPackage) {
-        return mAppOpsManager.checkOpNoThrow(AppOpsManager.OP_WRITE_WALLPAPER, Binder.getCallingUid(),
+        final int callingUid = Binder.getCallingUid();
+        enforcePackageBelongsToUid(callingPackage, callingUid);
+
+        return mAppOpsManager.checkOpNoThrow(AppOpsManager.OP_WRITE_WALLPAPER, callingUid,
                 callingPackage) == AppOpsManager.MODE_ALLOWED;
     }
 
@@ -3101,7 +3170,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
         return new JournaledFile(new File(base), new File(base + ".tmp"));
     }
 
-    private void saveSettingsLocked(int userId) {
+    void saveSettingsLocked(int userId) {
         JournaledFile journal = makeJournaledFile(userId);
         FileOutputStream fstream = null;
         try {
@@ -3250,7 +3319,7 @@ public class WallpaperManagerService extends IWallpaperManager.Stub
      * Important: this method loads settings to initialize the given user's wallpaper data if
      * there is no current in-memory state.
      */
-    private WallpaperData getWallpaperSafeLocked(int userId, int which) {
+    WallpaperData getWallpaperSafeLocked(int userId, int which) {
         // We're setting either just system (work with the system wallpaper),
         // both (also work with the system wallpaper), or just the lock
         // wallpaper (update against the existing lock wallpaper if any).

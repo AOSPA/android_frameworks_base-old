@@ -31,8 +31,6 @@ import android.os.Handler
 import android.os.UserHandle
 import android.provider.Settings
 import android.view.View
-import android.view.View.GONE
-import android.view.View.VISIBLE
 import android.view.ViewGroup
 import com.android.settingslib.Utils
 import com.android.systemui.R
@@ -46,20 +44,14 @@ import com.android.systemui.plugins.FalsingManager
 import com.android.systemui.plugins.statusbar.StatusBarStateController
 import com.android.systemui.settings.UserTracker
 import com.android.systemui.flags.FeatureFlags
-import com.android.systemui.statusbar.StatusBarState
-import com.android.systemui.statusbar.notification.AnimatableProperty
-import com.android.systemui.statusbar.notification.PropertyAnimator
-import com.android.systemui.statusbar.notification.stack.AnimationProperties
-import com.android.systemui.statusbar.notification.stack.StackStateAnimator
 import com.android.systemui.statusbar.policy.ConfigurationController
+import com.android.systemui.statusbar.policy.DeviceProvisionedController
 import com.android.systemui.util.concurrency.Execution
 import com.android.systemui.util.settings.SecureSettings
+import java.lang.RuntimeException
 import java.util.Optional
 import java.util.concurrent.Executor
 import javax.inject.Inject
-
-private val ANIMATION_PROPERTIES = AnimationProperties()
-        .setDuration(StackStateAnimator.ANIMATION_DURATION_STANDARD.toLong())
 
 /**
  * Controller for managing the smartspace view on the lockscreen
@@ -76,193 +68,37 @@ class LockscreenSmartspaceController @Inject constructor(
     private val contentResolver: ContentResolver,
     private val configurationController: ConfigurationController,
     private val statusBarStateController: StatusBarStateController,
+    private val deviceProvisionedController: DeviceProvisionedController,
     private val execution: Execution,
     @Main private val uiExecutor: Executor,
     @Main private val handler: Handler,
     optionalPlugin: Optional<BcSmartspaceDataPlugin>
 ) {
-
-    var splitShadeContainer: ViewGroup? = null
-    private var singlePaneContainer: ViewGroup? = null
-
     private var session: SmartspaceSession? = null
     private val plugin: BcSmartspaceDataPlugin? = optionalPlugin.orElse(null)
-    private lateinit var smartspaceView: SmartspaceView
 
-    // smartspace casted to View
-    lateinit var view: View
-        private set
+    // Smartspace can be used on multiple displays, such as when the user casts their screen
+    private var smartspaceViews = mutableSetOf<SmartspaceView>()
 
     private var showSensitiveContentForCurrentUser = false
     private var showSensitiveContentForManagedUser = false
     private var managedUserHandle: UserHandle? = null
 
-    private var isAod = false
-    private var isSplitShade = false
+    var stateChangeListener = object : View.OnAttachStateChangeListener {
+        override fun onViewAttachedToWindow(v: View) {
+            smartspaceViews.add(v as SmartspaceView)
+            connectSession()
 
-    fun isSmartspaceEnabled(): Boolean {
-        execution.assertIsMainThread()
-
-        return featureFlags.isSmartspaceEnabled && plugin != null
-    }
-
-    fun setKeyguardStatusContainer(container: ViewGroup) {
-        singlePaneContainer = container
-        // reattach smartspace if necessary as this might be a new container
-        updateSmartSpaceContainer()
-    }
-
-    fun onSplitShadeChanged(splitShade: Boolean) {
-        isSplitShade = splitShade
-        updateSmartSpaceContainer()
-    }
-
-    private fun updateSmartSpaceContainer() {
-        if (!isSmartspaceEnabled()) return
-        // in AOD we always want to show smartspace on the left i.e. in singlePaneContainer
-        if (isSplitShade && !isAod) {
-            switchContainerVisibility(
-                    newParent = splitShadeContainer,
-                    oldParent = singlePaneContainer)
-        } else {
-            switchContainerVisibility(
-                    newParent = singlePaneContainer,
-                    oldParent = splitShadeContainer)
-        }
-        requestSmartspaceUpdate()
-    }
-
-    private fun switchContainerVisibility(newParent: ViewGroup?, oldParent: ViewGroup?) {
-        // it might be the case that smartspace was already attached and we just needed to update
-        // visibility, e.g. going from lockscreen -> unlocked -> lockscreen
-        if (newParent?.childCount == 0) {
-            oldParent?.removeAllViews()
-            newParent.addView(buildAndConnectView(newParent))
-        }
-        oldParent?.visibility = GONE
-        newParent?.visibility = VISIBLE
-    }
-
-    fun setSplitShadeSmartspaceAlpha(alpha: Float) {
-        // the other container's alpha is modified as a part of keyguard status view, so we don't
-        // have to do that here
-        if (splitShadeContainer?.visibility == VISIBLE) {
-            splitShadeContainer?.alpha = alpha
-        }
-    }
-
-    /**
-     * Constructs the smartspace view and connects it to the smartspace service. Subsequent calls
-     * are idempotent until [disconnect] is called.
-     */
-    fun buildAndConnectView(parent: ViewGroup): View {
-        execution.assertIsMainThread()
-
-        if (!isSmartspaceEnabled()) {
-            throw RuntimeException("Cannot build view when not enabled")
+            updateTextColorFromWallpaper()
+            statusBarStateListener.onDozeAmountChanged(0f, statusBarStateController.dozeAmount)
         }
 
-        buildView(parent)
-        connectSession()
+        override fun onViewDetachedFromWindow(v: View) {
+            smartspaceViews.remove(v as SmartspaceView)
 
-        return view
-    }
-
-    fun requestSmartspaceUpdate() {
-        session?.requestSmartspaceUpdate()
-    }
-
-    private fun buildView(parent: ViewGroup) {
-        if (plugin == null) {
-            return
-        }
-        if (this::view.isInitialized) {
-            // Due to some oddities with a singleton smartspace view, allow reparenting
-            (view.getParent() as ViewGroup?)?.removeView(view)
-            return
-        }
-
-        val ssView = plugin.getView(parent)
-        ssView.registerDataProvider(plugin)
-        ssView.setIntentStarter(object : BcSmartspaceDataPlugin.IntentStarter {
-            override fun startIntent(v: View?, i: Intent?) {
-                activityStarter.startActivity(i, true /* dismissShade */)
+            if (smartspaceViews.isEmpty()) {
+                disconnect()
             }
-
-            override fun startPendingIntent(pi: PendingIntent?) {
-                activityStarter.startPendingIntentDismissingKeyguard(pi)
-            }
-        })
-        ssView.setFalsingManager(falsingManager)
-
-        this.smartspaceView = ssView
-        this.view = ssView as View
-
-        updateTextColorFromWallpaper()
-        statusBarStateListener.onDozeAmountChanged(0f, statusBarStateController.dozeAmount)
-    }
-
-    private fun connectSession() {
-        if (plugin == null || session != null) {
-            return
-        }
-        val session = smartspaceManager.createSmartspaceSession(
-                SmartspaceConfig.Builder(context, "lockscreen").build())
-        session.addOnTargetsAvailableListener(uiExecutor, sessionListener)
-
-        userTracker.addCallback(userTrackerCallback, uiExecutor)
-        contentResolver.registerContentObserver(
-                secureSettings.getUriFor(Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS),
-                true,
-                settingsObserver,
-                UserHandle.USER_ALL
-        )
-        configurationController.addCallback(configChangeListener)
-        statusBarStateController.addCallback(statusBarStateListener)
-
-        this.session = session
-
-        reloadSmartspace()
-    }
-
-    /**
-     * Disconnects the smartspace view from the smartspace service and cleans up any resources.
-     * Calling [buildAndConnectView] again will cause the same view to be reconnected to the
-     * service.
-     */
-    fun disconnect() {
-        execution.assertIsMainThread()
-
-        if (session == null) {
-            return
-        }
-
-        session?.let {
-            it.removeOnTargetsAvailableListener(sessionListener)
-            it.close()
-        }
-        userTracker.removeCallback(userTrackerCallback)
-        contentResolver.unregisterContentObserver(settingsObserver)
-        configurationController.removeCallback(configChangeListener)
-        session = null
-
-        plugin?.onTargetsAvailable(emptyList())
-    }
-
-    fun addListener(listener: SmartspaceTargetListener) {
-        execution.assertIsMainThread()
-        plugin?.registerListener(listener)
-    }
-
-    fun removeListener(listener: SmartspaceTargetListener) {
-        execution.assertIsMainThread()
-        plugin?.unregisterListener(listener)
-    }
-
-    fun shiftSplitShadeSmartspace(y: Int, animate: Boolean) {
-        if (splitShadeContainer?.visibility == VISIBLE) {
-            PropertyAnimator.setProperty(splitShadeContainer, AnimatableProperty.Y, y.toFloat(),
-                    ANIMATION_PROPERTIES, animate)
         }
     }
 
@@ -276,9 +112,6 @@ class LockscreenSmartspaceController @Inject constructor(
         override fun onUserChanged(newUser: Int, userContext: Context) {
             execution.assertIsMainThread()
             reloadSmartspace()
-        }
-
-        override fun onProfilesChanged(profiles: List<UserInfo>) {
         }
     }
 
@@ -299,25 +132,133 @@ class LockscreenSmartspaceController @Inject constructor(
     private val statusBarStateListener = object : StatusBarStateController.StateListener {
         override fun onDozeAmountChanged(linear: Float, eased: Float) {
             execution.assertIsMainThread()
-            smartspaceView.setDozeAmount(eased)
+            smartspaceViews.forEach { it.setDozeAmount(eased) }
         }
+    }
 
-        override fun onDozingChanged(isDozing: Boolean) {
-            isAod = isDozing
-            updateSmartSpaceContainer()
-        }
+    private val deviceProvisionedListener =
+        object : DeviceProvisionedController.DeviceProvisionedListener {
+            override fun onDeviceProvisionedChanged() {
+                connectSession()
+            }
 
-        override fun onStateChanged(newState: Int) {
-            if (newState == StatusBarState.KEYGUARD) {
-                if (isSmartspaceEnabled()) {
-                    updateSmartSpaceContainer()
-                }
-            } else {
-                splitShadeContainer?.visibility = GONE
-                singlePaneContainer?.visibility = GONE
-                disconnect()
+            override fun onUserSetupChanged() {
+                connectSession()
             }
         }
+
+    init {
+        deviceProvisionedController.addCallback(deviceProvisionedListener)
+    }
+
+    fun isEnabled(): Boolean {
+        execution.assertIsMainThread()
+
+        return featureFlags.isSmartspaceEnabled && plugin != null
+    }
+
+    /**
+     * Constructs the smartspace view and connects it to the smartspace service.
+     */
+    fun buildAndConnectView(parent: ViewGroup): View? {
+        execution.assertIsMainThread()
+
+        if (!isEnabled()) {
+            throw RuntimeException("Cannot build view when not enabled")
+        }
+
+        val view = buildView(parent)
+        connectSession()
+
+        return view
+    }
+
+    fun requestSmartspaceUpdate() {
+        session?.requestSmartspaceUpdate()
+    }
+
+    private fun buildView(parent: ViewGroup): View? {
+        if (plugin == null) {
+            return null
+        }
+
+        val ssView = plugin.getView(parent)
+        ssView.registerDataProvider(plugin)
+        ssView.setIntentStarter(object : BcSmartspaceDataPlugin.IntentStarter {
+            override fun startIntent(v: View?, i: Intent?) {
+                activityStarter.startActivity(i, true /* dismissShade */)
+            }
+
+            override fun startPendingIntent(pi: PendingIntent?) {
+                activityStarter.startPendingIntentDismissingKeyguard(pi)
+            }
+        })
+        ssView.setFalsingManager(falsingManager)
+        return (ssView as View).apply { addOnAttachStateChangeListener(stateChangeListener) }
+    }
+
+    private fun connectSession() {
+        if (plugin == null || session != null) {
+            return
+        }
+
+        // Only connect after the device is fully provisioned to avoid connection caching
+        // issues
+        if (!deviceProvisionedController.isDeviceProvisioned() ||
+                !deviceProvisionedController.isCurrentUserSetup()) {
+            return
+        }
+
+        val newSession = smartspaceManager.createSmartspaceSession(
+                SmartspaceConfig.Builder(context, "lockscreen").build())
+        newSession.addOnTargetsAvailableListener(uiExecutor, sessionListener)
+        this.session = newSession
+
+        deviceProvisionedController.removeCallback(deviceProvisionedListener)
+        userTracker.addCallback(userTrackerCallback, uiExecutor)
+        contentResolver.registerContentObserver(
+                secureSettings.getUriFor(Settings.Secure.LOCK_SCREEN_ALLOW_PRIVATE_NOTIFICATIONS),
+                true,
+                settingsObserver,
+                UserHandle.USER_ALL
+        )
+        configurationController.addCallback(configChangeListener)
+        statusBarStateController.addCallback(statusBarStateListener)
+
+        reloadSmartspace()
+    }
+
+    /**
+     * Disconnects the smartspace view from the smartspace service and cleans up any resources.
+     */
+    fun disconnect() {
+        execution.assertIsMainThread()
+
+        if (session == null) {
+            return
+        }
+
+        session?.let {
+            it.removeOnTargetsAvailableListener(sessionListener)
+            it.close()
+        }
+        userTracker.removeCallback(userTrackerCallback)
+        contentResolver.unregisterContentObserver(settingsObserver)
+        configurationController.removeCallback(configChangeListener)
+        statusBarStateController.removeCallback(statusBarStateListener)
+        session = null
+
+        plugin?.onTargetsAvailable(emptyList())
+    }
+
+    fun addListener(listener: SmartspaceTargetListener) {
+        execution.assertIsMainThread()
+        plugin?.registerListener(listener)
+    }
+
+    fun removeListener(listener: SmartspaceTargetListener) {
+        execution.assertIsMainThread()
+        plugin?.unregisterListener(listener)
     }
 
     private fun filterSmartspaceTarget(t: SmartspaceTarget): Boolean {
@@ -341,7 +282,7 @@ class LockscreenSmartspaceController @Inject constructor(
 
     private fun updateTextColorFromWallpaper() {
         val wallpaperTextColor = Utils.getColorAttrDefaultColor(context, R.attr.wallpaperTextColor)
-        smartspaceView.setPrimaryTextColor(wallpaperTextColor)
+        smartspaceViews.forEach { it.setPrimaryTextColor(wallpaperTextColor) }
     }
 
     private fun reloadSmartspace() {

@@ -17,7 +17,7 @@
 package com.android.systemui.statusbar.notification.stack;
 
 import static com.android.internal.jank.InteractionJankMonitor.CUJ_NOTIFICATION_SHADE_SCROLL_FLING;
-import static com.android.systemui.statusbar.notification.stack.NotificationSectionsManagerKt.BUCKET_SILENT;
+import static com.android.systemui.statusbar.notification.stack.NotificationPriorityBucketKt.BUCKET_SILENT;
 import static com.android.systemui.statusbar.notification.stack.StackStateAnimator.ANIMATION_DURATION_SWIPE;
 import static com.android.systemui.util.InjectionInflationController.VIEW_CONTEXT;
 import static com.android.systemui.util.Utils.shouldUseSplitNotificationShade;
@@ -139,6 +139,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private static final boolean DEBUG_REMOVE_ANIMATION = SystemProperties.getBoolean(
             "persist.debug.nssl.dismiss", false /* default */);
 
+    // Delay in milli-seconds before shade closes for clear all.
+    private final int DELAY_BEFORE_SHADE_CLOSE = 200;
+    private boolean mShadeNeedsToClose = false;
+
     private static final float RUBBER_BAND_FACTOR_NORMAL = 0.35f;
     private static final float RUBBER_BAND_FACTOR_AFTER_EXPAND = 0.15f;
     private static final float RUBBER_BAND_FACTOR_ON_PANEL_EXPAND = 0.21f;
@@ -159,7 +163,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private final Paint mBackgroundPaint = new Paint();
     private final boolean mShouldDrawNotificationBackground;
     private boolean mHighPriorityBeforeSpeedBump;
-    private boolean mDismissRtl;
 
     private float mExpandedHeight;
     private int mOwnScrollY;
@@ -250,10 +253,10 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     private boolean mExpandedInThisMotion;
     private boolean mShouldShowShelfOnly;
     protected boolean mScrollingEnabled;
+    private boolean mIsCurrentUserSetup;
     protected FooterView mFooterView;
     protected EmptyShadeView mEmptyShadeView;
     private boolean mDismissAllInProgress;
-    private boolean mFadeNotificationsOnDismiss;
     private FooterDismissListener mFooterDismissListener;
     private boolean mFlingAfterUpEvent;
 
@@ -607,6 +610,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mClearAllEnabled = res.getBoolean(R.bool.config_enableNotificationsClearAll);
         mGroupMembershipManager = groupMembershipManager;
         mGroupExpansionManager = groupExpansionManager;
+        setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_YES);
     }
 
     void initializeForegroundServiceSection(ForegroundServiceDungeonView fgsSectionView) {
@@ -615,16 +619,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         }
         mFgsSectionView = fgsSectionView;
         addView(mFgsSectionView, -1);
-    }
-
-    void updateDismissRtlSetting(boolean dismissRtl) {
-        mDismissRtl = dismissRtl;
-        for (int i = 0; i < getChildCount(); i++) {
-            View child = getChildAt(i);
-            if (child instanceof ExpandableNotificationRow) {
-                ((ExpandableNotificationRow) child).setDismissRtl(dismissRtl);
-            }
-        }
     }
 
     /**
@@ -689,6 +683,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         boolean showDismissView = mClearAllEnabled &&
                 mController.hasActiveClearableNotifications(ROWS_ALL);
         boolean showFooterView = (showDismissView || getVisibleNotificationCount() > 0)
+                && mIsCurrentUserSetup  // see: b/193149550
                 && mStatusBarState != StatusBarState.KEYGUARD
                 && !mUnlockedScreenOffAnimationController.isScreenOffAnimationPlaying()
                 && !mIsRemoteInputActive;
@@ -1205,7 +1200,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     @ShadeViewRefactor(RefactorComponent.COORDINATOR)
     private void clampScrollPosition() {
         int scrollRange = getScrollRange();
-        if (scrollRange < mOwnScrollY) {
+        if (scrollRange < mOwnScrollY && !mAmbientState.isDismissAllInProgress()) {
             boolean animateStackY = false;
             if (scrollRange < getScrollAmountToScrollBoundary()
                     && mAnimateStackYForContentHeightChange) {
@@ -1721,6 +1716,11 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
 
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
     public void dismissViewAnimated(View child, Runnable endRunnable, int delay, long duration) {
+        if (child instanceof SectionHeaderView) {
+             ((StackScrollerDecorView) child).setContentVisible(
+                     false /* visible */, true /* animate */, endRunnable);
+             return;
+        }
         mSwipeHelper.dismissChild(child, 0, endRunnable, delay, true, duration,
                 true /* isDismissAll */);
     }
@@ -2910,7 +2910,6 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         updateChronometerForChild(child);
         if (child instanceof ExpandableNotificationRow) {
             ExpandableNotificationRow row = (ExpandableNotificationRow) child;
-            row.setDismissRtl(mDismissRtl);
             row.setDismissUsingRowTranslationX(mDismissUsingRowTranslationX);
 
         }
@@ -4062,6 +4061,18 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         runAnimationFinishedRunnables();
         clearTransient();
         clearHeadsUpDisappearRunning();
+
+        if (mAmbientState.isDismissAllInProgress()) {
+            setDismissAllInProgress(false);
+            if (mShadeNeedsToClose) {
+                mShadeNeedsToClose = false;
+                postDelayed(
+                        () -> {
+                            mShadeController.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
+                        },
+                        DELAY_BEFORE_SHADE_CLOSE /* delayMillis */);
+            }
+        }
     }
 
     @ShadeViewRefactor(RefactorComponent.STATE_RESOLVER)
@@ -4243,7 +4254,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         final @ColorInt int textColor =
                 Utils.getColorAttrDefaultColor(mContext, android.R.attr.textColorPrimary);
         mSectionsManager.setHeaderForegroundColor(textColor);
-        mFooterView.setTextColor(textColor);
+        mFooterView.updateColors();
         mEmptyShadeView.setTextColor(textColor);
     }
 
@@ -4430,6 +4441,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
     public void setDismissAllInProgress(boolean dismissAllInProgress) {
         mDismissAllInProgress = dismissAllInProgress;
         mAmbientState.setDismissAllInProgress(dismissAllInProgress);
+        mController.getNoticationRoundessManager().setDismissAllInProgress(dismissAllInProgress);
         handleDismissAllClipping();
     }
 
@@ -4973,127 +4985,135 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
         mHeadsUpAppearanceController = headsUpAppearanceController;
     }
 
-    @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    @VisibleForTesting
-    void clearNotifications(@SelectedRows int selection, boolean closeShade) {
-        // animate-swipe all dismissable notifications, then animate the shade closed
-        int numChildren = getChildCount();
+    private boolean isVisible(View child) {
+        boolean hasClipBounds = child.getClipBounds(mTmpRect);
+        return child.getVisibility() == View.VISIBLE
+                && (!hasClipBounds || mTmpRect.height() > 0);
+    }
 
-        final ArrayList<View> viewsToHide = new ArrayList<>(numChildren);
-        final ArrayList<ExpandableNotificationRow> viewsToRemove = new ArrayList<>(numChildren);
-        for (int i = 0; i < numChildren; i++) {
-            final View child = getChildAt(i);
-            if (child instanceof ExpandableNotificationRow) {
-                ExpandableNotificationRow row = (ExpandableNotificationRow) child;
-                boolean parentVisible = false;
-                boolean hasClipBounds = child.getClipBounds(mTmpRect);
-                if (includeChildInDismissAll(row, selection)) {
-                    viewsToRemove.add(row);
-                    if (child.getVisibility() == View.VISIBLE
-                            && (!hasClipBounds || mTmpRect.height() > 0)) {
-                        viewsToHide.add(child);
-                        parentVisible = true;
-                    }
-                } else if (child.getVisibility() == View.VISIBLE
-                        && (!hasClipBounds || mTmpRect.height() > 0)) {
-                    parentVisible = true;
-                }
-                List<ExpandableNotificationRow> children = row.getAttachedChildren();
-                if (children != null) {
-                    for (ExpandableNotificationRow childRow : children) {
-                        if (includeChildInDismissAll(row, selection)) {
-                            viewsToRemove.add(childRow);
-                            if (parentVisible && row.areChildrenExpanded()) {
-                                hasClipBounds = childRow.getClipBounds(mTmpRect);
-                                if (childRow.getVisibility() == View.VISIBLE
-                                        && (!hasClipBounds || mTmpRect.height() > 0)) {
-                                    viewsToHide.add(childRow);
-                                }
-                            }
+    private boolean shouldHideParent(View view, @SelectedRows int selection) {
+        final boolean silentSectionWillBeGone =
+                !mController.hasNotifications(ROWS_GENTLE, false /* clearable */);
+
+        // The only SectionHeaderView we have is the silent section header.
+        if (view instanceof SectionHeaderView && silentSectionWillBeGone) {
+            return true;
+        }
+        if (view instanceof ExpandableNotificationRow) {
+            ExpandableNotificationRow row = (ExpandableNotificationRow) view;
+            if (isVisible(row) && includeChildInDismissAll(row, selection)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean isChildrenVisible(ExpandableNotificationRow parent) {
+        List<ExpandableNotificationRow> children = parent.getAttachedChildren();
+        return isVisible(parent)
+                && children != null
+                && parent.areChildrenExpanded();
+    }
+
+    // Similar to #getRowsToDismissInBackend, but filters for visible views.
+    private ArrayList<View> getVisibleViewsToAnimateAway(@SelectedRows int selection) {
+        final int viewCount = getChildCount();
+        final ArrayList<View> viewsToHide = new ArrayList<>(viewCount);
+
+        for (int i = 0; i < viewCount; i++) {
+            final View view = getChildAt(i);
+
+            if (shouldHideParent(view, selection)) {
+                viewsToHide.add(view);
+            }
+            if (view instanceof ExpandableNotificationRow) {
+                ExpandableNotificationRow parent = (ExpandableNotificationRow) view;
+
+                if (isChildrenVisible(parent)) {
+                    for (ExpandableNotificationRow child : parent.getAttachedChildren()) {
+                        if (isVisible(child) && includeChildInDismissAll(child, selection)) {
+                            viewsToHide.add(child);
                         }
                     }
                 }
             }
         }
+        return viewsToHide;
+    }
 
+    private ArrayList<ExpandableNotificationRow> getRowsToDismissInBackend(
+            @SelectedRows int selection) {
+        final int childCount = getChildCount();
+        final ArrayList<ExpandableNotificationRow> viewsToRemove = new ArrayList<>(childCount);
+
+        for (int i = 0; i < childCount; i++) {
+            final View view = getChildAt(i);
+            if (!(view instanceof ExpandableNotificationRow)) {
+                continue;
+            }
+            ExpandableNotificationRow parent = (ExpandableNotificationRow) view;
+            if (includeChildInDismissAll(parent, selection)) {
+                viewsToRemove.add(parent);
+            }
+            List<ExpandableNotificationRow> children = parent.getAttachedChildren();
+            if (isVisible(parent) && children != null) {
+                for (ExpandableNotificationRow child : children) {
+                    if (includeChildInDismissAll(parent, selection)) {
+                        viewsToRemove.add(child);
+                    }
+                }
+            }
+        }
+        return viewsToRemove;
+    }
+
+    /**
+     * Collects a list of visible rows, and animates them away in a staggered fashion as if they
+     * were dismissed. Notifications are dismissed in the backend via onDismissAllAnimationsEnd.
+     */
+    @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
+    @VisibleForTesting
+    void clearNotifications(@SelectedRows int selection, boolean closeShade) {
+        // Animate-swipe all dismissable notifications, then animate the shade closed
+        final ArrayList<View> viewsToAnimateAway = getVisibleViewsToAnimateAway(selection);
+        final ArrayList<ExpandableNotificationRow> rowsToDismissInBackend =
+                getRowsToDismissInBackend(selection);
         if (mDismissListener != null) {
             mDismissListener.onDismiss(selection);
         }
-
-        if (viewsToRemove.isEmpty()) {
-            if (closeShade && mShadeController != null) {
-                mShadeController.animateCollapsePanels(CommandQueue.FLAG_EXCLUDE_NONE);
-            }
+        final Runnable dismissInBackend = () -> {
+            onDismissAllAnimationsEnd(rowsToDismissInBackend, selection);
+        };
+        if (viewsToAnimateAway.isEmpty()) {
+            dismissInBackend.run();
             return;
         }
+        // Disable normal animations
+        setDismissAllInProgress(true);
+        mShadeNeedsToClose = closeShade;
 
-        performDismissAllAnimations(
-                viewsToHide,
-                closeShade,
-                () -> onDismissAllAnimationsEnd(viewsToRemove, selection));
+        // Decrease the delay for every row we animate to give the sense of
+        // accelerating the swipes
+        final int rowDelayDecrement = 5;
+        int currentDelay = 60;
+        int totalDelay = 0;
+        final int numItems = viewsToAnimateAway.size();
+        for (int i = numItems - 1; i >= 0; i--) {
+            View view = viewsToAnimateAway.get(i);
+            Runnable endRunnable = null;
+            if (i == 0) {
+                endRunnable = dismissInBackend;
+            }
+            dismissViewAnimated(view, endRunnable, totalDelay, ANIMATION_DURATION_SWIPE);
+            currentDelay = Math.max(30, currentDelay - rowDelayDecrement);
+            totalDelay += currentDelay;
+        }
     }
 
     private boolean includeChildInDismissAll(
             ExpandableNotificationRow row,
             @SelectedRows int selection) {
         return canChildBeDismissed(row) && matchesSelection(row, selection);
-    }
-
-    /**
-     * Given a list of rows, animates them away in a staggered fashion as if they were dismissed.
-     * Doesn't actually dismiss them, though -- that must be done in the onAnimationComplete
-     * handler.
-     *
-     * @param hideAnimatedList List of rows to animated away. Should only be views that are
-     *                         currently visible, or else the stagger will look funky.
-     * @param closeShade Whether to close the shade after the stagger animation completes.
-     * @param onAnimationComplete Called after the entire animation completes (including the shade
-     *                            closing if appropriate). The rows must be dismissed for real here.
-     */
-    @ShadeViewRefactor(RefactorComponent.SHADE_VIEW)
-    private void performDismissAllAnimations(
-            final ArrayList<View> hideAnimatedList,
-            final boolean closeShade,
-            final Runnable onAnimationComplete) {
-
-        final Runnable onSlideAwayAnimationComplete = () -> {
-            if (closeShade) {
-                mShadeController.addPostCollapseAction(() -> {
-                    setDismissAllInProgress(false);
-                    onAnimationComplete.run();
-                });
-                mShadeController.animateCollapsePanels(
-                        CommandQueue.FLAG_EXCLUDE_NONE);
-            } else {
-                setDismissAllInProgress(false);
-                onAnimationComplete.run();
-            }
-        };
-
-        if (hideAnimatedList.isEmpty()) {
-            onSlideAwayAnimationComplete.run();
-            return;
-        }
-
-        // let's disable our normal animations
-        setDismissAllInProgress(true);
-
-        // Decrease the delay for every row we animate to give the sense of
-        // accelerating the swipes
-        int rowDelayDecrement = 10;
-        int currentDelay = 140;
-        int totalDelay = 180;
-        int numItems = hideAnimatedList.size();
-        for (int i = numItems - 1; i >= 0; i--) {
-            View view = hideAnimatedList.get(i);
-            Runnable endRunnable = null;
-            if (i == 0) {
-                endRunnable = onSlideAwayAnimationComplete;
-            }
-            dismissViewAnimated(view, endRunnable, totalDelay, ANIMATION_DURATION_SWIPE);
-            currentDelay = Math.max(50, currentDelay - rowDelayDecrement);
-            totalDelay += currentDelay;
-        }
     }
 
     /** Register a {@link View.OnClickListener} to be invoked when the Manage button is clicked. */
@@ -5114,6 +5134,7 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
                 mFooterDismissListener.onDismiss();
             }
             clearNotifications(ROWS_ALL, true /* closeShade */);
+            footerView.setSecondaryVisible(false /* visible */, true /* animate */);
         });
         setFooterView(footerView);
     }
@@ -5586,6 +5607,16 @@ public class NotificationStackScrollLayout extends ViewGroup implements Dumpable
      */
     public void animateNextTopPaddingChange() {
         mAnimateNextTopPaddingChange = true;
+    }
+
+    /**
+     * Sets whether the current user is set up, which is required to show the footer (b/193149550)
+     */
+    public void setCurrentUserSetup(boolean isCurrentUserSetup) {
+        if (mIsCurrentUserSetup != isCurrentUserSetup) {
+            mIsCurrentUserSetup = isCurrentUserSetup;
+            updateFooter();
+        }
     }
 
     /**

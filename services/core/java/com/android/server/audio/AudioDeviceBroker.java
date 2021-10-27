@@ -645,6 +645,37 @@ import java.util.concurrent.atomic.AtomicBoolean;
         sendLMsgNoDelay(MSG_L_HEARING_AID_DEVICE_CONNECTION_CHANGE_EXT, SENDMSG_QUEUE, info);
     }
 
+    private static final class LeAudioDeviceConnectionInfo {
+        final @NonNull BluetoothDevice mDevice;
+        final @AudioService.BtProfileConnectionState int mState;
+        final boolean mSupprNoisy;
+        final @NonNull String mEventSource;
+
+        LeAudioDeviceConnectionInfo(@NonNull BluetoothDevice device,
+                @AudioService.BtProfileConnectionState int state,
+                boolean suppressNoisyIntent, @NonNull String eventSource) {
+            mDevice = device;
+            mState = state;
+            mSupprNoisy = suppressNoisyIntent;
+            mEventSource = eventSource;
+        }
+    }
+
+    /*package*/ void postBluetoothLeAudioOutDeviceConnectionState(
+            @NonNull BluetoothDevice device, @AudioService.BtProfileConnectionState int state,
+            boolean suppressNoisyIntent, @NonNull String eventSource) {
+        final LeAudioDeviceConnectionInfo info = new LeAudioDeviceConnectionInfo(
+                device, state, suppressNoisyIntent, eventSource);
+        sendLMsgNoDelay(MSG_L_LE_AUDIO_DEVICE_OUT_CONNECTION_CHANGE_EXT, SENDMSG_QUEUE, info);
+    }
+
+    /*package*/ void postBluetoothLeAudioInDeviceConnectionState(
+            @NonNull BluetoothDevice device, @AudioService.BtProfileConnectionState int state,
+            @NonNull String eventSource) {
+        final LeAudioDeviceConnectionInfo info = new LeAudioDeviceConnectionInfo(
+                device, state, false, eventSource);
+        sendLMsgNoDelay(MSG_L_LE_AUDIO_DEVICE_IN_CONNECTION_CHANGE_EXT, SENDMSG_QUEUE, info);
+    }
 
     /**
      * Current Bluetooth SCO audio active state indicated by BtHelper via setBluetoothScoOn().
@@ -913,6 +944,23 @@ import java.util.concurrent.atomic.AtomicBoolean;
                 state,
                 device,
                 delay);
+    }
+
+    /*package*/ void postSetLeAudioOutConnectionState(
+            @AudioService.BtProfileConnectionState int state,
+            @NonNull BluetoothDevice device, int delay) {
+        sendILMsg(MSG_IL_SET_LE_AUDIO_OUT_CONNECTION_STATE, SENDMSG_QUEUE,
+                state,
+                device,
+                delay);
+    }
+
+    /*package*/ void postSetLeAudioInConnectionState(
+            @AudioService.BtProfileConnectionState int state,
+            @NonNull BluetoothDevice device) {
+        sendILMsgNoDelay(MSG_IL_SET_LE_AUDIO_IN_CONNECTION_STATE, SENDMSG_QUEUE,
+                state,
+                device);
     }
 
     /*package*/ void postDisconnectA2dp() {
@@ -1236,7 +1284,20 @@ import java.util.concurrent.atomic.AtomicBoolean;
                     synchronized (mDeviceStateLock) {
                         mDeviceInventory.onSetHearingAidConnectionState(
                                 (BluetoothDevice) msg.obj, msg.arg1,
-                                mAudioService.getHearingAidStreamType());
+                                mAudioService.getBluetoothContextualVolumeStream());
+                    }
+                    break;
+                case MSG_IL_SET_LE_AUDIO_OUT_CONNECTION_STATE:
+                    synchronized (mDeviceStateLock) {
+                        mDeviceInventory.onSetLeAudioOutConnectionState(
+                                (BluetoothDevice) msg.obj, msg.arg1,
+                                mAudioService.getBluetoothContextualVolumeStream());
+                    }
+                    break;
+                case MSG_IL_SET_LE_AUDIO_IN_CONNECTION_STATE:
+                    synchronized (mDeviceStateLock) {
+                        mDeviceInventory.onSetLeAudioInConnectionState(
+                                (BluetoothDevice) msg.obj, msg.arg1);
                     }
                     break;
                 case MSG_BT_HEADSET_CNCT_FAILED:
@@ -1444,6 +1505,31 @@ import java.util.concurrent.atomic.AtomicBoolean;
                     final int capturePreset = msg.arg1;
                     mDeviceInventory.onSaveClearPreferredDevicesForCapturePreset(capturePreset);
                 } break;
+                case MSG_L_LE_AUDIO_DEVICE_OUT_CONNECTION_CHANGE_EXT: {
+                    final LeAudioDeviceConnectionInfo info =
+                            (LeAudioDeviceConnectionInfo) msg.obj;
+                    AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+                            "setLeAudioDeviceOutConnectionState state=" + info.mState
+                                    + " addr=" + info.mDevice.getAddress()
+                                    + " supprNoisy=" + info.mSupprNoisy
+                                    + " src=" + info.mEventSource)).printLog(TAG));
+                    synchronized (mDeviceStateLock) {
+                        mDeviceInventory.setBluetoothLeAudioOutDeviceConnectionState(
+                                info.mDevice, info.mState, info.mSupprNoisy);
+                    }
+                } break;
+                case MSG_L_LE_AUDIO_DEVICE_IN_CONNECTION_CHANGE_EXT: {
+                    final LeAudioDeviceConnectionInfo info =
+                            (LeAudioDeviceConnectionInfo) msg.obj;
+                    AudioService.sDeviceLogger.log((new AudioEventLogger.StringEvent(
+                            "setLeAudioDeviceInConnectionState state=" + info.mState
+                                    + " addr=" + info.mDevice.getAddress()
+                                    + " src=" + info.mEventSource)).printLog(TAG));
+                    synchronized (mDeviceStateLock) {
+                        mDeviceInventory.setBluetoothLeAudioInDeviceConnectionState(info.mDevice,
+                                info.mState);
+                    }
+                } break;
                 default:
                     Log.wtf(TAG, "Invalid message " + msg.what);
             }
@@ -1528,6 +1614,11 @@ import java.util.concurrent.atomic.AtomicBoolean;
     // process external command to (dis)connect or change active A2DP device
     private static final int MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT = 64;
 
+    private static final int MSG_IL_SET_LE_AUDIO_OUT_CONNECTION_STATE = 42;
+    private static final int MSG_IL_SET_LE_AUDIO_IN_CONNECTION_STATE = 43;
+    private static final int MSG_L_LE_AUDIO_DEVICE_OUT_CONNECTION_CHANGE_EXT = 44;
+    private static final int MSG_L_LE_AUDIO_DEVICE_IN_CONNECTION_CHANGE_EXT = 45;
+
     private static boolean isMessageHandledUnderWakelock(int msgId) {
         switch(msgId) {
             case MSG_L_SET_WIRED_DEVICE_CONNECTION_STATE:
@@ -1544,6 +1635,8 @@ import java.util.concurrent.atomic.AtomicBoolean;
             case MSG_L_HEARING_AID_DEVICE_CONNECTION_CHANGE_EXT:
             case MSG_CHECK_MUTE_MUSIC:
             case MSG_L_A2DP_ACTIVE_DEVICE_CHANGE_EXT:
+            case MSG_L_LE_AUDIO_DEVICE_OUT_CONNECTION_CHANGE_EXT:
+            case MSG_L_LE_AUDIO_DEVICE_IN_CONNECTION_CHANGE_EXT:
                 return true;
             default:
                 return false;
@@ -1752,11 +1845,10 @@ import java.util.concurrent.atomic.AtomicBoolean;
         if (client == null) {
             return;
         }
-        Log.w(TAG, "Speaker client died");
-        if (removeCommunicationRouteClient(client.getBinder(), false)
-                != null) {
-            onUpdateCommunicationRoute("onCommunicationRouteClientDied");
-        }
+        Log.w(TAG, "Communication client died");
+        setCommunicationRouteForClient(
+                client.getBinder(), client.getPid(), null, BtHelper.SCO_MODE_UNDEFINED,
+                "onCommunicationRouteClientDied");
     }
 
     /**

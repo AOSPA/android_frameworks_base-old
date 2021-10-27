@@ -177,16 +177,13 @@ abstract class PipTransition(protected val testSpec: FlickerTestParameter) {
 
     @Presubmit
     @Test
-    open fun navBarLayerRotatesAndScales() =
-        testSpec.navBarLayerRotatesAndScales(testSpec.config.startRotation, Surface.ROTATION_0)
+    open fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     @Presubmit
     @Test
-    open fun statusBarLayerRotatesScales() =
-        testSpec.statusBarLayerRotatesScales(testSpec.config.startRotation, Surface.ROTATION_0)
+    open fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
     @Presubmit
     @Test
-    open fun entireScreenCovered() =
-        testSpec.entireScreenCovered(testSpec.config.startRotation, Surface.ROTATION_0)
+    open fun entireScreenCovered() = testSpec.entireScreenCovered()
 }

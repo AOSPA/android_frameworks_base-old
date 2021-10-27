@@ -24,21 +24,33 @@ import static android.system.OsConstants.O_RDWR;
 import static com.android.server.pm.PackageManagerService.COMPRESSED_EXTENSION;
 import static com.android.server.pm.PackageManagerService.DEBUG_COMPRESSION;
 import static com.android.server.pm.PackageManagerService.DEBUG_DEXOPT;
+import static com.android.server.pm.PackageManagerService.DEBUG_INTENT_MATCHING;
+import static com.android.server.pm.PackageManagerService.DEBUG_PREFERRED;
+import static com.android.server.pm.PackageManagerService.RANDOM_DIR_PREFIX;
 import static com.android.server.pm.PackageManagerService.STUB_SUFFIX;
 import static com.android.server.pm.PackageManagerService.TAG;
 
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.UserIdInt;
 import android.app.AppGlobals;
+import android.compat.annotation.ChangeId;
+import android.compat.annotation.EnabledAfter;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ActivityInfo;
+import android.content.pm.ApplicationInfo;
+import android.content.pm.ComponentInfo;
 import android.content.pm.PackageInfoLite;
 import android.content.pm.PackageManager;
 import android.content.pm.ResolveInfo;
+import android.content.pm.ServiceInfo;
+import android.content.pm.SharedLibraryInfo;
 import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
 import android.content.pm.parsing.ApkLiteParseUtils;
 import android.content.pm.parsing.PackageLite;
+import android.content.pm.parsing.component.ParsedMainComponent;
 import android.content.pm.parsing.result.ParseResult;
 import android.content.pm.parsing.result.ParseTypeImpl;
 import android.os.Build;
@@ -52,11 +64,17 @@ import android.os.UserHandle;
 import android.os.incremental.IncrementalManager;
 import android.os.incremental.V4Signature;
 import android.os.incremental.V4Signature.HashingInfo;
+import android.os.storage.DiskInfo;
+import android.os.storage.VolumeInfo;
 import android.service.pm.PackageServiceDumpProto;
+import android.stats.storage.StorageEnums;
 import android.system.ErrnoException;
 import android.system.Os;
 import android.util.ArraySet;
+import android.util.Base64;
 import android.util.Log;
+import android.util.LogPrinter;
+import android.util.Printer;
 import android.util.Slog;
 import android.util.proto.ProtoOutputStream;
 
@@ -66,9 +84,13 @@ import com.android.internal.util.ArrayUtils;
 import com.android.internal.util.FastPrintWriter;
 import com.android.internal.util.HexDump;
 import com.android.server.EventLogTags;
+import com.android.server.IntentResolver;
+import com.android.server.compat.PlatformCompat;
 import com.android.server.pm.dex.DexManager;
 import com.android.server.pm.dex.PackageDexUsage;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.verify.domain.DomainVerificationManagerInternal;
+import com.android.server.utils.WatchedLongSparseArray;
 
 import dalvik.system.VMRuntime;
 
@@ -86,6 +108,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.PrintWriter;
 import java.nio.file.Path;
+import java.security.SecureRandom;
 import java.security.cert.CertificateEncodingException;
 import java.security.cert.CertificateException;
 import java.text.SimpleDateFormat;
@@ -96,6 +119,8 @@ import java.util.Collections;
 import java.util.Date;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Map;
+import java.util.function.Function;
 import java.util.function.Predicate;
 import java.util.zip.GZIPInputStream;
 
@@ -109,7 +134,21 @@ public class PackageManagerServiceUtils {
     private static final long MAX_CRITICAL_INFO_DUMP_SIZE = 3 * 1000 * 1000; // 3MB
 
     public final static Predicate<PackageSetting> REMOVE_IF_NULL_PKG =
-            pkgSetting -> pkgSetting.pkg == null;
+            pkgSetting -> pkgSetting.getPkg() == null;
+
+    /**
+     * Components of apps targeting Android T and above will stop receiving intents from
+     * external callers that do not match its declared intent filters.
+     *
+     * When an app registers an exported component in its manifest and adds an <intent-filter>,
+     * the component can be started by any intent - even those that do not match the intent filter.
+     * This has proven to be something that many developers find counterintuitive.
+     * Without checking the intent when the component is started, in some circumstances this can
+     * allow 3P apps to trigger internal-only functionality.
+     */
+    @ChangeId
+    @EnabledAfter(targetSdkVersion = Build.VERSION_CODES.S)
+    private static final long ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS = 161252188;
 
     private static ArraySet<String> getPackageNamesForIntent(Intent intent, int userId) {
         List<ResolveInfo> ris = null;
@@ -198,19 +237,19 @@ public class PackageManagerServiceUtils {
         ArrayList<PackageSetting> sortTemp = new ArrayList<>(remainingPkgSettings.size());
 
         // Give priority to core apps.
-        applyPackageFilter(pkgSetting -> pkgSetting.pkg.isCoreApp(), result, remainingPkgSettings, sortTemp,
-                packageManagerService);
+        applyPackageFilter(pkgSetting -> pkgSetting.getPkg().isCoreApp(), result,
+                remainingPkgSettings, sortTemp, packageManagerService);
 
         // Give priority to system apps that listen for pre boot complete.
         Intent intent = new Intent(Intent.ACTION_PRE_BOOT_COMPLETED);
         final ArraySet<String> pkgNames = getPackageNamesForIntent(intent, UserHandle.USER_SYSTEM);
-        applyPackageFilter(pkgSetting -> pkgNames.contains(pkgSetting.name), result,
+        applyPackageFilter(pkgSetting -> pkgNames.contains(pkgSetting.getPackageName()), result,
                 remainingPkgSettings, sortTemp, packageManagerService);
 
         // Give priority to apps used by other apps.
         DexManager dexManager = packageManagerService.getDexManager();
         applyPackageFilter(pkgSetting ->
-                dexManager.getPackageUseInfoOrDefault(pkgSetting.name)
+                dexManager.getPackageUseInfoOrDefault(pkgSetting.getPackageName())
                         .isAnyCodePathUsedByOtherApps(),
                 result, remainingPkgSettings, sortTemp, packageManagerService);
 
@@ -227,7 +266,7 @@ public class PackageManagerServiceUtils {
                             pkgSetting1.getPkgState().getLatestForegroundPackageUseTimeInMills(),
                             pkgSetting2.getPkgState().getLatestForegroundPackageUseTimeInMills()));
             if (debug) {
-                Log.i(TAG, "Taking package " + lastUsed.name
+                Log.i(TAG, "Taking package " + lastUsed.getPackageName()
                         + " as reference in time use");
             }
             long estimatedPreviousSystemUseTime = lastUsed.getPkgState()
@@ -310,7 +349,7 @@ public class PackageManagerServiceUtils {
             if (sb.length() > 0) {
                 sb.append(", ");
             }
-            sb.append(pkgSettings.get(index).name);
+            sb.append(pkgSettings.get(index).getPackageName());
         }
         return sb.toString();
     }
@@ -499,7 +538,7 @@ public class PackageManagerServiceUtils {
      */
     public static boolean comparePackageSignatures(PackageSetting pkgSetting,
             Signature[] signatures) {
-        final SigningDetails signingDetails = pkgSetting.signatures.mSigningDetails;
+        final SigningDetails signingDetails = pkgSetting.getSigningDetails();
         return signingDetails == SigningDetails.UNKNOWN
                 || compareSignatures(signingDetails.getSignatures(), signatures)
                 == PackageManager.SIGNATURE_MATCH;
@@ -574,16 +613,16 @@ public class PackageManagerServiceUtils {
      */
     private static boolean matchSignatureInSystem(PackageSetting pkgSetting,
             PackageSetting disabledPkgSetting) {
-        if (pkgSetting.signatures.mSigningDetails.checkCapability(
-                disabledPkgSetting.signatures.mSigningDetails,
+        if (pkgSetting.getSigningDetails().checkCapability(
+                disabledPkgSetting.getSigningDetails(),
                 SigningDetails.CertCapabilities.INSTALLED_DATA)
-                || disabledPkgSetting.signatures.mSigningDetails.checkCapability(
-                pkgSetting.signatures.mSigningDetails,
+                || disabledPkgSetting.getSigningDetails().checkCapability(
+                pkgSetting.getSigningDetails(),
                 SigningDetails.CertCapabilities.ROLLBACK)) {
             return true;
         } else {
             logCriticalInfo(Log.ERROR, "Updated system app mismatches cert on /system: " +
-                    pkgSetting.name);
+                    pkgSetting.getPackageName());
             return false;
         }
     }
@@ -626,31 +665,31 @@ public class PackageManagerServiceUtils {
             PackageSetting disabledPkgSetting, SigningDetails parsedSignatures,
             boolean compareCompat, boolean compareRecover, boolean isRollback)
             throws PackageManagerException {
-        final String packageName = pkgSetting.name;
+        final String packageName = pkgSetting.getPackageName();
         boolean compatMatch = false;
-        if (pkgSetting.signatures.mSigningDetails.getSignatures() != null) {
+        if (pkgSetting.getSigningDetails().getSignatures() != null) {
             // Already existing package. Make sure signatures match
             boolean match = parsedSignatures.checkCapability(
-                    pkgSetting.signatures.mSigningDetails,
+                    pkgSetting.getSigningDetails(),
                     SigningDetails.CertCapabilities.INSTALLED_DATA)
-                            || pkgSetting.signatures.mSigningDetails.checkCapability(
+                            || pkgSetting.getSigningDetails().checkCapability(
                                     parsedSignatures,
                                     SigningDetails.CertCapabilities.ROLLBACK);
             if (!match && compareCompat) {
-                match = matchSignaturesCompat(packageName, pkgSetting.signatures,
+                match = matchSignaturesCompat(packageName, pkgSetting.getSignatures(),
                         parsedSignatures);
                 compatMatch = match;
             }
             if (!match && compareRecover) {
                 match = matchSignaturesRecover(
                         packageName,
-                        pkgSetting.signatures.mSigningDetails,
+                        pkgSetting.getSigningDetails(),
                         parsedSignatures,
                         SigningDetails.CertCapabilities.INSTALLED_DATA)
                                 || matchSignaturesRecover(
                                         packageName,
                                         parsedSignatures,
-                                        pkgSetting.signatures.mSigningDetails,
+                                        pkgSetting.getSigningDetails(),
                                         SigningDetails.CertCapabilities.ROLLBACK);
             }
 
@@ -662,7 +701,7 @@ public class PackageManagerServiceUtils {
                 // Since a rollback can only be initiated for an APK previously installed on the
                 // device allow rolling back to a previous signing key even if the rollback
                 // capability has not been granted.
-                match = pkgSetting.signatures.mSigningDetails.hasAncestorOrSelf(parsedSignatures);
+                match = pkgSetting.getSigningDetails().hasAncestorOrSelf(parsedSignatures);
             }
 
             if (!match) {
@@ -692,7 +731,8 @@ public class PackageManagerServiceUtils {
             // being the only package in the sharedUserId so far and the lineage being updated to
             // deny the sharedUserId capability of the previous key in the lineage.
             if (!match && pkgSetting.getSharedUser().packages.size() == 1
-                    && pkgSetting.getSharedUser().packages.valueAt(0).name.equals(packageName)) {
+                    && pkgSetting.getSharedUser().packages
+                            .valueAt(0).getPackageName().equals(packageName)) {
                 match = true;
             }
             if (!match && compareCompat) {
@@ -726,7 +766,7 @@ public class PackageManagerServiceUtils {
                     // if the current package in the sharedUserId is the package being updated then
                     // skip this check as the update may revoke the sharedUserId capability from
                     // the key with which this app was previously signed.
-                    if (packageName.equals(shUidPkgSetting.name)) {
+                    if (packageName.equals(shUidPkgSetting.getPackageName())) {
                         continue;
                     }
                     SigningDetails shUidSigningDetails =
@@ -739,8 +779,9 @@ public class PackageManagerServiceUtils {
                             throw new PackageManagerException(
                                     INSTALL_FAILED_SHARED_USER_INCOMPATIBLE,
                                     "Package " + packageName
-                                            + " revoked the sharedUserId capability from the "
-                                            + "signing key used to sign " + shUidPkgSetting.name);
+                                            + " revoked the sharedUserId capability from the"
+                                            + " signing key used to sign "
+                                            + shUidPkgSetting.getPackageName());
                         }
                     }
                 }
@@ -1070,5 +1111,169 @@ public class PackageManagerServiceUtils {
             Slog.e(TAG, "ERROR: could not load root hash from incremental install");
         }
         return null;
+    }
+
+    public static boolean isSystemApp(PackageSetting ps) {
+        return (ps.pkgFlags & ApplicationInfo.FLAG_SYSTEM) != 0;
+    }
+
+    public static boolean isUpdatedSystemApp(PackageSetting ps) {
+        return (ps.pkgFlags & ApplicationInfo.FLAG_UPDATED_SYSTEM_APP) != 0;
+    }
+
+    // Static to give access to ComputeEngine
+    public static void applyEnforceIntentFilterMatching(
+            PlatformCompat compat, ComponentResolver resolver,
+            List<ResolveInfo> resolveInfos, boolean isReceiver,
+            Intent intent, String resolvedType, int filterCallingUid) {
+        // Do not enforce filter matching when the caller is system or root.
+        // see ActivityManager#checkComponentPermission(String, int, int, boolean)
+        if (filterCallingUid == Process.ROOT_UID || filterCallingUid == Process.SYSTEM_UID) {
+            return;
+        }
+
+        final Printer logPrinter = DEBUG_INTENT_MATCHING
+                ? new LogPrinter(Log.VERBOSE, TAG, Log.LOG_ID_SYSTEM)
+                : null;
+
+        for (int i = resolveInfos.size() - 1; i >= 0; --i) {
+            final ComponentInfo info = resolveInfos.get(i).getComponentInfo();
+
+            // Do not enforce filter matching when the caller is the same app
+            if (info.applicationInfo.uid == filterCallingUid) {
+                continue;
+            }
+
+            // Only enforce filter matching if target app's target SDK >= T
+            if (!compat.isChangeEnabledInternal(
+                    ENFORCE_INTENTS_TO_MATCH_INTENT_FILTERS, info.applicationInfo)) {
+                continue;
+            }
+
+            final ParsedMainComponent comp;
+            if (info instanceof ActivityInfo) {
+                if (isReceiver) {
+                    comp = resolver.getReceiver(info.getComponentName());
+                } else {
+                    comp = resolver.getActivity(info.getComponentName());
+                }
+            } else if (info instanceof ServiceInfo) {
+                comp = resolver.getService(info.getComponentName());
+            } else {
+                // This shall never happen
+                throw new IllegalArgumentException("Unsupported component type");
+            }
+
+            if (comp.getIntents().isEmpty()) {
+                continue;
+            }
+
+            final boolean match = comp.getIntents().stream().anyMatch(
+                    f -> IntentResolver.intentMatchesFilter(f, intent, resolvedType));
+            if (!match) {
+                Slog.w(TAG, "Intent does not match component's intent filter: " + intent);
+                Slog.w(TAG, "Access blocked: " + comp.getComponentName());
+                if (DEBUG_INTENT_MATCHING) {
+                    Slog.v(TAG, "Component intent filters:");
+                    comp.getIntents().forEach(f -> f.dump(logPrinter, "  "));
+                    Slog.v(TAG, "-----------------------------");
+                }
+                resolveInfos.remove(i);
+            }
+        }
+    }
+
+
+    /**
+     * Do NOT use for intent resolution filtering. That should be done with
+     * {@link DomainVerificationManagerInternal#filterToApprovedApp(Intent, List, int, Function)}.
+     *
+     * @return if the package is approved at any non-zero level for the domain in the intent
+     */
+    public static boolean hasAnyDomainApproval(
+            @NonNull DomainVerificationManagerInternal manager, @NonNull PackageSetting pkgSetting,
+            @NonNull Intent intent, @PackageManager.ResolveInfoFlags int resolveInfoFlags,
+            @UserIdInt int userId) {
+        return manager.approvalLevelForDomain(pkgSetting, intent, resolveInfoFlags, userId)
+                > DomainVerificationManagerInternal.APPROVAL_LEVEL_NONE;
+    }
+
+    /**
+     * Update given intent when being used to request {@link ResolveInfo}.
+     */
+    public static Intent updateIntentForResolve(Intent intent) {
+        if (intent.getSelector() != null) {
+            intent = intent.getSelector();
+        }
+        if (DEBUG_PREFERRED) {
+            intent.addFlags(Intent.FLAG_DEBUG_LOG_RESOLUTION);
+        }
+        return intent;
+    }
+
+    public static String arrayToString(int[] array) {
+        StringBuilder stringBuilder = new StringBuilder(128);
+        stringBuilder.append('[');
+        if (array != null) {
+            for (int i = 0; i < array.length; i++) {
+                if (i > 0) stringBuilder.append(", ");
+                stringBuilder.append(array[i]);
+            }
+        }
+        stringBuilder.append(']');
+        return stringBuilder.toString();
+    }
+
+    /**
+     * Given {@code targetDir}, returns {@code targetDir/~~[randomStrA]/[packageName]-[randomStrB].}
+     * Makes sure that {@code targetDir/~~[randomStrA]} directory doesn't exist.
+     * Notice that this method doesn't actually create any directory.
+     *
+     * @param targetDir Directory that is two-levels up from the result directory.
+     * @param packageName Name of the package whose code files are to be installed under the result
+     *                    directory.
+     * @return File object for the directory that should hold the code files of {@code packageName}.
+     */
+    public static File getNextCodePath(File targetDir, String packageName) {
+        SecureRandom random = new SecureRandom();
+        byte[] bytes = new byte[16];
+        File firstLevelDir;
+        do {
+            random.nextBytes(bytes);
+            String dirName = RANDOM_DIR_PREFIX
+                    + Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
+            firstLevelDir = new File(targetDir, dirName);
+        } while (firstLevelDir.exists());
+        random.nextBytes(bytes);
+        String suffix = Base64.encodeToString(bytes, Base64.URL_SAFE | Base64.NO_WRAP);
+        return new File(firstLevelDir, packageName + "-" + suffix);
+    }
+
+    /**
+     * Gets the type of the external storage a package is installed on.
+     * @param packageVolume The storage volume of the package.
+     * @param packageIsExternal true if the package is currently installed on
+     * external/removable/unprotected storage.
+     * @return {@link StorageEnums#UNKNOWN} if the package is not stored externally or the
+     * corresponding {@link StorageEnums} storage type value if it is.
+     * corresponding {@link StorageEnums} storage type value if it is.
+     */
+    public static int getPackageExternalStorageType(VolumeInfo packageVolume,
+            boolean packageIsExternal) {
+        if (packageVolume != null) {
+            DiskInfo disk = packageVolume.getDisk();
+            if (disk != null) {
+                if (disk.isSd()) {
+                    return StorageEnums.SD_CARD;
+                }
+                if (disk.isUsb()) {
+                    return StorageEnums.USB;
+                }
+                if (packageIsExternal) {
+                    return StorageEnums.OTHER;
+                }
+            }
+        }
+        return StorageEnums.UNKNOWN;
     }
 }

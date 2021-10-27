@@ -416,13 +416,12 @@ public abstract class Context {
     public static final int BIND_SCHEDULE_LIKE_TOP_APP = 0x00080000;
 
     /**
-     * Flag for {@link #bindService}: allow background activity starts from the bound service's
-     * process.
-     * This flag is only respected if the caller is holding
-     * {@link android.Manifest.permission#START_ACTIVITIES_FROM_BACKGROUND}.
+     * This flag has never been used.
      * @hide
+     * @deprecated This flag has never been used.
      */
     @SystemApi
+    @Deprecated
     public static final int BIND_ALLOW_BACKGROUND_ACTIVITY_STARTS = 0x00100000;
 
     /**
@@ -534,8 +533,8 @@ public abstract class Context {
                     | Context.BIND_NOT_PERCEPTIBLE | Context.BIND_NOT_VISIBLE;
 
     /** @hide */
-    @IntDef(flag = true, prefix = { "RECEIVER_VISIBLE_" }, value = {
-            RECEIVER_VISIBLE_TO_INSTANT_APPS
+    @IntDef(flag = true, prefix = { "RECEIVER_VISIBLE" }, value = {
+            RECEIVER_VISIBLE_TO_INSTANT_APPS, RECEIVER_EXPORTED, RECEIVER_NOT_EXPORTED
     })
     @Retention(RetentionPolicy.SOURCE)
     public @interface RegisterReceiverFlags {}
@@ -544,6 +543,18 @@ public abstract class Context {
      * Flag for {@link #registerReceiver}: The receiver can receive broadcasts from Instant Apps.
      */
     public static final int RECEIVER_VISIBLE_TO_INSTANT_APPS = 0x1;
+
+    /**
+     * Flag for {@link #registerReceiver}: The receiver can receive broadcasts from other Apps.
+     * Has the same behavior as marking a statically registered receiver with "exported=true"
+     */
+    public static final int RECEIVER_EXPORTED = 0x2;
+
+    /**
+     * Flag for {@link #registerReceiver}: The receiver cannot receive broadcasts from other Apps.
+     * Has the same behavior as marking a statically registered receiver with "exported=false"
+     */
+    public static final int RECEIVER_NOT_EXPORTED = 0x4;
 
     /**
      * Returns an AssetManager instance for the application's package.
@@ -2989,8 +3000,12 @@ public abstract class Context {
      *
      * @param receiver The BroadcastReceiver to handle the broadcast.
      * @param filter Selects the Intent broadcasts to be received.
-     * @param flags Additional options for the receiver. May be 0 or
-     *      {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS}.
+     * @param flags Additional options for the receiver. As of
+     * Android T, either {@link #RECEIVER_EXPORTED} or
+     * {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being registered
+     *            for protected broadcasts, and may additionally specify
+     *            {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS} if {@link #RECEIVER_EXPORTED} is
+     *            specified.
      *
      * @return The first sticky intent found that matches <var>filter</var>,
      *         or null if there are none.
@@ -3062,8 +3077,12 @@ public abstract class Context {
      *      no permission is required.
      * @param scheduler Handler identifying the thread that will receive
      *      the Intent.  If null, the main thread of the process will be used.
-     * @param flags Additional options for the receiver. May be 0 or
-     *      {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS}.
+     * @param flags Additional options for the receiver. As of
+     * Android T, either {@link #RECEIVER_EXPORTED} or
+     * {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being registered
+     *            for protected broadcasts, and may additionally specify
+     *            {@link #RECEIVER_VISIBLE_TO_INSTANT_APPS} if {@link #RECEIVER_EXPORTED} is
+     *            specified.
      *
      * @return The first sticky intent found that matches <var>filter</var>,
      *         or null if there are none.
@@ -3110,6 +3129,42 @@ public abstract class Context {
     }
 
     /**
+     * Same as {@link #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler, int)}
+     * but this receiver will receive broadcasts that are sent to all users. The receiver can
+     * use {@link BroadcastReceiver#getSendingUser} to determine on which user the broadcast
+     * was sent.
+     *
+     * @param receiver The BroadcastReceiver to handle the broadcast.
+     * @param filter Selects the Intent broadcasts to be received.
+     * @param broadcastPermission String naming a permissions that a
+     *      broadcaster must hold in order to send an Intent to you. If {@code null},
+     *      no permission is required.
+     * @param scheduler Handler identifying the thread that will receive
+     *      the Intent. If {@code null}, the main thread of the process will be used.
+     * @param flags Additional options for the receiver. As of
+     *      Android T, either {@link #RECEIVER_EXPORTED} or
+     *      {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being
+     *      registered for protected broadcasts
+     *
+     * @return The first sticky intent found that matches <var>filter</var>,
+     *         or {@code null} if there are none.
+     *
+     * @see #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler, int)
+     * @see #sendBroadcast
+     * @see #unregisterReceiver
+     * @hide
+     */
+    @SuppressLint("IntentBuilderName")
+    @Nullable
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @SystemApi
+    public Intent registerReceiverForAllUsers(@Nullable BroadcastReceiver receiver,
+            @NonNull IntentFilter filter, @Nullable String broadcastPermission,
+            @Nullable Handler scheduler, @RegisterReceiverFlags int flags) {
+        throw new RuntimeException("Not implemented. Must override in a subclass.");
+    }
+
+    /**
      * @hide
      * Same as {@link #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler)
      * but for a specific user.  This receiver will receiver broadcasts that
@@ -3138,6 +3193,41 @@ public abstract class Context {
     public abstract Intent registerReceiverAsUser(BroadcastReceiver receiver,
             UserHandle user, IntentFilter filter, @Nullable String broadcastPermission,
             @Nullable Handler scheduler);
+
+    /**
+     * @hide
+     * Same as {@link #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler, int)
+     * but for a specific user.  This receiver will receiver broadcasts that
+     * are sent to the requested user.
+     *
+     * @param receiver The BroadcastReceiver to handle the broadcast.
+     * @param user UserHandle to send the intent to.
+     * @param filter Selects the Intent broadcasts to be received.
+     * @param broadcastPermission String naming a permissions that a
+     *      broadcaster must hold in order to send an Intent to you.  If null,
+     *      no permission is required.
+     * @param scheduler Handler identifying the thread that will receive
+     *      the Intent.  If null, the main thread of the process will be used.
+     * @param flags Additional options for the receiver. As of
+     *      Android T, either {@link #RECEIVER_EXPORTED} or
+     *      {@link #RECEIVER_NOT_EXPORTED} must be specified if the receiver isn't being
+     *      registered for protected broadcasts
+     *
+     * @return The first sticky intent found that matches <var>filter</var>,
+     *         or null if there are none.
+     *
+     * @see #registerReceiver(BroadcastReceiver, IntentFilter, String, Handler, int)
+     * @see #sendBroadcast
+     * @see #unregisterReceiver
+     */
+    @SuppressWarnings("HiddenAbstractMethod")
+    @SuppressLint("IntentBuilderName")
+    @Nullable
+    @RequiresPermission(android.Manifest.permission.INTERACT_ACROSS_USERS_FULL)
+    @UnsupportedAppUsage
+    public abstract Intent registerReceiverAsUser(BroadcastReceiver receiver,
+            UserHandle user, IntentFilter filter, @Nullable String broadcastPermission,
+            @Nullable Handler scheduler, @RegisterReceiverFlags int flags);
 
     /**
      * Unregister a previously registered BroadcastReceiver.  <em>All</em>
@@ -3195,7 +3285,7 @@ public abstract class Context {
      * apps targeting SDK Version {@link android.os.Build.VERSION_CODES#O}
      * or higher are not allowed to start background services from the background.
      * See
-     * <a href="{@docRoot}/about/versions/oreo/background">
+     * <a href="/about/versions/oreo/background">
      * Background Execution Limits</a>
      * for more details.
      *
@@ -3204,7 +3294,7 @@ public abstract class Context {
      * apps targeting SDK Version {@link android.os.Build.VERSION_CODES#S}
      * or higher are not allowed to start foreground services from the background.
      * See
-     * <a href="{@docRoot}/about/versions/12/behavior-changes-12">
+     * <a href="/about/versions/12/behavior-changes-12">
      * Behavior changes: Apps targeting Android 12
      * </a>
      * for more details.
@@ -3258,7 +3348,7 @@ public abstract class Context {
      * apps targeting SDK Version {@link android.os.Build.VERSION_CODES#S}
      * or higher are not allowed to start foreground services from the background.
      * See
-     * <a href="{@docRoot}/about/versions/12/behavior-changes-12">
+     * <a href="/about/versions/12/behavior-changes-12">
      * Behavior changes: Apps targeting Android 12
      * </a>
      * for more details.
@@ -3392,9 +3482,8 @@ public abstract class Context {
      * @return {@code true} if the system is in the process of bringing up a
      *         service that your client has permission to bind to; {@code false}
      *         if the system couldn't find the service or if your client doesn't
-     *         have permission to bind to it. If this value is {@code true}, you
-     *         should later call {@link #unbindService} to release the
-     *         connection.
+     *         have permission to bind to it. You should call {@link #unbindService}
+     *         to release the connection even if this method returned {@code false}.
      *
      * @throws SecurityException If the caller does not have permission to access the service
      * or the service can not be found.
@@ -4204,14 +4293,12 @@ public abstract class Context {
 
     /**
      * Use with {@link #getSystemService(String)} to retrieve a {@link
-     * android.app.StatusBarManager} for interacting with the status bar.
+     * android.app.StatusBarManager} for interacting with the status bar and quick settings.
      *
      * @see #getSystemService(String)
      * @see android.app.StatusBarManager
      *
-     * @hide
      */
-    @SystemApi
     @SuppressLint("ServiceName")
     public static final String STATUS_BAR_SERVICE = "statusbar";
 
@@ -5950,6 +6037,10 @@ public abstract class Context {
      * that have been explicitly granted -- if the given process/uid has
      * more general access to the URI's content provider then this check will
      * always fail.
+     *
+     * <strong>Note:</strong> On SDK Version {@link android.os.Build.VERSION_CODES#S},
+     * calling this method from a secondary-user's context will incorrectly return
+     * {@link PackageManager#PERMISSION_DENIED} for all {code uris}.
      *
      * @param uris The list of URIs that is being checked.
      * @param pid The process ID being checked against.  Must be &gt; 0.

@@ -326,7 +326,9 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"फ़ोन कॉल करने और उन्हें प्रबंधित करने की अनुमति दें"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"बॉडी सेंसर"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"अपने महत्वपूर्ण संकेतों के बारे में सेंसर डेटा को ऐक्सेस करें"</string>
-    <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"विंडो की सामग्री वापस पाएं"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"सूचनाएं"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"सूचनाएं दिखाएं"</string>
+    <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"विंडो का कॉन्टेंट वापस पाएं"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"उस विंडो की सामग्री की जाँच करें, जिसका आप इस्तेमाल कर रहे हैं."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"छूकर, किसी चीज़ से जुड़ी जानकारी सुनने की सुविधा चालू करें"</string>
     <string name="capability_desc_canRequestTouchExploration" msgid="4394677060796752976">"जिन चीज़ों पर आप टैप करेंगे उन्हें ज़ोर से बोला जाएगा और स्क्रीन को जेस्चर के ज़रिए एक्सप्लोर किया जा सकेगा."</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"ऐप्स को कीलॉक और कोई भी संबद्ध पासवर्ड सुरक्षा बंद करने देता है. उदाहरण के लिए, इनकमिंग फ़ोन कॉल पाते समय फ़ोन, कीलॉक को बंद कर देता है, फिर कॉल खत्म होने पर कीलॉक को फिर से चालू कर देता है."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"जानें कि स्क्रीन लॉक कितना मुश्किल बनाया गया है"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"यह मंज़ूरी मिलने के बाद ऐप्लिकेशन जान पाता है कि स्क्रीन लॉक कितना मुश्किल (बहुत ज़्यादा, मध्यम, कम या बिल्कुल नहीं) है. इस स्तर से यह पता चलता है कि स्क्रीन लॉक कितना लंबा या किस तरह का है. ऐप्लिकेशन उपयोगकर्ताओं को यह सुझाव भी दे सकता है कि वे स्क्रीन लॉक को एक तय लेवल तक अपडेट करें. लेकिन उपयोगकर्ता इसे बेझिझक अनदेखा करके छोड़ सकते हैं. ध्यान दें कि स्क्रीन लॉक को सादे टेक्स्ट में सेव नहीं किया जाता है इसलिए ऐप्लिकेशन को सटीक पासवर्ड पता नहीं होता है."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"सूचनाएं दिखाएं"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"ऐप्लिकेशन को सूचनाएं दिखाने की अनुमति दें"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"बायोमीट्रिक हार्डवेयर इस्तेमाल करने दें"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"पुष्टि के लिए, ऐप्लिकेशन को बायोमीट्रिक हार्डवेयर इस्तेमाल करने की मंज़ूरी दें"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"फ़िंगरप्रिंट हार्डवेयर को प्रबंधित करें"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"जारी रखने के लिए, फ़िंगरप्रिंट या स्क्रीन लॉक क्रेडेंशियल डालकर पुष्टि करें"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"कोई गड़बड़ी हुई. फिर से कोशिश करें."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"फ़िंगरप्रिंट आइकॉन"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"फ़ेस अनलॉक"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"फ़ेस अनलॉक से जुड़ी समस्या"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"जारी रखने के लिए, अपना चेहरा दिखाकर या स्क्रीन लॉक क्रेडेंशियल डालकर पुष्टि करें"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"कोई गड़बड़ी हुई. फिर से कोशिश करें."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"चेहरे का आइकॉन"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"समन्वयन सेटिंग पढ़ें"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"ऐप्स  को किसी खाते की समन्वयन सेटिंग पढ़ने देता है. उदाहरण के लिए, इससे यह तय किया जा सकता है कि लोग ऐप्स  किसी खाते के साथ समन्‍वयित है या नहीं."</string>
@@ -745,10 +751,10 @@
     <string name="policydesc_wipeData_secondaryUser" product="default" msgid="2788325512167208654">"इस फ़ोन पर मौजूद इस उपयोगकर्ता का डेटा बिना चेतावनी के मिटा दें."</string>
     <string name="policylab_setGlobalProxy" msgid="215332221188670221">"डिवाइस वैश्विक प्रॉक्‍सी सेट करें"</string>
     <string name="policydesc_setGlobalProxy" msgid="7149665222705519604">"नीति चालू होने के दौरान इस्तेमाल करने के लिए डिवाइस ग्लोबल प्रॉक्‍सी सेट करें. केवल डिवाइस का मालिक ही ग्लोबल प्रॉक्‍सी सेट कर सकता है."</string>
-    <string name="policylab_expirePassword" msgid="6015404400532459169">"स्‍क्रीन लॉक पासवर्ड समाप्‍ति सेट करें"</string>
+    <string name="policylab_expirePassword" msgid="6015404400532459169">"स्‍क्रीन लॉक पासवर्ड के खत्म होने की अवधि सेट करें"</string>
     <string name="policydesc_expirePassword" msgid="9136524319325960675">"यह बदलें कि स्‍क्रीन लॉक पासवर्ड, पिन या पैटर्न को कितने समय में बदला जाना चाहिए."</string>
     <string name="policylab_encryptedStorage" msgid="9012936958126670110">"मेमोरी को सुरक्षित करने का तरीका सेट करें"</string>
-    <string name="policydesc_encryptedStorage" msgid="1102516950740375617">"संग्रहित ऐप्स डेटा को एन्क्रिप्ट किया जाना आवश्‍यक है."</string>
+    <string name="policydesc_encryptedStorage" msgid="1102516950740375617">"स्टोर किए गए ऐप डेटा को एन्क्रिप्ट किया जाना ज़रूरी है."</string>
     <string name="policylab_disableCamera" msgid="5749486347810162018">"कैमरों को अक्षम करें"</string>
     <string name="policydesc_disableCamera" msgid="3204405908799676104">"सभी डिवाइस कैमरों का उपयोग रोकें."</string>
     <string name="policylab_disableKeyguardFeatures" msgid="5071855750149949741">"स्‍क्रीन लॉक की कुछ सुविधाएं बंद करना"</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"शॉर्टकट के चालू होने पर, दाेनाें वॉल्यूम बटन (आवाज़ कम या ज़्यादा करने वाले बटन) को तीन सेकंड तक दबाने से, सुलभता सुविधा शुरू हाे जाएगी."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"क्या आप सुलभता सुविधाओं के लिए शॉर्टकट चालू करना चाहते हैं?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"आवाज़ कम और ज़्यादा करने वाले दोनों बटन को कुछ सेकंड तक दबाकर रखने से सुलभता सुविधाएं चालू हो जाती हैं. ऐसा करने से आपके डिवाइस के काम करने के तरीके में बदलाव हो सकता है.\n\nमौजूदा सुविधाएं:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nआप सेटिंग और सुलभता में जाकर चुनी हुई सुविधाएं बदल सकते हैं."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"क्या आप <xliff:g id="SERVICE">%1$s</xliff:g> शॉर्टकट चालू करना चाहते हैं?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"आवाज़ कम और ज़्यादा करने वाले दोनों बटन को कुछ सेकंड तक दबाकर रखने से <xliff:g id="SERVICE">%1$s</xliff:g> चालू हो जाती है, जो एक सुलभता सुविधा है. ऐसा करने से आपके डिवाइस के काम करने के तरीके में बदलाव हो सकता है.\n\nआप सेटिंग और सुलभता में जाकर इस शॉर्टकट को किसी दूसरी सुविधा के लिए बदल सकते हैं."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"चालू करें"</string>
@@ -2009,7 +2015,7 @@
     <string name="app_category_image" msgid="7307840291864213007">"फ़ोटो और तस्वीरें"</string>
     <string name="app_category_social" msgid="2278269325488344054">"सामाजिक और संचार"</string>
     <string name="app_category_news" msgid="1172762719574964544">"समाचार और पत्रिकाएं"</string>
-    <string name="app_category_maps" msgid="6395725487922533156">"Maps और नेविगेशन ऐप्लिकेशन"</string>
+    <string name="app_category_maps" msgid="6395725487922533156">"मैप और नेविगेशन ऐप्लिकेशन"</string>
     <string name="app_category_productivity" msgid="1844422703029557883">"उत्पादकता"</string>
     <string name="app_category_accessibility" msgid="6643521607848547683">"सुलभता"</string>
     <string name="device_storage_monitor_notification_channel" msgid="5164244565844470758">"डिवाइस में जगह"</string>

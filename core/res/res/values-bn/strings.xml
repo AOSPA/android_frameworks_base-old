@@ -326,6 +326,10 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"ফোন কলগুলি এবং পরিচালনা"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"বডি সেন্সর"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"আপনার অত্যাবশ্যক লক্ষণগুলির সম্পর্কে সেন্সর ডেটা অ্যাক্সেস করে"</string>
+    <!-- no translation found for permgrouplab_notifications (5472972361980668884) -->
+    <skip />
+    <!-- no translation found for permgroupdesc_notifications (4608679556801506580) -->
+    <skip />
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"উইন্ডোর কন্টেন্ট পুনরুদ্ধার করে"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"ব্যবহার করছেন এমন একটি উইন্ডোর কন্টেন্ট নিরীক্ষণ করে৷"</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"স্পর্শের মাধ্যমে অন্বেষণ করা চালু করুন"</string>
@@ -549,6 +553,10 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"কী-লক এবং যেকোনো সংশ্লিষ্ট পাসওয়ার্ড সুরক্ষা অক্ষম করতে অ্যাপ্লিকেশানটিকে মঞ্জুর করে৷ উদাহরণস্বরূপ, একটি ইনকামিং ফোন কল গ্রহণ করার সময়ে ফোনটি কী-লক অক্ষম করে, তারপরে কল শেষ হয়ে গেলে কী-লকটিকে আবার সক্ষম করে৷"</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"স্ক্রিন লকের জটিলতা জানার অনুরোধ করুন"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"এটি অ্যাপটিকে স্ক্রিন লকের জটিলতার লেভেল বুঝতে সাহায্য করে (খুব বেশি, মাঝারি, অল্প জটিল বা কোনও জটিলতা নেই), যা স্ক্রিন লকটি সম্ভবত কত দীর্ঘ ও সেটির ধরন কীরকম, তার ইঙ্গিত দেয়। এই অ্যাপটি একটি নির্দিষ্ট লেভেল পর্যন্ত স্ক্রিন লক আপডেট করার সাজেশনও দিতে পারে, তবে ব্যবহারকারী তা উপেক্ষা করে অন্য কোথাও চলে যেতে পারেন। মনে রাখবেন যে স্ক্রিন লক প্লেন টেক্সট হিসেবে সংরক্ষণ করা হয় না, তাই অ্যাপ কখনও আসল পাসওয়ার্ড জানতে পারে না।"</string>
+    <!-- no translation found for permlab_postNotification (4875401198597803658) -->
+    <skip />
+    <!-- no translation found for permdesc_postNotification (5974977162462877075) -->
+    <skip />
     <string name="permlab_useBiometric" msgid="6314741124749633786">"বায়োমেট্রিক হার্ডওয়্যার ব্যবহার করুন"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"অ্যাপটিকে যাচাইকরণের জন্য বায়োমেট্রিক হার্ডওয়্যার ব্যবহার করার অনুমতি দেয়"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"আঙ্গুলের ছাপ নেওয়ার হার্ডওয়্যার পরিচালনা করুন"</string>
@@ -609,6 +617,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"চালিয়ে যেতে আপনার আঙুলের ছাপ বা স্ক্রিন লক ব্য়বহার করুন"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"কোনও সমস্যা হয়েছে। আবার করে দেখুন।"</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"আঙ্গুলের ছাপ আইকন"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"ফেস আনলক"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"\'ফেস আনলক\' ফিচার ব্যবহার করার ক্ষেত্রে হওয়া সমস্যা"</string>
@@ -661,6 +670,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"চালিয়ে যেতে আপনার ফেস বা স্ক্রিন লক ব্যবহার করুন"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"কোনও সমস্যা হয়েছে। আবার করে দেখুন।"</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"ফেস আইকন"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"সিঙ্ক সেটিংস পড়ে"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"অ্যাপ্লিকেশানটিকে একটি অ্যাকাউন্টের জন্য সিঙ্ক সেটিংস পড়ার অনুমতি দেয়৷ উদাহরণস্বরূপ, \'পিপল\' অ্যাপ্লিকেশানটি কোনো অ্যাকাউন্টের সাথে সিঙ্ক করা আছে কিনা তা নির্ধারণ করতে পারে৷"</string>
@@ -1692,7 +1702,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"শর্টকাট চালু করা থাকাকালীন দুটি ভলিউম বোতাম একসাথে ৩ সেকেন্ড টিপে ধরে রাখলে একটি অ্যাকসেসিবিলিটি ফিচার চালু হবে।"</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"অ্যাক্সেসিবিলিটি ফিচারের শর্টকাট বন্ধ করতে চান?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"উভয় ভলিউম কী কয়েক সেকেন্ড ধরে থাকলে অ্যাক্সেসিবিলিটি ফিচার চালু হয়ে যাবে। এর ফলে, আপনার ডিভাইস কীভাবে কাজ করবে সেটিতে পরিবর্তন হতে পারে।\n\nবর্তমান ফিচার:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nসেটিংস &gt; অ্যাক্সেসিবিলিটি বিকল্প থেকে আপনি বাছাই করা ফিচার পরিবর্তন করতে পারবেন।"</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"<xliff:g id="SERVICE">%1$s</xliff:g> শর্টকাট চালু করতে চান?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"উভয় ভলিউম কী কয়েক সেকেন্ড ধরে থাকলে <xliff:g id="SERVICE">%1$s</xliff:g> চালু হয়ে যাবে। এটি একটি অ্যাক্সেসিবিলিটি ফিচার। এর ফলে, আপনার ডিভাইস কীভাবে কাজ করবে সেটিতে পরিবর্তন হতে পারে।\n\nসেটিংস &gt; অ্যাক্সেসিবিলিটি থেকে আপনি এই শর্টকাট পরিবর্তন করতে পারবেন।"</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"চালু করুন"</string>

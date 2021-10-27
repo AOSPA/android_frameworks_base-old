@@ -22,7 +22,6 @@ import static android.view.RemoteAnimationTarget.MODE_OPENING;
 import static com.android.wm.shell.common.ExecutorUtils.executeRemoteCallWithTaskPermission;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_BOTTOM_OR_RIGHT;
 import static com.android.wm.shell.common.split.SplitLayout.SPLIT_POSITION_TOP_OR_LEFT;
-import static com.android.wm.shell.splitscreen.SplitScreen.STAGE_TYPE_MAIN;
 
 import android.app.ActivityManager;
 import android.app.ActivityTaskManager;
@@ -42,17 +41,21 @@ import android.view.IRemoteAnimationFinishedCallback;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
 import android.view.SurfaceControl;
+import android.view.SurfaceSession;
 import android.view.WindowManager;
-import android.window.IRemoteTransition;
+import android.window.RemoteTransition;
 import android.window.WindowContainerTransaction;
 
 import androidx.annotation.BinderThread;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 
+import com.android.internal.logging.InstanceId;
+import com.android.internal.util.FrameworkStatsLog;
 import com.android.wm.shell.RootTaskDisplayAreaOrganizer;
 import com.android.wm.shell.ShellTaskOrganizer;
 import com.android.wm.shell.common.DisplayImeController;
+import com.android.wm.shell.common.DisplayInsetsController;
 import com.android.wm.shell.common.RemoteCallable;
 import com.android.wm.shell.common.ShellExecutor;
 import com.android.wm.shell.common.SyncTransactionQueue;
@@ -60,11 +63,11 @@ import com.android.wm.shell.common.TransactionPool;
 import com.android.wm.shell.common.annotations.ExternalThread;
 import com.android.wm.shell.common.split.SplitLayout.SplitPosition;
 import com.android.wm.shell.draganddrop.DragAndDropPolicy;
-import com.android.wm.shell.splitscreen.ISplitScreenListener;
 import com.android.wm.shell.transition.LegacyTransitions;
 import com.android.wm.shell.transition.Transitions;
 
 import java.io.PrintWriter;
+import java.util.Arrays;
 import java.util.concurrent.Executor;
 
 /**
@@ -72,6 +75,7 @@ import java.util.concurrent.Executor;
  * {@link SplitScreen}.
  * @see StageCoordinator
  */
+// TODO(b/198577848): Implement split screen flicker test to consolidate CUJ of split screen.
 public class SplitScreenController implements DragAndDropPolicy.Starter,
         RemoteCallable<SplitScreenController> {
     private static final String TAG = SplitScreenController.class.getSimpleName();
@@ -83,8 +87,10 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
     private final ShellExecutor mMainExecutor;
     private final SplitScreenImpl mImpl = new SplitScreenImpl();
     private final DisplayImeController mDisplayImeController;
+    private final DisplayInsetsController mDisplayInsetsController;
     private final Transitions mTransitions;
     private final TransactionPool mTransactionPool;
+    private final SplitscreenEventLogger mLogger;
 
     private StageCoordinator mStageCoordinator;
 
@@ -92,6 +98,7 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
             SyncTransactionQueue syncQueue, Context context,
             RootTaskDisplayAreaOrganizer rootTDAOrganizer,
             ShellExecutor mainExecutor, DisplayImeController displayImeController,
+            DisplayInsetsController displayInsetsController,
             Transitions transitions, TransactionPool transactionPool) {
         mTaskOrganizer = shellTaskOrganizer;
         mSyncQueue = syncQueue;
@@ -99,8 +106,10 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         mRootTDAOrganizer = rootTDAOrganizer;
         mMainExecutor = mainExecutor;
         mDisplayImeController = displayImeController;
+        mDisplayInsetsController = displayInsetsController;
         mTransitions = transitions;
         mTransactionPool = transactionPool;
+        mLogger = new SplitscreenEventLogger();
     }
 
     public SplitScreen asSplitScreen() {
@@ -121,8 +130,8 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         if (mStageCoordinator == null) {
             // TODO: Multi-display
             mStageCoordinator = new StageCoordinator(mContext, DEFAULT_DISPLAY, mSyncQueue,
-                    mRootTDAOrganizer, mTaskOrganizer, mDisplayImeController, mTransitions,
-                    mTransactionPool);
+                    mRootTDAOrganizer, mTaskOrganizer, mDisplayImeController,
+                    mDisplayInsetsController, mTransitions, mTransactionPool, mLogger);
         }
     }
 
@@ -164,8 +173,8 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
                 leftOrTop ? SPLIT_POSITION_TOP_OR_LEFT : SPLIT_POSITION_BOTTOM_OR_RIGHT);
     }
 
-    public void exitSplitScreen() {
-        mStageCoordinator.exitSplitScreen();
+    public void exitSplitScreen(int toTopTaskId, int exitReason) {
+        mStageCoordinator.exitSplitScreen(toTopTaskId, exitReason);
     }
 
     public void onKeyguardOccludedChanged(boolean occluded) {
@@ -232,46 +241,29 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
     private void startIntentLegacy(PendingIntent intent, Intent fillInIntent,
             @SplitScreen.StageType int stage, @SplitPosition int position,
             @Nullable Bundle options) {
-        final boolean wasInSplit = isSplitScreenVisible();
-
         LegacyTransitions.ILegacyTransition transition = new LegacyTransitions.ILegacyTransition() {
             @Override
             public void onAnimationStart(int transit, RemoteAnimationTarget[] apps,
                     RemoteAnimationTarget[] wallpapers, RemoteAnimationTarget[] nonApps,
                     IRemoteAnimationFinishedCallback finishedCallback,
                     SurfaceControl.Transaction t) {
-                boolean cancelled = apps == null || apps.length == 0;
                 mStageCoordinator.updateSurfaceBounds(null /* layout */, t);
-                if (cancelled) {
-                    if (!wasInSplit) {
-                        final WindowContainerTransaction undoWct = new WindowContainerTransaction();
-                        mStageCoordinator.prepareExitSplitScreen(STAGE_TYPE_MAIN, undoWct);
-                        mSyncQueue.queue(undoWct);
-                        mSyncQueue.runInSync(undoT -> {
-                            // looks weird, but we want undoT to execute after t but still want the
-                            // rest of the syncQueue runnables to aggregate.
-                            t.merge(undoT);
-                            undoT.merge(t);
-                        });
-                        return;
-                    }
-                } else {
+
+                if (apps != null) {
                     for (int i = 0; i < apps.length; ++i) {
                         if (apps[i].mode == MODE_OPENING) {
                             t.show(apps[i].leash);
                         }
                     }
                 }
-                RemoteAnimationTarget divider = mStageCoordinator.getDividerBarLegacyTarget();
-                if (divider.leash != null) {
-                    t.show(divider.leash);
-                }
+
                 t.apply();
-                if (cancelled) return;
-                try {
-                    finishedCallback.onAnimationFinished();
-                } catch (RemoteException e) {
-                    Slog.e(TAG, "Error finishing legacy transition: ", e);
+                if (finishedCallback != null) {
+                    try {
+                        finishedCallback.onAnimationFinished();
+                    } catch (RemoteException e) {
+                        Slog.e(TAG, "Error finishing legacy transition: ", e);
+                    }
                 }
             }
         };
@@ -281,9 +273,38 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         mSyncQueue.queue(transition, WindowManager.TRANSIT_OPEN, wct);
     }
 
-    RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel) {
+    RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel, RemoteAnimationTarget[] apps) {
         if (!isSplitScreenVisible()) return null;
-        return new RemoteAnimationTarget[]{mStageCoordinator.getDividerBarLegacyTarget()};
+        final SurfaceControl.Builder builder = new SurfaceControl.Builder(new SurfaceSession())
+                .setContainerLayer()
+                .setName("RecentsAnimationSplitTasks")
+                .setHidden(false)
+                .setCallsite("SplitScreenController#onGoingtoRecentsLegacy");
+        mRootTDAOrganizer.attachToDisplayArea(DEFAULT_DISPLAY, builder);
+        SurfaceControl sc = builder.build();
+        SurfaceControl.Transaction transaction = new SurfaceControl.Transaction();
+
+        // Ensure that we order these in the parent in the right z-order as their previous order
+        Arrays.sort(apps, (a1, a2) -> a1.prefixOrderIndex - a2.prefixOrderIndex);
+        int layer = 1;
+        for (RemoteAnimationTarget appTarget : apps) {
+            transaction.reparent(appTarget.leash, sc);
+            transaction.setPosition(appTarget.leash, appTarget.screenSpaceBounds.left,
+                    appTarget.screenSpaceBounds.top);
+            transaction.setLayer(appTarget.leash, layer++);
+        }
+        transaction.apply();
+        transaction.close();
+        return new RemoteAnimationTarget[]{
+                mStageCoordinator.getDividerBarLegacyTarget(),
+                mStageCoordinator.getOutlineLegacyTarget()};
+    }
+
+    /**
+     * Sets drag info to be logged when splitscreen is entered.
+     */
+    public void logOnDroppedToSplit(@SplitPosition int position, InstanceId dragSessionId) {
+        mStageCoordinator.logOnDroppedToSplit(position, dragSessionId);
     }
 
     public void dump(@NonNull PrintWriter pw, String prefix) {
@@ -475,10 +496,11 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         }
 
         @Override
-        public void exitSplitScreen() {
+        public void exitSplitScreen(int toTopTaskId) {
             executeRemoteCallWithTaskPermission(mController, "exitSplitScreen",
                     (controller) -> {
-                        controller.exitSplitScreen();
+                        controller.exitSplitScreen(toTopTaskId,
+                                FrameworkStatsLog.SPLITSCREEN_UICHANGED__EXIT_REASON__UNKNOWN_EXIT);
                     });
         }
 
@@ -528,7 +550,7 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         public void startTasks(int mainTaskId, @Nullable Bundle mainOptions,
                 int sideTaskId, @Nullable Bundle sideOptions,
                 @SplitPosition int sidePosition,
-                @Nullable IRemoteTransition remoteTransition) {
+                @Nullable RemoteTransition remoteTransition) {
             executeRemoteCallWithTaskPermission(mController, "startTasks",
                     (controller) -> controller.mStageCoordinator.startTasks(mainTaskId, mainOptions,
                             sideTaskId, sideOptions, sidePosition, remoteTransition));
@@ -554,10 +576,11 @@ public class SplitScreenController implements DragAndDropPolicy.Starter,
         }
 
         @Override
-        public RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel) {
+        public RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel,
+                RemoteAnimationTarget[] apps) {
             final RemoteAnimationTarget[][] out = new RemoteAnimationTarget[][]{null};
             executeRemoteCallWithTaskPermission(mController, "onGoingToRecentsLegacy",
-                    (controller) -> out[0] = controller.onGoingToRecentsLegacy(cancel),
+                    (controller) -> out[0] = controller.onGoingToRecentsLegacy(cancel, apps),
                     true /* blocking */);
             return out[0];
         }

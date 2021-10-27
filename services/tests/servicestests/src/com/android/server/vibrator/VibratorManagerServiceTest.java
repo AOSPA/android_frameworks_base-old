@@ -35,7 +35,6 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoMoreInteractions;
 import static org.mockito.Mockito.when;
 
 import android.app.AppOpsManager;
@@ -95,6 +94,8 @@ import org.mockito.junit.MockitoRule;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 import java.util.function.Predicate;
 
 /**
@@ -229,6 +230,19 @@ public class VibratorManagerServiceTest {
         verify(mNativeWrapperMock).init(any());
         assertTrue(mVibratorProviders.get(1).isInitialized());
         assertTrue(mVibratorProviders.get(2).isInitialized());
+    }
+
+    @Test
+    public void createService_resetsVibrators() {
+        mockVibrators(1, 2);
+        mVibratorProviders.get(1).setCapabilities(IVibrator.CAP_EXTERNAL_CONTROL);
+        mVibratorProviders.get(2).setCapabilities(IVibrator.CAP_EXTERNAL_CONTROL);
+
+        createService();
+        assertEquals(1, mVibratorProviders.get(1).getOffCount());
+        assertEquals(1, mVibratorProviders.get(2).getOffCount());
+        assertEquals(Arrays.asList(false), mVibratorProviders.get(1).getExternalControlStates());
+        assertEquals(Arrays.asList(false), mVibratorProviders.get(2).getExternalControlStates());
     }
 
     @Test
@@ -696,10 +710,12 @@ public class VibratorManagerServiceTest {
                         VibratorManagerService.OnSyncedVibrationCompleteListener.class);
         verify(mNativeWrapperMock).init(listenerCaptor.capture());
 
-        // Mock trigger callback on registered listener.
+        CountDownLatch triggerCountDown = new CountDownLatch(1);
+        // Mock trigger callback on registered listener right after the synced vibration starts.
         when(mNativeWrapperMock.prepareSynced(eq(new int[]{1, 2}))).thenReturn(true);
         when(mNativeWrapperMock.triggerSynced(anyLong())).then(answer -> {
             listenerCaptor.getValue().onComplete(answer.getArgument(0));
+            triggerCountDown.countDown();
             return true;
         });
 
@@ -708,20 +724,19 @@ public class VibratorManagerServiceTest {
                 .compose();
         CombinedVibration effect = CombinedVibration.createParallel(composed);
 
-        // Wait for vibration to start, it should finish right away with trigger callback.
         vibrate(service, effect, ALARM_ATTRS);
-
-        // VibrationThread will start this vibration async, so wait until callback is triggered.
-        assertTrue(waitUntil(s -> !listenerCaptor.getAllValues().isEmpty(), service,
-                TEST_TIMEOUT_MILLIS));
+        // VibrationThread will start this vibration async, so wait until vibration is triggered.
+        triggerCountDown.await(TEST_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS);
 
         verify(mNativeWrapperMock).prepareSynced(eq(new int[]{1, 2}));
         verify(mNativeWrapperMock).triggerSynced(anyLong());
-
         PrimitiveSegment expected = new PrimitiveSegment(
                 VibrationEffect.Composition.PRIMITIVE_CLICK, 1, 100);
         assertEquals(Arrays.asList(expected), mVibratorProviders.get(1).getEffectSegments());
         assertEquals(Arrays.asList(expected), mVibratorProviders.get(2).getEffectSegments());
+
+        // VibrationThread needs some time to react to native callbacks and stop the vibrator.
+        assertTrue(waitUntil(s -> !s.isVibrating(1), service, TEST_TIMEOUT_MILLIS));
     }
 
     @Test
@@ -989,7 +1004,7 @@ public class VibratorManagerServiceTest {
         mExternalVibratorService.onExternalVibrationStop(externalVibration);
 
         assertEquals(IExternalVibratorService.SCALE_NONE, scale);
-        assertEquals(Arrays.asList(true, false),
+        assertEquals(Arrays.asList(false, true, false),
                 mVibratorProviders.get(1).getExternalControlStates());
     }
 
@@ -1013,9 +1028,10 @@ public class VibratorManagerServiceTest {
         assertEquals(IExternalVibratorService.SCALE_NONE, firstScale);
         assertEquals(IExternalVibratorService.SCALE_NONE, secondScale);
         verify(firstController).mute();
-        verifyNoMoreInteractions(secondController);
+        verify(secondController, never()).mute();
         // Set external control called only once.
-        assertEquals(Arrays.asList(true), mVibratorProviders.get(1).getExternalControlStates());
+        assertEquals(Arrays.asList(false, true),
+                mVibratorProviders.get(1).getExternalControlStates());
     }
 
     @Test
@@ -1037,7 +1053,8 @@ public class VibratorManagerServiceTest {
 
         // Vibration is cancelled.
         assertTrue(waitUntil(s -> !s.isVibrating(1), service, TEST_TIMEOUT_MILLIS));
-        assertEquals(Arrays.asList(true), mVibratorProviders.get(1).getExternalControlStates());
+        assertEquals(Arrays.asList(false, true),
+                mVibratorProviders.get(1).getExternalControlStates());
     }
 
     private VibrationEffectSegment expectedPrebaked(int effectId) {

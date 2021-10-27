@@ -21,6 +21,7 @@ import android.annotation.Nullable;
 import android.app.ActivityManager;
 import android.content.Context;
 import android.content.res.TypedArray;
+import android.graphics.BLASTBufferQueue;
 import android.graphics.FrameInfo;
 import android.graphics.HardwareRenderer;
 import android.graphics.Picture;
@@ -257,6 +258,76 @@ public final class ThreadedRenderer extends HardwareRenderer {
     private boolean mEnabled;
     private boolean mRequested = true;
 
+    /**
+     * This child class exists to break ownership cycles. ViewRootImpl owns a ThreadedRenderer
+     * which owns a WebViewOverlayProvider. WebViewOverlayProvider will in turn be set as
+     * the listener for HardwareRenderer callbacks. By keeping this a child class, there are
+     * no cycles in the chain. The ThreadedRenderer will remain GC-able if any callbacks are
+     * still outstanding, which will in turn release any JNI references to WebViewOverlayProvider.
+     */
+    private static final class WebViewOverlayProvider implements
+            PrepareSurfaceControlForWebviewCallback, ASurfaceTransactionCallback {
+        private static final boolean sOverlaysAreEnabled =
+                HardwareRenderer.isWebViewOverlaysEnabled();
+        private final SurfaceControl.Transaction mTransaction = new SurfaceControl.Transaction();
+        private boolean mHasWebViewOverlays = false;
+        private BLASTBufferQueue mBLASTBufferQueue;
+        private SurfaceControl mSurfaceControl;
+
+        public boolean setSurfaceControlOpaque(boolean opaque) {
+            synchronized (this) {
+                if (mHasWebViewOverlays) return false;
+                mTransaction.setOpaque(mSurfaceControl, opaque).apply();
+            }
+            return opaque;
+        }
+
+        public boolean shouldEnableOverlaySupport() {
+            return sOverlaysAreEnabled && mSurfaceControl != null && mBLASTBufferQueue != null;
+        }
+
+        public void setSurfaceControl(SurfaceControl surfaceControl) {
+            synchronized (this) {
+                mSurfaceControl = surfaceControl;
+                if (mSurfaceControl != null && mHasWebViewOverlays) {
+                    mTransaction.setOpaque(surfaceControl, false).apply();
+                }
+            }
+        }
+
+        public void setBLASTBufferQueue(BLASTBufferQueue bufferQueue) {
+            synchronized (this) {
+                mBLASTBufferQueue = bufferQueue;
+            }
+        }
+
+        @Override
+        public void prepare() {
+            synchronized (this) {
+                mHasWebViewOverlays = true;
+                if (mSurfaceControl != null) {
+                    mTransaction.setOpaque(mSurfaceControl, false).apply();
+                }
+            }
+        }
+
+        @Override
+        public boolean onMergeTransaction(long nativeTransactionObj,
+                long aSurfaceControlNativeObj, long frameNr) {
+            synchronized (this) {
+                if (mBLASTBufferQueue == null) {
+                    return false;
+                } else {
+                    mBLASTBufferQueue.mergeWithNextTransaction(nativeTransactionObj, frameNr);
+                    return true;
+                }
+            }
+        }
+    }
+
+    private final WebViewOverlayProvider mWebViewOverlayProvider = new WebViewOverlayProvider();
+    private boolean mWebViewOverlaysEnabled = false;
+
     @Nullable
     private ArrayList<FrameDrawingCallback> mNextRtFrameCallbacks;
 
@@ -455,6 +526,56 @@ public final class ThreadedRenderer extends HardwareRenderer {
     }
 
     /**
+     * Whether or not the renderer owns the SurfaceControl's opacity. If true, use
+     * {@link #setSurfaceControlOpaque(boolean)} to update the opacity
+     */
+    public boolean rendererOwnsSurfaceControlOpacity() {
+        return mWebViewOverlayProvider.mSurfaceControl != null;
+    }
+
+    /**
+     * Sets the SurfaceControl's opacity that this HardwareRenderer is rendering onto. The renderer
+     * may opt to override the opacity, and will return the value that is ultimately set
+     *
+     * @return true if the surface is opaque, false otherwise
+     *
+     * @hide
+     */
+    public boolean setSurfaceControlOpaque(boolean opaque) {
+        return mWebViewOverlayProvider.setSurfaceControlOpaque(opaque);
+    }
+
+    private void updateWebViewOverlayCallbacks() {
+        boolean shouldEnable = mWebViewOverlayProvider.shouldEnableOverlaySupport();
+        if (shouldEnable != mWebViewOverlaysEnabled) {
+            mWebViewOverlaysEnabled = shouldEnable;
+            if (shouldEnable) {
+                setASurfaceTransactionCallback(mWebViewOverlayProvider);
+                setPrepareSurfaceControlForWebviewCallback(mWebViewOverlayProvider);
+            } else {
+                setASurfaceTransactionCallback(null);
+                setPrepareSurfaceControlForWebviewCallback(null);
+            }
+        }
+    }
+
+    @Override
+    public void setSurfaceControl(@Nullable SurfaceControl surfaceControl) {
+        super.setSurfaceControl(surfaceControl);
+        mWebViewOverlayProvider.setSurfaceControl(surfaceControl);
+        updateWebViewOverlayCallbacks();
+    }
+
+    /**
+     * Sets the BLASTBufferQueue being used for rendering. This is required to be specified
+     * for WebView overlay support
+     */
+    public void setBlastBufferQueue(@Nullable BLASTBufferQueue blastBufferQueue) {
+        mWebViewOverlayProvider.setBLASTBufferQueue(blastBufferQueue);
+        updateWebViewOverlayCallbacks();
+    }
+
+    /**
      * Updates the light position based on the position of the window.
      *
      * @param attachInfo Information about the window.
@@ -488,11 +609,7 @@ public final class ThreadedRenderer extends HardwareRenderer {
         return mHeight;
     }
 
-    /**
-     * Outputs extra debugging information in the specified file descriptor.
-     */
-    void dumpGfxInfo(PrintWriter pw, FileDescriptor fd, String[] args) {
-        pw.flush();
+    private static int dumpArgsToFlags(String[] args) {
         // If there's no arguments, eg 'dumpsys gfxinfo', then dump everything.
         // If there's a targetted package, eg 'dumpsys gfxinfo com.android.systemui', then only
         // dump the summary information
@@ -510,7 +627,21 @@ public final class ThreadedRenderer extends HardwareRenderer {
                     break;
             }
         }
-        dumpProfileInfo(fd, flags);
+        return flags;
+    }
+
+    /** @hide */
+    public static void handleDumpGfxInfo(FileDescriptor fd, String[] args) {
+        dumpGlobalProfileInfo(fd, dumpArgsToFlags(args));
+        WindowManagerGlobal.getInstance().dumpGfxInfo(fd, args);
+    }
+
+    /**
+     * Outputs extra debugging information in the specified file descriptor.
+     */
+    void dumpGfxInfo(PrintWriter pw, FileDescriptor fd, String[] args) {
+        pw.flush();
+        dumpProfileInfo(fd, dumpArgsToFlags(args));
     }
 
     Picture captureRenderingCommands() {

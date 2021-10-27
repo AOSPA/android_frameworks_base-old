@@ -98,6 +98,7 @@ extern int register_android_media_AudioVolumeGroups(JNIEnv *env);
 extern int register_android_media_AudioVolumeGroupChangeHandler(JNIEnv *env);
 extern int register_android_media_MicrophoneInfo(JNIEnv *env);
 extern int register_android_media_ToneGenerator(JNIEnv *env);
+extern int register_android_media_audio_common_AidlConversion(JNIEnv* env);
 extern int register_android_media_midi(JNIEnv *env);
 
 namespace android {
@@ -204,11 +205,13 @@ extern int register_com_android_internal_os_KernelCpuTotalBpfMapReader(JNIEnv* e
 extern int register_com_android_internal_os_KernelCpuUidBpfMapReader(JNIEnv *env);
 extern int register_com_android_internal_os_KernelSingleProcessCpuThreadReader(JNIEnv* env);
 extern int register_com_android_internal_os_KernelSingleUidTimeReader(JNIEnv *env);
+extern int register_com_android_internal_os_LongArrayMultiStateCounter(JNIEnv* env);
 extern int register_com_android_internal_os_Zygote(JNIEnv *env);
 extern int register_com_android_internal_os_ZygoteCommandBuffer(JNIEnv *env);
 extern int register_com_android_internal_os_ZygoteInit(JNIEnv *env);
 extern int register_com_android_internal_security_VerityUtils(JNIEnv* env);
 extern int register_com_android_internal_util_VirtualRefBasePtr(JNIEnv *env);
+extern int register_android_window_WindowInfosListener(JNIEnv* env);
 extern int register_com_android_internal_app_ActivityTrigger(JNIEnv *env);
 
 // Namespace for Android Runtime flags applied during boot time.
@@ -1587,6 +1590,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_com_android_internal_content_om_OverlayConfig),
         REG_JNI(register_com_android_internal_net_NetworkUtilsInternal),
         REG_JNI(register_com_android_internal_os_ClassLoaderFactory),
+        REG_JNI(register_com_android_internal_os_LongArrayMultiStateCounter),
         REG_JNI(register_com_android_internal_os_Zygote),
         REG_JNI(register_com_android_internal_os_ZygoteCommandBuffer),
         REG_JNI(register_com_android_internal_os_ZygoteInit),
@@ -1618,6 +1622,7 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_android_media_MicrophoneInfo),
         REG_JNI(register_android_media_RemoteDisplay),
         REG_JNI(register_android_media_ToneGenerator),
+        REG_JNI(register_android_media_audio_common_AidlConversion),
         REG_JNI(register_android_media_midi),
 
         REG_JNI(register_android_opengl_classes),
@@ -1656,6 +1661,8 @@ static const RegJNIRec gRegJNI[] = {
         REG_JNI(register_com_android_internal_os_KernelCpuTotalBpfMapReader),
         REG_JNI(register_com_android_internal_os_KernelCpuUidBpfMapReader),
         REG_JNI(register_com_android_internal_os_KernelSingleUidTimeReader),
+
+        REG_JNI(register_android_window_WindowInfosListener),
         REG_JNI(register_com_android_internal_app_ActivityTrigger),
         REG_JNI(register_com_android_internal_os_KernelSingleProcessCpuThreadReader),
 };

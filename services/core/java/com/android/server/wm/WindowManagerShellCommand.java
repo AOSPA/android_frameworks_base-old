@@ -23,7 +23,11 @@ import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_BACKGROUND_
 import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_BACKGROUND_APP_COLOR_BACKGROUND_FLOATING;
 import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_BACKGROUND_SOLID_COLOR;
 import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_BACKGROUND_WALLPAPER;
+import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_REACHABILITY_POSITION_CENTER;
+import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_REACHABILITY_POSITION_LEFT;
+import static com.android.server.wm.LetterboxConfiguration.LETTERBOX_REACHABILITY_POSITION_RIGHT;
 
+import android.content.res.Resources.NotFoundException;
 import android.graphics.Color;
 import android.graphics.Point;
 import android.graphics.Rect;
@@ -43,6 +47,7 @@ import com.android.internal.protolog.ProtoLogImpl;
 import com.android.server.LocalServices;
 import com.android.server.statusbar.StatusBarManagerInternal;
 import com.android.server.wm.LetterboxConfiguration.LetterboxBackgroundType;
+import com.android.server.wm.LetterboxConfiguration.LetterboxReachabilityPosition;
 
 import java.io.IOException;
 import java.io.PrintWriter;
@@ -606,7 +611,7 @@ public class WindowManagerShellCommand extends ShellCommand {
             return -1;
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset' or aspect ratio should be provided as an argument " + e);
+                    "Error: aspect ratio should be provided as an argument " + e);
             return -1;
         }
         synchronized (mInternal.mGlobalLock) {
@@ -625,7 +630,7 @@ public class WindowManagerShellCommand extends ShellCommand {
             return -1;
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset' or corners radius should be provided as an argument " + e);
+                    "Error: corners radius should be provided as an argument " + e);
             return -1;
         }
         synchronized (mInternal.mGlobalLock) {
@@ -653,18 +658,36 @@ public class WindowManagerShellCommand extends ShellCommand {
                     break;
                 default:
                     getErrPrintWriter().println(
-                            "Error: 'reset', 'solid_color', 'app_color_background' or "
+                            "Error: 'solid_color', 'app_color_background' or "
                             + "'wallpaper' should be provided as an argument");
                     return -1;
             }
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset', 'solid_color', 'app_color_background' or "
+                    "Error: 'solid_color', 'app_color_background' or "
                         + "'wallpaper' should be provided as an argument" + e);
             return -1;
         }
         synchronized (mInternal.mGlobalLock) {
             mLetterboxConfiguration.setLetterboxBackgroundType(backgroundType);
+        }
+        return 0;
+    }
+
+    private int runSetLetterboxBackgroundColorResource(PrintWriter pw) throws RemoteException {
+        final int colorId;
+        try {
+            String arg = getNextArgRequired();
+            colorId = mInternal.mContext.getResources()
+                    .getIdentifier(arg, "color", "com.android.internal");
+        } catch (NotFoundException e) {
+            getErrPrintWriter().println(
+                    "Error: color in '@android:color/resource_name' format should be provided as "
+                            + "an argument " + e);
+            return -1;
+        }
+        synchronized (mInternal.mGlobalLock) {
+            mLetterboxConfiguration.setLetterboxBackgroundColorResourceId(colorId);
         }
         return 0;
     }
@@ -676,7 +699,7 @@ public class WindowManagerShellCommand extends ShellCommand {
             color = Color.valueOf(Color.parseColor(arg));
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset' or color in #RRGGBB format should be provided as "
+                    "Error: color in #RRGGBB format should be provided as "
                             + "an argument " + e);
             return -1;
         }
@@ -697,7 +720,7 @@ public class WindowManagerShellCommand extends ShellCommand {
             return -1;
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset' or blur radius should be provided as an argument " + e);
+                    "Error: blur radius should be provided as an argument " + e);
             return -1;
         }
         synchronized (mInternal.mGlobalLock) {
@@ -717,7 +740,7 @@ public class WindowManagerShellCommand extends ShellCommand {
             return -1;
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset' or alpha should be provided as an argument " + e);
+                    "Error: alpha should be provided as an argument " + e);
             return -1;
         }
         synchronized (mInternal.mGlobalLock) {
@@ -726,7 +749,7 @@ public class WindowManagerShellCommand extends ShellCommand {
         return 0;
     }
 
-    private int runSeLetterboxHorizontalPositionMultiplier(PrintWriter pw) throws RemoteException {
+    private int runSetLetterboxHorizontalPositionMultiplier(PrintWriter pw) throws RemoteException {
         final float multiplier;
         try {
             String arg = getNextArgRequired();
@@ -736,11 +759,65 @@ public class WindowManagerShellCommand extends ShellCommand {
             return -1;
         } catch (IllegalArgumentException  e) {
             getErrPrintWriter().println(
-                    "Error: 'reset' or multiplier should be provided as an argument " + e);
+                    "Error: multiplier should be provided as an argument " + e);
             return -1;
         }
         synchronized (mInternal.mGlobalLock) {
             mLetterboxConfiguration.setLetterboxHorizontalPositionMultiplier(multiplier);
+        }
+        return 0;
+    }
+
+    private int runSetLetterboxIsReachabilityEnabled(PrintWriter pw) throws RemoteException {
+        String arg = getNextArg();
+        final boolean enabled;
+        switch (arg) {
+            case "true":
+            case "1":
+                enabled = true;
+                break;
+            case "false":
+            case "0":
+                enabled = false;
+                break;
+            default:
+                getErrPrintWriter().println("Error: expected true, 1, false, 0, but got " + arg);
+                return -1;
+        }
+
+        synchronized (mInternal.mGlobalLock) {
+            mLetterboxConfiguration.setIsReachabilityEnabled(enabled);
+        }
+        return 0;
+    }
+
+    private int runSetLetterboxDefaultPositionForReachability(PrintWriter pw)
+            throws RemoteException {
+        @LetterboxReachabilityPosition final int position;
+        try {
+            String arg = getNextArgRequired();
+            switch (arg) {
+                case "left":
+                    position = LETTERBOX_REACHABILITY_POSITION_LEFT;
+                    break;
+                case "center":
+                    position = LETTERBOX_REACHABILITY_POSITION_CENTER;
+                    break;
+                case "right":
+                    position = LETTERBOX_REACHABILITY_POSITION_RIGHT;
+                    break;
+                default:
+                    getErrPrintWriter().println(
+                            "Error: 'left', 'center' or 'right' are expected as an argument");
+                    return -1;
+            }
+        } catch (IllegalArgumentException  e) {
+            getErrPrintWriter().println(
+                    "Error: 'left', 'center' or 'right' are expected as an argument" + e);
+            return -1;
+        }
+        synchronized (mInternal.mGlobalLock) {
+            mLetterboxConfiguration.setDefaultPositionForReachability(position);
         }
         return 0;
     }
@@ -764,6 +841,9 @@ public class WindowManagerShellCommand extends ShellCommand {
                 case "--backgroundColor":
                     runSetLetterboxBackgroundColor(pw);
                     break;
+                case "--backgroundColorResource":
+                    runSetLetterboxBackgroundColorResource(pw);
+                    break;
                 case "--wallpaperBlurRadius":
                     runSetLetterboxBackgroundWallpaperBlurRadius(pw);
                     break;
@@ -771,7 +851,13 @@ public class WindowManagerShellCommand extends ShellCommand {
                     runSetLetterboxBackgroundWallpaperDarkScrimAlpha(pw);
                     break;
                 case "--horizontalPositionMultiplier":
-                    runSeLetterboxHorizontalPositionMultiplier(pw);
+                    runSetLetterboxHorizontalPositionMultiplier(pw);
+                    break;
+                case "--isReachabilityEnabled":
+                    runSetLetterboxIsReachabilityEnabled(pw);
+                    break;
+                case "--defaultPositionForReachability":
+                    runSetLetterboxDefaultPositionForReachability(pw);
                     break;
                 default:
                     getErrPrintWriter().println(
@@ -810,6 +896,12 @@ public class WindowManagerShellCommand extends ShellCommand {
                         break;
                     case "horizontalPositionMultiplier":
                         mLetterboxConfiguration.resetLetterboxHorizontalPositionMultiplier();
+                        break;
+                    case "isReachabilityEnabled":
+                        mLetterboxConfiguration.getIsReachabilityEnabled();
+                        break;
+                    case "defaultPositionForReachability":
+                        mLetterboxConfiguration.getDefaultPositionForReachability();
                         break;
                     default:
                         getErrPrintWriter().println(
@@ -904,6 +996,8 @@ public class WindowManagerShellCommand extends ShellCommand {
             mLetterboxConfiguration.resetLetterboxBackgroundWallpaperBlurRadius();
             mLetterboxConfiguration.resetLetterboxBackgroundWallpaperDarkScrimAlpha();
             mLetterboxConfiguration.resetLetterboxHorizontalPositionMultiplier();
+            mLetterboxConfiguration.resetIsReachabilityEnabled();
+            mLetterboxConfiguration.resetDefaultPositionForReachability();
         }
     }
 
@@ -915,6 +1009,11 @@ public class WindowManagerShellCommand extends ShellCommand {
                     + mLetterboxConfiguration.getLetterboxHorizontalPositionMultiplier());
             pw.println("Aspect ratio: "
                     + mLetterboxConfiguration.getFixedOrientationLetterboxAspectRatio());
+            pw.println("Is reachability enabled: "
+                    + mLetterboxConfiguration.getIsReachabilityEnabled());
+            pw.println("Default position for reachability: "
+                    + LetterboxConfiguration.letterboxReachabilityPositionToString(
+                            mLetterboxConfiguration.getDefaultPositionForReachability()));
 
             pw.println("Background type: "
                     + LetterboxConfiguration.letterboxBackgroundTypeToString(
@@ -1031,6 +1130,11 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("        is 'solid-color'. Use (set)get-letterbox-style to check and control");
         pw.println("        letterbox background type. See Color#parseColor for allowed color");
         pw.println("        formats (#RRGGBB and some colors by name, e.g. magenta or olive).");
+        pw.println("      --backgroundColorResource resource_name");
+        pw.println("        Color resource name of letterbox background which is used when");
+        pw.println("        background type is 'solid-color'. Use (set)get-letterbox-style to");
+        pw.println("        check and control background type. Parameter is a color resource");
+        pw.println("        name, for example, @android:color/system_accent2_50.");
         pw.println("      --wallpaperBlurRadius radius");
         pw.println("        Blur radius for 'wallpaper' letterbox background. If radius <= 0");
         pw.println("        both it and R.dimen.config_letterboxBackgroundWallpaperBlurRadius");
@@ -1044,9 +1148,16 @@ public class WindowManagerShellCommand extends ShellCommand {
         pw.println("        Horizontal position of app window center. If multiplier < 0 or > 1,");
         pw.println("        both it and R.dimen.config_letterboxHorizontalPositionMultiplier");
         pw.println("        are ignored and central position (0.5) is used.");
+        pw.println("      --isReachabilityEnabled [true|1|false|0]");
+        pw.println("        Whether reachability repositioning is allowed for letterboxed");
+        pw.println("        fullscreen apps in landscape device orientation.");
+        pw.println("      --defaultPositionForReachability [left|center|right]");
+        pw.println("        Default horizontal position of app window  when reachability is.");
+        pw.println("        enabled.");
         pw.println("  reset-letterbox-style [aspectRatio|cornerRadius|backgroundType");
         pw.println("      |backgroundColor|wallpaperBlurRadius|wallpaperDarkScrimAlpha");
-        pw.println("      |horizontalPositionMultiplier]");
+        pw.println("      |horizontalPositionMultiplier|isReachabilityEnabled");
+        pw.println("      |defaultPositionMultiplierForReachability]");
         pw.println("    Resets overrides to default values for specified properties separated");
         pw.println("    by space, e.g. 'reset-letterbox-style aspectRatio cornerRadius'.");
         pw.println("    If no arguments provided, all values will be reset.");

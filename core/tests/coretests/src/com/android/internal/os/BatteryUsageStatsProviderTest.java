@@ -18,6 +18,9 @@ package com.android.internal.os;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
+
 import android.app.ActivityManager;
 import android.content.Context;
 import android.os.BatteryConsumer;
@@ -160,6 +163,73 @@ public class BatteryUsageStatsProviderTest {
         assertThat(iterator.next(item)).isFalse();
     }
 
+    @Test
+    public void testWriteAndReadHistoryTags() {
+        MockBatteryStatsImpl batteryStats = mStatsRule.getBatteryStats();
+        batteryStats.setRecordAllHistoryLocked(true);
+        batteryStats.forceRecordAllHistory();
+
+        batteryStats.setNoAutoReset(true);
+
+        mStatsRule.setTime(1_000_000, 1_000_000);
+
+        batteryStats.setBatteryStateLocked(BatteryManager.BATTERY_STATUS_DISCHARGING, 100,
+                /* plugType */ 0, 90, 72, 3700, 3_600_000, 4_000_000, 0, 1_000_000,
+                1_000_000, 1_000_000);
+
+        // Add a large number of different history tags with strings of increasing length.
+        // These long strings will overflow the history buffer, at which point
+        // history will be written to disk and a new buffer started.
+        // As a result, we will only see a tail end of the sequence of events included
+        // in history.
+        for (int i = 1; i < 200; i++) {
+            StringBuilder sb = new StringBuilder().append(i).append(" ");
+            for (int j = 0; j <= i; j++) {
+                sb.append("word ");
+            }
+            batteryStats.noteJobStartLocked(sb.toString(), i);
+        }
+
+        Context context = InstrumentationRegistry.getContext();
+        BatteryUsageStatsProvider provider = new BatteryUsageStatsProvider(context, batteryStats);
+
+        final BatteryUsageStats batteryUsageStats =
+                provider.getBatteryUsageStats(
+                        new BatteryUsageStatsQuery.Builder().includeBatteryHistory().build());
+
+        Parcel parcel = Parcel.obtain();
+        batteryUsageStats.writeToParcel(parcel, 0);
+
+        assertThat(parcel.dataSize()).isAtMost(128_000);
+
+        parcel.setDataPosition(0);
+        BatteryUsageStats unparceled = BatteryUsageStats.CREATOR.createFromParcel(parcel);
+
+        BatteryStatsHistoryIterator iterator = unparceled.iterateBatteryStatsHistory();
+        BatteryStats.HistoryItem item = new BatteryStats.HistoryItem();
+
+        assertThat(iterator.next(item)).isTrue();
+        assertThat(item.cmd).isEqualTo((int) BatteryStats.HistoryItem.CMD_CURRENT_TIME);
+
+        int lastUid = 0;
+        while (iterator.next(item)) {
+            int uid = item.eventTag.uid;
+            // We expect the history buffer to have been reset in the middle of the run because
+            // there were many different history tags written, exceeding the limit of 128k.
+            assertThat(uid).isGreaterThan(150);
+            assertThat(item.eventCode).isEqualTo(
+                    BatteryStats.HistoryItem.EVENT_JOB | BatteryStats.HistoryItem.EVENT_FLAG_START);
+            assertThat(item.eventTag.string).startsWith(uid + " ");
+            assertThat(item.batteryChargeUah).isEqualTo(3_600_000);
+            assertThat(item.batteryLevel).isEqualTo(90);
+            assertThat(item.time).isEqualTo((long) 1_000_000);
+
+            lastUid = uid;
+        }
+
+        assertThat(lastUid).isEqualTo(199);
+    }
+
     private void assertHistoryItem(BatteryStats.HistoryItem item, int command, int eventCode,
             String tag, int uid, int batteryChargeUah, int batteryLevel, long elapsedTimeMs) {
         assertThat(item.cmd).isEqualTo(command);
@@ -261,6 +331,39 @@ public class BatteryUsageStatsProviderTest {
                 .getConsumedPower(BatteryConsumer.POWER_COMPONENT_FLASHLIGHT))
                 .isWithin(0.1)
                 .of(180.0);
+    }
+
+    @Test
+    public void testAggregateBatteryStats_incompatibleSnapshot() {
+        Context context = InstrumentationRegistry.getContext();
+        MockBatteryStatsImpl batteryStats = mStatsRule.getBatteryStats();
+        batteryStats.initMeasuredEnergyStats(new String[]{"FOO", "BAR"});
+
+        BatteryUsageStatsStore batteryUsageStatsStore = mock(BatteryUsageStatsStore.class);
+
+        when(batteryUsageStatsStore.listBatteryUsageStatsTimestamps())
+                .thenReturn(new long[]{1000, 2000});
+
+        when(batteryUsageStatsStore.loadBatteryUsageStats(1000)).thenReturn(
+                new BatteryUsageStats.Builder(batteryStats.getCustomEnergyConsumerNames())
+                        .setStatsDuration(1234).build());
+
+        // Add a snapshot, with a different set of custom power components.  It should
+        // be skipped by the aggregation.
+        when(batteryUsageStatsStore.loadBatteryUsageStats(2000)).thenReturn(
+                new BatteryUsageStats.Builder(new String[]{"different"})
+                        .setStatsDuration(4321).build());
+
+        BatteryUsageStatsProvider provider = new BatteryUsageStatsProvider(context,
+                batteryStats, batteryUsageStatsStore);
+
+        BatteryUsageStatsQuery query = new BatteryUsageStatsQuery.Builder()
+                .aggregateSnapshots(0, 3000)
+                .build();
+        final BatteryUsageStats stats = provider.getBatteryUsageStats(query);
+        assertThat(stats.getCustomPowerComponentNames())
+                .isEqualTo(batteryStats.getCustomEnergyConsumerNames());
+        assertThat(stats.getStatsDuration()).isEqualTo(1234);
     }
 
     private static class TestHandler extends Handler {

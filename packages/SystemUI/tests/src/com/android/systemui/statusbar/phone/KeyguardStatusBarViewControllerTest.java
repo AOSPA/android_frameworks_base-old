@@ -17,35 +17,48 @@
 package com.android.systemui.statusbar.phone;
 
 
+import static com.android.systemui.statusbar.StatusBarState.KEYGUARD;
+import static com.android.systemui.statusbar.StatusBarState.SHADE;
+
+import static com.google.common.truth.Truth.assertThat;
+
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import android.view.ViewGroup;
+import android.testing.AndroidTestingRunner;
+import android.testing.TestableLooper;
+import android.view.LayoutInflater;
+import android.view.View;
 
 import androidx.test.filters.SmallTest;
 
 import com.android.keyguard.CarrierTextController;
+import com.android.keyguard.KeyguardUpdateMonitor;
+import com.android.keyguard.KeyguardUpdateMonitorCallback;
 import com.android.systemui.R;
 import com.android.systemui.SysuiTestCase;
 import com.android.systemui.battery.BatteryMeterViewController;
 import com.android.systemui.flags.FeatureFlags;
+import com.android.systemui.plugins.statusbar.StatusBarStateController;
+import com.android.systemui.statusbar.SysuiStatusBarStateController;
 import com.android.systemui.statusbar.events.SystemStatusAnimationScheduler;
 import com.android.systemui.statusbar.policy.BatteryController;
 import com.android.systemui.statusbar.policy.ConfigurationController;
+import com.android.systemui.statusbar.policy.KeyguardStateController;
 import com.android.systemui.statusbar.policy.UserInfoController;
 
 import org.junit.Before;
 import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 @SmallTest
+@RunWith(AndroidTestingRunner.class)
+@TestableLooper.RunWithLooper
 public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
-    @Mock
-    private KeyguardStatusBarView mKeyguardStatusBarView;
-    @Mock
-    private ViewGroup mViewGroup;
     @Mock
     private CarrierTextController mCarrierTextController;
     @Mock
@@ -62,16 +75,33 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
     private FeatureFlags mFeatureFlags;
     @Mock
     private BatteryMeterViewController mBatteryMeterViewController;
+    @Mock
+    private KeyguardStateController mKeyguardStateController;
+    @Mock
+    private KeyguardBypassController mKeyguardBypassController;
+    @Mock
+    private KeyguardUpdateMonitor mKeyguardUpdateMonitor;
+    @Mock
+    private BiometricUnlockController mBiometricUnlockController;
+    @Mock
+    private SysuiStatusBarStateController mStatusBarStateController;
 
+    private TestNotificationPanelViewStateProvider mNotificationPanelViewStateProvider;
+    private KeyguardStatusBarView mKeyguardStatusBarView;
     private KeyguardStatusBarViewController mController;
 
     @Before
     public void setup() throws Exception {
+        mNotificationPanelViewStateProvider = new TestNotificationPanelViewStateProvider();
+
         MockitoAnnotations.initMocks(this);
 
-        when(mKeyguardStatusBarView.getResources()).thenReturn(mContext.getResources());
-        when(mKeyguardStatusBarView.findViewById(R.id.statusIcons)).thenReturn(mViewGroup);
-        when(mViewGroup.getContext()).thenReturn(mContext);
+        allowTestableLooperAsMainThread();
+        TestableLooper.get(this).runWithLooper(() -> {
+            mKeyguardStatusBarView =
+                    (KeyguardStatusBarView) LayoutInflater.from(mContext)
+                            .inflate(R.layout.keyguard_status_bar, null);
+        });
 
         mController = new KeyguardStatusBarViewController(
                 mKeyguardStatusBarView,
@@ -82,7 +112,13 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
                 mUserInfoController,
                 mStatusBarIconController,
                 new StatusBarIconController.TintedIconManager.Factory(mFeatureFlags),
-                mBatteryMeterViewController
+                mBatteryMeterViewController,
+                mNotificationPanelViewStateProvider,
+                mKeyguardStateController,
+                mKeyguardBypassController,
+                mKeyguardUpdateMonitor,
+                mBiometricUnlockController,
+                mStatusBarStateController
         );
     }
 
@@ -132,5 +168,217 @@ public class KeyguardStatusBarViewControllerTest extends SysuiTestCase {
         mController.setBatteryListening(true);
 
         verify(mBatteryController).addCallback(any());
+    }
+
+    @Test
+    public void updateTopClipping_viewClippingUpdated() {
+        int viewTop = 20;
+        mKeyguardStatusBarView.setTop(viewTop);
+        int notificationPanelTop = 30;
+
+        mController.updateTopClipping(notificationPanelTop);
+
+        assertThat(mKeyguardStatusBarView.getClipBounds().top).isEqualTo(
+                notificationPanelTop - viewTop);
+    }
+
+    @Test
+    public void setNotTopClipping_viewClippingUpdatedToZero() {
+        // Start out with some amount of top clipping.
+        mController.updateTopClipping(50);
+        assertThat(mKeyguardStatusBarView.getClipBounds().top).isGreaterThan(0);
+
+        mController.setNoTopClipping();
+
+        assertThat(mKeyguardStatusBarView.getClipBounds().top).isEqualTo(0);
+    }
+
+    @Test
+    public void updateViewState_alphaAndVisibilityGiven_viewUpdated() {
+        // Verify the initial values so we know the method triggers changes.
+        assertThat(mKeyguardStatusBarView.getAlpha()).isEqualTo(1f);
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.VISIBLE);
+
+        float newAlpha = 0.5f;
+        int newVisibility = View.INVISIBLE;
+        mController.updateViewState(newAlpha, newVisibility);
+
+        assertThat(mKeyguardStatusBarView.getAlpha()).isEqualTo(newAlpha);
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(newVisibility);
+    }
+
+    @Test
+    public void updateViewState_notKeyguardState_nothingUpdated() {
+        mController.onViewAttached();
+        updateStateToNotKeyguard();
+
+        float oldAlpha = mKeyguardStatusBarView.getAlpha();
+
+        mController.updateViewState();
+
+        assertThat(mKeyguardStatusBarView.getAlpha()).isEqualTo(oldAlpha);
+    }
+
+    @Test
+    public void updateViewState_bypassEnabledAndShouldListenForFace_viewHidden() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.VISIBLE);
+
+        when(mKeyguardUpdateMonitor.shouldListenForFace()).thenReturn(true);
+        when(mKeyguardBypassController.getBypassEnabled()).thenReturn(true);
+        onFinishedGoingToSleep();
+
+        mController.updateViewState();
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.INVISIBLE);
+    }
+
+    @Test
+    public void updateViewState_bypassNotEnabled_viewShown() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+
+        when(mKeyguardUpdateMonitor.shouldListenForFace()).thenReturn(true);
+        when(mKeyguardBypassController.getBypassEnabled()).thenReturn(false);
+        onFinishedGoingToSleep();
+
+        mController.updateViewState();
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void updateViewState_shouldNotListenForFace_viewShown() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+
+        when(mKeyguardUpdateMonitor.shouldListenForFace()).thenReturn(false);
+        when(mKeyguardBypassController.getBypassEnabled()).thenReturn(true);
+        onFinishedGoingToSleep();
+
+        mController.updateViewState();
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    @Test
+    public void updateViewState_panelExpandedHeightZero_viewHidden() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+
+        mNotificationPanelViewStateProvider.setPanelViewExpandedHeight(0);
+
+        mController.updateViewState();
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.INVISIBLE);
+    }
+
+    @Test
+    public void updateViewState_qsExpansionOne_viewHidden() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+
+        mNotificationPanelViewStateProvider.setQsExpansionFraction(1f);
+
+        mController.updateViewState();
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.INVISIBLE);
+    }
+
+    // TODO(b/195442899): Add more tests for #updateViewState once CLs are finalized.
+
+    @Test
+    public void updateForHeadsUp_headsUpShouldBeVisible_viewHidden() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+        mKeyguardStatusBarView.setVisibility(View.VISIBLE);
+
+        mNotificationPanelViewStateProvider.setShouldHeadsUpBeVisible(true);
+        mController.updateForHeadsUp(/* animate= */ false);
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.INVISIBLE);
+    }
+
+    @Test
+    public void updateForHeadsUp_headsUpShouldNotBeVisible_viewShown() {
+        mController.onViewAttached();
+        updateStateToKeyguard();
+
+        // Start with the opposite state.
+        mNotificationPanelViewStateProvider.setShouldHeadsUpBeVisible(true);
+        mController.updateForHeadsUp(/* animate= */ false);
+
+        mNotificationPanelViewStateProvider.setShouldHeadsUpBeVisible(false);
+        mController.updateForHeadsUp(/* animate= */ false);
+
+        assertThat(mKeyguardStatusBarView.getVisibility()).isEqualTo(View.VISIBLE);
+    }
+
+    private void updateStateToNotKeyguard() {
+        updateStatusBarState(SHADE);
+    }
+
+    private void updateStateToKeyguard() {
+        updateStatusBarState(KEYGUARD);
+    }
+
+    private void updateStatusBarState(int state) {
+        ArgumentCaptor<StatusBarStateController.StateListener> statusBarStateListenerCaptor =
+                ArgumentCaptor.forClass(StatusBarStateController.StateListener.class);
+        verify(mStatusBarStateController).addCallback(statusBarStateListenerCaptor.capture());
+        StatusBarStateController.StateListener callback = statusBarStateListenerCaptor.getValue();
+
+        callback.onStateChanged(state);
+    }
+
+    /**
+     * Calls {@link com.android.keyguard.KeyguardUpdateMonitorCallback#onFinishedGoingToSleep(int)}
+     * to ensure values are updated properly.
+     */
+    private void onFinishedGoingToSleep() {
+        ArgumentCaptor<KeyguardUpdateMonitorCallback> keyguardUpdateCallbackCaptor =
+                ArgumentCaptor.forClass(KeyguardUpdateMonitorCallback.class);
+        verify(mKeyguardUpdateMonitor).registerCallback(keyguardUpdateCallbackCaptor.capture());
+        KeyguardUpdateMonitorCallback callback = keyguardUpdateCallbackCaptor.getValue();
+
+        callback.onFinishedGoingToSleep(0);
+    }
+
+    private static class TestNotificationPanelViewStateProvider
+            implements NotificationPanelViewController.NotificationPanelViewStateProvider {
+
+        TestNotificationPanelViewStateProvider() {}
+
+        private float mPanelViewExpandedHeight = 100f;
+        private float mQsExpansionFraction = 0f;
+        private boolean mShouldHeadsUpBeVisible = false;
+
+        @Override
+        public float getPanelViewExpandedHeight() {
+            return mPanelViewExpandedHeight;
+        }
+
+        @Override
+        public float getQsExpansionFraction() {
+            return mQsExpansionFraction;
+        }
+
+        @Override
+        public boolean shouldHeadsUpBeVisible() {
+            return mShouldHeadsUpBeVisible;
+        }
+
+        public void setPanelViewExpandedHeight(float panelViewExpandedHeight) {
+            this.mPanelViewExpandedHeight = panelViewExpandedHeight;
+        }
+
+        public void setQsExpansionFraction(float qsExpansionFraction) {
+            this.mQsExpansionFraction = qsExpansionFraction;
+        }
+
+        public void setShouldHeadsUpBeVisible(boolean shouldHeadsUpBeVisible) {
+            this.mShouldHeadsUpBeVisible = shouldHeadsUpBeVisible;
+        }
     }
 }

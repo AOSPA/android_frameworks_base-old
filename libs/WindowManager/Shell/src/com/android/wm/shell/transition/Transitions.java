@@ -19,6 +19,7 @@ package com.android.wm.shell.transition;
 import static android.view.WindowManager.TRANSIT_CHANGE;
 import static android.view.WindowManager.TRANSIT_CLOSE;
 import static android.view.WindowManager.TRANSIT_FIRST_CUSTOM;
+import static android.view.WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
 import static android.view.WindowManager.TRANSIT_OPEN;
 import static android.view.WindowManager.TRANSIT_TO_BACK;
 import static android.view.WindowManager.TRANSIT_TO_FRONT;
@@ -39,8 +40,8 @@ import android.provider.Settings;
 import android.util.Log;
 import android.view.SurfaceControl;
 import android.view.WindowManager;
-import android.window.IRemoteTransition;
 import android.window.ITransitionPlayer;
+import android.window.RemoteTransition;
 import android.window.TransitionFilter;
 import android.window.TransitionInfo;
 import android.window.TransitionRequestInfo;
@@ -175,13 +176,13 @@ public class Transitions implements RemoteCallable<Transitions> {
         return new ShellTransitions() {
             @Override
             public void registerRemote(@androidx.annotation.NonNull TransitionFilter filter,
-                    @androidx.annotation.NonNull IRemoteTransition remoteTransition) {
+                    @androidx.annotation.NonNull RemoteTransition remoteTransition) {
                 // Do nothing
             }
 
             @Override
             public void unregisterRemote(
-                    @androidx.annotation.NonNull IRemoteTransition remoteTransition) {
+                    @androidx.annotation.NonNull RemoteTransition remoteTransition) {
                 // Do nothing
             }
         };
@@ -217,12 +218,12 @@ public class Transitions implements RemoteCallable<Transitions> {
 
     /** Register a remote transition to be used when `filter` matches an incoming transition */
     public void registerRemote(@NonNull TransitionFilter filter,
-            @NonNull IRemoteTransition remoteTransition) {
+            @NonNull RemoteTransition remoteTransition) {
         mRemoteTransitionHandler.addFiltered(filter, remoteTransition);
     }
 
     /** Unregisters a remote transition and all associated filters */
-    public void unregisterRemote(@NonNull IRemoteTransition remoteTransition) {
+    public void unregisterRemote(@NonNull RemoteTransition remoteTransition) {
         mRemoteTransitionHandler.removeFiltered(remoteTransition);
     }
 
@@ -230,7 +231,7 @@ public class Transitions implements RemoteCallable<Transitions> {
     public static boolean isOpeningType(@WindowManager.TransitionType int type) {
         return type == TRANSIT_OPEN
                 || type == TRANSIT_TO_FRONT
-                || type == WindowManager.TRANSIT_KEYGUARD_GOING_AWAY;
+                || type == TRANSIT_KEYGUARD_GOING_AWAY;
     }
 
     /** @return true if the transition was triggered by closing something vs opening something */
@@ -703,14 +704,14 @@ public class Transitions implements RemoteCallable<Transitions> {
 
         @Override
         public void registerRemote(@NonNull TransitionFilter filter,
-                @NonNull IRemoteTransition remoteTransition) {
+                @NonNull RemoteTransition remoteTransition) {
             mMainExecutor.execute(() -> {
                 mRemoteTransitionHandler.addFiltered(filter, remoteTransition);
             });
         }
 
         @Override
-        public void unregisterRemote(@NonNull IRemoteTransition remoteTransition) {
+        public void unregisterRemote(@NonNull RemoteTransition remoteTransition) {
             mMainExecutor.execute(() -> {
                 mRemoteTransitionHandler.removeFiltered(remoteTransition);
             });
@@ -737,7 +738,7 @@ public class Transitions implements RemoteCallable<Transitions> {
 
         @Override
         public void registerRemote(@NonNull TransitionFilter filter,
-                @NonNull IRemoteTransition remoteTransition) {
+                @NonNull RemoteTransition remoteTransition) {
             executeRemoteCallWithTaskPermission(mTransitions, "registerRemote",
                     (transitions) -> {
                         transitions.mRemoteTransitionHandler.addFiltered(filter, remoteTransition);
@@ -745,7 +746,7 @@ public class Transitions implements RemoteCallable<Transitions> {
         }
 
         @Override
-        public void unregisterRemote(@NonNull IRemoteTransition remoteTransition) {
+        public void unregisterRemote(@NonNull RemoteTransition remoteTransition) {
             executeRemoteCallWithTaskPermission(mTransitions, "unregisterRemote",
                     (transitions) -> {
                         transitions.mRemoteTransitionHandler.removeFiltered(remoteTransition);

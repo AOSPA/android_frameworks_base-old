@@ -22,6 +22,7 @@ import android.os.PowerManager;
 import android.os.SystemProperties;
 import android.os.UserHandle;
 import android.provider.Settings;
+import android.util.Log;
 import android.util.MathUtils;
 
 import androidx.annotation.NonNull;
@@ -35,6 +36,7 @@ import com.android.systemui.doze.DozeScreenState;
 import com.android.systemui.dump.DumpManager;
 import com.android.systemui.flags.FeatureFlags;
 import com.android.systemui.statusbar.policy.BatteryController;
+import com.android.systemui.statusbar.policy.DevicePostureController;
 import com.android.systemui.tuner.TunerService;
 
 import java.io.FileDescriptor;
@@ -48,8 +50,10 @@ import javax.inject.Inject;
  * Retrieve doze information
  */
 @SysUISingleton
-public class DozeParameters implements TunerService.Tunable,
-        com.android.systemui.plugins.statusbar.DozeParameters, Dumpable {
+public class DozeParameters implements
+        TunerService.Tunable,
+        com.android.systemui.plugins.statusbar.DozeParameters,
+        Dumpable {
     private static final int MAX_DURATION = 60 * 1000;
     public static final boolean FORCE_NO_BLANKING =
             SystemProperties.getBoolean("debug.force_no_blanking", false);
@@ -254,9 +258,20 @@ public class DozeParameters implements TunerService.Tunable,
     }
 
     /**
+     * Whether the single tap sensor uses the proximity sensor for this device posture.
+     */
+    public boolean singleTapUsesProx(@DevicePostureController.DevicePostureInt int devicePosture) {
+        return getPostureSpecificBool(
+                mResources.getIntArray(R.array.doze_single_tap_uses_prox_posture_mapping),
+                singleTapUsesProx(),
+                devicePosture
+        );
+    }
+
+    /**
      * Whether the single tap sensor uses the proximity sensor.
      */
-    public boolean singleTapUsesProx() {
+    private boolean singleTapUsesProx() {
         return mResources.getBoolean(R.bool.doze_single_tap_uses_prox);
     }
 
@@ -265,6 +280,17 @@ public class DozeParameters implements TunerService.Tunable,
      */
     public boolean longPressUsesProx() {
         return mResources.getBoolean(R.bool.doze_long_press_uses_prox);
+    }
+
+    /**
+     * Sensor to use for brightness changes.
+     */
+    public String brightnessName(@DevicePostureController.DevicePostureInt int posture) {
+        return AmbientDisplayConfiguration.getSensorFromPostureMapping(
+                mResources.getStringArray(R.array.doze_brightness_sensor_name_posture_mapping),
+                null /* defaultValue */,
+                posture
+        );
     }
 
     /**
@@ -291,6 +317,7 @@ public class DozeParameters implements TunerService.Tunable,
 
     @Override
     public void dump(@NonNull FileDescriptor fd, @NonNull PrintWriter pw, @NonNull String[] args) {
+        pw.print("getAlwaysOn(): "); pw.println(getAlwaysOn());
         pw.print("getDisplayStateSupported(): "); pw.println(getDisplayStateSupported());
         pw.print("getPulseDuration(): "); pw.println(getPulseDuration());
         pw.print("getPulseInDuration(): "); pw.println(getPulseInDuration());
@@ -303,6 +330,20 @@ public class DozeParameters implements TunerService.Tunable,
         pw.print("getPickupVibrationThreshold(): "); pw.println(getPickupVibrationThreshold());
         pw.print("getSelectivelyRegisterSensorsUsingProx(): ");
         pw.println(getSelectivelyRegisterSensorsUsingProx());
+    }
+
+    private boolean getPostureSpecificBool(
+            int[] postureMapping,
+            boolean defaultSensorBool,
+            int posture) {
+        boolean bool = defaultSensorBool;
+        if (posture < postureMapping.length) {
+            bool = postureMapping[posture] != 0;
+        } else {
+            Log.e("DozeParameters", "Unsupported doze posture " + posture);
+        }
+
+        return bool;
     }
 
     interface Callback {

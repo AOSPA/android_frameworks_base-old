@@ -40,9 +40,10 @@ import android.annotation.NonNull;
 import android.app.PropertyInvalidatedCache;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.content.pm.PackageUserState;
 import android.content.pm.SuspendDialogInfo;
 import android.content.pm.UserInfo;
+import android.content.pm.pkg.PackageUserState;
+import android.content.pm.pkg.PackageUserStateInternal;
 import android.os.BaseBundle;
 import android.os.PersistableBundle;
 import android.os.Process;
@@ -208,24 +209,24 @@ public class PackageManagerSettingsTests {
         settingsUnderTest.readPackageRestrictionsLPr(0);
 
         PackageSetting ps1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1);
-        PackageUserState packageUserState1 = ps1.readUserState(0);
-        assertThat(packageUserState1.suspended, is(true));
-        assertThat(packageUserState1.suspendParams.size(), is(1));
-        assertThat(packageUserState1.suspendParams.keyAt(0), is("android"));
-        assertThat(packageUserState1.suspendParams.valueAt(0), is(nullValue()));
+        PackageUserStateInternal packageUserState1 = ps1.readUserState(0);
+        assertThat(packageUserState1.isSuspended(), is(true));
+        assertThat(packageUserState1.getSuspendParams().size(), is(1));
+        assertThat(packageUserState1.getSuspendParams().keyAt(0), is("android"));
+        assertThat(packageUserState1.getSuspendParams().valueAt(0), is(nullValue()));
 
         // Verify that the snapshot returns the same answers
         ps1 = snapshot.mPackages.get(PACKAGE_NAME_1);
         packageUserState1 = ps1.readUserState(0);
-        assertThat(packageUserState1.suspended, is(true));
-        assertThat(packageUserState1.suspendParams.size(), is(1));
-        assertThat(packageUserState1.suspendParams.keyAt(0), is("android"));
-        assertThat(packageUserState1.suspendParams.valueAt(0), is(nullValue()));
+        assertThat(packageUserState1.isSuspended(), is(true));
+        assertThat(packageUserState1.getSuspendParams().size(), is(1));
+        assertThat(packageUserState1.getSuspendParams().keyAt(0), is("android"));
+        assertThat(packageUserState1.getSuspendParams().valueAt(0), is(nullValue()));
 
         PackageSetting ps2 = settingsUnderTest.mPackages.get(PACKAGE_NAME_2);
-        PackageUserState packageUserState2 = ps2.readUserState(0);
-        assertThat(packageUserState2.suspended, is(false));
-        assertThat(packageUserState2.suspendParams, is(nullValue()));
+        PackageUserStateInternal packageUserState2 = ps2.readUserState(0);
+        assertThat(packageUserState2.isSuspended(), is(false));
+        assertThat(packageUserState2.getSuspendParams(), is(nullValue()));
 
         // Verify that the snapshot returns different answers
         ps2 = snapshot.mPackages.get(PACKAGE_NAME_2);
@@ -246,12 +247,13 @@ public class PackageManagerSettingsTests {
 
         final PackageSetting ps1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1);
         watcher.verifyNoChangeReported("get package 1");
-        final PackageUserState packageUserState1 = ps1.readUserState(0);
+        final PackageUserStateInternal packageUserState1 = ps1.readUserState(0);
         watcher.verifyNoChangeReported("readUserState");
-        assertThat(packageUserState1.suspended, is(true));
-        assertThat(packageUserState1.suspendParams.size(), is(1));
-        assertThat(packageUserState1.suspendParams.keyAt(0), is(PACKAGE_NAME_3));
-        final PackageUserState.SuspendParams params = packageUserState1.suspendParams.valueAt(0);
+        assertThat(packageUserState1.isSuspended(), is(true));
+        assertThat(packageUserState1.getSuspendParams().size(), is(1));
+        assertThat(packageUserState1.getSuspendParams().keyAt(0), is(PACKAGE_NAME_3));
+        final PackageUserState.SuspendParams params =
+                packageUserState1.getSuspendParams().valueAt(0);
         watcher.verifyNoChangeReported("fetch user state");
         assertThat(params, is(notNullValue()));
         assertThat(params.appExtras.size(), is(1));
@@ -330,15 +332,15 @@ public class PackageManagerSettingsTests {
         // now read and verify
         settingsUnderTest.readPackageRestrictionsLPr(0);
         watcher.verifyChangeReported("readPackageRestrictions");
-        final PackageUserState readPus1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1)
+        final PackageUserStateInternal readPus1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1)
                 .readUserState(0);
         watcher.verifyNoChangeReported("package get 1");
-        assertThat(readPus1.suspended, is(true));
-        assertThat(readPus1.suspendParams.size(), is(2));
+        assertThat(readPus1.isSuspended(), is(true));
+        assertThat(readPus1.getSuspendParams().size(), is(2));
         watcher.verifyNoChangeReported("read package param");
 
-        assertThat(readPus1.suspendParams.keyAt(0), is("suspendingPackage1"));
-        final PackageUserState.SuspendParams params11 = readPus1.suspendParams.valueAt(0);
+        assertThat(readPus1.getSuspendParams().keyAt(0), is("suspendingPackage1"));
+        final PackageUserState.SuspendParams params11 = readPus1.getSuspendParams().valueAt(0);
         watcher.verifyNoChangeReported("read package param");
         assertThat(params11, is(notNullValue()));
         assertThat(params11.dialogInfo, is(dialogInfo1));
@@ -347,8 +349,8 @@ public class PackageManagerSettingsTests {
                 is(true));
         watcher.verifyNoChangeReported("read package param");
 
-        assertThat(readPus1.suspendParams.keyAt(1), is("suspendingPackage2"));
-        final PackageUserState.SuspendParams params12 = readPus1.suspendParams.valueAt(1);
+        assertThat(readPus1.getSuspendParams().keyAt(1), is("suspendingPackage2"));
+        final PackageUserState.SuspendParams params12 = readPus1.getSuspendParams().valueAt(1);
         assertThat(params12, is(notNullValue()));
         assertThat(params12.dialogInfo, is(dialogInfo2));
         assertThat(BaseBundle.kindofEquals(params12.appExtras, appExtras2), is(true));
@@ -356,22 +358,22 @@ public class PackageManagerSettingsTests {
                 is(true));
         watcher.verifyNoChangeReported("read package param");
 
-        final PackageUserState readPus2 = settingsUnderTest.mPackages.get(PACKAGE_NAME_2)
+        final PackageUserStateInternal readPus2 = settingsUnderTest.mPackages.get(PACKAGE_NAME_2)
                 .readUserState(0);
-        assertThat(readPus2.suspended, is(true));
-        assertThat(readPus2.suspendParams.size(), is(1));
-        assertThat(readPus2.suspendParams.keyAt(0), is("suspendingPackage3"));
-        final PackageUserState.SuspendParams params21 = readPus2.suspendParams.valueAt(0);
+        assertThat(readPus2.isSuspended(), is(true));
+        assertThat(readPus2.getSuspendParams().size(), is(1));
+        assertThat(readPus2.getSuspendParams().keyAt(0), is("suspendingPackage3"));
+        final PackageUserState.SuspendParams params21 = readPus2.getSuspendParams().valueAt(0);
         assertThat(params21, is(notNullValue()));
         assertThat(params21.dialogInfo, is(nullValue()));
         assertThat(BaseBundle.kindofEquals(params21.appExtras, appExtras1), is(true));
         assertThat(params21.launcherExtras, is(nullValue()));
         watcher.verifyNoChangeReported("read package param");
 
-        final PackageUserState readPus3 = settingsUnderTest.mPackages.get(PACKAGE_NAME_3)
+        final PackageUserStateInternal readPus3 = settingsUnderTest.mPackages.get(PACKAGE_NAME_3)
                 .readUserState(0);
-        assertThat(readPus3.suspended, is(false));
-        assertThat(readPus3.suspendParams, is(nullValue()));
+        assertThat(readPus3.isSuspended(), is(false));
+        assertThat(readPus3.getSuspendParams(), is(nullValue()));
         watcher.verifyNoChangeReported("package get 3");
     }
 
@@ -411,31 +413,31 @@ public class PackageManagerSettingsTests {
         settingsUnderTest.readPackageRestrictionsLPr(0);
         final PackageUserState readPus1 = settingsUnderTest.mPackages.get(PACKAGE_NAME_1)
                 .readUserState(0);
-        assertThat(readPus1.distractionFlags, is(distractionFlags1));
+        assertThat(readPus1.getDistractionFlags(), is(distractionFlags1));
 
         final PackageUserState readPus2 = settingsUnderTest.mPackages.get(PACKAGE_NAME_2)
                 .readUserState(0);
-        assertThat(readPus2.distractionFlags, is(distractionFlags2));
+        assertThat(readPus2.getDistractionFlags(), is(distractionFlags2));
 
         final PackageUserState readPus3 = settingsUnderTest.mPackages.get(PACKAGE_NAME_3)
                 .readUserState(0);
-        assertThat(readPus3.distractionFlags, is(distractionFlags3));
+        assertThat(readPus3.getDistractionFlags(), is(distractionFlags3));
     }
 
     @Test
     public void testWriteReadUsesStaticLibraries() {
         final Settings settingsUnderTest = makeSettings();
         final PackageSetting ps1 = createPackageSetting(PACKAGE_NAME_1);
-        ps1.appId = Process.FIRST_APPLICATION_UID;
-        ps1.pkg = ((ParsedPackage) PackageImpl.forTesting(PACKAGE_NAME_1).hideAsParsed())
-                .setUid(ps1.appId)
+        ps1.setAppId(Process.FIRST_APPLICATION_UID);
+        ps1.setPkg(((ParsedPackage) PackageImpl.forTesting(PACKAGE_NAME_1).hideAsParsed())
+                .setUid(ps1.getAppId())
                 .setSystem(true)
-                .hideAsFinal();
+                .hideAsFinal());
         final PackageSetting ps2 = createPackageSetting(PACKAGE_NAME_2);
-        ps2.appId = Process.FIRST_APPLICATION_UID + 1;
-        ps2.pkg = ((ParsedPackage) PackageImpl.forTesting(PACKAGE_NAME_2).hideAsParsed())
-                .setUid(ps2.appId)
-                .hideAsFinal();
+        ps2.setAppId(Process.FIRST_APPLICATION_UID + 1);
+        ps2.setPkg(((ParsedPackage) PackageImpl.forTesting(PACKAGE_NAME_2).hideAsParsed())
+                .setUid(ps2.getAppId())
+                .hideAsFinal());
 
         ps1.usesStaticLibraries = new String[] { "com.example.shared.one" };
         ps1.usesStaticLibrariesVersions = new long[] { 12 };
@@ -603,7 +605,7 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/,
                 null /*mimeGroups*/,
                 UUID.randomUUID());
-        testPkgSetting01.copyFrom(origPkgSetting01);
+        testPkgSetting01.copyPackageSetting(origPkgSetting01);
         verifySettingCopy(origPkgSetting01, testPkgSetting01);
     }
 
@@ -631,8 +633,8 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/,
                 null /*mimeGroups*/,
                 UUID.randomUUID());
-        assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
-        assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
+        assertThat(testPkgSetting01.getPrimaryCpuAbi(), is("arm64-v8a"));
+        assertThat(testPkgSetting01.getSecondaryCpuAbi(), is("armeabi"));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
@@ -665,8 +667,8 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/,
                 null /*mimeGroups*/,
                 UUID.randomUUID());
-        assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
-        assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
+        assertThat(testPkgSetting01.getPrimaryCpuAbi(), is("arm64-v8a"));
+        assertThat(testPkgSetting01.getSecondaryCpuAbi(), is("armeabi"));
         assertThat(testPkgSetting01.pkgFlags, is(ApplicationInfo.FLAG_SYSTEM));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(ApplicationInfo.PRIVATE_FLAG_PRIVILEGED));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
@@ -712,7 +714,7 @@ public class PackageManagerSettingsTests {
     public void testCreateNewSetting01() {
         final PackageSetting originalPkgSetting01 =
                 createPackageSetting(0 /*sharedUserId*/, 0 /*pkgFlags*/);
-        final PackageSignatures originalSignatures = originalPkgSetting01.signatures;
+        final PackageSignatures originalSignatures = originalPkgSetting01.getSignatures();
         final PackageSetting testPkgSetting01 = Settings.createNewSetting(
                 REAL_PACKAGE_NAME,
                 originalPkgSetting01 /*originalPkg*/,
@@ -736,14 +738,14 @@ public class PackageManagerSettingsTests {
                 null /*mimeGroups*/,
                 UUID.randomUUID());
         assertThat(testPkgSetting01.getPath(), is(UPDATED_CODE_PATH));
-        assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
+        assertThat(testPkgSetting01.getPackageName(), is(PACKAGE_NAME));
         assertThat(testPkgSetting01.pkgFlags, is(ApplicationInfo.FLAG_SYSTEM));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(ApplicationInfo.PRIVATE_FLAG_PRIVILEGED));
-        assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
-        assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
+        assertThat(testPkgSetting01.getPrimaryCpuAbi(), is("arm64-v8a"));
+        assertThat(testPkgSetting01.getSecondaryCpuAbi(), is("armeabi"));
         // signatures object must be different
-        assertNotSame(testPkgSetting01.signatures, originalSignatures);
-        assertThat(testPkgSetting01.versionCode, is(UPDATED_VERSION_CODE));
+        assertNotSame(testPkgSetting01.getSignatures(), originalSignatures);
+        assertThat(testPkgSetting01.getLongVersionCode(), is(UPDATED_VERSION_CODE));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
         verifyUserState(userState, null /*oldUserState*/, false /*userStateChanged*/,
                 false /*notLaunched*/, false /*stopped*/, true /*installed*/);
@@ -774,14 +776,14 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/,
                 null /*mimeGroups*/,
                 UUID.randomUUID());
-        assertThat(testPkgSetting01.appId, is(0));
+        assertThat(testPkgSetting01.getAppId(), is(0));
         assertThat(testPkgSetting01.getPath(), is(INITIAL_CODE_PATH));
-        assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
+        assertThat(testPkgSetting01.getPackageName(), is(PACKAGE_NAME));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
-        assertThat(testPkgSetting01.primaryCpuAbiString, is("x86_64"));
-        assertThat(testPkgSetting01.secondaryCpuAbiString, is("x86"));
-        assertThat(testPkgSetting01.versionCode, is(INITIAL_VERSION_CODE));
+        assertThat(testPkgSetting01.getPrimaryCpuAbi(), is("x86_64"));
+        assertThat(testPkgSetting01.getSecondaryCpuAbi(), is("x86"));
+        assertThat(testPkgSetting01.getLongVersionCode(), is(INITIAL_VERSION_CODE));
         // by default, the package is considered stopped
         final PackageUserState userState = testPkgSetting01.readUserState(0);
         verifyUserState(userState, null /*oldUserState*/, false /*userStateChanged*/,
@@ -816,14 +818,14 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/,
                 null /*mimeGroups*/,
                 UUID.randomUUID());
-        assertThat(testPkgSetting01.appId, is(10064));
+        assertThat(testPkgSetting01.getAppId(), is(10064));
         assertThat(testPkgSetting01.getPath(), is(INITIAL_CODE_PATH));
-        assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
+        assertThat(testPkgSetting01.getPackageName(), is(PACKAGE_NAME));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
-        assertThat(testPkgSetting01.primaryCpuAbiString, is("x86_64"));
-        assertThat(testPkgSetting01.secondaryCpuAbiString, is("x86"));
-        assertThat(testPkgSetting01.versionCode, is(INITIAL_VERSION_CODE));
+        assertThat(testPkgSetting01.getPrimaryCpuAbi(), is("x86_64"));
+        assertThat(testPkgSetting01.getSecondaryCpuAbi(), is("x86"));
+        assertThat(testPkgSetting01.getLongVersionCode(), is(INITIAL_VERSION_CODE));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
         verifyUserState(userState, null /*oldUserState*/, false /*userStateChanged*/,
                 false /*notLaunched*/, false /*stopped*/, true /*installed*/);
@@ -834,8 +836,8 @@ public class PackageManagerSettingsTests {
     public void testCreateNewSetting04() {
         final PackageSetting disabledPkgSetting01 =
                 createPackageSetting(0 /*sharedUserId*/, 0 /*pkgFlags*/);
-        disabledPkgSetting01.appId = 10064;
-        final PackageSignatures disabledSignatures = disabledPkgSetting01.signatures;
+        disabledPkgSetting01.setAppId(10064);
+        final PackageSignatures disabledSignatures = disabledPkgSetting01.getSignatures();
         final PackageSetting testPkgSetting01 = Settings.createNewSetting(
                 PACKAGE_NAME,
                 null /*originalPkg*/,
@@ -858,15 +860,15 @@ public class PackageManagerSettingsTests {
                 null /*usesStaticLibrariesVersions*/,
                 null /*mimeGroups*/,
                 UUID.randomUUID());
-        assertThat(testPkgSetting01.appId, is(10064));
+        assertThat(testPkgSetting01.getAppId(), is(10064));
         assertThat(testPkgSetting01.getPath(), is(UPDATED_CODE_PATH));
-        assertThat(testPkgSetting01.name, is(PACKAGE_NAME));
+        assertThat(testPkgSetting01.getPackageName(), is(PACKAGE_NAME));
         assertThat(testPkgSetting01.pkgFlags, is(0));
         assertThat(testPkgSetting01.pkgPrivateFlags, is(0));
-        assertThat(testPkgSetting01.primaryCpuAbiString, is("arm64-v8a"));
-        assertThat(testPkgSetting01.secondaryCpuAbiString, is("armeabi"));
-        assertNotSame(testPkgSetting01.signatures, disabledSignatures);
-        assertThat(testPkgSetting01.versionCode, is(UPDATED_VERSION_CODE));
+        assertThat(testPkgSetting01.getPrimaryCpuAbi(), is("arm64-v8a"));
+        assertThat(testPkgSetting01.getSecondaryCpuAbi(), is("armeabi"));
+        assertNotSame(testPkgSetting01.getSignatures(), disabledSignatures);
+        assertThat(testPkgSetting01.getLongVersionCode(), is(UPDATED_VERSION_CODE));
         final PackageUserState userState = testPkgSetting01.readUserState(0);
         verifyUserState(userState, null /*oldUserState*/, false /*userStateChanged*/,
                 false /*notLaunched*/, false /*stopped*/, true /*installed*/);
@@ -895,13 +897,13 @@ public class PackageManagerSettingsTests {
 
     private void verifyUserState(PackageUserState userState, PackageUserState oldUserState,
             boolean userStateChanged, boolean notLaunched, boolean stopped, boolean installed) {
-        assertThat(userState.enabled, is(0));
-        assertThat(userState.hidden, is(false));
-        assertThat(userState.installed, is(installed));
-        assertThat(userState.notLaunched, is(notLaunched));
-        assertThat(userState.stopped, is(stopped));
-        assertThat(userState.suspended, is(false));
-        assertThat(userState.distractionFlags, is(0));
+        assertThat(userState.getEnabledState(), is(0));
+        assertThat(userState.isHidden(), is(false));
+        assertThat(userState.isInstalled(), is(installed));
+        assertThat(userState.isNotLaunched(), is(notLaunched));
+        assertThat(userState.isStopped(), is(stopped));
+        assertThat(userState.isSuspended(), is(false));
+        assertThat(userState.getDistractionFlags(), is(0));
         if (oldUserState != null) {
             assertThat(userState.equals(oldUserState), is(not(userStateChanged)));
         }
@@ -909,25 +911,25 @@ public class PackageManagerSettingsTests {
 
     private void verifySettingCopy(PackageSetting origPkgSetting, PackageSetting testPkgSetting) {
         assertThat(origPkgSetting, is(not(testPkgSetting)));
-        assertThat(origPkgSetting.appId, is(testPkgSetting.appId));
+        assertThat(origPkgSetting.getAppId(), is(testPkgSetting.getAppId()));
         assertSame(origPkgSetting.getPath(), testPkgSetting.getPath());
         assertThat(origPkgSetting.getPath(), is(testPkgSetting.getPath()));
         assertSame(origPkgSetting.getPathString(), testPkgSetting.getPathString());
         assertThat(origPkgSetting.getPathString(), is(testPkgSetting.getPathString()));
-        assertSame(origPkgSetting.cpuAbiOverrideString, testPkgSetting.cpuAbiOverrideString);
-        assertThat(origPkgSetting.cpuAbiOverrideString, is(testPkgSetting.cpuAbiOverrideString));
+        assertSame(origPkgSetting.getCpuAbiOverride(), testPkgSetting.getCpuAbiOverride());
+        assertThat(origPkgSetting.getCpuAbiOverride(), is(testPkgSetting.getCpuAbiOverride()));
         assertThat(origPkgSetting.getDomainSetId(), is(testPkgSetting.getDomainSetId()));
-        assertThat(origPkgSetting.firstInstallTime, is(testPkgSetting.firstInstallTime));
-        assertSame(origPkgSetting.installSource, testPkgSetting.installSource);
-        assertThat(origPkgSetting.installPermissionsFixed,
-                is(testPkgSetting.installPermissionsFixed));
-        assertSame(origPkgSetting.keySetData, testPkgSetting.keySetData);
-        assertThat(origPkgSetting.keySetData, is(testPkgSetting.keySetData));
-        assertThat(origPkgSetting.lastUpdateTime, is(testPkgSetting.lastUpdateTime));
-        assertSame(origPkgSetting.legacyNativeLibraryPathString,
-                testPkgSetting.legacyNativeLibraryPathString);
-        assertThat(origPkgSetting.legacyNativeLibraryPathString,
-                is(testPkgSetting.legacyNativeLibraryPathString));
+        assertThat(origPkgSetting.getFirstInstallTime(), is(testPkgSetting.getFirstInstallTime()));
+        assertSame(origPkgSetting.getInstallSource(), testPkgSetting.getInstallSource());
+        assertThat(origPkgSetting.isInstallPermissionsFixed(),
+                is(testPkgSetting.isInstallPermissionsFixed()));
+        assertSame(origPkgSetting.getKeySetData(), testPkgSetting.getKeySetData());
+        assertThat(origPkgSetting.getKeySetData(), is(testPkgSetting.getKeySetData()));
+        assertThat(origPkgSetting.getLastUpdateTime(), is(testPkgSetting.getLastUpdateTime()));
+        assertSame(origPkgSetting.getLegacyNativeLibraryPath(),
+                testPkgSetting.getLegacyNativeLibraryPath());
+        assertThat(origPkgSetting.getLegacyNativeLibraryPath(),
+                is(testPkgSetting.getLegacyNativeLibraryPath()));
         if (origPkgSetting.mimeGroups != null) {
             assertNotSame(origPkgSetting.mimeGroups, testPkgSetting.mimeGroups);
         }
@@ -936,32 +938,31 @@ public class PackageManagerSettingsTests {
                 testPkgSetting.mLegacyPermissionsState);
         assertThat(origPkgSetting.mLegacyPermissionsState,
                 is(testPkgSetting.mLegacyPermissionsState));
-        assertThat(origPkgSetting.name, is(testPkgSetting.name));
+        assertThat(origPkgSetting.getPackageName(), is(testPkgSetting.getPackageName()));
         // mOldCodePaths is _not_ copied
         // assertNotSame(origPkgSetting.mOldCodePaths, testPkgSetting.mOldCodePaths);
         // assertThat(origPkgSetting.mOldCodePaths, is(not(testPkgSetting.mOldCodePaths)));
-        assertSame(origPkgSetting.pkg, testPkgSetting.pkg);
+        assertSame(origPkgSetting.getPkg(), testPkgSetting.getPkg());
         // No equals() method for this object
         // assertThat(origPkgSetting.pkg, is(testPkgSetting.pkg));
         assertThat(origPkgSetting.pkgFlags, is(testPkgSetting.pkgFlags));
         assertThat(origPkgSetting.pkgPrivateFlags, is(testPkgSetting.pkgPrivateFlags));
-        assertSame(origPkgSetting.primaryCpuAbiString, testPkgSetting.primaryCpuAbiString);
-        assertThat(origPkgSetting.primaryCpuAbiString, is(testPkgSetting.primaryCpuAbiString));
-        assertThat(origPkgSetting.realName, is(testPkgSetting.realName));
-        assertSame(origPkgSetting.secondaryCpuAbiString, testPkgSetting.secondaryCpuAbiString);
-        assertThat(origPkgSetting.secondaryCpuAbiString, is(testPkgSetting.secondaryCpuAbiString));
-        assertSame(origPkgSetting.sharedUser, testPkgSetting.sharedUser);
-        assertThat(origPkgSetting.sharedUser, is(testPkgSetting.sharedUser));
-        assertSame(origPkgSetting.signatures, testPkgSetting.signatures);
-        assertThat(origPkgSetting.signatures, is(testPkgSetting.signatures));
-        assertThat(origPkgSetting.timeStamp, is(testPkgSetting.timeStamp));
-        assertThat(origPkgSetting.uidError, is(testPkgSetting.uidError));
+        assertSame(origPkgSetting.getPrimaryCpuAbi(), testPkgSetting.getPrimaryCpuAbi());
+        assertThat(origPkgSetting.getPrimaryCpuAbi(), is(testPkgSetting.getPrimaryCpuAbi()));
+        assertThat(origPkgSetting.getRealName(), is(testPkgSetting.getRealName()));
+        assertSame(origPkgSetting.getSecondaryCpuAbi(), testPkgSetting.getSecondaryCpuAbi());
+        assertThat(origPkgSetting.getSecondaryCpuAbi(), is(testPkgSetting.getSecondaryCpuAbi()));
+        assertSame(origPkgSetting.getSharedUser(), testPkgSetting.getSharedUser());
+        assertThat(origPkgSetting.getSharedUser(), is(testPkgSetting.getSharedUser()));
+        assertSame(origPkgSetting.getSignatures(), testPkgSetting.getSignatures());
+        assertThat(origPkgSetting.getSignatures(), is(testPkgSetting.getSignatures()));
+        assertThat(origPkgSetting.getLastModifiedTime(), is(testPkgSetting.getLastModifiedTime()));
         assertNotSame(origPkgSetting.getUserState(), is(testPkgSetting.getUserState()));
         // No equals() method for SparseArray object
         // assertThat(origPkgSetting.getUserState(), is(testPkgSetting.getUserState()));
-        assertThat(origPkgSetting.versionCode, is(testPkgSetting.versionCode));
-        assertSame(origPkgSetting.volumeUuid, testPkgSetting.volumeUuid);
-        assertThat(origPkgSetting.volumeUuid, is(testPkgSetting.volumeUuid));
+        assertThat(origPkgSetting.getLongVersionCode(), is(testPkgSetting.getLongVersionCode()));
+        assertSame(origPkgSetting.getVolumeUuid(), testPkgSetting.getVolumeUuid());
+        assertThat(origPkgSetting.getVolumeUuid(), is(testPkgSetting.getVolumeUuid()));
     }
 
     private SharedUserSetting createSharedUserSetting(Settings settings, String userName,
@@ -1245,14 +1246,14 @@ public class PackageManagerSettingsTests {
 
         /* verify packages have been given the appropriate information */
         PackageSetting ps = packages.get("com.android.app1");
-        assertThat(ps.keySetData.getProperSigningKeySet(), is(1L));
+        assertThat(ps.getKeySetData().getProperSigningKeySet(), is(1L));
         ps = packages.get("com.android.app2");
-        assertThat(ps.keySetData.getProperSigningKeySet(), is(1L));
-        assertThat(ps.keySetData.getAliases().get("AB"), is(4L));
+        assertThat(ps.getKeySetData().getProperSigningKeySet(), is(1L));
+        assertThat(ps.getKeySetData().getAliases().get("AB"), is(4L));
         ps = packages.get("com.android.app3");
-        assertThat(ps.keySetData.getProperSigningKeySet(), is(2L));
-        assertThat(ps.keySetData.getAliases().get("C"), is(3L));
-        assertThat(ps.keySetData.getUpgradeKeySets().length, is(1));
-        assertThat(ps.keySetData.getUpgradeKeySets()[0], is(3L));
+        assertThat(ps.getKeySetData().getProperSigningKeySet(), is(2L));
+        assertThat(ps.getKeySetData().getAliases().get("C"), is(3L));
+        assertThat(ps.getKeySetData().getUpgradeKeySets().length, is(1));
+        assertThat(ps.getKeySetData().getUpgradeKeySets()[0], is(3L));
     }
 }

@@ -67,7 +67,15 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
     }
 
     @Override
-    public long getMinSatiatedBalance(final int userId, @NonNull final String pkgName) {
+    void setup() {
+        super.setup();
+        for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
+            mEnabledEconomicPolicies.valueAt(i).setup();
+        }
+    }
+
+    @Override
+    long getMinSatiatedBalance(final int userId, @NonNull final String pkgName) {
         long min = 0;
         for (int i = 0; i < mEnabledEconomicPolicies.size(); ++i) {
             min += mEnabledEconomicPolicies.valueAt(i).getMinSatiatedBalance(userId, pkgName);
@@ -76,24 +84,24 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
     }
 
     @Override
-    public long getMaxSatiatedBalance() {
+    long getMaxSatiatedBalance() {
         return mMaxSatiatedBalance;
     }
 
     @Override
-    public long getMaxSatiatedCirculation() {
+     long getMaxSatiatedCirculation() {
         return mMaxSatiatedCirculation;
     }
 
     @NonNull
     @Override
-    public int[] getCostModifiers() {
+    int[] getCostModifiers() {
         return mCostModifiers == null ? EmptyArray.INT : mCostModifiers;
     }
 
     @Nullable
     @Override
-    public Action getAction(@AppAction int actionId) {
+    Action getAction(@AppAction int actionId) {
         if (mActions.contains(actionId)) {
             return mActions.get(actionId);
         }
@@ -115,7 +123,7 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
 
     @Nullable
     @Override
-    public Reward getReward(@UtilityReward int rewardId) {
+    Reward getReward(@UtilityReward int rewardId) {
         if (mRewards.contains(rewardId)) {
             return mRewards.get(rewardId);
         }
@@ -140,5 +148,35 @@ public class CompleteEconomicPolicy extends EconomicPolicy {
     @Override
     void dump(IndentingPrintWriter pw) {
         dumpActiveModifiers(pw);
+
+        pw.println();
+        pw.println(getClass().getSimpleName() + ":");
+        pw.increaseIndent();
+
+        pw.println("Cached actions:");
+        pw.increaseIndent();
+        for (int i = 0; i < mActions.size(); ++i) {
+            dumpAction(pw, mActions.valueAt(i));
+        }
+        pw.decreaseIndent();
+
+        pw.println();
+        pw.println("Cached rewards:");
+        pw.increaseIndent();
+        for (int i = 0; i < mRewards.size(); ++i) {
+            dumpReward(pw, mRewards.valueAt(i));
+        }
+        pw.decreaseIndent();
+
+        for (int i = 0; i < mEnabledEconomicPolicies.size(); i++) {
+            final EconomicPolicy economicPolicy = mEnabledEconomicPolicies.valueAt(i);
+            pw.println();
+            pw.print("(Includes) ");
+            pw.println(economicPolicy.getClass().getSimpleName() + ":");
+            pw.increaseIndent();
+            economicPolicy.dump(pw);
+            pw.decreaseIndent();
+        }
+        pw.decreaseIndent();
     }
 }

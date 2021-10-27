@@ -22,6 +22,7 @@ import android.view.View;
 import android.view.ViewPropertyAnimator;
 
 import com.android.systemui.animation.Interpolators;
+import com.android.systemui.communal.CommunalStateController;
 import com.android.systemui.statusbar.StatusBarState;
 import com.android.systemui.statusbar.notification.AnimatableProperty;
 import com.android.systemui.statusbar.notification.PropertyAnimator;
@@ -38,24 +39,30 @@ import com.android.systemui.statusbar.policy.KeyguardStateController;
 public class KeyguardVisibilityHelper {
 
     private View mView;
+    private final CommunalStateController mCommunalStateController;
     private final KeyguardStateController mKeyguardStateController;
     private final DozeParameters mDozeParameters;
     private final UnlockedScreenOffAnimationController mUnlockedScreenOffAnimationController;
+    private final boolean mVisibleOnCommunal;
     private boolean mAnimateYPos;
     private boolean mKeyguardViewVisibilityAnimating;
     private boolean mLastOccludedState = false;
     private final AnimationProperties mAnimationProperties = new AnimationProperties();
 
     public KeyguardVisibilityHelper(View view,
+            CommunalStateController communalStateController,
             KeyguardStateController keyguardStateController,
             DozeParameters dozeParameters,
             UnlockedScreenOffAnimationController unlockedScreenOffAnimationController,
-            boolean animateYPos) {
+            boolean animateYPos,
+            boolean visibleOnCommunal) {
         mView = view;
+        mCommunalStateController = communalStateController;
         mKeyguardStateController = keyguardStateController;
         mDozeParameters = dozeParameters;
         mUnlockedScreenOffAnimationController = unlockedScreenOffAnimationController;
         mAnimateYPos = animateYPos;
+        mVisibleOnCommunal = visibleOnCommunal;
     }
 
     public boolean isVisibilityAnimating() {
@@ -73,6 +80,14 @@ public class KeyguardVisibilityHelper {
         mView.animate().cancel();
         boolean isOccluded = mKeyguardStateController.isOccluded();
         mKeyguardViewVisibilityAnimating = false;
+
+        // If the communal view is showing, hide immediately
+        if (!mVisibleOnCommunal && mCommunalStateController.getCommunalViewShowing()) {
+            mView.setVisibility(View.GONE);
+            mView.setAlpha(1f);
+            return;
+        }
+
         if ((!keyguardFadingAway && oldStatusBarState == KEYGUARD
                 && statusBarState != KEYGUARD) || goingToFullShade) {
             mKeyguardViewVisibilityAnimating = true;
@@ -132,8 +147,7 @@ public class KeyguardVisibilityHelper {
                         .alpha(1f)
                         .withEndAction(mAnimateKeyguardStatusViewVisibleEndRunnable)
                         .start();
-            } else if (mUnlockedScreenOffAnimationController
-                        .isScreenOffLightRevealAnimationPlaying()) {
+            } else if (mUnlockedScreenOffAnimationController.shouldAnimateInKeyguard()) {
                 mKeyguardViewVisibilityAnimating = true;
 
                 // Ask the screen off animation controller to animate the keyguard visibility for us

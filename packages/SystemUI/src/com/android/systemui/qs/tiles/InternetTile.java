@@ -52,13 +52,13 @@ import com.android.systemui.qs.QSHost;
 import com.android.systemui.qs.logging.QSLogger;
 import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.qs.tiles.dialog.InternetDialogFactory;
-import com.android.systemui.statusbar.policy.NetworkController;
-import com.android.systemui.statusbar.policy.NetworkController.AccessPointController;
-import com.android.systemui.statusbar.policy.NetworkController.IconState;
-import com.android.systemui.statusbar.policy.NetworkController.MobileDataIndicators;
-import com.android.systemui.statusbar.policy.NetworkController.SignalCallback;
-import com.android.systemui.statusbar.policy.NetworkController.WifiIndicators;
-import com.android.systemui.statusbar.policy.WifiIcons;
+import com.android.systemui.statusbar.connectivity.NetworkController;
+import com.android.systemui.statusbar.connectivity.NetworkController.AccessPointController;
+import com.android.systemui.statusbar.connectivity.NetworkController.IconState;
+import com.android.systemui.statusbar.connectivity.NetworkController.MobileDataIndicators;
+import com.android.systemui.statusbar.connectivity.NetworkController.SignalCallback;
+import com.android.systemui.statusbar.connectivity.NetworkController.WifiIndicators;
+import com.android.systemui.statusbar.connectivity.WifiIcons;
 
 import java.io.FileDescriptor;
 import java.io.PrintWriter;
@@ -122,8 +122,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
 
     @Override
     protected void handleClick(@Nullable View view) {
-        boolean canConfigMobileData = mAccessPointController.canConfigMobileData();
-        mHandler.post(() -> mInternetDialogFactory.create(true, canConfigMobileData));
+        mHandler.post(() -> mInternetDialogFactory.create(true,
+                mAccessPointController.canConfigMobileData(),
+                mAccessPointController.canConfigWifi()));
     }
 
     @Override
@@ -278,9 +279,9 @@ public class InternetTile extends QSTileImpl<SignalState> {
                 // Not data sim, don't display.
                 return;
             }
-            mCellularInfo.mDataSubscriptionName = indicators.description == null
-                    ? mController.getMobileDataNetworkName() : indicators.description;
-            mCellularInfo.mDataContentDescription = indicators.description != null
+            mCellularInfo.mDataSubscriptionName = indicators.qsDescription == null
+                    ? mController.getMobileDataNetworkName() : indicators.qsDescription;
+            mCellularInfo.mDataContentDescription = indicators.qsDescription != null
                     ? indicators.typeContentDescriptionHtml : null;
             mCellularInfo.mMobileSignalIconId = indicators.qsIcon.icon;
             mCellularInfo.mQsTypeIcon = indicators.qsType;

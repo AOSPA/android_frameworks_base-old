@@ -23,6 +23,8 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.testing.AndroidTestingRunner;
 import android.testing.TestableLooper.RunWithLooper;
 
@@ -42,6 +44,7 @@ import com.android.systemui.qs.tileimpl.QSTileImpl;
 import com.android.systemui.settings.brightness.BrightnessController;
 import com.android.systemui.settings.brightness.BrightnessSlider;
 import com.android.systemui.settings.brightness.ToggleSlider;
+import com.android.systemui.statusbar.CommandQueue;
 import com.android.systemui.tuner.TunerService;
 import com.android.systemui.util.animation.DisappearParameters;
 
@@ -94,7 +97,13 @@ public class QSPanelControllerTest extends SysuiTestCase {
     QSTileView mQSTileView;
     @Mock
     PagedTileLayout mPagedTileLayout;
+    @Mock
+    CommandQueue mCommandQueue;
     FalsingManagerFake mFalsingManager = new FalsingManagerFake();
+    @Mock
+    Resources mResources;
+    @Mock
+    Configuration mConfiguration;
 
     private QSPanelController mController;
 
@@ -106,7 +115,8 @@ public class QSPanelControllerTest extends SysuiTestCase {
         when(mQSPanel.getDumpableTag()).thenReturn("QSPanel");
         when(mQSPanel.getOrCreateTileLayout()).thenReturn(mPagedTileLayout);
         when(mQSPanel.getTileLayout()).thenReturn(mPagedTileLayout);
-        when(mQSPanel.getResources()).thenReturn(mContext.getResources());
+        when(mQSPanel.getResources()).thenReturn(mResources);
+        when(mResources.getConfiguration()).thenReturn(mConfiguration);
         when(mQSTileHost.getTiles()).thenReturn(Collections.singleton(mQSTile));
         when(mQSTileHost.createTileView(any(), eq(mQSTile), anyBoolean())).thenReturn(mQSTileView);
         when(mToggleSliderViewControllerFactory.create(any(), any()))
@@ -121,7 +131,7 @@ public class QSPanelControllerTest extends SysuiTestCase {
                 mQSTileHost, mQSCustomizerController, true, mMediaHost,
                 mQSTileRevealControllerFactory, mDumpManager, mMetricsLogger, mUiEventLogger,
                 mQSLogger, mBrightnessControllerFactory, mToggleSliderViewControllerFactory,
-                mFalsingManager
+                mFalsingManager, mCommandQueue
         );
 
         mController.init();

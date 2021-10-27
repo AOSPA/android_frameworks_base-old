@@ -326,6 +326,8 @@
     <string name="permgroupdesc_phone" msgid="270048070781478204">"утасны дуудлага хийх, дуудлага удирдах"</string>
     <string name="permgrouplab_sensors" msgid="9134046949784064495">"Биеийн мэдрэгч"</string>
     <string name="permgroupdesc_sensors" msgid="2610631290633747752">"таны биеийн байдлын талаарх мэдрэгч бүхий өгөгдөлд нэвтрэх"</string>
+    <string name="permgrouplab_notifications" msgid="5472972361980668884">"Мэдэгдэл"</string>
+    <string name="permgroupdesc_notifications" msgid="4608679556801506580">"мэдэгдэл харуулах"</string>
     <string name="capability_title_canRetrieveWindowContent" msgid="7554282892101587296">"Цонхны агуулгыг авах"</string>
     <string name="capability_desc_canRetrieveWindowContent" msgid="6195610527625237661">"Таны харилцан үйлчлэх цонхны контентоос шалгах."</string>
     <string name="capability_title_canRequestTouchExploration" msgid="327598364696316213">"Хүрэлтээр сонсохыг асаах"</string>
@@ -549,6 +551,8 @@
     <string name="permdesc_disableKeyguard" msgid="3223710003098573038">"Апп нь түгжээ болон бусад холбоотой нууц үгийн аюулгүй байдлыг идэвхгүй болгох боломжтой. Жишээ нь бол утас нь дуудлага ирэх үед түгжээг идэвхгүй болгох ба дуудлага дуусахад буцаан идэвхтэй болгодог."</string>
     <string name="permlab_requestPasswordComplexity" msgid="1808977190557794109">"дэлгэцийн түгжээний төвөгтэй байдлын хүсэлт тавих"</string>
     <string name="permdesc_requestPasswordComplexity" msgid="1130556896836258567">"Аппад дэлгэцийн түгжээний боломжтой уртын хэмжээ болон төрлийг заадаг дэлгэцийн түгжээний төвөгтэй байдлын түвшнийг (өндөр, дундаж, бага эсвэл байхгүй) мэдэж авахыг зөвшөөрдөг. Түүнчлэн, апп хэрэглэгчдэд дэлгэцийн түгжээг тодорхой түвшинд шинэчлэхийг санал болгох боломжтой хэдий ч хэрэглэгч үүнийг чөлөөтэй үл хэрэгсэж, орхих боломжтой. Дэлгэцийн түгжээг ил бичвэрээр хадгалдаггүй тул энэ апп тодорхой нууц үгийг мэддэггүй болохыг анхаарна уу."</string>
+    <string name="permlab_postNotification" msgid="4875401198597803658">"мэдэгдэл харуулах"</string>
+    <string name="permdesc_postNotification" msgid="5974977162462877075">"Аппад мэдэгдэл харуулахыг зөвшөөрнө"</string>
     <string name="permlab_useBiometric" msgid="6314741124749633786">"биометрийн техник хангамжийг ашиглах"</string>
     <string name="permdesc_useBiometric" msgid="7502858732677143410">"Aппад биометрийн техник хангамжийг баталгаажуулалтад ашиглахыг зөвшөөрдөг"</string>
     <string name="permlab_manageFingerprint" msgid="7432667156322821178">"хурууны хээний төхөөрөмжийг удирдах"</string>
@@ -609,6 +613,7 @@
     <string name="fingerprint_or_screen_lock_dialog_default_subtitle" msgid="5195808203117992200">"Үргэлжлүүлэхийн тулд хурууны хээ эсвэл дэлгэцийн түгжээгээ ашиглана уу"</string>
   <string-array name="fingerprint_error_vendor">
   </string-array>
+    <string name="fingerprint_error_vendor_unknown" msgid="4170002184907291065">"Алдаа гарлаа. Дахин оролдоно уу."</string>
     <string name="fingerprint_icon_content_description" msgid="4741068463175388817">"Хурууны хээний дүрс"</string>
     <string name="face_recalibrate_notification_name" msgid="7311163114750748686">"Царайгаар түгжээ тайлах"</string>
     <string name="face_recalibrate_notification_title" msgid="2524791952735579082">"Царайгаар түгжээ тайлахтай холбоотой асуудал"</string>
@@ -661,6 +666,7 @@
     <string name="face_or_screen_lock_dialog_default_subtitle" msgid="5006381531158341844">"Үргэлжлүүлэхийн тулд царай эсвэл дэлгэцийн түгжээгээ ашиглана уу"</string>
   <string-array name="face_error_vendor">
   </string-array>
+    <string name="face_error_vendor_unknown" msgid="7387005932083302070">"Алдаа гарлаа. Дахин оролдоно уу."</string>
     <string name="face_icon_content_description" msgid="465030547475916280">"Царайны дүрс тэмдэг"</string>
     <string name="permlab_readSyncSettings" msgid="6250532864893156277">"синк тохиргоог унших"</string>
     <string name="permdesc_readSyncSettings" msgid="1325658466358779298">"Апп нь бүртгэлийн синк тохиргоог унших боломжтой. Жишээ нь энэ нь Хүмүүс апп бүртгэлтэй синк хийгдсэн эсэхийг тодорхойлох боломжтой."</string>
@@ -1692,7 +1698,7 @@
     <string name="accessibility_shortcut_toogle_warning" msgid="4161716521310929544">"Товчлол асаалттай үед дууны түвшний хоёр товчлуурыг хамтад нь 3 секунд дарснаар хандалтын онцлогийг эхлүүлнэ."</string>
     <string name="accessibility_shortcut_multiple_service_warning_title" msgid="3135860819356676426">"Хандалтын онцлогуудын товчлолыг асаах уу?"</string>
     <string name="accessibility_shortcut_multiple_service_warning" msgid="3740723309483706911">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарснаар хандалтын онцлогууд асна. Энэ нь таны төхөөрөмжийн ажиллах зарчмыг өөрчилж болзошгүй.\n\nОдоогийн онцлогууд:\n<xliff:g id="SERVICE">%1$s</xliff:g>\nТа сонгосон онцлогуудыг Тохиргоо &gt; Хандалт хэсэгт өөрчлөх боломжтой."</string>
-    <string name="accessibility_shortcut_multiple_service_list" msgid="6935581470716541531">"	• <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
+    <string name="accessibility_shortcut_multiple_service_list" msgid="2128323171922023762">" • <xliff:g id="SERVICE">%1$s</xliff:g>\n"</string>
     <string name="accessibility_shortcut_single_service_warning_title" msgid="1909518473488345266">"<xliff:g id="SERVICE">%1$s</xliff:g>-н товчлолыг асаах уу?"</string>
     <string name="accessibility_shortcut_single_service_warning" msgid="6363127705112844257">"Дууны түвшний түлхүүрийг хэдэн секундийн турш зэрэг дарах нь хандалтын онцлог болох <xliff:g id="SERVICE">%1$s</xliff:g>-г асаадаг. Энэ нь таны төхөөрөмжийн ажиллах зарчмыг өөрчилж болзошгүй.\n\nТа Тохиргоо &gt; Хандалт хэсэгт энэ товчлолыг өөр онцлогт оноож өөрчлөх боломжтой."</string>
     <string name="accessibility_shortcut_on" msgid="5463618449556111344">"Асаах"</string>

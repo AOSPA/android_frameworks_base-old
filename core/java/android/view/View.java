@@ -3515,6 +3515,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *                    1             PFLAG4_ALLOW_CLICK_WHEN_DISABLED
      *                   1              PFLAG4_DETACHED
      *                  1               PFLAG4_HAS_TRANSLATION_TRANSIENT_STATE
+     *                 1                PFLAG4_DRAG_A11Y_STARTED
      * |-------|-------|-------|-------|
      */
 
@@ -3585,6 +3586,11 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * Indicates that the view has transient state because the system is translating it.
      */
     private static final int PFLAG4_HAS_TRANSLATION_TRANSIENT_STATE = 0x000004000;
+
+    /**
+     * Indicates that the view has started a drag with {@link AccessibilityAction#ACTION_DRAG_START}
+     */
+    private static final int PFLAG4_DRAG_A11Y_STARTED = 0x000008000;
 
     /* End of masks for mPrivateFlags4 */
 
@@ -5034,6 +5040,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * with this flag set, the drag shadow will be opaque, otherwise, it will be semitransparent.
      */
     public static final int DRAG_FLAG_OPAQUE = 1 << 9;
+
+    /**
+     * Flag indicating that the drag was initiated with
+     * {@link AccessibilityNodeInfo.AccessibilityAction#ACTION_DRAG_START}. When
+     * {@link #startDragAndDrop(ClipData, DragShadowBuilder, Object, int)} is called, this
+     * is used by the system to perform a drag without animations.
+     */
+    public static final int DRAG_FLAG_ACCESSIBILITY_ACTION = 1 << 10;
 
     /**
      * Vertical scroll factor cached by {@link #getVerticalScrollFactor}.
@@ -8204,7 +8218,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * to populate information about the event source (this View), then calls
      * {@link #dispatchPopulateAccessibilityEvent(AccessibilityEvent)} to
      * populate the text content of the event source including its descendants,
-     * and last calls
+     * then for events type {@link AccessibilityEvent#TYPE_VIEW_SCROLLED}
+     * and {@link AccessibilityEvent#TYPE_WINDOW_CONTENT_CHANGED} with
+     * subtype {@link AccessibilityEvent#CONTENT_CHANGE_TYPE_STATE_DESCRIPTION},
+     * throttle the events, and last calls
      * {@link ViewParent#requestSendAccessibilityEvent(View, AccessibilityEvent)}
      * on its parent to request sending of the event to interested parties.
      * <p>
@@ -8213,11 +8230,19 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      * {@link AccessibilityDelegate#sendAccessibilityEvent(View, int)} is
      * responsible for handling this call.
      * </p>
+     * <p>
+     * If this view uses {@link AccessibilityNodeProvider} to provide virtual view hierarchy rooted
+     * at this view, this method should not be called to send events from virtual children because
+     * it will populate the events with wrong information and the events should be throttled per
+     * child instead at the virtual root level. To send events from virtual children, call
+     * {@link ViewParent#requestSendAccessibilityEvent(View, AccessibilityEvent)} on the view's
+     * parent to request sending of the event to interested parties.
+     * </p>
      *
      * @param eventType The type of the event to send, as defined by several types from
-     * {@link android.view.accessibility.AccessibilityEvent}, such as
-     * {@link android.view.accessibility.AccessibilityEvent#TYPE_VIEW_CLICKED} or
-     * {@link android.view.accessibility.AccessibilityEvent#TYPE_VIEW_HOVER_ENTER}.
+     * {@link AccessibilityEvent}, such as
+     * {@link AccessibilityEvent#TYPE_VIEW_CLICKED} or
+     * {@link AccessibilityEvent#TYPE_VIEW_HOVER_ENTER}.
      *
      * @see #onInitializeAccessibilityEvent(AccessibilityEvent)
      * @see #dispatchPopulateAccessibilityEvent(AccessibilityEvent)
@@ -10376,7 +10401,16 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         if (mTouchDelegate != null) {
             info.setTouchDelegateInfo(mTouchDelegate.getTouchDelegateInfo());
         }
+
+        if (startedSystemDragForAccessibility()) {
+            info.addAction(AccessibilityAction.ACTION_DRAG_CANCEL);
+        }
+
+        if (canAcceptAccessibilityDrop()) {
+            info.addAction(AccessibilityAction.ACTION_DRAG_DROP);
+        }
     }
+
 
     /**
      * Adds extra data to an {@link AccessibilityNodeInfo} based on an explicit request for the
@@ -14214,7 +14248,43 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 return true;
             }
         }
+
+        if (action == R.id.accessibilityActionDragDrop) {
+            if (!canAcceptAccessibilityDrop()) {
+                return false;
+            }
+            try {
+                if (mAttachInfo != null && mAttachInfo.mSession != null) {
+                    final int[] location = new int[2];
+                    getLocationInWindow(location);
+                    final int centerX = location[0] + getWidth() / 2;
+                    final int centerY = location[1] + getHeight() / 2;
+                    return mAttachInfo.mSession.dropForAccessibility(mAttachInfo.mWindow,
+                            centerX, centerY);
+                }
+            } catch (RemoteException e) {
+                Log.e(VIEW_LOG_TAG, "Unable to drop for accessibility", e);
+            }
+            return false;
+        } else if (action == R.id.accessibilityActionDragCancel) {
+            if (!startedSystemDragForAccessibility()) {
+                return false;
+            }
+            if (mAttachInfo != null && mAttachInfo.mDragToken != null) {
+                cancelDragAndDrop();
+                return true;
+            }
+            return false;
+        }
         return false;
+    }
+
+    private boolean canAcceptAccessibilityDrop() {
+        if (!canAcceptDrag()) {
+            return false;
+        }
+        ListenerInfo li = mListenerInfo;
+        return (li != null) && (li.mOnDragListener != null || li.mOnReceiveContentListener != null);
     }
 
     private boolean traverseAtGranularity(int granularity, boolean forward,
@@ -20840,13 +20910,14 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             mPrivateFlags &= ~PFLAG_SCROLL_CONTAINER_ADDED;
         }
 
+        notifyAppearedOrDisappearedForContentCaptureIfNeeded(false);
+
         mAttachInfo = null;
         if (mOverlay != null) {
             mOverlay.getOverlayView().dispatchDetachedFromWindow();
         }
 
         notifyEnterOrExitForAutoFillIfNeeded(false);
-        notifyAppearedOrDisappearedForContentCaptureIfNeeded(false);
     }
 
     /**
@@ -26642,6 +26713,7 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
      *         <li>{@link #DRAG_FLAG_GLOBAL_URI_READ}</li>
      *         <li>{@link #DRAG_FLAG_GLOBAL_URI_WRITE}</li>
      *         <li>{@link #DRAG_FLAG_OPAQUE}</li>
+     *         <li>{@link #DRAG_FLAG_ACCESSIBILITY_ACTION}</li>
      *     </ul>
      * @return {@code true} if the method completes successfully, or
      * {@code false} if it fails anywhere. Returning {@code false} means the system was unable to
@@ -26663,6 +26735,37 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
         if (data != null) {
             data.prepareToLeaveProcess((flags & View.DRAG_FLAG_GLOBAL) != 0);
+        }
+
+        Rect bounds = new Rect();
+        getBoundsOnScreen(bounds, true);
+
+        Point lastTouchPoint = new Point();
+        mAttachInfo.mViewRootImpl.getLastTouchPoint(lastTouchPoint);
+        final ViewRootImpl root = mAttachInfo.mViewRootImpl;
+
+        // Skip surface logic since shadows and animation are not required during the a11y drag
+        final boolean a11yEnabled = AccessibilityManager.getInstance(mContext).isEnabled();
+        if (a11yEnabled && (flags & View.DRAG_FLAG_ACCESSIBILITY_ACTION) != 0) {
+            try {
+                IBinder token = mAttachInfo.mSession.performDrag(
+                        mAttachInfo.mWindow, flags, null,
+                        mAttachInfo.mViewRootImpl.getLastTouchSource(),
+                        0f, 0f, 0f, 0f, data);
+                if (ViewDebug.DEBUG_DRAG) {
+                    Log.d(VIEW_LOG_TAG, "startDragAndDrop via a11y action returned " + token);
+                }
+                if (token != null) {
+                    root.setLocalDragState(myLocalState);
+                    mAttachInfo.mDragToken = token;
+                    mAttachInfo.mViewRootImpl.setDragStartedViewForAccessibility(this);
+                    setAccessibilityDragStarted(true);
+                }
+                return token != null;
+            } catch (Exception e) {
+                Log.e(VIEW_LOG_TAG, "Unable to initiate a11y drag", e);
+                return false;
+            }
         }
 
         Point shadowSize = new Point();
@@ -26689,7 +26792,6 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                     + " shadowX=" + shadowTouchPoint.x + " shadowY=" + shadowTouchPoint.y);
         }
 
-        final ViewRootImpl root = mAttachInfo.mViewRootImpl;
         final SurfaceSession session = new SurfaceSession();
         final SurfaceControl surfaceControl = new SurfaceControl.Builder(session)
                 .setName("drag surface")
@@ -26712,12 +26814,9 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 surface.unlockCanvasAndPost(canvas);
             }
 
-            // repurpose 'shadowSize' for the last touch point
-            root.getLastTouchPoint(shadowSize);
-
-            token = mAttachInfo.mSession.performDrag(
-                    mAttachInfo.mWindow, flags, surfaceControl, root.getLastTouchSource(),
-                    shadowSize.x, shadowSize.y, shadowTouchPoint.x, shadowTouchPoint.y, data);
+            token = mAttachInfo.mSession.performDrag(mAttachInfo.mWindow, flags, surfaceControl,
+                    root.getLastTouchSource(), lastTouchPoint.x, lastTouchPoint.y,
+                    shadowTouchPoint.x, shadowTouchPoint.y, data);
             if (ViewDebug.DEBUG_DRAG) {
                 Log.d(VIEW_LOG_TAG, "performDrag returned " + token);
             }
@@ -26729,6 +26828,10 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mAttachInfo.mDragToken = token;
                 // Cache the local state object for delivery with DragEvents
                 root.setLocalDragState(myLocalState);
+                if (a11yEnabled) {
+                    // Set for AccessibilityEvents
+                    mAttachInfo.mViewRootImpl.setDragStartedViewForAccessibility(this);
+                }
             }
             return token != null;
         } catch (Exception e) {
@@ -26740,6 +26843,24 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
             }
             session.kill();
         }
+    }
+
+    void setAccessibilityDragStarted(boolean started) {
+        int pflags4 = mPrivateFlags4;
+        if (started) {
+            pflags4 |= PFLAG4_DRAG_A11Y_STARTED;
+        } else {
+            pflags4 &= ~PFLAG4_DRAG_A11Y_STARTED;
+        }
+
+        if (pflags4 != mPrivateFlags4) {
+            mPrivateFlags4 = pflags4;
+            sendWindowContentChangedAccessibilityEvent(CONTENT_CHANGE_TYPE_UNDEFINED);
+        }
+    }
+
+    private boolean startedSystemDragForAccessibility() {
+        return (mPrivateFlags4 & PFLAG4_DRAG_A11Y_STARTED) != 0;
     }
 
     /**
@@ -26959,6 +27080,12 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
         }
 
         switch (event.mAction) {
+            case DragEvent.ACTION_DRAG_STARTED: {
+                if (result && li.mOnDragListener != null) {
+                    sendWindowContentChangedAccessibilityEvent(
+                            AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
+                }
+            } break;
             case DragEvent.ACTION_DRAG_ENTERED: {
                 mPrivateFlags2 |= View.PFLAG2_DRAG_HOVERED;
                 refreshDrawableState();
@@ -26967,7 +27094,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
                 mPrivateFlags2 &= ~View.PFLAG2_DRAG_HOVERED;
                 refreshDrawableState();
             } break;
+            case DragEvent.ACTION_DROP: {
+                if (result && (li.mOnDragListener != null | li.mOnReceiveContentListener != null)) {
+                    sendWindowContentChangedAccessibilityEvent(
+                            AccessibilityEvent.CONTENT_CHANGE_TYPE_DRAG_DROPPED);
+                }
+            } break;
             case DragEvent.ACTION_DRAG_ENDED: {
+                sendWindowContentChangedAccessibilityEvent(
+                        AccessibilityEvent.CONTENT_CHANGE_TYPE_UNDEFINED);
                 mPrivateFlags2 &= ~View.DRAG_MASK;
                 refreshDrawableState();
             } break;
@@ -26978,6 +27113,15 @@ public class View implements Drawable.Callback, KeyEvent.Callback,
 
     boolean canAcceptDrag() {
         return (mPrivateFlags2 & PFLAG2_DRAG_CAN_ACCEPT) != 0;
+    }
+
+    void sendWindowContentChangedAccessibilityEvent(int changeType) {
+        if (AccessibilityManager.getInstance(mContext).isEnabled()) {
+            AccessibilityEvent event = AccessibilityEvent.obtain();
+            event.setEventType(AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED);
+            event.setContentChangeTypes(changeType);
+            sendAccessibilityEventUnchecked(event);
+        }
     }
 
     /**

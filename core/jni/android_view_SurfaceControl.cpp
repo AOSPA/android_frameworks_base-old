@@ -238,6 +238,11 @@ static struct {
     jmethodID ctor;
 } gJankDataClassInfo;
 
+static struct {
+    jclass clazz;
+    jmethodID onTransactionCommitted;
+} gTransactionCommittedListenerClassInfo;
+
 class JNamedColorSpace {
 public:
     // ColorSpace.Named.SRGB.ordinal() = 0;
@@ -320,6 +325,44 @@ public:
 
 private:
     jobject screenCaptureListenerObject;
+    JavaVM* mVm;
+
+    JNIEnv* getenv() {
+        JNIEnv* env;
+        mVm->GetEnv(reinterpret_cast<void**>(&env), JNI_VERSION_1_6);
+        return env;
+    }
+};
+
+class TransactionCommittedListenerWrapper {
+public:
+    explicit TransactionCommittedListenerWrapper(JNIEnv* env, jobject object) {
+        env->GetJavaVM(&mVm);
+        mTransactionCommittedListenerObject = env->NewGlobalRef(object);
+        LOG_ALWAYS_FATAL_IF(!mTransactionCommittedListenerObject, "Failed to make global ref");
+    }
+
+    ~TransactionCommittedListenerWrapper() {
+        getenv()->DeleteGlobalRef(mTransactionCommittedListenerObject);
+    }
+
+    void callback() {
+        JNIEnv* env = getenv();
+        env->CallVoidMethod(mTransactionCommittedListenerObject,
+                            gTransactionCommittedListenerClassInfo.onTransactionCommitted);
+    }
+
+    static void transactionCallbackThunk(void* context, nsecs_t /*latchTime*/,
+                                         const sp<Fence>& /*presentFence*/,
+                                         const std::vector<SurfaceControlStats>& /*stats*/) {
+        TransactionCommittedListenerWrapper* listener =
+                reinterpret_cast<TransactionCommittedListenerWrapper*>(context);
+        listener->callback();
+        delete listener;
+    }
+
+private:
+    jobject mTransactionCommittedListenerObject;
     JavaVM* mVm;
 
     JNIEnv* getenv() {
@@ -814,7 +857,7 @@ static void nativeSetLayerStack(JNIEnv* env, jclass clazz, jlong transactionObj,
     auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
 
     SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl *>(nativeObject);
-    transaction->setLayerStack(ctrl, layerStack);
+    transaction->setLayerStack(ctrl, ui::LayerStack::fromValue(layerStack));
 }
 
 static void nativeSetShadowRadius(JNIEnv* env, jclass clazz, jlong transactionObj,
@@ -870,6 +913,13 @@ static void nativeSetFixedTransformHint(JNIEnv* env, jclass clazz, jlong transac
     transaction->setFixedTransformHint(ctrl, transformHint);
 }
 
+static void nativeSetDropInputMode(JNIEnv* env, jclass clazz, jlong transactionObj,
+                                   jlong nativeObject, jint mode) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+    SurfaceControl* const ctrl = reinterpret_cast<SurfaceControl*>(nativeObject);
+    transaction->setDropInputMode(ctrl, static_cast<gui::DropInputMode>(mode));
+}
+
 static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
     const auto displayIds = SurfaceComposerClient::getPhysicalDisplayIds();
     jlongArray array = env->NewLongArray(displayIds.size());
@@ -889,6 +939,12 @@ static jlongArray nativeGetPhysicalDisplayIds(JNIEnv* env, jclass clazz) {
 
     env->ReleaseLongArrayElements(array, values, 0);
     return array;
+}
+
+static jlong nativeGetPrimaryPhysicalDisplayId(JNIEnv* env, jclass clazz) {
+    PhysicalDisplayId displayId;
+    SurfaceComposerClient::getPrimaryPhysicalDisplayId(&displayId);
+    return static_cast<jlong>(displayId.value);
 }
 
 static jobject nativeGetPhysicalDisplayToken(JNIEnv* env, jclass clazz, jlong physicalDisplayId) {
@@ -1013,7 +1069,7 @@ static void nativeSetDisplayLayerStack(JNIEnv* env, jclass clazz,
 
     {
         auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
-        transaction->setDisplayLayerStack(token, layerStack);
+        transaction->setDisplayLayerStack(token, ui::LayerStack::fromValue(layerStack));
     }
 }
 
@@ -1723,6 +1779,17 @@ static void nativeSetFrameTimelineVsync(JNIEnv* env, jclass clazz, jlong transac
             {frameTimelineVsyncId, android::os::IInputConstants::INVALID_INPUT_EVENT_ID});
 }
 
+static void nativeAddTransactionCommittedListener(JNIEnv* env, jclass clazz, jlong transactionObj,
+                                                  jobject transactionCommittedListenerObject) {
+    auto transaction = reinterpret_cast<SurfaceComposerClient::Transaction*>(transactionObj);
+
+    void* context =
+            new TransactionCommittedListenerWrapper(env, transactionCommittedListenerObject);
+    transaction->addTransactionCommittedCallback(TransactionCommittedListenerWrapper::
+                                                         transactionCallbackThunk,
+                                                 context);
+}
+
 class JankDataListenerWrapper : public JankDataListener {
 public:
     JankDataListenerWrapper(JNIEnv* env, jobject onJankDataListenerObject) {
@@ -1815,6 +1882,12 @@ static jint nativeGetTransformHint(JNIEnv* env, jclass clazz, jlong nativeSurfac
     return toRotationInt(ui::Transform::toRotation((transformHintRotationFlags)));
 }
 
+static jint nativeGetLayerId(JNIEnv* env, jclass clazz, jlong nativeSurfaceControl) {
+    sp<SurfaceControl> surface(reinterpret_cast<SurfaceControl*>(nativeSurfaceControl));
+
+    return surface->getLayerId();
+}
+
 // ----------------------------------------------------------------------------
 
 static const JNINativeMethod sSurfaceControlMethods[] = {
@@ -1893,6 +1966,8 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeReleaseFrameRateFlexibilityToken },
     {"nativeGetPhysicalDisplayIds", "()[J",
             (void*)nativeGetPhysicalDisplayIds },
+    {"nativeGetPrimaryPhysicalDisplayId", "()J",
+            (void*)nativeGetPrimaryPhysicalDisplayId },
     {"nativeGetPhysicalDisplayToken", "(J)Landroid/os/IBinder;",
             (void*)nativeGetPhysicalDisplayToken },
     {"nativeCreateDisplay", "(Ljava/lang/String;Z)Landroid/os/IBinder;",
@@ -2010,6 +2085,12 @@ static const JNINativeMethod sSurfaceControlMethods[] = {
             (void*)nativeGetTransformHint },
     {"nativeSetTrustedOverlay", "(JJZ)V",
             (void*)nativeSetTrustedOverlay },
+    {"nativeGetLayerId", "(J)I",
+            (void*)nativeGetLayerId },
+    {"nativeSetDropInputMode", "(JJI)V",
+             (void*)nativeSetDropInputMode },
+    {"nativeAddTransactionCommittedListener", "(JLandroid/view/TransactionCommittedListener;)V",
+            (void*) nativeAddTransactionCommittedListener },
         // clang-format on
 };
 
@@ -2225,6 +2306,14 @@ int register_android_view_SurfaceControl(JNIEnv* env)
     gJankDataListenerClassInfo.onJankDataAvailable =
             GetMethodIDOrDie(env, onJankDataListenerClazz, "onJankDataAvailable",
                              "([Landroid/view/SurfaceControl$JankData;)V");
+
+    jclass transactionCommittedListenerClazz =
+            FindClassOrDie(env, "android/view/TransactionCommittedListener");
+    gTransactionCommittedListenerClassInfo.clazz =
+            MakeGlobalRefOrDie(env, transactionCommittedListenerClazz);
+    gTransactionCommittedListenerClassInfo.onTransactionCommitted =
+            GetMethodIDOrDie(env, transactionCommittedListenerClazz, "onTransactionCommitted",
+                             "()V");
     return err;
 }
 

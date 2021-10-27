@@ -24,6 +24,7 @@ import android.annotation.NonNull;
 import android.annotation.Nullable;
 import android.graphics.GraphicBuffer;
 import android.graphics.PixelFormat;
+import android.graphics.Point;
 import android.graphics.Rect;
 import android.hardware.HardwareBuffer;
 import android.view.Surface;
@@ -70,17 +71,21 @@ class SurfaceFreezer {
      * above the target surface) and then taking a snapshot and placing it over the target surface.
      *
      * @param startBounds The original bounds (on screen) of the surface we are snapshotting.
+     * @param relativePosition The related position of the snapshot surface to its parent.
+     * @param freezeTarget The surface to take snapshot from. If {@code null}, we will take a
+     *                     snapshot from the {@link #mAnimatable} surface.
      */
-    void freeze(SurfaceControl.Transaction t, Rect startBounds) {
+    void freeze(SurfaceControl.Transaction t, Rect startBounds, Point relativePosition,
+            @Nullable SurfaceControl freezeTarget) {
         mFreezeBounds.set(startBounds);
 
         mLeash = SurfaceAnimator.createAnimationLeash(mAnimatable, mAnimatable.getSurfaceControl(),
                 t, ANIMATION_TYPE_SCREEN_ROTATION, startBounds.width(), startBounds.height(),
-                startBounds.left, startBounds.top, false /* hidden */,
+                relativePosition.x, relativePosition.y, false /* hidden */,
                 mWmService.mTransactionFactory);
         mAnimatable.onAnimationLeashCreated(t, mLeash);
 
-        SurfaceControl freezeTarget = mAnimatable.getFreezeSnapshotTarget();
+        freezeTarget = freezeTarget != null ? freezeTarget : mAnimatable.getFreezeSnapshotTarget();
         if (freezeTarget != null) {
             SurfaceControl.ScreenshotHardwareBuffer screenshotBuffer = createSnapshotBuffer(
                     freezeTarget, startBounds);
@@ -117,9 +122,21 @@ class SurfaceFreezer {
         SurfaceControl leash = mLeash;
         mLeash = null;
         final boolean scheduleAnim = SurfaceAnimator.removeLeash(t, mAnimatable, leash,
-                false /* destroy */);
+                true /* destroy */);
         if (scheduleAnim) {
             mWmService.scheduleAnimationLocked();
+        }
+    }
+
+    void setLayer(SurfaceControl.Transaction t, int layer) {
+        if (mLeash != null) {
+            t.setLayer(mLeash, layer);
+        }
+    }
+
+    void setRelativeLayer(SurfaceControl.Transaction t, SurfaceControl relativeTo, int layer) {
+        if (mLeash != null) {
+            t.setRelativeLayer(mLeash, relativeTo, layer);
         }
     }
 

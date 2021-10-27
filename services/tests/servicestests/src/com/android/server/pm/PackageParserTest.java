@@ -40,7 +40,6 @@ import android.content.pm.FeatureGroupInfo;
 import android.content.pm.FeatureInfo;
 import android.content.pm.PackageInfo;
 import android.content.pm.PackageManager.Property;
-import android.content.pm.PackageUserState;
 import android.content.pm.ServiceInfo;
 import android.content.pm.Signature;
 import android.content.pm.SigningDetails;
@@ -54,8 +53,10 @@ import android.content.pm.parsing.component.ParsedPermissionGroup;
 import android.content.pm.parsing.component.ParsedProvider;
 import android.content.pm.parsing.component.ParsedService;
 import android.content.pm.parsing.component.ParsedUsesPermission;
+import android.content.pm.pkg.PackageUserState;
 import android.os.Bundle;
 import android.os.Parcel;
+import android.os.Parcelable;
 import android.platform.test.annotations.Presubmit;
 import android.util.ArraySet;
 
@@ -71,6 +72,7 @@ import com.android.server.pm.parsing.PackageInfoUtils;
 import com.android.server.pm.parsing.PackageParser2;
 import com.android.server.pm.parsing.TestPackageParser2;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.parsing.pkg.AndroidPackageUtils;
 import com.android.server.pm.parsing.pkg.PackageImpl;
 import com.android.server.pm.parsing.pkg.ParsedPackage;
 
@@ -174,7 +176,7 @@ public class PackageParserTest {
                     true /* useCaches */).hideAsFinal();
 
             Parcel p = Parcel.obtain();
-            pkg.writeToParcel(p, 0 /* flags */);
+            ((Parcelable) pkg).writeToParcel(p, 0 /* flags */);
 
             p.setDataPosition(0);
             ParsedPackage deserialized = new PackageImpl(p);
@@ -191,7 +193,7 @@ public class PackageParserTest {
         setKnownFields(pkg);
 
         Parcel p = Parcel.obtain();
-        pkg.writeToParcel(p, 0 /* flags */);
+        ((Parcelable) pkg).writeToParcel(p, 0 /* flags */);
 
         p.setDataPosition(0);
         ParsedPackage deserialized = new PackageImpl(p);
@@ -204,7 +206,7 @@ public class PackageParserTest {
         setKnownFields(pkg);
 
         Parcel p = Parcel.obtain();
-        pkg.writeToParcel(p, 0 /* flags */);
+        ((Parcelable) pkg).writeToParcel(p, 0 /* flags */);
 
         p.setDataPosition(0);
         ParsingPackage deserialized = new PackageImpl(p);
@@ -609,10 +611,10 @@ public class PackageParserTest {
     private static PackageSetting mockPkgSetting(AndroidPackage pkg) {
         return new PackageSettingBuilder()
                 .setName(pkg.getPackageName())
-                .setRealName(pkg.getRealPackage())
+                .setRealName(pkg.getManifestPackageName())
                 .setCodePath(pkg.getPath())
-                .setPrimaryCpuAbiString(pkg.getPrimaryCpuAbi())
-                .setSecondaryCpuAbiString(pkg.getSecondaryCpuAbi())
+                .setPrimaryCpuAbiString(AndroidPackageUtils.getRawPrimaryCpuAbi(pkg))
+                .setSecondaryCpuAbiString(AndroidPackageUtils.getRawSecondaryCpuAbi(pkg))
                 .setPVersionCode(pkg.getLongVersionCode())
                 .setPkgFlags(PackageInfoUtils.appInfoFlags(pkg, null))
                 .setPrivateFlags(PackageInfoUtils.appInfoPrivateFlags(pkg, null))
@@ -625,7 +627,7 @@ public class PackageParserTest {
     public static void assertPackagesEqual(AndroidPackage a, AndroidPackage b) {
         assertEquals(a.getBaseRevisionCode(), b.getBaseRevisionCode());
         assertEquals(a.isBaseHardwareAccelerated(), b.isBaseHardwareAccelerated());
-        assertEquals(a.getVersionCode(), b.getVersionCode());
+        assertEquals(a.getLongVersionCode(), b.getLongVersionCode());
         assertEquals(a.getSharedUserLabel(), b.getSharedUserLabel());
         assertEquals(a.getInstallLocation(), b.getInstallLocation());
         assertEquals(a.isCoreApp(), b.isCoreApp());
@@ -643,9 +645,9 @@ public class PackageParserTest {
         assertArrayEquals(a.getSplitFlags(), b.getSplitFlags());
 
         PackageInfo aInfo = PackageInfoUtils.generate(a, new int[]{}, 0, 0, 0,
-                Collections.emptySet(), new PackageUserState(), 0, mockPkgSetting(a));
+                Collections.emptySet(), PackageUserState.DEFAULT, 0, mockPkgSetting(a));
         PackageInfo bInfo = PackageInfoUtils.generate(b, new int[]{}, 0, 0, 0,
-                Collections.emptySet(), new PackageUserState(), 0, mockPkgSetting(b));
+                Collections.emptySet(), PackageUserState.DEFAULT, 0, mockPkgSetting(b));
         assertApplicationInfoEqual(aInfo.applicationInfo, bInfo.applicationInfo);
 
         assertEquals(ArrayUtils.size(a.getPermissions()), ArrayUtils.size(b.getPermissions()));
@@ -700,7 +702,7 @@ public class PackageParserTest {
         assertEquals(a.getUsesLibraries(), b.getUsesLibraries());
         assertEquals(a.getUsesOptionalLibraries(), b.getUsesOptionalLibraries());
         assertEquals(a.getOriginalPackages(), b.getOriginalPackages());
-        assertEquals(a.getRealPackage(), b.getRealPackage());
+        assertEquals(a.getManifestPackageName(), b.getManifestPackageName());
         assertEquals(a.getAdoptPermissions(), b.getAdoptPermissions());
         assertBundleApproximateEquals(a.getMetaData(), b.getMetaData());
         assertEquals(a.getVersionName(), b.getVersionName());
@@ -710,7 +712,7 @@ public class PackageParserTest {
         assertEquals(a.getRestrictedAccountType(), b.getRestrictedAccountType());
         assertEquals(a.getRequiredAccountType(), b.getRequiredAccountType());
         assertEquals(a.getOverlayTarget(), b.getOverlayTarget());
-        assertEquals(a.getOverlayTargetName(), b.getOverlayTargetName());
+        assertEquals(a.getOverlayTargetOverlayableName(), b.getOverlayTargetOverlayableName());
         assertEquals(a.getOverlayCategory(), b.getOverlayCategory());
         assertEquals(a.getOverlayPriority(), b.getOverlayPriority());
         assertEquals(a.isOverlayIsStatic(), b.isOverlayIsStatic());
@@ -800,9 +802,9 @@ public class PackageParserTest {
 
         // Validity check for ServiceInfo.
         ServiceInfo aInfo = PackageInfoUtils.generateServiceInfo(aPkg, a, 0,
-                new PackageUserState(), 0, mockPkgSetting(aPkg));
+                PackageUserState.DEFAULT, 0, mockPkgSetting(aPkg));
         ServiceInfo bInfo = PackageInfoUtils.generateServiceInfo(bPkg, b, 0,
-                new PackageUserState(), 0, mockPkgSetting(bPkg));
+                PackageUserState.DEFAULT, 0, mockPkgSetting(bPkg));
         assertApplicationInfoEqual(aInfo.applicationInfo, bInfo.applicationInfo);
         assertEquals(a.getName(), b.getName());
     }
@@ -827,9 +829,9 @@ public class PackageParserTest {
 
         // Validity check for ActivityInfo.
         ActivityInfo aInfo = PackageInfoUtils.generateActivityInfo(aPkg, a, 0,
-                new PackageUserState(), 0, mockPkgSetting(aPkg));
+                PackageUserState.DEFAULT, 0, mockPkgSetting(aPkg));
         ActivityInfo bInfo = PackageInfoUtils.generateActivityInfo(bPkg, b, 0,
-                new PackageUserState(), 0, mockPkgSetting(bPkg));
+                PackageUserState.DEFAULT, 0, mockPkgSetting(bPkg));
         assertApplicationInfoEqual(aInfo.applicationInfo, bInfo.applicationInfo);
         assertEquals(a.getName(), b.getName());
     }
@@ -848,7 +850,7 @@ public class PackageParserTest {
         assertEquals(a.theme, that.theme);
         assertEquals(a.fullBackupContent, that.fullBackupContent);
         assertEquals(a.uiOptions, that.uiOptions);
-        assertEquals(a.flags, that.flags);
+        assertEquals(Integer.toBinaryString(a.flags), Integer.toBinaryString(that.flags));
         assertEquals(a.privateFlags, that.privateFlags);
         assertEquals(a.requiresSmallestWidthDp, that.requiresSmallestWidthDp);
         assertEquals(a.compatibleWidthLimitDp, that.compatibleWidthLimitDp);
@@ -928,7 +930,6 @@ public class PackageParserTest {
                 .addUsesLibrary("foo11")
                 .addUsesOptionalLibrary("foo12")
                 .addOriginalPackage("foo14")
-                .setRealPackage("foo15")
                 .addAdoptPermission("foo16")
                 .setMetaData(bundle)
                 .setVersionName("foo17")
@@ -953,7 +954,7 @@ public class PackageParserTest {
                 .setCompileSdkVersion(100)
                 .setOverlayCategory("foo24")
                 .setOverlayIsStatic(true)
-                .setOverlayTargetName("foo26")
+                .setOverlayTargetOverlayableName("foo26")
                 .setVisibleToInstantApps(true)
                 .setSplitHasCode(0, true)
                 .hideAsParsed())

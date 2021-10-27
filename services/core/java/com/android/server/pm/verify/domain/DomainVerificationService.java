@@ -29,9 +29,10 @@ import android.content.Intent;
 import android.content.pm.IntentFilterVerificationInfo;
 import android.content.pm.PackageManager;
 import android.content.pm.PackageManager.NameNotFoundException;
-import android.content.pm.PackageUserState;
 import android.content.pm.ResolveInfo;
 import android.content.pm.parsing.component.ParsedActivity;
+import android.content.pm.pkg.PackageUserState;
+import android.content.pm.pkg.PackageUserStateUtils;
 import android.content.pm.verify.domain.DomainOwner;
 import android.content.pm.verify.domain.DomainVerificationInfo;
 import android.content.pm.verify.domain.DomainVerificationManager;
@@ -843,7 +844,7 @@ public class DomainVerificationService extends SystemService
     @Override
     public void migrateState(@NonNull PackageSetting oldPkgSetting,
             @NonNull PackageSetting newPkgSetting) {
-        String pkgName = newPkgSetting.getName();
+        String pkgName = newPkgSetting.getPackageName();
         boolean sendBroadcast;
 
         synchronized (mLock) {
@@ -936,7 +937,7 @@ public class DomainVerificationService extends SystemService
         //  gains or loses all domains.
 
         UUID domainSetId = newPkgSetting.getDomainSetId();
-        String pkgName = newPkgSetting.getName();
+        String pkgName = newPkgSetting.getPackageName();
 
         boolean sendBroadcast = true;
 
@@ -949,7 +950,8 @@ public class DomainVerificationService extends SystemService
         } else {
             pkgState = mSettings.removeRestoredState(pkgName);
             if (pkgState != null && !Objects.equals(pkgState.getBackupSignatureHash(),
-                    PackageUtils.computeSignaturesSha256Digest(newPkgSetting.getSignatures()))) {
+                    PackageUtils.computeSignaturesSha256Digest(
+                            newPkgSetting.getSigningDetails().getSignatures()))) {
                 // If restoring and the signatures don't match, drop the state
                 pkgState = null;
             }
@@ -1032,7 +1034,7 @@ public class DomainVerificationService extends SystemService
             @NonNull ArrayMap<String, Integer> stateMap,
             @NonNull ArraySet<String> autoVerifyDomains) {
         if (pkgSetting.isSystem()
-                && mSystemConfig.getLinkedApps().contains(pkgSetting.getName())) {
+                && mSystemConfig.getLinkedApps().contains(pkgSetting.getPackageName())) {
             int domainsSize = autoVerifyDomains.size();
             for (int index = 0; index < domainsSize; index++) {
                 stateMap.put(autoVerifyDomains.valueAt(index),
@@ -1072,7 +1074,7 @@ public class DomainVerificationService extends SystemService
                         }
 
                         return PackageUtils.computeSignaturesSha256Digest(
-                                pkgSetting.getSignatures());
+                                pkgSetting.getSigningDetails().getSignatures());
                     };
                 }
 
@@ -1718,7 +1720,7 @@ public class DomainVerificationService extends SystemService
     @Override
     public int approvalLevelForDomain(@NonNull PackageSetting pkgSetting, @NonNull Intent intent,
             @PackageManager.ResolveInfoFlags int resolveInfoFlags, @UserIdInt int userId) {
-        String packageName = pkgSetting.getName();
+        String packageName = pkgSetting.getPackageName();
         if (!DomainVerificationUtils.isDomainVerificationIntent(intent, resolveInfoFlags)) {
             if (DEBUG_APPROVAL) {
                 debugApproval(packageName, intent, userId, false, "not valid intent");
@@ -1742,13 +1744,13 @@ public class DomainVerificationService extends SystemService
                 userId, debugObject);
         if (includeNegative && approvalLevel == APPROVAL_LEVEL_NONE) {
             PackageUserState pkgUserState = pkgSetting.readUserState(userId);
-            if (!pkgUserState.installed) {
+            if (!pkgUserState.isInstalled()) {
                 return APPROVAL_LEVEL_NOT_INSTALLED;
             }
 
             AndroidPackage pkg = pkgSetting.getPkg();
             if (pkg != null) {
-                if (!pkgUserState.isPackageEnabled(pkg)) {
+                if (!PackageUserStateUtils.isPackageEnabled(pkgUserState, pkg)) {
                     return APPROVAL_LEVEL_DISABLED;
                 } else if (mCollector.containsAutoVerifyDomain(pkgSetting.getPkg(), host)) {
                     return APPROVAL_LEVEL_UNVERIFIED;
@@ -1762,7 +1764,7 @@ public class DomainVerificationService extends SystemService
     private int approvalLevelForDomainInternal(@NonNull PackageSetting pkgSetting,
             @NonNull String host, boolean includeNegative, @UserIdInt int userId,
             @NonNull Object debugObject) {
-        String packageName = pkgSetting.getName();
+        String packageName = pkgSetting.getPackageName();
         final AndroidPackage pkg = pkgSetting.getPkg();
 
         if (pkg != null && includeNegative && !mCollector.containsWebDomain(pkg, host)) {
@@ -1782,7 +1784,7 @@ public class DomainVerificationService extends SystemService
             return APPROVAL_LEVEL_NONE;
         }
 
-        if (!pkgUserState.installed) {
+        if (!pkgUserState.isInstalled()) {
             if (DEBUG_APPROVAL) {
                 debugApproval(packageName, debugObject, userId, false,
                         "package not installed for user");
@@ -1790,7 +1792,7 @@ public class DomainVerificationService extends SystemService
             return APPROVAL_LEVEL_NONE;
         }
 
-        if (!pkgUserState.isPackageEnabled(pkg)) {
+        if (!PackageUserStateUtils.isPackageEnabled(pkgUserState, pkg)) {
             if (DEBUG_APPROVAL) {
                 debugApproval(packageName, debugObject, userId, false,
                         "package not enabled for user");
@@ -1798,7 +1800,7 @@ public class DomainVerificationService extends SystemService
             return APPROVAL_LEVEL_NONE;
         }
 
-        if (pkgUserState.suspended) {
+        if (pkgUserState.isSuspended()) {
             if (DEBUG_APPROVAL) {
                 debugApproval(packageName, debugObject, userId, false,
                         "package suspended for user");

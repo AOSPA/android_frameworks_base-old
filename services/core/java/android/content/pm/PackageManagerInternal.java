@@ -20,6 +20,7 @@ import android.annotation.AppIdInt;
 import android.annotation.IntDef;
 import android.annotation.NonNull;
 import android.annotation.Nullable;
+import android.annotation.SystemApi;
 import android.annotation.UserIdInt;
 import android.annotation.WorkerThread;
 import android.content.ComponentName;
@@ -48,6 +49,8 @@ import com.android.internal.util.function.pooled.PooledLambda;
 import com.android.server.pm.PackageList;
 import com.android.server.pm.PackageSetting;
 import com.android.server.pm.parsing.pkg.AndroidPackage;
+import com.android.server.pm.pkg.AndroidPackageApi;
+import com.android.server.pm.pkg.PackageState;
 
 import java.io.IOException;
 import java.lang.annotation.Retention;
@@ -479,6 +482,35 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
             @AppIdInt int recipientAppId, int visibleUid,
             boolean direct);
 
+    /**
+     * Grants implicit access based on an interaction between two apps. This grants access to the
+     * from one application to the other's package metadata.
+     * <p>
+     * When an application explicitly tries to interact with another application [via an
+     * activity, service or provider that is either declared in the caller's
+     * manifest via the {@code <queries>} tag or has been exposed via the target apps manifest using
+     * the {@code visibleToInstantApp} attribute], the target application must be able to see
+     * metadata about the calling app. If the calling application uses an implicit intent [ie
+     * action VIEW, category BROWSABLE], it remains hidden from the launched app.
+     * <p>
+     * If an interaction is not explicit, the {@code direct} argument should be set to false as
+     * visibility should not be granted in some cases. This method handles that logic.
+     * <p>
+     * @param userId the user
+     * @param intent the intent that triggered the grant
+     * @param recipientAppId The app ID of the application that is being given access to {@code
+     *                       visibleUid}
+     * @param visibleUid The uid of the application that is becoming accessible to {@code
+     *                   recipientAppId}
+     * @param direct true if the access is being made due to direct interaction between visibleUid
+     *               and recipientAppId.
+     * @param retainOnUpdate true if the implicit access is retained across package update.
+     */
+    public abstract void grantImplicitAccess(
+            @UserIdInt int userId, Intent intent,
+            @AppIdInt int recipientAppId, int visibleUid,
+            boolean direct, boolean retainOnUpdate);
+
     public abstract boolean isInstantAppInstallerComponent(ComponentName component);
     /**
      * Prunes instant apps and state associated with uninstalled
@@ -619,13 +651,27 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
      */
     public abstract @Nullable AndroidPackage getPackage(@NonNull String packageName);
 
-    public abstract @Nullable PackageSetting getPackageSetting(String packageName);
+    /**
+     * Returns the {@link SystemApi} variant of a package for use with mainline.
+     */
+    @Nullable
+    public abstract AndroidPackageApi getAndroidPackage(@NonNull String packageName);
+
+    public abstract @Nullable PackageSetting getPackageSetting(@NonNull String packageName);
+
+    public abstract @Nullable PackageState getPackageState(@NonNull String packageName);
 
     /**
      * Returns a package for the given UID. If the UID is part of a shared user ID, one
      * of the packages will be chosen to be returned.
      */
     public abstract @Nullable AndroidPackage getPackage(int uid);
+
+
+    /**
+     * Returns all packages for the given app ID.
+     */
+    public abstract @NonNull List<AndroidPackage> getPackagesForAppId(int appId);
 
     /**
      * Returns a list without a change observer.
@@ -735,6 +781,14 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
     @Nullable
     public abstract int[] getVisibilityAllowList(@NonNull String packageName, int userId);
 
+    /**
+     * Returns whether the given UID either declares &lt;queries&gt; element with the given package
+     * name in its app's manifest, has {@link android.Manifest.permission.QUERY_ALL_PACKAGES}, or
+     * package visibility filtering is enabled on it. If the UID is part of a shared user ID,
+     * return {@code true} if any one application belongs to the shared user ID meets the criteria.
+     */
+    public abstract boolean canQueryPackage(int callingUid, @Nullable String packageName);
+
     /** Returns whether the given package was signed by the platform */
     public abstract boolean isPlatformSigned(String pkg);
 
@@ -843,6 +897,17 @@ public abstract class PackageManagerInternal implements PackageSettingsSnapshotP
      * @param actionLocked action to be performed
      */
     public abstract void forEachPackageSetting(Consumer<PackageSetting> actionLocked);
+
+    /**
+     * Perform the given action for each package.
+     *
+     * @param locked whether to hold the packages lock. If the lock is not held, the objects will
+     *               be iterated using a temporary data structure. In the vast majority of cases,
+     *               the lock should not have to be held. This is exposed to mirror the
+     *               functionality of the other forEach methods, for eventual migration.
+     * @param action action to be performed
+     */
+    public abstract void forEachPackageState(boolean locked, Consumer<PackageState> action);
 
     /**
      * Perform the given action for each installed package for a user.

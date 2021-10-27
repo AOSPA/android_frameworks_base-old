@@ -5210,6 +5210,16 @@ public class CarrierConfigManager {
             "display_no_data_notification_on_permanent_failure_bool";
 
     /**
+     * Boolean indicating if the VoNR setting is visible in the Call Settings menu.
+     * If true, the VoNR setting menu will be visible. If false, the menu will be gone.
+     *
+     * Disabled by default.
+     *
+     * @hide
+     */
+    public static final String KEY_VONR_SETTING_VISIBILITY_BOOL = "vonr_setting_visibility_bool";
+
+    /**
      * Determine whether unthrottle data retry when tracking area code (TAC/LAC) from cell changes
      *
      * @hide
@@ -5889,6 +5899,7 @@ public class CarrierConfigManager {
         });
         sDefaults.putBoolean(KEY_REQUIRE_APN_FILTERING_WITH_RADIO_CAPABILITY, false);
         sDefaults.putBoolean(KEY_USE_SMS_CALLBACK_MODE_BOOL, false);
+        sDefaults.putBoolean(KEY_VONR_SETTING_VISIBILITY_BOOL, false);
     }
 
     /**

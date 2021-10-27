@@ -16,7 +16,6 @@
 
 package com.android.wm.shell.flicker.pip
 
-import android.platform.test.annotations.Postsubmit
 import android.platform.test.annotations.Presubmit
 import android.view.Surface
 import androidx.test.filters.FlakyTest
@@ -30,7 +29,7 @@ import com.android.server.wm.flicker.entireScreenCovered
 import com.android.server.wm.flicker.helpers.WindowUtils
 import com.android.server.wm.flicker.navBarLayerRotatesAndScales
 import com.android.server.wm.flicker.statusBarLayerRotatesScales
-import com.android.server.wm.traces.parser.windowmanager.WindowManagerStateHelper
+import com.android.server.wm.traces.common.FlickerComponentName
 import com.android.wm.shell.flicker.helpers.FixedAppHelper
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_LANDSCAPE
 import com.android.wm.shell.flicker.pip.PipTransition.BroadcastActionTrigger.Companion.ORIENTATION_PORTRAIT
@@ -101,31 +100,35 @@ class EnterPipToOtherOrientationTest(
                 broadcastActionTrigger.doAction(ACTION_ENTER_PIP)
                 wmHelper.waitFor { it.wmState.hasPipWindow() }
                 wmHelper.waitForAppTransitionIdle()
+                // during rotation the status bar becomes invisible and reappears at the end
+                wmHelper.waitForNavBarStatusBarVisible()
             }
         }
 
     /**
-     * Checks that the [WindowManagerStateHelper.NAV_BAR_COMPONENT] has the correct position at
+     * Checks that the [FlickerComponentName.NAV_BAR] has the correct position at
      * the start and end of the transition
      */
     @FlakyTest
     @Test
-    override fun navBarLayerRotatesAndScales() =
-        testSpec.navBarLayerRotatesAndScales(Surface.ROTATION_90, Surface.ROTATION_0)
+    override fun navBarLayerRotatesAndScales() = testSpec.navBarLayerRotatesAndScales()
 
     /**
-     * Checks that the [WindowManagerStateHelper.STATUS_BAR_COMPONENT] has the correct position at
+     * Checks that the [FlickerComponentName.STATUS_BAR] has the correct position at
      * the start and end of the transition
      */
-    @Postsubmit
+    @Presubmit
     @Test
-    override fun statusBarLayerRotatesScales() =
-        testSpec.statusBarLayerRotatesScales(Surface.ROTATION_90, Surface.ROTATION_0)
+    override fun statusBarLayerRotatesScales() = testSpec.statusBarLayerRotatesScales()
 
-    @Postsubmit
+    /**
+     * Checks that all parts of the screen are covered at the start and end of the transition
+     *
+     * TODO b/197726599 Prevents all states from being checked
+     */
+    @Presubmit
     @Test
-    override fun entireScreenCovered() =
-        testSpec.entireScreenCovered(Surface.ROTATION_90, Surface.ROTATION_0, allStates = false)
+    override fun entireScreenCovered() = testSpec.entireScreenCovered(allStates = false)
 
     /**
      * Checks [pipApp] window remains visible and on top throughout the transition
@@ -145,7 +148,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppWindowInvisibleOnStart() {
         testSpec.assertWmStart {
-            isInvisible(testApp.component)
+            isAppWindowInvisible(testApp.component)
         }
     }
 
@@ -156,7 +159,7 @@ class EnterPipToOtherOrientationTest(
     @Test
     fun testAppWindowVisibleOnEnd() {
         testSpec.assertWmEnd {
-            isVisible(testApp.component)
+            isAppWindowVisible(testApp.component)
         }
     }
 

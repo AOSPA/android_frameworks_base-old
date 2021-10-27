@@ -22,7 +22,7 @@ import android.os.Bundle;
 import android.os.UserHandle;
 import android.view.RemoteAnimationAdapter;
 import android.view.RemoteAnimationTarget;
-import android.window.IRemoteTransition;
+import android.window.RemoteTransition;
 
 import com.android.wm.shell.splitscreen.ISplitScreenListener;
 
@@ -52,9 +52,10 @@ interface ISplitScreen {
     oneway void removeFromSideStage(int taskId) = 4;
 
     /**
-     * Removes the split-screen stages.
+     * Removes the split-screen stages and leaving indicated task to top. Passing INVALID_TASK_ID
+     * to indicate leaving no top task after leaving split-screen.
      */
-    oneway void exitSplitScreen() = 5;
+    oneway void exitSplitScreen(int toTopTaskId) = 5;
 
     /**
      * @param exitSplitScreenOnHide if to exit split-screen if both stages are not visible.
@@ -82,7 +83,7 @@ interface ISplitScreen {
      * Starts tasks simultaneously in one transition.
      */
     oneway void startTasks(int mainTaskId, in Bundle mainOptions, int sideTaskId,
-            in Bundle sideOptions, int sidePosition, in IRemoteTransition remoteTransition) = 10;
+            in Bundle sideOptions, int sidePosition, in RemoteTransition remoteTransition) = 10;
 
     /**
      * Version of startTasks using legacy transition system.
@@ -95,6 +96,8 @@ interface ISplitScreen {
      * Blocking call that notifies and gets additional split-screen targets when entering
      * recents (for example: the dividerBar).
      * @param cancel is true if leaving recents back to split (eg. the gesture was cancelled).
+     * @param appTargets apps that will be re-parented to display area
      */
-    RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel) = 12;
+    RemoteAnimationTarget[] onGoingToRecentsLegacy(boolean cancel,
+                                                   in RemoteAnimationTarget[] appTargets) = 12;
 }

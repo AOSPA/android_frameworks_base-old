@@ -67,7 +67,7 @@ public class KeyguardServiceDelegate {
         boolean showing;
         boolean showingAndNotOccluded;
         boolean inputRestricted;
-        boolean occluded;
+        volatile boolean occluded;
         boolean secure;
         boolean dreaming;
         boolean systemIsReady;
@@ -272,6 +272,10 @@ public class KeyguardServiceDelegate {
         mKeyguardState.occluded = isOccluded;
     }
 
+    public boolean isOccluded() {
+        return mKeyguardState.occluded;
+    }
+
     public void dismiss(IKeyguardDismissCallback callback, CharSequence message) {
         if (mKeyguardService != null) {
             mKeyguardService.dismiss(callback, message);
@@ -406,8 +410,7 @@ public class KeyguardServiceDelegate {
     }
 
     public void startKeyguardExitAnimation(long startTime, long fadeoutDuration) {
-        if (!WindowManagerService.sEnableRemoteKeyguardGoingAwayAnimation
-                && mKeyguardService != null) {
+        if (mKeyguardService != null) {
             mKeyguardService.startKeyguardExitAnimation(startTime, fadeoutDuration);
         }
     }
